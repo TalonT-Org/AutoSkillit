@@ -32,6 +32,7 @@ def test_cmd_spec_fields():
         "process_idle_timeout_ms",
         "inherited_fds",
         "managed_skill_catalog",
+        "projected_skill_entries",
         "app_server_plan",
         "force_inactive_agent_teams",
     }

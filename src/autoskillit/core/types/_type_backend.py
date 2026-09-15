@@ -568,6 +568,7 @@ class CmdSpec:
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
     managed_skill_catalog: ValidatedAddDir | None = None
+    projected_skill_entries: tuple[tuple[str, str], ...] = ()
     app_server_plan: CodexAppServerPlan | None = None
     # Records that the builder was asked to keep Claude agent teams inactive
     # and honored that request at construction. Post-spawn checkpoints read
@@ -579,6 +580,11 @@ class CmdSpec:
             self,
             "inherited_fds",
             normalize_inherited_fds(self.inherited_fds),
+        )
+        object.__setattr__(
+            self,
+            "projected_skill_entries",
+            tuple((name, relative_path) for name, relative_path in self.projected_skill_entries),
         )
 
 

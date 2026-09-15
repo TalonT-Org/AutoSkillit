@@ -1028,19 +1028,19 @@ FORWARDING_SITES: dict[str, str] = {
         "just above, since it is also one of the reserved keys this same filter blocks from"
         "callers."
     ),
-    "execution/backends/_codex/session_commands.py:265": (
+    "execution/backends/_codex/session_commands.py:289": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:423": (
+    "execution/backends/_codex/session_commands.py:447": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:562": (
+    "execution/backends/_codex/session_commands.py:586": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:650": (
+    "execution/backends/_codex/session_commands.py:674": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

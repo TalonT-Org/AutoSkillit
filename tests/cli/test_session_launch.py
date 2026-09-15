@@ -30,6 +30,7 @@ from autoskillit.core import (
     BackendConventions,
     ClaudeFlags,
     HookTrustPolicy,
+    PluginLoadMode,
     PreLaunchReadiness,
 )
 from autoskillit.core._plugin_ids import (
@@ -50,8 +51,10 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 class _TestBinding:
     def __init__(self, plugin_dir: Path | None) -> None:
+        self.load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
         self.plugin_dir = plugin_dir
         self.inherited_fds: tuple[int, ...] = ()
+        self.skill_entries: tuple[tuple[str, str], ...] = ()
         self.closed = False
 
     def close(self) -> None:
@@ -198,6 +201,7 @@ def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
         "ensure_pre_launch",
         lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
+    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda _self, _spec: [])
 
 
 # Module-level flags map — shared by Tests B, C, and the registry guard.
@@ -1725,6 +1729,11 @@ from pathlib import Path
 import sys
 import tomllib
 
+trace_path = os.environ.get("AUTOSKILLIT_TEST_CODEX_PROBE_CWD_LOG")
+if trace_path:
+    with Path(trace_path).open("a", encoding="utf-8") as trace:
+        trace.write(f"{Path.cwd()}\\n")
+
 if "--version" in sys.argv:
     print("codex-cli 0.147.0")
     raise SystemExit(0)
@@ -1843,11 +1852,22 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
     assert prepared.spec.managed_skill_catalog is catalog
 
 
+def _capture_optional_codex_config(captured: dict[str, object], spec: object) -> None:
+    from autoskillit.core import CmdSpec
+
+    typed_spec = cast(CmdSpec, spec)
+    config_path = Path(typed_spec.env["CODEX_HOME"]) / "config.toml"
+    if config_path.is_file():
+        captured["config_text"] = config_path.read_text()
+        captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+
+
 def _prepare_codex_order_composition(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
     project_mcp_command: str | None = None,
+    raw: bool = False,
 ) -> tuple[dict[str, object], object]:
     from autoskillit.core import SkillExecutionRole
     from autoskillit.execution.backends.codex import CodexBackend
@@ -1905,7 +1925,10 @@ def _prepare_codex_order_composition(
         "pre_launch_dirs": [],
         "process_calls": [],
         "projection_roots": [],
+        "bindings": [],
         "validation_errors": [],
+        "project_dir": project_dir,
+        "executable": executable,
     }
 
     original_ensure_pre_launch = CodexBackend.ensure_pre_launch
@@ -1922,9 +1945,7 @@ def _prepare_codex_order_composition(
     def validate_interactive_invocation(self, spec):  # type: ignore[no-untyped-def]
         cast(list[str], captured["events"]).append("validated")
         captured["spec"] = spec
-        generated_home = Path(spec.env["CODEX_HOME"])
-        captured["config_text"] = (generated_home / "config.toml").read_text()
-        captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+        _capture_optional_codex_config(captured, spec)
         errors = original_validate(self, spec)
         cast(list[list[str]], captured["validation_errors"]).append(errors)
         return errors
@@ -1942,6 +1963,7 @@ def _prepare_codex_order_composition(
         def acquire_launch_binding(self, **kwargs):  # type: ignore[no-untyped-def]
             binding = self._delegate.acquire_launch_binding(**kwargs)  # type: ignore[attr-defined]
             cast(list[Path], captured["projection_roots"]).append(binding.identity.managed_path)
+            cast(list[object], captured["bindings"]).append(binding)
             return binding
 
     def capture_interactive_authority(**kwargs):  # type: ignore[no-untyped-def]
@@ -1968,7 +1990,17 @@ def _prepare_codex_order_composition(
         record_final_process,
     )
 
-    def launch() -> None:
+    def launch_raw() -> None:
+        _run_interactive_session(
+            "composition contract",
+            project_dir=project_dir,
+            required_env=frozenset(),
+            backend=backend,
+            skill_compilation=compilation,
+            default_base_branch="main",
+        )
+
+    def launch_managed() -> None:
         _launch_cook_session(
             "composition contract",
             project_dir=project_dir,
@@ -1980,7 +2012,7 @@ def _prepare_codex_order_composition(
             workspace_temp_dir=None,
         )
 
-    return captured, launch
+    return captured, {False: launch_managed, True: launch_raw}[raw]
 
 
 def test_codex_order_composition_produces_canonical_generated_home(
@@ -2054,6 +2086,120 @@ def test_codex_order_composition_rejects_effective_mcp_override(
     errors = cast(list[list[str]], captured["validation_errors"])
     assert errors == []
     assert "command does not match final config" in capsys.readouterr().err
+
+
+def test_raw_codex_launch_attests_finalized_projected_home_while_lease_is_live(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raw sessions attest their lease-bound projected catalog before spawning."""
+    from autoskillit.core import CmdSpec, PluginLaunchBinding
+    from autoskillit.execution import assert_interactive_ordering
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    captured, launch = _prepare_codex_order_composition(tmp_path, monkeypatch, raw=True)
+    project_dir = cast(Path, captured["project_dir"]).resolve()
+    probe_cwd_log = tmp_path / "probe-cwds.txt"
+    monkeypatch.setenv("AUTOSKILLIT_TEST_CODEX_PROBE_CWD_LOG", str(probe_cwd_log))
+
+    original_prepare = _patch_session__session_launch.prepare_interactive_launch
+
+    def prepare(*args, **kwargs):  # type: ignore[no-untyped-def]
+        prepared = original_prepare(*args, **kwargs)
+        cast(list[str], captured["events"]).append("prepared")
+        return prepared
+
+    monkeypatch.setattr(_patch_session__session_launch, "prepare_interactive_launch", prepare)
+    original_ordering = assert_interactive_ordering
+
+    def check_ordering(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cast(list[str], captured["events"]).append("ordered")
+        return original_ordering(*args, **kwargs)
+
+    monkeypatch.setattr("autoskillit.execution.assert_interactive_ordering", check_ordering)
+    original_validate = CodexBackend.validate_interactive_invocation
+
+    def validate(self, spec: CmdSpec) -> list[str]:
+        binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
+        assert not binding.closed
+        captured["validated_spec"] = spec
+        return original_validate(self, spec)
+
+    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", validate)
+    original_recheck = _patch_session__session_launch.executable_binding_matches_current_file
+
+    def recheck(binding):  # type: ignore[no-untyped-def]
+        cast(list[str], captured["events"]).append("rechecked")
+        return original_recheck(binding)
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "executable_binding_matches_current_file",
+        recheck,
+    )
+
+    def final_popen(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        cast(list[str], captured["events"]).append("spawned")
+        captured["popen"] = (cmd, kwargs)
+        return InteractiveProcessStub(0)
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "subprocess",
+        SimpleNamespace(Popen=final_popen, TimeoutExpired=subprocess.TimeoutExpired),
+    )
+
+    launch()  # type: ignore[operator]
+
+    assert captured["events"] == ["prepared", "ordered", "validated", "rechecked", "spawned"]
+    spec = cast(CmdSpec, captured["validated_spec"])
+    binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
+    assert spec.origin is not None
+    assert spec.origin.binary == str(cast(Path, captured["executable"]).resolve())
+    assert spec.cwd == str(project_dir)
+    assert binding.plugin_dir is not None
+    assert spec.env["CODEX_HOME"] == str(binding.plugin_dir)
+    assert spec.projected_skill_entries == binding.skill_entries
+    _, popen_kwargs = cast(tuple[object, dict[str, object]], captured["popen"])
+    assert popen_kwargs["cwd"] == str(project_dir)
+    assert probe_cwd_log.read_text(encoding="utf-8").splitlines()
+    assert set(probe_cwd_log.read_text(encoding="utf-8").splitlines()) == {str(project_dir)}
+    assert binding.closed
+
+
+def test_raw_codex_launch_renders_validation_errors_without_spawning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A projected-home attestation failure aborts the raw launch at the validator seam."""
+    from autoskillit.core import PluginLaunchBinding
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    captured, launch = _prepare_codex_order_composition(tmp_path, monkeypatch, raw=True)
+    original_validate = CodexBackend.validate_interactive_invocation
+
+    def reject(self, spec):  # type: ignore[no-untyped-def]
+        assert original_validate(self, spec) == []
+        return ["projected catalog discovery rejected"]
+
+    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", reject)
+
+    def must_not_spawn(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        pytest.fail("final interactive Popen must not be called after validation errors")
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "subprocess",
+        SimpleNamespace(Popen=must_not_spawn, TimeoutExpired=subprocess.TimeoutExpired),
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        launch()  # type: ignore[operator]
+
+    assert "ERROR: projected catalog discovery rejected" in capsys.readouterr().err
+    binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
+    assert binding.closed
 
 
 def test_order_managed_session_keeps_home_across_reload_and_infra_resume(

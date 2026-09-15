@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -69,13 +68,20 @@ def _catalog(
 
 
 def _loader_output(name: str, catalog_dir: Path) -> str:
+    return _loader_output_at_root(name, catalog_dir, _discovery_root(catalog_dir))
+
+
+def _discovery_root(catalog_dir: Path) -> Path:
+    return catalog_dir.parent.parent / "skills"
+
+
+def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -> str:
     document = _fixture_document(name)
     fixture_version = "v0130" if "v0130" in name else "v0153"
     source_root = _FIXTURE_ROOT / fixture_version / "home" / "skills"
-    legacy_root = catalog_dir.parent.parent / "skills"
     return _with_skills_text(
         document,
-        _skills_text(document).replace(str(source_root), str(legacy_root)),
+        _skills_text(document).replace(str(source_root), str(discovery_root)),
     )
 
 
@@ -248,13 +254,24 @@ def test_parse_skills_instructions_rejects_duplicate_names_and_truncated_entries
         discovery.parse_skills_instructions(_with_skills_text(document, truncated))
 
 
-def test_attest_catalog_discovery_accepts_real_loader_fixture_and_ignores_native_entries(
+@pytest.mark.parametrize(
+    "use_managed_alias",
+    [False, True],
+    ids=["direct-catalog-root", "managed-alias-root"],
+)
+def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
     tmp_path: Path,
+    use_managed_alias: bool,
 ) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
+    expected_discovery_root = _discovery_root(catalog_dir) if use_managed_alias else catalog_dir
     command, env = _install_prompt_stub(
         tmp_path,
-        _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
+        _loader_output_at_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            expected_discovery_root,
+        ),
     )
 
     errors = discovery.attest_catalog_discovery(
@@ -262,6 +279,7 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_and_ignores_native
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=expected_discovery_root,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -270,7 +288,7 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_and_ignores_native
     assert (catalog_dir / ".system" / "native" / "SKILL.md").is_file()
 
 
-def test_attest_catalog_discovery_reports_missing_managed_name_with_context(
+def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
     tmp_path: Path,
 ) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
@@ -295,12 +313,13 @@ def test_attest_catalog_discovery_reports_missing_managed_name_with_context(
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
 
     diagnostic = "\n".join(errors)
-    assert "missing managed names ['beta']" in diagnostic
+    assert "missing expected names ['beta']" in diagnostic
     assert "roots=" in diagnostic
     assert f"catalog={catalog_dir}" in diagnostic
     assert "version=0.153.4" in diagnostic
@@ -319,6 +338,7 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -328,16 +348,46 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
     assert str(tmp_path / "missing" / "beta" / "SKILL.md") in diagnostic
 
 
-def test_attest_catalog_discovery_reports_duplicate_legacy_root(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "root_failure",
+    ["missing", "wrong", "duplicate"],
+)
+def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
+    tmp_path: Path,
+    root_failure: str,
+) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
-    legacy_root = catalog_dir.parent.parent / "skills"
-    document = json.loads(_loader_output("discovery_prompt_input_v0153.json", catalog_dir))
-    assert isinstance(document, list)
-    text = _skills_text(document).replace(
-        "### Available skills",
-        f"- `r9` = `{legacy_root}`\n### Available skills",
-    )
-    output = _with_skills_text(document, text)
+    if root_failure == "missing":
+        expected_discovery_root = catalog_dir
+        output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir)
+        expected_fragment = "roots do not contain expected discovery root"
+    elif root_failure == "wrong":
+        expected_discovery_root = tmp_path / "wrong-root"
+        expected_discovery_root.mkdir()
+        output = _loader_output_at_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            expected_discovery_root,
+        )
+        expected_fragment = "expected root does not resolve to the catalog"
+    else:
+        expected_discovery_root = catalog_dir
+        document = json.loads(
+            _loader_output_at_root(
+                "discovery_prompt_input_v0153.json",
+                catalog_dir,
+                expected_discovery_root,
+            )
+        )
+        assert isinstance(document, list)
+        output = _with_skills_text(
+            document,
+            _skills_text(document).replace(
+                "### Available skills",
+                f"- `r9` = `{expected_discovery_root}`\n### Available skills",
+            ),
+        )
+        expected_fragment = "roots contain duplicate expected discovery root"
     command, env = _install_prompt_stub(tmp_path, output)
 
     errors = discovery.attest_catalog_discovery(
@@ -345,48 +395,70 @@ def test_attest_catalog_discovery_reports_duplicate_legacy_root(tmp_path: Path) 
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
-        expected_entries=expected_entries,
-        version="0.153.4",
-    )
-
-    assert any("roots contain duplicate legacy root" in error for error in errors)
-
-
-def test_legacy_root_derivation_consumes_catalog_layout_depth(tmp_path: Path) -> None:
-    contract = replace(
-        discovery.CODEX_SKILL_DISCOVERY_CONTRACT,
-        catalog_relpath="nested/add-dir/skills",
-    )
-
-    legacy_root = discovery._legacy_root_for_catalog(
-        tmp_path / contract.catalog_relpath,
-        contract,
-    )
-
-    assert legacy_root == tmp_path / contract.legacy_root_relpath
-
-
-def test_attest_catalog_discovery_rejects_catalog_absent_from_roots(tmp_path: Path) -> None:
-    catalog_dir, expected_entries = _catalog(tmp_path)
-    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir).replace(
-        str(catalog_dir.parent.parent / "skills"),
-        str(tmp_path / "unrelated-skills"),
-    )
-    command, env = _install_prompt_stub(tmp_path, output)
-
-    errors = discovery.attest_catalog_discovery(
-        probe_command=command,
-        env=env,
-        cwd=str(tmp_path),
-        catalog_dir=catalog_dir,
+        expected_discovery_root=expected_discovery_root,
         expected_entries=expected_entries,
         version="0.153.4",
     )
 
     diagnostic = "\n".join(errors)
-    assert "roots do not contain legacy root" in diagnostic
+    assert expected_fragment in diagnostic
+    assert str(expected_discovery_root) in diagnostic
+    assert "roots=" in diagnostic
     assert f"catalog={catalog_dir}" in diagnostic
     assert "version=0.153.4" in diagnostic
+    assert all(len(error) <= 2_000 for error in errors)
+
+
+def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+
+    def probe_must_not_run(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("relative explicit root should fail before probing Codex")
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=("codex", "debug", "prompt-input"),
+        env={},
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=Path("skills"),
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    assert len(errors) == 1
+    assert "expected root must be absolute" in errors[0]
+
+
+def test_attest_catalog_discovery_rejects_symlinked_catalog_before_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    catalog_alias = tmp_path / "catalog-alias"
+    catalog_alias.symlink_to(catalog_dir, target_is_directory=True)
+
+    def probe_must_not_run(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("symlinked catalog should fail before probing Codex")
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=("codex", "debug", "prompt-input"),
+        env={},
+        cwd=str(tmp_path),
+        catalog_dir=catalog_alias,
+        expected_discovery_root=catalog_alias,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    assert len(errors) == 1
+    assert "managed catalog must be a canonical real directory" in errors[0]
 
 
 def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_managed_entry(
@@ -407,11 +479,12 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
 
-    assert any("misplaced managed paths" in error and "alpha=" in error for error in errors)
+    assert any("misplaced expected paths" in error and "alpha=" in error for error in errors)
 
 
 @pytest.mark.parametrize(
@@ -448,6 +521,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
         env={},
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -456,6 +530,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
     assert expected_fragment in diagnostic
     assert f"catalog={catalog_dir}" in diagnostic
     assert "version=0.153.4" in diagnostic
+    assert "timeout_seconds=30.0" in diagnostic
 
 
 def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
@@ -469,6 +544,7 @@ def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
         env={},
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -490,6 +566,7 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -523,6 +600,7 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -574,6 +652,7 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
         env={},
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
         expected_entries=expected_entries,
         version="0.153.4",
         timeout_seconds=12.5,

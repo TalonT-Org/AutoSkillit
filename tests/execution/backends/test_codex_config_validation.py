@@ -42,6 +42,17 @@ _VALID_INVENTORY_BYTES = json.dumps(
 ).encode()
 
 
+class _InertPluginLease:
+    closed = False
+
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return ()
+
+    def close(self) -> None:
+        self.closed = True
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -362,12 +373,82 @@ def _interactive_discovery_spec(
     return backend, spec, generated_home, executable
 
 
-def _prompt_input_for_catalog(generated_home: Path) -> bytes:
+def _projected_plugin_binding(
+    tmp_path: Path,
+    *,
+    skill_entries: tuple[tuple[str, str], ...] = (
+        ("projected-skill", "projected-skill/SKILL.md"),
+    ),
+) -> tuple[Any, Path]:
+    from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding, PluginLoadMode
+
+    projected_home = tmp_path / "projected-home"
+    projected_home.mkdir()
+    for name, relative_path in skill_entries:
+        skill_path = projected_home / "skills" / relative_path
+        skill_path.parent.mkdir(parents=True, exist_ok=True)
+        skill_path.write_text(f"projected skill {name}", encoding="utf-8")
+    binding = PluginLaunchBinding(
+        load_mode=PluginLoadMode.PROJECTED_HOME,
+        plugin_dir=projected_home,
+        identity=PluginArtifactIdentity(
+            semantic_key="projected-test-plugin",
+            incarnation_id="00000000000040008000000000000001",
+            manifest_schema_version=1,
+            artifact_digest="a" * 64,
+            managed_path=projected_home,
+            manifest_path=tmp_path / "projected-test-plugin.manifest.json",
+        ),
+        inherited_fds=(),
+        _lease=_InertPluginLease(),
+        skill_entries=skill_entries,
+    )
+    return binding, projected_home
+
+
+def _projected_interactive_spec(
+    tmp_path: Path,
+) -> tuple[Any, Any, Path, Path]:
+    from autoskillit.core import PROVIDER_PROFILE_ENV_VAR, resolve_executable_launch_binding
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    plugin_binding, projected_home = _projected_plugin_binding(tmp_path)
+    source_home = tmp_path / "projected-source-home"
+    source_home.mkdir()
+    executable = tmp_path / "codex-bound"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    env_extras = {
+        "PATH": str(tmp_path),
+        PROVIDER_PROFILE_ENV_VAR: "test-profile",
+    }
+    backend = CodexBackend(source_codex_home=source_home)
+    candidate = backend.build_interactive_cmd(
+        plugin_binding=plugin_binding,
+        env_extras=env_extras,
+    )
+    binding = resolve_executable_launch_binding(
+        binary_name=executable.name,
+        environment=candidate.env,
+        cwd=tmp_path,
+    )
+    spec = replace(
+        backend.build_interactive_cmd(
+            executable=binding,
+            plugin_binding=plugin_binding,
+            env_extras=env_extras,
+        ),
+        cwd=str(tmp_path),
+    )
+    return backend, spec, projected_home, executable
+
+
+def _prompt_input_for_catalog(catalog_dir: Path) -> bytes:
     skills_block = "\n".join(
         (
             "<skills_instructions>",
             "### Skill roots",
-            f"- `r0` = `{generated_home / 'skills'}`",
+            f"- `r0` = `{catalog_dir}`",
             "### Available skills",
             "- managed-skill: managed skill (file: `r0/managed-skill/SKILL.md`)",
             "</skills_instructions>",
@@ -416,7 +497,11 @@ def test_real_interactive_validator_reaches_successful_native_probe(
         if command == (str(executable), "--version"):
             return probes._BoundedProbeResult(0, b"codex-cli 0.153.4\n", b"")
         if command[-2:] == discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe:
-            return probes._BoundedProbeResult(0, _prompt_input_for_catalog(generated_home), b"")
+            return probes._BoundedProbeResult(
+                0,
+                _prompt_input_for_catalog(generated_home / "skills"),
+                b"",
+            )
         pytest.fail(f"unexpected Codex probe command: {command}")
 
     monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
@@ -460,7 +545,7 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
 ) -> None:
     from autoskillit.execution.backends import codex
 
-    backend, spec, _generated_home, executable = _interactive_discovery_spec(tmp_path)
+    backend, spec, generated_home, executable = _interactive_discovery_spec(tmp_path)
     assert spec.origin is not None
     discovery_errors = ["exact discovery diagnostic"]
     captured: dict[str, object] = {}
@@ -485,8 +570,237 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     )
     assert captured["env"] == spec.env
     assert captured["cwd"] == spec.cwd
+    assert captured["catalog_dir"] == (
+        generated_home / codex.CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+    )
+    assert captured["expected_discovery_root"] == (
+        generated_home / codex.CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
+    )
+    assert captured["expected_entries"] == spec.managed_skill_catalog.skill_entries
     assert captured["timeout_seconds"] == 30
     assert str(executable) == spec.origin.binary
+
+
+def test_projected_interactive_validator_accepts_canonical_home_without_managed_topology(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    monkeypatch.setenv("CODEX_SQLITE_HOME", str(tmp_path / "ambient-sqlite-home"))
+    backend, spec, projected_home, executable = _projected_interactive_spec(tmp_path)
+    assert spec.origin is not None
+    assert spec.managed_skill_catalog is None
+    assert spec.env["CODEX_HOME"] == str(projected_home)
+    assert "CODEX_SQLITE_HOME" not in spec.env
+    assert not (projected_home / "config.toml").exists()
+    events: list[str] = []
+    version_call: dict[str, object] = {}
+    discovery_call: dict[str, object] = {}
+
+    def probe_version(**kwargs: object) -> tuple[str, str, list[str]]:
+        events.append("version")
+        version_call.update(kwargs)
+        return "codex-cli 0.153.4", "0.153.4", []
+
+    def attest(**kwargs: object) -> list[str]:
+        events.append("prompt-input")
+        discovery_call.update(kwargs)
+        return []
+
+    monkeypatch.setattr(codex, "probe_codex_version", probe_version)
+    monkeypatch.setattr(codex, "attest_catalog_discovery", attest)
+
+    assert backend.validate_interactive_invocation(spec) == []
+    assert events == ["version", "prompt-input"]
+    assert version_call == {
+        "executable": str(executable),
+        "env": spec.env,
+        "cwd": spec.cwd,
+        "timeout_seconds": 30.0,
+    }
+    assert discovery_call["probe_command"] == (
+        *codex._interactive_probe_prefix(spec.origin),
+        *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
+    )
+    assert discovery_call["catalog_dir"] == projected_home / "skills"
+    assert discovery_call["expected_discovery_root"] == projected_home / "skills"
+    assert discovery_call["expected_entries"] == spec.projected_skill_entries
+    assert discovery_call["version"] == "codex-cli 0.153.4"
+    assert discovery_call["timeout_seconds"] == 30.0
+
+
+@pytest.mark.parametrize(
+    ("environment_update", "expected_error"),
+    [
+        ({"CODEX_HOME": ""}, "Codex projected interactive validation requires CODEX_HOME"),
+        (
+            {"CODEX_HOME": "relative-home"},
+            "Codex projected interactive CODEX_HOME must be absolute",
+        ),
+        (
+            {"CODEX_SQLITE_HOME": "/unexpected-sqlite-home"},
+            "Codex projected interactive environment must not contain CODEX_SQLITE_HOME",
+        ),
+    ],
+)
+def test_projected_interactive_validator_rejects_invalid_home_environment(
+    tmp_path: Path,
+    environment_update: dict[str, str],
+    expected_error: str,
+) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    environment = dict(spec.env)
+    environment.update(environment_update)
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        expected_error
+    ]
+
+
+def test_projected_interactive_validator_rejects_noncanonical_home(tmp_path: Path) -> None:
+    backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
+    noncanonical_home = projected_home.parent / "projected-home" / ".." / "projected-home"
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(noncanonical_home)
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        "Codex projected interactive CODEX_HOME must be a canonical real directory"
+    ]
+
+
+def test_projected_interactive_validator_rejects_unreadable_home(tmp_path: Path) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(tmp_path / "missing-home")
+
+    errors = backend.validate_interactive_invocation(replace(spec, env=environment))
+
+    assert len(errors) == 1
+    assert errors[0].startswith("Codex projected interactive CODEX_HOME is unreadable:")
+
+
+def test_projected_interactive_validator_rejects_home_file(tmp_path: Path) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    home_file = tmp_path / "home-file"
+    home_file.write_text("not a directory", encoding="utf-8")
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(home_file)
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        "Codex projected interactive CODEX_HOME must be a canonical real directory"
+    ]
+
+
+def test_managed_interactive_validator_rejects_mismatched_reserved_homes(tmp_path: Path) -> None:
+    backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
+    environment = dict(spec.env)
+    environment["CODEX_SQLITE_HOME"] = str(tmp_path / "different-home")
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        "Codex interactive reserved home and SQLite environment must name the same generated home"
+    ]
+
+
+def test_projected_interactive_validator_rejects_missing_catalog_before_prompt_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
+    (projected_home / "skills" / "projected-skill" / "SKILL.md").unlink()
+    monkeypatch.setattr(
+        codex,
+        "probe_codex_version",
+        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
+    )
+
+    errors = backend.validate_interactive_invocation(spec)
+
+    assert any("catalog validation failed" in error for error in errors)
+    assert any("projected-skill/SKILL.md" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("catalog_state", "expected_fragment"),
+    [
+        ("misplaced", "misplaced expected paths"),
+        ("changed", "mutated the managed catalog"),
+    ],
+)
+def test_projected_interactive_validator_rejects_attestation_catalog_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    catalog_state: str,
+    expected_fragment: str,
+) -> None:
+    from autoskillit.execution.backends import _codex_discovery as discovery
+    from autoskillit.execution.backends import codex
+
+    backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
+    catalog_dir = projected_home / "skills"
+    monkeypatch.setattr(
+        codex,
+        "probe_codex_version",
+        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
+    )
+    prompt_root = catalog_dir
+    if catalog_state == "misplaced":
+        prompt_root = tmp_path / "other-home" / "skills"
+        misplaced_skill = prompt_root / "projected-skill" / "SKILL.md"
+        misplaced_skill.parent.mkdir(parents=True)
+        misplaced_skill.write_text("misplaced", encoding="utf-8")
+
+    def run_probe(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
+        if catalog_state == "changed":
+            (catalog_dir / "projected-skill" / "SKILL.md").write_text("changed", encoding="utf-8")
+        return probes._BoundedProbeResult(
+            0,
+            _prompt_input_for_catalog(prompt_root).replace(b"managed-skill", b"projected-skill"),
+            b"",
+        )
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
+
+    errors = backend.validate_interactive_invocation(spec)
+
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_projected_interactive_validator_rejects_empty_or_mixed_catalog_evidence(
+    tmp_path: Path,
+) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    _, managed_spec, _generated_home, _managed_executable = _interactive_discovery_spec(tmp_path)
+
+    assert backend.validate_interactive_invocation(replace(spec, projected_skill_entries=())) == [
+        "Codex interactive validation requires managed or projected catalog evidence"
+    ]
+    assert backend.validate_interactive_invocation(
+        replace(spec, managed_skill_catalog=managed_spec.managed_skill_catalog)
+    ) == ["Codex interactive validation received mixed managed and projected catalogs"]
+
+
+def test_projected_interactive_cmd_rejects_empty_frozen_catalog(tmp_path: Path) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    binding, _projected_home = _projected_plugin_binding(tmp_path, skill_entries=())
+
+    with pytest.raises(ValueError, match="requires nonempty skill entries"):
+        CodexBackend().build_interactive_cmd(plugin_binding=binding)
+
+
+def test_cmd_spec_deep_freezes_projected_skill_entries() -> None:
+    from autoskillit.core import CmdSpec
+
+    entries: Any = [["projected-skill", "projected-skill/SKILL.md"]]
+    spec = CmdSpec(cmd=("codex",), env={}, projected_skill_entries=entries)
+    entries[0][0] = "changed-skill"
+    entries.append(["second-skill", "second-skill/SKILL.md"])
+
+    assert spec.projected_skill_entries == (("projected-skill", "projected-skill/SKILL.md"),)
+    assert isinstance(spec.projected_skill_entries[0], tuple)
 
 
 def test_interactive_validator_skips_version_and_discovery_when_mcp_fails(

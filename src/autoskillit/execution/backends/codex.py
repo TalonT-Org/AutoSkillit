@@ -64,6 +64,7 @@ from autoskillit.execution.backends._codex_config import (
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_discovery import (
+    CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
     probe_codex_version,
@@ -120,6 +121,67 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
+
+
+def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list[str]]:
+    origin = spec.origin
+    if origin is None:
+        return None, ["Codex interactive validation requires unambiguous CmdOrigin metadata"]
+    reconstructed: list[str] = [origin.binary, *origin.mode_flags]
+    for flag, value in origin.kv_flags:
+        reconstructed.extend((flag, value))
+    reconstructed.extend(origin.positional)
+    for flag, value in origin.variadic_pairs:
+        reconstructed.extend((flag, value))
+    if tuple(reconstructed) != spec.cmd:
+        return None, ["Codex interactive CmdOrigin does not describe the finalized command"]
+    if not spec.cwd or not Path(spec.cwd).is_absolute():
+        return None, ["Codex interactive validation requires an absolute finalized cwd"]
+    return origin, []
+
+
+def _validate_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin) -> list[str]:
+    home_value = spec.env.get(CODEX_HOME_ENV_VAR)
+    if not home_value:
+        return ["Codex projected interactive validation requires CODEX_HOME"]
+    if spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR):
+        return ["Codex projected interactive environment must not contain CODEX_SQLITE_HOME"]
+    projected_home = Path(home_value)
+    if not projected_home.is_absolute():
+        return ["Codex projected interactive CODEX_HOME must be absolute"]
+    try:
+        canonical_home = projected_home.resolve(strict=True)
+    except OSError as exc:
+        return [f"Codex projected interactive CODEX_HOME is unreadable: {exc}"]
+    if (
+        projected_home != canonical_home
+        or projected_home.is_symlink()
+        or not projected_home.is_dir()
+    ):
+        return ["Codex projected interactive CODEX_HOME must be a canonical real directory"]
+
+    catalog_dir = projected_home / "skills"
+    raw_version, _, version_errors = probe_codex_version(
+        executable=origin.binary,
+        env=spec.env,
+        cwd=spec.cwd,
+        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+    )
+    if version_errors:
+        return version_errors
+    return attest_catalog_discovery(
+        probe_command=(
+            *_interactive_probe_prefix(origin),
+            *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
+        ),
+        env=spec.env,
+        cwd=spec.cwd,
+        catalog_dir=catalog_dir,
+        expected_discovery_root=catalog_dir,
+        expected_entries=spec.projected_skill_entries,
+        version=raw_version,
+        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+    )
 
 
 def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
@@ -379,19 +441,20 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         return errors
 
     def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-        origin = spec.origin
-        if origin is None:
-            return ["Codex interactive validation requires unambiguous CmdOrigin metadata"]
-        reconstructed: list[str] = [origin.binary, *origin.mode_flags]
-        for flag, value in origin.kv_flags:
-            reconstructed.extend((flag, value))
-        reconstructed.extend(origin.positional)
-        for flag, value in origin.variadic_pairs:
-            reconstructed.extend((flag, value))
-        if tuple(reconstructed) != spec.cmd:
-            return ["Codex interactive CmdOrigin does not describe the finalized command"]
-        if not spec.cwd or not Path(spec.cwd).is_absolute():
-            return ["Codex interactive validation requires an absolute finalized cwd"]
+        origin, origin_errors = _validated_interactive_origin(spec)
+        if origin_errors:
+            return origin_errors
+        assert origin is not None
+
+        managed_catalog = spec.managed_skill_catalog
+        if managed_catalog is not None and spec.projected_skill_entries:
+            return ["Codex interactive validation received mixed managed and projected catalogs"]
+        if managed_catalog is None:
+            if not spec.projected_skill_entries:
+                return [
+                    "Codex interactive validation requires managed or projected catalog evidence"
+                ]
+            return _validate_projected_interactive_invocation(spec, origin)
 
         home_value = spec.env.get(CODEX_HOME_ENV_VAR)
         sqlite_value = spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR)
@@ -407,9 +470,6 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         if str(generated_home) != home_value:
             return ["Codex interactive generated home environment is not canonical"]
 
-        managed_catalog = spec.managed_skill_catalog
-        if managed_catalog is None:
-            return ["Codex interactive managed home requires a frozen skill catalog"]
         expected_add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
         if managed_catalog.session_home != str(generated_home):
             return ["Codex interactive managed skill catalog is bound to another home"]
@@ -464,7 +524,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             executable=origin.binary,
             env=spec.env,
             cwd=spec.cwd,
-            timeout_seconds=30,
+            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
         )
         if version_errors:
             return version_errors
@@ -478,9 +538,11 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             env=spec.env,
             cwd=spec.cwd,
             catalog_dir=catalog_dir,
+            expected_discovery_root=generated_home
+            / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
             expected_entries=managed_catalog.skill_entries,
             version=raw_version,
-            timeout_seconds=30,
+            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
         )
         final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
         errors.extend(final_errors)

@@ -330,6 +330,7 @@ class PluginLaunchBinding:
     identity: PluginArtifactIdentity
     inherited_fds: tuple[int, ...]
     _lease: _LeaseOwner
+    skill_entries: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.load_mode.consumes_artifact:
@@ -350,6 +351,11 @@ class PluginLaunchBinding:
         if inherited_fds != normalize_inherited_fds(self._lease.inherited_fds):
             raise ValueError("inherited descriptors must be owned by the launch lease")
         object.__setattr__(self, "inherited_fds", inherited_fds)
+        object.__setattr__(
+            self,
+            "skill_entries",
+            tuple((name, relative_path) for name, relative_path in self.skill_entries),
+        )
 
     @property
     def closed(self) -> bool:

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -191,6 +192,38 @@ class TestPluginArtifactAuthoritySurface:
                 inherited_fds=(),
                 _lease=_TestLease(),
             )
+
+    def test_binding_deep_freezes_nested_skill_entries(self) -> None:
+        from autoskillit.core import (
+            PluginArtifactIdentity,
+            PluginLaunchBinding,
+            PluginLoadMode,
+        )
+        from tests.execution.backends._plugin_binding import _TestLease
+
+        plugin_dir = Path("/plugin")
+        entries = [["test-skill", "test-skill/SKILL.md"]]
+        binding = PluginLaunchBinding(
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            plugin_dir=plugin_dir,
+            identity=PluginArtifactIdentity(
+                semantic_key="test",
+                incarnation_id="00000000000040008000000000000001",
+                manifest_schema_version=1,
+                artifact_digest="a" * 64,
+                managed_path=plugin_dir,
+                manifest_path=Path("/plugin.json"),
+            ),
+            inherited_fds=(),
+            _lease=_TestLease(),
+            skill_entries=cast(tuple[tuple[str, str], ...], entries),
+        )
+
+        entries[0][0] = "changed"
+
+        assert binding.skill_entries == (("test-skill", "test-skill/SKILL.md"),)
+        assert isinstance(binding.skill_entries, tuple)
+        assert isinstance(binding.skill_entries[0], tuple)
 
 
 class TestAllEntrypointsAgree:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -414,6 +415,8 @@ def test_direct_install_projection_cache_identity_and_reuse(
         DirectInstall,
         PluginArtifactContentionError,
         PluginLoadMode,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
         SkillSourceRef,
     )
     from autoskillit.workspace import (
@@ -425,9 +428,24 @@ def test_direct_install_projection_cache_identity_and_reuse(
 
     monkeypatch.setenv("HOME", str(tmp_path))
     source_root = tmp_path / "plugin"
-    skill_path = source_root / "canonical" / "SKILL.md"
-    skill_path.parent.mkdir(parents=True)
-    skill_path.write_text(
+
+    def write_bundled_skill(name: str, content: str):
+        skill_path = source_root / name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text(content, encoding="utf-8")
+        return _skill_info_from_frontmatter(
+            name,
+            SkillSource.BUNDLED,
+            skill_path,
+            source_ref=SkillSourceRef(
+                origin=SkillSource.BUNDLED,
+                logical_name=name,
+                skill_path=skill_path,
+            ),
+        )
+
+    immutable_cache = write_bundled_skill(
+        "immutable-cache",
         "---\n"
         "name: immutable-cache\n"
         "description: Immutable projection fixture.\n"
@@ -436,26 +454,51 @@ def test_direct_install_projection_cache_identity_and_reuse(
         "---\n"
         "base branch: {{DEFAULT_BASE_BRANCH}}\n"
         "external skill: /autoskillit:external\n",
-        encoding="utf-8",
     )
-    info = _skill_info_from_frontmatter(
-        "immutable-cache",
-        SkillSource.BUNDLED,
-        skill_path,
-        source_ref=SkillSourceRef(
-            origin=SkillSource.BUNDLED,
-            logical_name="immutable-cache",
-            skill_path=skill_path,
-        ),
+    alpha_cache = write_bundled_skill(
+        "alpha-cache",
+        "---\n"
+        "name: alpha-cache\n"
+        "description: Supported projection fixture.\n"
+        "execution_role: session\n"
+        "uses_capabilities: []\n"
+        "---\n"
+        "alpha body\n",
+    )
+    unavailable_cache = write_bundled_skill(
+        "unavailable-cache",
+        "---\n"
+        "name: unavailable-cache\n"
+        "description: Unsupported projection fixture.\n"
+        "execution_role: session\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  join:\n"
+        "    required: true\n"
+        "---\n"
+        "unavailable body\n",
     )
     catalog = EffectiveSkillCatalog(
-        skills=(SkillCatalogEntry.from_skill_info(info),),
+        skills=tuple(
+            SkillCatalogEntry.from_skill_info(info)
+            for info in (unavailable_cache, immutable_cache, alpha_cache)
+        ),
         execution_role=SkillExecutionRole.SESSION,
         namespace_sources={"external": SkillSource.BUNDLED},
     )
+
+    def adapt_semantics(plan, _adaptation_context=None):
+        if plan.join is not None and plan.join.required:
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic="fixture backend does not support fixed-set fan-in",
+            )
+        return SkillSemanticAdaptationResult()
+
     backend = SimpleNamespace(
         name="codex",
         conventions=BackendConventions(),
+        adapt_skill_semantics=adapt_semantics,
     )
     source = DirectInstall(plugin_dir=source_root)
 
@@ -470,6 +513,17 @@ def test_direct_install_projection_cache_identity_and_reuse(
     )
     assert first.plugin_dir is not None
     first_inode = first.plugin_dir.stat().st_ino
+    expected_entries = (
+        ("alpha-cache", "alpha-cache/SKILL.md"),
+        ("immutable-cache", "immutable-cache/SKILL.md"),
+    )
+    assert first.skill_entries == expected_entries
+    skills_dir = first.plugin_dir / "skills"
+    for skill_name, relative_path in first.skill_entries:
+        projected_entry = skills_dir / relative_path
+        assert projected_entry.parent == skills_dir / skill_name
+        assert stat.S_ISREG(projected_entry.lstat().st_mode)
+    assert not (skills_dir / "unavailable-cache").exists()
     projected_skill = first.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
     assert "base branch: develop" in projected_skill.read_text(encoding="utf-8")
     second = authority.acquire_launch_binding(
@@ -479,6 +533,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
     assert second.plugin_dir is not None
     assert second.plugin_dir == first.plugin_dir
     assert second.plugin_dir.stat().st_ino == first_inode
+    assert second.skill_entries == expected_entries
     manifest_path = first.plugin_dir.parent / (
         f".{first.plugin_dir.name}.autoskillit-projection.json"
     )

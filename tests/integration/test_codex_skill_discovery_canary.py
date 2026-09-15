@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,8 +17,12 @@ from autoskillit.core import (
     CmdSpec,
     ManagedSessionHome,
     OutputFormat,
+    PluginLoadMode,
     SkillExecutionRole,
+    managed_home_for,
     pkg_root,
+    plugin_launch_binding_scope,
+    resolve_executable_launch_binding,
 )
 
 # Reuse the production JSON-RPC frame encoder rather than duplicating it here;
@@ -36,6 +42,7 @@ from autoskillit.workspace import (
     EffectiveSkillCatalog,
     SkillsDirectoryProvider,
     compile_session_skill_catalog,
+    project_default_plugin_authority,
 )
 from tests.execution.backends._live_codex_parent import CODEX_LIVE_PROCESS_ENV_ALLOWLIST
 from tests.integration._codex_canary_helpers import SelectedCodex as _SelectedCodex
@@ -426,19 +433,44 @@ def _isolated_child_env(spec_env: Mapping[str, str], generated_home: Path) -> di
     return env
 
 
+def _isolated_projected_home_env(
+    spec_env: Mapping[str, str],
+    *,
+    home: Path,
+    projected_home: Path,
+) -> dict[str, str]:
+    env = _isolated_child_env(spec_env, home)
+    env["CODEX_HOME"] = str(projected_home)
+    env.pop("CODEX_SQLITE_HOME")
+    return env
+
+
 def _run_prompt_input(
     *,
     spec,
     binary: Path,
     generated_home: Path,
     project: Path,
+    require_sqlite_home: bool = True,
 ) -> str:
     assert Path(spec.env["CODEX_HOME"]) == generated_home
-    assert Path(spec.env["CODEX_SQLITE_HOME"]) == generated_home
+    if require_sqlite_home:
+        assert Path(spec.env["CODEX_SQLITE_HOME"]) == generated_home
+    else:
+        assert "CODEX_SQLITE_HOME" not in spec.env
+    probe_env = (
+        _isolated_child_env(spec.env, generated_home)
+        if require_sqlite_home
+        else _isolated_projected_home_env(
+            spec.env,
+            home=Path(spec.env["HOME"]),
+            projected_home=generated_home,
+        )
+    )
     result = subprocess.run(
         _prompt_input_command(spec, binary),
         cwd=Path(spec.cwd) if spec.cwd else project,
-        env=_isolated_child_env(spec.env, generated_home),
+        env=probe_env,
         capture_output=True,
         text=True,
         timeout=_PROBE_TIMEOUT_SECONDS,
@@ -620,6 +652,9 @@ def test_prelaunch_attestation_matches_the_real_loader(
                 env=env,
                 cwd=spec.cwd or str(project),
                 catalog_dir=catalog,
+                expected_discovery_root=(
+                    managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
+                ),
                 expected_entries=expected_entries,
                 version=selected_codex.normalized_version,
                 timeout_seconds=_PROBE_TIMEOUT_SECONDS,
@@ -634,6 +669,9 @@ def test_prelaunch_attestation_matches_the_real_loader(
             env=env,
             cwd=spec.cwd or str(project),
             catalog_dir=catalog,
+            expected_discovery_root=(
+                managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
+            ),
             expected_entries=expected_entries,
             version=selected_codex.normalized_version,
             timeout_seconds=_PROBE_TIMEOUT_SECONDS,
@@ -696,6 +734,122 @@ async def test_installed_app_server_registers_the_session_catalog(
             legacy_root=str(legacy_root),
             registered_names=sorted(driver.first_rows),
             cleared_names=sorted(driver.second_names),
+        )
+        assert diagnostic.is_file()
+
+
+def test_projected_home_prelaunch_attestation_uses_the_direct_skill_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    selected_codex: _SelectedCodex,
+) -> None:
+    """Path B validates its projected catalog immediately before raw-session launch."""
+    isolated_home = tmp_path / "isolated-home"
+    isolated_home.mkdir()
+    xdg_config = isolated_home / "xdg-config"
+    xdg_data = isolated_home / "xdg-data"
+    xdg_config.mkdir()
+    xdg_data.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: isolated_home)
+    monkeypatch.setenv("HOME", str(isolated_home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_data))
+
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    (binary_dir / "codex").symlink_to(selected_codex.binary)
+    monkeypatch.setenv(
+        "PATH",
+        os.pathsep.join((str(binary_dir), os.environ.get("PATH", ""))),
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    catalog = DefaultSkillResolver().list_effective(
+        project,
+        SkillExecutionRole.SESSION,
+        allow_only=frozenset({"make-arch-diag"}),
+    )
+    assert [skill.name for skill in catalog.skills] == ["make-arch-diag"]
+
+    backend = CodexBackend(source_codex_home=_profile_source(tmp_path, ("profile-only",)))
+    authority = project_default_plugin_authority(
+        home=managed_home_for(isolated_home),
+        base_branch="main",
+        catalog=catalog,
+        cwd=project,
+    )
+    with plugin_launch_binding_scope(
+        authority=authority,
+        backend=backend,
+        load_mode=PluginLoadMode.PROJECTED_HOME,
+    ) as plugin_binding:
+        assert plugin_binding is not None
+        assert plugin_binding.plugin_dir is not None
+        projected_home = plugin_binding.plugin_dir
+        projected_catalog = projected_home / "skills"
+        assert projected_home == projected_home.resolve(strict=True)
+        assert not projected_home.is_symlink()
+        assert projected_catalog.is_dir()
+        assert not projected_catalog.is_symlink()
+
+        candidate = backend.build_interactive_cmd(plugin_binding=plugin_binding)
+        executable = resolve_executable_launch_binding(
+            binary_name=backend.binary_name(),
+            environment=candidate.env,
+            cwd=project,
+        )
+        assert executable.path == selected_codex.binary.resolve(strict=True)
+        built_spec = backend.build_interactive_cmd(
+            executable=executable,
+            plugin_binding=plugin_binding,
+        )
+        spec = replace(
+            built_spec,
+            cwd=str(project),
+            env=_isolated_projected_home_env(
+                built_spec.env,
+                home=isolated_home,
+                projected_home=projected_home,
+            ),
+        )
+        expected_entries = plugin_binding.skill_entries
+        assert spec.managed_skill_catalog is None
+        assert spec.projected_skill_entries == expected_entries
+
+        discovered = parse_skills_instructions(
+            _run_prompt_input(
+                spec=spec,
+                binary=selected_codex.binary,
+                generated_home=projected_home,
+                project=project,
+                require_sqlite_home=False,
+            )
+        )
+        expected_names = {name for name, _ in expected_entries}
+        assert expected_names <= discovered.names
+        assert projected_catalog in discovered.roots
+        for name, relative_path in expected_entries:
+            expected_path = projected_catalog / relative_path
+            assert discovered.paths[name] == expected_path
+            assert discovered.paths[name].resolve(strict=True) == expected_path.resolve()
+
+        assert backend.validate_interactive_invocation(spec) == []
+
+        removed_name, relative_path = expected_entries[0]
+        skill_path = projected_catalog / relative_path
+        skill_path.rename(skill_path.with_name("SKILL.md.removed"))
+        errors = backend.validate_interactive_invocation(spec)
+        assert errors
+        assert "Codex skill discovery catalog validation failed" in "\n".join(errors)
+        assert removed_name in "\n".join(errors)
+
+        diagnostic = _write_diagnostics(
+            project,
+            selected_codex,
+            projected_catalog=str(projected_catalog),
+            discovered_names=sorted(discovered.names),
+            attestation_errors=errors,
         )
         assert diagnostic.is_file()
 

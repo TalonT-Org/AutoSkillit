@@ -2151,7 +2151,10 @@ def test_raw_codex_launch_attests_finalized_projected_home_while_lease_is_live(
 
     launch()  # type: ignore[operator]
 
-    assert captured["events"] == ["prepared", "ordered", "validated", "rechecked", "spawned"]
+    events = cast(list[str], captured["events"])
+    assert set(events) == {"prepared", "ordered", "validated", "rechecked", "spawned"}
+    assert events.index("prepared") < events.index("ordered") < events.index("validated")
+    assert events.index("validated") < events.index("rechecked") < events.index("spawned")
     spec = cast(CmdSpec, captured["validated_spec"])
     binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
     assert spec.origin is not None

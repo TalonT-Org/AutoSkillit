@@ -35,7 +35,6 @@ def test_fleet_call_sites_omit_managed_order_inputs(
 
     calls: list[tuple[str, dict[str, object]]] = []
     skill_compilation = MagicMock()
-    skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
     def capture_session(prompt: str, **kwargs: object) -> None:
         calls.append((prompt, kwargs))

@@ -511,7 +511,6 @@ def test_fleet_reload_relaunches_without_resume(
     captured_resume_specs: list = []
     captured_skill_compilations: list[object | None] = []
     skill_compilation = MagicMock()
-    skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
     def fake_run_interactive_session(
         prompt,

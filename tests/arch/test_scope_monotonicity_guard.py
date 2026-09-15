@@ -78,21 +78,26 @@ def _mentions_scope(node: ast.AST | None) -> bool:
     )
 
 
-def _iter_store_names(target: ast.expr) -> list[str]:
-    if isinstance(target, ast.Name):
-        return [target.id]
-    if isinstance(target, (ast.Tuple, ast.List)):
-        names: list[str] = []
-        for element in target.elts:
-            names.extend(_iter_store_names(element))
-        return names
-    if isinstance(target, ast.Starred):
-        return _iter_store_names(target.value)
-    return []
-
-
 class _ScopeCollector(ast.NodeVisitor):
     """Classify every touch of `scope` within one function's body.
+
+    Anchored on `ast.Name` with `ctx=Store` (and `ctx=Del`) rather than an
+    enumeration of binding statement types. Assign, AnnAssign, AugAssign,
+    NamedExpr (walrus), For/AsyncFor targets, and With/AsyncWith targets all
+    surface uniformly as such a Name — a single `visit_Name` rule subsumes
+    what a statement-type allowlist would otherwise need to re-enumerate one
+    node kind at a time, and automatically covers any future grammar addition
+    with the same shape. `visit_Assign` is kept only to track the RHS value
+    for the single-construction-site check, not for detection.
+
+    Two binding shapes are NOT `ast.Name` at all — bare strings — and are
+    handled separately: `ast.ExceptHandler.name` and `ast.Global`/`ast.Nonlocal`
+    names.
+
+    Comprehension targets are deliberately excluded (own scope in Python 3, so
+    an inner `scope` binding there cannot reach the enclosing name) via
+    dedicated visitors that skip `generator.target` but still visit everything
+    else in the comprehension.
 
     Not a general lexical-scope walker: none of the three functions this guard
     audits currently define a nested function, so descending into every nested
@@ -103,24 +108,60 @@ class _ScopeCollector(ast.NodeVisitor):
         self._function = function_name
         self._allow_construction = allow_construction
         self._construction_seen = False
+        self._assign_value: ast.expr | None = None
         self.sites: list[_ScopeSite] = []
 
-    def _check_store_target(self, target: ast.expr, value: ast.expr | None, lineno: int) -> None:
-        if not (isinstance(target, ast.Name) and target.id == _SCOPE_NAME):
-            return
-        if (
-            self._allow_construction
-            and not self._construction_seen
-            and _is_bare_accumulator_construction(value)
-        ):
-            self._construction_seen = True
-            self.sites.append(_ScopeSite(self._function, lineno, "construction", "single site"))
-            return
-        self.sites.append(_ScopeSite(self._function, lineno, "rebind", "assignment"))
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id == _SCOPE_NAME:
+            if isinstance(node.ctx, ast.Store):
+                if (
+                    self._assign_value is not None
+                    and self._allow_construction
+                    and not self._construction_seen
+                    and _is_bare_accumulator_construction(self._assign_value)
+                ):
+                    self._construction_seen = True
+                    self.sites.append(
+                        _ScopeSite(self._function, node.lineno, "construction", "single site")
+                    )
+                else:
+                    self.sites.append(_ScopeSite(self._function, node.lineno, "rebind", "binding"))
+            elif isinstance(node.ctx, ast.Del):
+                self.sites.append(
+                    _ScopeSite(self._function, node.lineno, "rebind", "a del statement")
+                )
+        self.generic_visit(node)
 
-    def _check_target_names(self, target: ast.expr, lineno: int, label: str) -> None:
-        if _SCOPE_NAME in _iter_store_names(target):
-            self.sites.append(_ScopeSite(self._function, lineno, "rebind", label))
+    def visit_Assign(self, node: ast.Assign) -> None:
+        previous = self._assign_value
+        self._assign_value = node.value
+        for target in node.targets:
+            self.visit(target)
+        self._assign_value = previous
+        self.visit(node.value)
+
+    def _skip_comprehension_targets(self, node: ast.expr) -> None:
+        for generator in node.generators:  # type: ignore[attr-defined]
+            self.visit(generator.iter)
+            for if_clause in generator.ifs:
+                self.visit(if_clause)
+        if isinstance(node, ast.DictComp):
+            self.visit(node.key)
+            self.visit(node.value)
+        else:
+            self.visit(node.elt)  # type: ignore[attr-defined]
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self._skip_comprehension_targets(node)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self._skip_comprehension_targets(node)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self._skip_comprehension_targets(node)
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self._skip_comprehension_targets(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
@@ -135,49 +176,6 @@ class _ScopeCollector(ast.NodeVisitor):
             self.sites.append(
                 _ScopeSite(self._function, node.lineno, "unresolvable_call", "dynamic call target")
             )
-        self.generic_visit(node)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        for target in node.targets:
-            self._check_store_target(target, node.value, node.lineno)
-        self.generic_visit(node)
-
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        self._check_store_target(node.target, node.value, node.lineno)
-        self.generic_visit(node)
-
-    def visit_AugAssign(self, node: ast.AugAssign) -> None:
-        if isinstance(node.target, ast.Name) and node.target.id == _SCOPE_NAME:
-            self.sites.append(
-                _ScopeSite(self._function, node.lineno, "rebind", "augmented assignment")
-            )
-        self.generic_visit(node)
-
-    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
-        if isinstance(node.target, ast.Name) and node.target.id == _SCOPE_NAME:
-            self.sites.append(
-                _ScopeSite(self._function, node.lineno, "rebind", "walrus assignment")
-            )
-        self.generic_visit(node)
-
-    def visit_For(self, node: ast.For) -> None:
-        self._check_target_names(node.target, node.lineno, "for-loop target")
-        self.generic_visit(node)
-
-    def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
-        self._check_target_names(node.target, node.lineno, "for-loop target")
-        self.generic_visit(node)
-
-    def visit_With(self, node: ast.With) -> None:
-        for item in node.items:
-            if item.optional_vars is not None:
-                self._check_target_names(item.optional_vars, node.lineno, "with-statement target")
-        self.generic_visit(node)
-
-    def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
-        for item in node.items:
-            if item.optional_vars is not None:
-                self._check_target_names(item.optional_vars, node.lineno, "with-statement target")
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
@@ -199,13 +197,6 @@ class _ScopeCollector(ast.NodeVisitor):
             self.sites.append(
                 _ScopeSite(self._function, node.lineno, "string_rebind", "a nonlocal declaration")
             )
-        self.generic_visit(node)
-
-    def visit_Delete(self, node: ast.Delete) -> None:
-        if any(
-            isinstance(target, ast.Name) and target.id == _SCOPE_NAME for target in node.targets
-        ):
-            self.sites.append(_ScopeSite(self._function, node.lineno, "rebind", "a del statement"))
         self.generic_visit(node)
 
 
@@ -357,6 +348,21 @@ def test_argument_level_set_difference_inside_additive_call_is_not_flagged() -> 
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
         "    scope.add_targets(*(full_set - exclusions))\n"
+    )
+    sites = _scan_tree(ast.parse(source))
+    assert [site.violation for site in sites] == [None, None]
+
+
+def test_comprehension_target_named_scope_is_not_flagged() -> None:
+    """Canary: a comprehension's own iteration variable is not a rebind.
+
+    Comprehensions carry their own scope in Python 3, so `scope` as a
+    comprehension target cannot reach the enclosing name.
+    """
+    source = (
+        "def build_test_scope():\n"
+        "    scope = ScopeAccumulator()\n"
+        "    scope.add_targets(*(name for scope in groups for name in scope))\n"
     )
     sites = _scan_tree(ast.parse(source))
     assert [site.violation for site in sites] == [None, None]

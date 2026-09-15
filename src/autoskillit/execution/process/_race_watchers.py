@@ -71,6 +71,7 @@ async def _watch_stdout_idle(
         try:
             current_size = stdout_path.stat().st_size
         except OSError:
+            last_size = 0
             continue
         if current_size > last_size:
             last_size = current_size

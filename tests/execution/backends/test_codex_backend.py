@@ -62,43 +62,22 @@ from autoskillit.execution.backends.codex import (
     CodexBackend as _CodexBackend,
 )
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_legacy_direct_home: Path | None = None
+CodexBackend = GeneratedHomeCodexBackend
 
 
 @pytest.fixture(autouse=True)
-def _bind_legacy_direct_home(tmp_path: Path):
-    global _legacy_direct_home
-    _legacy_direct_home = tmp_path / "generated-home"
-    try:
-        yield
-    finally:
-        _legacy_direct_home = None
-
-
-def _legacy_home() -> Path:
-    assert _legacy_direct_home is not None
-    return _legacy_direct_home
-
-
-class CodexBackend(_CodexBackend):
-    """Give legacy direct-builder assertions an isolated wrapper home."""
-
-    def build_headless_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_headless_cmd(*args, **kwargs)
-
-    def build_interactive_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_interactive_cmd(*args, **kwargs)
-
-    def build_resume_cmd(self, *args, **kwargs):
-        kwargs.setdefault("session_home", str(_legacy_home()))
-        return super().build_resume_cmd(*args, **kwargs)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        CodexBackend,
+        "generated_home",
+        tmp_path / "generated-home",
+    )
 
 
 _OTLP_OVERRIDES = (

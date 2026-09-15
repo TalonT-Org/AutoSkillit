@@ -9,41 +9,23 @@ import pytest
 from autoskillit.core import SkillSessionConfig
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
+from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _CODEX_SKILL_ADD_DIRS = codex_skill_add_dirs("/repo")
-_legacy_direct_home: Path | None = None
+CodexBackend = GeneratedHomeCodexBackend
 
 
 @pytest.fixture(autouse=True)
-def _bind_legacy_direct_home(tmp_path: Path):
-    global _legacy_direct_home
-    _legacy_direct_home = tmp_path / "generated-home"
-    try:
-        yield
-    finally:
-        _legacy_direct_home = None
-
-
-def _legacy_home() -> Path:
-    assert _legacy_direct_home is not None
-    return _legacy_direct_home
-
-
-class CodexBackend(_CodexBackend):
-    """Supply a test-owned home to legacy direct builder calls."""
-
-    def build_headless_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_headless_cmd(*args, **kwargs)
-
-    def build_interactive_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_interactive_cmd(*args, **kwargs)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        CodexBackend,
+        "generated_home",
+        tmp_path / "generated-home",
+    )
 
 
 class TestCodexTranslateModel:

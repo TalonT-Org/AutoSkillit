@@ -26,6 +26,16 @@ from tests.server.conftest import _SUCCESS_JSON
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _last_claude_call(runner):
+    return next(call for call in reversed(runner.call_args_list) if call[0][0] == "claude")
+
+
+def _command_config() -> AutomationConfig:
+    config = AutomationConfig()
+    config.quota_guard.enabled = False
+    return config
+
+
 class TestRunSkillPluginDir:
     """T2: run_skill passes --plugin-dir to the claude command."""
 
@@ -59,7 +69,7 @@ class TestRunSkillPluginDir:
         )
         await run_skill("/investigate some-error", "/tmp")
 
-        cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
+        cmd = _last_claude_call(tool_ctx_kitchen_open.runner)[0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
         assert authority.bindings
@@ -70,7 +80,7 @@ class TestRunSkillPluginDir:
         assert binding.closed
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
-        actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]
+        actual_cwd = _last_claude_call(tool_ctx_kitchen_open.runner)[1]
         assert actual_cwd == Path("/tmp").resolve(), (
             f"Subprocess cwd mismatch: {actual_cwd} != {Path('/tmp').resolve()}"
         )
@@ -82,7 +92,7 @@ class TestRunSkillTimeoutFromConfig:
     @pytest.mark.anyio
     async def test_run_skill_timeout_from_config(self, tool_ctx_kitchen_open):
         """run_skill uses _config.run_skill.timeout instead of hardcoded value."""
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.run_skill = RunSkillConfig(timeout=120)
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
@@ -98,7 +108,7 @@ class TestRunSkillTimeoutFromConfig:
         )
         await run_skill("/investigate foo", "/tmp")
 
-        assert tool_ctx_kitchen_open.runner.call_args_list[-1][2] == 120.0
+        assert _last_claude_call(tool_ctx_kitchen_open.runner)[2] == 120.0
 
 
 class TestRunSkillInjectsCompletionDirective:
@@ -107,7 +117,7 @@ class TestRunSkillInjectsCompletionDirective:
     @pytest.mark.anyio
     async def test_run_skill_injects_completion_directive(self, tool_ctx_kitchen_open):
         """Skill command passed to claude -p contains the completion marker instruction."""
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
 
@@ -122,7 +132,7 @@ class TestRunSkillInjectsCompletionDirective:
         )
         await run_skill("/investigate foo", "/tmp")
 
-        cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
+        cmd = _last_claude_call(tool_ctx_kitchen_open.runner)[0]
         prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
         skill_arg = cmd[prompt_idx]
         assert "%%ORDER_UP::" in skill_arg
@@ -151,7 +161,7 @@ class TestRunSkillEnvPrefix:
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1]
+        cmd, _cwd, _timeout, kwargs = _last_claude_call(tool_ctx_kitchen_open.runner)
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -159,14 +169,14 @@ class TestRunSkillEnvPrefix:
 
     @pytest.mark.anyio
     async def test_zero_delay_omits_delay_env_var(self, tool_ctx_kitchen_open):
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=0)
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1]
+        cmd, _cwd, _timeout, kwargs = _last_claude_call(tool_ctx_kitchen_open.runner)
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -174,7 +184,7 @@ class TestRunSkillEnvPrefix:
 
     @pytest.mark.anyio
     async def test_custom_delay_value_in_env(self, tool_ctx_kitchen_open):
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.run_skill = RunSkillConfig(
             exit_after_stop_delay_ms=60000, natural_exit_grace_seconds=61.0
         )
@@ -183,7 +193,7 @@ class TestRunSkillEnvPrefix:
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd, _cwd, _timeout, kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1]
+        cmd, _cwd, _timeout, kwargs = _last_claude_call(tool_ctx_kitchen_open.runner)
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
@@ -198,7 +208,7 @@ class TestRunSkillPassesSessionLogDir:
         self, tool_ctx_kitchen_open, tmp_path, monkeypatch
     ):
         """runner receives session_log_dir derived from cwd."""
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
 
@@ -226,7 +236,7 @@ class TestRunSkillPassesSessionLogDir:
         )
         await run_skill("/investigate foo", cwd)
 
-        call_kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1][3]
+        call_kwargs = _last_claude_call(tool_ctx_kitchen_open.runner)[3]
         assert call_kwargs["session_log_dir"] == log_dir
         assert "some-project" in str(log_dir)
 
@@ -245,7 +255,7 @@ class TestRunSkillModel:
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="sonnet")
-        cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
+        cmd = _last_claude_call(tool_ctx_kitchen_open.runner)[0]
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == CLAUDE_MODEL_ALIASES["sonnet"]
 
@@ -260,7 +270,7 @@ class TestRunSkillModel:
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
-        cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
+        cmd = _last_claude_call(tool_ctx_kitchen_open.runner)[0]
         assert "--model" not in cmd
 
 
@@ -513,7 +523,7 @@ class TestRunSkillMcpTimeout:
         """On TimeoutError, run_skill returns SkillResult.crashed() envelope."""
         import json
 
-        cfg = AutomationConfig()
+        cfg = _command_config()
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
 

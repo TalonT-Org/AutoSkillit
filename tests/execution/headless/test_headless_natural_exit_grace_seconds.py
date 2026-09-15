@@ -30,6 +30,7 @@ def _configure_run_skill(
         exit_after_stop_delay_ms=exit_after_stop_delay_ms,
     )
     cfg.safety.require_dry_walkthrough = False
+    cfg.quota_guard.enabled = False
     ctx.config = cfg
 
 

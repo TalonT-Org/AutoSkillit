@@ -16,7 +16,6 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
     _make_recipe_info,
     _make_standard_recipe,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _simple_prompt_builder,
 )
@@ -50,7 +49,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         assert not tool_ctx.worker_capacity.at_capacity()
@@ -73,7 +71,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -97,7 +94,6 @@ class TestDispatchFoodTruckExecution:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
         assert not tool_ctx.worker_capacity.at_capacity()
@@ -142,7 +138,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(raw.outcome.to_envelope())
@@ -212,7 +207,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         dispatch_id = tool_ctx.executor.dispatch_calls[0].order_id
@@ -244,7 +238,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         assert "quota_post_dispatch_refresh" in submitted_labels
@@ -274,7 +267,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         assert len(cleanup_calls) == 0
@@ -299,7 +291,6 @@ class TestDispatchFoodTruckExecution:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             cache_invalidator=_capture_invalidate,
         )

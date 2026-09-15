@@ -777,7 +777,7 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
             role_config = tomllib.loads(
                 (session_home / "agents" / f"{role}.toml").read_text(encoding="utf-8")
             )
-            assert "env" not in role_config["mcp_servers"]["autoskillit"]
+            assert "env" not in role_config.get("mcp_servers", {}).get("autoskillit", {})
         events.append("manager-cleanup")
         return original_manager_cleanup(session_id)
 

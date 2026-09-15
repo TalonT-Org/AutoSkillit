@@ -13,8 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit._llm_triage import triage_staleness
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     DIRECT_INSTALL_CACHE_SUBDIR,
     MARKETPLACE_PREFIX,
+    ArtifactLease,
+    ArtifactLeaseContention,
     ensure_project_temp,
     get_logger,
     pipeline_tracker_directory,
@@ -48,6 +51,9 @@ from autoskillit.execution import (
     invalidate_cache as invalidate_cache,
 )
 from autoskillit.execution import (
+    oauth_admission_lock_path as oauth_admission_lock_path,
+)
+from autoskillit.execution import (
     resolve_log_dir as resolve_log_dir,
 )
 from autoskillit.execution import (
@@ -63,6 +69,7 @@ from autoskillit.hook_registry import (
     validate_plugin_cache_hooks,
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.pipeline import create_background_task
 from autoskillit.workspace import (
     AgentSkillDocument as AgentSkillDocument,
 )
@@ -267,15 +274,26 @@ async def _prime_quota_cache(*, supports_quota_check: bool) -> None:
 
     try:
         _ctx = _ctx_fn()
-        await check_and_sleep_if_needed(
-            _ctx.config.quota_guard,
-            provider="anthropic",
-        )
+        with ArtifactLease.acquire_shared(
+            oauth_admission_lock_path(resolve_log_dir(_ctx.config.linux_tracing.log_dir)),
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        ):
+            await check_and_sleep_if_needed(
+                _ctx.config.quota_guard,
+                provider="anthropic",
+            )
+    except ArtifactLeaseContention:
+        logger.warning("quota_prime_admission_lock_contended")
     except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
 
 
-async def _quota_refresh_loop(config: QuotaGuardConfig, *, supports_quota_check: bool) -> None:
+async def _quota_refresh_loop(
+    config: QuotaGuardConfig,
+    *,
+    diagnostic_log_root: Path,
+    supports_quota_check: bool,
+) -> None:
     """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
 
     Designed to run as a background asyncio.Task for the duration of a kitchen session.
@@ -298,9 +316,33 @@ async def _quota_refresh_loop(config: QuotaGuardConfig, *, supports_quota_check:
     while True:
         await asyncio.sleep(config.cache_refresh_interval)
         try:
-            await _refresh_quota_cache(config)
+            with ArtifactLease.acquire_shared(
+                oauth_admission_lock_path(diagnostic_log_root),
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            ):
+                await _refresh_quota_cache(config)
+        except ArtifactLeaseContention:
+            logger.warning("quota_refresh_admission_lock_contended")
         except Exception as exc:
             logger.warning("quota_refresh_loop_error", exc_info=True, error=str(exc))
+
+
+def _ensure_quota_refresh_started(ctx: Any) -> None:
+    """Start an Anthropic refresh loop after a finalized Claude candidate is admitted."""
+    task = ctx.quota_refresh_task
+    if task is not None and not task.done():
+        return
+    try:
+        ctx.quota_refresh_task = create_background_task(
+            _quota_refresh_loop(
+                ctx.config.quota_guard,
+                diagnostic_log_root=resolve_log_dir(ctx.config.linux_tracing.log_dir),
+                supports_quota_check=True,
+            ),
+            label="quota_refresh_loop",
+        )
+    except Exception:
+        logger.warning("quota_refresh_lazy_start_failed", exc_info=True)
 
 
 def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:

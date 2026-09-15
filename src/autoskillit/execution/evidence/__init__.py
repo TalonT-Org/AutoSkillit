@@ -43,6 +43,7 @@ from autoskillit.execution.evidence.session_log import (
     flush_session_log,
     resolve_log_dir,
     session_index_lock_path,
+    write_execution_candidate_manifest,
 )
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "flush_session_log",
     "resolve_log_dir",
     "session_index_lock_path",
+    "write_execution_candidate_manifest",
     # _session_log_recovery
     "recover_crashed_sessions",
     # _session_retention

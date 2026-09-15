@@ -19,7 +19,7 @@ def test_project_config_has_operational_test_gate_tuple():
     cfg = load_yaml(REPO_ROOT / ".autoskillit/config.yaml")
     test_check = cfg["test_check"]
     assert test_check["command"] == ["task", "test-local-gate"]
-    assert test_check["timeout"] == 900
+    assert test_check["timeout"] == 1200
     assert test_check["filter_mode"] == "conservative"
     assert test_check["base_ref"] == "develop"
 

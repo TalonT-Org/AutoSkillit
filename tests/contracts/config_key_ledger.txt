@@ -78,6 +78,7 @@ process_tether.cook_ceiling_seconds
 process_tether.orphan_ceiling_seconds
 process_tether.systemd_scope_enabled
 providers.default_provider
+providers.execution_candidates
 providers.model_overrides
 providers.profiles
 providers.provider_retry_limit

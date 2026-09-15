@@ -338,6 +338,7 @@ providers:
   step_overrides: {}
   recipe_overrides: {}
   model_overrides: {}
+  execution_candidates: []
   provider_retry_limit: 2
 
 agent_backend:

@@ -6,38 +6,36 @@ import dataclasses
 import os
 import time
 import traceback
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING
 
 import anyio
 
+import autoskillit.execution.headless._headless_terminal as _terminal
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
+    CandidatePreSpawnRejection,
     ClosureAuthoritySpec,
     CmdSpec,
     CodingAgentBackend,
     ExecutionIdentity,
     InfrastructureFaultError,
-    KillReason,
     LaunchPreparation,
     LaunchResolver,
     ModelIdentity,
     PluginArtifactAuthority,
     PluginLaunchBinding,
     PluginLoadMode,
-    ProviderOutcome,
-    RecipeIdentity,
     ResolvedLaunchContract,
     RetryReason,
     SkillResult,
     WriteBehaviorSpec,
     collect_version_snapshot,
     get_logger,
-    is_feature_enabled,
     is_git_main_checkout,
     is_git_worktree,
     is_in_git_repo,
@@ -88,7 +86,7 @@ from autoskillit.execution.runtime.clone_guard import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import SubprocessResult
+    from autoskillit.core import ExecutionSelection, SubprocessResult
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe._contracts_types import SkillContract
 
@@ -134,8 +132,6 @@ async def _execute_claude_headless(
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     retained_binding: PluginLaunchBinding | None = None,
-    provider_fallback_env: dict[str, str] | None = None,
-    provider_fallback_name: str = "",
     provider_extras: Mapping[str, str] | None = None,
     enable_deadline_extension: bool = False,
     max_extension_seconds: float = 7200,
@@ -156,9 +152,16 @@ async def _execute_claude_headless(
     skill_contract: SkillContract | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    execution_selection: ExecutionSelection | None = None,
+    execution_selection_provider: Callable[[], ExecutionSelection | None] | None = None,
+    pre_spawn_admission: Callable[
+        [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+    ]
+    | None = None,
+    mark_execution_started: Callable[[], None] | None = None,
     child_role: str | None = None,
     child_attribution_skill: str = "",
-) -> SkillResult:
+) -> SkillResult | CandidatePreSpawnRejection:
     """Shared subprocess execution for headless Claude sessions.
 
     Acquires one plugin binding per attempt (or reuses ``retained_binding`` when
@@ -176,8 +179,6 @@ async def _execute_claude_headless(
 
     current_provider_name: str = provider_name
     current_provider_extras: dict[str, str] = dict(provider_extras or {})
-    fallback_activated: bool = False
-    remaining_attempts = ctx.config.providers.provider_retry_limit if provider_fallback_env else 0
 
     runner = ctx.runner
     if runner is None:
@@ -192,6 +193,7 @@ async def _execute_claude_headless(
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
     _start_mono = time.monotonic()
+    _start_epoch = time.time()
     _versions = collect_version_snapshot(_step_backend)  # type: ignore[arg-type]
 
     _readonly_skill = readonly_skill
@@ -293,6 +295,7 @@ async def _execute_claude_headless(
     launch_logged = False
     spec: CmdSpec | None = None
     current_launch_contract: ResolvedLaunchContract | None = None
+    execution_started = False
 
     def observe_launch(contract: ResolvedLaunchContract) -> None:
         nonlocal current_launch_contract
@@ -300,8 +303,15 @@ async def _execute_claude_headless(
         if on_launch_resolved is not None:
             on_launch_resolved(contract)
 
+    def observe_execution_started() -> None:
+        nonlocal execution_started
+        execution_started = True
+        if mark_execution_started is not None:
+            mark_execution_started()
+
     sink = LocalOtlpSink.start(ctx.config.linux_tracing.log_dir)
     physical_attempt = 0
+    same_binding_nudge_attempted = False
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
     recorder, _observe_managed_spawn, _bind_managed_launch_alias = (
@@ -332,7 +342,7 @@ async def _execute_claude_headless(
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
                 physical_attempt += 1
-                _result, spec = await _run_headless_attempt(
+                attempt_result = await _run_headless_attempt(
                     build_spec,
                     runner=runner,
                     backend=_step_backend,
@@ -365,11 +375,16 @@ async def _execute_claude_headless(
                     backend_resume_session_id=backend_resume_session_id,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
                     on_launch_resolved=observe_launch,
+                    pre_spawn_admission=pre_spawn_admission,
+                    mark_execution_started=observe_execution_started,
                     managed_attempt_id=managed_attempt_id,
                     attempt=physical_attempt,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     **lineage_callbacks.launch_kwargs,
                 )
+                if isinstance(attempt_result, CandidatePreSpawnRejection):
+                    return attempt_result
+                _result, spec = attempt_result
             except InfrastructureFaultError as exc:
                 logger.error("headless_runner_infrastructure_fault", exc_info=True)
                 result = None
@@ -443,16 +458,36 @@ async def _execute_claude_headless(
                 skill_result,
                 _step_backend.capabilities.anthropic_provider_capable,
                 getattr(ctx.config, "quota_guard", None),
+                credential_scope=(
+                    current_launch_contract.quota_identity.get("credential_scope")
+                    if current_launch_contract is not None
+                    else None
+                ),
             )
 
+            nudge_selection = (
+                execution_selection_provider()
+                if execution_selection_provider is not None
+                else execution_selection
+            )
+            nudge_deadline_epoch = (
+                nudge_selection.invocation_deadline_epoch
+                if nudge_selection is not None
+                and nudge_selection.invocation_deadline_epoch is not None
+                else _start_epoch + timeout
+            )
+            nudge_deadline_remaining = nudge_deadline_epoch - time.time()
             if (
                 skill_result.needs_retry
                 and skill_result.session_id
+                and current_launch_contract is not None
+                and nudge_deadline_remaining > 0
                 and skill_result.retry_reason
                 in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
             ):
                 try:
                     physical_attempt += 1
+                    same_binding_nudge_attempted = True
                     nudge_success = await _attempt_contract_nudge(
                         skill_result,
                         result,
@@ -475,12 +510,17 @@ async def _execute_claude_headless(
                         launch_preparation=launch_preparation,
                         expected_launch_contract=resume_launch_contract,
                         on_launch_resolved=observe_launch,
+                        pre_spawn_admission=pre_spawn_admission,
+                        mark_execution_started=observe_execution_started,
                         on_session_id_resolved=capture_resolved_session_id,
                         natural_exit_grace_seconds=natural_exit_grace_seconds,
+                        nudge_timeout=min(60.0, nudge_deadline_remaining),
                         attempt=physical_attempt,
                         ceiling_seconds=ceiling_seconds,
                         **lineage_callbacks.attempt_kwargs,
                     )
+                    if isinstance(nudge_success, CandidatePreSpawnRejection):
+                        return nudge_success
                 except InfrastructureFaultError:
                     raise
                 except BaseException as exc:
@@ -520,21 +560,6 @@ async def _execute_claude_headless(
             # skill_result is final now (post nudge/clone-guard); record before retry decides.
             recorder.record_outcome(skill_result, "attempt_final")
 
-            if (
-                skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
-                and provider_fallback_env is not None
-                and remaining_attempts > 0
-                and provider_name
-                and is_feature_enabled("providers", ctx.config.features)
-            ):
-                if not fallback_activated:
-                    current_provider_extras.update(provider_fallback_env)
-                    current_provider_extras.update(sink_env)
-                    if provider_fallback_name:
-                        current_provider_name = provider_fallback_name
-                fallback_activated = True
-                remaining_attempts -= 1
-                continue
             lineage_callbacks.bind_final(skill_result.session_id)
             break
 
@@ -560,11 +585,17 @@ async def _execute_claude_headless(
             evidence_session_id=evidence_session_id,
             diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
         )
-        provider_outcome = ProviderOutcome(
-            provider_used=current_provider_name,
-            fallback_activated=fallback_activated,
+        terminal_selection, provider_outcome = _terminal.finalize_terminal_selection(
+            execution_selection=execution_selection,
+            execution_selection_provider=execution_selection_provider,
+            current_launch_contract=current_launch_contract,
+            provider_name=current_provider_name,
+            same_binding_nudge_attempted=same_binding_nudge_attempted,
+            execution_started=execution_started,
+            skill_result=skill_result,
+            backend=_step_backend,
         )
-        recipe_identity = RecipeIdentity(
+        recipe_identity = _terminal.build_recipe_identity(
             name=recipe_name,
             content_hash=recipe_content_hash,
             composite_hash=recipe_composite_hash,
@@ -624,7 +655,21 @@ async def _execute_claude_headless(
         skill_result = dataclasses.replace(
             skill_result,
             provider=provider_outcome,
+            execution_selection=terminal_selection,
         )
+
+        if terminal_selection is not None:
+            from autoskillit.execution.evidence.session_log import (
+                write_execution_candidate_manifest,
+            )
+
+            write_execution_candidate_manifest(
+                terminal_selection,
+                ctx.config.linux_tracing.log_dir,
+                max_sessions=ctx.config.linux_tracing.max_sessions,
+                project_dir=str(ctx.project_dir),
+                build_protected_campaign_ids=ctx.build_protected_campaign_ids,
+            )
 
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
@@ -633,94 +678,45 @@ async def _execute_claude_headless(
             else:
                 from autoskillit.execution.evidence.session_log import flush_session_log
 
-            flush_kwargs: dict[str, Any] = {
-                "log_dir": ctx.config.linux_tracing.log_dir,
-                "cwd": cwd,
-                "kitchen_id": kitchen_id,
-                "caller_session_id": caller_session_id,
-                "order_id": order_id,
-                "campaign_id": campaign_id,
-                "dispatch_id": dispatch_id,
-                "project_dir": project_dir,
-                "build_protected_campaign_ids": ctx.build_protected_campaign_ids,
-                "session_id": evidence_session_id,
-                "pid": result.pid if result is not None else 0,
-                "skill_command": skill_command,
-                "success": skill_result.success,
-                "needs_retry": skill_result.needs_retry,
-                "retry_reason": skill_result.retry_reason.value,
-                "infra": skill_result.infra,
-                "api_error_status": skill_result.api_failure.status,
-                "is_error": skill_result.is_error,
-                "subtype": skill_result.subtype,
-                "exit_code": skill_result.exit_code,
-                "start_ts": result.start_ts if result is not None else _start_ts,
-                "proc_snapshots": result.proc_snapshots if result is not None else None,
-                "termination_reason": (
-                    result.termination.value if result is not None else terminal_reason_override
-                ),
-                "exception_text": terminal_exception_text,
-                "versions": _versions,
-                "provider_outcome": provider_outcome,
-                "recipe_identity": recipe_identity,
-                "max_sessions": ctx.config.linux_tracing.max_sessions,
-                "model_identity": resolved_model_identity,
-                "backend": cast(Literal["claude-code", "codex"], _step_backend.name),
-                "channel_b_capable": _step_backend.capabilities.channel_b_capable,
-                "comm_aliases": _step_backend.capabilities.process_name_aliases,
-                "telemetry": terminal_telemetry,
-                "backend_authority": dict(
+            flush_kwargs = _terminal.build_terminal_flush_kwargs(
+                ctx=ctx,
+                result=result,
+                skill_result=skill_result,
+                cwd=cwd,
+                kitchen_id=kitchen_id,
+                caller_session_id=caller_session_id,
+                order_id=order_id,
+                campaign_id=campaign_id,
+                dispatch_id=dispatch_id,
+                project_dir=project_dir,
+                session_id=evidence_session_id,
+                skill_command=skill_command,
+                step_name=step_name,
+                start_ts=_start_ts,
+                termination_reason=terminal_reason_override,
+                exception_text=terminal_exception_text,
+                versions=_versions,
+                provider_outcome=provider_outcome,
+                recipe_identity=recipe_identity,
+                model_identity=resolved_model_identity,
+                backend=_step_backend.name,
+                channel_b_capable=_step_backend.capabilities.channel_b_capable,
+                comm_aliases=_step_backend.capabilities.process_name_aliases,
+                telemetry=terminal_telemetry,
+                backend_authority=dict(
                     current_launch_contract.backend_authority.to_payload()
                     if current_launch_contract is not None
                     else launch_preparation.backend_authority.to_payload()
                 ),
-                "launch_contract_digest": (
+                launch_contract_digest=(
                     current_launch_contract.digest if current_launch_contract is not None else ""
                 ),
-                "native_shell_capture": terminal_capture_diagnostic,
-                "session_type": lineage_callbacks.session_type,
-            }
-            if result is not None:
-                assert spec is not None
-                flush_kwargs.update(
-                    {
-                        "cli_subtype": skill_result.cli_subtype,
-                        "end_ts": result.end_ts,
-                        "elapsed_seconds": result.elapsed_seconds,
-                        "kill_reason": skill_result.kill_reason.value,
-                        "snapshot_interval_seconds": ctx.config.linux_tracing.proc_interval,
-                        "step_name": step_name,
-                        "api_retry_count": skill_result.api_retry.count,
-                        "api_retry_last_error": skill_result.api_retry.last_error,
-                        "api_retry_last_status": skill_result.api_retry.last_status,
-                        "api_retry_exhausted": skill_result.api_retry.exhausted,
-                        "ndjson_unknown_event_count": (
-                            skill_result.ndjson_drift.unknown_event_count
-                        ),
-                        "ndjson_unknown_item_count": skill_result.ndjson_drift.unknown_item_count,
-                        "write_path_warnings": skill_result.write_path_warnings,
-                        "write_call_count": skill_result.evidence.write_call_count,
-                        "fs_writes_detected": skill_result.evidence.fs_writes_detected,
-                        "git_writes_detected": skill_result.evidence.git_writes_detected,
-                        "file_changes_count": skill_result.evidence.file_changes_count,
-                        "clone_contamination_reverted": _clone_reverted,
-                        "tracked_comm": result.tracked_comm,
-                        "orphaned_tool_result": result.orphaned_tool_result,
-                        "raw_stdout": (
-                            result.stdout
-                            if (
-                                not skill_result.success
-                                or skill_result.kill_reason != KillReason.NATURAL_EXIT
-                            )
-                            else ""
-                        ),
-                        "last_stop_reason": skill_result.last_stop_reason,
-                        "is_resume": spec.is_resume,
-                        "outcome_fields": skill_result.outcome_fields,
-                        "outcome_invariant_violated": skill_result.outcome_invariant_violated,
-                        "outcome_qualifier": skill_result.outcome_qualifier,
-                    }
-                )
+                native_shell_capture=terminal_capture_diagnostic,
+                session_type=lineage_callbacks.session_type,
+                execution_selection=terminal_selection,
+                clone_contamination_reverted=_clone_reverted,
+                is_resume=spec.is_resume if spec is not None else False,
+            )
             try:
                 with anyio.CancelScope(shield=pending_cancel is not None):
                     flush_session_log(**flush_kwargs)

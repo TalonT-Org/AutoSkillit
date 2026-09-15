@@ -225,7 +225,7 @@ async def test_attested_run_skill_preserves_recipe_model_vacancy(
     tmp_path,
     tool_ctx_ready_recipe,
 ) -> None:
-    """The real research scope step keeps the executor model sentinel vacant."""
+    """A vacant recipe model resolves to the configured launch default."""
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -250,10 +250,7 @@ async def test_attested_run_skill_preserves_recipe_model_vacancy(
 
     assert result.get("stage") != "preflight:recipe_execution", result
     assert len(executor.calls) == 1
-    assert executor.calls[0].model == "", (
-        "unresolved recipe model must preserve the executor's vacancy sentinel, got "
-        f"{executor.calls[0].model!r}"
-    )
+    assert executor.calls[0].model == ready.tool_ctx.config.model.default_model
 
 
 async def test_attested_run_skill_reports_missing_canonical_tool_def(

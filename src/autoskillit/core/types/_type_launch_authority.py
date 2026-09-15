@@ -154,6 +154,7 @@ class ModelPinResolution:
 
     model: str
     source: LaunchValueSource
+    profile_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)

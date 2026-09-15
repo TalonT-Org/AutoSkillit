@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher
+from tests.fleet._helpers import _noop_quota_refresher
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -45,7 +45,6 @@ async def test_fleet_dispatch_surfaces_plus_n_more_for_combined_overflow(tool_ct
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -78,7 +77,6 @@ async def test_fleet_dispatch_no_indicator_at_exactly_six(tool_ctx):
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 

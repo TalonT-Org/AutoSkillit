@@ -374,6 +374,57 @@ def test_explicit_authority_precedence_is_declarative(
     assert preparation.backend_authority.key_path == expected_key_path
 
 
+def test_launch_preparation_keeps_the_winning_source_for_each_value() -> None:
+    recipe_backend = _authority(
+        "claude-code",
+        BackendAuthorityKind.RECIPE,
+        BackendAuthorityTier.RECIPE,
+        "recipe.backend",
+    )
+    binding = ProviderBinding(
+        provider="anthropic",
+        profile="production",
+        required_backend="claude-code",
+        normalized_endpoint="https://api.anthropic.com",
+        key_path="providers.recipe.production",
+        provider_source=RECIPE,
+        profile_source=STEP,
+        endpoint_source=RECIPE,
+    )
+
+    preparation = DefaultLaunchResolver().prepare(
+        _request(
+            authority_candidates=(
+                _authority(
+                    "claude-code",
+                    BackendAuthorityKind.GLOBAL,
+                    BackendAuthorityTier.GLOBAL,
+                    "agent_backend.backend",
+                ),
+                recipe_backend,
+            ),
+            provider_binding=binding,
+            requested_model="caller-model",
+            requested_model_source=CALLER,
+            configured_model="recipe-model",
+            configured_model_source=RECIPE,
+        )
+    )
+
+    assert preparation.backend_authority == recipe_backend
+    assert (
+        preparation.provider_source,
+        preparation.profile_source,
+        preparation.endpoint_source,
+    ) == (RECIPE, STEP, RECIPE)
+    assert (
+        preparation.requested_model,
+        preparation.requested_model_source,
+        preparation.configured_model,
+        preparation.configured_model_source,
+    ) == ("caller-model", CALLER, "recipe-model", RECIPE)
+
+
 @pytest.mark.parametrize(
     "metadata",
     [

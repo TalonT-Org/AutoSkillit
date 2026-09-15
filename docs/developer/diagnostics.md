@@ -63,6 +63,28 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 `summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`, `child_outcomes` (see [Child Terminal Reasons](#child-terminal-reasons)).
 
+### Execution-candidate manifests
+
+Before evaluating a primary binding or configured alternative, `run_skill`
+atomically records its current selection at
+`execution-candidates/<selection-id>.json` beneath the diagnostic log root.
+The manifest records ordered attempts, requested and effective backend/provider/
+model values, pre-spawn rejection reasons, quota-admission data, the terminal
+selection, completion state, and any continuation recommendation. Secret values
+are not included; the provider binding records only secret environment key names.
+
+`candidate_exhausted: true` means every recorded route was rejected before any
+worker started. It is therefore distinct from a child failure. A candidate that
+has started is terminal for candidate selection: no later entry may be launched
+as a replay of that work.
+
+Candidate manifests follow `linux_tracing.max_sessions` as their ordinary
+retention window. The manifest currently being written, manifests for protected
+campaigns, and pending selections before their invocation deadline are retained
+even when that exceeds the count. A telemetry-clear marker can make older,
+unprotected manifests eligible immediately. Completed and expired unprotected
+manifests are then pruned by age until the configured count is met.
+
 ### Anomaly Types
 
 | Kind | Condition | Severity |

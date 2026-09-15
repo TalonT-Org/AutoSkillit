@@ -162,13 +162,6 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "Cook startup selects the provider profile inherited by hook policy.",
     ),
     HookEnvVarDef(
-        "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
-        "operator",
-        None,
-        None,
-        "Operators may override the quota safety buffer for a local session.",
-    ),
-    HookEnvVarDef(
         "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
         "operator",
         None,
@@ -188,13 +181,6 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         None,
         None,
         "Operators may deliberately disable quota enforcement for a local session.",
-    ),
-    HookEnvVarDef(
-        "AUTOSKILLIT_SESSION_DEADLINE",
-        "autoskillit",
-        "autoskillit.fleet.dispatch._execution:run_execution",
-        "autoskillit.fleet.dispatch._api:_run_dispatch",
-        "Fleet dispatch propagates the bounded child-session execution deadline.",
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_SESSION_TYPE",

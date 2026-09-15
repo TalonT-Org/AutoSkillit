@@ -381,6 +381,7 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill records provider_extras and profile_name when feature is enabled."""
+    from autoskillit.config import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -388,12 +389,9 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("vertex", {"ANTHROPIC_API_KEY": "test-key-xyz"}),
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        default_provider="vertex",
+        profiles={"vertex": {"ANTHROPIC_API_KEY": "test-key-xyz"}},
     )
 
     await run_skill("/autoskillit:probe", str(tmp_path))
@@ -424,7 +422,7 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     assert set(executor.calls[0].provider_extras or {}) == {"AUTOSKILLIT_SESSION_DEADLINE"}
     assert executor.calls[0].profile_name == ""
-    assert executor.calls[0].provider_name == ""
+    assert executor.calls[0].provider_name == "anthropic"
 
 
 @pytest.mark.anyio
@@ -439,19 +437,11 @@ async def test_run_skill_provider_extras_none_when_default_profile(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {}),
-    )
-
     await run_skill("/autoskillit:probe", str(tmp_path))
 
     assert set(executor.calls[0].provider_extras or {}) == {"AUTOSKILLIT_SESSION_DEADLINE"}
     assert executor.calls[0].profile_name == ""
-    assert executor.calls[0].provider_name == ""
+    assert executor.calls[0].provider_name == "anthropic"
 
 
 @pytest.mark.anyio

@@ -1168,6 +1168,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Server file-level entries:
             "server/test_audit_admission_projected_plugin_process.py",
             "server/test_declare_join_batch_handler.py",
+            "server/test_execution_candidates.py",
             "server/test_explicit_backend_override.py",
             "server/test_factory_context_construction.py",
             "server/test_managed_fixed_batch.py",

@@ -656,7 +656,6 @@ class TestValidationFailureCampaignState:
             dispatch_name="step1",
             timeout_sec=None,
             prompt_builder=lambda **kw: "",
-            quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import (
@@ -714,7 +713,6 @@ class TestValidationFailureCampaignState:
             dispatch_name="step1",
             timeout_sec=None,
             prompt_builder=lambda **kw: "",
-            quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
         )
 
@@ -771,7 +769,6 @@ class TestValidationFailureCampaignState:
             dispatch_name="step1",
             timeout_sec=None,
             prompt_builder=lambda **kw: "",
-            quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
         )
         from autoskillit.server.tools.tools_fleet_dispatch import (
@@ -881,7 +878,6 @@ class TestValidationFailureCampaignState:
             dispatch_name="step1",
             timeout_sec=None,
             prompt_builder=lambda **kw: "",
-            quota_checker=lambda **kw: {},
             quota_refresher=lambda **kw: None,
         )
 

@@ -5,7 +5,10 @@ terminal response shaping.
 from __future__ import annotations
 
 import json
+import os
 import time
+from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,9 +20,19 @@ from autoskillit.core import (
     AuditMaterializationStatus,
     AuditOutcome,
     AuditOutcomeStatus,
+    CandidatePreSpawnRejection,
+    ExecutionCandidateAttempt,
+    ResolvedLaunchContract,
     SkillResult,
     get_logger,
 )
+from autoskillit.execution import (
+    admit_quota,
+    resolve_log_dir,
+    write_execution_candidate_manifest,
+)
+from autoskillit.quota_constraints import quota_scope
+from autoskillit.server._misc import _ensure_quota_refresh_started
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.recipe._recipe_execution import (
     required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
@@ -38,9 +51,150 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
+async def _execute_and_finalize_run_skill(
+    state: _RunSkillDispatchState,
+) -> str | CandidatePreSpawnRejection:
+    def _replace_current_attempt(attempt: ExecutionCandidateAttempt) -> None:
+        selection = state.execution_selection
+        if selection is None:
+            return
+        primary = selection.attempts[0]
+        state.execution_selection = replace(
+            selection,
+            attempts=(*selection.attempts[:-1], attempt),
+            candidate_fallback=(
+                selection.candidate_fallback or (attempt.execution_started and attempt.ordinal > 0)
+            ),
+            backend_rerouted=(
+                selection.backend_rerouted
+                or (
+                    attempt.execution_started
+                    and bool(primary.effective_backend)
+                    and attempt.effective_backend != primary.effective_backend
+                )
+            ),
+            provider_fallback=(
+                selection.provider_fallback
+                or (
+                    attempt.execution_started
+                    and attempt.provider_source_path.startswith("providers.execution_candidates.")
+                    and attempt.effective_provider != primary.effective_provider
+                )
+            ),
+        )
+        assert state._cfg is not None
+        write_execution_candidate_manifest(
+            state.execution_selection,
+            state._cfg.linux_tracing.log_dir,
+            max_sessions=state._cfg.linux_tracing.max_sessions,
+            project_dir=str(state.tool_ctx.project_dir),
+            build_protected_campaign_ids=state.tool_ctx.build_protected_campaign_ids,
+        )
+
+    def _bind_launch(contract: ResolvedLaunchContract) -> None:
+        state._current_launch_contract = contract
+        state.contract_lifecycle.bind_launch(contract)
+        selection = state.execution_selection
+        if selection is not None and selection.attempts:
+            _replace_current_attempt(
+                replace(
+                    selection.attempts[-1],
+                    effective_backend=contract.effective_backend,
+                    effective_provider=contract.provider,
+                    effective_model=contract.physical_model or contract.configured_model or "",
+                    backend_source_path=contract.backend_authority.key_path,
+                    provider_source_path=contract.provider_source.key_path,
+                    model_source_path=contract.physical_model_source.key_path,
+                )
+            )
+
     def _observe_contract_session_id(candidate_session_id: str) -> None:
         state.contract_lifecycle.observe_candidate(candidate_session_id)
+
+    def _mark_execution_started() -> None:
+        selection = state.execution_selection
+        if selection is not None and selection.attempts:
+            _replace_current_attempt(
+                replace(
+                    selection.attempts[-1],
+                    execution_started=True,
+                    admission_status="started",
+                )
+            )
+        state.contract_lifecycle.execution_started = True
+
+    async def _admit_finalized_launch(
+        contract: ResolvedLaunchContract,
+    ) -> CandidatePreSpawnRejection | None:
+        assert state._cfg is not None
+        identity = contract.quota_identity
+        scope = identity.get("credential_scope", "")
+        mode = identity.get("mode", "")
+        if state._cfg.quota_guard.enabled and mode == "api-key":
+            key = (state.provider_extras or {}).get("ANTHROPIC_API_KEY") or os.environ.get(
+                "ANTHROPIC_API_KEY"
+            )
+            if not key or f"api-key:{sha256(key.encode()).hexdigest()}" != scope:
+                return CandidatePreSpawnRejection(
+                    reason="quota_authority_changed",
+                    attempted_contract=contract,
+                )
+        if state._cfg.quota_guard.enabled and mode.startswith("anthropic-oauth") and not scope:
+            return CandidatePreSpawnRejection(
+                reason="quota_authority_unknown",
+                attempted_contract=contract,
+            )
+        if state._quota_lease is not None:
+            if scope != state._quota_scope:
+                return CandidatePreSpawnRejection(
+                    reason="quota_authority_changed",
+                    attempted_contract=contract,
+                )
+            try:
+                current_scope = quota_scope(
+                    "anthropic", Path(state._cfg.quota_guard.credentials_path).expanduser()
+                )
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                current_scope = ""
+            if current_scope != scope:
+                return CandidatePreSpawnRejection(
+                    reason="quota_authority_changed",
+                    attempted_contract=contract,
+                )
+            return None
+        decision = await admit_quota(
+            config=state._cfg.quota_guard,
+            credential_scope=scope or None,
+            diagnostic_log_root=resolve_log_dir(state._cfg.linux_tracing.log_dir),
+            deadline_monotonic=state._invocation_deadline_monotonic,
+            provider=identity.get("provider", "anthropic"),
+            binding_scope=scope or None,
+            nested_worker="run_skill" in state._skill_caps,
+        )
+        if not decision.admitted:
+            return CandidatePreSpawnRejection(
+                reason=decision.reason,
+                attempted_contract=contract,
+                rate_limit=decision.rate_limit,
+            )
+        if mode == "anthropic-oauth":
+            try:
+                _ensure_quota_refresh_started(state.tool_ctx)
+            except Exception:
+                logger.warning("run_skill_quota_refresh_start_failed", exc_info=True)
+        state._quota_lease = decision.lease
+        state._quota_scope = scope
+        selection = state.execution_selection
+        if selection is not None and selection.attempts:
+            _replace_current_attempt(
+                replace(
+                    selection.attempts[-1],
+                    admission_status="admitted",
+                    admission_at_epoch=int(time.time()),
+                    admission_cache_status=decision.reason,
+                )
+            )
+        return None
 
     state._start = time.monotonic()
     assert state._cfg is not None
@@ -61,13 +215,14 @@ async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
     assert state._lineage_store is not None
     try:
         try:
-            with anyio.fail_after(state._cfg.run_skill.mcp_tool_timeout_sec):
+            with anyio.fail_after(
+                max(0.0, state._invocation_deadline_monotonic - time.monotonic())
+            ):
                 async with _te_pkg.execution_marker(
                     state._marker_dir,
                     state._caller_hook_session_id,
                     "run-skill",
                 ):
-                    state.contract_lifecycle.execution_started = True
                     if state._audit_reservation is not None:
                         if state.provider_extras is None:
                             state.provider_extras = {}
@@ -104,7 +259,17 @@ async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
                             write_watch_dirs=state.write_watch_dirs,
                             provider_extras=state.provider_extras,
                             profile_name=state.profile_name_out,
-                            provider_name=state.profile_name_out,
+                            provider_name=(
+                                state.provider_binding.provider
+                                if state.provider_binding is not None
+                                else state.profile_name_out
+                            ),
+                            provider_binding=state.provider_binding,
+                            model_pin=state.model_pin,
+                            mark_execution_started=_mark_execution_started,
+                            pre_spawn_admission=_admit_finalized_launch,
+                            execution_selection=state.execution_selection,
+                            execution_selection_provider=lambda: state.execution_selection,
                             backend_authority=state._backend_authority,
                             resume_session_id=state.resume_session_id,
                             resume_launch_contract=state._resume_launch_contract,
@@ -120,7 +285,7 @@ async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
                             capability_contract=state._capability_contract,
                             native_shell_capture_decision=(state._native_shell_capture_decision),
                             managed_lineage_ref=state._managed_lineage_ref,
-                            on_launch_resolved=state.contract_lifecycle.bind_launch,
+                            on_launch_resolved=_bind_launch,
                             execution_identity=state._execution_identity,
                             on_session_id_resolved=(
                                 _observe_contract_session_id
@@ -150,6 +315,10 @@ async def _execute_and_finalize_run_skill(state: _RunSkillDispatchState) -> str:
                 child_session_id=state._timeout_result.session_id,
             )
 
+        if isinstance(state.skill_result, CandidatePreSpawnRejection):
+            return state.skill_result
+        if state.skill_result.execution_selection is not None:
+            state.execution_selection = state.skill_result.execution_selection
         state.contract_lifecycle.finalize(state.skill_result.session_id)
 
         rebind_verified_final_session(

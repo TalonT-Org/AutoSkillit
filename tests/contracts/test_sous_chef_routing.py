@@ -475,7 +475,7 @@ def _extract_rate_limit_retry_section(skill_md: str) -> str:
     in_section = False
     extracted: list[str] = []
     for line in lines:
-        if "RATE LIMIT RETRY PROTOCOL" in line:
+        if line.startswith("## RATE LIMIT RETRY PROTOCOL"):
             in_section = True
             extracted.append(line)
             continue
@@ -586,7 +586,7 @@ class TestSousChefRateLimitFallbackRemoval:
 
 
 class TestSousChefRateLimitRetryProtocol:
-    """SKILL.md must include a RATE LIMIT RETRY PROTOCOL section with bounded retry contract."""
+    """SKILL.md must route rate limits from structured execution results."""
 
     def test_rate_limit_retry_protocol_section_exists(self) -> None:
         """SKILL.md must contain a RATE LIMIT RETRY PROTOCOL section."""
@@ -594,51 +594,21 @@ class TestSousChefRateLimitRetryProtocol:
         section = _extract_rate_limit_retry_section(skill_md)
         assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
 
-    def test_rate_limit_retry_protocol_has_wait_instruction(self) -> None:
-        """RATE LIMIT RETRY PROTOCOL must instruct waiting/delay before re-routing."""
+    def test_rate_limit_retry_protocol_routes_pre_spawn_exhaustion(self) -> None:
+        """Pre-spawn candidate exhaustion routes without replaying the original call."""
         skill_md = _sous_chef_text()
         section = _extract_rate_limit_retry_section(skill_md)
         assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
-        section_lower = section.lower()
-        assert any(keyword in section_lower for keyword in ("wait", "delay", "sleep")), (
-            "RATE LIMIT RETRY PROTOCOL section must instruct the orchestrator to "
-            "wait/delay/sleep before re-routing on rate-limit signals. "
-            f"Got section:\n{section}"
-        )
+        assert "candidate_exhausted: true" in section
+        assert "execution_selection.attempts" in section
+        assert "Do not replay the original" in section
+        assert "on_rate_limit" in section and "on_failure" in section
 
-    def test_rate_limit_retry_protocol_has_retry_count_bound(self) -> None:
-        """RATE LIMIT RETRY PROTOCOL must bound the number of consecutive rate-limit retries."""
-        skill_md = _sous_chef_text()
-        section = _extract_rate_limit_retry_section(skill_md)
-        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
-        section_lower = section.lower()
-        # Look for a retry bound like "three times" / "max 3" / "3 retries" / "consecutive".
-        has_retry_bound = (
-            "three times" in section_lower
-            or "max 3" in section_lower
-            or "3 retries" in section_lower
-            or "3 rate-limit retries" in section_lower
-            or ("retries" in section_lower and "consecutive" in section_lower)
-            or "retry count" in section_lower
-        )
-        assert has_retry_bound, (
-            "RATE LIMIT RETRY PROTOCOL must bound the per-step rate-limit retry count "
-            "(e.g., 'three times', 'max 3', '3 retries', or per-step consecutive counter). "
-            f"Got section:\n{section}"
-        )
-
-    def test_rate_limit_retry_protocol_checks_deadline_budget(self) -> None:
-        """RATE LIMIT RETRY PROTOCOL must check the session deadline before sleeping."""
-        skill_md = _sous_chef_text()
-        section = _extract_rate_limit_retry_section(skill_md)
-        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
-        assert "AUTOSKILLIT_SESSION_DEADLINE" in section, (
-            "RATE LIMIT RETRY PROTOCOL must reference AUTOSKILLIT_SESSION_DEADLINE and "
-            "check remaining budget before sleeping on rate-limit retries."
-        )
-        # Also assert a deadline-aware word like "budget", "deadline", or "remain" is present.
-        section_lower = section.lower()
-        assert any(keyword in section_lower for keyword in ("deadline", "budget", "remain")), (
-            "RATE LIMIT RETRY PROTOCOL must check the session deadline budget before waiting. "
-            f"Got section:\n{section}"
-        )
+    def test_rate_limit_retry_protocol_allows_only_explicit_same_binding_resume(self) -> None:
+        """A started worker may resume only through its returned same-binding recommendation."""
+        section = _extract_rate_limit_retry_section(_sous_chef_text())
+        lowered = section.lower()
+        assert "execution_selection.continuation.resume_session_id" in section
+        assert "same-backend/provider" in section
+        assert "never rerun the" in lowered
+        assert "sleep" not in lowered and "60 seconds" not in lowered

@@ -15,7 +15,6 @@ from autoskillit.core.types._type_enums import RetryReason
 from autoskillit.fleet._api import _run_dispatch
 from tests.fleet._helpers import (
     _mock_backend_with_locator,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _setup_dispatch,
 )
@@ -46,7 +45,6 @@ async def test_marker_created_before_dispatch(tool_ctx, monkeypatch, tmp_path: P
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -66,7 +64,6 @@ async def test_marker_deleted_after_success(tool_ctx, monkeypatch, tmp_path: Pat
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -95,7 +92,6 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
     except* RuntimeError:
@@ -143,7 +139,6 @@ async def test_marker_not_written_when_cwd_unavailable(
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -164,7 +159,6 @@ async def test_run_dispatch_writes_heartbeat_file(tool_ctx, monkeypatch) -> None
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -196,7 +190,6 @@ async def test_run_dispatch_heartbeat_exists_during_execution(tool_ctx, monkeypa
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -242,7 +235,6 @@ async def test_run_dispatch_heartbeat_mtime_is_fresh(tool_ctx, monkeypatch) -> N
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=lambda **kw: "prompt",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 

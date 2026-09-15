@@ -51,4 +51,4 @@ def test_quota_guard_hook_payload_bridges_cache_fields() -> None:
     payload = _quota_guard_hook_payload(cfg)
     assert payload["cache_max_age"] == 999
     assert payload["cache_path"] == "/x/y.json"
-    assert payload["buffer_seconds"] == 42
+    assert "buffer_seconds" not in payload

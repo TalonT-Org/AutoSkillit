@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +17,7 @@ from autoskillit.core import (
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    CandidatePreSpawnRejection,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     ExecutionIdentity,
@@ -29,6 +30,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
     ModelIdentity,
+    ModelPinResolution,
     NativeShellCaptureDecision,
     ProviderBinding,
     ResolvedLaunchContract,
@@ -67,13 +69,15 @@ from autoskillit.execution.headless._headless_helpers import (
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
     assert_interactive_ordering,
-    resolve_model_identity,
-    resolve_model_pin,
+    resolve_launch_quota_identity,
 )
 from autoskillit.execution.headless._headless_launch import (
     _NUDGE_TIMEOUT,  # noqa: F401
     _attempt_contract_nudge,  # noqa: F401
-    _skill_launch_spec_builder,
+)
+from autoskillit.execution.headless._headless_model import (
+    resolve_model_identity,
+    resolve_model_pin,
 )
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
@@ -113,8 +117,12 @@ from autoskillit.execution.headless._managed import (
 from autoskillit.execution.headless._managed._food_truck_executor import (
     DefaultHeadlessExecutor,
 )
+from autoskillit.execution.headless._managed._launch_adapter import (
+    _skill_launch_spec_builder,
+)
 
 if TYPE_CHECKING:
+    from autoskillit.core import ExecutionSelection
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe._contracts_types import SkillContract
 
@@ -151,6 +159,8 @@ def _prepare_headless_launch(
     backend_authority: BackendAuthority | None,
     provider_extras: Mapping[str, str] | None,
     provider_name: str,
+    provider_binding: ProviderBinding | None,
+    model_pin: ModelPinResolution | None,
     capability_contract: SkillProjectionBinding | None,
     network_access: bool,
     resume_session_id: str,
@@ -158,14 +168,19 @@ def _prepare_headless_launch(
     readonly_skill: bool,
 ) -> HeadlessLaunchPreparation:
     caller_key_path = "run_skill.model"
-    model_pin = resolve_model_pin(
+    model_pin = model_pin or resolve_model_pin(
         model,
         ctx.config,
         step_name=step_name,
         recipe_name=recipe_name,
         caller_key_path=caller_key_path,
     )
-    model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
+    resolved_profile_name = (
+        provider_binding.provider
+        if provider_binding is not None
+        else model_pin.profile_name or profile_name
+    )
+    model_identity = resolve_model_identity(model_pin, profile_name=resolved_profile_name)
     add_dirs_tuple = tuple(add_dirs)
     if backend_authority is None:
         if ctx.backend is None:
@@ -176,6 +191,11 @@ def _prepare_headless_launch(
             tier=BackendAuthorityTier.GLOBAL,
             key_path="agent_backend.backend",
         )
+    launch_backend = (
+        ctx.backend
+        if ctx.backend is not None and ctx.backend.name == backend_authority.backend
+        else ctx.launch_resolver.backend_for_authority(backend_authority)
+    )
     value_source_kind = LaunchValueSourceKind(backend_authority.kind.value)
     authority_source = LaunchValueSource(value_source_kind, backend_authority.key_path)
     default_source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
@@ -197,7 +217,7 @@ def _prepare_headless_launch(
             )
         )
     )
-    provider_binding = (
+    provider_binding = provider_binding or (
         ProviderBinding(
             provider=provider_name or profile_name or backend_authority.backend,
             profile=profile_name or "default",
@@ -280,7 +300,12 @@ def _prepare_headless_launch(
         artifact_paths=(
             capability_contract.artifact_paths if capability_contract is not None else ()
         ),
-        quota_identity={"provider": provider_name or profile_name or "default"},
+        quota_identity=resolve_launch_quota_identity(
+            backend=launch_backend,
+            binding=provider_binding,
+            provider_extras=provider_extras,
+            config=ctx.config,
+        ),
         provider_binding=provider_binding,
         skill_projection_binding=capability_contract,
         non_authority_metadata={"entrypoint": "headless"},
@@ -358,8 +383,8 @@ async def run_headless_core(
     provider_extras: Mapping[str, str] | None = None,
     profile_name: str = "",
     provider_name: str = "",
-    provider_fallback_env: dict[str, str] | None = None,
-    provider_fallback_name: str = "",
+    provider_binding: ProviderBinding | None = None,
+    model_pin: ModelPinResolution | None = None,
     resume_session_id: str = "",
     resume_launch_contract: ResolvedLaunchContract | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
@@ -378,10 +403,17 @@ async def run_headless_core(
     native_shell_capture_decision: NativeShellCaptureDecision | None = None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    execution_selection: ExecutionSelection | None = None,
+    execution_selection_provider: Callable[[], ExecutionSelection | None] | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    pre_spawn_admission: Callable[
+        [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+    ]
+    | None = None,
+    mark_execution_started: Callable[[], None] | None = None,
     child_role: str | None = None,
     child_attribution_skill: str = "",
-) -> SkillResult:
+) -> SkillResult | CandidatePreSpawnRejection:
     """Shared headless runner used by run_skill.
 
     Does NOT check open_kitchen gate — callers in server.py are responsible.
@@ -413,6 +445,8 @@ async def run_headless_core(
             backend_authority=backend_authority,
             provider_extras=provider_extras,
             provider_name=provider_name,
+            provider_binding=provider_binding,
+            model_pin=model_pin,
             capability_contract=capability_contract,
             network_access=network_access,
             resume_session_id=resume_session_id,
@@ -501,8 +535,6 @@ async def run_headless_core(
                 provider_name=effective_provider,
                 plugin_authority=ctx.plugin_authority,
                 plugin_load_mode=plugin_load_mode,
-                provider_fallback_env=provider_fallback_env,
-                provider_fallback_name=provider_fallback_name,
                 provider_extras=provider_extras,
                 launch_resolver=ctx.launch_resolver,
                 launch_preparation=launch.launch_preparation,
@@ -514,7 +546,11 @@ async def run_headless_core(
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
                 execution_identity=execution_identity,
+                execution_selection=execution_selection,
+                execution_selection_provider=execution_selection_provider,
                 on_launch_resolved=on_launch_resolved,
+                pre_spawn_admission=pre_spawn_admission,
+                mark_execution_started=mark_execution_started,
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 on_session_id_resolved=on_session_id_resolved,
@@ -531,6 +567,10 @@ async def run_headless_core(
             if managed_lineage_observer is not None:
                 managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
             raise
+        if isinstance(skill_result, CandidatePreSpawnRejection):
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+            return skill_result
         if managed_lineage_observer is not None and not skill_result.needs_retry:
             managed_lineage_observer.close(
                 ManagedHeadlessSessionTerminalState.SUCCEEDED

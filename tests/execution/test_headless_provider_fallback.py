@@ -1,7 +1,7 @@
-"""Tests verifying the provider fallback loop in _execute_claude_headless.
+"""Tests for provider behavior after a headless attempt starts.
 
-Covers: STALE triggers fallback, BUDGET_EXHAUSTED triggers fallback,
-no fallback_env suppresses retry, and empty provider (Anthropic) never falls back.
+Once a runner has been entered, failures never switch provider credentials.  A
+same-binding continuation is handled separately from this legacy fallback path.
 """
 
 from __future__ import annotations
@@ -25,8 +25,6 @@ from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_PROVIDER_RETRY_LIMIT = 2
-
 _STALE_RESULT = SkillResult(
     success=False,
     result="",
@@ -48,6 +46,18 @@ _BUDGET_EXHAUSTED_RESULT = SkillResult(
     exit_code=1,
     needs_retry=False,
     retry_reason=RetryReason.BUDGET_EXHAUSTED,
+    stderr="",
+)
+
+_RATE_LIMITED_RESULT = SkillResult(
+    success=False,
+    result="HTTP 429 after request was accepted",
+    session_id="s1",
+    subtype="rate_limited",
+    is_error=False,
+    exit_code=1,
+    needs_retry=True,
+    retry_reason=RetryReason.RATE_LIMITED,
     stderr="",
 )
 
@@ -137,7 +147,7 @@ class _Authority:
         return binding
 
 
-class TestProviderFallbackLoop:
+class TestPostStartProviderSafety:
     def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
         import autoskillit.execution.evidence.session_log as _sl_mod
         import autoskillit.execution.headless._headless_execute as _execute_module
@@ -155,11 +165,6 @@ class TestProviderFallbackLoop:
             runner_pass_fds.append(kwargs["pass_fds"])
             return _sub_result
 
-        if ctx is not None:
-            monkeypatch.setattr(
-                ctx.config.providers, "provider_retry_limit", _PROVIDER_RETRY_LIMIT
-            )
-
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_build_skill_result",
@@ -174,11 +179,6 @@ class TestProviderFallbackLoop:
             _patch_headless__headless_execute,
             "_capture_git_head_sha",
             lambda *a: "",  # noqa: ARG005
-        )
-        monkeypatch.setattr(
-            _patch_headless__headless_execute,
-            "is_feature_enabled",
-            lambda name, *a, **kw: name == "providers",  # noqa: ARG005
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
@@ -205,7 +205,9 @@ class TestProviderFallbackLoop:
         return fake_runner, call_count, runner_envs, runner_pass_fds
 
     @pytest.mark.anyio
-    async def test_stale_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
+    async def test_stale_after_runner_entry_does_not_replay_to_fallback_profile(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
         import autoskillit.execution.headless._headless_execute as _execute_module
         from autoskillit.execution.headless import _execute_claude_headless
 
@@ -261,11 +263,6 @@ class TestProviderFallbackLoop:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
-            provider_fallback_env={
-                **{key: f"fallback-{key}" for key in sink_env},
-                "ANTHROPIC_API_KEY": "sk-test",
-            },
-            provider_fallback_name="anthropic",
             plugin_authority=authority,
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             managed_lineage_observer=lineage_observer,
@@ -276,32 +273,32 @@ class TestProviderFallbackLoop:
             ),
         )
 
-        assert call_count[0] == 2
-        assert runner_envs == [sink_env, {**sink_env, "ANTHROPIC_API_KEY": "sk-test"}]
-        assert runner_pass_fds == [(77,), (77,)]
-        assert len(authority.bindings) == 2
-        assert authority.bindings[0] is not authority.bindings[1]
+        assert call_count[0] == 1
+        assert runner_envs == [sink_env]
+        assert runner_pass_fds == [(77,)]
+        assert len(authority.bindings) == 1
         assert all(binding.closed for binding in authority.bindings)
         assert [mode for _, mode in authority.requests] == [
             PluginLoadMode.EXPLICIT_PLUGIN_DIR,
-            PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         ]
-        assert result.provider.fallback_activated is True
-        assert result.provider.provider_used == "anthropic"
-        assert len(lineage_coordinates) == 2
+        assert result.provider.fallback_activated is False
+        assert result.provider.provider_used == "minimax"
+        assert len(lineage_coordinates) == 1
         assert {decision for decision, _, _ in lineage_coordinates} == {lineage_observer.decision}
         assert {reference for _, reference, _ in lineage_coordinates} == {
             lineage_observer.reference
         }
         attempt_ids = tuple(attempt_id for _, _, attempt_id in lineage_coordinates)
-        assert len(set(attempt_ids)) == 2
+        assert len(set(attempt_ids)) == 1
         persisted_lineage = lineage_store.load_reference(lineage_observer.reference)
         assert persisted_lineage.attempt_ids == attempt_ids
-        assert persisted_lineage.final_native_session_id == "s2"
+        assert persisted_lineage.final_native_session_id == "s1"
         assert len(persisted_lineage.launch_contract_digest) == 64
 
     @pytest.mark.anyio
-    async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
+    async def test_budget_exhausted_after_runner_entry_does_not_replay_to_fallback_profile(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
         from autoskillit.execution.headless import _execute_claude_headless
 
         fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
@@ -320,8 +317,6 @@ class TestProviderFallbackLoop:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
-            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
-            provider_fallback_name="anthropic",
             launch_resolver=minimal_ctx.launch_resolver,
             launch_preparation=_launch_preparation(
                 minimal_ctx,
@@ -329,20 +324,30 @@ class TestProviderFallbackLoop:
             ),
         )
 
-        assert call_count[0] == 2
-        assert result.provider.fallback_activated is True
-        assert result.provider.provider_used == "anthropic"
+        assert call_count[0] == 1
+        assert result.provider.fallback_activated is False
+        assert result.provider.provider_used == "minimax"
 
     @pytest.mark.anyio
-    async def test_no_fallback_env_suppresses_retry(self, minimal_ctx, tmp_path, monkeypatch):
+    async def test_post_start_429_with_external_effect_does_not_replay_profile(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
+        """A 429 after an external request is terminal for provider selection."""
         from autoskillit.execution.headless import _execute_claude_headless
 
         fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
             monkeypatch,
             tmp_path,
-            _make_queued_build_result(_STALE_RESULT),
+            _make_queued_build_result(_RATE_LIMITED_RESULT, _SUCCESS_RESULT),
+            ctx=minimal_ctx,
         )
-        minimal_ctx.runner = fake_runner
+        external_effects: list[str] = []
+
+        async def runner_with_external_effect(cmd, **kwargs):
+            external_effects.append("provider-request")
+            return await fake_runner(cmd, **kwargs)
+
+        minimal_ctx.runner = runner_with_external_effect
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
@@ -353,43 +358,10 @@ class TestProviderFallbackLoop:
             stale_threshold=5.0,
             provider_name="minimax",
             launch_resolver=minimal_ctx.launch_resolver,
-            launch_preparation=_launch_preparation(
-                minimal_ctx,
-                cwd=str(tmp_path),
-            ),
+            launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
         )
 
+        assert external_effects == ["provider-request"]
         assert call_count[0] == 1
         assert result.provider.fallback_activated is False
-
-    @pytest.mark.anyio
-    async def test_anthropic_provider_never_falls_back(self, minimal_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.headless import _execute_claude_headless
-
-        fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
-            monkeypatch,
-            tmp_path,
-            _make_queued_build_result(_STALE_RESULT),
-            ctx=minimal_ctx,
-        )
-        minimal_ctx.runner = fake_runner
-        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
-
-        result = await _execute_claude_headless(
-            _build_echo_spec,
-            str(tmp_path),
-            minimal_ctx,
-            timeout=30.0,
-            stale_threshold=5.0,
-            provider_name="",
-            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
-            provider_fallback_name="anthropic",
-            launch_resolver=minimal_ctx.launch_resolver,
-            launch_preparation=_launch_preparation(
-                minimal_ctx,
-                cwd=str(tmp_path),
-            ),
-        )
-
-        assert call_count[0] == 1
-        assert result.provider.fallback_activated is False
+        assert result.provider.provider_used == "minimax"

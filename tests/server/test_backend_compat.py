@@ -218,6 +218,35 @@ def test_shared_backend_compat_checks_only_supported_root_not_refused_dependency
     assert adapted_plans == [root_plan]
 
 
+def test_shared_backend_compat_keeps_codex_capability_eligibility_candidate_local() -> None:
+    """Direct dispatch must not inherit candidate-only closure eligibility checks."""
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server.tools._backend_compat import _check_backend_compat
+
+    root = SimpleNamespace(semantic_plan=None, uses_capabilities=frozenset())
+    codex_inapplicable_dependency = SimpleNamespace(
+        semantic_plan=None,
+        uses_capabilities=frozenset({"open_kitchen"}),
+    )
+    invocation = SimpleNamespace(
+        root=root,
+        closure=(root, codex_inapplicable_dependency),
+    )
+
+    assert (
+        _check_backend_compat(
+            skill_command="$root",
+            resolved_command="$root",
+            effective_order_id="order-123",
+            target_name="root",
+            skill_info=invocation,
+            effective_backend_obj=CodexBackend(),
+            skill_resolver=object(),
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     ("malformation", "expected"),
     [

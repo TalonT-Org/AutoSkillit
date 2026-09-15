@@ -102,6 +102,9 @@ from autoskillit.config._config_dataclasses import (
     DiagnosticsConfig as DiagnosticsConfig,
 )
 from autoskillit.config._config_dataclasses import (
+    ExecutionCandidateSpec as ExecutionCandidateSpec,
+)
+from autoskillit.config._config_dataclasses import (
     FleetConfig as FleetConfig,
 )
 from autoskillit.config._config_dataclasses import (
@@ -252,6 +255,7 @@ __all__ = [
     "ConfigSchemaError",
     "CoreRunConfig",
     "DiagnosticsConfig",
+    "ExecutionCandidateSpec",
     "FleetConfig",
     "GitHubConfig",
     "ImplementGateConfig",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -13,9 +14,11 @@ import anyio
 
 from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    ApiFailureOutcome,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    CandidatePreSpawnRejection,
     CodingAgentBackend,
     EffectiveSkillCatalogAuthority,
     LaunchResolutionRequest,
@@ -31,6 +34,7 @@ from autoskillit.core import (
     PluginLoadMode,
     ProviderBinding,
     ResolvedLaunchContract,
+    RetryReason,
     SemanticLaunchPlan,
     SessionCheckpoint,
     SkillProjectionPreparation,
@@ -40,6 +44,9 @@ from autoskillit.core import (
     temp_dir_display_str,
 )
 from autoskillit.execution.headless._headless_helpers import (
+    resolve_launch_quota_identity,
+)
+from autoskillit.execution.headless._headless_model import (
     resolve_model_identity,
     resolve_model_pin,
 )
@@ -53,6 +60,7 @@ from autoskillit.execution.headless._managed._executor import _DefaultHeadlessEx
 from autoskillit.execution.headless._managed._launch_adapter import (
     _food_truck_launch_spec_builder,
 )
+from autoskillit.execution.quota import admit_quota
 
 
 class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
@@ -122,8 +130,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
         marker_dir: Path | None = None,
@@ -192,6 +198,26 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 )
             )
         )
+        dispatch_provider_binding = (
+            ProviderBinding(
+                provider=provider_name or profile_name or dispatch_backend.name,
+                profile=profile_name or "default",
+                required_backend=dispatch_backend.name,
+                normalized_endpoint=(
+                    merged_extras.get("ANTHROPIC_BASE_URL")
+                    or merged_extras.get("OPENAI_BASE_URL")
+                    or ""
+                ),
+                key_path="fleet.provider",
+                provider_source=authority_source,
+                profile_source=authority_source,
+                endpoint_source=authority_source,
+                environment={},
+                secret_environment_keys=secret_provider_keys,
+            )
+            if provider_name or profile_name or merged_extras
+            else None
+        )
         semantic_digest = hashlib.sha256(orchestrator_prompt.encode()).hexdigest()
         launch_preparation = self._ctx.launch_resolver.prepare(
             LaunchResolutionRequest(
@@ -230,27 +256,13 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 plugin_identity={},
                 projection_identity={"digest": semantic_digest, "version": "0"},
                 artifact_paths=(),
-                quota_identity={"provider": provider_name or profile_name or "default"},
-                provider_binding=(
-                    ProviderBinding(
-                        provider=provider_name or profile_name or dispatch_backend.name,
-                        profile=profile_name or "default",
-                        required_backend=dispatch_backend.name,
-                        normalized_endpoint=(
-                            merged_extras.get("ANTHROPIC_BASE_URL")
-                            or merged_extras.get("OPENAI_BASE_URL")
-                            or ""
-                        ),
-                        key_path="fleet.provider",
-                        provider_source=authority_source,
-                        profile_source=authority_source,
-                        endpoint_source=authority_source,
-                        environment={},
-                        secret_environment_keys=secret_provider_keys,
-                    )
-                    if provider_name or profile_name or merged_extras
-                    else None
+                quota_identity=resolve_launch_quota_identity(
+                    backend=dispatch_backend,
+                    binding=dispatch_provider_binding,
+                    provider_extras=merged_extras,
+                    config=cfg,
                 ),
+                provider_binding=dispatch_provider_binding,
                 non_authority_metadata={"entrypoint": "fleet"},
             )
         )
@@ -307,6 +319,32 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             if cwd
             else None
         )
+        from autoskillit.execution.evidence.session_log import resolve_log_dir
+
+        diagnostic_log_root = resolve_log_dir(cfg.linux_tracing.log_dir)
+        admission_deadline_monotonic = time.monotonic() + effective_timeout
+
+        async def _admit_finalized_launch(
+            contract: ResolvedLaunchContract,
+        ) -> CandidatePreSpawnRejection | None:
+            quota_identity = contract.quota_identity
+            credential_scope = quota_identity.get("credential_scope") or None
+            decision = await admit_quota(
+                config=cfg.quota_guard,
+                credential_scope=credential_scope,
+                diagnostic_log_root=diagnostic_log_root,
+                deadline_monotonic=admission_deadline_monotonic,
+                provider=quota_identity.get("provider", "anthropic"),
+                binding_scope=credential_scope,
+                nested_worker=True,
+            )
+            if decision.admitted:
+                return None
+            return CandidatePreSpawnRejection(
+                reason=decision.reason,
+                attempted_contract=contract,
+                rate_limit=decision.rate_limit,
+            )
 
         # This binding spans the whole logical dispatch (main attempt, provider
         # retry, and nudge), not just this construction -- every physical attempt
@@ -405,8 +443,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                         pty_override=False,
                         provider_name=provider_name,
                         provider_extras=merged_extras or None,
-                        provider_fallback_env=provider_fallback_env,
-                        provider_fallback_name=provider_fallback_name,
                         enable_deadline_extension=effective_deadline_ext,
                         max_extension_seconds=effective_max_ext,
                         ceiling_seconds=effective_ceiling_seconds,
@@ -417,6 +453,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                         on_session_id_resolved=on_session_id_resolved,
                         launch_resolver=self._ctx.launch_resolver,
                         launch_preparation=launch_preparation,
+                        pre_spawn_admission=_admit_finalized_launch,
                         on_launch_resolved=on_launch_resolved,
                         plugin_authority=resolved_plugin_authority,
                         plugin_load_mode=plugin_load_mode,
@@ -433,6 +470,32 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     if managed_lineage_observer is not None:
                         managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
                     raise
+                if isinstance(skill_result, CandidatePreSpawnRejection):
+                    if managed_lineage_observer is not None:
+                        managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+                    quota_blocked = skill_result.reason in {
+                        "quota_exhausted",
+                        "observed_quota_blocked",
+                    }
+                    return SkillResult(
+                        success=False,
+                        result=f"Food-truck quota admission rejected: {skill_result.reason}",
+                        session_id="",
+                        subtype="quota_admission_rejected",
+                        is_error=True,
+                        exit_code=1,
+                        needs_retry=quota_blocked,
+                        retry_reason=(
+                            RetryReason.RATE_LIMITED if quota_blocked else RetryReason.NONE
+                        ),
+                        stderr="",
+                        order_id=order_id,
+                        api_failure=ApiFailureOutcome(
+                            terminal_reason=skill_result.reason,
+                            error_code="quota_admission_rejected",
+                            rate_limit=skill_result.rate_limit,
+                        ),
+                    )
                 if managed_lineage_observer is not None and not skill_result.needs_retry:
                     managed_lineage_observer.close(
                         ManagedHeadlessSessionTerminalState.SUCCEEDED

@@ -37,6 +37,7 @@ EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
     "execution/headless/_headless_adjudication.py": frozenset({"recipe"}),
     "execution/headless/_headless_execute.py": frozenset({"pipeline", "recipe"}),
     "execution/headless/_headless_helpers.py": frozenset({"config"}),
+    "execution/headless/_headless_model.py": frozenset({"config"}),
     "execution/headless/_headless_outcome.py": frozenset({"recipe"}),
     "execution/headless/_headless_result.py": frozenset({"recipe"}),
     "execution/headless/_managed/_executor.py": frozenset({"pipeline", "recipe"}),

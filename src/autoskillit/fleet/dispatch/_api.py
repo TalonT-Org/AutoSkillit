@@ -102,7 +102,6 @@ async def execute_dispatch(
     dispatch_name: str | None,
     timeout_sec: int | None,
     prompt_builder: Callable[..., str],
-    quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, str | dict[str, str]] | None = None,
@@ -120,7 +119,7 @@ async def execute_dispatch(
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
-    Composes: lock → validate → quota → prompt → dispatch → parse → state → cleanup.
+    Composes: lock → validate → prompt → dispatch → parse → state → cleanup.
     Returns DispatchResult wrapping the outcome plus the per-dispatch state path.
     """
     from autoskillit.fleet._capture import _normalize_capture_spec
@@ -176,7 +175,6 @@ async def execute_dispatch(
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
             prompt_builder=prompt_builder,
-            quota_checker=quota_checker,
             quota_refresher=quota_refresher,
             cache_invalidator=cache_invalidator,
             capture=_normalize_capture_spec(capture),
@@ -273,7 +271,6 @@ async def _run_dispatch(
     dispatch_name: str | None,
     timeout_sec: int | None,
     prompt_builder: Callable[..., str],
-    quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
     capture: dict[str, CaptureEntrySpec] | None = None,
@@ -324,7 +321,6 @@ async def _run_dispatch(
         caller_backend_name=recipe_ctx.caller_backend_name,
         dispatch_name=dispatch_name,
         prompt_builder=prompt_builder,
-        quota_checker=quota_checker,
         capture=capture,
         resume_session_id=resume_session_id,
         resume_checkpoint=resume_checkpoint,

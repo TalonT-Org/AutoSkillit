@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -134,10 +135,12 @@ class TestMultiWindowSelection:
 
     # T-MW-6: _read_cache with new format returns QuotaStatus from binding
     def test_read_cache_new_format_returns_binding(self, tmp_path):
-        from autoskillit.execution.quota import _read_cache
+        from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION, _read_cache
 
+        credential_scope = "anthropic-oauth:fixture"
         new_cache = {
-            "schema_version": 3,
+            "schema_version": QUOTA_CACHE_SCHEMA_VERSION,
+            "credential_scope": credential_scope,
             "fetched_at": datetime.now(UTC).isoformat(),
             "windows": {
                 "one_hour": {
@@ -159,7 +162,7 @@ class TestMultiWindowSelection:
         }
         cache_path = tmp_path / "new_cache.json"
         cache_path.write_text(json.dumps(new_cache))
-        status = _read_cache(str(cache_path), max_age=120)
+        status = _read_cache(str(cache_path), max_age=120, credential_scope=credential_scope)
         assert status is not None
         assert status.utilization == pytest.approx(91.0)
         assert status.window_name == "one_hour"
@@ -192,6 +195,65 @@ class TestMultiWindowSelection:
         assert result.should_block is True
         assert result.window_name == "seven_day"
         assert result.effective_threshold == 95.0
+
+
+class TestCredentialScopedQuotaCache:
+    """Poll evidence belongs to an OAuth credential, not its file path."""
+
+    def test_oauth_scope_follows_token_across_paths_and_changes_on_relogin(self, tmp_path):
+        from autoskillit.quota_constraints import quota_scope
+
+        original = tmp_path / "original.json"
+        copied = tmp_path / "copied.json"
+        original.write_text(
+            json.dumps({"claudeAiOauth": {"accessToken": "token-one", "expiresAt": 4102444800000}})
+        )
+        copied.write_text(original.read_text())
+
+        original_scope = quota_scope("anthropic", Path(original))
+        copied_scope = quota_scope("anthropic", Path(copied))
+        original.write_text(
+            json.dumps({"claudeAiOauth": {"accessToken": "token-two", "expiresAt": 4102444800000}})
+        )
+
+        assert copied_scope == original_scope
+        assert quota_scope("anthropic", original) != original_scope
+        assert "token-one" not in original_scope
+        assert "token-two" not in quota_scope("anthropic", original)
+
+    def test_read_cache_rejects_a_snapshot_for_a_different_credential_scope(self, tmp_path):
+        from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION, _read_cache
+
+        cache_path = tmp_path / "cache.json"
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": QUOTA_CACHE_SCHEMA_VERSION,
+                    "credential_scope": "anthropic-oauth:credential-one",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "binding": {
+                        "window_name": "seven_day",
+                        "utilization": 99.0,
+                        "resets_at": (datetime.now(UTC) + timedelta(days=4)).isoformat(),
+                        "should_block": True,
+                        "effective_threshold": 98.0,
+                    },
+                }
+            )
+        )
+
+        assert (
+            _read_cache(
+                str(cache_path), max_age=120, credential_scope="anthropic-oauth:credential-one"
+            )
+            is not None
+        )
+        assert (
+            _read_cache(
+                str(cache_path), max_age=120, credential_scope="anthropic-oauth:credential-two"
+            )
+            is None
+        )
 
 
 class TestPerWindowThresholds:
@@ -432,43 +494,6 @@ class TestPerWindowThresholds:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["window_name"] == "seven_day"
-
-    @pytest.mark.anyio
-    async def test_check_and_sleep_returns_true_for_seven_day_at_99_percent(
-        self, monkeypatch, tmp_path
-    ):
-        from autoskillit.execution.quota import (
-            QuotaFetchResult,
-            QuotaWindowEntry,
-            _compute_binding,
-            check_and_sleep_if_needed,
-        )
-
-        now = datetime.now(UTC)
-        weekly_resets = now + timedelta(days=4)
-        windows = {
-            "seven_day": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
-            "five_hour": QuotaWindowEntry(utilization=2.0, resets_at=now + timedelta(hours=1)),
-        }
-        binding = _compute_binding(
-            windows,
-            short_threshold=85.0,
-            long_threshold=98.0,
-            long_patterns=self._LONG_PATTERNS,
-        )
-
-        async def fake_fetch(credentials_path, **kwargs):
-            return QuotaFetchResult(windows=windows, binding=binding)
-
-        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
-        config = make_quota_guard_config(
-            cache_path=str(tmp_path / "cache.json"),
-            credentials_path=str(tmp_path / "creds.json"),
-        )
-        result = await check_and_sleep_if_needed(config)
-        assert result["should_sleep"] is True
-        assert result["window_name"] == "seven_day"
-        assert result["sleep_seconds"] > 0
 
     def test_seven_day_window_classified_as_long_with_default_patterns(self):
         """seven_day is the actual Anthropic API key for the weekly budget.

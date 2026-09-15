@@ -16,7 +16,10 @@ from structlog.testing import capture_logs
 import autoskillit.execution.evidence._session_log_recovery as session_log_recovery
 import autoskillit.execution.evidence._session_retention as session_retention
 from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution.evidence._session_retention import apply_session_retention
+from autoskillit.execution.evidence._session_retention import (
+    apply_execution_candidate_manifest_retention,
+    apply_session_retention,
+)
 from autoskillit.execution.evidence.linux_tracing import (
     is_pid_zombie,
     read_boot_id,
@@ -33,7 +36,106 @@ from tests.execution.conftest import _flush, _snap
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
+def _write_candidate_manifest(
+    manifests_dir: Path,
+    name: str,
+    payload: dict[str, object],
+    *,
+    mtime: float,
+) -> Path:
+    manifests_dir.mkdir(parents=True, exist_ok=True)
+    path = manifests_dir / name
+    path.write_text(json.dumps(payload))
+    os.utime(path, (mtime, mtime))
+    return path
+
+
 # --- recover_crashed_sessions tests ---
+
+
+def test_candidate_manifest_retention_preserves_live_and_protected_selections(tmp_path):
+    manifests_dir = tmp_path / "execution-candidates"
+    current_time = time.time()
+    expired = _write_candidate_manifest(
+        manifests_dir,
+        "expired.json",
+        {
+            "campaign_id": "",
+            "completed": False,
+            "invocation_deadline_epoch": int(current_time - 1),
+        },
+        mtime=current_time - 3,
+    )
+    pending = _write_candidate_manifest(
+        manifests_dir,
+        "pending.json",
+        {
+            "campaign_id": "",
+            "completed": False,
+            "invocation_deadline_epoch": int(current_time + 60),
+        },
+        mtime=current_time - 2,
+    )
+    campaign = _write_candidate_manifest(
+        manifests_dir,
+        "campaign.json",
+        {"campaign_id": "active", "completed": True, "invocation_deadline_epoch": None},
+        mtime=current_time - 1,
+    )
+
+    survivors = apply_execution_candidate_manifest_retention(
+        manifests_dir,
+        max_sessions=1,
+        protected_ids=frozenset({"active"}),
+        clear_marker=None,
+    )
+
+    assert survivors == {pending.name, campaign.name}
+    assert not expired.exists()
+    assert pending.exists()
+    assert campaign.exists()
+
+
+def test_candidate_manifest_retention_honors_telemetry_clear_fence(tmp_path):
+    manifests_dir = tmp_path / "execution-candidates"
+    current_time = time.time()
+    stale = _write_candidate_manifest(
+        manifests_dir,
+        "stale.json",
+        {"campaign_id": "", "completed": True, "invocation_deadline_epoch": None},
+        mtime=current_time - 2,
+    )
+
+    survivors = apply_execution_candidate_manifest_retention(
+        manifests_dir,
+        max_sessions=4,
+        protected_ids=frozenset(),
+        clear_marker=datetime.now(UTC),
+    )
+
+    assert survivors == set()
+    assert not stale.exists()
+
+
+def test_recovery_prunes_completed_candidate_manifests(tmp_path):
+    from autoskillit.core.types._type_results_execution import ExecutionSelection
+    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+
+    old_selection = ExecutionSelection(selection_id="old", completed=True)
+    write_execution_candidate_manifest(old_selection, str(tmp_path), max_sessions=2)
+    old_path = tmp_path / old_selection.manifest_ref
+    old_mtime = time.time() - 10
+    os.utime(old_path, (old_mtime, old_mtime))
+    new_selection = ExecutionSelection(selection_id="new", completed=True)
+    write_execution_candidate_manifest(new_selection, str(tmp_path), max_sessions=2)
+
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    assert (
+        recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path), max_sessions=1) == 0
+    )
+    assert not old_path.exists()
+    assert (tmp_path / new_selection.manifest_ref).exists()
 
 
 def test_recover_crashed_sessions_noop_when_no_orphans(tmp_path):

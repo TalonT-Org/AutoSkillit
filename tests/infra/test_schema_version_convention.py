@@ -123,9 +123,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 298),
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 424),
     # tools_kitchen/_hook_config.py — hook config, quota guard, and git_ops_policy
-    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 99),
-    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 118),
-    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 150),
+    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 101),
+    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 120),
+    ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 152),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
     ("src/autoskillit/server/tools/_overlay_state.py", 132),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
@@ -136,7 +136,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 587),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
-    ("src/autoskillit/server/tools/tools_github.py", 340),
+    ("src/autoskillit/server/tools/tools_github.py", 345),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 26),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)

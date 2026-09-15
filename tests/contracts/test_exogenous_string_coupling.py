@@ -14,53 +14,6 @@ import pytest
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
-def test_quota_guard_deny_trigger_coupled_to_prompt():
-    """QUOTA_GUARD_DENY_TRIGGER constant in quota_guard must appear verbatim
-    in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
-    from autoskillit.core import DIRECT_PREFIX
-    from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER
-    from tests.cli._orchestrator_prompt_helpers import (
-        build_orchestrator_prompt as _build_orchestrator_prompt,
-    )
-
-    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
-    assert QUOTA_GUARD_DENY_TRIGGER in prompt, (
-        f"Prompt must reference quota_guard.QUOTA_GUARD_DENY_TRIGGER "
-        f"({QUOTA_GUARD_DENY_TRIGGER!r}) verbatim"
-    )
-
-
-def test_quota_post_warning_trigger_coupled_to_prompt():
-    """QUOTA_POST_WARNING_TRIGGER constant in quota_post_hook must appear verbatim
-    in the orchestrator prompt's QUOTA DENIAL ROUTING section."""
-    from autoskillit.core import DIRECT_PREFIX
-    from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER
-    from tests.cli._orchestrator_prompt_helpers import (
-        build_orchestrator_prompt as _build_orchestrator_prompt,
-    )
-
-    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
-    assert QUOTA_POST_WARNING_TRIGGER in prompt, (
-        f"Prompt must reference quota_post_hook.QUOTA_POST_WARNING_TRIGGER "
-        f"({QUOTA_POST_WARNING_TRIGGER!r}) verbatim"
-    )
-
-
-def test_quota_post_warning_trigger_coupled_to_sous_chef_skill():
-    """QUOTA_POST_WARNING_TRIGGER constant must also appear in sous-chef SKILL.md
-    so both prompt surfaces stay in sync with the hook emit string."""
-    from autoskillit.core import pkg_root
-    from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER
-
-    skill_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    assert skill_path.exists(), "sous-chef SKILL.md not found"
-    content = skill_path.read_text()
-    assert QUOTA_POST_WARNING_TRIGGER in content, (
-        f"sous-chef SKILL.md must reference quota_post_hook.QUOTA_POST_WARNING_TRIGGER "
-        f"({QUOTA_POST_WARNING_TRIGGER!r}) verbatim"
-    )
-
-
 def test_server_authoritative_ingredients_coupled_to_sous_chef_skill():
     """Every SERVER_AUTHORITATIVE_INGREDIENTS member must appear in the sous-chef SKILL.md
     INGREDIENT LOCKING section so the guidance stays in sync with the registry."""
@@ -83,27 +36,6 @@ def test_server_authoritative_ingredients_coupled_to_sous_chef_skill():
             f"sous-chef SKILL.md INGREDIENT LOCKING section must mention "
             f"server-authoritative ingredient {key!r}; not found in section text"
         )
-
-
-def test_quota_post_budget_exceeded_trigger_coupled_to_food_truck_prompt():
-    """QUOTA_POST_BUDGET_EXCEEDED_TRIGGER must appear verbatim in the food truck prompt."""
-    from autoskillit.core import DIRECT_PREFIX
-    from autoskillit.fleet._prompts import _build_food_truck_prompt
-    from autoskillit.hooks.quota_post_hook import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
-
-    prompt = _build_food_truck_prompt(
-        recipe="test",
-        task="test",
-        ingredients={},
-        mcp_prefix=DIRECT_PREFIX,
-        dispatch_id="did",
-        campaign_id="cid",
-        l3_timeout_sec=3600,
-    )
-    assert QUOTA_POST_BUDGET_EXCEEDED_TRIGGER in prompt, (
-        f"Food truck prompt must reference quota_post_hook.QUOTA_POST_BUDGET_EXCEEDED_TRIGGER "
-        f"({QUOTA_POST_BUDGET_EXCEEDED_TRIGGER!r}) verbatim"
-    )
 
 
 class TestPromptToolReachability:

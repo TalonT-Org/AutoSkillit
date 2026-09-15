@@ -52,11 +52,13 @@ class TestReadCredentials:
 
 class TestReadCache:
     def test_fresh_cache_returns_status(self, tmp_path):
-        from autoskillit.execution.quota import _read_cache
+        from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION, _read_cache
 
         now = datetime.now(UTC)
+        credential_scope = "anthropic-oauth:fixture"
         cache_data = {
-            "schema_version": 3,
+            "schema_version": QUOTA_CACHE_SCHEMA_VERSION,
+            "credential_scope": credential_scope,
             "fetched_at": (now - timedelta(seconds=30)).isoformat(),
             "windows": {
                 "five_hour": {
@@ -74,7 +76,7 @@ class TestReadCache:
         }
         cache_path = tmp_path / "usage_cache.json"
         cache_path.write_text(json.dumps(cache_data))
-        status = _read_cache(str(cache_path), max_age=120)
+        status = _read_cache(str(cache_path), max_age=120, credential_scope=credential_scope)
         assert status is not None
         assert status.utilization == pytest.approx(87.3)
 
@@ -210,6 +212,7 @@ class TestCacheSchemaVersion:
 
     def test_write_cache_embeds_schema_version(self, tmp_path):
         from autoskillit.execution.quota import (
+            QUOTA_CACHE_SCHEMA_VERSION,
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
@@ -221,12 +224,14 @@ class TestCacheSchemaVersion:
             binding=QuotaStatus(utilization=50.0, resets_at=None, window_name="five_hour"),
         )
         cache_path = tmp_path / "cache.json"
-        _write_cache(str(cache_path), result)
+        _write_cache(str(cache_path), result, credential_scope="anthropic-oauth:fixture")
         raw = json.loads(cache_path.read_text())
-        assert raw["schema_version"] == 3
+        assert raw["schema_version"] == QUOTA_CACHE_SCHEMA_VERSION
+        assert raw["credential_scope"] == "anthropic-oauth:fixture"
 
     def test_write_cache_uses_write_versioned_json(self, tmp_path, monkeypatch):
         from autoskillit.execution.quota import (
+            QUOTA_CACHE_SCHEMA_VERSION,
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
@@ -251,7 +256,7 @@ class TestCacheSchemaVersion:
         cache_path = tmp_path / "cache.json"
         _write_cache(str(cache_path), result)
         assert len(calls) == 1
-        assert calls[0]["schema_version"] == 3
+        assert calls[0]["schema_version"] == QUOTA_CACHE_SCHEMA_VERSION
 
     def test_read_cache_schema_round_trip_returns_status(self, tmp_path):
         from autoskillit.execution.quota import (
@@ -285,12 +290,12 @@ class TestCacheSchemaVersion:
         cache_path.write_text(json.dumps(old_data))
         assert _read_cache(str(cache_path), max_age=60) is None
 
-    def test_read_cache_wrong_schema_version_returns_none(self, tmp_path):
+    def test_read_cache_v3_schema_returns_none(self, tmp_path):
         from autoskillit.execution.quota import _read_cache
 
         cache_path = tmp_path / "cache.json"
         old_data = {
-            "schema_version": 1,
+            "schema_version": 3,
             "fetched_at": datetime.now(UTC).isoformat(),
             "windows": {},
             "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
@@ -422,7 +427,9 @@ class TestCacheSchemaVersion:
         )
         await check_and_sleep_if_needed(config)
         new_data = json.loads(cache_path.read_text())
-        assert new_data["schema_version"] == 3
+        from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION
+
+        assert new_data["schema_version"] == QUOTA_CACHE_SCHEMA_VERSION
 
     def test_read_cache_uses_shared_read_versioned_json(self, tmp_path, monkeypatch):
         """_read_cache must call read_versioned_json (not inline validation)."""

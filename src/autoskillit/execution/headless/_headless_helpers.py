@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,15 +14,20 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
-    LaunchValueSource,
-    LaunchValueSourceKind,
-    ModelIdentity,
-    ModelPinResolution,
+    ProviderBinding,
     SkillResult,
     get_logger,
 )
 from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.execution.headless._headless_git import _compute_loc_changed
+from autoskillit.execution.headless._headless_model import (
+    resolve_model_identity,  # noqa: F401 - public helper compatibility export
+    resolve_model_pin,  # noqa: F401 - public helper compatibility export
+)
+from autoskillit.quota_constraints import quota_scope
+
+if TYPE_CHECKING:
+    from autoskillit.config import AutomationConfig
 
 _CLAUDE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
     {
@@ -48,10 +54,60 @@ _CODEX_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
 
 _ALL_VALUE_BEARING_FLAGS: frozenset[str] = _CLAUDE_VALUE_BEARING_FLAGS | _CODEX_VALUE_BEARING_FLAGS
 
-if TYPE_CHECKING:
-    from autoskillit.config import AutomationConfig
-
 logger = get_logger(__name__)
+
+
+def resolve_launch_quota_identity(
+    *,
+    backend: CodingAgentBackend,
+    binding: ProviderBinding | None,
+    provider_extras: Mapping[str, str] | None,
+    config: AutomationConfig,
+) -> dict[str, str]:
+    """Bind quota evidence to the credential actually selected for this launch."""
+    provider = (
+        binding.provider
+        if binding is not None
+        else "anthropic"
+        if backend.capabilities.anthropic_provider_capable
+        else backend.name
+    )
+    if not backend.capabilities.anthropic_provider_capable:
+        return {
+            "provider": provider,
+            "mode": "backend-native",
+            "credential_scope": f"backend-native:{provider}",
+        }
+
+    extras = provider_extras or {}
+    api_key = extras.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    if api_key:
+        return {
+            "provider": provider,
+            "mode": "api-key",
+            "credential_scope": f"api-key:{sha256(api_key.encode()).hexdigest()}",
+        }
+    if provider != "anthropic":
+        endpoint = binding.normalized_endpoint if binding is not None else ""
+        scope = sha256(f"{provider}:{endpoint}".encode()).hexdigest()[:16]
+        return {
+            "provider": provider,
+            "mode": "external",
+            "credential_scope": f"external:{scope}",
+        }
+
+    oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+    if oauth_token:
+        return {
+            "provider": provider,
+            "mode": "anthropic-oauth-env",
+            "credential_scope": f"anthropic-oauth:{sha256(oauth_token.encode()).hexdigest()}",
+        }
+    try:
+        scope = quota_scope("anthropic", Path(config.quota_guard.credentials_path).expanduser())
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {"provider": provider, "mode": "anthropic-oauth", "credential_scope": ""}
+    return {"provider": provider, "mode": "anthropic-oauth", "credential_scope": scope}
 
 
 def _session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path:
@@ -114,90 +170,6 @@ def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | No
     if not backend.capabilities.channel_b_capable:
         return None
     return _session_log_dir(cwd, backend)
-
-
-def resolve_model_pin(
-    step_model: str,
-    config: AutomationConfig,
-    *,
-    step_name: str = "",
-    recipe_name: str = "",
-    caller_key_path: str = "run_skill.model",
-) -> ModelPinResolution:
-    """Resolve the model to launch with, in descending priority order.
-
-    Tiers, checked in order: global ``model_override``; the recipe-scoped
-    override (when both ``recipe_name`` and ``step_name`` are given); the
-    step-scoped override; the caller-supplied ``step_model`` (attributed to
-    ``caller_key_path`` — pass the caller's own key path, e.g. ``"fleet.model"``
-    for food-truck dispatch, when it differs from the default
-    ``"run_skill.model"``); then ``default_model``. If no tier resolves, the
-    returned ``ModelPinResolution.model`` is ``""`` — the sentinel for "no
-    model configured" — which callers must treat as absence, not error.
-    """
-    if config.model.model_override:
-        logger.debug("model_resolved", tier="override", model=config.model.model_override)
-        return ModelPinResolution(
-            config.model.model_override,
-            LaunchValueSource(LaunchValueSourceKind.GLOBAL, "model.model_override"),
-        )
-    if recipe_name and step_name:
-        recipe_model = config.model.recipe_overrides.get(recipe_name, {}).get(step_name)
-        if recipe_model:
-            logger.debug("model_resolved", tier="recipe_override", model=recipe_model)
-            return ModelPinResolution(
-                recipe_model,
-                LaunchValueSource(
-                    LaunchValueSourceKind.RECIPE,
-                    f"model.recipe_overrides.{recipe_name}.{step_name}",
-                ),
-            )
-    if step_name:
-        step_override = config.model.step_overrides.get(step_name)
-        if step_override:
-            logger.debug("model_resolved", tier="step_override", model=step_override)
-            return ModelPinResolution(
-                step_override,
-                LaunchValueSource(LaunchValueSourceKind.STEP, f"model.step_overrides.{step_name}"),
-            )
-    if step_model:
-        logger.debug("model_resolved", tier="step", model=step_model)
-        return ModelPinResolution(
-            step_model,
-            LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path),
-        )
-    if config.model.default_model:
-        logger.debug("model_resolved", tier="default", model=config.model.default_model)
-        return ModelPinResolution(
-            config.model.default_model,
-            LaunchValueSource(LaunchValueSourceKind.DEFAULT, "model.default_model"),
-        )
-    logger.debug("model_resolved", tier="none", model=None)
-    default_key_path = f"{caller_key_path.rsplit('.', 1)[0]}.defaults"
-    return ModelPinResolution(
-        "", LaunchValueSource(LaunchValueSourceKind.DEFAULT, default_key_path)
-    )
-
-
-def resolve_model_identity(
-    pin: ModelPinResolution,
-    *,
-    profile_name: str = "",
-) -> ModelIdentity:
-    """Attach provider awareness to an already-resolved model pin.
-
-    For non-Anthropic providers, effective_model is left empty so the downstream
-    argmax fallback in flush_session_log fires and extracts the real provider model
-    from model_breakdown.
-    """
-    configured = pin.model
-    if profile_name and profile_name != "anthropic":
-        return ModelIdentity.for_provider(
-            configured=configured, effective="", profile=profile_name
-        )
-    if configured:
-        return ModelIdentity.anthropic(configured)
-    return ModelIdentity.unknown()
 
 
 def _derive_step_name_from_skill_command(skill_command: str) -> str:

@@ -147,6 +147,10 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
         ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
+        (
+            "src/autoskillit/execution/evidence/_session_retention.py",
+            "apply_execution_candidate_manifest_retention",
+        ),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
         ("src/autoskillit/workspace/_installed/_projection_cache.py", "prune_stale_projections"),
         (
@@ -276,6 +280,15 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         "apply_session_retention",
     ): _convergence_adapters(
         ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention")
+    ),
+    (
+        "src/autoskillit/execution/evidence/_session_retention.py",
+        "apply_execution_candidate_manifest_retention",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/evidence/_session_retention.py",
+            "apply_execution_candidate_manifest_retention",
+        )
     ),
     ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"): _convergence_adapters(
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
@@ -591,6 +604,10 @@ _CS = (
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
 _SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
+_ECMR = (
+    "src/autoskillit/execution/evidence/_session_retention.py::"
+    "apply_execution_candidate_manifest_retention"
+)
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_installed/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_entry"
@@ -782,16 +799,52 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --
-    f"{_SL}::L100": _self_limiting(
+    f"{_SL}::L103": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
         "equivalent of a reaper excluding the generation it is currently claiming."
     ),
-    f"{_SL}::L116": RetentionDecision(
+    f"{_SL}::L119": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected campaign id is honoured unconditionally, retaining "
         "the session directory regardless of its age, the same self-exclusion family as "
         "the dispatch reaper's protected-id set.",
+    ),
+    # -- execution._session_retention::apply_execution_candidate_manifest_retention --
+    f"{_ECMR}::L158": _self_limiting(
+        "The manifest currently being written is excluded from the retention pass that it "
+        "triggered, so it cannot be reclaimed before publication completes."
+    ),
+    f"{_ECMR}::L162": _self_limiting(
+        "A manifest that vanished during its observed scan is already absent and requires no "
+        "further retention action."
+    ),
+    f"{_ECMR}::L170": _retries_after_input_changes(
+        "Unreadable candidate evidence is retained until its file can be read or is replaced; "
+        "a parse failure is never proof that the selection may be discarded."
+    ),
+    f"{_ECMR}::L174": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Candidate evidence for a protected campaign is retained unconditionally while the "
+        "caller declares that campaign live.",
+    ),
+    f"{_ECMR}::L183": _retries_after_input_changes(
+        "Without a telemetry-clear marker, or while the manifest is newer than that marker, "
+        "the clear-based pass retains it until retention evidence changes."
+    ),
+    f"{_ECMR}::L185": RetentionDecision(
+        Revocability.REVOCABLE,
+        "The current, protected, or still-pending manifest name is retained as live "
+        "execution evidence.",
+    ),
+    f"{_ECMR}::L200": _self_limiting(
+        "The normal size window is satisfied, so the capacity pass stops without further "
+        "candidate deletion."
+    ),
+    f"{_ECMR}::L202": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Protected and pending manifest names remain durable evidence even when the size "
+        "window would otherwise evict them.",
     ),
     # -- hooks._capture._sweep::sweep_one --
     f"{_SW}::L608": RetentionDecision(

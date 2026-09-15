@@ -44,7 +44,6 @@ async def _run_with_backend(tool_ctx, dispatch_backend=None):
 
     from autoskillit.fleet._api import execute_dispatch
     from tests.fleet._helpers import (
-        _no_sleep_quota_checker,
         _noop_quota_refresher,
         _simple_prompt_builder,
     )
@@ -57,7 +56,6 @@ async def _run_with_backend(tool_ctx, dispatch_backend=None):
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
         dispatch_backend=dispatch_backend,
     )
@@ -129,6 +127,7 @@ class TestFoodTruckBackendOverridePrelaunch:
         tmp_path: Path,
     ) -> None:
         from contextlib import contextmanager
+        from types import SimpleNamespace
 
         from autoskillit.core import SubprocessResult, TerminationReason, ValidatedAddDir
         from tests.fakes import MockSubprocessRunner
@@ -196,11 +195,24 @@ class TestFoodTruckBackendOverridePrelaunch:
         )
         tool_ctx.runner = runner
         tool_ctx.backend = backend
+        tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "diagnostics")
+        admissions: list[dict[str, object]] = []
+
+        async def record_admission(**kwargs):
+            admissions.append(kwargs)
+            return SimpleNamespace(admitted=True, reason="provider_bypass")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._managed._food_truck_executor.admit_quota",
+            record_admission,
+        )
 
         await _run_with_backend(tool_ctx, dispatch_backend=backend)
 
         assert runner.call_args_list
         prelaunch.assert_called_once_with()
+        assert admissions[0]["provider"] == "codex"
+        assert admissions[0]["diagnostic_log_root"] == Path(tool_ctx.config.linux_tracing.log_dir)
 
 
 class TestDispatchBackendOverrideThreadsToExecutor:

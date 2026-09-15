@@ -43,6 +43,7 @@ from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismat
 
 logger = get_logger(__name__)
 
+
 _BuildSpec = Callable[
     [PluginLaunchBinding | None, Mapping[str, str] | None, str | None],
     CmdSpec,

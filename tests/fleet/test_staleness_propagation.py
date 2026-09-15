@@ -13,16 +13,6 @@ from tests.server._helpers import _make_recipe_info, _make_standard_recipe
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
@@ -56,7 +46,6 @@ class TestStalenessErrorPropagation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(dispatch_result.outcome.to_envelope())

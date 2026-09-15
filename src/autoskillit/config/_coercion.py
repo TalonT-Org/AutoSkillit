@@ -113,10 +113,18 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     if target_type is str:
         return str(value)
     if origin is list:
-        try:
-            return list(value)
-        except TypeError as exc:
-            raise ConfigSchemaError(f"{context} must be iterable for list, got {value!r}") from exc
+        if not isinstance(value, list):
+            try:
+                value = list(value)
+            except TypeError as exc:
+                raise ConfigSchemaError(
+                    f"{context} must be iterable for list, got {value!r}"
+                ) from exc
+        element_type = args[0] if args else Any
+        return [
+            _coerce_value(element, element_type, f"{context}[{index}]")
+            for index, element in enumerate(value)
+        ]
     if origin is set:
         try:
             return set(value)
@@ -124,6 +132,24 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
             raise ConfigSchemaError(f"{context} must be iterable for set, got {value!r}") from exc
     if origin is dict:
         return value
+    if isinstance(target_type, type) and dataclasses.is_dataclass(target_type):
+        if not isinstance(value, dict):
+            raise ConfigSchemaError(f"{context} must be a mapping, got {type(value).__name__!r}")
+        field_names = {field.name for field in dataclasses.fields(target_type)}
+        unexpected = sorted(set(value) - field_names)
+        if unexpected:
+            raise ConfigSchemaError(
+                f"{context} contains unexpected key(s): {', '.join(unexpected)}"
+            )
+        hints = get_type_hints(target_type)
+        kwargs = {
+            name: _coerce_value(raw, hints[name], f"{context}.{name}")
+            for name, raw in value.items()
+        }
+        try:
+            return target_type(**kwargs)
+        except (TypeError, ValueError) as exc:
+            raise ConfigSchemaError(f"invalid {context}: {exc}") from exc
     return value
 
 

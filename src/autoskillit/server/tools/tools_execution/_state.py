@@ -56,15 +56,19 @@ if TYPE_CHECKING:
         BackendAuthority,
         BackendPinResolution,
         BoundScalar,
+        CandidatePreSpawnRejection,
         ClosureAuthoritySpec,
         CodingAgentBackend,
         EffectiveSkillInvocationAuthority,
         ExecutionIdentity,
+        ExecutionSelection,
         InstalledRecipeExecution,
         InvocationTemplate,
         ManagedHeadlessSessionLineageRef,
         ManagedHeadlessSessionLineageStore,
+        ModelPinResolution,
         NativeShellCaptureDecision,
+        ProviderBinding,
         RecipeExecutionId,
         ResolvedLaunchContract,
         RunSkillCompletionAuthority,
@@ -134,6 +138,9 @@ class _RunSkillDispatchState:
 
     # --- Dispatch bootstrap (timing, tracker authority, explorer launch) ---
     _start: float = 0.0
+    _invocation_deadline_epoch: float = 0.0
+    _invocation_deadline_monotonic: float = 0.0
+    _invocation_cwd: str = ""
     _sn_token: Token[str] | None = None
     _oid_token: Token[str] | None = None
     _tracker_target: TrackerAuthorityTarget | None = None
@@ -144,6 +151,9 @@ class _RunSkillDispatchState:
     _generated_home_cleanup_required: bool = False
     _copied_snapshot_dir: Path | None = None
     _child_resource_owner: AbstractAsyncContextManager[object] | None = None
+    _quota_lease: ArtifactLease | None = None
+    _quota_scope: str = ""
+    execution_selection: ExecutionSelection | None = None
     _owned_cwd: Path | None = None
     _explorer_parent_identity: tuple[Path, str] | None = None
     _explorer_launch_lease: _ExplorerLaunchLease | None = None
@@ -159,6 +169,7 @@ class _RunSkillDispatchState:
     _resume_backend_obj: CodingAgentBackend | None = None
     _resume_backend_authority: BackendAuthority | None = None
     _resume_launch_contract: ResolvedLaunchContract | None = None
+    _current_launch_contract: ResolvedLaunchContract | None = None
     _effective_skill_resolver: SkillResolver | None = None
     invocation: EffectiveSkillInvocationAuthority | None = None
     projection_context: SkillProjectionContext | None = None
@@ -199,7 +210,10 @@ class _RunSkillDispatchState:
     _in_fleet_dispatch: bool = False
     _inspector_model: str | None = None
     effective_model: str = ""
+    requested_step_provider: str = ""
     provider_extras: dict[str, str] | None = None
+    provider_binding: ProviderBinding | None = None
+    model_pin: ModelPinResolution | None = None
     profile_name_out: str | None = None
     _profile: str = ""
     _env_dict: dict[str, str] = field(default_factory=dict)
@@ -217,6 +231,7 @@ class _RunSkillDispatchState:
     _backend_authority: BackendAuthority | None = None
     _effective_backend_obj: CodingAgentBackend | None = None
     _explicit_binary: str | None = None
+    _candidate_rejection_reason: str | None = None
     _fresh_parent_sandbox_mode: str | None = None
     _active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] | None = None
 
@@ -255,7 +270,7 @@ class _RunSkillDispatchState:
     _caller_hook_session_id: str | None = None
 
     # --- Executor result ---
-    skill_result: SkillResult | None = None
+    skill_result: SkillResult | CandidatePreSpawnRejection | None = None
 
     # --- Finalize-writable (single helper site mutates these) ---
     _audit_outcome_to_finalize: AuditOutcome | None = None

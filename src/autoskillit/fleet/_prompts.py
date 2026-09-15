@@ -12,10 +12,6 @@ import regex as re
 
 from autoskillit.core import (
     ADMIRAL_DISPATCH_SECTIONS,
-    QUOTA_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_GUARD_DENY_TRIGGER,
-    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_POST_WARNING_TRIGGER,
     ROUTING_AUTHORITY_CLAUSE,
     STEP_SKIP_SEMANTICS_CLAUSE,
     CaptureEntrySpec,
@@ -245,7 +241,6 @@ HOOK DENIAL COMPLIANCE — ALL HOOKS:
   the original tool call.
 
 SPECIFIC HOOK DENIAL PATTERNS:
-- "QUOTA WAIT REQUIRED": Temporary — sleep and retry (see QUOTA DENIAL ROUTING below).
 - "REVIEW LOOP REQUIRED": Call check_review_loop before retrying wait_for_ci/enqueue_pr.
 - "DEPENDENCY UNMET": A prerequisite pipeline step has not completed. \
 Call record_pipeline_step(op="status") to inspect tracker state. \
@@ -253,28 +248,19 @@ Run the missing prerequisite, or escalate if the tracker is stale. \
 Never blind-retry the denied call.
 - All other denials: Follow the corrective instruction in the deny reason text.
 
-QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
-- When a PreToolUse hook DENIES run_skill with "{QUOTA_GUARD_DENY_TRIGGER}":
-  - This is a TEMPORARY block. The API quota resets on a rolling window.
-  - The deny message contains a run_cmd sleep command. Execute it immediately.
-  - After the sleep completes, retry the EXACT same run_skill call (same arguments).
-  - NEVER treat a quota denial as a permanent failure or pipeline-stopping error.
-- When a PreToolUse hook DENIES run_skill with "{QUOTA_BUDGET_EXCEEDED_TRIGGER}":
-  - The required quota sleep EXCEEDS the session's remaining wall-clock budget.
-  - Do NOT sleep. Instead, emit the sentinel block immediately with the fields
-    specified in the deny message (success=false, reason=fleet_quota_exhausted,
-    wait_seconds, summary).
-  - Then STOP — do not call any more tools after emitting the sentinel.
-- When run_skill output contains "{QUOTA_POST_WARNING_TRIGGER}":
-  - A post-execution quota check detected high utilization.
-  - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.
-  - After sleeping, proceed normally with the next pipeline step.
-- When run_skill output contains "{QUOTA_POST_BUDGET_EXCEEDED_TRIGGER}":
-  - The required quota sleep EXCEEDS the session's remaining wall-clock budget.
-  - Do NOT sleep. Instead, emit the sentinel block with the fields
-    specified in the output (success=false, reason=fleet_quota_exhausted,
-    wait_seconds, resets_at, summary).
-  - Then STOP — do not call any more tools after emitting the sentinel.
+RATE LIMIT AND QUOTA RESULT ROUTING — run_skill only (check BEFORE on_failure):
+- A structured result with "candidate_exhausted: true" records that every compatible
+  candidate was rejected before a worker started. Inspect its ordered
+  "execution_selection.attempts" and "retry_reason". Route `rate_limited` to
+  on_rate_limit when defined; otherwise route to on_failure. Do not replay the original
+  call or add a fixed delay.
+- When a candidate started and returns "retry_reason: rate_limited", never rerun the
+  original call or choose another candidate. Resume only when
+  "execution_selection.continuation.resume_session_id" is non-empty, using that exact
+  same-binding ID within its returned reset/deadline bounds.
+- Without that explicit continuation, route immediately to on_rate_limit when defined,
+  otherwise on_failure. The routed step owns cleanup. Hook diagnostics are not a retry
+  instruction.
 
 SKILL_COMMAND FORMATTING — MANDATORY:
 - The `skill_command` value in each step's `with:` block is a LITERAL template.
@@ -296,18 +282,9 @@ campaign throughput.
 
 --- SECTION 5: QUOTA AWARENESS ---
 
-When you detect that the API quota is exhausted (via quota guard denial
-or quota post-warning), and you cannot make further progress:
-
-Emit the sentinel block with:
-  "success": false,
-  "reason": "fleet_quota_exhausted",
-  "wait_seconds": <seconds_until_reset>
-
-The fleet dispatcher will schedule a retry after the wait period.
-Do NOT loop indefinitely on quota denials — if 3 consecutive quota
-denials occur with no successful run_skill between them, emit the
-fleet_quota_exhausted sentinel and exit.
+Quota admission and rate-limit continuation come from structured run_skill results.
+Use the result-routing rules above; do not manufacture a fleet quota sentinel, wait for a
+quota window, or replay a call from a hook diagnostic.
 
 --- SECTION 6: CAMPAIGN TASK ---
 

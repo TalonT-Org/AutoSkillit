@@ -55,6 +55,7 @@ class TestProvidersConfig:
         assert cfg.providers.step_overrides == {}
         assert cfg.providers.recipe_overrides == {}
         assert cfg.providers.model_overrides == {}
+        assert cfg.providers.execution_candidates == []
         assert cfg.providers.provider_retry_limit == 2
 
     def test_providers_config_defaults(self) -> None:
@@ -66,6 +67,7 @@ class TestProvidersConfig:
         assert cfg.step_overrides == {}
         assert cfg.recipe_overrides == {}
         assert cfg.model_overrides == {}
+        assert cfg.execution_candidates == []
         assert cfg.provider_retry_limit == 2
 
     def test_providers_config_is_mutable(self) -> None:
@@ -87,6 +89,7 @@ class TestProvidersConfig:
             "step_overrides",
             "recipe_overrides",
             "model_overrides",
+            "execution_candidates",
             "provider_retry_limit",
         }
 
@@ -156,6 +159,88 @@ class TestProvidersConfig:
 
 
 class TestProvidersConfigYaml:
+    def test_load_config_execution_candidates_preserves_configured_order(self, tmp_path) -> None:
+        from autoskillit.config import ExecutionCandidateSpec, load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {
+                    "providers": {
+                        "profiles": {"fast": {}, "backup": {}},
+                        "execution_candidates": [
+                            {
+                                "backend": "claude-code",
+                                "profile": "fast",
+                                "model": "claude-sonnet-4-5",
+                            },
+                            {
+                                "backend": "claude-code",
+                                "profile": "backup",
+                                "model": "claude-opus-4-5",
+                            },
+                            {"backend": "codex"},
+                        ],
+                    }
+                }
+            )
+        )
+
+        cfg = load_config(tmp_path)
+
+        assert cfg.providers.execution_candidates == [
+            ExecutionCandidateSpec(
+                backend="claude-code", profile="fast", model="claude-sonnet-4-5"
+            ),
+            ExecutionCandidateSpec(
+                backend="claude-code", profile="backup", model="claude-opus-4-5"
+            ),
+            ExecutionCandidateSpec(backend="codex"),
+        ]
+
+    @pytest.mark.parametrize(
+        ("candidate", "match"),
+        [
+            ("claude-code", "execution_candidates"),
+            ({"profile": "fast"}, "backend"),
+            ({"backend": "not-a-backend"}, "backend"),
+            ({"backend": "codex", "unexpected": "value"}, "unexpected"),
+        ],
+    )
+    def test_load_config_execution_candidates_reject_invalid_entries(
+        self, tmp_path, candidate, match: str
+    ) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"providers": {"execution_candidates": [candidate]}})
+        )
+
+        with pytest.raises(ValueError, match=match):
+            load_config(tmp_path)
+
+    def test_load_config_rejects_execution_candidates_when_providers_are_disabled(
+        self, tmp_path
+    ) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {
+                    "features": {"providers": False},
+                    "providers": {"execution_candidates": [{"backend": "codex"}]},
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="execution_candidates"):
+            load_config(tmp_path)
+
     def test_defaults_yaml_has_providers_section(self) -> None:
         from autoskillit.core.io import load_yaml
         from autoskillit.core.paths import pkg_root

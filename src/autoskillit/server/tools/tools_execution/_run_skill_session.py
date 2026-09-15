@@ -1,5 +1,5 @@
 """run_skill session phase: skill-snapshot replay/materialization, closure
-write-scope expansion, native-shell lineage, and completion-receipt begin.
+write-scope expansion, and native-shell lineage.
 
 Returns the terminal MCP response string when an early exit is warranted;
 ``None`` otherwise, in which case dispatch continues to the finalize phase.
@@ -10,7 +10,6 @@ from __future__ import annotations
 import functools
 import json
 import os
-import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -466,15 +465,7 @@ async def _prepare_owned_dispatch_session(
 
     # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
     state.provider_extras = propagate_session_deadline(
-        time.time() + state._cfg.run_skill.timeout,
+        state._invocation_deadline_epoch,
         state.provider_extras,
-    )
-
-    state._completion_invocation_id = _te_pkg._begin_run_skill_completion(
-        state.tool_ctx,
-        request_context=state.ctx,
-        order_id=state.order_id,
-        step_name=state.step_name,
-        tracker_target=state._tracker_target,
     )
     return None

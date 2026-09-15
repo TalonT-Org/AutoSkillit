@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: quota check before run_skill.
+"""PreToolUse hook: record quota observations before run_skill.
 
-Reads the local quota cache file (written by autoskillit's quota module) and
-denies run_skill when the cached binding marks ``should_block=True``. The
-threshold classification is computed once on the cache write side, so this
-hook contains no threshold logic of its own. Fails open when the cache is
-missing, expired, or unreadable — the next run_skill call will discover
-quota exhaustion on its own.
+The server owns quota admission when it finalizes an execution launch. This
+hook only records the cached quota observation for diagnostics; it never
+changes the tool permission decision.
 
 This script is stdlib-only so it can run under any Python interpreter without
 requiring the autoskillit package to be importable.
 """
 
 import json
-import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -48,14 +44,6 @@ from quota_constraints import (  # noqa: E402
     decide_quota_block,
 )  # type: ignore[import-not-found]
 
-# Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
-# Changing this value requires updating _prompts.py and sous-chef/SKILL.md in the same commit.
-QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
-
-# Emitted when required sleep exceeds remaining session wall-clock budget.
-# Instructs the session to emit a clean sentinel and exit, rather than sleep-and-retry.
-QUOTA_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
-
 
 def quota_guard_decision(
     settings: QuotaHookSettings, *, now_epoch: int
@@ -75,13 +63,13 @@ def main(*, cache_path_override: str | None = None) -> None:
         raw = sys.stdin.read()
         event = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
-        sys.exit(0)  # malformed event — approve
+        sys.exit(0)  # malformed event — no diagnostic to record
     except Exception as e:
         print(
             f"quota_guard: unexpected error reading stdin: {type(e).__name__}: {e}",
             file=sys.stderr,
         )
-        sys.exit(0)  # log but approve — don't block run_skill on hook bugs
+        sys.exit(0)  # diagnostics must not affect run_skill on hook bugs
 
     event_session_id = ""
     if isinstance(event, dict):
@@ -98,150 +86,31 @@ def main(*, cache_path_override: str | None = None) -> None:
     log_dir = resolve_quota_log_dir(caller="quota_guard")
     ts = datetime.now(UTC).isoformat()
 
-    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
-    if backend == "codex":
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "backend_bypass",
-                "backend": backend,
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-        sys.exit(0)
-
-    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
-    if profile and profile.casefold() != "anthropic":
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "provider_bypass",
-                "profile": profile,
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-        sys.exit(0)
-
     now_epoch = int(time.time())
     winner, metadata = quota_guard_decision(settings, now_epoch=now_epoch)
-    utilization = float(metadata["utilization"])
-    effective_threshold = float(metadata["effective_threshold"])
-    window_name = str(metadata["window_name"])
-    should_block = winner is not None or bool(metadata["unknown_reset_block"])
-
-    if not should_block and metadata["cache_state"] in {"miss", "parse_error"}:
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": ("cache_miss" if metadata["cache_state"] == "miss" else "parse_error"),
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-        sys.exit(0)
-
-    if should_block:
-        if winner is not None:
-            resets_at_str = datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
-            n = max(
-                0,
-                winner.blocked_until_epoch - now_epoch + settings.buffer_seconds,
-            )
-            window_name = winner.limit_type or window_name
-        else:
-            resets_at_str = None
-            n = settings.buffer_seconds
-
-        session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
-        budget_exceeded = False
-        remaining_budget = float("inf")
-        if session_deadline_str:
-            try:
-                session_deadline = float(session_deadline_str)
-                remaining_budget = max(0, session_deadline - time.time())
-                if n > remaining_budget:
-                    budget_exceeded = True
-            except (ValueError, TypeError):
-                pass  # malformed deadline — fall through to normal deny
-
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "blocked_budget_exceeded" if budget_exceeded else "blocked",
-                "effective_threshold": effective_threshold,
-                "window_name": window_name,
-                "utilization": utilization,
-                "sleep_seconds": n,
-                "resets_at": resets_at_str,
-                "budget_exceeded": budget_exceeded,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-
-        if budget_exceeded:
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "deny",
-                            "permissionDecisionReason": (
-                                f"{QUOTA_BUDGET_EXCEEDED_TRIGGER} — "
-                                f"Quota sleep ({n}s) exceeds session budget "
-                                f"({remaining_budget:.0f}s remaining). "
-                                f"MANDATORY ACTION: Emit your result block with "
-                                f'"success": false, '
-                                f'"reason": "fleet_quota_exhausted", '
-                                f'"wait_seconds": {n}, '
-                                f'"summary": "Quota exceeded; session budget insufficient '
-                                f'for sleep. Resume after window resets." '
-                                f"Then STOP — do not call any more tools."
-                            ),
-                        }
-                    }
-                )
-            )
-        else:
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "deny",
-                            "permissionDecisionReason": (
-                                f"{QUOTA_GUARD_DENY_TRIGGER} (temporary — NOT a permanent error). "
-                                f"Utilization: {utilization:.0f}% on window '{window_name}' "
-                                f"(threshold: {effective_threshold:.0f}%). "
-                                f"MANDATORY ACTION: Call run_cmd with: "
-                                f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
-                                f"then retry the SAME run_skill call with identical arguments. "
-                                f"Before executing, state aloud: "
-                                f"'Quota exceeded at {utilization:.0f}%. "
-                                f"Sleeping {n}s, then retrying.'"
-                            ),
-                        }
-                    }
-                )
-            )
-    else:
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "approved",
-                "effective_threshold": effective_threshold,
-                "window_name": window_name,
-                "utilization": utilization,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-    sys.exit(0)  # exit 0 so Claude Code parses the JSON decision
+    write_quota_log_event(
+        {
+            "ts": ts,
+            "event": "quota_observation",
+            "cache_path": cache_path_str,
+            "cache_state": metadata["cache_state"],
+            "effective_threshold": float(metadata["effective_threshold"]),
+            "window_name": (
+                winner.limit_type if winner is not None else str(metadata["window_name"])
+            ),
+            "utilization": float(metadata["utilization"]),
+            "constraint_observed": winner is not None,
+            "unknown_reset_observed": bool(metadata["unknown_reset_block"]),
+            "resets_at": (
+                datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
+                if winner is not None
+                else None
+            ),
+        },
+        log_dir,
+        caller="quota_guard",
+    )
+    sys.exit(0)
 
 
 if __name__ == "__main__":

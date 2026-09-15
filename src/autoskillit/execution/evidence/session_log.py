@@ -1,10 +1,4 @@
-"""File-based session diagnostics log writer.
-
-Writes structured JSON logs to a global, XDG-aware directory. Each headless
-session gets its own directory keyed by session ID, containing process trace
-data, a session summary, and flagged anomalies. A bounded derived index provides
-quick scanning across retained committed sessions.
-"""
+"""File-based session diagnostics log writer."""
 
 from __future__ import annotations
 
@@ -18,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from autoskillit.core import (
         CampaignProtector,
+        ExecutionSelection,
         InfraOutcome,
         NativeShellCaptureDiagnostic,
         ProviderOutcome,
@@ -45,6 +40,7 @@ from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution.evidence._session_retention import (
     apply_session_retention,
     refresh_summary_child_outcomes,
+    write_execution_candidate_manifest_at_root,
 )
 from autoskillit.execution.evidence.anomaly_detection import (
     api_retry_exhaustion_anomaly,
@@ -192,6 +188,32 @@ def session_index_lock_path(log_root: Path) -> Path:
     return Path(log_root) / ".locks" / "sessions-index.lock"
 
 
+def _protected_campaign_ids(
+    project_dir: str,
+    build_protected_campaign_ids: CampaignProtector | None,
+) -> frozenset[str]:
+    if project_dir and build_protected_campaign_ids is not None:
+        return build_protected_campaign_ids(Path(project_dir))
+    return frozenset()
+
+
+def write_execution_candidate_manifest(
+    selection: ExecutionSelection,
+    log_dir: str,
+    *,
+    max_sessions: int | None = None,
+    project_dir: str = "",
+    build_protected_campaign_ids: CampaignProtector | None = None,
+) -> str:
+    """Publish selection evidence before candidate admission or launch."""
+    return write_execution_candidate_manifest_at_root(
+        selection,
+        resolve_log_dir(log_dir),
+        max_sessions=max_sessions,
+        protected_ids=_protected_campaign_ids(project_dir, build_protected_campaign_ids),
+    )
+
+
 def _append_session_archive_rows(archive_path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         return
@@ -270,6 +292,7 @@ def flush_session_log(
     channel_b_capable: bool = True,
     backend_authority: Mapping[str, object] | None = None,
     launch_contract_digest: str = "",
+    execution_selection: ExecutionSelection | None = None,
     telemetry: SessionTelemetry,
     outcome_fields: dict[str, int | str] | None = None,
     outcome_invariant_violated: bool = False,
@@ -472,6 +495,9 @@ def flush_session_log(
             if native_shell_capture is not None
             else None
         )
+        execution_selection_payload = (
+            execution_selection.to_payload() if execution_selection is not None else None
+        )
 
         summary = {
             "session_id": session_id,
@@ -521,6 +547,7 @@ def flush_session_log(
             if backend_authority is not None
             else None,
             "launch_contract_digest": launch_contract_digest,
+            "execution_selection": execution_selection_payload,
             "execution_identity": execution_identity.to_dict(),
             "orphaned_tool_result": orphaned_tool_result,
             "last_stop_reason": last_stop_reason,
@@ -684,6 +711,7 @@ def flush_session_log(
             if backend_authority is not None
             else None,
             "launch_contract_digest": launch_contract_digest,
+            "execution_selection": execution_selection_payload,
             "requested_parent_backend": execution_identity.requested_parent_backend,
             "effective_parent_backend": execution_identity.effective_parent_backend,
             "requested_parent_model": execution_identity.requested_parent_model,
@@ -734,11 +762,7 @@ def flush_session_log(
         ]
         index_rows.append(index_entry)
 
-        protected_ids = (
-            build_protected_campaign_ids(Path(project_dir))
-            if project_dir and build_protected_campaign_ids is not None
-            else frozenset()
-        )
+        protected_ids = _protected_campaign_ids(project_dir, build_protected_campaign_ids)
         surviving_names = apply_session_retention(
             sessions_dir,
             max_sessions=max_sessions,

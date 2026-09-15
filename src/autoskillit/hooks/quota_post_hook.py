@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: quota warning after run_skill execution.
+"""PostToolUse hook: record quota observations after run_skill execution.
 
-Fires after run_skill completes and checks whether the cached binding marks
-``should_block=True``. When set, replaces the tool output with a quota warning
-and sleep instruction via updatedMCPToolOutput.
+The server owns quota admission when it finalizes an execution launch. This
+hook only records the cached quota observation for diagnostics; it never
+replaces a tool result or tells the caller to delay a later launch.
 
 This script is stdlib-only so it can run under any Python interpreter without
 requiring the autoskillit package to be importable.
 """
 
 import json
-import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -44,10 +43,6 @@ from quota_constraints import (  # noqa: E402
     QuotaConstraint,
     decide_quota_block,
 )  # type: ignore[import-not-found]
-
-# Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
-QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
-QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
 def quota_post_decision(
@@ -86,133 +81,30 @@ def main(*, cache_path_override: str | None = None) -> None:
     log_dir = resolve_quota_log_dir(caller="quota_post_hook")
     ts = datetime.now(UTC).isoformat()
 
-    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
-    if backend == "codex":
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "post_backend_bypass",
-                "backend": backend,
-                "tool_name": tool_name,
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_post_hook",
-        )
-        sys.exit(0)
-
-    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
-    if profile and profile.casefold() != "anthropic":
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "post_provider_bypass",
-                "profile": profile,
-                "tool_name": tool_name,
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_post_hook",
-        )
-        sys.exit(0)
-
     now_epoch = int(time.time())
     winner, metadata = quota_post_decision(settings, now_epoch=now_epoch)
-    utilization = float(metadata["utilization"])
-    effective_threshold = float(metadata["effective_threshold"])
-    window_name = str(metadata["window_name"])
-    should_block = winner is not None or bool(metadata["unknown_reset_block"])
-
-    if not should_block:
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "post_check_pass",
-                "effective_threshold": effective_threshold,
-                "window_name": window_name,
-                "utilization": utilization,
-                "tool_name": tool_name,
-            },
-            log_dir,
-            caller="quota_post_hook",
-        )
-        sys.exit(0)
-
-    if winner is not None:
-        resets_at_str = datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
-        n = max(
-            0,
-            winner.blocked_until_epoch - now_epoch + settings.buffer_seconds,
-        )
-        window_name = winner.limit_type or window_name
-    else:
-        resets_at_str = None
-        n = settings.buffer_seconds
-
-    session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
-    budget_exceeded = False
-    remaining_budget = float("inf")
-    if session_deadline_str:
-        try:
-            session_deadline = float(session_deadline_str)
-            remaining_budget = max(0, session_deadline - time.time())
-            if n > remaining_budget:
-                budget_exceeded = True
-        except (ValueError, TypeError):
-            pass
-
-    if budget_exceeded:
-        resets_at_display = resets_at_str or "unknown"
-        warning_text = (
-            f"{QUOTA_POST_BUDGET_EXCEEDED_TRIGGER}\n"
-            f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
-            f"(threshold: {effective_threshold:.0f}%)\n"
-            f"Quota sleep ({n}s) exceeds session budget ({remaining_budget:.0f}s remaining).\n"
-            f"MANDATORY ACTION: Emit your result block with "
-            f'"success": false, '
-            f'"reason": "fleet_quota_exhausted", '
-            f'"wait_seconds": {n}, '
-            f'"resets_at": "{resets_at_display}", '
-            f'"summary": "Quota exceeded; session budget insufficient for sleep. '
-            f'"Resume after window resets." '
-            f"Then STOP — do not call any more tools."
-        )
-    else:
-        warning_text = (
-            f"{QUOTA_POST_WARNING_TRIGGER}\n"
-            f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
-            f"(threshold: {effective_threshold:.0f}%)\n"
-            f"MANDATORY ACTION before next run_skill: Call run_cmd with: "
-            f'python3 -c "import time; time.sleep({n})" timeout={n + 30}\n'
-            f"Before executing, state aloud: "
-            f"'Quota at {utilization:.0f}%. Sleeping {n}s before next step.'"
-        )
-
     write_quota_log_event(
         {
             "ts": ts,
-            "event": "post_check_budget_exceeded" if budget_exceeded else "post_check_warning",
-            "effective_threshold": effective_threshold,
-            "window_name": window_name,
-            "utilization": utilization,
-            "sleep_seconds": n,
-            "resets_at": resets_at_str,
+            "event": "post_quota_observation",
+            "cache_path": cache_path_str,
+            "cache_state": metadata["cache_state"],
+            "effective_threshold": float(metadata["effective_threshold"]),
+            "window_name": (
+                winner.limit_type if winner is not None else str(metadata["window_name"])
+            ),
+            "utilization": float(metadata["utilization"]),
+            "constraint_observed": winner is not None,
+            "unknown_reset_observed": bool(metadata["unknown_reset_block"]),
+            "resets_at": (
+                datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
+                if winner is not None
+                else None
+            ),
             "tool_name": tool_name,
-            "budget_exceeded": budget_exceeded,
-            "remaining_budget": remaining_budget if remaining_budget != float("inf") else None,
         },
         log_dir,
         caller="quota_post_hook",
-    )
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "updatedMCPToolOutput": warning_text,
-                }
-            }
-        )
     )
     sys.exit(0)
 

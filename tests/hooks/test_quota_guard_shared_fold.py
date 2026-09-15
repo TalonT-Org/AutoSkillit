@@ -24,6 +24,7 @@ pytestmark = pytest.mark.medium
 def test_hooks_fold_observed_and_poll_constraints(tmp_path) -> None:
     credentials = tmp_path / ".credentials.json"
     cache = tmp_path / "cache.json"
+    credentials.write_text('{"claudeAiOauth": {"accessToken": "token-a"}}')
     scope = quota_scope("anthropic", credentials)
     config = make_quota_guard_config(credentials_path=str(credentials), cache_path=str(cache))
     now = int(datetime.now(UTC).timestamp())
@@ -37,7 +38,6 @@ def test_hooks_fold_observed_and_poll_constraints(tmp_path) -> None:
     settings = QuotaHookSettings(
         cache_path=str(cache),
         cache_max_age=300,
-        buffer_seconds=60,
         quota_account_scope=scope,
     )
 
@@ -51,6 +51,7 @@ def test_hooks_fold_observed_and_poll_constraints(tmp_path) -> None:
     _write_cache(
         str(cache),
         QuotaFetchResult(binding=QuotaStatus(90, poll_reset, "five_hour", True, 85)),
+        credential_scope=scope,
     )
     guard_winner, _ = quota_guard_decision(settings, now_epoch=now)
     post_winner, _ = quota_post_decision(settings, now_epoch=now)
@@ -61,7 +62,43 @@ def test_hooks_fold_observed_and_poll_constraints(tmp_path) -> None:
     _write_cache(
         str(cache),
         QuotaFetchResult(binding=QuotaStatus(20, None, "five_hour", False, 85)),
+        credential_scope=scope,
     )
     guard_winner, _ = quota_guard_decision(settings, now_epoch=now)
     assert guard_winner is not None
     assert guard_winner.source.value == "observed_terminal"
+
+
+def test_hooks_ignore_poll_cache_from_another_credential_scope(tmp_path) -> None:
+    credentials_a = tmp_path / "credentials-a.json"
+    credentials_b = tmp_path / "credentials-b.json"
+    cache = tmp_path / "cache.json"
+    credentials_a.write_text('{"claudeAiOauth": {"accessToken": "token-a"}}')
+    credentials_b.write_text('{"claudeAiOauth": {"accessToken": "token-b"}}')
+    scope_a = quota_scope("anthropic", credentials_a)
+    scope_b = quota_scope("anthropic", credentials_b)
+    now = int(datetime.now(UTC).timestamp())
+    _write_cache(
+        str(cache),
+        QuotaFetchResult(
+            binding=QuotaStatus(
+                90,
+                datetime.now(UTC) + timedelta(hours=2),
+                "five_hour",
+                True,
+                85,
+            )
+        ),
+        credential_scope=scope_a,
+    )
+    settings = QuotaHookSettings(
+        cache_path=str(cache),
+        cache_max_age=300,
+        quota_account_scope=scope_b,
+    )
+
+    guard_winner, _ = quota_guard_decision(settings, now_epoch=now)
+    post_winner, _ = quota_post_decision(settings, now_epoch=now)
+
+    assert guard_winner is None
+    assert post_winner is None

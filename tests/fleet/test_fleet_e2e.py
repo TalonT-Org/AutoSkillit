@@ -127,16 +127,6 @@ def _simple_prompt_builder(**kwargs: Any) -> str:
     return f"dispatch {kwargs.get('recipe', 'unknown')} for {kwargs.get('task', 'test')}"
 
 
-async def _no_sleep_quota_checker(config: Any, **kwargs: Any) -> dict[str, Any]:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config: Any, **kwargs: Any) -> None:
     pass
 
@@ -281,7 +271,6 @@ class FleetRuntime:
         timeout_sec: int | None = None,
         shim_mode: str = "success",
         sleep_sec: float | None = None,
-        quota_checker: Any = None,
     ) -> dict[str, Any]:
         """Run execute_dispatch and return the parsed JSON envelope."""
         from autoskillit.fleet._api import execute_dispatch
@@ -295,7 +284,6 @@ class FleetRuntime:
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=quota_checker if quota_checker is not None else _no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         return cast(dict[str, Any], json.loads(result.outcome.to_envelope()))
@@ -650,47 +638,6 @@ async def test_ingredient_type_validation(fleet_runtime: FleetRuntime) -> None:
     assert result["success"] is False
     assert result["error"] == "fleet_unknown_ingredient"
     assert rt.runner.call_count == 0
-
-
-@pytest.mark.anyio
-async def test_quota_exhausted_mid_campaign_sleeps_and_retries_once(
-    fleet_runtime: FleetRuntime,
-) -> None:
-    """Quota sleep is honored before dispatch proceeds to completion."""
-    rt = fleet_runtime
-    rt.add_recipe("recipe-a")
-
-    call_count = [0]
-
-    async def _stateful_quota_checker(config: Any, **kwargs: Any) -> dict[str, Any]:
-        call_count[0] += 1
-        if call_count[0] == 1:
-            return {
-                "should_sleep": True,
-                "sleep_seconds": 0.1,
-                "utilization": None,
-                "resets_at": None,
-                "window_name": None,
-            }
-        return {
-            "should_sleep": False,
-            "sleep_seconds": 0,
-            "utilization": None,
-            "resets_at": None,
-            "window_name": None,
-        }
-
-    t0 = time.monotonic()
-    result = await rt.dispatch(
-        "recipe-a",
-        shim_mode="success",
-        quota_checker=_stateful_quota_checker,
-    )
-    elapsed = time.monotonic() - t0
-
-    assert result["success"] is True
-    assert elapsed >= 0.1, f"Expected quota sleep ≥ 0.1s, got {elapsed:.3f}s"
-    assert call_count[0] >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -1067,7 +1014,6 @@ async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
         resume_session_id="test-session-id",
     )

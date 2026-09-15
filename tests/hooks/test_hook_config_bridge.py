@@ -1,15 +1,9 @@
-"""Regression tests for hook policy snapshots in ``.hook_config.json``.
-
-Tests quota and output-budget serialization across the server-to-stdlib hook
-boundary, including layered overlay behavior. No pytestmark — hooks/ is out of
-scope for layer markers.
-"""
+"""Tests for quota and output-budget hook-config snapshots."""
 
 from __future__ import annotations
 
 import io
 import json
-import time
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -22,7 +16,6 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 _ENV_VARS = (
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
-    "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
     "AUTOSKILLIT_QUOTA_GUARD__DISABLED",
 )
 
@@ -38,6 +31,34 @@ def _write_hook_config(tmp_path: Path, quota_guard: dict) -> None:
     hook_cfg.write_text(json.dumps({"quota_guard": quota_guard}))
 
 
+def _write_blocking_cache(cache_path: Path) -> None:
+    cache_path.write_text(
+        json.dumps(
+            {
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "credential_scope": "",
+                "binding": {
+                    "utilization": 95.0,
+                    "should_block": True,
+                    "effective_threshold": 85.0,
+                    "window_name": "five_hour",
+                    "resets_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+                },
+            }
+        )
+    )
+
+
+def _run_quota_hook() -> tuple[str, int]:
+    from autoskillit.hooks.guards.quota_guard import main
+
+    stdout = io.StringIO()
+    with patch("sys.stdin", io.StringIO(json.dumps({"tool_name": "run_skill"}))):
+        with redirect_stdout(stdout), pytest.raises(SystemExit) as exit_info:
+            main()
+    return stdout.getvalue(), exit_info.value.code
+
+
 @pytest.mark.parametrize("overlay", ([], {"order": []}, {"quota_guard": []}))
 def test_hook_bridge_rejects_invalid_overlay_shapes(tmp_path: Path, overlay: object) -> None:
     from autoskillit.hooks._runtime._hook_settings import read_merged_hook_config
@@ -49,177 +70,58 @@ def test_hook_bridge_rejects_invalid_overlay_shapes(tmp_path: Path, overlay: obj
     assert read_merged_hook_config(tmp_path) == {}
 
 
-def _write_blocking_cache(cache_path: Path, *, fetched_at: str | None = None) -> None:
-    """Write a quota cache with should_block=True. No resets_at → sleep = buffer_seconds."""
-    payload = {
-        "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
-        "binding": {
-            "utilization": 95.0,
-            "should_block": True,
-            "effective_threshold": 85.0,
-            "window_name": "five_hour",
-        },
-    }
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(payload))
-
-
-def _run_hook(event: dict | None = None) -> tuple[str, int]:
-    """Run quota_guard.main() without cache_path_override — exercises the bridge path."""
-    from autoskillit.hooks.guards.quota_guard import main
-
-    buf = io.StringIO()
-    exit_code = 0
-    with patch("sys.stdin", io.StringIO(json.dumps(event or {}))):
-        with redirect_stdout(buf):
-            try:
-                main()
-            except SystemExit as e:
-                exit_code = e.code if isinstance(e.code, int) else 0
-    return buf.getvalue(), exit_code
-
-
-# T-BRIDGE-1
-def test_hook_reads_cache_path_from_hook_config_and_denies(tmp_path, monkeypatch):
-    """Hook reads cache from payload-written path and denies when should_block=True."""
-    cache = tmp_path / "quota_cache.json"
+def test_hook_reads_cache_path_from_hook_config_without_denying(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "quota-cache.json"
     _write_blocking_cache(cache)
     _write_hook_config(
         tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 60,
-            "disabled": False,
-        },
+        {"cache_path": str(cache), "cache_max_age": 300, "disabled": False},
     )
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
 
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    with patch("autoskillit.hooks.guards.quota_guard.write_quota_log_event") as write_event:
+        output, exit_code = _run_quota_hook()
 
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-# T-BRIDGE-2
-def test_deny_message_contains_sleep_from_payload_buffer_seconds(tmp_path, monkeypatch):
-    """Deny message contains time.sleep(77) and Sleeping 77s from hook config buffer_seconds=77."""
-    cache = tmp_path / "quota_cache.json"
-    _write_blocking_cache(cache)  # no resets_at → n = buffer_seconds exactly
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 77,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
-
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "time.sleep(77)" in reason
-    assert "Sleeping 77s" in reason
-
-
-# T-BRIDGE-3
-def test_stale_cache_fails_open_with_hook_config_max_age(tmp_path, monkeypatch):
-    """Cache older than max_age from hook config treated as stale → fail-open approve."""
-    cache = tmp_path / "quota_cache.json"
-    old_fetched_at = (datetime.now(UTC) - timedelta(seconds=65)).isoformat()
-    _write_blocking_cache(cache, fetched_at=old_fetched_at)
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 30,
-            "buffer_seconds": 60,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-
-    out, exit_code = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out == ""  # no deny JSON → approve (fail-open on stale cache)
+    assert output == ""
     assert exit_code == 0
+    assert write_event.call_args.args[0]["constraint_observed"] is True
 
 
-# T-BRIDGE-4
-def test_disabled_true_unconditionally_approves(tmp_path, monkeypatch):
-    """disabled=True in hook config → unconditional approve even with a blocking cache."""
-    cache = tmp_path / "quota_cache.json"
+def test_disabled_hook_config_skips_quota_observation(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "quota-cache.json"
     _write_blocking_cache(cache)
     _write_hook_config(
         tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 60,
-            "disabled": True,
-        },
+        {"cache_path": str(cache), "cache_max_age": 300, "disabled": True},
     )
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
 
-    out, exit_code = _run_hook(event={"tool_name": "run_skill"})
+    with patch("autoskillit.hooks.guards.quota_guard.write_quota_log_event") as write_event:
+        output, exit_code = _run_quota_hook()
 
-    assert out == ""  # guard bypassed entirely — no cache logic runs
+    assert output == ""
     assert exit_code == 0
+    write_event.assert_not_called()
 
 
-# T-BRIDGE-5
-def test_disabled_false_blocks_normally(tmp_path, monkeypatch):
-    """enabled=True → disabled=False in hook config → hook blocks on should_block=True."""
-    cache = tmp_path / "quota_cache.json"
-    _write_blocking_cache(cache)
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 60,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-# T-BRIDGE-6
-def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path):
-    """set(data['quota_guard'].keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS."""
+def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path) -> None:
     from autoskillit.config.settings import QuotaGuardConfig
     from autoskillit.hooks._runtime._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
     from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
-    cfg = QuotaGuardConfig()
-    payload = {"quota_guard": _quota_guard_hook_payload(cfg)}
+    payload = {"quota_guard": _quota_guard_hook_payload(QuotaGuardConfig())}
     hook_cfg = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
     hook_cfg.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg.write_text(json.dumps(payload))
 
     data = json.loads(hook_cfg.read_text())
     assert set(data["quota_guard"].keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS
+    assert "buffer_seconds" not in data["quota_guard"]
 
 
-def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
-    """The server snapshot and stdlib consumer declare the same exact keys."""
+def test_output_budget_policy_serializer_matches_stdlib_bridge_keys() -> None:
     from autoskillit.config import OutputBudgetConfig
     from autoskillit.hooks._runtime._hook_settings import OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
     from autoskillit.server.tools.tools_kitchen import _output_budget_policy_hook_payload
@@ -240,8 +142,7 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
     }
 
 
-def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
-    """The project overlay is the highest-priority output-budget policy layer."""
+def test_output_budget_policy_overlay_overrides_snapshot(tmp_path) -> None:
     from autoskillit.hooks._runtime._hook_settings import read_merged_hook_config
 
     config_dir = tmp_path / ".autoskillit" / "temp"
@@ -257,40 +158,22 @@ def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
         )
     )
     (config_dir / ".hook_config_overlay.json").write_text(
-        json.dumps(
-            {
-                "output_budget_policy": {
-                    "disabled": True,
-                }
-            }
-        )
+        json.dumps({"output_budget_policy": {"disabled": True}})
     )
 
     policy = read_merged_hook_config(tmp_path)["output_budget_policy"]
 
-    assert policy == {
-        "disabled": True,
-        "shell_max_inline_bytes": 12000,
-    }
+    assert policy == {"disabled": True, "shell_max_inline_bytes": 12000}
 
 
-# T-BRIDGE-7
-def test_write_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monkeypatch):
-    """_write_hook_config round-trip: payload written by _quota_guard_hook_payload
-    is correctly read back by resolve_quota_settings()."""
+def test_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monkeypatch) -> None:
     from autoskillit.config.settings import QuotaGuardConfig
     from autoskillit.hooks._runtime._hook_settings import resolve_quota_settings
     from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
     monkeypatch.chdir(tmp_path)
     _clear_env(monkeypatch)
-
-    cfg = QuotaGuardConfig(
-        cache_max_age=999,
-        buffer_seconds=42,
-        cache_path="/round/trip.json",
-        enabled=True,
-    )
+    cfg = QuotaGuardConfig(cache_max_age=999, cache_path="/round-trip.json", enabled=True)
     hook_cfg = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
     hook_cfg.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg.write_text(json.dumps({"quota_guard": _quota_guard_hook_payload(cfg)}))
@@ -298,100 +181,5 @@ def test_write_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monke
     settings = resolve_quota_settings()
 
     assert settings.cache_max_age == 999
-    assert settings.buffer_seconds == 42
-    assert settings.cache_path == "/round/trip.json"
-    assert settings.disabled is False  # enabled=True → disabled=False
-
-
-# T-BUDGET-1
-def test_quota_guard_budget_exceeded_exit(tmp_path, monkeypatch):
-    """When sleep exceeds remaining budget, deny message instructs clean exit."""
-    cache = tmp_path / "quota_cache.json"
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", str(time.time() + 60))
-    _write_blocking_cache(
-        cache,
-        fetched_at=datetime.now(UTC).isoformat(),
-    )
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 3600,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "QUOTA BUDGET EXCEEDED" in reason
-    assert "fleet_quota_exhausted" in reason
-    assert "run_cmd" not in reason  # no sleep command
-
-
-# T-BUDGET-2
-def test_quota_guard_normal_deny_when_budget_sufficient(tmp_path, monkeypatch):
-    """Normal deny when deadline is far in the future (sleep fits in budget)."""
-    cache = tmp_path / "quota_cache.json"
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", str(time.time() + 7200))
-    _write_blocking_cache(
-        cache,
-        fetched_at=datetime.now(UTC).isoformat(),
-    )
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 300,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "QUOTA WAIT REQUIRED" in reason
-    assert "run_cmd" in reason or "time.sleep" in reason  # contains sleep command
-
-
-# T-BUDGET-3
-def test_quota_guard_normal_deny_when_no_deadline(tmp_path, monkeypatch):
-    """Normal deny when AUTOSKILLIT_SESSION_DEADLINE is not set (backward compatible)."""
-    cache = tmp_path / "quota_cache.json"
-    _write_blocking_cache(
-        cache,
-        fetched_at=datetime.now(UTC).isoformat(),
-    )
-    _write_hook_config(
-        tmp_path,
-        {
-            "cache_path": str(cache),
-            "cache_max_age": 300,
-            "buffer_seconds": 300,
-            "disabled": False,
-        },
-    )
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
-
-    out, _ = _run_hook(event={"tool_name": "run_skill"})
-
-    assert out != "", "hook failed-open unexpectedly (empty output)"
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "QUOTA WAIT REQUIRED" in reason
-    assert "run_cmd" in reason or "time.sleep" in reason
+    assert settings.cache_path == "/round-trip.json"
+    assert settings.disabled is False

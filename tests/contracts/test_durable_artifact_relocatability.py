@@ -55,6 +55,27 @@ class TestRegistryIntegrity:
         assert callable(_resolve(entry.writer))
         assert callable(_resolve(entry.detection))
 
+    def test_execution_candidate_manifest_writer_is_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.core.types._type_results_execution import ExecutionSelection
+        from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+
+        writer = (
+            "autoskillit.execution.evidence._session_retention:"
+            "write_execution_candidate_manifest_at_root"
+        )
+        entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]
+        assert len(entries) == 1
+        assert entries[0].machine_local is False
+        assert entries[0].detection is None
+
+        selection = ExecutionSelection(selection_id="selection-1")
+        assert (
+            write_execution_candidate_manifest(selection, str(tmp_path)) == selection.manifest_ref
+        )
+        content = (tmp_path / selection.manifest_ref).read_text(encoding="utf-8")
+        assert json.loads(content) == selection.to_payload()
+        _assert_relocatable(content)
+
     def test_every_writer_string_resolves(self) -> None:
         for entry in DURABLE_ARTIFACT_WRITERS:
             try:

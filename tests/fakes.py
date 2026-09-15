@@ -684,8 +684,8 @@ class ExecutorCall:
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
     provider_name: str = ""
-    provider_fallback_env: dict[str, str] | None = None
-    provider_fallback_name: str = ""
+    provider_binding: Any | None = None
+    model_pin: Any | None = None
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
@@ -704,7 +704,11 @@ class ExecutorCall:
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None
+    pre_spawn_admission: Callable[..., Any] | None = None
+    mark_execution_started: Callable[[], None] | None = None
     execution_identity: ExecutionIdentity = ExecutionIdentity()
+    execution_selection: Any | None = None
+    execution_selection_provider: Callable[[], Any | None] | None = None
     child_role: str | None = None
     child_attribution_skill: str = ""
 
@@ -736,8 +740,6 @@ class DispatchFoodTruckCall:
     allowed_write_prefix: str = ""
     allowed_write_prefixes: tuple[str, ...] = ()
     provider_name: str = ""
-    provider_fallback_env: dict[str, str] | None = None
-    provider_fallback_name: str = ""
     sentinel_contract: str = ""
     profile_name: str = ""
     prior_completion_markers: Sequence[str] | None = None
@@ -812,8 +814,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
+        provider_binding: Any | None = None,
+        model_pin: Any | None = None,
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
@@ -832,7 +834,11 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        pre_spawn_admission: Callable[..., Any] | None = None,
+        mark_execution_started: Callable[[], None] | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity(),
+        execution_selection: Any | None = None,
+        execution_selection_provider: Callable[[], Any | None] | None = None,
         child_role: str | None = None,
         child_attribution_skill: str = "",
     ) -> SkillResult:
@@ -864,8 +870,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 provider_extras=provider_extras,
                 profile_name=profile_name,
                 provider_name=provider_name,
-                provider_fallback_env=provider_fallback_env,
-                provider_fallback_name=provider_fallback_name,
+                provider_binding=provider_binding,
+                model_pin=model_pin,
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
@@ -884,7 +890,11 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 native_shell_capture_decision=native_shell_capture_decision,
                 managed_lineage_ref=managed_lineage_ref,
                 on_launch_resolved=on_launch_resolved,
+                pre_spawn_admission=pre_spawn_admission,
+                mark_execution_started=mark_execution_started,
                 execution_identity=execution_identity,
+                execution_selection=execution_selection,
+                execution_selection_provider=execution_selection_provider,
                 child_role=child_role,
                 child_attribution_skill=child_attribution_skill,
             )
@@ -927,8 +937,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
         prior_completion_markers: Sequence[str] | None = None,
@@ -967,8 +975,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 allowed_write_prefix=allowed_write_prefix,
                 allowed_write_prefixes=allowed_write_prefixes,
                 provider_name=provider_name,
-                provider_fallback_env=provider_fallback_env,
-                provider_fallback_name=provider_fallback_name,
                 sentinel_contract=sentinel_contract,
                 profile_name=profile_name,
                 prior_completion_markers=prior_completion_markers,

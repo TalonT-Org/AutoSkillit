@@ -1,13 +1,7 @@
-"""Tests for the quota_post_check PostToolUse hook.
-
-The hook fires after run_skill completes and checks whether post-execution
-quota utilization exceeds the threshold. When over threshold, it replaces the
-tool output with a quota warning + sleep instruction via updatedMCPToolOutput.
-"""
+"""Tests for the diagnostic-only quota PostToolUse hook."""
 
 import io
 import json
-import pathlib
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,722 +9,100 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
-
-_LONG_PATTERNS = ("weekly", "sonnet", "opus")
-
-
-def _classify_threshold(window_name: str) -> float:
-    lowered = window_name.lower()
-    return 98.0 if any(p in lowered for p in _LONG_PATTERNS) else 85.0
 
 
 def _write_cache(
     cache_path: Path,
+    *,
     utilization: float,
-    resets_at: str | None = None,
-    window_name: str = "five_hour",
-    extra_windows: dict | None = None,
+    resets_at: datetime | None = None,
     should_block: bool | None = None,
-    effective_threshold: float | None = None,
 ) -> None:
-    """Write a fresh quota cache file in the full-snapshot format.
-
-    When ``should_block`` is None, classifies the window via the default
-    long-window patterns and computes ``should_block`` from utilization.
-    """
-    if effective_threshold is None:
-        effective_threshold = _classify_threshold(window_name)
     if should_block is None:
-        should_block = utilization >= effective_threshold
-    windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
-    if extra_windows:
-        windows.update(extra_windows)
-    payload = {
-        "fetched_at": datetime.now(UTC).isoformat(),
-        "windows": windows,
-        "binding": {
-            "window_name": window_name,
-            "utilization": utilization,
-            "resets_at": resets_at,
-            "should_block": should_block,
-            "effective_threshold": effective_threshold,
-        },
-    }
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(payload))
+        should_block = utilization >= 85.0
+    cache_path.write_text(
+        json.dumps(
+            {
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "credential_scope": "",
+                "windows": {
+                    "five_hour": {
+                        "utilization": utilization,
+                        "resets_at": resets_at.isoformat() if resets_at else None,
+                    }
+                },
+                "binding": {
+                    "window_name": "five_hour",
+                    "utilization": utilization,
+                    "resets_at": resets_at.isoformat() if resets_at else None,
+                    "should_block": should_block,
+                    "effective_threshold": 85.0,
+                },
+            }
+        )
+    )
 
 
-def _build_event(
-    tool_name: str = "mcp__plugin_autoskillit_autoskillit__run_skill",
-    success: bool = True,
-    result_text: str = "plan written",
-) -> dict:
-    """Build a synthetic PostToolUse event for run_skill."""
-    inner = json.dumps({"success": success, "result": result_text})
-    outer = json.dumps({"result": inner})
-    return {
-        "tool_name": tool_name,
-        "tool_response": outer,
-    }
-
-
-def _run_hook(
-    event: dict | None = None,
-    raw_stdin: str | None = None,
-    cache_path: Path | None = None,
-) -> tuple[str, int]:
-    """Run quota_post_check.main() with synthetic stdin and optional cache file.
-
-    Returns (stdout, exit_code). stdout empty = no warning, JSON string = warning.
-    """
+def _run_hook(cache_path: Path, event: dict | None = None) -> str:
     from autoskillit.hooks.quota_post_hook import main
 
-    stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
-
-    buf = io.StringIO()
-    exit_code = 0
-    with patch("sys.stdin", io.StringIO(stdin_text)):
-        with redirect_stdout(buf):
-            try:
-                main(cache_path_override=str(cache_path) if cache_path is not None else None)
-            except SystemExit as e:
-                exit_code = e.code if e.code is not None else 0
-    return buf.getvalue(), exit_code
+    stdout = io.StringIO()
+    with patch("sys.stdin", io.StringIO(json.dumps(event or {"tool_name": "run_skill"}))):
+        with redirect_stdout(stdout), pytest.raises(SystemExit) as exit_info:
+            main(cache_path_override=str(cache_path))
+    assert exit_info.value.code == 0
+    return stdout.getvalue()
 
 
-@pytest.fixture(autouse=True)
-def _clear_session_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate quota tests from orchestrator env vars that alter hook control flow.
+def test_over_threshold_quota_preserves_the_completed_tool_output(tmp_path) -> None:
+    cache = tmp_path / "quota-cache.json"
+    _write_cache(
+        cache,
+        utilization=95.0,
+        resets_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
 
-    AUTOSKILLIT_SESSION_DEADLINE: when expired, triggers budget_exceeded path
-    (QUOTA BUDGET EXCEEDED) instead of the normal QUOTA WARNING path.
-    AUTOSKILLIT_PROVIDER_PROFILE: when non-anthropic, triggers provider bypass
-    exit before quota check, producing empty output instead of warning JSON.
-    Tests that need a specific profile set it explicitly via monkeypatch.setenv.
-    """
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+    with patch("autoskillit.hooks.quota_post_hook.write_quota_log_event") as write_event:
+        output = _run_hook(cache, {"tool_name": "run_skill", "tool_response": {"success": True}})
 
-
-# T1: PostToolUse quota warning emitted when over threshold
-def test_qpc1_emits_warning_when_over_threshold(tmp_path):
-    """PostToolUse hook emits updatedMCPToolOutput with quota warning."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    assert "hookSpecificOutput" in data
-    assert "updatedMCPToolOutput" in data["hookSpecificOutput"]
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert output == ""
+    event = write_event.call_args.args[0]
+    assert event["event"] == "post_quota_observation"
+    assert event["constraint_observed"] is True
+    assert event["resets_at"] is not None
 
 
-# T2: Silent exit when under threshold
-def test_qpc2_silent_when_under_threshold(tmp_path):
-    """PostToolUse hook exits silently (no stdout) when utilization < threshold."""
-    cache = tmp_path / "quota_cache.json"
+def test_under_threshold_quota_is_recorded_after_run_skill(tmp_path) -> None:
+    cache = tmp_path / "quota-cache.json"
     _write_cache(cache, utilization=50.0)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
 
+    with patch("autoskillit.hooks.quota_post_hook.write_quota_log_event") as write_event:
+        output = _run_hook(cache)
 
-# T3: Fail-open on missing cache
-def test_qpc3_silent_on_missing_cache(tmp_path):
-    """PostToolUse hook exits silently when cache file does not exist."""
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=tmp_path / "nonexistent.json")
-    assert out.strip() == ""
+    assert output == ""
+    event = write_event.call_args.args[0]
+    assert event["event"] == "post_quota_observation"
+    assert event["constraint_observed"] is False
 
 
-# T4: Fail-open on corrupt cache
-def test_qpc4_silent_on_corrupt_cache(tmp_path):
-    """PostToolUse hook exits silently when cache file contains invalid JSON."""
-    cache = tmp_path / "quota_cache.json"
-    cache.write_text("not-json-{{{")
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
-
-
-# T5: Fail-open on stale cache
-def test_qpc5_silent_on_stale_cache(tmp_path):
-    """PostToolUse hook exits silently when cache is older than max_age."""
-    cache = tmp_path / "quota_cache.json"
-    payload = {
-        "fetched_at": "2020-01-01T00:00:00+00:00",
-        "five_hour": {"utilization": 99.0, "resets_at": None},
-    }
-    cache.write_text(json.dumps(payload))
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
-
-
-# T6: Warning output includes sleep seconds and run_cmd instruction
-def test_qpc6_warning_contains_sleep_instruction(tmp_path):
-    """Warning output includes explicit run_cmd sleep command with correct seconds."""
-    cache = tmp_path / "quota_cache.json"
-    resets_at = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-    _write_cache(cache, utilization=90.0, resets_at=resets_at)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "run_cmd" in output
-    assert "time.sleep" in output
-
-
-# T7: Warning output is hook-generated only
-def test_qpc7_warning_does_not_forward_tool_response(tmp_path):
-    """updatedMCPToolOutput must not echo arbitrary raw tool_response content."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    event = _build_event(success=True, result_text="plan written")
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "QUOTA WARNING" in output
-    assert "success: True" not in output
-    assert "plan written" not in output
-
-
-# T8: JSONL event logging for post-check warning
-def test_qpc8_warning_event_written_to_log(tmp_path, monkeypatch):
-    """Post-check logs a 'post_check_warning' event to quota_events.jsonl."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    event = _build_event()
-    _run_hook(event=event, cache_path=cache)
-    events = [
-        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
-    ]
-    assert len(events) == 1
-    assert events[0]["event"] == "post_check_warning"
-
-
-# T9: JSONL event logging for post-check pass
-def test_qpc9_pass_event_written_to_log(tmp_path, monkeypatch):
-    """Post-check logs a 'post_check_pass' event when under threshold."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=50.0)
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    event = _build_event()
-    _run_hook(event=event, cache_path=cache)
-    events = [
-        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
-    ]
-    assert len(events) == 1
-    assert events[0]["event"] == "post_check_pass"
-
-
-# T10: Hook fires on failed run_skill results too
-def test_qpc10_fires_on_failed_run_skill(tmp_path):
-    """PostToolUse hook checks quota even when run_skill returned success=False."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    event = _build_event(success=False)
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-# T11: Hook reads cache_path from hook config
-def test_qpc11_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
-    """PostToolUse hook reads cache_path from .autoskillit/.hook_config.json.
-
-    The hook trusts the cache binding's ``should_block`` flag — it never re-derives
-    a verdict from a hook config threshold. This test only verifies that the hook
-    locates the cache file via the hook config cache_path setting.
-    """
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH", raising=False)
-    cache = tmp_path / "custom_cache.json"
-    _write_cache(cache, utilization=95.0)
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(
-        json.dumps(
-            {
-                "quota_guard": {
-                    "cache_max_age": 300,
-                    "cache_path": str(cache),
-                }
-            }
-        )
-    )
-    event = _build_event()
-    out, _ = _run_hook(event=event)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-# T12: Hook registered in HOOK_REGISTRY
-def test_qpc12_registered_in_hook_registry():
-    """quota_post_hook.py is registered as PostToolUse in HOOK_REGISTRY."""
-    from autoskillit.hook_registry import HOOK_REGISTRY
-
-    post_tool_scripts = [
-        s for h in HOOK_REGISTRY if h.event_type == "PostToolUse" for s in h.scripts
-    ]
-    assert "quota_post_hook.py" in post_tool_scripts
-
-
-# T13: Fail-open on malformed stdin
-def test_qpc13_failopen_on_malformed_stdin(tmp_path):
-    """PostToolUse hook exits silently when stdin is not valid JSON."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    out, exit_code = _run_hook(raw_stdin="not-json-garbage", cache_path=cache)
-    assert out.strip() == ""
-    assert exit_code == 0
-
-
-# T14: Non-run_skill tools do not trigger post-check
-def test_qpc14_only_run_skill_matcher():
-    """The hook_registry PostToolUse entry for quota_post_check matches only run_skill."""
-    import re
-
-    from autoskillit.hook_registry import HOOK_REGISTRY
-
-    entry = next(
-        h
-        for h in HOOK_REGISTRY
-        if h.event_type == "PostToolUse" and "quota_post_hook.py" in h.scripts
-    )
-    assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
-    assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")
-    assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status")
-
-
-# T-PCHK-PWT-1: regression test for #721 — post_check silent for weekly at 86%.
-def test_post_hook_silent_when_weekly_below_long_threshold(tmp_path):
-    """Weekly window at 86% must NOT emit a warning. Regression test for #721."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(
-        cache,
-        utilization=86.0,
-        window_name="weekly",
-        should_block=False,
-        effective_threshold=98.0,
-    )
-    event = _build_event()
-    out, exit_code = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
-    assert exit_code == 0
-
-
-# T-PCHK-PWT-2: weekly above 98% must still warn.
-def test_post_hook_warns_when_weekly_above_long_threshold(tmp_path):
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(
-        cache,
-        utilization=99.0,
-        window_name="weekly",
-        should_block=True,
-        effective_threshold=98.0,
-    )
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "QUOTA WARNING" in output
-    assert "weekly" in output
-    assert "98" in output
-
-
-# T-PCHK-MW-1: post_check warns when binding window is exhausted (not five_hour)
-def test_warns_when_binding_window_exhausted(tmp_path):
-    """PostToolUse hook emits warning when binding is one_hour (not five_hour)."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(
-        cache,
-        utilization=91.0,
-        window_name="one_hour",
-        extra_windows={"five_hour": {"utilization": 35.0, "resets_at": None}},
-    )
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-# T-PCHK-15
-def test_qpc_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
-    """Post-check warning sleep uses ``buffer_seconds`` from hook config.
-
-    Writes a cache with ``resets_at=None`` so the hook takes the plain-buffer branch
-    (``n = settings.buffer_seconds``), making the assertion deterministic.
-    """
-    monkeypatch.chdir(tmp_path)
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=95.0, resets_at=None)
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(
-        json.dumps(
-            {
-                "quota_guard": {
-                    "cache_max_age": 300,
-                    "cache_path": str(cache),
-                    "buffer_seconds": 120,
-                }
-            }
-        )
-    )
-    event = _build_event()
-    out, _ = _run_hook(event=event)
-    data = json.loads(out)
-    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "time.sleep(120)" in output
-    assert "Sleeping 120s" in output
-
-
-# T-PCHK-16
-def test_qpc_buffer_seconds_env_var_override(tmp_path, monkeypatch):
-    """AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS env var overrides the warning sleep duration."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "180")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=95.0, resets_at=None)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "time.sleep(180)" in output
-    assert "Sleeping 180s" in output
-
-
-# T-PCHK-17
-def test_qpc_cache_max_age_env_var_override(tmp_path, monkeypatch):
-    """AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE env var overrides the cache freshness window.
-
-    With ``cache_max_age=60`` and a 61-second-old cache, the hook treats the cache
-    as stale and exits silently (fail-open, no warning output).
-    """
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE", "60")
-    cache = tmp_path / "quota_cache.json"
-    stale_fetched_at = (datetime.now(UTC) - timedelta(seconds=61)).isoformat()
-    payload = {
-        "fetched_at": stale_fetched_at,
-        "windows": {"five_hour": {"utilization": 95.0, "resets_at": None}},
-        "binding": {
-            "window_name": "five_hour",
-            "utilization": 95.0,
-            "resets_at": None,
-            "should_block": True,
-            "effective_threshold": 85.0,
-        },
-    }
-    cache.write_text(json.dumps(payload))
-    event = _build_event()
-    out, exit_code = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
-    assert exit_code == 0
-
-
-def test_resolve_quota_log_dir_prints_to_stderr_on_exception(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """resolve_quota_log_dir() must print to stderr when caller= is provided."""
-    from autoskillit.hooks._runtime._hook_settings import resolve_quota_log_dir
-
-    def _raise() -> None:
-        raise OSError("boom")
-
-    monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
-    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.setattr(pathlib.Path, "home", staticmethod(_raise))
-
-    result = resolve_quota_log_dir(caller="quota_post_hook")
-
-    assert result is None
-    captured = capsys.readouterr()
-    assert "quota_post_hook" in captured.err
-
-
-def test_write_quota_log_event_prints_to_stderr_on_write_failure(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """write_quota_log_event() must print to stderr when caller= is provided. The write path
-    is _atomic_write_marker's tempfile.mkstemp + os.fdopen + os.replace, not
-    Path.write_text/builtins.open."""
-    from autoskillit.hooks._runtime._hook_settings import write_quota_log_event
-
-    with patch("tempfile.mkstemp", side_effect=OSError("disk full")):
-        write_quota_log_event({}, tmp_path, caller="quota_post_hook")
-
-    captured = capsys.readouterr()
-    assert "quota_post_hook" in captured.err
-
-
-def test_post_provider_bypass_skips_warning(tmp_path, monkeypatch):
-    """Non-anthropic AUTOSKILLIT_PROVIDER_PROFILE bypasses post-check warning."""
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    event = _build_event()
-    out, exit_code = _run_hook(event=event, cache_path=cache)
-    assert out.strip() == ""
-    assert exit_code == 0
-
-
-def test_post_provider_bypass_logs_event(tmp_path, monkeypatch):
-    """Provider bypass writes a 'post_provider_bypass' event to quota_events.jsonl."""
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    event = _build_event()
-    _run_hook(event=event, cache_path=cache)
-    events = [
-        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
-    ]
-    assert len(events) == 1
-    ev = events[0]
-    assert ev["event"] == "post_provider_bypass"
-    assert ev["profile"] == "minimax"
-    assert "ts" in ev
-    assert "tool_name" in ev
-    assert "cache_path" in ev
-
-
-def test_post_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
-    """AUTOSKILLIT_PROVIDER_PROFILE=anthropic still enforces post-check warning."""
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "anthropic")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-def _setup_backend_env(monkeypatch, agent_backend):
-    """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
-
-    The root ``_scrub_ambient_env`` fixture already deletes the variable
-    before every test; this helper re-deletes for row-level isolation
-    before optionally setting it.
-    """
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
-    if agent_backend is not None:
-        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", agent_backend)
-
-
-def _read_quota_events(log_dir):
-    return [json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()]
-
-
-@pytest.mark.parametrize(
-    ("agent_backend", "profile", "expected_event"),
-    [
-        ("codex", "anthropic", "post_backend_bypass"),
-        ("claude-code", "anthropic", "post_check_warning"),
-        ("claude-code", "minimax", "post_provider_bypass"),
-        ("codex", "", "post_backend_bypass"),
-        ("claude-code", "", "post_check_warning"),
-        (None, "anthropic", "post_check_warning"),
-        (None, "minimax", "post_provider_bypass"),
-        ("unexpected", "anthropic", "post_check_warning"),
-    ],
-    ids=[
-        "codex+anthropic_blocked_backend_bypasses",
-        "claude-code+anthropic_warns",
-        "claude-code+minimax_provider_bypasses",
-        "codex+empty_profile_backend_bypasses",
-        "claude-code+empty_profile_warns",
-        "unset_backend+anthropic_warns",
-        "unset_backend+minimax_provider_bypasses",
-        "unexpected_backend+anthropic_warns",
-    ],
-)
-def test_post_backend_profile_matrix(
-    tmp_path, monkeypatch, agent_backend, profile, expected_event
-):
-    """Backend × profile matrix for post-hook quota enforcement.
-
-    Codex steps with an Anthropic provider profile (the bug case) MUST
-    bypass the post-hook warning — Codex cannot have consumed Anthropic
-    quota. Unset or unrecognized backend values do not silently inherit
-    Codex's exemption.
-    """
-    _setup_backend_env(monkeypatch, agent_backend)
-    if profile:
-        monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", profile)
-    else:
-        monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
-
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
-
-    if expected_event == "post_check_warning":
-        data = json.loads(out)
-        assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    else:
-        assert out.strip() == "", f"Bypass row must emit empty stdout (got {out!r})"
-
-    events = _read_quota_events(log_dir)
-    assert len(events) == 1, f"Exactly one event expected, got {events!r}"
-    assert events[0]["event"] == expected_event
-    assert events[0].get("tool_name") == _build_event()["tool_name"]
-
-
-def test_post_backend_bypass_payload_includes_backend(tmp_path, monkeypatch):
-    """post_backend_bypass event payload must include the backend field."""
+def test_post_observation_does_not_depend_on_parent_backend(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "quota-cache.json"
+    _write_cache(cache, utilization=95.0, resets_at=datetime.now(UTC) + timedelta(minutes=5))
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "anthropic")
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    _run_hook(event=_build_event(), cache_path=cache)
-    events = _read_quota_events(log_dir)
-    assert events[0]["backend"] == "codex"
-    assert events[0]["tool_name"] == _build_event()["tool_name"]
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "openai")
+
+    with patch("autoskillit.hooks.quota_post_hook.write_quota_log_event") as write_event:
+        output = _run_hook(cache)
+
+    assert output == ""
+    assert write_event.call_args.args[0]["constraint_observed"] is True
 
 
-def test_post_backend_bypass_with_empty_profile(tmp_path, monkeypatch):
-    """Codex with empty provider profile: backend bypass fires (backend check wins)."""
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
-    log_dir = tmp_path / "logs"
-    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event(), cache_path=cache)
-    assert out.strip() == ""
-    events = _read_quota_events(log_dir)
-    assert events[0]["event"] == "post_backend_bypass"
+def test_malformed_event_is_silent(tmp_path) -> None:
+    from autoskillit.hooks.quota_post_hook import main
 
+    with patch("sys.stdin", io.StringIO("not json")), pytest.raises(SystemExit) as exit_info:
+        main(cache_path_override=str(tmp_path / "quota-cache.json"))
 
-# ---------------------------------------------------------------------------
-# Session-scoped quota-disable marker integration (PART B)
-# ---------------------------------------------------------------------------
-
-
-def _build_event_with_session(
-    session_id: str = "session-aaa",
-    tool_name: str = "mcp__plugin_autoskillit_autoskillit__run_skill",
-    success: bool = True,
-) -> dict:
-    inner = json.dumps({"success": success, "result": "plan written"})
-    outer = json.dumps({"result": inner})
-    return {
-        "session_id": session_id,
-        "tool_name": tool_name,
-        "tool_response": outer,
-    }
-
-
-def _write_disable_marker(state_dir: Path, session_id: str) -> None:
-    marker = state_dir / "kitchen_state" / f"{session_id}_quota_guard_disabled.json"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(
-        json.dumps(
-            {
-                "session_id": session_id,
-                "disabled_at": datetime.now(UTC).isoformat(),
-                "marker_version": 1,
-            }
-        )
-    )
-
-
-def test_fresh_marker_matching_session_suppresses_warning(tmp_path, monkeypatch):
-    """A fresh quota-disable marker matching the event session_id suppresses the warning."""
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    _write_disable_marker(tmp_path, "session-aaa")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
-    assert out.strip() == ""
-
-
-def test_marker_for_other_session_still_warns(tmp_path, monkeypatch):
-    """A quota-disable marker for a different session does NOT suppress the warning."""
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    _write_disable_marker(tmp_path, "session-bbb")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-def test_expired_marker_still_warns(tmp_path, monkeypatch):
-    """An expired quota-disable marker does NOT suppress the warning."""
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    state_dir = tmp_path / "kitchen_state"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    marker = state_dir / "session-aaa_quota_guard_disabled.json"
-    old = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 25 * 3600, tz=UTC).isoformat()
-    marker.write_text(
-        json.dumps({"session_id": "session-aaa", "disabled_at": old, "marker_version": 1})
-    )
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-def test_malformed_marker_still_warns(tmp_path, monkeypatch):
-    """A malformed quota-disable marker does NOT suppress the warning."""
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    state_dir = tmp_path / "kitchen_state"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    marker = state_dir / "session-aaa_quota_guard_disabled.json"
-    marker.write_text("not-json-{{{")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
-    data = json.loads(out)
-    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
-
-
-def test_base_config_disabled_still_suppresses_post_warning(tmp_path, monkeypatch):
-    """Base-config ``disabled=true`` continues to suppress the post-hook warning."""
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(
-        json.dumps(
-            {
-                "quota_guard": {
-                    "cache_max_age": 300,
-                    "cache_path": str(cache),
-                    "disabled": True,
-                }
-            }
-        )
-    )
-    out, _ = _run_hook(event=_build_event_with_session(), cache_path=cache)
-    assert out.strip() == ""
-
-
-def test_explicit_env_override_still_suppresses_post_warning(tmp_path, monkeypatch):
-    """``AUTOSKILLIT_QUOTA_GUARD__DISABLED=1`` env override continues to suppress the warning."""
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", "1")
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=99.0, should_block=True)
-    out, _ = _run_hook(event=_build_event_with_session(), cache_path=cache)
-    assert out.strip() == ""
+    assert exit_info.value.code == 0

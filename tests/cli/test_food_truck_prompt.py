@@ -74,17 +74,18 @@ def _get_admiral_block() -> str:
 
 
 class TestAdmiralDispatchBlock:
-    def test_retains_exactly_five_sections(self) -> None:
+    def test_retains_exactly_six_sections(self) -> None:
         block = _get_admiral_block()
         for title in (
             "CONTEXT LIMIT ROUTING",
             "STEP NAME IMMUTABILITY",
             "MERGE PHASE",
             "QUOTA WAIT PROTOCOL",
+            "RATE LIMIT RETRY PROTOCOL",
             "RUN_SKILL COMPLETION HANDSHAKE",
         ):
             assert title in block, f"Missing retained section: {title}"
-        assert len(re.findall(r"^## ", block, re.MULTILINE)) == 5
+        assert len(re.findall(r"^## ", block, re.MULTILINE)) == 6
 
     def test_excludes_five_sections(self) -> None:
         block = _get_admiral_block()
@@ -242,8 +243,9 @@ class TestFoodTruckPromptSections:
 
     def test_contains_quota_awareness(self) -> None:
         prompt = _get_prompt()
-        assert "quota_exhausted" in prompt
-        assert "wait_seconds" in prompt
+        assert "candidate_exhausted" in prompt
+        assert "execution_selection.continuation" in prompt
+        assert "wait_seconds" not in prompt
 
     def test_contains_campaign_task_block(self) -> None:
         prompt = _get_prompt()

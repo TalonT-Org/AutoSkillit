@@ -16,6 +16,19 @@ from tests._helpers import make_quota_guard_config
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
+@pytest.fixture(autouse=True)
+def _write_fixture_credentials(tmp_path) -> None:
+    (tmp_path / ".credentials.json").write_text(
+        json.dumps({"claudeAiOauth": {"accessToken": "fixture-token"}})
+    )
+
+
+def _credential_scope(tmp_path) -> str:
+    from autoskillit.quota_constraints import quota_scope
+
+    return quota_scope("anthropic", tmp_path / ".credentials.json")
+
+
 class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_disabled_returns_immediately_no_io(self, monkeypatch):
@@ -120,6 +133,7 @@ class TestCheckAndSleepIfNeeded:
                     utilization=40.0, resets_at=resets_at, window_name="five_hour"
                 ),
             ),
+            credential_scope=_credential_scope(tmp_path),
         )
         config = make_quota_guard_config(
             enabled=True,
@@ -340,6 +354,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
                     effective_threshold=85.0,
                 ),
             ),
+            credential_scope=_credential_scope(tmp_path),
         )
         config = make_quota_guard_config(
             enabled=True,
@@ -482,13 +497,13 @@ class TestProviderBypassUnit:
 
 
 class TestIntegration:
-    """Integration tests: write/read contract between execution.quota and hooks.quota_guard."""
+    """Integration tests for the execution quota cache and diagnostic hook."""
 
     def test_write_cache_then_quota_check_main_reads_it(self, tmp_path, monkeypatch):
-        """Cache written by _write_cache must be readable and actionable by quota_guard.main().
+        """The diagnostic hook must not deny a skill from a cached quota observation.
 
-        T-INT-1: Catches format drift between _write_cache (execution layer) and
-        read_quota_cache (hook subprocess layer, _hook_settings.py).
+        T-INT-1: Catches a regression where the parent hook becomes a second
+        quota authority after execution writes a cache snapshot.
         """
         import io
         from contextlib import redirect_stdout
@@ -528,9 +543,7 @@ class TestIntegration:
                 except SystemExit:
                     pass
 
-        out = buf.getvalue()
-        data = json.loads(out)
-        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert buf.getvalue() == ""
 
 
 class TestFetchQuotaNovelWindowWarning:

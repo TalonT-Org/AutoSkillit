@@ -85,16 +85,6 @@ def _simple_prompt_builder(**kwargs: Any) -> str:
     return f"dispatch {kwargs.get('recipe', 'unknown')} for {kwargs.get('task', 'test')}"
 
 
-async def _no_sleep_quota_checker(config: Any, **kwargs: Any) -> dict[str, Any]:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config: Any, **kwargs: Any) -> None:
     pass
 
@@ -191,7 +181,6 @@ class TestCodexFleetE2E:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         envelope = cast(dict[str, Any], json.loads(result.outcome.to_envelope()))

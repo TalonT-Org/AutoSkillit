@@ -169,6 +169,7 @@ def record_skill_result_rate_limit(
     supports_quota_check: bool,
     config: QuotaPersistenceConfigLike | None,
     *,
+    credential_scope: str | None = None,
     now_epoch: int | None = None,
 ) -> None:
     """Project structured terminal reset evidence into the observed store.
@@ -206,7 +207,8 @@ def record_skill_result_rate_limit(
     try:
         record_observed_rate_limit(
             config,
-            scope=quota_scope("anthropic", Path(config.credentials_path).expanduser()),
+            scope=credential_scope
+            or quota_scope("anthropic", Path(config.credentials_path).expanduser()),
             resets_at_epoch=rate_limit.resets_at_epoch,
             limit_type=rate_limit.limit_type,
             now_epoch=now_epoch if now_epoch is not None else int(time.time()),

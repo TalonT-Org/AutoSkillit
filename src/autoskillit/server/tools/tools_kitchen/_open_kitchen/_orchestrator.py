@@ -175,13 +175,16 @@ async def open_kitchen(
                 return handler_err
         else:
             _ctx_post = _get_ctx()
-            if _ctx_post.quota_refresh_task is None:
-                _supports_quota_post = _backend_supports_quota(_ctx_post)
+            _supports_quota_post = _backend_supports_quota(_ctx_post)
+            if _ctx_post.quota_refresh_task is None and _supports_quota_post:
                 try:
                     _ctx_post.quota_refresh_task = _tk_pkg.create_background_task(
                         _tk_pkg._quota_refresh_loop(
                             _ctx_post.config.quota_guard,
-                            supports_quota_check=_supports_quota_post,
+                            diagnostic_log_root=_tk_pkg.resolve_log_dir(
+                                _ctx_post.config.linux_tracing.log_dir
+                            ),
+                            supports_quota_check=True,
                         ),
                         label="quota_refresh_loop",
                     )

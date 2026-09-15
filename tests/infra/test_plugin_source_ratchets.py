@@ -83,6 +83,24 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "recovery directory for the same dir_name being committed.",
     ),
     (
+        "execution/evidence/_session_retention.py",
+        "apply_execution_candidate_manifest_retention",
+        "entry.path.unlink",
+    ): (
+        2,
+        "Retention removes an execution-candidate manifest only after the retention "
+        "decision has classified its owning session as eligible for pruning.",
+    ),
+    (
+        "execution/evidence/_session_retention.py",
+        "apply_session_retention",
+        "shutil.rmtree",
+    ): (
+        1,
+        "The existing retention decision removes the session directory after its "
+        "associated execution-candidate manifest is handled.",
+    ),
+    (
         "workspace/_projected_artifact/_artifact_residue.py",
         "teardown_artifact_residue",
         "manifest.unlink",

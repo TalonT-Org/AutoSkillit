@@ -10,6 +10,11 @@ sleeps via run_cmd.
 
 from __future__ import annotations
 
+from autoskillit.execution.quota._admission import (
+    QuotaAdmission,
+    admit_quota,
+    oauth_admission_lock_path,
+)
 from autoskillit.execution.quota._quota_gate import (
     KNOWN_QUOTA_WINDOW_NAMES,
     LONG_WINDOW_NAMES,
@@ -32,12 +37,15 @@ from autoskillit.execution.quota._quota_gate import (
 )
 
 __all__ = [
+    "QuotaAdmission",
     "KNOWN_QUOTA_WINDOW_NAMES",
     "LONG_WINDOW_NAMES",
     "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaFetchResult",
     "QuotaStatus",
     "QuotaWindowEntry",
+    "admit_quota",
     "check_and_sleep_if_needed",
     "invalidate_cache",
+    "oauth_admission_lock_path",
 ]

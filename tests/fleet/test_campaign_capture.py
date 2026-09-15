@@ -373,16 +373,6 @@ def _simple_prompt_builder(**kwargs) -> str:
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
 
 
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
@@ -472,7 +462,6 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
         timeout_sec=None,
         capture={"out": "${{ result.out }}"},
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -546,7 +535,6 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
         timeout_sec=None,
         capture=None,
         prompt_builder=_capturing_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -571,7 +559,6 @@ async def test_unresolved_campaign_ref_in_ingredients_returns_fleet_error(tool_c
         timeout_sec=None,
         capture=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 

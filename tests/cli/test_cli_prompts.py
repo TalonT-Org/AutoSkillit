@@ -350,6 +350,18 @@ def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
     )
 
 
+def test_orchestrator_prompt_uses_result_driven_rate_limit_routing():
+    """Rate limits must route from structured exhaustion or continuation evidence."""
+
+    prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
+    assert "candidate_exhausted: true" in prompt
+    assert "execution_selection.attempts" in prompt
+    assert "execution_selection.continuation.resume_session_id" in prompt
+    assert "same-binding ID" in prompt
+    assert "QUOTA WAIT REQUIRED" not in prompt
+    assert "retry the EXACT same run_skill call" not in prompt
+
+
 def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_path, capsys):
     """show_cook_preview must not produce lines wider than 120 chars even for
     the real implementation.yaml with its 220-char run_mode description."""
@@ -421,10 +433,11 @@ def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> 
 
 
 def test_orchestrator_prompt_contains_quota_routing():
-    """_build_orchestrator_prompt output includes QUOTA DENIAL ROUTING section."""
+    """The orchestrator routes quota outcomes from the structured result."""
 
     prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
-    assert "QUOTA DENIAL ROUTING" in prompt
+    assert "RATE LIMIT AND QUOTA RESULT ROUTING" in prompt
+    assert "candidate_exhausted" in prompt
 
 
 def test_orchestrator_prompt_has_no_server_startup_recovery_block():

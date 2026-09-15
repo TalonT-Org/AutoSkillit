@@ -160,6 +160,59 @@ part in Ladder A, and `providers.model_overrides` plays no part in Ladder B
 — each ladder is blind to the other's sources. `model.override` is the only
 source that wins in both, which is why it is the recovery control above.
 
+## Execution candidates
+
+With the `providers` feature enabled, `run_skill` first tries its resolved
+primary binding, then evaluates `providers.execution_candidates` in listed
+order. Each entry can choose the worker backend, a provider profile, and the
+model supplied to normal model resolution. For example, this keeps the
+first-party Claude primary, tries an external Claude-compatible profile, then
+uses an explicit Codex candidate:
+
+```yaml
+agent_backend:
+  backend: claude-code                 # primary
+
+features:
+  providers: true
+
+providers:
+  profiles:
+    partner-gateway:
+      base_url: https://api.partner.example/v1
+      api_key_env: PARTNER_GATEWAY_API_KEY
+  execution_candidates:                # ordered alternatives after the primary
+    - backend: claude-code
+      profile: partner-gateway
+      model: partner-sonnet
+    - backend: codex
+      model: gpt-5.6
+```
+
+`api_key_env` names an environment variable; keep its value in the environment
+or `.secrets.yaml`, never in project configuration. A profile is an environment
+and endpoint binding, not a backend adapter: an external profile is compatible
+with `claude-code`, while a non-Claude backend must use its own provider name.
+
+A candidate profile wins over ordinary provider selection for that candidate.
+Its `model` is then subject to the normal model hierarchy: `model.override`,
+recipe and step model overrides, and `providers.model_overrides` can replace it.
+If the winning model names a provider profile and that profile differs from the
+candidate's explicit `profile`, selection fails before launch rather than mixing
+the model and credentials from two profiles.
+
+Candidate checks use the chosen worker backend, not the parent backend. In
+particular, Codex rejects a skill closure containing capabilities marked
+not-applicable for Codex before a process starts. Such a rejection can advance
+to the next candidate; an incompatible candidate never represents a started
+child execution.
+
+Quota admission also happens before start against the finalized binding. Scoped
+observed quota blocks are never reused for another credential scope. Anthropic
+OAuth candidates revalidate the scope from the credential source and make one
+fresh quota check, with at most one additional check near the configured
+threshold; other provider candidates do not poll the Anthropic quota endpoint.
+
 ## Specialized Explorer Agents
 
 `semantic-code-navigator` and `repository-impact-profiler` are built-in terminal Codex explorer

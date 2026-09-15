@@ -12,7 +12,12 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import atomic_write, get_logger, is_feature_enabled
+from autoskillit.core import (
+    CandidatePreSpawnRejection,
+    atomic_write,
+    get_logger,
+    is_feature_enabled,
+)
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._misc import _extract_block, resolve_log_dir
@@ -680,6 +685,14 @@ async def _run_report_session(
                 direct_dispatch.capability_contract if direct_dispatch is not None else None
             ),
         )
+        if isinstance(skill_result, CandidatePreSpawnRejection):
+            write_status(status_path, "failed", error=skill_result.reason)
+            return {
+                "success": False,
+                "status": "failed",
+                "error": skill_result.reason,
+                "session_id": "",
+            }
 
         report_text = skill_result.result or skill_result.stderr or "No report generated."
         try:

@@ -1,7 +1,7 @@
 """Tests for the shared stdlib-only quota hook settings resolver.
 
 ``autoskillit.hooks._hook_settings.resolve_quota_settings()`` resolves cache path,
-cache max age, and buffer seconds from a layered hierarchy:
+cache max age from a layered hierarchy:
 
     1. ``cache_path_override`` parameter (tests / DI)
     2. ``AUTOSKILLIT_QUOTA_GUARD__<KEY>`` env var
@@ -26,7 +26,6 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 _ENV_VARS = (
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
-    "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
 )
 
 
@@ -45,7 +44,6 @@ def _write_hook_config(tmp_path, quota_guard: dict) -> None:
 def test_resolve_defaults_without_env_or_hook_config(tmp_path, monkeypatch):
     """With no env var and no hook config, resolver returns module defaults."""
     from autoskillit.hooks._runtime._hook_settings import (
-        DEFAULT_BUFFER_SECONDS,
         DEFAULT_CACHE_MAX_AGE,
         DEFAULT_CACHE_PATH,
         resolve_quota_settings,
@@ -58,7 +56,6 @@ def test_resolve_defaults_without_env_or_hook_config(tmp_path, monkeypatch):
 
     assert settings.cache_path == DEFAULT_CACHE_PATH
     assert settings.cache_max_age == DEFAULT_CACHE_MAX_AGE
-    assert settings.buffer_seconds == DEFAULT_BUFFER_SECONDS
 
 
 # T-HS-2
@@ -89,20 +86,6 @@ def test_env_var_overrides_cache_path(tmp_path, monkeypatch):
     assert settings.cache_path == "/custom/path.json"
 
 
-# T-HS-4
-def test_env_var_overrides_buffer_seconds(tmp_path, monkeypatch):
-    """AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS env var sets buffer_seconds."""
-    from autoskillit.hooks._runtime._hook_settings import resolve_quota_settings
-
-    monkeypatch.chdir(tmp_path)
-    _clear_env(monkeypatch)
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "120")
-
-    settings = resolve_quota_settings()
-
-    assert settings.buffer_seconds == 120
-
-
 # T-HS-5
 def test_hook_config_overrides_defaults(tmp_path, monkeypatch):
     """Hook config snapshot overrides module defaults when env vars are unset."""
@@ -115,7 +98,6 @@ def test_hook_config_overrides_defaults(tmp_path, monkeypatch):
         {
             "cache_max_age": 600,
             "cache_path": "/bridge/cache.json",
-            "buffer_seconds": 90,
         },
     )
 
@@ -123,7 +105,6 @@ def test_hook_config_overrides_defaults(tmp_path, monkeypatch):
 
     assert settings.cache_max_age == 600
     assert settings.cache_path == "/bridge/cache.json"
-    assert settings.buffer_seconds == 90
 
 
 # T-HS-6
@@ -138,18 +119,15 @@ def test_env_var_beats_hook_config(tmp_path, monkeypatch):
         {
             "cache_max_age": 600,
             "cache_path": "/bridge/cache.json",
-            "buffer_seconds": 90,
         },
     )
     monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE", "900")
     monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH", "/env/cache.json")
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "300")
 
     settings = resolve_quota_settings()
 
     assert settings.cache_max_age == 900
     assert settings.cache_path == "/env/cache.json"
-    assert settings.buffer_seconds == 300
 
 
 # T-HS-7
@@ -171,7 +149,6 @@ def test_cache_path_override_parameter_beats_all(tmp_path, monkeypatch):
 def test_invalid_env_var_falls_through(tmp_path, monkeypatch):
     """Non-numeric env var values fall through to hook config / default."""
     from autoskillit.hooks._runtime._hook_settings import (
-        DEFAULT_BUFFER_SECONDS,
         resolve_quota_settings,
     )
 
@@ -184,8 +161,6 @@ def test_invalid_env_var_falls_through(tmp_path, monkeypatch):
 
     # Invalid env var → falls through to hook config (450)
     assert settings.cache_max_age == 450
-    # buffer_seconds has neither env var nor hook config → default
-    assert settings.buffer_seconds == DEFAULT_BUFFER_SECONDS
 
 
 # T-HS-9
@@ -197,7 +172,6 @@ def test_defaults_match_defaults_yaml():
     """
     from autoskillit.core import load_yaml, pkg_root
     from autoskillit.hooks._runtime._hook_settings import (
-        DEFAULT_BUFFER_SECONDS,
         DEFAULT_CACHE_MAX_AGE,
         DEFAULT_CACHE_PATH,
     )
@@ -207,7 +181,6 @@ def test_defaults_match_defaults_yaml():
     quota_guard = defaults["quota_guard"]
     assert DEFAULT_CACHE_PATH == quota_guard["cache_path"]
     assert DEFAULT_CACHE_MAX_AGE == quota_guard["cache_max_age"]
-    assert DEFAULT_BUFFER_SECONDS == quota_guard["buffer_seconds"]
 
 
 def test_merged_hook_config_overlay_wins():

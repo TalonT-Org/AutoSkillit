@@ -144,7 +144,6 @@ def test_hook_config_is_read_from_state_root_outside_hook_cwd(
                 "quota_guard": {
                     "cache_path": "/state-root/quota-cache.json",
                     "cache_max_age": 123,
-                    "buffer_seconds": 45,
                     "disabled": True,
                 }
             }
@@ -158,7 +157,6 @@ def test_hook_config_is_read_from_state_root_outside_hook_cwd(
 
     assert settings.cache_path == "/state-root/quota-cache.json"
     assert settings.cache_max_age == 123
-    assert settings.buffer_seconds == 45
     assert settings.disabled is True
 
 

@@ -98,6 +98,21 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/evidence/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
     (
+        "execution/evidence/_session_retention.py",
+        "prune_execution_candidate_manifests_at_root",
+        "ArtifactLease.acquire_exclusive",
+    ),
+    (
+        "execution/evidence/_session_retention.py",
+        "write_execution_candidate_manifest_at_root",
+        "ArtifactLease.acquire_exclusive",
+    ),
+    (
+        "execution/quota/_admission.py",
+        "admit_quota",
+        "ArtifactLease.acquire_exclusive",
+    ),
+    (
         "execution/quota/_quota_observed.py",
         "record_observed_rate_limit",
         "acquire_flock_with_timeout",
@@ -126,6 +141,8 @@ _EXPECTED_ACQUISITIONS = (
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),
     ("planner/merge.py", "replace_item", "acquire_flock_with_timeout"),
     ("server/recipe/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
+    ("server/_misc.py", "_prime_quota_cache", "ArtifactLease.acquire_shared"),
+    ("server/_misc.py", "_quota_refresh_loop", "ArtifactLease.acquire_shared"),
     ("server/tools/_overlay_state.py", "locked_overlay", "acquire_flock_with_timeout"),
     (
         "workspace/_installed/_state.py",

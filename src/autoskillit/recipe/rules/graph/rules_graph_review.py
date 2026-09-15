@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import regex as re
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger, resolve_skill_name
@@ -12,8 +14,27 @@ from autoskillit.recipe._analysis_bfs import (
 )
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
+
+
+def _pass_through_output_usage(
+    step: RecipeStep, skill_contract: dict[str, Any]
+) -> tuple[set[str], set[str]]:
+    output_names = {output["name"] for output in skill_contract.get("outputs", [])}
+    captured_outputs = {
+        name
+        for name in output_names
+        if any(f"result.{name}" in entry.from_ for entry in (step.capture or {}).values())
+    }
+    conditions = step.on_result.conditions if step.on_result else []
+    used_in_when = {
+        name
+        for name in output_names
+        if any(cond.when and f"result.{name}" in cond.when for cond in conditions or [])
+    }
+    return captured_outputs, used_in_when
 
 
 @semantic_rule(
@@ -44,25 +65,7 @@ def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
         if not skill_name:
             continue
         skill_contract = manifest.get("skills", {}).get(skill_name, {})
-        all_output_names: set[str] = set()
-        outputs_with_allowed_values: dict[str, list[str]] = {}
-        for output in skill_contract.get("outputs", []):
-            all_output_names.add(output["name"])
-            if "allowed_values" in output:
-                outputs_with_allowed_values[output["name"]] = output["allowed_values"]
-        captured_outputs: set[str] = set()
-        if step.capture:
-            for captured_var, capture_expr in step.capture.items():
-                for output_name in all_output_names:
-                    if f"result.{output_name}" in capture_expr.from_:
-                        captured_outputs.add(output_name)
-        used_in_when: set[str] = set()
-        if step.on_result and step.on_result.conditions:
-            for cond in step.on_result.conditions:
-                if cond.when:
-                    for output_name in all_output_names:
-                        if f"result.{output_name}" in cond.when:
-                            used_in_when.add(output_name)
+        captured_outputs, used_in_when = _pass_through_output_usage(step, skill_contract)
         for pt_name in step.pass_through:
             if pt_name not in captured_outputs:
                 findings.append(

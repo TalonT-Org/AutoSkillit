@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
-from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
@@ -22,6 +22,126 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
 
     visited: set[str] = set()
     rec_stack: set[str] = set()
+
+    def retry_cycle_outcome(
+        cycle_steps: list[str],
+        cycle_set: set[str],
+        node: str,
+        neighbor: str,
+    ) -> tuple[RuleFinding | None, bool]:
+        """Return a retry-cycle finding and whether its DFS call must stop."""
+        retrying_steps = [
+            step_name
+            for step_name in cycle_steps
+            if step_name in recipe.steps
+            and recipe.steps[step_name].retries > 0
+            and recipe.steps[step_name].tool in SKILL_TOOLS
+            and recipe.steps[step_name].on_exhausted not in cycle_set
+        ]
+        if not retrying_steps:
+            return None, False
+
+        exit_targets: set[str] = set()
+        for step_name in retrying_steps:
+            step = recipe.steps[step_name]
+            success_routes: set[str] = set()
+            if step.on_result:
+                if step.on_result.conditions:
+                    success_routes = {condition.route for condition in step.on_result.conditions}
+                elif step.on_result.routes:
+                    success_routes = set(step.on_result.routes.values())
+            if step.on_success:
+                success_routes.add(step.on_success)
+            failure_targets = {target for target in (step.on_failure, step.on_exhausted) if target}
+            if any(
+                successor in cycle_set
+                for successor in success_routes
+                if successor not in failure_targets
+            ):
+                break
+            failure_targets.update(
+                target
+                for target in (step.on_context_limit, step.on_rate_limit)
+                if target and target not in cycle_set
+            )
+            exit_targets.update(
+                successor
+                for successor in graph.get(step_name, set())
+                if successor not in cycle_set and successor not in failure_targets
+            )
+        else:
+            if not any(
+                cycle_set & bfs_reachable(graph, target).union({target}) for target in exit_targets
+            ):
+                return None, True
+
+        return (
+            make_finding(
+                rule_name="unbounded-cycle",
+                step_name=node,
+                message=(
+                    f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
+                    f"Step(s) {', '.join(retrying_steps)} have retry exits, but their "
+                    f"success paths re-enter the cycle. The inner retry budget resets "
+                    f"on each loop iteration, so the outer loop is unbounded. "
+                    "Add a check_loop_iteration guard step to enforce a hard "
+                    "iteration cap, or route the success path outside the cycle."
+                ),
+            ),
+            True,
+        )
+
+    def collect_merge_queue_branch_findings() -> list[RuleFinding]:
+        """Collect unguarded dropped-CI branches that can return to queue watching."""
+        mq_steps = {
+            name: step
+            for name, step in recipe.steps.items()
+            if step.tool == "wait_for_merge_queue"
+            and step.on_result is not None
+            and step.on_result.conditions
+        }
+        enqueue_tools = {"enqueue_pr", "wait_for_merge_queue"}
+        mq_step_names = set(mq_steps)
+        branch_findings: list[RuleFinding] = []
+        for step_name, step in mq_steps.items():
+            assert step.on_result is not None
+            max_drops = (
+                int(step.with_args.get("max_merge_group_drops", 0)) if step.with_args else 0
+            )
+            if max_drops >= 1:
+                continue
+            for condition in step.on_result.conditions:
+                if condition.when is None or "dropped_merge_group_ci" not in condition.when:
+                    continue
+                target = condition.route
+                if target not in recipe.steps:
+                    continue
+                target_step = recipe.steps[target]
+                if target_step.tool == "run_python" and target_step.on_result is not None:
+                    continue
+                if target_step.tool in enqueue_tools:
+                    continue
+                reachable = bfs_reachable(graph, target).union({target})
+                if not reachable & mq_step_names:
+                    continue
+                branch_label = (
+                    condition.when.split("==")[-1].strip().strip("'\"")
+                    if "==" in condition.when
+                    else condition.when
+                )
+                branch_findings.append(
+                    make_finding(
+                        rule_name="unbounded-cycle",
+                        step_name=step_name,
+                        message=f"Per-branch cycle: {step_name}[{branch_label}] → "
+                        f"{target} reaches wait_for_merge_queue without a "
+                        f"direct guard step. The {branch_label} branch has no "
+                        f"run_python guard at its immediate route target, so "
+                        f"the re-enqueue loop is unbounded. Add a "
+                        f"check_dropped_merge_group_ci_loop guard step.",
+                    )
+                )
+        return branch_findings
 
     def dfs(node: str, path: list[str]) -> None:
         visited.add(node)
@@ -65,93 +185,15 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                     rec_stack.discard(node)
                     return
 
-                has_retry_exit = any(
-                    recipe.steps[s].retries > 0
-                    and recipe.steps[s].tool in SKILL_TOOLS
-                    and recipe.steps[s].on_exhausted not in cycle_set
-                    for s in cycle_steps
-                    if s in recipe.steps
+                retry_finding, retry_stops = retry_cycle_outcome(
+                    cycle_steps,
+                    cycle_set,
+                    node,
+                    neighbor,
                 )
-                if has_retry_exit:
-                    retrying_steps = [
-                        s
-                        for s in cycle_steps
-                        if s in recipe.steps
-                        and recipe.steps[s].retries > 0
-                        and recipe.steps[s].tool in SKILL_TOOLS
-                        and recipe.steps[s].on_exhausted not in cycle_set
-                    ]
-                    success_stays_in_cycle = False
-                    for _s in retrying_steps:
-                        _step = recipe.steps[_s]
-                        _success_routes: set[str] = set()
-                        if _step.on_result:
-                            if _step.on_result.conditions:
-                                _success_routes = {c.route for c in _step.on_result.conditions}
-                            elif _step.on_result.routes:
-                                _success_routes = set(_step.on_result.routes.values())
-                        if _step.on_success:
-                            _success_routes.add(_step.on_success)
-                        _fail_targets = {t for t in (_step.on_failure, _step.on_exhausted) if t}
-                        if any(
-                            succ in cycle_set
-                            for succ in _success_routes
-                            if succ not in _fail_targets
-                        ):
-                            success_stays_in_cycle = True
-                            break
-                    if not success_stays_in_cycle:
-                        exit_targets: set[str] = set()
-                        for _rs in retrying_steps:
-                            _step_r = recipe.steps[_rs]
-                            _fail_targets_r = {
-                                t
-                                for t in (
-                                    _step_r.on_failure,
-                                    _step_r.on_exhausted,
-                                )
-                                if t
-                            }
-                            if (
-                                _step_r.on_context_limit
-                                and _step_r.on_context_limit not in cycle_set
-                            ):
-                                _fail_targets_r.add(_step_r.on_context_limit)
-                            if _step_r.on_rate_limit and _step_r.on_rate_limit not in cycle_set:
-                                _fail_targets_r.add(_step_r.on_rate_limit)
-                            for succ in graph.get(_rs, set()):
-                                if succ not in cycle_set and succ not in _fail_targets_r:
-                                    exit_targets.add(succ)
-                        loops_back = False
-                        visited_exit: set[str] = set()
-                        frontier = exit_targets
-                        while frontier:
-                            if frontier & cycle_set:
-                                loops_back = True
-                                break
-                            visited_exit |= frontier
-                            nxt: set[str] = set()
-                            for f in frontier:
-                                nxt |= set(graph.get(f, set())) - visited_exit
-                            frontier = nxt
-                        if not loops_back:
-                            rec_stack.discard(node)
-                            return
-
-                    findings.append(
-                        make_finding(
-                            rule_name="unbounded-cycle",
-                            step_name=node,
-                            message=(
-                                f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
-                                f"Step(s) {', '.join(retrying_steps)} have retry exits, but their "
-                                f"success paths re-enter the cycle. The inner retry budget resets "
-                                f"on each loop iteration, so the outer loop is unbounded. "
-                                "Add a check_loop_iteration guard step to enforce a hard "
-                                "iteration cap, or route the success path outside the cycle."
-                            ),
-                        )
-                    )
+                if retry_finding is not None:
+                    findings.append(retry_finding)
+                if retry_stops:
                     rec_stack.discard(node)
                     return
 
@@ -192,74 +234,5 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
         if step_name not in visited:
             dfs(step_name, [step_name])
 
-    # --- Per-branch analysis for wait_for_merge_queue steps ---
-    # The DFS above uses aggregate suppression: if ANY step in a cycle has
-    # an on_result exit, the whole cycle is suppressed. This misses the case
-    # where one branch (e.g. dropped_merge_group_ci) has no guard while
-    # sibling branches (ejected, dropped_healthy) do. Analyze each branch
-    # independently using BFS reachability.
-    mq_steps = {
-        name: step
-        for name, step in recipe.steps.items()
-        if step.tool == "wait_for_merge_queue"
-        and step.on_result is not None
-        and step.on_result.conditions
-    }
-    enqueue_tools = {"enqueue_pr", "wait_for_merge_queue"}
-    for step_name, step in mq_steps.items():
-        assert step.on_result is not None
-        max_drops = int(step.with_args.get("max_merge_group_drops", 0)) if step.with_args else 0
-        if max_drops >= 1:
-            continue
-        for cond in step.on_result.conditions:
-            if cond.when is None:
-                continue
-            if "dropped_merge_group_ci" not in cond.when:
-                continue
-            target = cond.route
-            if target not in recipe.steps:
-                continue
-            target_step = recipe.steps[target]
-            if target_step.tool == "run_python" and target_step.on_result is not None:
-                continue
-            if target_step.tool in enqueue_tools:
-                continue
-            bfs_visited: set[str] = set()
-            bfs_frontier: set[str] = {target}
-            reaches_mq = False
-            while bfs_frontier:
-                bfs_frontier -= bfs_visited
-                if not bfs_frontier:
-                    break
-                for n in bfs_frontier:
-                    if n in mq_steps and n != step_name:
-                        reaches_mq = True
-                    elif n == step_name:
-                        reaches_mq = True
-                if reaches_mq:
-                    break
-                bfs_visited |= bfs_frontier
-                next_bfs: set[str] = set()
-                for n in bfs_frontier:
-                    next_bfs |= graph.get(n, set())
-                bfs_frontier = next_bfs
-            if reaches_mq:
-                branch_label = (
-                    cond.when.split("==")[-1].strip().strip("'\"")
-                    if "==" in cond.when
-                    else cond.when
-                )
-                findings.append(
-                    make_finding(
-                        rule_name="unbounded-cycle",
-                        step_name=step_name,
-                        message=f"Per-branch cycle: {step_name}[{branch_label}] → "
-                        f"{target} reaches wait_for_merge_queue without a "
-                        f"direct guard step. The {branch_label} branch has no "
-                        f"run_python guard at its immediate route target, so "
-                        f"the re-enqueue loop is unbounded. Add a "
-                        f"check_dropped_merge_group_ci_loop guard step.",
-                    )
-                )
-
+    findings.extend(collect_merge_queue_branch_findings())
     return findings

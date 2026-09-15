@@ -215,9 +215,7 @@ def _has_conflict_routing(step, recipe) -> bool:
     if step.on_failure:
         targets.append(step.on_failure)
     if step.on_result:
-        for cond in step.on_result.conditions or []:
-            if cond.route:
-                targets.append(cond.route)
+        targets.extend(cond.route for cond in step.on_result.conditions or [] if cond.route)
 
     for target_name in targets:
         visited: set[str] = set()
@@ -238,14 +236,10 @@ def _has_conflict_routing(step, recipe) -> bool:
                 callable_str = (target_step.with_args or {}).get("callable", "")
                 if "rebase" in callable_str:
                     return True
-            if target_step.on_success:
-                queue.append((target_step.on_success, hops + 1))
-            if target_step.on_failure:
-                queue.append((target_step.on_failure, hops + 1))
+            next_targets = [target_step.on_success, target_step.on_failure]
             if target_step.on_result:
-                for cond in target_step.on_result.conditions or []:
-                    if cond.route:
-                        queue.append((cond.route, hops + 1))
+                next_targets.extend(cond.route for cond in target_step.on_result.conditions or [])
+            queue.extend((target, hops + 1) for target in next_targets if target)
     return False
 
 

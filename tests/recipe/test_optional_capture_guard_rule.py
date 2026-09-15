@@ -121,6 +121,55 @@ def test_allows_optional_pattern_with_guard(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
 
+def test_allows_non_route_step_self_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rule is silent when the producer routes only on its own optional result key."""
+    manifest = {
+        "version": "0.1.0",
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "pr_url", "type": "string"}],
+                "expected_output_patterns": ["pr_url\\s*=\\s*(https://.*)?"],
+                "pattern_examples": ["pr_url = https://example.com/pull/1"],
+                "write_behavior": "conditional",
+                "write_expected_when": ["pr_url\\s*=\\s*https://"],
+            }
+        },
+    }
+    monkeypatch.setattr(_r, "load_bundled_manifest", lambda: manifest)
+
+    recipe = _make_recipe(
+        {
+            "producer": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:test-skill"},
+                capture={"pr_url": "${{ result.pr_url }}"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.pr_url }}",
+                            route="consumer",
+                        ),
+                        StepResultCondition(route="fallback"),
+                    ]
+                ),
+            ),
+            "consumer": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo ${{ context.pr_url }}"},
+            ),
+            "fallback": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo no pr"},
+            ),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    guard_findings = [f for f in findings if f.rule == "optional-capture-requires-guard"]
+    assert guard_findings == []
+
+
 def test_allows_mandatory_pattern_without_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rule does NOT fire when the skill's pattern has no optional group."""
     manifest = {

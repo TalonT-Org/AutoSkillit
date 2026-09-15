@@ -13,6 +13,7 @@ from autoskillit.recipe._analysis_bfs import _build_success_step_graph
 from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     {
@@ -75,6 +76,23 @@ _RECOVERY_SIGNATURES_SKILL: dict[str, str] = {
 _RECOVERY_SIGNATURES_CALLABLE: dict[str, str] = {
     "autoskillit.recipe._cmd_rpc.main_repo_guard": "dirty_retry",
 }
+
+
+def _recovery_signature(step: RecipeStep) -> str | None:
+    """Return the recovery class identified by one step, when it has one."""
+    if step.tool in _RECOVERY_SIGNATURES_TOOL:
+        return _RECOVERY_SIGNATURES_TOOL[step.tool]
+    if step.tool == "run_skill":
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name and skill_name in _RECOVERY_SIGNATURES_SKILL:
+            return _RECOVERY_SIGNATURES_SKILL[skill_name]
+    elif step.tool == "run_python":
+        callable_name = (step.with_args or {}).get("callable", "")
+        if callable_name in _RECOVERY_SIGNATURES_CALLABLE:
+            return _RECOVERY_SIGNATURES_CALLABLE[callable_name]
+    return None
+
 
 # Canonical _FAILED_STEP_PATTERN; rules_merge_context imports this rather than
 # maintaining its own copy.
@@ -230,18 +248,14 @@ def _check_merge_routing_cross_site_consistency(
 
         classified = {s: c for s, c in classifications.items() if c is not None}
         unclassified = [s for s in classifications if classifications[s] is None]
-
-        mismatch = False
-        if classified and unclassified:
-            mismatch = True
-        elif len(classified) >= 2 and len(set(classified.values())) > 1:
-            mismatch = True
-        elif len(unclassified) >= 2:
-            unclassified_targets = {targets[s] for s in unclassified}
-            if len(unclassified_targets) > 1:
-                mismatch = True
-
-        if not mismatch:
+        has_mixed_classification = bool(classified) and bool(unclassified)
+        has_distinct_classified_classes = len(set(classified.values())) > 1
+        has_distinct_unclassified_targets = len({targets[s] for s in unclassified}) > 1
+        if not (
+            has_mixed_classification
+            or has_distinct_classified_classes
+            or has_distinct_unclassified_targets
+        ):
             continue
 
         site_list = ", ".join(sites_with_key)
@@ -306,18 +320,9 @@ def _classify_recovery_class(
         depth_signatures: set[str] = set()
         for node in frontier:
             step = ctx.recipe.steps.get(node)
-            if step is not None:
-                if step.tool in _RECOVERY_SIGNATURES_TOOL:
-                    depth_signatures.add(_RECOVERY_SIGNATURES_TOOL[step.tool])
-                if step.tool == "run_skill":
-                    skill_cmd = (step.with_args or {}).get("skill_command", "")
-                    skill_name = resolve_skill_name(skill_cmd)
-                    if skill_name and skill_name in _RECOVERY_SIGNATURES_SKILL:
-                        depth_signatures.add(_RECOVERY_SIGNATURES_SKILL[skill_name])
-                if step.tool == "run_python":
-                    callable_name = (step.with_args or {}).get("callable", "")
-                    if callable_name in _RECOVERY_SIGNATURES_CALLABLE:
-                        depth_signatures.add(_RECOVERY_SIGNATURES_CALLABLE[callable_name])
+            signature = _recovery_signature(step) if step is not None else None
+            if signature is not None:
+                depth_signatures.add(signature)
             if _depth == max_depth:
                 continue
             for successor in graph.get(node, ()):
@@ -376,9 +381,7 @@ def _check_merge_failure_skill_domain_mismatch(
                 when_lower = condition.when.lower()
                 if "remote_is_ancestor" not in when_lower:
                     continue
-                required_class = _REQUIRED_RECOVERY_CLASS.get(domain)
-                if required_class is None:
-                    continue
+                required_class = _REQUIRED_RECOVERY_CLASS[domain]
                 actual_class = _classify_recovery_class(
                     condition.route, ctx, success_graph=success_graph
                 )

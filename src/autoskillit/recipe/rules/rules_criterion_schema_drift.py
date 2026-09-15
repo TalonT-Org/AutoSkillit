@@ -10,6 +10,7 @@ runtime errors.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 from autoskillit.core import Severity
@@ -30,6 +31,24 @@ def _is_criterion_drift(criteria: object) -> bool:
         if not _REQUIRED_CRITERION_KEYS <= entry.keys():
             return True
     return False
+
+
+def _drifted_canary_ids(manifest_path: Path) -> Iterator[object]:
+    if not manifest_path.exists():
+        return
+    try:
+        canaries = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(canaries, list):
+        return
+    for canary in canaries:
+        if not isinstance(canary, dict):
+            continue
+        canary_id = canary.get("id", "?")
+        criteria = canary.get("detection_criteria", [])
+        if _is_criterion_drift(criteria):
+            yield canary_id
 
 
 @semantic_rule(
@@ -53,28 +72,15 @@ def _check_criterion_schema_drift(ctx: ValidationContext) -> list[RuleFinding]:
         if not manifest_arg:
             continue
         manifest_path = Path(str(manifest_arg))
-        if not manifest_path.exists():
-            continue
-        try:
-            canaries = json.loads(manifest_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(canaries, list):
-            continue
-        for canary in canaries:
-            if not isinstance(canary, dict):
-                continue
-            canary_id = canary.get("id", "?")
-            criteria = canary.get("detection_criteria", [])
-            if _is_criterion_drift(criteria):
-                findings.append(
-                    make_finding(
-                        rule_name="criterion-schema-drift",
-                        step_name=step_name,
-                        message=(
-                            f"Canary {canary_id} in {manifest_path} uses plain-string "
-                            f"detection_criteria — must be structured {{text, type}} objects."
-                        ),
-                    )
+        for canary_id in _drifted_canary_ids(manifest_path):
+            findings.append(
+                make_finding(
+                    rule_name="criterion-schema-drift",
+                    step_name=step_name,
+                    message=(
+                        f"Canary {canary_id} in {manifest_path} uses plain-string "
+                        f"detection_criteria — must be structured {{text, type}} objects."
+                    ),
                 )
+            )
     return findings

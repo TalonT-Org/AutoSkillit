@@ -62,31 +62,23 @@ def _has_guard_for_key(
         if step is None:
             continue
 
-        # Check if this step is a guard: action=route with on_result conditions
-        if step.action == "route" and step.on_result and step.on_result.conditions:
-            for cond in step.on_result.conditions:
-                if cond.when and (
-                    f"context.{captured_key}" in cond.when or f"result.{captured_key}" in cond.when
-                ):
-                    return True
-            # Guard not found here — continue BFS through all condition routes
-            for cond in step.on_result.conditions:
-                if cond.route:
-                    to_visit.append(cond.route)
-            continue
-
-        if step.on_result and step.on_result.conditions:
-            # Non-route step routing via on_result: self-guard if it gates on result.{key}
-            # before routing to consumers (only reachable when value is truthy).
+        conditions = (
+            step.on_result.conditions if step.on_result and step.on_result.conditions else []
+        )
+        if conditions:
+            guard_refs = (
+                (f"context.{captured_key}", f"result.{captured_key}")
+                if step.action == "route"
+                else (f"result.{captured_key}",)
+            )
             if any(
-                cond.when and f"result.{captured_key}" in cond.when
-                for cond in step.on_result.conditions
+                condition.when and any(ref in condition.when for ref in guard_refs)
+                for condition in conditions
             ):
                 return True
-            # Follow each condition's route to find downstream guards
-            for cond in step.on_result.conditions:
-                if cond.route:
-                    to_visit.append(cond.route)
+            for condition in conditions:
+                if condition.route:
+                    to_visit.append(condition.route)
         elif step.on_success:
             to_visit.append(step.on_success)
 

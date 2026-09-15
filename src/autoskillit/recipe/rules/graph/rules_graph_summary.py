@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from itertools import combinations
 
 import regex as re
@@ -10,7 +11,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import _build_success_step_graph, bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
-from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+from autoskillit.recipe.schema import Recipe, RecipeIngredient
 
 # Matches an explicit optional-phase marker: "(name?)" — hyphen/underscore agnostic,
 # parsed independently of the '>' separator convention used by every bundled recipe.
@@ -86,23 +87,135 @@ def _is_simple_boolean_gate(recipe: Recipe, ref: str) -> bool:
     return ing.default in (None, "", "true", "false")
 
 
-def _candidate_labels(step_name: str, step: RecipeStep) -> set[str]:
-    """Normalized labels a summary token could plausibly use for this step.
+def _candidate_labels(direct_labels: set[str], gate_ref: str) -> set[str]:
+    """Return caller-provided direct labels plus the normalized gating ingredient name.
 
-    Includes the step's own key, its resolved skill name, and the name of
-    the ingredient gating it — recipes sometimes label a cluster of steps
-    sharing one gate with the gate's own name (e.g. remediation.yaml's
-    "(open_pr?)" covers prepare_pr/run_arch_lenses/compose_pr/review_pr).
+    A summary may label several steps with the name of their shared gate.
     """
-    labels = {_normalize_label(step_name)}
-    if step.skill_name:
-        labels.add(_normalize_label(step.skill_name))
-    gate_ref = step.skip_when_false or step.skip_when_true
-    if gate_ref is not None:
-        gate_name = _ingredient_name_from_ref(gate_ref)
-        if gate_name:
-            labels.add(_normalize_label(gate_name))
+    labels = direct_labels.copy()
+    gate_name = _ingredient_name_from_ref(gate_ref)
+    if gate_name:
+        labels.add(_normalize_label(gate_name))
     return labels
+
+
+def _partition_summary_skill_steps(
+    recipe: Recipe,
+) -> tuple[list[tuple[str, str, set[str]]], list[tuple[str, set[str]]]]:
+    """Collect ordered gated and ungated skill records with their direct labels."""
+    gated: list[tuple[str, str, set[str]]] = []
+    ungated: list[tuple[str, set[str]]] = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        direct_labels = {_normalize_label(step_name)}
+        if step.skill_name:
+            direct_labels.add(_normalize_label(step.skill_name))
+        gate_ref = step.skip_when_false or step.skip_when_true
+        if gate_ref is None:
+            ungated.append((step_name, direct_labels))
+        else:
+            gated.append((step_name, gate_ref, direct_labels))
+    return gated, ungated
+
+
+def _validate_gated_summary_markers(
+    recipe: Recipe,
+    records: list[tuple[str, str, set[str]]],
+    token_labels: set[str],
+    optional_labels: set[str],
+    first_index: dict[str, int],
+    emit: Callable[[str, str, str], None],
+    matched_direct: list[tuple[str, str, int]],
+) -> None:
+    """Validate disclosure and optional markers for user-configurable gated phases."""
+    for step_name, gate_ref, direct_labels in records:
+        if not _is_user_configurable_gate(recipe, gate_ref):
+            continue
+        matching = _candidate_labels(direct_labels, gate_ref) & token_labels
+        if not matching:
+            emit(
+                step_name,
+                "missing",
+                f"Step '{step_name}' is a user-configurable phase (gated by "
+                f"skip_when_false/skip_when_true) but no normalized form of its "
+                f"step name, skill name, or gating ingredient appears in the "
+                f"recipe's summary: line. Disclose it as '(label?)'.",
+            )
+            continue
+
+        matched_own = direct_labels & matching
+        if matched_own:
+            label = next(iter(matched_own))
+            matched_direct.append((step_name, label, first_index[label]))
+        else:
+            label = next(iter(matching))
+
+        if _is_simple_boolean_gate(recipe, gate_ref) and label not in optional_labels:
+            emit(
+                step_name,
+                "missing-optional-marker",
+                f"Step '{step_name}' is gated (skip_when_false/skip_when_true) but its "
+                f"summary token '{label}' is shown without the '?' optional marker. "
+                f"Use '({label}?)'.",
+            )
+
+
+def _validate_ungated_summary_markers(
+    records: list[tuple[str, set[str]]],
+    token_labels: set[str],
+    optional_labels: set[str],
+    first_index: dict[str, int],
+    emit: Callable[[str, str, str], None],
+    matched_direct: list[tuple[str, str, int]],
+) -> None:
+    """Reject optional markers on matched ungated phases."""
+    for step_name, direct_labels in records:
+        matched = direct_labels & optional_labels
+        if matched:
+            label = next(iter(matched))
+            emit(
+                step_name,
+                "false-optional-marker",
+                f"Step '{step_name}' is not gated (no skip_when_false/skip_when_true) "
+                f"but its summary token '{label}' is marked '?' as optional.",
+            )
+            continue
+        matched_bare = direct_labels & token_labels
+        if matched_bare:
+            label = next(iter(matched_bare))
+            matched_direct.append((step_name, label, first_index[label]))
+
+
+def _check_summary_phase_order(
+    recipe: Recipe,
+    matched_direct: list[tuple[str, str, int]],
+    emit: Callable[[str, str, str], None],
+) -> None:
+    """Report summary order that contradicts one-way success-path reachability."""
+    if len(matched_direct) <= 1:
+        return
+    graph = _build_success_step_graph(recipe)
+    reachable_cache: dict[str, set[str]] = {}
+    by_index = sorted(set(matched_direct), key=lambda t: t[2])
+    for (name_i, label_i, idx_i), (name_j, label_j, idx_j) in combinations(by_index, 2):
+        if idx_i == idx_j or name_i == name_j:
+            continue
+        if name_i not in reachable_cache:
+            reachable_cache[name_i] = bfs_reachable(graph, name_i)
+        if name_j not in reachable_cache:
+            reachable_cache[name_j] = bfs_reachable(graph, name_j)
+        forward = name_j in reachable_cache[name_i]
+        backward = name_i in reachable_cache[name_j]
+        if backward and not forward:
+            emit(
+                name_j,
+                "order-divergence",
+                f"Summary lists '{label_i}' before '{label_j}', but the "
+                f"success-path step graph only reaches '{name_i}' from "
+                f"'{name_j}' (the reverse order). Reorder the summary or "
+                f"correct the routing.",
+            )
 
 
 @semantic_rule(
@@ -149,100 +262,24 @@ def _check_summary_graph_divergence(ctx: ValidationContext) -> list[RuleFinding]
     # the ordering check.
     matched_direct: list[tuple[str, str, int]] = []
 
-    for step_name, step in recipe.steps.items():
-        if step.tool != "run_skill":
-            continue
-        gate_ref = step.skip_when_false or step.skip_when_true
-        if gate_ref is None:
-            continue
-        if not _is_user_configurable_gate(recipe, gate_ref):
-            continue
-
-        own_labels = {_normalize_label(step_name)}
-        if step.skill_name:
-            own_labels.add(_normalize_label(step.skill_name))
-        all_labels = _candidate_labels(step_name, step)
-
-        matching = all_labels & token_labels
-        if not matching:
-            emit(
-                step_name,
-                "missing",
-                f"Step '{step_name}' is a user-configurable phase (gated by "
-                f"skip_when_false/skip_when_true) but no normalized form of its "
-                f"step name, skill name, or gating ingredient appears in the "
-                f"recipe's summary: line. Disclose it as '(label?)'.",
-            )
-            continue
-
-        matched_own = own_labels & matching
-        if matched_own:
-            label = next(iter(matched_own))
-            matched_direct.append((step_name, label, first_index[label]))
-        else:
-            label = next(iter(matching))
-
-        if _is_simple_boolean_gate(recipe, gate_ref) and label not in optional_labels:
-            emit(
-                step_name,
-                "missing-optional-marker",
-                f"Step '{step_name}' is gated (skip_when_false/skip_when_true) but its "
-                f"summary token '{label}' is shown without the '?' optional marker. "
-                f"Use '({label}?)'.",
-            )
-
-    # Reject '?' on a matched, ungated run_skill phase.
-    for step_name, step in recipe.steps.items():
-        if step.tool != "run_skill":
-            continue
-        gate_ref = step.skip_when_false or step.skip_when_true
-        if gate_ref is not None:
-            continue
-        own_labels = {_normalize_label(step_name)}
-        if step.skill_name:
-            own_labels.add(_normalize_label(step.skill_name))
-        matched = own_labels & optional_labels
-        if matched:
-            label = next(iter(matched))
-            emit(
-                step_name,
-                "false-optional-marker",
-                f"Step '{step_name}' is not gated (no skip_when_false/skip_when_true) "
-                f"but its summary token '{label}' is marked '?' as optional.",
-            )
-        else:
-            matched_bare = own_labels & token_labels
-            if matched_bare:
-                label = next(iter(matched_bare))
-                matched_direct.append((step_name, label, first_index[label]))
-
-    # Ordering check: pairwise success-graph reachability for directly matched
-    # phase steps. Reverse-only reachability contradicts the summary's
-    # left-to-right order; bidirectional reachability (a shared cycle) and
-    # incomparable branch nodes impose no false total order.
-    if len(matched_direct) > 1:
-        graph = _build_success_step_graph(recipe)
-        reachable_cache: dict[str, set[str]] = {}
-
-        def reachable_from(node: str) -> set[str]:
-            if node not in reachable_cache:
-                reachable_cache[node] = bfs_reachable(graph, node)
-            return reachable_cache[node]
-
-        by_index = sorted(set(matched_direct), key=lambda t: t[2])
-        for (name_i, label_i, idx_i), (name_j, label_j, idx_j) in combinations(by_index, 2):
-            if idx_i == idx_j or name_i == name_j:
-                continue
-            forward = name_j in reachable_from(name_i)
-            backward = name_i in reachable_from(name_j)
-            if backward and not forward:
-                emit(
-                    name_j,
-                    "order-divergence",
-                    f"Summary lists '{label_i}' before '{label_j}', but the "
-                    f"success-path step graph only reaches '{name_i}' from "
-                    f"'{name_j}' (the reverse order). Reorder the summary or "
-                    f"correct the routing.",
-                )
+    gated_records, ungated_records = _partition_summary_skill_steps(recipe)
+    _validate_gated_summary_markers(
+        recipe,
+        gated_records,
+        token_labels,
+        optional_labels,
+        first_index,
+        emit,
+        matched_direct,
+    )
+    _validate_ungated_summary_markers(
+        ungated_records,
+        token_labels,
+        optional_labels,
+        first_index,
+        emit,
+        matched_direct,
+    )
+    _check_summary_phase_order(recipe, matched_direct, emit)
 
     return findings

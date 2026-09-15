@@ -11,6 +11,8 @@ patchability contract this module participates in.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import regex as re
 
 from autoskillit.core import Severity
@@ -63,6 +65,58 @@ def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
             if _LITERAL_ORIGIN_RE.search(stripped):
                 return True
     return False
+
+
+def _interpreter_write_block_violations(
+    content: str,
+    interpreter_line_re: re.Pattern[str],
+    write_apis_re: re.Pattern[str],
+) -> list[str]:
+    """Return labels for bash and Python blocks containing interpreter writes."""
+    violations: list[str] = []
+    for block in extract_bash_blocks(content):
+        for line in block.splitlines():
+            stripped = line.lstrip()
+            cleaned = stripped.lstrip("$(")
+            if interpreter_line_re.search(cleaned):
+                if write_apis_re.search(block):
+                    violations.append("bash block")
+                break
+    for block in extract_python_blocks(content):
+        if write_apis_re.search(block):
+            violations.append("python block")
+    return violations
+
+
+def _iter_resolved_skill_bash_blocks(
+    ctx: ValidationContext,
+) -> Iterator[tuple[str, str, list[str]]]:
+    """Yield each run-skill step with its resolved nonempty bash blocks."""
+    from autoskillit.recipe.rules.rules_skill_content import _resolve_skill_md
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(
+            skill_name,
+            project_root=ctx.project_dir,
+            resolver=ctx.skill_resolver,
+        )
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        if bash_blocks:
+            yield step_name, skill_name, bash_blocks
 
 
 @semantic_rule(
@@ -207,20 +261,11 @@ def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFi
             content = skill_md.read_text(encoding="utf-8")
         except OSError:
             continue
-        violations: list[str] = []
-        for block in extract_bash_blocks(content):
-            has_interpreter = False
-            for line in block.splitlines():
-                stripped = line.lstrip()
-                cleaned = stripped.lstrip("$(")
-                if _INTERPRETER_LINE_RE.search(cleaned):
-                    has_interpreter = True
-                    break
-            if has_interpreter and _WRITE_APIS_RE.search(block):
-                violations.append("bash block")
-        for block in extract_python_blocks(content):
-            if _WRITE_APIS_RE.search(block):
-                violations.append("python block")
+        violations = _interpreter_write_block_violations(
+            content,
+            _INTERPRETER_LINE_RE,
+            _WRITE_APIS_RE,
+        )
         if violations:
             findings.append(
                 make_finding(
@@ -303,32 +348,8 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
     ),
 )
 def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
-    from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,
-    )
-
     findings: list[RuleFinding] = []
-    for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "run_skill":
-            continue
-        skill_cmd = step.with_args.get("skill_command", "")
-        if not skill_cmd:
-            continue
-        skill_name = resolve_skill_name(skill_cmd)
-        if skill_name is None:
-            continue
-        skill_md = _resolve_skill_md(
-            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
-        )
-        if skill_md is None:
-            continue
-        try:
-            content = skill_md.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        bash_blocks = extract_bash_blocks(content)
-        if not bash_blocks:
-            continue
+    for step_name, skill_name, bash_blocks in _iter_resolved_skill_bash_blocks(ctx):
         violations: list[str] = []
         for block in bash_blocks:
             for line in block.splitlines():
@@ -364,32 +385,8 @@ def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
     ),
 )
 def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
-    from autoskillit.recipe.rules.rules_skill_content import (
-        _resolve_skill_md,
-    )
-
     findings: list[RuleFinding] = []
-    for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "run_skill":
-            continue
-        skill_cmd = step.with_args.get("skill_command", "")
-        if not skill_cmd:
-            continue
-        skill_name = resolve_skill_name(skill_cmd)
-        if skill_name is None:
-            continue
-        skill_md = _resolve_skill_md(
-            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
-        )
-        if skill_md is None:
-            continue  # unknown-skill-command rule handles missing skills
-        try:
-            content = skill_md.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        bash_blocks = extract_bash_blocks(content)
-        if not bash_blocks:
-            continue
+    for step_name, skill_name, bash_blocks in _iter_resolved_skill_bash_blocks(ctx):
         violations: list[str] = []
         for block in bash_blocks:
             for line in block.splitlines():

@@ -417,8 +417,7 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
         queue: deque[tuple[str, int]] = deque(
             (p, 1) for p in ctx.predecessors.get(step_name, set())
         )
-        found_write_skill: str | None = None
-        while queue and found_write_skill is None:
+        while queue:
             pred_name, depth = queue.popleft()
             if pred_name in visited or depth > max_hops:
                 continue
@@ -426,32 +425,29 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
             pred = ctx.recipe.steps.get(pred_name)
             if pred is None:
                 continue
-            if pred.tool in SKILL_TOOLS:
-                skill_cmd = (pred.with_args or {}).get("skill_command", "")
-                skill = resolve_skill_name(skill_cmd)
-                if skill:
-                    contract = get_skill_contract(skill, manifest)
-                    if (
-                        contract
-                        and contract.write_behavior in ("always", "conditional")
-                        and not contract.read_only
-                    ):
-                        found_write_skill = pred_name
-                        break
+            if pred.tool in SKILL_TOOLS and (
+                skill := resolve_skill_name((pred.with_args or {}).get("skill_command", ""))
+            ):
+                contract = get_skill_contract(skill, manifest)
+                if (
+                    contract
+                    and contract.write_behavior in ("always", "conditional")
+                    and not contract.read_only
+                ):
+                    if (step.with_args or {}).get("force", "").strip().lower() != "true":
+                        findings.append(
+                            make_finding(
+                                rule_name="push-after-edit-requires-force",
+                                step_name=step_name,
+                                message=f"push_to_remote step '{step_name}' follows "
+                                "write-behavior skill "
+                                f"step '{pred_name}' but is missing force='true'. "
+                                "A write-behavior skill rewrites commit history — a force push "
+                                "(--force-with-lease) is required to update the remote.",
+                            )
+                        )
+                    break
             queue.extend((p, depth + 1) for p in ctx.predecessors.get(pred_name, set()))
-        if found_write_skill is not None and (
-            (step.with_args or {}).get("force", "").strip().lower() != "true"
-        ):
-            findings.append(
-                make_finding(
-                    rule_name="push-after-edit-requires-force",
-                    step_name=step_name,
-                    message=f"push_to_remote step '{step_name}' follows write-behavior skill "
-                    f"step '{found_write_skill}' but is missing force='true'. "
-                    "A write-behavior skill rewrites commit history — a force push "
-                    "(--force-with-lease) is required to update the remote.",
-                )
-            )
 
     return findings
 

@@ -160,6 +160,57 @@ def test_gh_api_check_runs_fires_warning() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ci-wait-requires-applicability-guard rule tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("has_applicability_route", "expected_findings"),
+    ((True, 0), (False, 1)),
+)
+def test_ci_wait_requires_applicability_guard_searches_predecessors(
+    has_applicability_route: bool,
+    expected_findings: int,
+) -> None:
+    """Only a predecessor route that checks ci_applicable suppresses the finding."""
+    route_condition = (
+        "context.ci_applicable == 'true'"
+        if has_applicability_route
+        else "context.ready_for_ci == 'true'"
+    )
+    recipe = _make_recipe(
+        {
+            "check_state": RecipeStep(
+                tool="check_repo_merge_state",
+                on_success="route_ci",
+            ),
+            "route_ci": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when=route_condition, route="ci_watch"),
+                        StepResultCondition(route="done"),
+                    ]
+                ),
+            ),
+            "ci_watch": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "${{ context.ci_event }}"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    matching = [f for f in findings if f.rule == "ci-wait-requires-applicability-guard"]
+    assert len(matching) == expected_findings
+    if matching:
+        assert matching[0].severity == Severity.ERROR
+        assert matching[0].step_name == "ci_watch"
+
+
+# ---------------------------------------------------------------------------
 # ci-failure-missing-conflict-gate rule tests
 # ---------------------------------------------------------------------------
 

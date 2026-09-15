@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import chain
+
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
@@ -77,20 +79,11 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
 
         declared_keys = {out.name for out in contract.outputs}
 
-        for _capture_var, capture_expr in step.capture.items():
-            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
-                if ref_key not in declared_keys:
-                    findings.append(
-                        make_finding(
-                            rule_name="undeclared-capture-key",
-                            step_name=step_name,
-                            message=f"Step '{step_name}' captures result.{ref_key} "
-                            f"but skill '{skill_name}' does not declare '{ref_key}' "
-                            f"in its outputs contract.",
-                        )
-                    )
-
-        for _capture_var, capture_expr in step.capture_list.items():
+        captures = chain(
+            ((capture_expr, "") for capture_expr in step.capture.values()),
+            ((capture_expr, " via capture_list") for capture_expr in step.capture_list.values()),
+        )
+        for capture_expr, capture_suffix in captures:
             for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
                 if ref_key not in declared_keys:
                     findings.append(
@@ -98,7 +91,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                             rule_name="undeclared-capture-key",
                             step_name=step_name,
                             message=(
-                                f"Step '{step_name}' captures result.{ref_key} via capture_list "
+                                f"Step '{step_name}' captures result.{ref_key}{capture_suffix} "
                                 f"but skill '{skill_name}' does not declare '{ref_key}' "
                                 f"in its outputs contract."
                             ),
@@ -132,16 +125,20 @@ def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFi
         if not callable_path:
             continue
 
-        # Collect all result.* references from capture, capture_list, and on_result
-        result_refs: list[str] = []
-        for _capture_var, capture_expr in step.capture.items():
-            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr.from_))
-        for _capture_var, capture_expr in step.capture_list.items():
-            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr.from_))
-        if step.on_result is not None:
-            for cond in step.on_result.conditions:
-                if cond.when is not None:
-                    result_refs.extend(RESULT_CAPTURE_RE.findall(cond.when))
+        expressions = chain(
+            (capture_expr.from_ for capture_expr in step.capture.values()),
+            (capture_expr.from_ for capture_expr in step.capture_list.values()),
+            (
+                condition.when
+                for condition in (step.on_result.conditions if step.on_result is not None else ())
+                if condition.when is not None
+            ),
+        )
+        result_refs = [
+            ref_key
+            for expression in expressions
+            for ref_key in RESULT_CAPTURE_RE.findall(expression)
+        ]
 
         if not result_refs:
             continue

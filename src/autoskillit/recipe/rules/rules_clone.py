@@ -32,6 +32,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -214,6 +215,53 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
 _CLONE_CREATING_TOOLS: frozenset[str] = frozenset({"bootstrap_clone", "clone_repo"})
 
 
+def _first_unregistered_clone_terminal(recipe: Recipe, clone_step_name: str) -> str | None:
+    """Find the first success-path terminal reached before clone registration."""
+    graph: dict[str, set[str]] = {}
+    barrier_steps: set[str] = set()
+    all_step_names = set(recipe.steps)
+    for step_name, step in recipe.steps.items():
+        targets = {
+            target
+            for target in (
+                step.on_success,
+                step.on_failure,
+                step.on_context_limit,
+                step.on_rate_limit,
+            )
+            if target and target in all_step_names
+        }
+        if step.on_result:
+            targets.update(
+                condition.route
+                for condition in step.on_result.conditions
+                if condition.route and condition.route in all_step_names
+            )
+            targets.update(
+                route for route in step.on_result.routes.values() if route in all_step_names
+            )
+        if (
+            step.on_exhausted
+            and step.on_exhausted in all_step_names
+            and step.on_exhausted not in RECIPE_TERMINAL_TARGETS
+        ):
+            targets.add(step.on_exhausted)
+        graph[step_name] = targets
+        if step.tool == "register_clone_status":
+            barrier_steps.add(step_name)
+
+    for barrier in barrier_steps:
+        graph[barrier] = set()
+
+    success_target = recipe.steps[clone_step_name].on_success
+    if not success_target or success_target not in all_step_names:
+        return None
+    for step_name in bfs_reachable(graph, success_target):
+        if recipe.steps[step_name].action == "stop":
+            return step_name
+    return None
+
+
 @semantic_rule(
     name="clone-terminal-requires-registration",
     description=(
@@ -236,74 +284,18 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
     if clone_step_name is None:
         return []
 
-    # Build a full routing graph (all edge types: on_success, on_failure, on_context_limit,
-    # on_result conditions). Barrier nodes are register_clone_status steps.
-    graph: dict[str, set[str]] = {}
-    barrier_steps: set[str] = set()
-    all_step_names = set(recipe.steps)
-
-    for sn, step in recipe.steps.items():
-        targets: set[str] = set()
-        if step.on_success and step.on_success in all_step_names:
-            targets.add(step.on_success)
-        if step.on_failure and step.on_failure in all_step_names:
-            targets.add(step.on_failure)
-        if step.on_context_limit and step.on_context_limit in all_step_names:
-            targets.add(step.on_context_limit)
-        if step.on_rate_limit and step.on_rate_limit in all_step_names:
-            targets.add(step.on_rate_limit)
-        if step.on_result:
-            for cond in step.on_result.conditions:
-                if cond.route and cond.route in all_step_names:
-                    targets.add(cond.route)
-            for route in step.on_result.routes.values():
-                if route in all_step_names:
-                    targets.add(route)
-        # on_exhausted defaults to the sentinel "escalate" on every RecipeStep.
-        # Skip sentinel values to avoid false edges when a step happens to share
-        # a name with a sentinel (e.g. a step literally named "escalate").
-        if (
-            step.on_exhausted
-            and step.on_exhausted in all_step_names
-            and step.on_exhausted not in RECIPE_TERMINAL_TARGETS
-        ):
-            targets.add(step.on_exhausted)
-        graph[sn] = targets
-        if step.tool == "register_clone_status":
-            barrier_steps.add(sn)
-
-    # Remove outgoing edges from barrier nodes so BFS stops there.
-    for barrier in barrier_steps:
-        graph[barrier] = set()
-
-    # Start BFS from the clone step's on_success target, not the clone step itself.
-    # If the clone fails (on_failure path), no clone was created so no registration
-    # is required on that path.
-    clone_step = recipe.steps[clone_step_name]
-    success_target = clone_step.on_success
-    if not success_target or success_target not in all_step_names:
+    terminal_step_name = _first_unregistered_clone_terminal(recipe, clone_step_name)
+    if terminal_step_name is None:
         return []
-
-    # Find all steps reachable after a successful clone (BFS with barriers suppressed).
-    reachable = bfs_reachable(graph, success_target)
-
-    # Check if any reachable step is a terminal (action == "stop").
-    findings: list[RuleFinding] = []
-    for sn in reachable:
-        step = recipe.steps[sn]
-        if step.action == "stop":
-            findings.append(
-                make_finding(
-                    rule_name="clone-terminal-requires-registration",
-                    step_name=clone_step_name,
-                    message=(
-                        f"Clone step '{clone_step_name}' has a path to terminal step '{sn}' "
-                        f"that bypasses register_clone_status. All terminal paths from a "
-                        f"clone-creating step must pass through register_clone_status to "
-                        f"register the clone for batch cleanup and diagnostics."
-                    ),
-                )
-            )
-            break  # one finding per clone step is sufficient
-
-    return findings
+    return [
+        make_finding(
+            rule_name="clone-terminal-requires-registration",
+            step_name=clone_step_name,
+            message=(
+                f"Clone step '{clone_step_name}' has a path to terminal step "
+                f"'{terminal_step_name}' that bypasses register_clone_status. All terminal paths "
+                f"from a clone-creating step must pass through register_clone_status to register "
+                f"the clone for batch cleanup and diagnostics."
+            ),
+        )
+    ]

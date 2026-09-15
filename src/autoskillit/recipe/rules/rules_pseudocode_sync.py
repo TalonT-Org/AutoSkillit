@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,38 @@ def _get_package_source_dir(callable_path: str) -> Path | None:
     return None
 
 
+def _decode_frozenset_constant_statement(
+    node: ast.AST,
+) -> dict[str, frozenset[str | None]]:
+    """Decode directly assigned frozenset literals without descending into children."""
+    targets: list[ast.Name] = []
+    value: ast.expr | None = None
+    if isinstance(node, ast.Assign):
+        targets = [target for target in node.targets if isinstance(target, ast.Name)]
+        value = node.value
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        targets = [node.target]
+        value = node.value
+    if not targets or value is None:
+        return {}
+    if not (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Name)
+        and value.func.id == "frozenset"
+        and value.args
+    ):
+        return {}
+    members_node = value.args[0]
+    if not isinstance(members_node, (ast.Set, ast.List)):
+        return {}
+    members: set[str | None] = set()
+    for member in members_node.elts:
+        if not isinstance(member, ast.Constant) or not isinstance(member.value, (str, type(None))):
+            return {}
+        members.add(member.value)
+    return {target.id: frozenset(members) for target in targets}
+
+
 def _find_frozenset_constants(source_dir: Path) -> dict[str, frozenset[str | None]]:
     constants: dict[str, frozenset[str | None]] = {}
     for py_file in sorted(source_dir.rglob("*.py")):
@@ -49,37 +82,7 @@ def _find_frozenset_constants(source_dir: Path) -> dict[str, frozenset[str | Non
             logger.warning("Failed to parse %s", py_file, exc_info=True)
             continue
         for node in ast.iter_child_nodes(tree):
-            targets: list[ast.Name] = []
-            val: ast.expr | None = None
-            if isinstance(node, ast.Assign):
-                targets = [t for t in node.targets if isinstance(t, ast.Name)]
-                val = node.value
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                targets = [node.target]
-                val = node.value
-            if not targets or val is None:
-                continue
-            if not (
-                isinstance(val, ast.Call)
-                and isinstance(val.func, ast.Name)
-                and val.func.id == "frozenset"
-                and val.args
-            ):
-                continue
-            inner = val.args[0]
-            if not isinstance(inner, (ast.Set, ast.List)):
-                continue
-            members: set[str | None] = set()
-            valid = True
-            for elt in inner.elts:
-                if isinstance(elt, ast.Constant) and isinstance(elt.value, (str, type(None))):
-                    members.add(elt.value)
-                else:
-                    valid = False
-                    break
-            if valid:
-                for target in targets:
-                    constants[target.id] = frozenset(members)
+            constants.update(_decode_frozenset_constant_statement(node))
     return constants
 
 
@@ -87,6 +90,37 @@ def _member_inlined_in_block(member: str | None, block: str) -> bool:
     if member is None:
         return "None" in block
     return f'"{member}"' in block or f"'{member}'" in block
+
+
+def _iter_family_skill_python_blocks(
+    ctx: ValidationContext,
+    family: str,
+) -> Iterator[tuple[str, list[str]]]:
+    """Yield resolved Python blocks for matching family skills in recipe order."""
+    for _, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill" or step.phoropter_family != family:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md_path = _resolve_skill_md(
+            skill_name,
+            project_root=ctx.project_dir,
+            resolver=ctx.skill_resolver,
+        )
+        if skill_md_path is None:
+            continue
+        try:
+            skill_content = skill_md_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to read %s", skill_md_path, exc_info=True)
+            continue
+        python_blocks = extract_python_blocks(skill_content)
+        if python_blocks:
+            yield skill_name, python_blocks
 
 
 @semantic_rule(
@@ -118,33 +152,7 @@ def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFi
         if not constants:
             continue
 
-        for _, other_step in ctx.recipe.steps.items():
-            if other_step.tool != "run_skill":
-                continue
-            if other_step.phoropter_family != family:
-                continue
-            skill_cmd = other_step.with_args.get("skill_command", "")
-            if not skill_cmd:
-                continue
-            skill_name = resolve_skill_name(skill_cmd)
-            if skill_name is None:
-                continue
-            skill_md_path = _resolve_skill_md(
-                skill_name,
-                project_root=ctx.project_dir,
-                resolver=ctx.skill_resolver,
-            )
-            if skill_md_path is None:
-                continue
-            try:
-                skill_content = skill_md_path.read_text(encoding="utf-8")
-            except OSError:
-                logger.warning("Failed to read %s", skill_md_path, exc_info=True)
-                continue
-            python_blocks = extract_python_blocks(skill_content)
-            if not python_blocks:
-                continue
-
+        for skill_name, python_blocks in _iter_family_skill_python_blocks(ctx, family):
             all_blocks = "\n".join(python_blocks)
 
             for const_name, members in constants.items():

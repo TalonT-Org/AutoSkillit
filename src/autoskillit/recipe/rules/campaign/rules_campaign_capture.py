@@ -263,24 +263,25 @@ def _check_dispatch_capture_type_matches_contract_optionality(
         if not contracts:
             continue
 
+        optional_fields = {
+            field for contract in contracts for field in _identify_optional_output_fields(contract)
+        }
+
         for cap_key, cap_entry in d.capture.items():
             m = RESULT_CAPTURE_RE.match(cap_entry.from_.strip())
             if not m:
                 continue
             field_name = m.group(1)
-            for contract in contracts:
-                optional_fields = _identify_optional_output_fields(contract)
-                if field_name in optional_fields and cap_entry.value_type == "string":
-                    findings.append(
-                        make_finding(
-                            rule_name="dispatch-capture-type-matches-contract-optionality",
-                            step_name="(top-level)",
-                            message=f"Dispatch {d.name!r} capture key {cap_key!r} captures "
-                            f"field '{field_name}' with value_type='string' but target "
-                            f"recipe {d.recipe!r} skill contract allows empty values "
-                            f"for this field. Use 'type: optional_string'.",
-                        )
+            if field_name in optional_fields and cap_entry.value_type == "string":
+                findings.append(
+                    make_finding(
+                        rule_name="dispatch-capture-type-matches-contract-optionality",
+                        step_name="(top-level)",
+                        message=f"Dispatch {d.name!r} capture key {cap_key!r} captures "
+                        f"field '{field_name}' with value_type='string' but target "
+                        f"recipe {d.recipe!r} skill contract allows empty values "
+                        f"for this field. Use 'type: optional_string'.",
                     )
-                    break  # one finding per cap_key is enough
+                )
 
     return findings

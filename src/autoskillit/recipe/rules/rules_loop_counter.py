@@ -28,6 +28,19 @@ def _is_check_loop_iteration_guard(step: RecipeStep) -> bool:
     )
 
 
+def _collect_context_counter_guards(recipe: Recipe) -> dict[str, str]:
+    """Return check-loop guards whose current iteration names a context counter."""
+    guards: dict[str, str] = {}
+    for step_name, step in recipe.steps.items():
+        if not _is_check_loop_iteration_guard(step):
+            continue
+        current_iter_expr = step.with_args.get("current_iteration", "")
+        match = _CTX_VAR_RE.search(current_iter_expr)
+        if match:
+            guards[step_name] = match.group(1)
+    return guards
+
+
 def _build_yaml_predecessor_map(ctx: ValidationContext) -> dict[str, set[str]]:
     preds: dict[str, set[str]] = {}
     for name, step in ctx.recipe.steps.items():
@@ -55,6 +68,52 @@ def _has_disconnected_preds(
     return None
 
 
+def _first_non_max_exceeded_route(step: RecipeStep) -> str | None:
+    """Return the first result-condition route other than the max-exceeded arm."""
+    if step.on_result is None:
+        return None
+    for condition in step.on_result.conditions:
+        if condition.when and "max_exceeded" in condition.when:
+            continue
+        return condition.route
+    return None
+
+
+def _has_dominating_counter_reset(
+    recipe: Recipe,
+    graph: dict[str, set[str]],
+    start: str,
+    guard_name: str,
+    counter_var: str,
+    reachable: set[str],
+) -> bool:
+    """Return whether a non-guard capture of ``counter_var`` dominates a guard."""
+    return any(
+        reset_name != guard_name
+        and (reset_step := recipe.steps.get(reset_name)) is not None
+        and counter_var in reset_step.capture
+        and not _is_check_loop_iteration_guard(reset_step)
+        and all_paths_cross(graph, start, reset_name, guard_name)
+        for reset_name in reachable
+    )
+
+
+def _verify_failure_returns_to_guard(
+    recipe: Recipe,
+    guard_name: str,
+    verify_route: str,
+) -> str | None:
+    """Return a valid verify step's failure target when it returns to its guard."""
+    verify_step = recipe.steps.get(verify_route)
+    if verify_step is None or verify_step.tool not in ("test_check", "run_skill"):
+        return None
+    failure_target = verify_step.on_failure
+    if failure_target is None or failure_target not in recipe.steps:
+        return None
+    fix_edges = _extract_routing_edges(recipe.steps[failure_target])
+    return failure_target if any(edge.target == guard_name for edge in fix_edges) else None
+
+
 @semantic_rule(
     name="loop-counter-cross-path-sharing",
     description=(
@@ -69,19 +128,12 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
     graph = ctx.step_graph
 
     yaml_preds = _build_yaml_predecessor_map(ctx)
+    counter_guards = _collect_context_counter_guards(recipe)
 
     for step_name, step in recipe.steps.items():
-        if step.tool != "run_python":
+        counter_var = counter_guards.get(step_name)
+        if counter_var is None:
             continue
-        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
-            continue
-
-        current_iter_expr = step.with_args.get("current_iteration", "")
-        m = _CTX_VAR_RE.search(current_iter_expr)
-        if not m:
-            continue
-        counter_var = m.group(1)
-
         if counter_var not in step.capture:
             continue
 
@@ -100,11 +152,10 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
 
         modified_graph = _build_graph_without_nodes(graph, full_cycle)
 
-        guard_steps = {
-            sn
-            for sn, s in recipe.steps.items()
-            if s.tool == "run_python"
-            and s.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
+        all_loop_iteration_guards = {
+            name
+            for name, guard_step in recipe.steps.items()
+            if _is_check_loop_iteration_guard(guard_step)
         }
 
         external_preds: dict[str, set[str]] = {}
@@ -113,7 +164,7 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
             if member_step and member_step.tool == "test_check":
                 continue
             for pred in yaml_preds.get(member, set()):
-                if pred not in full_cycle and pred not in guard_steps:
+                if pred not in full_cycle and pred not in all_loop_iteration_guards:
                     external_preds.setdefault(member, set()).add(pred)
 
         for member in list(external_preds):
@@ -163,37 +214,13 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
     recipe = ctx.recipe
 
     for step_name, step in recipe.steps.items():
-        if step.tool != "run_python":
+        if not _is_check_loop_iteration_guard(step):
             continue
-        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
+        non_exit_route = _first_non_max_exceeded_route(step)
+        if non_exit_route is None:
             continue
-
-        if step.on_result is None:
-            continue
-
-        non_exit_route: str | None = None
-        for cond in step.on_result.conditions:
-            if cond.when and "max_exceeded" in cond.when:
-                continue
-            non_exit_route = cond.route
-            break
-
-        if non_exit_route is None or non_exit_route not in recipe.steps:
-            continue
-
-        verify_step = recipe.steps[non_exit_route]
-        if verify_step.tool not in ("test_check", "run_skill"):
-            continue
-
-        failure_target = verify_step.on_failure
-        if failure_target is None or failure_target not in recipe.steps:
-            continue
-
-        fix_step = recipe.steps[failure_target]
-        fix_edges = _extract_routing_edges(fix_step)
-        routes_to_guard = any(edge.target == step_name for edge in fix_edges)
-
-        if routes_to_guard:
+        failure_target = _verify_failure_returns_to_guard(recipe, step_name, non_exit_route)
+        if failure_target is not None:
             findings.append(
                 make_finding(
                     rule_name="loop-guard-before-verify",
@@ -266,17 +293,7 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
     recipe = ctx.recipe
     graph = ctx.step_graph
 
-    guard_steps: dict[str, str] = {}
-    for step_name, step in recipe.steps.items():
-        if step.tool != "run_python":
-            continue
-        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
-            continue
-        current_iter_expr = step.with_args.get("current_iteration", "")
-        m = _CTX_VAR_RE.search(current_iter_expr)
-        if not m:
-            continue
-        guard_steps[step_name] = m.group(1)
+    guard_steps = _collect_context_counter_guards(recipe)
 
     if len(guard_steps) < 2:
         return findings
@@ -288,17 +305,7 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         return findings
 
     for outer_name in audit_outer_guards:
-        outer_step = recipe.steps[outer_name]
-        if outer_step.on_result is None:
-            continue
-
-        non_exit_target: str | None = None
-        for cond in outer_step.on_result.conditions:
-            if cond.when and "max_exceeded" in cond.when:
-                continue
-            non_exit_target = cond.route
-            break
-
+        non_exit_target = _first_non_max_exceeded_route(recipe.steps[outer_name])
         if non_exit_target is None or non_exit_target not in recipe.steps:
             continue
 
@@ -319,39 +326,13 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
             if inner_name not in cycle_candidates:
                 continue
 
-            # Dominator check: at least one reset step must dominate
-            # ``inner_name`` on every path from ``non_exit_target``. The prior
-            # existential-path intersection (``forward & backward``) accepted
-            # any reset reachable in the bilateral region — false-negative for
-            # branching re-entry where the reset sits on only one branch.
-            #
-            # Candidate filter:
-            # - ``inner_name`` is excluded because every ``check_loop_iteration``
-            #   captures its own counter (self-loop), and ``all_paths_cross``
-            #   returns True whenever ``candidate == target``. Without this
-            #   filter, every cyclic guard would trivially "dominate itself"
-            #   and the rule would silently never fire.
-            # - Other ``check_loop_iteration`` guards sharing the counter are
-            #   excluded because their ``capture`` is an INCREMENT (the guard
-            #   runs to consume one iteration), not a reset. Including them
-            #   would treat every parallel guard as a "reset" and produce
-            #   false-positive findings on bundled recipes that have multiple
-            #   guards sharing a counter across parallel branches.
-            # - The actual reset is a step using
-            #   ``autoskillit.smoke_utils.init_counter`` whose ``capture``
-            #   publishes the new value. We identify it by callable.
-            reset_steps = [
-                sn
-                for sn in forward_reachable
-                if sn != inner_name
-                and sn in recipe.steps
-                and inner_counter in recipe.steps[sn].capture
-                and not _is_check_loop_iteration_guard(recipe.steps[sn])
-            ]
-
-            has_reset = any(
-                all_paths_cross(graph, non_exit_target, reset_sn, inner_name)
-                for reset_sn in reset_steps
+            has_reset = _has_dominating_counter_reset(
+                recipe,
+                graph,
+                non_exit_target,
+                inner_name,
+                inner_counter,
+                forward_reachable,
             )
 
             if not has_reset:
@@ -522,18 +503,7 @@ def _check_shared_counter_cross_site_without_push_symmetry(
     recipe = ctx.recipe
     yaml_preds = _build_yaml_predecessor_map(ctx)
 
-    # Collect guard steps and their counter variables
-    guard_steps: dict[str, str] = {}
-    for step_name, step in recipe.steps.items():
-        if step.tool != "run_python":
-            continue
-        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
-            continue
-        current_iter_expr = step.with_args.get("current_iteration", "")
-        m = _CTX_VAR_RE.search(current_iter_expr)
-        if not m:
-            continue
-        guard_steps[step_name] = m.group(1)
+    guard_steps = _collect_context_counter_guards(recipe)
 
     if len(guard_steps) < 2:
         return findings

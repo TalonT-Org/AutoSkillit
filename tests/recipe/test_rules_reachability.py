@@ -8,6 +8,8 @@ Tests verify that:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from autoskillit.recipe._analysis import (
@@ -438,3 +440,36 @@ def test_event_scope_fork_only_one_branch_has_producer_fires():
         f"got {len(matching)}: {[f.message for f in matching]}"
     )
     assert matching[0].step_name == "ci_watch"
+
+
+def test_capture_inversion_ignores_list_only_producer_and_keeps_repeated_reads():
+    recipe = _make_non_dominating_producer_recipe()
+    recipe.steps["branch_producer"] = replace(
+        recipe.steps["branch_producer"],
+        retries=0,
+        capture_list={"list_only": "${{ result.list_only }}"},
+    )
+    joiner = recipe.steps["joiner"]
+    assert joiner.on_result is not None
+    joiner.on_result.conditions.insert(
+        1, StepResultCondition(route="check_list", when="context.list_only == 'yes'")
+    )
+    recipe.steps["check_list"] = RecipeStep(
+        name="check_list",
+        tool="run_cmd",
+        with_args={"cmd": "echo check list"},
+        on_success="reader",
+    )
+    recipe.steps["reader"].with_args["cmd"] = (
+        "echo ${{ context.var_x }} ${{ context.var_x }} ${{ context.list_only }}"
+    )
+
+    findings = _check_capture_inversion(make_validation_context(recipe))
+    scalar_findings = [
+        finding
+        for finding in findings
+        if finding.step_name == "reader" and "context.var_x" in finding.message
+    ]
+    list_findings = [finding for finding in findings if "context.list_only" in finding.message]
+    assert len(scalar_findings) == 2
+    assert list_findings == []

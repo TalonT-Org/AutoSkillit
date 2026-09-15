@@ -278,6 +278,34 @@ class TestPythonCaptureOutputCoverageRule:
         assert undeclared[0].severity == Severity.WARNING
         assert "nonexistent" in undeclared[0].message
 
+    def test_python_capture_list_undeclared_key_fires_warning(self) -> None:
+        """A run_python capture_list referencing an undeclared output must warn."""
+        recipe_yaml = textwrap.dedent("""\
+            name: python-capture-list-invalid
+            description: test
+            steps:
+              check:
+                tool: run_python
+                with:
+                  callable: "autoskillit.smoke_utils.check_review_loop"
+                  pr_number: "42"
+                  cwd: "/tmp"
+                capture_list:
+                  bad: "${{ result.nonexistent }}"
+                retries: 0
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
+        assert len(undeclared) == 1
+        assert undeclared[0].severity == Severity.WARNING
+        assert "result.nonexistent" in undeclared[0].message
+
     def test_python_capture_no_contract_fires_warning(self) -> None:
         """A run_python step with an unknown callable must warn about missing contract."""
         recipe_yaml = textwrap.dedent("""\

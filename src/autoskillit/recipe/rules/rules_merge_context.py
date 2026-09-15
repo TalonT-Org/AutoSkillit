@@ -14,6 +14,20 @@ logger = get_logger(__name__)
 _TEST_GATE_FAILURES = frozenset({"test_gate", "post_rebase_test_gate"})
 
 
+def _failed_step_routes(step: RecipeStep) -> dict[str, set[str]]:
+    """Return result.failed_step categories and their direct route targets."""
+    routes_by_category: dict[str, set[str]] = {}
+    if not step.on_result or not step.on_result.conditions:
+        return routes_by_category
+    for condition in step.on_result.conditions:
+        if condition.when is None:
+            continue
+        match = _FAILED_STEP_PATTERN.search(condition.when)
+        if match:
+            routes_by_category.setdefault(match.group(1), set()).add(condition.route)
+    return routes_by_category
+
+
 def _find_resolve_failures_step(
     start: str, ctx: ValidationContext
 ) -> tuple[str, RecipeStep] | None:
@@ -93,16 +107,10 @@ def _check_merge_test_gate_context_not_forwarded(
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "merge_worktree":
             continue
-        if not step.on_result or not step.on_result.conditions:
-            continue
-
-        test_gate_routes: set[str] = set()
-        for cond in step.on_result.conditions:
-            if cond.when is None:
-                continue
-            m = _FAILED_STEP_PATTERN.search(cond.when)
-            if m and m.group(1) in _TEST_GATE_FAILURES:
-                test_gate_routes.add(cond.route)
+        routes_by_category = _failed_step_routes(step)
+        test_gate_routes: set[str] = set().union(
+            *(routes_by_category.get(category, set()) for category in _TEST_GATE_FAILURES)
+        )
 
         if not test_gate_routes:
             continue
@@ -183,16 +191,7 @@ def _check_merge_failed_step_not_captured(ctx: ValidationContext) -> list[RuleFi
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "merge_worktree":
             continue
-        if not step.on_result or not step.on_result.conditions:
-            continue
-
-        failed_step_routes: set[str] = set()
-        for cond in step.on_result.conditions:
-            if cond.when is None:
-                continue
-            m = _FAILED_STEP_PATTERN.search(cond.when)
-            if m:
-                failed_step_routes.add(cond.route)
+        failed_step_routes: set[str] = set().union(*_failed_step_routes(step).values())
 
         if not failed_step_routes:
             continue

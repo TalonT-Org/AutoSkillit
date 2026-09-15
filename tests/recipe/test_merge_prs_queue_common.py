@@ -934,7 +934,7 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
     # step that routes back to the wait_for_merge_queue step.  The passthrough
     # is NOT run_python and NOT enqueue_pr, so the unbounded-cycle per-branch
     # analysis won't suppress it — the BFS will reach the MQ step and fire.
-    from autoskillit.recipe.schema import RecipeStep
+    from autoskillit.recipe.schema import RecipeStep, StepResultCondition
 
     guard_step_names = [
         name
@@ -962,6 +962,16 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
             on_success=step_name,
         )
 
+    direct_watcher = mq_step_names[0]
+    direct_watcher_step = recipe.steps[direct_watcher]
+    assert direct_watcher_step.on_result is not None
+    direct_watcher_step.on_result.conditions.append(
+        StepResultCondition(
+            when="result.state == 'dropped_merge_group_ci_direct'",
+            route=direct_watcher,
+        )
+    )
+
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     dmgci_findings = [
@@ -973,6 +983,9 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
         f"unbounded-cycle must fire ERROR for unguarded dropped_merge_group_ci branch in "
         f"{recipe.name}; got no such finding among: "
         f"{[(f.step_name, f.severity, f.message[:80]) for f in cycle_findings]}"
+    )
+    assert not any(
+        "dropped_merge_group_ci_direct" in finding.message for finding in cycle_findings
     )
 
 

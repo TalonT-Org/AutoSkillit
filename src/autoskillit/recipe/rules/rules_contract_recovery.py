@@ -66,11 +66,11 @@ def _check_contract_recovery_requires_salvage_route(ctx: ValidationContext) -> l
             context_limit_targets.add(step.on_context_limit)
 
     for step_name, step in recipe.steps.items():
-        if step.tool not in SKILL_TOOLS:
-            continue
-        if step.action == "stop":
-            continue
-        if step_name in context_limit_targets:
+        if (
+            step.tool not in SKILL_TOOLS
+            or step.action == "stop"
+            or step_name in context_limit_targets
+        ):
             continue
         skill_name = step.skill_name
         if not skill_name:

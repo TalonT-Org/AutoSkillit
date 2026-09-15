@@ -39,6 +39,112 @@ def _no_go_routes(step: RecipeStep) -> tuple[str, ...]:
     )
 
 
+def _no_go_route_findings(
+    ctx: ValidationContext,
+    audit_step_name: str,
+    no_go_start: str,
+    audit_steps: list[str],
+    make_plan_steps: set[str],
+    reported: set[tuple[str, str]],
+) -> list[RuleFinding]:
+    """Validate one audit NO GO route's producer, dominance, and successor bindings."""
+    findings: list[RuleFinding] = []
+    reachable = bfs_reachable(ctx.step_graph, no_go_start) | {no_go_start}
+    reachable_planners = sorted(make_plan_steps & reachable)
+    if not reachable_planners:
+        key = (audit_step_name, "producer")
+        if key not in reported:
+            reported.add(key)
+            findings.append(
+                make_finding(
+                    rule_name="inventory-gate-not-bilateral",
+                    step_name=audit_step_name,
+                    message=(
+                        f"NO GO route from '{audit_step_name}' reaches no "
+                        "make-plan producer for a plan disposition report."
+                    ),
+                )
+            )
+        return findings
+    for planner_name in reachable_planners:
+        missing_planner = [
+            name for name in ("audit_cycle_path",) if not _has_bound_input(ctx, planner_name, name)
+        ]
+        if "plan_disposition_path" not in ctx.recipe.steps[planner_name].capture:
+            missing_planner.append("capture.plan_disposition_path")
+        key = (planner_name, "producer")
+        if missing_planner and key not in reported:
+            reported.add(key)
+            findings.append(
+                make_finding(
+                    rule_name="inventory-gate-not-bilateral",
+                    step_name=planner_name,
+                    message=(
+                        f"Step '{planner_name}' is on an audit NO GO route "
+                        f"but lacks executable producer bindings {missing_planner!r}."
+                    ),
+                )
+            )
+    for dry_name in sorted(
+        name
+        for name in reachable
+        if name in ctx.recipe.steps and bound_skill_name(ctx, name) == "dry-walkthrough"
+    ):
+        key = (dry_name, "dominance")
+        if (
+            any(
+                all_paths_cross(ctx.step_graph, no_go_start, planner_name, dry_name)
+                for planner_name in reachable_planners
+            )
+            or key in reported
+        ):
+            continue
+        reported.add(key)
+        findings.append(
+            make_finding(
+                rule_name="inventory-gate-not-bilateral",
+                step_name=dry_name,
+                message=(
+                    f"Dry step '{dry_name}' is reachable from audit NO GO "
+                    "without crossing a make-plan disposition producer."
+                ),
+            )
+        )
+    successor_audits = (set(audit_steps) & reachable) - {audit_step_name}
+    if audit_step_name in reachable and audit_step_name != no_go_start:
+        successor_audits.add(audit_step_name)
+    key = (audit_step_name, "successor")
+    if not successor_audits and key not in reported:
+        reported.add(key)
+        findings.append(
+            make_finding(
+                rule_name="inventory-gate-not-bilateral",
+                step_name=audit_step_name,
+                message=(
+                    f"NO GO route from '{audit_step_name}' cannot reach a "
+                    "successor audit-impl verdict; remediation could not "
+                    "close the active authority."
+                ),
+            )
+        )
+    for successor_name in sorted(successor_audits):
+        key = (successor_name, "successor-input")
+        if _has_bound_input(ctx, successor_name, "prior_audit_cycle_path") or key in reported:
+            continue
+        reported.add(key)
+        findings.append(
+            make_finding(
+                rule_name="inventory-gate-not-bilateral",
+                step_name=successor_name,
+                message=(
+                    f"Successor audit step '{successor_name}' does not consume "
+                    "the bound prior_audit_cycle_path."
+                ),
+            )
+        )
+    return findings
+
+
 @semantic_rule(
     name="inventory-gate-not-bilateral",
     description=(
@@ -100,111 +206,14 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
     reported: set[tuple[str, str]] = set()
     for audit_step_name in audit_steps:
         for no_go_start in _no_go_routes(ctx.recipe.steps[audit_step_name]):
-            reachable = bfs_reachable(ctx.step_graph, no_go_start) | {no_go_start}
-            reachable_planners = sorted(make_plan_steps & reachable)
-            if not reachable_planners:
-                key = (audit_step_name, "producer")
-                if key not in reported:
-                    reported.add(key)
-                    findings.append(
-                        make_finding(
-                            rule_name="inventory-gate-not-bilateral",
-                            step_name=audit_step_name,
-                            message=(
-                                f"NO GO route from '{audit_step_name}' reaches no "
-                                "make-plan producer for a plan disposition report."
-                            ),
-                        )
-                    )
-                continue
-            for planner_name in reachable_planners:
-                missing_planner = [
-                    name
-                    for name in ("audit_cycle_path",)
-                    if not _has_bound_input(ctx, planner_name, name)
-                ]
-                if "plan_disposition_path" not in ctx.recipe.steps[planner_name].capture:
-                    missing_planner.append("capture.plan_disposition_path")
-                if missing_planner:
-                    key = (planner_name, "producer")
-                    if key not in reported:
-                        reported.add(key)
-                        findings.append(
-                            make_finding(
-                                rule_name="inventory-gate-not-bilateral",
-                                step_name=planner_name,
-                                message=(
-                                    f"Step '{planner_name}' is on an audit NO GO route "
-                                    f"but lacks executable producer bindings {missing_planner!r}."
-                                ),
-                            )
-                        )
-            for dry_name in sorted(
-                name
-                for name in reachable
-                if name in ctx.recipe.steps and bound_skill_name(ctx, name) == "dry-walkthrough"
-            ):
-                if any(
-                    all_paths_cross(
-                        ctx.step_graph,
-                        no_go_start,
-                        planner_name,
-                        dry_name,
-                    )
-                    for planner_name in reachable_planners
-                ):
-                    continue
-                key = (dry_name, "dominance")
-                if key in reported:
-                    continue
-                reported.add(key)
-                findings.append(
-                    make_finding(
-                        rule_name="inventory-gate-not-bilateral",
-                        step_name=dry_name,
-                        message=(
-                            f"Dry step '{dry_name}' is reachable from audit NO GO "
-                            "without crossing a make-plan disposition producer."
-                        ),
-                    )
-                )
-            successor_audits = (set(audit_steps) & reachable) - {audit_step_name}
-            if audit_step_name in reachable and audit_step_name != no_go_start:
-                successor_audits.add(audit_step_name)
-            if not successor_audits:
-                key = (audit_step_name, "successor")
-                if key not in reported:
-                    reported.add(key)
-                    findings.append(
-                        make_finding(
-                            rule_name="inventory-gate-not-bilateral",
-                            step_name=audit_step_name,
-                            message=(
-                                f"NO GO route from '{audit_step_name}' cannot reach a "
-                                "successor audit-impl verdict; remediation could not "
-                                "close the active authority."
-                            ),
-                        )
-                    )
-            for successor_name in sorted(successor_audits):
-                if _has_bound_input(
+            findings.extend(
+                _no_go_route_findings(
                     ctx,
-                    successor_name,
-                    "prior_audit_cycle_path",
-                ):
-                    continue
-                key = (successor_name, "successor-input")
-                if key in reported:
-                    continue
-                reported.add(key)
-                findings.append(
-                    make_finding(
-                        rule_name="inventory-gate-not-bilateral",
-                        step_name=successor_name,
-                        message=(
-                            f"Successor audit step '{successor_name}' does not consume "
-                            "the bound prior_audit_cycle_path."
-                        ),
-                    )
+                    audit_step_name,
+                    no_go_start,
+                    audit_steps,
+                    make_plan_steps,
+                    reported,
                 )
+            )
     return findings

@@ -10,6 +10,8 @@ patchability contract this module participates in.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import regex as re
 
 from autoskillit.core import Severity
@@ -83,6 +85,17 @@ _BANNED_BLOCKQUOTE_VARS: frozenset[str] = frozenset(
         "section_diff_content",
     }
 )
+
+
+def _invalid_executable_field_vrule_ids(content: str) -> Iterator[str]:
+    """Yield V-rule IDs with executable fields but no validity signal, in document order."""
+    for match in _VRULE_RE.finditer(content):
+        block = match.group(0)
+        block_lower = block.lower()
+        if "acquisition" not in block_lower and "spec_path" not in block_lower:
+            continue
+        if not _CONTENT_VALIDITY_SIGNALS_RE.search(block):
+            yield match.group(1)
 
 
 @semantic_rule(
@@ -261,23 +274,18 @@ def _check_executable_field_content_validity(
         except OSError:
             continue
 
-        for m in _VRULE_RE.finditer(content):
-            block = m.group(0)
-            block_lower = block.lower()
-            if "acquisition" not in block_lower and "spec_path" not in block_lower:
-                continue
-            if not _CONTENT_VALIDITY_SIGNALS_RE.search(block):
-                findings.append(
-                    make_finding(
-                        rule_name="executable-field-content-validity",
-                        step_name=step_name,
-                        message=(
-                            f"V-rule {m.group(1)} in {skill_name} mentions an executable "
-                            f"field but lacks content-validity criteria "
-                            f"(placeholder/template rejection language)."
-                        ),
-                    )
+        for rule_id in _invalid_executable_field_vrule_ids(content):
+            findings.append(
+                make_finding(
+                    rule_name="executable-field-content-validity",
+                    step_name=step_name,
+                    message=(
+                        f"V-rule {rule_id} in {skill_name} mentions an executable "
+                        f"field but lacks content-validity criteria "
+                        f"(placeholder/template rejection language)."
+                    ),
                 )
+            )
     return findings
 
 

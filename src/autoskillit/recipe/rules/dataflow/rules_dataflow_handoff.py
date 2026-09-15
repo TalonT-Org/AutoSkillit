@@ -164,10 +164,8 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
             continue
 
         producer_contract = get_skill_contract(producer_skill, manifest)
-        if producer_contract is None:
+        if producer_contract is None or producer_contract.outputs:
             continue
-        if producer_contract.outputs:
-            continue  # has declared outputs — implicit-handoff rule covers this
 
         # producer declares outputs: [] — check successors for unsatisfied file-path inputs
         for successor_name in ctx.step_graph.get(step_name, set()):
@@ -197,16 +195,18 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
                 continue
 
             skill_cmd = successor_step.with_args.get("skill_command", "")
+            context_wired_inputs = {
+                inp.name
+                for inp in file_path_inputs
+                if consumer_invocation is not None
+                and (value := consumer_invocation.skill_input(inp.name)) is not None
+                and value.is_present
+                and value.context_dependencies
+            }
             unwired = [
                 inp
                 for inp in file_path_inputs
-                if not (
-                    consumer_invocation is not None
-                    and (value := consumer_invocation.skill_input(inp.name)) is not None
-                    and value.is_present
-                    and value.context_dependencies
-                )
-                and f"context.{inp.name}" not in skill_cmd
+                if inp.name not in context_wired_inputs and f"context.{inp.name}" not in skill_cmd
             ]
             if not unwired:
                 continue  # all file-path inputs wired via context refs

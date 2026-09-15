@@ -122,6 +122,36 @@ def test_cycle_with_retry_exit_but_success_reenters_is_error() -> None:
     assert any(f.severity == Severity.ERROR for f in cycle_findings)
 
 
+def test_retry_exit_reentering_through_outside_node_uses_retry_diagnostic() -> None:
+    """A retry success path that leaves then rejoins the cycle stays retry-specific."""
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(tool="run_cmd", with_args={"cmd": "echo a"}, on_success="B"),
+            "B": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:resolve-failures /tmp", "cwd": "/tmp"},
+                retries=2,
+                on_success="outside",
+                on_failure="A",
+                on_exhausted="done",
+            ),
+            "outside": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo outside"},
+                on_success="A",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert len(cycle_findings) == 1
+    assert cycle_findings[0].severity == Severity.ERROR
+    assert "success paths re-enter the cycle" in cycle_findings[0].message
+    assert "No step in this cycle" not in cycle_findings[0].message
+
+
 def test_no_cycle_is_clean() -> None:
     """Linear A→B→C → no findings for unbounded-cycle."""
     recipe = _make_recipe(

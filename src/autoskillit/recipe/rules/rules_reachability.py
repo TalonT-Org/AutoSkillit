@@ -59,6 +59,28 @@ def _find_capture_producers(ctx: ValidationContext, var: str) -> list[str]:
     return [step.name for step in ctx.recipe.steps.values() if var in (step.capture or {})]
 
 
+def _conditional_capture_is_available(
+    ctx: ValidationContext,
+    entry: str,
+    step_name: str,
+    var: str,
+    recipe_fact_vars: set[str],
+    known_vars: set[str],
+    producers_by_var: dict[str, list[str]],
+) -> tuple[bool, list[str]]:
+    """Determine whether a conditional capture is known at a step on every path."""
+    if var not in recipe_fact_vars or var in known_vars:
+        return True, []
+    producers = producers_by_var.get(var, [])
+    if not producers:
+        return True, []
+    for producer in producers:
+        reachable_without = bfs_reachable_without_barrier(ctx.recipe, entry, producer)
+        if step_name not in reachable_without:
+            return True, producers
+    return False, producers
+
+
 def _find_recipe_entry(ctx: ValidationContext) -> str | None:
     """Return the recipe entry step name: the first step with no in-edges in ``ctx.step_graph``.
 
@@ -109,6 +131,7 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
         for fs in node_facts:
             all_facts_in_recipe.update(fs)
     recipe_fact_vars = {v for v, _ in all_facts_in_recipe}
+    producers_by_var = {var: _find_capture_producers(ctx, var) for var in recipe_fact_vars}
 
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
@@ -121,36 +144,16 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
         known_vars = {var for var, _ in intersected}
 
         for var in context_refs:
-            # Only flag vars that appear in the conditional fact domain of the recipe.
-            # If no step establishes (var, value) via a conditional edge, the var is
-            # captured unconditionally — not an inversion.
-
-            if var not in recipe_fact_vars:
-                continue  # var is not conditionally established anywhere — skip
-
-            if var in known_vars:
-                continue  # fact is known on every path to this step — OK
-
-            producers = _find_capture_producers(ctx, var)
-            if not producers:
-                continue  # no producer anywhere — not an inversion, different bug
-
-            # Strict forward-path dominance: exonerate if any producer strictly
-            # dominates step_name on success paths — every success-path from entry
-            # to step_name crosses the producer, so var is always captured before
-            # step_name runs. Using backward reachability (_ancestors) here would
-            # accept "on some path" producers that don't dominate fork-join readers,
-            # producing false negatives in real inversions. bfs_reachable_without_barrier
-            # builds its own success-path graph from ctx.recipe (post-prune) and
-            # returns all steps reachable from entry without crossing the barrier.
-            # If step_name is NOT in this set, the producer strictly dominates it.
-            exonerated = False
-            for _producer in producers:
-                _reachable_without = bfs_reachable_without_barrier(ctx.recipe, entry, _producer)
-                if step_name not in _reachable_without:
-                    exonerated = True
-                    break
-            if exonerated:
+            capture_available, producers = _conditional_capture_is_available(
+                ctx,
+                entry,
+                step_name,
+                var,
+                recipe_fact_vars,
+                known_vars,
+                producers_by_var,
+            )
+            if capture_available:
                 continue
 
             findings.append(

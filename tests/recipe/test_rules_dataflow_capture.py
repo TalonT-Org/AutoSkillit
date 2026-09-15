@@ -72,6 +72,33 @@ class TestCaptureOutputCoverageRule:
         assert "nonexistent_output" in undeclared[0].message
         assert "implement-worktree-no-merge" in undeclared[0].message
 
+    def test_capture_list_undeclared_key_emits_error(self) -> None:
+        """A skill capture_list references only output keys in its contract."""
+        recipe_yaml = textwrap.dedent("""\
+            name: capture-list-invalid-key
+            description: test
+            steps:
+              implement:
+                tool: run_skill
+                with:
+                  skill_command: /autoskillit:implement-worktree-no-merge ${{ inputs.plan }}
+                capture_list:
+                  nonexistent_output: "${{ result.nonexistent_output }}"
+                retries: 0
+                on_success: done
+                on_failure: done
+              done:
+                action: stop
+                message: Done
+        """)
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
+        findings = run_semantic_rules(recipe)
+        undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+        assert len(undeclared) == 1
+        assert undeclared[0].severity == Severity.ERROR
+        assert "nonexistent_output" in undeclared[0].message
+        assert " via capture_list" in undeclared[0].message
+
     def test_capture_from_skill_with_no_contract_emits_error(self) -> None:
         """A capture step whose skill has no entry in skill_contracts.yaml at all
         must produce a Severity.ERROR finding with rule 'undeclared-capture-key'."""

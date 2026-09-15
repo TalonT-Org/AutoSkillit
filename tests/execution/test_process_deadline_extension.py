@@ -12,7 +12,8 @@ import pytest
 
 import autoskillit.execution.process._process_race as _patch_process__process_race
 from autoskillit.execution.process import run_managed_async
-from autoskillit.execution.process._process_race import _watch_child_activity
+from autoskillit.execution.process._process_race import RaceAccumulator, _watch_child_activity
+from autoskillit.execution.process._race_watchers import _enroll_child_activity_watcher
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -327,20 +328,76 @@ async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
     assert scope_ref[0].deadline == original_deadline_ref[0]
 
 
-def test_marker_dir_threaded_from_run_managed_async() -> None:
-    """run_managed_async threads marker_dir and session_id to _watch_child_activity."""
+@pytest.mark.parametrize(
+    ("enabled", "pid", "lifecycle"),
+    [(True, 17, True), (True, 17, False), (False, 17, True), (True, None, True)],
+)
+def test_child_activity_watcher_enrollment(
+    tmp_path, enabled: bool, pid: int | None, lifecycle: bool
+) -> None:
+    class CapturingTaskGroup:
+        def __init__(self) -> None:
+            self.scheduled: list[tuple[object, tuple[object, ...]]] = []
+
+        def start_soon(self, func, *args) -> None:
+            self.scheduled.append((func, args))
+
+    tg = CapturingTaskGroup()
+
+    async def watcher(*args, **kwargs) -> None:
+        pass
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+    scope_ref: list[anyio.CancelScope | None] = [None]
+    _enroll_child_activity_watcher(
+        tg,
+        _watch_child_activity=watcher,
+        enable_deadline_extension=enabled,
+        observed_pid=pid,
+        timeout_scope_ref=scope_ref,
+        max_extension_seconds=90.0,
+        trigger=trigger,
+        marker_dir=tmp_path,
+        session_id="test-sid",
+        lifecycle_observation_enabled=lifecycle,
+        acc=acc,
+    )
+
+    if not enabled or pid is None:
+        assert tg.scheduled == []
+        return
+
+    assert len(tg.scheduled) == 1
+    scheduled, args = tg.scheduled[0]
+    assert args == ()
+    assert isinstance(scheduled, functools.partial)
+    assert scheduled.func is watcher
+    assert scheduled.args == (pid, scope_ref, 90.0, trigger)
+    assert scheduled.keywords["marker_dir"] == tmp_path
+    assert scheduled.keywords["session_id"] == "test-sid"
+    callback = scheduled.keywords["has_pending_tasks"]
+    if lifecycle:
+        assert callback.__self__ is acc
+        assert callback.__func__ is RaceAccumulator.has_unresolved_obligations
+    else:
+        assert callback is None
+
+
+def test_marker_dir_threaded_from_race_watcher_wiring() -> None:
+    """Race watcher wiring forwards marker_dir and session_id to child activity."""
     import re
     from pathlib import Path
 
-    init_source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+    watcher_source = Path("src/autoskillit/execution/process/_race_watchers.py").read_text()
 
     pattern = (
         r"functools\.partial\(\s*_watch_child_activity,"
         r".*?marker_dir=marker_dir.*?session_id=session_id"
     )
-    match = re.search(pattern, init_source, re.DOTALL)
+    match = re.search(pattern, watcher_source, re.DOTALL)
     assert match is not None, (
-        "run_managed_async does not thread marker_dir and session_id "
+        "race watcher wiring does not thread marker_dir and session_id "
         "to _watch_child_activity via functools.partial"
     )
 

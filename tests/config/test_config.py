@@ -462,6 +462,7 @@ class TestRunSkillConfigFields:
         (
             {"timeout": 0},
             {"stale_threshold": -1},
+            {"completion_drain_timeout": -1},
             {"idle_output_timeout": -1},
             {"max_suppression_seconds": -1},
         ),

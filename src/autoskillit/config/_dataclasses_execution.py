@@ -58,6 +58,10 @@ class RunSkillConfig:
             raise ValueError(f"timeout={self.timeout} must be > 0.")
         if self.stale_threshold < 0:
             raise ValueError(f"stale_threshold={self.stale_threshold} must be >= 0.")
+        if self.completion_drain_timeout < 0:
+            raise ValueError(
+                f"completion_drain_timeout={self.completion_drain_timeout} must be >= 0."
+            )
         if self.idle_output_timeout < 0:
             raise ValueError(f"idle_output_timeout={self.idle_output_timeout} must be >= 0.")
         if self.max_suppression_seconds < 0:

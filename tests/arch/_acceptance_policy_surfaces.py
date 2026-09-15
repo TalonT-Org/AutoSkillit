@@ -116,6 +116,15 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
     PolicyRelaxationApproval(
         path="tests/arch/test_subpackage_isolation_file_counts.py",
         symbol="FILE_COUNT_LIMITS",
+        key="execution/process",
+        before="11",
+        after="12",
+        issue=5036,
+        approved_by="Trecek",
+    ),
+    PolicyRelaxationApproval(
+        path="tests/arch/test_subpackage_isolation_file_counts.py",
+        symbol="FILE_COUNT_LIMITS",
         key="core/io",
         before="8",
         after="9",

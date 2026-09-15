@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -82,22 +83,40 @@ from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVER
 logger = get_logger(__name__)
 
 
-def _configure_interactive_home(
+@dataclass(frozen=True, slots=True)
+class _InteractiveHomeConfig:
+    """Env changes required to bind CODEX_HOME for one interactive launch."""
+
+    env_removes: tuple[str, ...] = ()
+    extras_removes: tuple[str, ...] = ()
+    extras_overrides: Mapping[str, str] = field(default_factory=dict)
+    extras_defaults: Mapping[str, str] = field(default_factory=dict)
+    projected_skill_entries: tuple[tuple[str, str], ...] = ()
+
+    def apply(self, *, base_env: dict[str, str], merged_extras: dict[str, str]) -> None:
+        for key in self.env_removes:
+            base_env.pop(key, None)
+        for key in self.extras_removes:
+            merged_extras.pop(key, None)
+        merged_extras.update(self.extras_overrides)
+        for key, value in self.extras_defaults.items():
+            merged_extras.setdefault(key, value)
+
+
+def _plan_interactive_home(
     *,
     generated_home: Path | None,
     plugin_binding: PluginLaunchBinding | None,
-    base_env: dict[str, str],
-    merged_extras: dict[str, str],
-) -> tuple[tuple[str, str], ...]:
+) -> _InteractiveHomeConfig:
     if generated_home is not None:
-        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-            merged_extras[reserved_key] = str(generated_home)
-        return ()
+        overrides = {key: str(generated_home) for key in CODEX_RESERVED_HOME_ENV_VARS}
+        return _InteractiveHomeConfig(extras_overrides=overrides)
     if plugin_binding is None:
-        return ()
+        return _InteractiveHomeConfig()
     if plugin_binding.load_mode is not PluginLoadMode.PROJECTED_HOME:
-        merged_extras.setdefault(CODEX_HOME_ENV_VAR, str(plugin_binding.plugin_dir))
-        return ()
+        return _InteractiveHomeConfig(
+            extras_defaults={CODEX_HOME_ENV_VAR: str(plugin_binding.plugin_dir)}
+        )
 
     projected_home = plugin_binding.plugin_dir
     if projected_home is None or not projected_home.is_dir():
@@ -106,10 +125,12 @@ def _configure_interactive_home(
         raise ValueError("projected CODEX_HOME must already be canonical")
     if not plugin_binding.projected_skill_entries:
         raise ValueError("projected CODEX_HOME requires nonempty skill entries")
-    base_env.pop("CODEX_SQLITE_HOME", None)
-    merged_extras.pop("CODEX_SQLITE_HOME", None)
-    merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
-    return plugin_binding.projected_skill_entries
+    return _InteractiveHomeConfig(
+        env_removes=("CODEX_SQLITE_HOME",),
+        extras_removes=("CODEX_SQLITE_HOME",),
+        extras_overrides={CODEX_HOME_ENV_VAR: str(projected_home)},
+        projected_skill_entries=plugin_binding.projected_skill_entries,
+    )
 
 
 class CodexCommandMixin(BackendCmdBuilderBase):
@@ -600,12 +621,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
-        projected_skill_entries = _configure_interactive_home(
+        home_config = _plan_interactive_home(
             generated_home=generated_home,
             plugin_binding=plugin_binding,
-            base_env=base_env,
-            merged_extras=merged_extras,
         )
+        home_config.apply(base_env=base_env, merged_extras=merged_extras)
+        projected_skill_entries = home_config.projected_skill_entries
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         if generated_home is not None:
             effective_required |= CODEX_RESERVED_HOME_ENV_VARS

@@ -1852,6 +1852,16 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
     assert prepared.spec.managed_skill_catalog is catalog
 
 
+def _capture_optional_codex_config(captured: dict[str, object], spec: object) -> None:
+    from autoskillit.core import CmdSpec
+
+    typed_spec = cast(CmdSpec, spec)
+    config_path = Path(typed_spec.env["CODEX_HOME"]) / "config.toml"
+    if config_path.is_file():
+        captured["config_text"] = config_path.read_text()
+        captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+
+
 def _prepare_codex_order_composition(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1935,11 +1945,7 @@ def _prepare_codex_order_composition(
     def validate_interactive_invocation(self, spec):  # type: ignore[no-untyped-def]
         cast(list[str], captured["events"]).append("validated")
         captured["spec"] = spec
-        generated_home = Path(spec.env["CODEX_HOME"])
-        config_path = generated_home / "config.toml"
-        if config_path.is_file():
-            captured["config_text"] = config_path.read_text()
-            captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+        _capture_optional_codex_config(captured, spec)
         errors = original_validate(self, spec)
         cast(list[list[str]], captured["validation_errors"]).append(errors)
         return errors

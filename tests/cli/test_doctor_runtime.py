@@ -247,7 +247,8 @@ class TestCheckCodexRuntimePolicy:
             generated_home=tmp_path / "codex-sessions" / "session-123",
         )
 
-        assert result.message.count("Codex default") == 2
+        assert "context_window_tokens=Codex default" in result.message
+        assert "auto_compact_threshold_tokens=Codex default" in result.message
 
 
 class TestCheckSessionIndexProjection:

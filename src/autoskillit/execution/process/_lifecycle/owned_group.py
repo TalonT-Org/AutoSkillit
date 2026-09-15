@@ -382,12 +382,19 @@ class OwnedProcessGroup:
         if escalate and surviving_identities:
             escalation_deadline = time.monotonic() + timeout
             for pid, create_time in surviving_identities:
-                cleanup = kill_process_tree(
-                    pid,
-                    timeout=timeout,
-                    expected_create_time=create_time,
-                    deadline=escalation_deadline,
-                )
+                try:
+                    cleanup = kill_process_tree(
+                        pid,
+                        timeout=timeout,
+                        expected_create_time=create_time,
+                        deadline=escalation_deadline,
+                    )
+                except Exception:
+                    logger.warning(
+                        "owned_group_survivor_escalation_failed", pid=pid, exc_info=True
+                    )
+                    self._record_incomplete(pid)
+                    continue
                 if cleanup.access_denied_pids:
                     self._snapshot = self._snapshot.merge(
                         ProcessObservationSnapshot(

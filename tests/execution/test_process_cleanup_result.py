@@ -612,6 +612,33 @@ def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
     assert clock[0] == pytest.approx(100.1)
 
 
+def test_cleanup_records_failed_survivor_escalation_as_incomplete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    identity = (901, 1.0)
+    owner = _spawn_owner(monkeypatch, tmp_path)
+    owner.merge_snapshot(_owned_group.ProcessObservationSnapshot(process_identities=(identity,)))
+    owner.process.returncode = 0
+    monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
+    monkeypatch.setattr(owner, "_scan_group", lambda: ())
+    monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
+    monkeypatch.setattr(owner, "_wait_group_members", lambda _timeout: ())
+    monkeypatch.setattr(owner, "_identity_is_alive", lambda _identity: True)
+    monkeypatch.setattr(_owned_group.time, "sleep", lambda _seconds: None)
+
+    def fail_escalation(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(_owned_group, "kill_process_tree", fail_escalation)
+
+    with structlog.testing.capture_logs() as logs:
+        _, result = owner.cleanup(timeout=0.1, escalate=True)
+
+    assert result.survivor_pids == (901,)
+    assert result.observation_complete is False
+    assert any(entry.get("event") == "owned_group_survivor_escalation_failed" for entry in logs)
+
+
 def test_settle_preserving_converts_cleanup_failure_to_evidence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

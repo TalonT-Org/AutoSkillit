@@ -668,6 +668,29 @@ def test_projected_interactive_validator_rejects_noncanonical_home(tmp_path: Pat
     ]
 
 
+def test_projected_interactive_validator_rejects_unreadable_home(tmp_path: Path) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(tmp_path / "missing-home")
+
+    errors = backend.validate_interactive_invocation(replace(spec, env=environment))
+
+    assert len(errors) == 1
+    assert errors[0].startswith("Codex projected interactive CODEX_HOME is unreadable:")
+
+
+def test_projected_interactive_validator_rejects_home_file(tmp_path: Path) -> None:
+    backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
+    home_file = tmp_path / "home-file"
+    home_file.write_text("not a directory", encoding="utf-8")
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(home_file)
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        "Codex projected interactive CODEX_HOME must be a canonical real directory"
+    ]
+
+
 def test_managed_interactive_validator_rejects_mismatched_reserved_homes(tmp_path: Path) -> None:
     backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
     environment = dict(spec.env)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -756,13 +757,72 @@ class TestCrossInvocationResume:
         assert captured_specs[0] == NoResume()
 
 
+@pytest.mark.parametrize("fleet_mode", ["dispatch", "campaign"])
+def test_context_exhaustion_ends_fleet_session(
+    fleet_mode: Literal["dispatch", "campaign"],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.cli.session._session_launch import _InfraExitSignal
+    from autoskillit.core import (
+        CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
+        InfraExitCategory,
+    )
+
+    calls = 0
+
+    def _fake_run_session(*args: object, **kwargs: object) -> _InfraExitSignal:
+        nonlocal calls
+        calls += 1
+        return _InfraExitSignal(
+            session_id="terminal-session",
+            category=InfraExitCategory.CONTEXT_EXHAUSTED,
+        )
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "_run_interactive_session",
+        _fake_run_session,
+    )
+    monkeypatch.setattr(
+        _patch_cli_prompts,
+        "_build_fleet_dispatch_prompt",
+        lambda *args, **kwargs: "dispatch-prompt",
+    )
+    monkeypatch.setattr(
+        _patch_cli_prompts,
+        "_build_fleet_campaign_prompt",
+        lambda *args, **kwargs: "campaign-prompt",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
+
+    if fleet_mode == "campaign":
+        state_path = tmp_path / "state.json"
+        state_path.write_text("{}", encoding="utf-8")
+        _launch_fleet_session(
+            _make_campaign_recipe(),
+            "campaign-id",
+            state_path,
+            None,
+            fleet_mode=fleet_mode,
+        )
+    else:
+        _launch_fleet_session(None, None, None, None, fleet_mode=fleet_mode)
+
+    assert calls == 1
+    assert capsys.readouterr().out.strip() == CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE
+
+
 class TestSessionIdPersistence:
     """T3f: orchestrator_session_id is persisted on infra-resume and reload."""
 
     def test_session_id_written_to_state_on_infra_resume(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """InfraExitSignal session_id is persisted to CampaignState."""
+        """A resumable InfraExitSignal session_id is persisted to CampaignState."""
         from autoskillit.core import InfraExitCategory
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
 
@@ -776,7 +836,7 @@ class TestSessionIdPersistence:
 
         call_sequence = iter(
             [
-                InfraExitCategory.CONTEXT_EXHAUSTED,
+                InfraExitCategory.API_ERROR,
                 None,
             ]
         )

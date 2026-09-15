@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from autoskillit.core import (
+    CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     FLEET_SESSION_REQUIRED_ENV,
     CodingAgentBackend,
     FleetSessionEnv,
+    InfraExitCategory,
     NamedResume,
     NoResume,
     SkillExecutionRole,
@@ -273,6 +275,9 @@ def _launch_fleet_session(
                 if session_signal is None:
                     break
                 if not isinstance(session_signal, str):
+                    if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                        print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
+                        break
                     infra_resume_count += 1
                     if infra_resume_count >= _MAX_INFRA_RESUMES:
                         raise SystemExit(
@@ -391,6 +396,9 @@ def _launch_fleet_session(
                 if session_signal is None:
                     break
                 if not isinstance(session_signal, str):
+                    if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                        print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
+                        break
                     infra_resume_count += 1
                     if infra_resume_count >= _MAX_INFRA_RESUMES:
                         raise SystemExit(

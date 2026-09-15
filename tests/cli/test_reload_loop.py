@@ -509,6 +509,9 @@ def test_fleet_reload_relaunches_without_resume(
 
     call_count = [0]
     captured_resume_specs: list = []
+    captured_skill_compilations: list[object | None] = []
+    skill_compilation = MagicMock()
+    skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
     def fake_run_interactive_session(
         prompt,
@@ -519,6 +522,7 @@ def test_fleet_reload_relaunches_without_resume(
         initial_message=None,
         required_env=None,
         backend=None,
+        skill_compilation=None,
         force_inactive_agent_teams=False,
         mcp_tool_timeout_sec=None,
         cook_ceiling_seconds=None,
@@ -526,6 +530,7 @@ def test_fleet_reload_relaunches_without_resume(
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)
+        captured_skill_compilations.append(skill_compilation)
         if call_count[0] == 1:
             return "franchise-sess"
         return None
@@ -544,6 +549,10 @@ def test_fleet_reload_relaunches_without_resume(
         "_build_fleet_dispatch_prompt",
         lambda mcp_prefix, **kw: "test-prompt",
     )
+    monkeypatch.setattr(
+        "autoskillit.workspace.compile_session_skill_catalog",
+        lambda *_args, **_kwargs: skill_compilation,
+    )
     monkeypatch.chdir(tmp_path)
 
     from autoskillit.cli.fleet import _launch_fleet_session
@@ -560,3 +569,4 @@ def test_fleet_reload_relaunches_without_resume(
     assert isinstance(captured_resume_specs[0], NoResume)
     assert isinstance(captured_resume_specs[1], NamedResume)
     assert captured_resume_specs[1].session_id == "franchise-sess"
+    assert all(compilation is skill_compilation for compilation in captured_skill_compilations)

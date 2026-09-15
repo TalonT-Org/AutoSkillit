@@ -34,6 +34,8 @@ def test_fleet_call_sites_omit_managed_order_inputs(
     from autoskillit.core import FLEET_SESSION_REQUIRED_ENV, NoResume
 
     calls: list[tuple[str, dict[str, object]]] = []
+    skill_compilation = MagicMock()
+    skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
     def capture_session(prompt: str, **kwargs: object) -> None:
         calls.append((prompt, kwargs))
@@ -52,6 +54,10 @@ def test_fleet_call_sites_omit_managed_order_inputs(
         _patch_cli_prompts,
         "_build_fleet_campaign_prompt",
         lambda *args, **kwargs: "campaign-prompt",
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.compile_session_skill_catalog",
+        lambda *_args, **_kwargs: skill_compilation,
     )
     monkeypatch.chdir(tmp_path)
     state_path = tmp_path / "state.json"
@@ -83,12 +89,12 @@ def test_fleet_call_sites_omit_managed_order_inputs(
     assert kwargs["project_dir"] == tmp_path
     assert kwargs["required_env"] == FLEET_SESSION_REQUIRED_ENV
     assert kwargs["backend"] is not None
+    assert kwargs["skill_compilation"] is skill_compilation
     assert isinstance(kwargs["resume_spec"], NoResume)
     extra_env = kwargs["extra_env"]
     assert isinstance(extra_env, dict)
     assert extra_env["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
     managed_order_inputs = {
-        "skill_compilation",
         "managed_home",
         "plugin_binding",
         "retained_projection_binding",

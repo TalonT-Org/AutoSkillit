@@ -222,14 +222,13 @@ class BackendCmdBuilderBase(ABC):
             extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
         if write_guard_tool_names:
             extras[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] = ",".join(sorted(write_guard_tool_names))
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
-        if campaign_id:
-            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+        for key, value in (
+            ("SCENARIO_STEP_NAME", scenario_step_name),
+            (CAMPAIGN_ID_ENV_VAR, os.environ.get(CAMPAIGN_ID_ENV_VAR)),
+            (KITCHEN_SESSION_ID_ENV_VAR, os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)),
+        ):
+            if value:
+                extras[key] = value
         if write_prefix:
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = write_prefix
         if write_prefixes:

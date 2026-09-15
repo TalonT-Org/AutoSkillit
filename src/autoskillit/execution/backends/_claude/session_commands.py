@@ -60,6 +60,55 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
     def build_headless_cmd(self, *args: Any, **kwargs: Any) -> CmdSpec:
         """Build the concrete Claude headless command."""
 
+    def _skill_session_environment_inputs(
+        self,
+        *,
+        skill_command: str,
+        cwd: str,
+        completion_marker: str,
+        exit_after_stop_delay_ms: int,
+        stream_idle_timeout_ms: int,
+        mcp_tool_timeout_sec: float,
+        scenario_step_name: str,
+        child_outcome_log_dir: str,
+        allowed_write_prefix: str,
+        allowed_write_prefixes: tuple[str, ...],
+        provider_extras: Mapping[str, str] | None,
+        profile_name: str,
+    ) -> tuple[dict[str, str], dict[str, str], frozenset[str]]:
+        extras = self._assemble_shared_env_extras(
+            session_type=SESSION_TYPE_SKILL,
+            applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
+            child_outcome_log_dir=child_outcome_log_dir,
+        )
+        extras.update(_claude_host_attestation_env(None))
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        if exit_after_stop_delay_ms > 0:
+            extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
+        if stream_idle_timeout_ms > 0:
+            extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
+        if isinstance(mcp_tool_timeout_sec, (int, float)) and mcp_tool_timeout_sec > 0:
+            extras[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
+        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
+        if provider_extras:
+            for k, v in provider_extras.items():
+                if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
+                    extras[k] = v
+        extras.update(_CLAUDE_SKILL_SESSION_HARDENING)
+        if profile_name:
+            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
+            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        required = SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys()
+        return extras, filtered_base, required
+
     def build_skill_session_cmd(
         self,
         skill_command: str,
@@ -146,42 +195,26 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
                 include_scope_discipline=False,
             ),
         )
-        extras = self._assemble_shared_env_extras(
-            session_type=SESSION_TYPE_SKILL,
-            applicable_guards=self.capabilities.applicable_guards,
-            write_guard_tool_names=self.capabilities.write_guard_tool_names,
-            write_prefix=allowed_write_prefix,
-            write_prefixes=allowed_write_prefixes,
+        extras, filtered_base, required = self._skill_session_environment_inputs(
+            skill_command=skill_command,
             cwd=cwd,
+            completion_marker=completion_marker,
+            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=stream_idle_timeout_ms,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             scenario_step_name=scenario_step_name,
             child_outcome_log_dir=child_outcome_log_dir,
+            allowed_write_prefix=allowed_write_prefix,
+            allowed_write_prefixes=allowed_write_prefixes,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
         )
-        extras.update(_claude_host_attestation_env(None))
-        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
-        if exit_after_stop_delay_ms > 0:
-            extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
-        if stream_idle_timeout_ms > 0:
-            extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if isinstance(mcp_tool_timeout_sec, (int, float)) and mcp_tool_timeout_sec > 0:
-            extras[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
-        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
-        if provider_extras:
-            for k, v in provider_extras.items():
-                if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
-                    extras[k] = v
-        extras.update(_CLAUDE_SKILL_SESSION_HARDENING)
-        if profile_name:
-            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
-            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-
-        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         spec = self.build_headless_cmd(
             prompt,
             model=model,
             env_extras=extras,
             base=filtered_base,
-            required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
+            required=required,
             force_inactive_agent_teams=force_inactive_agent_teams,
             project_root=cwd,
         )

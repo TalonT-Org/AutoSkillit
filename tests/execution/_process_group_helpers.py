@@ -33,6 +33,17 @@ def _capture_owned_group_identities(
     return identities
 
 
+def _wait_for_identity_exit(
+    identities: Mapping[int, float], *, timeout: float, poll_interval: float
+) -> set[int]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _live_identities(identities):
+            return set()
+        time.sleep(poll_interval)
+    return _live_identities(identities)
+
+
 def _cleanup_process_identities(
     identities: Mapping[int, float],
     *,
@@ -49,12 +60,10 @@ def _cleanup_process_identities(
         except (OSError, psutil.Error):
             continue
 
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not _live_identities(targets):
-            return set()
-        time.sleep(poll_interval)
-    for pid in _live_identities(targets):
+    live = _wait_for_identity_exit(targets, timeout=timeout, poll_interval=poll_interval)
+    if not live:
+        return set()
+    for pid in live:
         try:
             candidate = psutil.Process(pid)
             if candidate.create_time() == targets[pid]:
@@ -62,12 +71,7 @@ def _cleanup_process_identities(
         except (OSError, psutil.Error):
             continue
 
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not _live_identities(targets):
-            return set()
-        time.sleep(poll_interval)
-    return _live_identities(targets)
+    return _wait_for_identity_exit(targets, timeout=timeout, poll_interval=poll_interval)
 
 
 def _owned_group_anchor_is_valid(
@@ -86,6 +90,15 @@ def _owned_group_anchor_is_valid(
         return False
 
 
+def _signal_owned_process_group(
+    process: subprocess.Popen[object], leader_create_time: float | None, signum: signal.Signals
+) -> bool:
+    if leader_create_time is None or not _owned_group_anchor_is_valid(process, leader_create_time):
+        return False
+    os.killpg(process.pid, signum)
+    return True
+
+
 def _cleanup_owned_process_group(
     process: subprocess.Popen[object],
     *,
@@ -97,35 +110,22 @@ def _cleanup_owned_process_group(
     if not identities:
         return set()
     leader_create_time = identities.get(process.pid)
-    if leader_create_time is not None and _owned_group_anchor_is_valid(
-        process, leader_create_time
-    ):
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except OSError:
-            pass
+    try:
+        _signal_owned_process_group(process, leader_create_time, signal.SIGTERM)
+    except OSError:
+        pass
 
     nonleader = {pid: created for pid, created in identities.items() if pid != process.pid}
-    deadline = time.monotonic() + timeout
-    while _live_identities(nonleader) and time.monotonic() < deadline:
-        time.sleep(poll_interval)
-    if _live_identities(nonleader):
+    if _wait_for_identity_exit(nonleader, timeout=timeout, poll_interval=poll_interval):
         try:
-            if leader_create_time is not None and _owned_group_anchor_is_valid(
-                process, leader_create_time
-            ):
-                os.killpg(process.pid, signal.SIGKILL)
+            _signal_owned_process_group(process, leader_create_time, signal.SIGKILL)
         except OSError:
             pass
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         try:
-            if leader_create_time is not None and _owned_group_anchor_is_valid(
-                process, leader_create_time
-            ):
-                os.killpg(process.pid, signal.SIGKILL)
-            else:
+            if not _signal_owned_process_group(process, leader_create_time, signal.SIGKILL):
                 process.kill()
         except OSError:
             process.kill()

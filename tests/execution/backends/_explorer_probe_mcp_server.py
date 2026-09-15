@@ -139,6 +139,90 @@ class _ProbeAudit:
             os.close(audit_fd)
 
 
+def _bounded_literal_search(
+    root: Path,
+    audit: _ProbeAudit,
+    needle: str,
+) -> dict[str, Any]:
+    try:
+        _bounded_utf8(needle, limit=_MAX_INPUT_BYTES, field="needle")
+        text = _read_fixed_regular_file(root, "readable.txt").decode("utf-8")
+        matches: list[dict[str, Any]] = []
+        total_matches = 0
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if needle in line:
+                total_matches += 1
+                if len(matches) < _MAX_MATCHES:
+                    matches.append(
+                        {
+                            "line": line_number,
+                            "text": _truncate_utf8(line, limit=_MAX_RESULT_LINE_BYTES),
+                        }
+                    )
+        result = {
+            "matches": matches,
+            "total_matches": total_matches,
+            "truncated": total_matches > len(matches),
+        }
+    except (UnicodeDecodeError, ValueError):
+        audit.append("bounded_literal_search", "denied")
+        raise
+    audit.append("bounded_literal_search", "allowed")
+    return result
+
+
+def _parse_python_ast(root: Path, audit: _ProbeAudit) -> dict[str, Any]:
+    try:
+        source = _read_fixed_regular_file(root, "semantic.py").decode("utf-8")
+        tree = ast.parse(source, filename="semantic.py", mode="exec")
+        names: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if len(node.name.encode("utf-8")) > _MAX_INPUT_BYTES:
+                    raise ValueError("function name exceeds the fixed byte bound")
+                names.append(node.name)
+                if len(names) == _MAX_FUNCTION_NAMES:
+                    break
+        result = {"function_names": names, "truncated": len(names) == _MAX_FUNCTION_NAMES}
+    except (SyntaxError, UnicodeDecodeError, ValueError):
+        audit.append("parse_python_ast", "denied")
+        raise
+    audit.append("parse_python_ast", "allowed")
+    return result
+
+
+def _optional_capability_status(_root: Path, audit: _ProbeAudit) -> dict[str, str]:
+    result = {
+        "lsp": "LSP_UNSUPPORTED",
+        "tree_sitter": "TREE_SITTER_UNSUPPORTED",
+    }
+    audit.append("optional_capability_status", "allowed")
+    return result
+
+
+def _deny_operations(
+    _root: Path,
+    audit: _ProbeAudit,
+    operations: list[ForbiddenOperation],
+) -> dict[str, Any]:
+    if len(operations) > _MAX_OPERATION_COUNT:
+        audit.append("deny_operations", "denied")
+        raise ValueError(f"operations exceeds {_MAX_OPERATION_COUNT} entries")
+    encoded_size = len(
+        json.dumps([operation.value for operation in operations], separators=(",", ":")).encode(
+            "utf-8"
+        )
+    )
+    if encoded_size > _MAX_INPUT_BYTES:
+        audit.append("deny_operations", "denied")
+        raise ValueError(f"operations exceeds {_MAX_INPUT_BYTES} UTF-8 bytes")
+    denied = []
+    for operation in operations:
+        audit.append(operation.value, "denied")
+        denied.append({"operation": operation.value, "status": "denied"})
+    return {"denied": denied, "count": len(denied)}
+
+
 def build_probe_server(repository_root: Path, audit_jsonl_path: Path) -> FastMCP:
     """Build the standalone stdio server with its intentionally closed tool surface."""
     root = _validated_root(repository_root)
@@ -148,82 +232,22 @@ def build_probe_server(repository_root: Path, audit_jsonl_path: Path) -> FastMCP
     @server.tool(name="bounded_literal_search")
     def bounded_literal_search(needle: str) -> dict[str, Any]:
         """Find bounded literal occurrences in the fixed ``readable.txt`` probe file."""
-        try:
-            _bounded_utf8(needle, limit=_MAX_INPUT_BYTES, field="needle")
-            text = _read_fixed_regular_file(root, "readable.txt").decode("utf-8")
-            matches: list[dict[str, Any]] = []
-            total_matches = 0
-            for line_number, line in enumerate(text.splitlines(), start=1):
-                if needle in line:
-                    total_matches += 1
-                    if len(matches) < _MAX_MATCHES:
-                        matches.append(
-                            {
-                                "line": line_number,
-                                "text": _truncate_utf8(line, limit=_MAX_RESULT_LINE_BYTES),
-                            }
-                        )
-            result = {
-                "matches": matches,
-                "total_matches": total_matches,
-                "truncated": total_matches > len(matches),
-            }
-        except (UnicodeDecodeError, ValueError):
-            audit.append("bounded_literal_search", "denied")
-            raise
-        audit.append("bounded_literal_search", "allowed")
-        return result
+        return _bounded_literal_search(root, audit, needle)
 
     @server.tool(name="parse_python_ast")
     def parse_python_ast() -> dict[str, Any]:
         """Parse fixed ``semantic.py`` source with stdlib AST without importing it."""
-        try:
-            source = _read_fixed_regular_file(root, "semantic.py").decode("utf-8")
-            tree = ast.parse(source, filename="semantic.py", mode="exec")
-            names: list[str] = []
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if len(node.name.encode("utf-8")) > _MAX_INPUT_BYTES:
-                        raise ValueError("function name exceeds the fixed byte bound")
-                    names.append(node.name)
-                    if len(names) == _MAX_FUNCTION_NAMES:
-                        break
-            result = {"function_names": names, "truncated": len(names) == _MAX_FUNCTION_NAMES}
-        except (SyntaxError, UnicodeDecodeError, ValueError):
-            audit.append("parse_python_ast", "denied")
-            raise
-        audit.append("parse_python_ast", "allowed")
-        return result
+        return _parse_python_ast(root, audit)
 
     @server.tool(name="optional_capability_status")
     def optional_capability_status() -> dict[str, str]:
         """Report intentionally unavailable optional analyzers without probing the host."""
-        result = {
-            "lsp": "LSP_UNSUPPORTED",
-            "tree_sitter": "TREE_SITTER_UNSUPPORTED",
-        }
-        audit.append("optional_capability_status", "allowed")
-        return result
+        return _optional_capability_status(root, audit)
 
     @server.tool(name="deny_operations")
     def deny_operations(operations: list[ForbiddenOperation]) -> dict[str, Any]:
         """Record closed-set operation requests as denied, without attempting any action."""
-        if len(operations) > _MAX_OPERATION_COUNT:
-            audit.append("deny_operations", "denied")
-            raise ValueError(f"operations exceeds {_MAX_OPERATION_COUNT} entries")
-        encoded_size = len(
-            json.dumps(
-                [operation.value for operation in operations], separators=(",", ":")
-            ).encode("utf-8")
-        )
-        if encoded_size > _MAX_INPUT_BYTES:
-            audit.append("deny_operations", "denied")
-            raise ValueError(f"operations exceeds {_MAX_INPUT_BYTES} UTF-8 bytes")
-        denied = []
-        for operation in operations:
-            audit.append(operation.value, "denied")
-            denied.append({"operation": operation.value, "status": "denied"})
-        return {"denied": denied, "count": len(denied)}
+        return _deny_operations(root, audit, operations)
 
     return server
 

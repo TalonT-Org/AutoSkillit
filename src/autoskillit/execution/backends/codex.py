@@ -177,6 +177,8 @@ def _attest_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin) -
         env=spec.env,
         cwd=spec.cwd,
         catalog_dir=catalog_dir,
+        # No legacy/catalog split for a projected home: the catalog dir is
+        # the expected discovery root itself.
         expected_discovery_root=catalog_dir,
         expected_entries=spec.projected_skill_entries,
         version=raw_version,
@@ -538,6 +540,8 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             env=spec.env,
             cwd=spec.cwd,
             catalog_dir=catalog_dir,
+            # Codex reports the legacy top-level "skills" symlink as the
+            # discovery root for a managed home, not the add-dir catalog.
             expected_discovery_root=generated_home
             / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
             expected_entries=managed_catalog.skill_entries,

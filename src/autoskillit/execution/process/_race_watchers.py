@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
@@ -29,7 +30,7 @@ def _enroll_race_watchers(
     _watch_stdout_idle: Callable[..., Any],
     owner: OwnedProcessGroup,
     line_driver_session: LineDriverSession,
-    process: Any,
+    process: subprocess.Popen[Any],
     capture_file: IO[bytes],
     acc: RaceAccumulator,
     trigger: anyio.Event,

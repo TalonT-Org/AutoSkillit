@@ -98,6 +98,68 @@ def _expand_skill_path(token: str, aliases: Mapping[str, Path]) -> Path:
     return path
 
 
+def _parse_skill_roots(lines: Sequence[str]) -> tuple[tuple[Path, ...], dict[str, Path]]:
+    aliases: dict[str, Path] = {}
+    roots: list[Path] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _ROOT_RE.fullmatch(line)
+        if match is None:
+            raise ValueError(f"malformed Skill roots entry: {line!r}")
+        alias = match.group("alias")
+        if alias in aliases:
+            raise ValueError(f"duplicate skill-root alias: {alias}")
+        root = Path(match.group("path"))
+        if not root.is_absolute():
+            raise ValueError(f"skill root is not absolute: {root}")
+        aliases[alias] = root
+        roots.append(root)
+    return tuple(roots), aliases
+
+
+def _new_skill_name(raw_name: str, paths: Mapping[str, Path]) -> str:
+    name = raw_name.strip()
+    if name in paths:
+        raise ValueError(f"duplicate skill name: {name}")
+    return name
+
+
+def _parse_available_skills(
+    lines: Sequence[str],
+    aliases: Mapping[str, Path],
+) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    pending_name: str | None = None
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _SKILL_RE.fullmatch(line)
+        if match is not None:
+            if pending_name is not None:
+                raise ValueError(f"skill entry {pending_name!r} has no path")
+            name = _new_skill_name(match.group("name"), paths)
+            paths[name] = _expand_skill_path(match.group("path"), aliases)
+            continue
+        start_match = _SKILL_START_RE.match(line)
+        if start_match is not None:
+            if pending_name is not None:
+                raise ValueError(f"skill entry {pending_name!r} has no path")
+            pending_name = _new_skill_name(start_match.group("name"), paths)
+            continue
+        path_match = _PATH_ONLY_RE.fullmatch(line)
+        if path_match is not None and pending_name is not None:
+            paths[pending_name] = _expand_skill_path(path_match.group("path"), aliases)
+            pending_name = None
+            continue
+        raise ValueError(f"malformed Available skills entry: {line!r}")
+    if pending_name is not None:
+        raise ValueError(f"skill entry {pending_name!r} has no path")
+    return paths
+
+
 def parse_skills_instructions(prompt_input_json: str) -> DiscoveredSkills:
     """Parse the consumed Codex skills grammar from a prompt-input JSON envelope."""
     try:
@@ -126,58 +188,11 @@ def parse_skills_instructions(prompt_input_json: str) -> DiscoveredSkills:
     if any("(file:" in line for line in lines[: skills_index + 1]):
         raise ValueError("skill path line appears outside Available skills")
 
-    aliases: dict[str, Path] = {}
-    roots: list[Path] = []
-    for raw_line in lines[roots_index + 1 : skills_index]:
-        line = raw_line.strip()
-        if not line:
-            continue
-        match = _ROOT_RE.fullmatch(line)
-        if match is None:
-            raise ValueError(f"malformed Skill roots entry: {line!r}")
-        alias = match.group("alias")
-        if alias in aliases:
-            raise ValueError(f"duplicate skill-root alias: {alias}")
-        root = Path(match.group("path"))
-        if not root.is_absolute():
-            raise ValueError(f"skill root is not absolute: {root}")
-        aliases[alias] = root
-        roots.append(root)
-
-    paths: dict[str, Path] = {}
-    pending_name: str | None = None
-    for raw_line in lines[skills_index + 1 : -1]:
-        line = raw_line.strip()
-        if not line:
-            continue
-        match = _SKILL_RE.fullmatch(line)
-        if match is not None:
-            if pending_name is not None:
-                raise ValueError(f"skill entry {pending_name!r} has no path")
-            name = match.group("name").strip()
-            if name in paths:
-                raise ValueError(f"duplicate skill name: {name}")
-            paths[name] = _expand_skill_path(match.group("path"), aliases)
-            continue
-        start_match = _SKILL_START_RE.match(line)
-        if start_match is not None:
-            if pending_name is not None:
-                raise ValueError(f"skill entry {pending_name!r} has no path")
-            pending_name = start_match.group("name").strip()
-            if pending_name in paths:
-                raise ValueError(f"duplicate skill name: {pending_name}")
-            continue
-        path_match = _PATH_ONLY_RE.fullmatch(line)
-        if path_match is not None and pending_name is not None:
-            paths[pending_name] = _expand_skill_path(path_match.group("path"), aliases)
-            pending_name = None
-            continue
-        raise ValueError(f"malformed Available skills entry: {line!r}")
-    if pending_name is not None:
-        raise ValueError(f"skill entry {pending_name!r} has no path")
+    roots, aliases = _parse_skill_roots(lines[roots_index + 1 : skills_index])
+    paths = _parse_available_skills(lines[skills_index + 1 : -1], aliases)
     return DiscoveredSkills(
         names=frozenset(paths),
-        roots=tuple(roots),
+        roots=roots,
         paths=MappingProxyType(paths),
     )
 
@@ -242,6 +257,74 @@ def _fingerprint_managed_files(
             raise ValueError(f"managed skill file changed while fingerprinting: {path}")
         fingerprint.append((*((name,) + identity_after), hashlib.sha256(content).hexdigest()))
     return tuple(fingerprint)
+
+
+def _legacy_root_discovery_errors(
+    discovered: DiscoveredSkills,
+    catalog_dir: Path,
+    context: str,
+) -> list[str]:
+    roots = [str(root) for root in discovered.roots]
+    legacy_root = _legacy_root_for_catalog(
+        catalog_dir,
+        CODEX_SKILL_DISCOVERY_CONTRACT,
+    )
+    legacy_matches = [root for root in discovered.roots if root == legacy_root]
+    if not legacy_matches:
+        return [
+            f"Codex skill discovery roots do not contain legacy root {legacy_root}; "
+            f"roots={roots}; {context}"
+        ]
+    if len(legacy_matches) > 1:
+        return [
+            f"Codex skill discovery roots contain duplicate legacy root {legacy_root}; "
+            f"roots={roots}; {context}"
+        ]
+    try:
+        legacy_target = legacy_matches[0].resolve(strict=True)
+    except OSError as exc:
+        return [f"Codex skill discovery legacy root is unreadable: {exc}; {context}"]
+    if legacy_target != catalog_dir:
+        return [
+            "Codex skill discovery legacy root does not resolve to the managed "
+            f"catalog; roots={roots}; {context}"
+        ]
+    return []
+
+
+def _catalog_discovery_errors(
+    discovered: DiscoveredSkills,
+    expected_paths: Mapping[str, Path],
+    catalog_dir: Path,
+    context: str,
+) -> list[str]:
+    missing = sorted(set(expected_paths) - discovered.names)
+    misplaced: list[str] = []
+    for name, expected_path in expected_paths.items():
+        actual_path = discovered.paths.get(name)
+        if actual_path is None:
+            continue
+        try:
+            actual_canonical = actual_path.resolve(strict=True)
+        except OSError as exc:
+            misplaced.append(f"{name}={actual_path} (unreadable: {type(exc).__name__}: {exc})")
+            continue
+        if actual_canonical != expected_path:
+            misplaced.append(f"{name}={actual_path}")
+
+    roots = [str(root) for root in discovered.roots]
+    errors: list[str] = []
+    if missing:
+        errors.append(
+            f"Codex skill discovery is missing managed names {missing}; roots={roots}; {context}"
+        )
+    if misplaced:
+        errors.append(
+            f"Codex skill discovery reported misplaced managed paths {misplaced}; "
+            f"roots={roots}; {context}"
+        )
+    errors.extend(_legacy_root_discovery_errors(discovered, catalog_dir, context))
+    return errors
 
 
 def probe_codex_version(
@@ -329,59 +412,9 @@ def attest_catalog_discovery(
         except (UnicodeDecodeError, ValueError) as exc:
             errors.append(f"Codex skill discovery parse failed: {exc}; {context}")
         else:
-            missing = sorted(set(expected_paths) - discovered.names)
-            misplaced: list[str] = []
-            for name, expected_path in expected_paths.items():
-                actual_path = discovered.paths.get(name)
-                if actual_path is None:
-                    continue
-                try:
-                    actual_canonical = actual_path.resolve(strict=True)
-                except OSError as exc:
-                    misplaced.append(
-                        f"{name}={actual_path} (unreadable: {type(exc).__name__}: {exc})"
-                    )
-                    continue
-                if actual_canonical != expected_path:
-                    misplaced.append(f"{name}={actual_path}")
-            if missing:
-                errors.append(
-                    f"Codex skill discovery is missing managed names {missing}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            if misplaced:
-                errors.append(
-                    f"Codex skill discovery reported misplaced managed paths {misplaced}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            legacy_root = _legacy_root_for_catalog(
-                catalog_dir,
-                CODEX_SKILL_DISCOVERY_CONTRACT,
+            errors.extend(
+                _catalog_discovery_errors(discovered, expected_paths, catalog_dir, context)
             )
-            legacy_matches = [root for root in discovered.roots if root == legacy_root]
-            if not legacy_matches:
-                errors.append(
-                    f"Codex skill discovery roots do not contain legacy root {legacy_root}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            elif len(legacy_matches) > 1:
-                errors.append(
-                    f"Codex skill discovery roots contain duplicate legacy root {legacy_root}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            else:
-                try:
-                    legacy_target = legacy_matches[0].resolve(strict=True)
-                except OSError as exc:
-                    errors.append(
-                        f"Codex skill discovery legacy root is unreadable: {exc}; {context}"
-                    )
-                else:
-                    if legacy_target != catalog_dir:
-                        errors.append(
-                            "Codex skill discovery legacy root does not resolve to the managed "
-                            f"catalog; roots={[str(root) for root in discovered.roots]}; {context}"
-                        )
     try:
         after_fingerprint = _fingerprint_managed_files(expected_paths)
     except OSError as exc:

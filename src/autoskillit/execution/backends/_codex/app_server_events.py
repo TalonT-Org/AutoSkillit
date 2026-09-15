@@ -242,79 +242,7 @@ class CodexStreamParser:
             )
 
         if event_type == CodexEventType.ITEM_COMPLETED:
-            item = obj.get("item", {})
-            if not isinstance(item, dict):
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-            item_type = CodexItemType.from_ndjson(item.get("type", ""))
-
-            if item_type == CodexItemType.AGENT_MESSAGE:
-                self._check_marker_text(item.get("text", ""))
-                return SessionEvent(
-                    kind=BackendEventKind.TOOL_OUTPUT,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=CodexEventData(
-                        record_type="item.completed",
-                        thread_id="",
-                        item_type="agent_message",
-                        raw=obj,
-                    ),
-                )
-
-            if item_type == CodexItemType.MESSAGE:
-                for block in item.get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        self._check_marker_text(block.get("text", ""))
-                return SessionEvent(
-                    kind=BackendEventKind.TOOL_OUTPUT,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=CodexEventData(
-                        record_type="item.completed",
-                        thread_id="",
-                        item_type="message",
-                        raw=obj,
-                    ),
-                )
-
-            if item_type in (
-                CodexItemType.FILE_CHANGE,
-                CodexItemType.COMMAND_EXECUTION,
-                CodexItemType.FUNCTION_CALL,
-                CodexItemType.MCP_TOOL_CALL,
-                CodexItemType.COLLAB_TOOL_CALL,
-                CodexItemType.WEB_SEARCH,
-            ):
-                return SessionEvent(
-                    kind=BackendEventKind.TOOL_OUTPUT,
-                    is_terminal=False,
-                    has_marker=False,
-                    backend_data=CodexEventData(
-                        record_type="item.completed",
-                        thread_id="",
-                        item_type=item_type.value,
-                        raw=obj,
-                    ),
-                )
-
-            if item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
-                return SessionEvent(
-                    kind=BackendEventKind.IGNORED,
-                    is_terminal=False,
-                    has_marker=False,
-                )
-
-            self.ndjson_unknown_item_count += 1
-            logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
-            return SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-            )
+            return self._parse_completed_item(obj)
 
         if event_type == CodexEventType.TURN_COMPLETED:
             usage = obj.get("usage") or self._last_usage
@@ -364,6 +292,49 @@ class CodexStreamParser:
             kind=BackendEventKind.IGNORED,
             is_terminal=False,
             has_marker=False,
+        )
+
+    def _parse_completed_item(self, obj: dict[str, Any]) -> SessionEvent:
+        item = obj.get("item", {})
+        if not isinstance(item, dict):
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+            )
+        item_type = CodexItemType.from_ndjson(item.get("type", ""))
+        if item_type == CodexItemType.AGENT_MESSAGE:
+            self._check_marker_text(item.get("text", ""))
+        elif item_type == CodexItemType.MESSAGE:
+            for block in item.get("content", []):
+                if isinstance(block, dict) and block.get("type") == "text":
+                    self._check_marker_text(block.get("text", ""))
+        elif item_type not in (
+            CodexItemType.FILE_CHANGE,
+            CodexItemType.COMMAND_EXECUTION,
+            CodexItemType.FUNCTION_CALL,
+            CodexItemType.MCP_TOOL_CALL,
+            CodexItemType.COLLAB_TOOL_CALL,
+            CodexItemType.WEB_SEARCH,
+        ):
+            if item_type not in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
+                self.ndjson_unknown_item_count += 1
+                logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+            )
+        return SessionEvent(
+            kind=BackendEventKind.TOOL_OUTPUT,
+            is_terminal=False,
+            has_marker=False,
+            backend_data=CodexEventData(
+                record_type="item.completed",
+                thread_id="",
+                item_type=item_type.value,
+                raw=obj,
+            ),
         )
 
 

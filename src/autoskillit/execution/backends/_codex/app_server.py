@@ -83,6 +83,29 @@ def _parse_user_agent_version(user_agent: object) -> str | None:
     return version or None
 
 
+def _expected_skill_row_error(
+    rows_by_name: Mapping[str, Mapping[str, Any]],
+    expected_entries: tuple[tuple[str, str], ...],
+    *,
+    cwd: str,
+    catalog_root: str,
+) -> str | None:
+    for name, relative_path in expected_entries:
+        row = rows_by_name.get(name)
+        if row is None:
+            return f"skills/list missing expected skill {name!r} for cwd {cwd!r}"
+        if row.get("enabled") is False:
+            return f"skills/list reports expected skill {name!r} as disabled"
+        expected_path = str(Path(catalog_root) / relative_path)
+        observed_path = row.get("path")
+        if observed_path != expected_path:
+            return (
+                f"skills/list resolved {name!r} to {observed_path!r}, "
+                f"expected canonical path {expected_path!r}"
+            )
+    return None
+
+
 class CodexAppServerDriver:
     """Drives one managed Codex `app-server` session's JSON-RPC handshake."""
 
@@ -338,24 +361,15 @@ class CodexAppServerDriver:
         for row in matched.get("skills") or []:
             if isinstance(row, dict) and isinstance(row.get("name"), str):
                 rows_by_name[row["name"]] = row
-        for name, relative_path in self._plan.expected_skill_entries:
-            row = rows_by_name.get(name)
-            if row is None:
-                self._fail(
-                    f"skills/list missing expected skill {name!r} for cwd {self._plan.cwd!r}"
-                )
-                return ()
-            if row.get("enabled") is False:
-                self._fail(f"skills/list reports expected skill {name!r} as disabled")
-                return ()
-            expected_path = str(Path(self._plan.catalog_root) / relative_path)
-            observed_path = row.get("path")
-            if observed_path != expected_path:
-                self._fail(
-                    f"skills/list resolved {name!r} to {observed_path!r}, "
-                    f"expected canonical path {expected_path!r}"
-                )
-                return ()
+        error = _expected_skill_row_error(
+            rows_by_name,
+            self._plan.expected_skill_entries,
+            cwd=self._plan.cwd,
+            catalog_root=self._plan.catalog_root,
+        )
+        if error is not None:
+            self._fail(error)
+            return ()
         self._phase = _Phase.AWAITING_THREAD_RESPONSE
         return (_encode(self._thread_request()),)
 

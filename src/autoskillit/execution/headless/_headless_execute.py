@@ -663,13 +663,16 @@ async def _execute_claude_headless(
                 write_execution_candidate_manifest,
             )
 
-            write_execution_candidate_manifest(
-                terminal_selection,
-                ctx.config.linux_tracing.log_dir,
-                max_sessions=ctx.config.linux_tracing.max_sessions,
-                project_dir=str(ctx.project_dir),
-                build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-            )
+            try:
+                write_execution_candidate_manifest(
+                    terminal_selection,
+                    ctx.config.linux_tracing.log_dir,
+                    max_sessions=ctx.config.linux_tracing.max_sessions,
+                    project_dir=str(ctx.project_dir),
+                    build_protected_campaign_ids=ctx.build_protected_campaign_ids,
+                )
+            except Exception:
+                logger.debug("execution_candidate_manifest_write_failed", exc_info=True)
 
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):

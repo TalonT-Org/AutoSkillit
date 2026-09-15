@@ -462,6 +462,63 @@ async def test_terminal_launch_provider_stamps_selection_and_result(
     assert persisted_selections == [result.execution_selection]
 
 
+@pytest.mark.anyio
+async def test_manifest_write_failure_does_not_skip_terminal_flush(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    import autoskillit.execution.evidence.session_log as session_log
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+    from tests.execution.conftest import _sr
+
+    subprocess_result = _sr()
+    selection = ExecutionSelection(
+        selection_id="selection-1",
+        attempts=(ExecutionCandidateAttempt(candidate_id="candidate-1", attempt=1),),
+    )
+    flushed: list[dict] = []
+
+    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        return subprocess_result
+
+    def fail_manifest_write(*args, **kwargs):  # noqa: ARG001
+        raise OSError("manifest unavailable")
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_build_skill_result",
+        lambda *args, **kwargs: _STUB_RESULT,  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_compute_post_session_metrics",
+        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_capture_git_head_sha",
+        lambda *args: "",  # noqa: ARG005
+    )
+    monkeypatch.setattr(session_log, "write_execution_candidate_manifest", fail_manifest_write)
+    monkeypatch.setattr(session_log, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+
+    result = await _execute_claude_headless(
+        lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        execution_selection=selection,
+    )
+
+    assert result.success is True
+    assert len(flushed) == 1
+
+
 def test_headless_executor_protocol_includes_provider_params() -> None:
     import inspect
 

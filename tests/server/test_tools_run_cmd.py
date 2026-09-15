@@ -359,6 +359,21 @@ class TestImportAndCallTypeCoercion:
     """Test _import_and_call annotation-aware type coercion."""
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "callable_path",
+        [
+            "tests.server._type_coercion_fixtures._typing_optional_str_param",
+            "tests.server._type_coercion_fixtures._union_optional_str_param",
+        ],
+    )
+    async def test_int_coerced_to_optional_str(self, callable_path):
+        result = json.loads(
+            await run_python(callable=callable_path, args={"value": 42}, timeout=10)
+        )
+        assert result["success"] is True
+        assert result["result"]["value"] == "42"
+
+    @pytest.mark.anyio
     async def test_int_coerced_to_str(self):
         """int value for str-annotated param is coerced to str."""
         result = json.loads(

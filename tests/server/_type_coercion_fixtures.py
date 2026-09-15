@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 
 def _typed_callable(name: str, count: int, ratio: float = 1.0) -> dict:
@@ -23,6 +24,14 @@ def _int_param(value: int) -> dict:
 
 
 def _str_optional_param(value: str = "default") -> dict:
+    return {"value": value}
+
+
+def _typing_optional_str_param(value: Optional[str]) -> dict:  # noqa: UP045 — tests this form
+    return {"value": value}
+
+
+def _union_optional_str_param(value: str | None) -> dict:
     return {"value": value}
 
 

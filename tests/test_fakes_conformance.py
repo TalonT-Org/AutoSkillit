@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from autoskillit.core.types import (
+    BackendCapabilities,
     CIWatcher,
     CodingAgentBackend,
     DatabaseReader,
@@ -337,7 +338,11 @@ def test_recipe_repository_calls_starts_empty():
 def test_recipe_repository_validate_from_path_records_call():
     repo = InMemoryRecipeRepository()
     script_path = Path("/proj/recipe.yaml")
-    repo.validate_from_path(script_path, ".autoskillit/temp")
+    result = repo.validate_from_path(script_path, ".autoskillit/temp")
+    assert result == {
+        "valid": False,
+        "findings": [{"error": "not configured"}],
+    }
     assert len(repo.calls) == 1
     call = repo.calls[0]
     assert call["method"] == "validate_from_path"
@@ -350,11 +355,41 @@ def test_recipe_repository_validate_from_path_records_call_with_overrides():
     repo = InMemoryRecipeRepository()
     script_path = Path("/proj/recipe.yaml")
     overrides = {"open_pr": "false"}
-    repo.validate_from_path(script_path, ".autoskillit/temp", ingredient_overrides=overrides)
+    effective_backend_map = {"implement": "codex"}
+    backend_capabilities_map = {"codex": BackendCapabilities()}
+    backend_origin_map = {"implement": "step.backend"}
+    repo.validate_from_path(
+        script_path,
+        ".autoskillit/temp",
+        backend_name="codex",
+        ingredient_overrides=overrides,
+        effective_backend_map=effective_backend_map,
+        backend_capabilities_map=backend_capabilities_map,
+        backend_origin_map=backend_origin_map,
+    )
     assert len(repo.calls) == 1
     call = repo.calls[0]
     assert call["method"] == "validate_from_path"
+    assert call["backend_name"] == "codex"
     assert call["ingredient_overrides"] == overrides
+    assert call["effective_backend_map"] is effective_backend_map
+    assert call["backend_capabilities_map"] is backend_capabilities_map
+    assert call["backend_origin_map"] is backend_origin_map
+
+
+def test_recipe_repository_validate_from_path_returns_configured_report():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    report = {
+        "valid": False,
+        "errors": ["missing steps"],
+        "quality": {},
+        "findings": [],
+        "contracts": [],
+    }
+    repo.set_path_validated(str(script_path), report)
+
+    assert repo.validate_from_path(script_path) is report
 
 
 def test_recipe_repository_validate_from_path_records_call_default_relpath():

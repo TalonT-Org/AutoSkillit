@@ -144,7 +144,13 @@ def test_load_and_validate_delegates_to_api(
 
 def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
     """validate_from_path calls _api.validate_from_path."""
-    expected = {"valid": True}
+    expected = {
+        "valid": True,
+        "errors": [],
+        "quality": {},
+        "findings": [],
+        "contracts": [],
+    }
     mock_api = MagicMock(return_value=expected)
 
     with patch.object(_patch_recipe__api, "validate_from_path", mock_api):
@@ -152,7 +158,7 @@ def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
         script_path = tmp_path / "recipe.yaml"
         result = repo.validate_from_path(script_path)
 
-    assert result == expected
+    assert result is expected
     mock_api.assert_called_once_with(
         script_path,
         temp_dir_relpath=".autoskillit/temp",

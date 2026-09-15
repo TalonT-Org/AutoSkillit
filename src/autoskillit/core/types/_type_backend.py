@@ -39,6 +39,7 @@ __all__ = [
     "BackendConventions",
     "CLAUDE_CODE_CAPABILITIES",
     "CLAUDE_MODEL_ALIASES",
+    "CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE",
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
@@ -64,6 +65,12 @@ __all__ = [
     "model_class",
     "strip_context_window_suffix",
 ]
+
+
+CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
+    "Automatic Codex context compaction was blocked. Start an explicit new session, "
+    "or compact manually and deliberately resume."
+)
 
 
 @dataclass(frozen=True, slots=True)

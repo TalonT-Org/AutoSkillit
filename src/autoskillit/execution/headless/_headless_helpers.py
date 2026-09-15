@@ -105,7 +105,13 @@ def resolve_launch_quota_identity(
         }
     try:
         scope = quota_scope("anthropic", Path(config.quota_guard.credentials_path).expanduser())
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        logger.warning(
+            "launch_quota_scope_unavailable",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
         return {"provider": provider, "mode": "anthropic-oauth", "credential_scope": ""}
     return {"provider": provider, "mode": "anthropic-oauth", "credential_scope": scope}
 

@@ -32,6 +32,33 @@ _STUB_RESULT = SkillResult(
 )
 
 
+def test_launch_quota_scope_failure_is_diagnostic(minimal_ctx, monkeypatch) -> None:
+    import structlog.testing
+
+    import autoskillit.execution.headless._headless_helpers as helpers
+
+    backend = _mock_backend(anthropic_provider_capable=True)
+
+    def unavailable_scope(*args, **kwargs):  # noqa: ARG001
+        raise OSError("credentials unavailable")
+
+    monkeypatch.setattr(helpers, "quota_scope", unavailable_scope)
+
+    with structlog.testing.capture_logs() as logs:
+        identity = helpers.resolve_launch_quota_identity(
+            backend=backend,
+            binding=None,
+            provider_extras=None,
+            config=minimal_ctx.config,
+        )
+
+    assert identity["credential_scope"] == ""
+    failure = next(log for log in logs if log["event"] == "launch_quota_scope_unavailable")
+    assert failure["error"] == "credentials unavailable"
+    assert failure["error_type"] == "OSError"
+    assert failure["exc_info"] is True
+
+
 @pytest.mark.anyio
 async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     minimal_ctx, tmp_path, monkeypatch

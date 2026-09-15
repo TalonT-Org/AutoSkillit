@@ -26,6 +26,18 @@ from tests._helpers import make_quota_guard_config
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
+def _quota_config(tmp_path):
+    config = make_quota_guard_config(
+        credentials_path=str(tmp_path / ".credentials.json"),
+        cache_path=str(tmp_path / "cache.json"),
+    )
+    Path(config.credentials_path).write_text(
+        '{"claudeAiOauth":{"accessToken":"test-token"}}',
+        encoding="utf-8",
+    )
+    return config
+
+
 def _rate_limited_result(subtype: str, epoch: int | None) -> SkillResult:
     return SkillResult(
         success=False,
@@ -52,10 +64,7 @@ def _rate_limited_result(subtype: str, epoch: int | None) -> SkillResult:
 
 @pytest.mark.parametrize("termination", ["normal", "stale", "idle_stall"])
 def test_all_rate_limited_terminations_record_at_convergence(tmp_path, termination) -> None:
-    config = make_quota_guard_config(
-        credentials_path=str(tmp_path / ".credentials.json"),
-        cache_path=str(tmp_path / "cache.json"),
-    )
+    config = _quota_config(tmp_path)
     epoch = 2_000_000_000
     record_skill_result_rate_limit(
         _rate_limited_result(termination, epoch),
@@ -73,10 +82,7 @@ def test_all_rate_limited_terminations_record_at_convergence(tmp_path, terminati
 
 
 def test_rate_limit_without_structured_epoch_records_nothing(tmp_path) -> None:
-    config = make_quota_guard_config(
-        credentials_path=str(tmp_path / ".credentials.json"),
-        cache_path=str(tmp_path / "cache.json"),
-    )
+    config = _quota_config(tmp_path)
     record_skill_result_rate_limit(
         _rate_limited_result("normal", None),
         True,

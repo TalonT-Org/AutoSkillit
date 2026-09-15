@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
 from autoskillit.core import (
+    ExecutionSelection,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
     ManagedHeadlessSessionLineageStatus,
@@ -69,6 +71,36 @@ def _attach_lineage_reference(
     store._write_manifest(entry, manifest)  # noqa: SLF001
 
 
+def _load_resume_execution_selection(tool_ctx: Any, session_id: str) -> ExecutionSelection:
+    index_path = Path(tool_ctx.config.linux_tracing.log_dir) / "sessions.jsonl"
+    row = json.loads(index_path.read_text(encoding="utf-8"))
+    return ExecutionSelection.from_payload(row["execution_selection"])
+
+
+def _replace_resume_execution_selection(
+    tool_ctx: Any, session_id: str, selection: ExecutionSelection
+) -> None:
+    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+
+    log_root = Path(tool_ctx.config.linux_tracing.log_dir)
+    write_execution_candidate_manifest(
+        selection,
+        str(log_root),
+        max_sessions=tool_ctx.config.linux_tracing.max_sessions,
+    )
+    (log_root / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "execution_selection": selection.to_payload(),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_verified_changed_resume_rebinds_lineage_index_and_contract_callback(
     tmp_path: Path,
 ) -> None:
@@ -111,6 +143,39 @@ def test_verified_changed_resume_rebinds_lineage_index_and_contract_callback(
             session_id="old-final",
         )
     assert rebound_contracts == [("new-final", lineage.reference)]
+
+
+def test_resume_rejects_unverified_final_session_drift(tmp_path: Path) -> None:
+    """A resume may rebind only to an ID recorded on its persisted lineage."""
+    from autoskillit.core import SkillContractError
+
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _seed_skill_lineage(
+        store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="old-final",
+    )
+    backend = MagicMock()
+    backend.capabilities.session_dir_persistent = True
+    rebound_contracts: list[tuple[str, object]] = []
+
+    with pytest.raises(SkillContractError, match="unverified final session ID"):
+        rebind_verified_final_session(
+            store=store,
+            backend=backend,
+            reference=lineage.reference,
+            is_resume=True,
+            requested_session_id="old-final",
+            returned_session_id="drifted-final",
+            on_rebind=lambda session_id, reference: rebound_contracts.append(
+                (session_id, reference)
+            ),
+        )
+
+    persisted = store.load_reference(lineage.reference)
+    assert persisted.final_native_session_id == "old-final"
+    assert rebound_contracts == []
 
 
 def test_contract_lifecycle_cleans_provisional_and_failed_bound_state() -> None:
@@ -158,6 +223,109 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, mon
     assert executor.calls[0].resume_launch_contract == persisted_launch
     assert persisted_launch.backend_authority is not None
     assert executor.calls[0].backend_authority == persisted_launch.backend_authority
+
+
+@pytest.mark.anyio
+async def test_resume_rejects_missing_selection_evidence(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_id = "missing-selection-evidence"
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id=session_id,
+        cwd=tmp_path,
+    )
+    (Path(tool_ctx_kitchen_open.config.linux_tracing.log_dir) / "sessions.jsonl").unlink()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/implement", str(tmp_path), resume_session_id=session_id))
+
+    assert result["success"] is False
+    assert "selection evidence is unavailable" in result["result"]
+    assert executor.calls == []
+
+
+@pytest.mark.anyio
+async def test_resume_rejects_expired_selection_deadline(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_id = "expired-selection-deadline"
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id=session_id,
+        cwd=tmp_path,
+    )
+    selection = _load_resume_execution_selection(tool_ctx_kitchen_open, session_id)
+    _replace_resume_execution_selection(
+        tool_ctx_kitchen_open,
+        session_id,
+        replace(selection, invocation_deadline_epoch=0),
+    )
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/implement", str(tmp_path), resume_session_id=session_id))
+
+    assert result["success"] is False
+    assert "deadline is unavailable or expired" in result["result"]
+    assert executor.calls == []
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("execution_started", "child_session_id", "effective_backend", "effective_provider"),
+    ids=("unstarted", "session", "backend", "provider"),
+)
+@pytest.mark.anyio
+async def test_resume_rejects_invalid_terminal_selection_binding(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path: Path,
+    field: str,
+) -> None:
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_id = "cross-bound-selection"
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id=session_id,
+        cwd=tmp_path,
+    )
+    selection = _load_resume_execution_selection(tool_ctx_kitchen_open, session_id)
+    terminal_attempt = selection.terminal_attempt
+    assert terminal_attempt is not None
+    if field == "execution_started":
+        replacement_attempt = replace(terminal_attempt, execution_started=False)
+    elif field == "child_session_id":
+        replacement_attempt = replace(terminal_attempt, child_session_id="another-session")
+    elif field == "effective_backend":
+        replacement_attempt = replace(terminal_attempt, effective_backend="another-backend")
+    else:
+        replacement_attempt = replace(terminal_attempt, effective_provider="another-provider")
+    _replace_resume_execution_selection(
+        tool_ctx_kitchen_open,
+        session_id,
+        replace(selection, attempts=(replacement_attempt,)),
+    )
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/implement", str(tmp_path), resume_session_id=session_id))
+
+    assert result["success"] is False
+    assert "selection binding is invalid" in result["result"]
+    assert executor.calls == []
 
 
 @pytest.mark.anyio

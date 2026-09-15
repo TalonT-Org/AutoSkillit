@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING, Any, assert_never
 import regex as re
 
 from autoskillit.core import (
+    BackendAuthority,
     BackendAuthorityKind,
+    BackendAuthorityTier,
     BackendPinResolution,
     FaultDomain,
     InputContractResolver,
@@ -23,6 +25,7 @@ from autoskillit.core import (
     parse_plan_paths,
     session_type,
 )
+from autoskillit.execution import get_backend
 from autoskillit.hooks import (
     PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
@@ -370,9 +373,82 @@ def _check_input_contracts(
     return None
 
 
+def _provider_configuration_can_use_anthropic(config: Any) -> bool:
+    """Return whether an unpinned Claude launch can select Anthropic."""
+    features = getattr(config, "features", {})
+    if not isinstance(features, dict) or not features.get("providers", False):
+        return True
+
+    providers = config.providers
+    if providers.default_provider in (None, "anthropic"):
+        return True
+    if "anthropic" in providers.step_overrides.values():
+        return True
+    return any(
+        "anthropic" in overrides.values() for overrides in providers.recipe_overrides.values()
+    )
+
+
 def _backend_supports_quota(ctx: Any) -> bool:
-    """Return True when the active backend is Anthropic-provider-capable."""
-    return ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
+    """Return whether a configured launch can require Anthropic quota admission."""
+    config = getattr(ctx, "config", None)
+    if config is None:
+        backend = getattr(ctx, "backend", None)
+        return backend is not None and backend.capabilities.anthropic_provider_capable
+
+    def supports_anthropic(authority: BackendAuthority) -> bool:
+        try:
+            backend = get_backend(authority.backend)
+        except (KeyError, ValueError):
+            return False
+        return backend.capabilities.anthropic_provider_capable
+
+    authorities = [
+        BackendAuthority(
+            backend=config.agent_backend.backend,
+            kind=BackendAuthorityKind.GLOBAL,
+            tier=BackendAuthorityTier.GLOBAL,
+            key_path="agent_backend.backend",
+        ),
+        *(
+            BackendAuthority(
+                backend=backend,
+                kind=BackendAuthorityKind.STEP,
+                tier=BackendAuthorityTier.STEP,
+                key_path=f"agent_backend.step_overrides.{step}",
+            )
+            for step, backend in config.agent_backend.step_overrides.items()
+        ),
+        *(
+            BackendAuthority(
+                backend=backend,
+                kind=BackendAuthorityKind.RECIPE,
+                tier=BackendAuthorityTier.RECIPE,
+                key_path=f"agent_backend.recipe_overrides.{recipe}.{step}",
+            )
+            for recipe, overrides in config.agent_backend.recipe_overrides.items()
+            for step, backend in overrides.items()
+        ),
+    ]
+    if any(supports_anthropic(authority) for authority in authorities) and (
+        _provider_configuration_can_use_anthropic(config)
+    ):
+        return True
+
+    for index, candidate in enumerate(config.providers.execution_candidates):
+        authority = BackendAuthority(
+            backend=candidate.backend,
+            kind=BackendAuthorityKind.GLOBAL,
+            tier=BackendAuthorityTier.GLOBAL,
+            key_path=f"providers.execution_candidates.{index}.backend",
+        )
+        if not supports_anthropic(authority):
+            continue
+        if candidate.profile == "anthropic":
+            return True
+        if candidate.profile is None and _provider_configuration_can_use_anthropic(config):
+            return True
+    return False
 
 
 def _provider_result(

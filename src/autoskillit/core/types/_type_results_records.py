@@ -37,7 +37,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 11
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +250,7 @@ class SessionIndexEntry(TypedDict):
     backend: str  # "claude-code" or "codex" — unambiguous backend identifier
     backend_authority: dict[str, object] | None
     launch_contract_digest: str
+    execution_selection: dict[str, object] | None
     requested_parent_backend: str
     effective_parent_backend: str
     requested_parent_model: str

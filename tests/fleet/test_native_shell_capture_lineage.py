@@ -22,7 +22,6 @@ from tests.fakes import _DEFAULT_SKILL_RESULT
 from tests.fleet._helpers import (
     _make_completed_clean,
     _mock_backend_with_locator,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _setup_dispatch,
     _simple_prompt_builder,
@@ -46,7 +45,6 @@ async def _execute(
         dispatch_name="dispatch",
         timeout_sec=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
         native_shell_capture_mode=mode,
         resume_session_id=resume_session_id,

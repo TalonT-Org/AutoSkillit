@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     BackendAuthority,
+    CandidatePreSpawnRejection,
     ClosureAuthoritySpec,
     ExecutionIdentity,
     ManagedHeadlessSessionLineageRef,
+    ModelPinResolution,
     NativeShellCaptureDecision,
+    ProviderBinding,
     ResolvedLaunchContract,
     SessionCheckpoint,
     SkillProjectionBinding,
@@ -21,6 +24,7 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.core import ExecutionSelection
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe._contracts_types import SkillContract
 
@@ -60,8 +64,8 @@ class _DefaultHeadlessExecutorBase:
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
+        provider_binding: ProviderBinding | None = None,
+        model_pin: ModelPinResolution | None = None,
         resume_session_id: str = "",
         resume_launch_contract: ResolvedLaunchContract | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -80,10 +84,17 @@ class _DefaultHeadlessExecutorBase:
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity(),
+        execution_selection: ExecutionSelection | None = None,
+        execution_selection_provider: Callable[[], ExecutionSelection | None] | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        pre_spawn_admission: Callable[
+            [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+        ]
+        | None = None,
+        mark_execution_started: Callable[[], None] | None = None,
         child_role: str | None = None,
         child_attribution_skill: str = "",
-    ) -> SkillResult:
+    ) -> SkillResult | CandidatePreSpawnRejection:
         from autoskillit.execution.headless import run_headless_core
 
         cfg = self._ctx.config.run_skill
@@ -117,8 +128,8 @@ class _DefaultHeadlessExecutorBase:
             provider_extras=provider_extras,
             profile_name=profile_name,
             provider_name=provider_name,
-            provider_fallback_env=provider_fallback_env,
-            provider_fallback_name=provider_fallback_name,
+            provider_binding=provider_binding,
+            model_pin=model_pin,
             resume_session_id=resume_session_id,
             resume_launch_contract=resume_launch_contract,
             resume_checkpoint=resume_checkpoint,
@@ -137,7 +148,11 @@ class _DefaultHeadlessExecutorBase:
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             execution_identity=execution_identity,
+            execution_selection=execution_selection,
+            execution_selection_provider=execution_selection_provider,
             on_launch_resolved=on_launch_resolved,
+            pre_spawn_admission=pre_spawn_admission,
+            mark_execution_started=mark_execution_started,
             child_role=child_role,
             child_attribution_skill=child_attribution_skill,
         )

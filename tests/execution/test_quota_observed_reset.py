@@ -28,10 +28,12 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def _config(tmp_path, name="cache.json"):
+    credentials_path = tmp_path / ".credentials.json"
+    credentials_path.write_text(json.dumps({"claudeAiOauth": {"accessToken": "fixture-token"}}))
     return make_quota_guard_config(
         enabled=True,
         buffer_seconds=0,
-        credentials_path=str(tmp_path / ".credentials.json"),
+        credentials_path=str(credentials_path),
         cache_path=str(tmp_path / name),
     )
 
@@ -59,6 +61,7 @@ async def test_observation_survives_nonblocking_poll_cache(monkeypatch, tmp_path
             windows={"five_hour": QuotaWindowEntry(20, None)},
             binding=QuotaStatus(20, None, "five_hour", False, 85),
         ),
+        credential_scope=_scope(config),
     )
     monkeypatch.setattr(
         _patch_quota__quota_gate,
@@ -109,6 +112,7 @@ async def test_blocking_cache_refetch_cannot_clobber_observation(monkeypatch, tm
         QuotaFetchResult(
             binding=QuotaStatus(90, now_dt + timedelta(hours=1), "five_hour", True, 85)
         ),
+        credential_scope=_scope(config),
     )
 
     async def refreshed(*args, **kwargs):

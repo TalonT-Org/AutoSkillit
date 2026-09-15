@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -44,6 +45,55 @@ class _FakeLocator:
 
     def list_sessions(self, cwd: str) -> tuple:
         return ()
+
+
+def test_candidate_manifest_updates_before_session_bundle_flush(tmp_path):
+    """Selection updates stay ordered and are bundled only with a real session."""
+    from autoskillit.core.types._type_results_execution import (
+        ExecutionCandidateAttempt,
+        ExecutionSelection,
+    )
+    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+
+    first = ExecutionCandidateAttempt(candidate_id="primary", ordinal=0, transition="rejected")
+    selection = ExecutionSelection(selection_id="selection-1", attempts=(first,))
+    assert write_execution_candidate_manifest(selection, str(tmp_path), max_sessions=4) == (
+        "execution-candidates/selection-1.json"
+    )
+    assert not (tmp_path / "sessions.jsonl").exists()
+
+    final_selection = replace(
+        selection,
+        attempts=(
+            first,
+            ExecutionCandidateAttempt(
+                candidate_id="fallback",
+                ordinal=1,
+                transition="completed",
+                execution_started=True,
+                child_session_id="child-1",
+            ),
+        ),
+        terminal_candidate_id="fallback",
+        candidate_fallback=True,
+        completed=True,
+    )
+    write_execution_candidate_manifest(final_selection, str(tmp_path), max_sessions=4)
+
+    manifest_path = tmp_path / final_selection.manifest_ref
+    assert json.loads(manifest_path.read_text()) == final_selection.to_payload()
+    assert [
+        attempt["ordinal"] for attempt in json.loads(manifest_path.read_text())["attempts"]
+    ] == [
+        0,
+        1,
+    ]
+
+    _flush(tmp_path, execution_selection=final_selection, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert summary["execution_selection"] == final_selection.to_payload()
+    assert index["execution_selection"] == final_selection.to_payload()
 
 
 def test_execution_identity_reaches_summary_and_current_schema_index(tmp_path):

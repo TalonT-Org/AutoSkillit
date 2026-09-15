@@ -19,6 +19,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditAdmissionLedger,
     AuditAdmissionStoreAuthority,
+    CandidatePreSpawnRejection,
     ContextAdmissionStoreAuthority,
     DefaultManagedWorkerCapacity,
     DirectInstall,
@@ -31,6 +32,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     SkillContractError,
     SkillExecutionRole,
+    SkillResult,
     SubprocessRunner,
     WriteBehaviorSpec,
     get_logger,
@@ -535,8 +537,16 @@ def make_context(
     ctx.recipe_execution_factory = make_recipe_execution
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
-    ctx.executor = DefaultHeadlessExecutor(ctx)
+    executor = DefaultHeadlessExecutor(ctx)
+    ctx.executor = executor
+
+    async def _run_migration_headless(*args: Any, **kwargs: Any) -> SkillResult:
+        result = await executor.run(*args, **kwargs)
+        if isinstance(result, CandidatePreSpawnRejection):
+            raise SkillContractError("Migration worker rejected before its runner started")
+        return result
+
     ctx.migrations = DefaultMigrationService(
-        default_migration_engine(), run_headless=ctx.executor.run
+        default_migration_engine(), run_headless=_run_migration_headless
     )
     return ctx

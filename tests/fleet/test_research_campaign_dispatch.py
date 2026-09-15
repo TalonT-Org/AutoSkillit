@@ -9,7 +9,6 @@ import pytest
 import autoskillit.fleet._api as fleet_api
 from tests.fleet._helpers import (
     _make_recipe_info,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _simple_prompt_builder,
 )
@@ -99,7 +98,6 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
             "research_dir": "${{ result.research_dir }}",
         },
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -142,7 +140,6 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
         timeout_sec=None,
         capture=None,
         prompt_builder=_capturing_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -169,7 +166,6 @@ async def test_missing_campaign_ref_returns_fleet_error(tool_ctx):
         timeout_sec=None,
         capture=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -208,7 +204,6 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         timeout_sec=None,
         capture={"worktree_path": "${{ result.worktree_path }}"},
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -227,7 +222,6 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
         timeout_sec=None,
         capture=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
 
@@ -252,7 +246,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
 
     from ._helpers import (
         _make_recipe_info,
-        _no_sleep_quota_checker,
         _noop_quota_refresher,
     )
 
@@ -329,7 +322,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             "experiment_type": "${{ result.experiment_type }}",
         },
         prompt_builder=_capture_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -394,7 +386,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             "experiment_results": "${{ result.experiment_results }}",
         },
         prompt_builder=_implement_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -475,7 +466,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             "report_path_after_finalize": "${{ result.report_path_after_finalize }}",
         },
         prompt_builder=_review_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -538,7 +528,6 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         timeout_sec=None,
         capture={},
         prompt_builder=_archive_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -569,7 +558,6 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
 
     from ._helpers import (
         _make_recipe_info,
-        _no_sleep_quota_checker,
         _noop_quota_refresher,
     )
 
@@ -634,7 +622,6 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             "experiment_type": "${{ result.experiment_type }}",
         },
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -696,7 +683,6 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             "experiment_results": "${{ result.experiment_results }}",
         },
         prompt_builder=_implement_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())
@@ -775,7 +761,6 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             "report_path_after_finalize": "${{ result.report_path_after_finalize }}",
         },
         prompt_builder=_review_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(raw.outcome.to_envelope())

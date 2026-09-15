@@ -147,6 +147,10 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
         ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
+        (
+            "src/autoskillit/execution/evidence/_session_retention.py",
+            "apply_execution_candidate_manifest_retention",
+        ),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
         ("src/autoskillit/workspace/_installed/_projection_cache.py", "prune_stale_projections"),
         (
@@ -276,6 +280,15 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         "apply_session_retention",
     ): _convergence_adapters(
         ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention")
+    ),
+    (
+        "src/autoskillit/execution/evidence/_session_retention.py",
+        "apply_execution_candidate_manifest_retention",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/evidence/_session_retention.py",
+            "apply_execution_candidate_manifest_retention",
+        )
     ),
     ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"): _convergence_adapters(
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
@@ -591,6 +604,10 @@ _CS = (
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
 _SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
+_ECMR = (
+    "src/autoskillit/execution/evidence/_session_retention.py::"
+    "apply_execution_candidate_manifest_retention"
+)
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_installed/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_entry"
@@ -782,16 +799,52 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --
-    f"{_SL}::L100": _self_limiting(
+    f"{_SL}::L104": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
         "equivalent of a reaper excluding the generation it is currently claiming."
     ),
-    f"{_SL}::L116": RetentionDecision(
+    f"{_SL}::L120": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected campaign id is honoured unconditionally, retaining "
         "the session directory regardless of its age, the same self-exclusion family as "
         "the dispatch reaper's protected-id set.",
+    ),
+    # -- execution._session_retention::apply_execution_candidate_manifest_retention --
+    f"{_ECMR}::L159": _self_limiting(
+        "The manifest currently being written is excluded from the retention pass that it "
+        "triggered, so it cannot be reclaimed before publication completes."
+    ),
+    f"{_ECMR}::L163": _self_limiting(
+        "A manifest that vanished during its observed scan is already absent and requires no "
+        "further retention action."
+    ),
+    f"{_ECMR}::L171": _retries_after_input_changes(
+        "Unreadable candidate evidence is retained until its file can be read or is replaced; "
+        "a parse failure is never proof that the selection may be discarded."
+    ),
+    f"{_ECMR}::L175": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Candidate evidence for a protected campaign is retained unconditionally while the "
+        "caller declares that campaign live.",
+    ),
+    f"{_ECMR}::L184": _retries_after_input_changes(
+        "Without a telemetry-clear marker, or while the manifest is newer than that marker, "
+        "the clear-based pass retains it until retention evidence changes."
+    ),
+    f"{_ECMR}::L186": RetentionDecision(
+        Revocability.REVOCABLE,
+        "The current, protected, or still-pending manifest name is retained as live "
+        "execution evidence.",
+    ),
+    f"{_ECMR}::L201": _self_limiting(
+        "The normal size window is satisfied, so the capacity pass stops without further "
+        "candidate deletion."
+    ),
+    f"{_ECMR}::L203": RetentionDecision(
+        Revocability.REVOCABLE,
+        "Protected and pending manifest names remain durable evidence even when the size "
+        "window would otherwise evict them.",
     ),
     # -- hooks._capture._sweep::sweep_one --
     f"{_SW}::L608": RetentionDecision(
@@ -1128,49 +1181,49 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # the #4623 pass's own child_outcomes import to inside the try block (issue
     # #4672 decomposition — module-level would circularly import back through
     # the evidence/ gateway that now wraps this file).
-    f"{_SR}::L211": _retries_after_input_changes(
+    f"{_SR}::L230": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SRE}::L42": _retries_after_input_changes(
+    f"{_SRE}::L45": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SRE}::L44": _resolves_with_contention(
+    f"{_SRE}::L47": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SRE}::L55": _retries_after_input_changes(
+    f"{_SRE}::L58": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SRE}::L60": _self_limiting(
+    f"{_SRE}::L63": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SRE}::L69": _resolves_with_contention(
+    f"{_SRE}::L72": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SRD}::L84": _self_limiting(
+    f"{_SRD}::L87": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SRD}::L89": _self_limiting(
+    f"{_SRD}::L92": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SRD}::L92": _self_limiting(
+    f"{_SRD}::L95": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SRD}::L97": _retries_after_input_changes(
+    f"{_SRD}::L100": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SRD}::L106": _self_limiting(
+    f"{_SRD}::L109": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SRD}::L118": _self_limiting(
+    f"{_SRD}::L121": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SRF}::L136": _retries_after_input_changes(
+    f"{_SRF}::L139": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SRF}::L176": _retries_after_input_changes(
+    f"{_SRF}::L179": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

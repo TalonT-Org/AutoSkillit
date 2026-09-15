@@ -1,8 +1,9 @@
 """LLM provider / agent backend dataclasses plus the retired-profile-key registry.
 
 Owns: ``CoreRunConfig`` (the ``model`` section), ``ProviderProfileDef`` (the
-frozen/slots registry entry for a named profile), ``ProvidersConfig`` (the
-``providers`` section with ``resolved_profiles`` coercion), and
+frozen/slots registry entry for a named profile), ``ExecutionCandidateSpec``
+(an ordered execution fallback entry), ``ProvidersConfig`` (the ``providers``
+section with ``resolved_profiles`` coercion), and
 ``AgentBackendConfig`` (the ``agent_backend`` section).
 
 Also owns the ``RETIRED_PROFILE_KEYS`` registry.
@@ -84,6 +85,28 @@ class ProviderProfileDef:
             raise ValueError(f"timeout_seconds must be non-negative, got {self.timeout_seconds}")
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionCandidateSpec:
+    """One ordered backend/provider/model candidate for skill execution."""
+
+    backend: str
+    profile: str | None = None
+    model: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.backend, str) or self.backend not in KNOWN_BACKEND_NAMES:
+            raise ValueError(
+                f"execution candidate backend must be one of "
+                f"{sorted(KNOWN_BACKEND_NAMES)!r}, got {self.backend!r}"
+            )
+        for field_name, value in (("profile", self.profile), ("model", self.model)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"execution candidate {field_name} must be a string or null, "
+                    f"got {type(value).__name__!r}"
+                )
+
+
 @dataclass
 class ProvidersConfig:
     """Configuration for alternative LLM provider routing.
@@ -97,11 +120,20 @@ class ProvidersConfig:
     step_overrides: dict[str, str] = field(default_factory=dict)
     recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     model_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    execution_candidates: list[ExecutionCandidateSpec] = field(default_factory=list)
     provider_retry_limit: int = 2
 
     def __post_init__(self) -> None:
         if self.provider_retry_limit < 1:
             raise ValueError(f"provider_retry_limit must be >= 1, got {self.provider_retry_limit}")
+        if not isinstance(self.execution_candidates, list):
+            raise ValueError("execution_candidates must be a list")
+        for index, candidate in enumerate(self.execution_candidates):
+            if not isinstance(candidate, ExecutionCandidateSpec):
+                raise ValueError(
+                    f"execution_candidates[{index}] must be an ExecutionCandidateSpec, "
+                    f"got {type(candidate).__name__!r}"
+                )
         for name, profile in self.profiles.items():
             for k, v in profile.items():
                 if v is not None and not isinstance(v, str):

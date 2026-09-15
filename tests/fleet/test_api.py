@@ -236,7 +236,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda *a, **kw: "prompt",
-                quota_checker=lambda *a, **kw: None,
                 quota_refresher=lambda *a, **kw: None,
             )
 
@@ -276,7 +275,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda *a, **kw: "prompt",
-                quota_checker=lambda *a, **kw: None,
                 quota_refresher=lambda *a, **kw: None,
                 resume_session_id="abc-123",
             )
@@ -309,7 +307,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda *a, **kw: "prompt",
-                quota_checker=lambda *a, **kw: None,
                 quota_refresher=lambda *a, **kw: None,
                 native_shell_capture_mode=NativeShellCaptureMode.DIRECT,
             )
@@ -349,7 +346,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda *a, **kw: "prompt",
-                quota_checker=lambda *a, **kw: None,
                 quota_refresher=lambda *a, **kw: None,
                 caller_instructions="skip review",
             )
@@ -368,7 +364,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
 
         from autoskillit.fleet import execute_dispatch
         from autoskillit.fleet.sidecar import sidecar_path as make_sidecar_path
-        from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher
+        from tests.fleet._helpers import _noop_quota_refresher
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
@@ -402,7 +398,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -415,16 +410,6 @@ class TestExecuteDispatchCancelledErrorLockRelease:
 # ---------------------------------------------------------------------------
 # requires_packs forwarding helpers
 # ---------------------------------------------------------------------------
-
-
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
 
 
 async def _noop_quota_refresher(config, **kwargs) -> None:
@@ -442,7 +427,6 @@ async def _run(tool_ctx, recipe="test-recipe", ingredients=None, timeout_sec=Non
         dispatch_name=None,
         timeout_sec=timeout_sec,
         prompt_builder=lambda **kwargs: f"prompt-for-{kwargs.get('recipe', 'unknown')}",
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     return json.loads(result.outcome.to_envelope())
@@ -476,7 +460,7 @@ class TestDispatchResultWrapper:
         """execute_dispatch must return DispatchResult with non-None per_dispatch_state_path."""
         from autoskillit.fleet import DispatchResult
         from autoskillit.fleet._api import execute_dispatch
-        from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher
+        from tests.fleet._helpers import _noop_quota_refresher
 
         _setup_dispatch(tool_ctx, monkeypatch)
         result = await execute_dispatch(
@@ -487,7 +471,6 @@ class TestDispatchResultWrapper:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kwargs: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         assert isinstance(result, DispatchResult)
@@ -901,7 +884,6 @@ class TestCancelledErrorRecordsInterruptedState:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -963,7 +945,6 @@ class TestSessionIdEagerPersistence:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -1005,7 +986,6 @@ class TestSessionIdEagerPersistence:
                 dispatch_name="test-dispatch",
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 

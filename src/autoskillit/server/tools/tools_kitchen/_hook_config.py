@@ -26,7 +26,6 @@ _PR_CREATE_RECIPES: frozenset[str] = frozenset(
 class QuotaGuardHookPayload(TypedDict):
     cache_max_age: int
     cache_path: str
-    buffer_seconds: int
     disabled: bool
     quota_account_scope: str
 
@@ -46,12 +45,15 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     QUOTA_GUARD_HOOK_PAYLOAD_KEYS in _hook_settings.py. The contract test
     test_hook_bridge_coverage.py enforces that both stay in sync.
     """
+    try:
+        account_scope = quota_scope("anthropic", Path(cfg.credentials_path).expanduser())
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        account_scope = ""
     return {
         "cache_max_age": cfg.cache_max_age,
         "cache_path": cfg.cache_path,
-        "buffer_seconds": cfg.buffer_seconds,
         "disabled": not cfg.enabled,
-        "quota_account_scope": quota_scope("anthropic", Path(cfg.credentials_path).expanduser()),
+        "quota_account_scope": account_scope,
     }
 
 

@@ -51,14 +51,16 @@ def test_l2_food_truck_retains_run_skill_guidance_without_machine_frontmatter():
         l3_timeout_sec=300,
     )
     assert "run_skill" in prompt
-    assert "retry the EXACT same run_skill call" in prompt
+    assert "candidate_exhausted: true" in prompt
+    assert "execution_selection.continuation.resume_session_id" in prompt
+    assert "retry the EXACT same run_skill call" not in prompt
     assert "uses_capabilities:" not in prompt
     assert "execution_role:" not in prompt
     assert "activate_deps:" not in prompt
 
 
-def test_fleet_prompt_contains_budget_exceeded_routing():
-    """L3 food truck prompt must contain QUOTA WAIT REQUIRED and QUOTA BUDGET EXCEEDED routing."""
+def test_fleet_prompt_uses_result_driven_quota_routing():
+    """L3 food truck prompt must route quota outcomes from structured results."""
     prompt = _build_food_truck_prompt(
         recipe="test-recipe",
         task="Test task",
@@ -68,8 +70,11 @@ def test_fleet_prompt_contains_budget_exceeded_routing():
         campaign_id="test-campaign",
         l3_timeout_sec=300,
     )
-    assert "QUOTA WAIT REQUIRED" in prompt
-    assert "QUOTA BUDGET EXCEEDED" in prompt
+    assert "candidate_exhausted: true" in prompt
+    assert "execution_selection.attempts" in prompt
+    assert "execution_selection.continuation.resume_session_id" in prompt
+    assert "QUOTA WAIT REQUIRED" not in prompt
+    assert "QUOTA BUDGET EXCEEDED" not in prompt
 
 
 def test_h3b_stop_step_semantics_references_sentinel_and_success():

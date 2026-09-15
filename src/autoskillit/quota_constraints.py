@@ -54,8 +54,15 @@ def normalize_naive_utc(parsed: datetime) -> datetime:
 
 
 def quota_scope(provider: str, credentials_path: Path) -> str:
-    digest = sha256(str(credentials_path).encode()).hexdigest()[:16]
-    return f"{provider}:{digest}"
+    """Return a secret-free OAuth identity scope for quota evidence.
+
+    Quota state belongs to the credential, not the credentials file.  Hash the
+    token before it can enter a cache, constraint, or log value.
+    """
+    credentials = json.loads(credentials_path.expanduser().read_text(encoding="utf-8"))
+    access_token = credentials["claudeAiOauth"]["accessToken"]
+    digest = sha256(access_token.encode()).hexdigest()
+    return f"{provider}-oauth:{digest}"
 
 
 def observed_constraint_path(cache_path: str | Path) -> Path:
@@ -146,6 +153,9 @@ def fold_poll_and_observed_constraints(
     }
     cache = read_cache(str(Path(cache_path).expanduser()), cache_max_age)
     if cache is None:
+        return constraints, metadata
+    if cache.get("credential_scope") != account_scope:
+        metadata["cache_state"] = "scope_mismatch"
         return constraints, metadata
     binding = cache.get("binding")
     if not isinstance(binding, dict):

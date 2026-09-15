@@ -100,6 +100,7 @@ from autoskillit.execution.evidence.session_log import (
     flush_session_log,
     resolve_log_dir,
     session_index_lock_path,
+    write_execution_candidate_manifest,
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderConformanceEvidence,
@@ -149,6 +150,7 @@ from autoskillit.execution.github_review import (
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     assert_interactive_ordering,
+    resolve_model_pin,
     run_headless_core,
 )
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
@@ -192,8 +194,10 @@ from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,
     QuotaStatus,
     _refresh_quota_cache,  # noqa: F401 — re-exported for server consumers; not in __all__
+    admit_quota,
     check_and_sleep_if_needed,
     invalidate_cache,
+    oauth_admission_lock_path,
 )
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from autoskillit.execution.runtime.db import (
@@ -285,8 +289,10 @@ __all__ = [
     # quota
     "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
+    "admit_quota",
     "check_and_sleep_if_needed",
     "invalidate_cache",
+    "oauth_admission_lock_path",
     # session
     "ClaudeSessionResult",
     "ContentState",
@@ -309,6 +315,7 @@ __all__ = [
     "DefaultHeadlessExecutor",
     "DefaultLaunchResolver",
     "assert_interactive_ordering",
+    "resolve_model_pin",
     # testing
     "parse_pytest_summary",
     "check_test_passed",
@@ -424,6 +431,7 @@ __all__ = [
     "recover_crashed_sessions",
     "resolve_log_dir",
     "session_index_lock_path",
+    "write_execution_candidate_manifest",
     "write_telemetry_clear_marker",
     # pr_analysis
     "DOMAIN_PATHS",

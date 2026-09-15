@@ -243,7 +243,9 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """step_provider auto-filled from RecipeStep.provider when caller omits it."""
+    from autoskillit.config.settings import ProvidersConfig
     from autoskillit.recipe.schema import RecipeStep
+    from autoskillit.server.tools.tools_execution import _run_skill_prepare
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -254,16 +256,17 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(profiles={"minimax": {}})
 
     captured_kwargs: dict = {}
 
+    resolve_candidate_policy = _run_skill_prepare.resolve_candidate_policy
+
     def spy(*args, **kwargs):
         captured_kwargs.update(kwargs)
-        return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return resolve_candidate_policy(*args, **kwargs)
 
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(_guards, "_resolve_provider_profile", spy)
+    monkeypatch.setattr(_run_skill_prepare, "resolve_candidate_policy", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",
@@ -280,7 +283,9 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """Explicit caller step_provider must not be overridden by recipe step."""
+    from autoskillit.config.settings import ProvidersConfig
     from autoskillit.recipe.schema import RecipeStep
+    from autoskillit.server.tools.tools_execution import _run_skill_prepare
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -291,16 +296,19 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        profiles={"bedrock": {}, "minimax": {}}
+    )
 
     captured_kwargs: dict = {}
 
+    resolve_candidate_policy = _run_skill_prepare.resolve_candidate_policy
+
     def spy(*args, **kwargs):
         captured_kwargs.update(kwargs)
-        return ("bedrock", {"AWS_REGION": "us-east-1"})
+        return resolve_candidate_policy(*args, **kwargs)
 
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(_guards, "_resolve_provider_profile", spy)
+    monkeypatch.setattr(_run_skill_prepare, "resolve_candidate_policy", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",

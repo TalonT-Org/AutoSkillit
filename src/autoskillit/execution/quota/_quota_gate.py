@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 
-QUOTA_CACHE_SCHEMA_VERSION: int = 3
+QUOTA_CACHE_SCHEMA_VERSION: int = 4
 
 # Canonical Anthropic quota API window names, as returned by GET /api/oauth/usage.
 # Update these when Anthropic adds or renames windows — the contract tests will
@@ -197,7 +197,12 @@ def _read_credentials(credentials_path: str) -> str:
     return creds["accessToken"]
 
 
-def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
+def _read_cache(
+    cache_path: str,
+    max_age: int,
+    *,
+    credential_scope: str | None = None,
+) -> QuotaStatus | None:
     """Return a fresh QuotaStatus from local cache, or None if stale/missing/old-format."""
     raw = read_versioned_json(
         Path(cache_path).expanduser(),
@@ -209,7 +214,9 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
     try:
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
         age = (datetime.now(UTC) - fetched_at).total_seconds()
-        if age > max_age:
+        if age < 0 or age > max_age:
+            return None
+        if credential_scope is not None and raw.get("credential_scope") != credential_scope:
             return None
         if "binding" not in raw:
             return None
@@ -225,10 +232,16 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
         return None
 
 
-def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
+def _write_cache(
+    cache_path: str,
+    result: QuotaFetchResult,
+    *,
+    credential_scope: str | None = None,
+) -> None:
     """Write full-snapshot quota data to cache file. Silently logs on failure."""
     try:
         payload = {
+            "credential_scope": credential_scope,
             "fetched_at": datetime.now(UTC).isoformat(),
             "windows": {
                 name: {
@@ -327,6 +340,7 @@ async def _fetch_quota(
 async def _refresh_quota_cache(
     config: Any,
     *,
+    credential_scope: str | None = None,
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10.0,
 ) -> None:
@@ -349,7 +363,14 @@ async def _refresh_quota_cache(
         base_url=base_url,
         _httpx_timeout=_httpx_timeout,
     )
-    _write_cache(config.cache_path, fetch_result)
+    _write_cache(
+        config.cache_path,
+        fetch_result,
+        credential_scope=_quota_scope_or_none(
+            credential_scope,
+            config.credentials_path,
+        ),
+    )
 
 
 def _poll_constraint(status: QuotaStatus, *, scope: str, now_epoch: int) -> QuotaConstraint | None:
@@ -362,6 +383,22 @@ def _poll_constraint(status: QuotaStatus, *, scope: str, now_epoch: int) -> Quot
         observed_at_epoch=now_epoch,
         limit_type=status.window_name,
     )
+
+
+def _quota_scope_or_none(credential_scope: str | None, credentials_path: str) -> str | None:
+    """Resolve a cache identity without letting diagnostic polling abort on its absence."""
+    if credential_scope:
+        return credential_scope
+    try:
+        return quota_scope("anthropic", Path(credentials_path).expanduser())
+    except _OPERATIONAL_EXCEPTION_TYPES as exc:
+        logger.warning(
+            "quota_credential_scope_unavailable",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+        return None
 
 
 def _render_constraint(
@@ -392,6 +429,7 @@ async def check_and_sleep_if_needed(
     config: Any,
     *,
     provider: str = "anthropic",
+    credential_scope: str | None = None,
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10,
 ) -> dict:
@@ -445,20 +483,25 @@ async def check_and_sleep_if_needed(
     }
 
     now_epoch = int(time.time())
-    account_scope = quota_scope(provider.casefold(), Path(config.credentials_path).expanduser())
     status: QuotaStatus | None = None
     refetched = False
     observations: list = []
     observed_winner: QuotaConstraint | None = None
 
     try:
-        observations = safe_decode_observed_constraints(
-            observed_constraint_path(config.cache_path)
-        )
-        observed_winner = effective_quota_block(
-            observations, account_scope=account_scope, now_epoch=now_epoch
-        )
-        status = _read_cache(config.cache_path, config.cache_max_age)
+        account_scope = _quota_scope_or_none(credential_scope, config.credentials_path)
+        if account_scope is not None:
+            observations = safe_decode_observed_constraints(
+                observed_constraint_path(config.cache_path)
+            )
+            observed_winner = effective_quota_block(
+                observations, account_scope=account_scope, now_epoch=now_epoch
+            )
+            status = _read_cache(
+                config.cache_path,
+                config.cache_max_age,
+                credential_scope=account_scope,
+            )
         if status is None:
             if observed_winner is not None:
                 return _render_constraint(
@@ -468,20 +511,29 @@ async def check_and_sleep_if_needed(
                     now_epoch=now_epoch,
                 )
             fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
-            _write_cache(config.cache_path, fetch_result)
+            _write_cache(config.cache_path, fetch_result, credential_scope=account_scope)
             status = fetch_result.binding
         if status.should_block and status.resets_at is not None:
             refetched = True
             fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
-            _write_cache(config.cache_path, fetch_result)
+            _write_cache(config.cache_path, fetch_result, credential_scope=account_scope)
             status = fetch_result.binding
 
         constraints = list(observations)
-        poll_constraint = _poll_constraint(status, scope=account_scope, now_epoch=now_epoch)
+        poll_constraint = _poll_constraint(status, scope=account_scope or "", now_epoch=now_epoch)
+        if account_scope is None and poll_constraint is not None:
+            return _render_constraint(
+                poll_constraint,
+                status=status,
+                buffer_seconds=config.buffer_seconds,
+                now_epoch=now_epoch,
+            )
         if poll_constraint is not None:
             constraints.append(poll_constraint)
-        winner = effective_quota_block(
-            constraints, account_scope=account_scope, now_epoch=now_epoch
+        winner = (
+            effective_quota_block(constraints, account_scope=account_scope, now_epoch=now_epoch)
+            if account_scope is not None
+            else None
         )
         if winner is not None:
             return _render_constraint(

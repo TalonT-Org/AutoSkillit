@@ -86,7 +86,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["cache_max_age"] == 300
     assert data["quota_guard"]["cache_path"] == "/custom/path.json"
-    assert data["quota_guard"]["buffer_seconds"] == 60
+    assert "buffer_seconds" not in data["quota_guard"]
     # threshold fields are pre-computed into should_block in the cache — not written to hook_config
     assert "threshold" not in data["quota_guard"]
     assert "short_window_threshold" not in data["quota_guard"]

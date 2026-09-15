@@ -5,7 +5,7 @@ subprocess runner, following ``tests/execution/test_headless_provider_fallback.p
 harness style (``minimal_ctx``, monkeypatched ``_build_skill_result``, a
 disabled ``LocalOtlpSink``). Covers the ``ManagedAttemptRecorder`` wiring:
 no-op for an ordinary (non-managed) session, one row per physical provider
-attempt across a retry, the ``new_managed_attempt_id()`` fallback when no
+attempt without cross-provider replay, the ``new_managed_attempt_id()`` fallback when no
 managed-lineage observer is present, cancellation before/after a confirmed
 spawn, and binding a later-resolved backend session id onto the same row.
 """
@@ -26,12 +26,10 @@ from autoskillit.core.types import RetryReason, SkillResult
 from autoskillit.execution import child_outcomes as co
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
-from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env, _sr
+from tests.execution.conftest import _launch_preparation, _mock_backend, _sr
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-_PROVIDER_RETRY_LIMIT = 2
 
 _STALE_RESULT = SkillResult(
     success=False,
@@ -155,7 +153,6 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     import autoskillit.execution.headless._headless_execute as _execute_module
     from autoskillit.execution.headless import PostSessionMetrics
 
-    monkeypatch.setattr(ctx.config.providers, "provider_retry_limit", _PROVIDER_RETRY_LIMIT)
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._build_skill_result",
         build_result_fn,
@@ -167,10 +164,6 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
-    )
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute.is_feature_enabled",
-        lambda name, *a, **kw: name == "providers",  # noqa: ARG005
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
@@ -232,7 +225,7 @@ async def test_ordinary_session_records_nothing(minimal_ctx, tmp_path, monkeypat
 
 
 @pytest.mark.anyio
-async def test_two_provider_attempts_produce_two_distinct_rows(
+async def test_post_start_stale_produces_one_terminal_row(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.headless import _execute_claude_headless
@@ -245,7 +238,6 @@ async def test_two_provider_attempts_produce_two_distinct_rows(
         _make_queued_build_result(_STALE_RESULT, _SUCCESS_RESULT),
     )
     minimal_ctx.runner = _runner_returning(12345, _sr())
-    sink_env = _sink_env()
     _, lineage_observer = _managed_observer(tmp_path)
 
     def build_spec(binding, provider_extras, managed_attempt_id):  # noqa: ARG001
@@ -259,11 +251,6 @@ async def test_two_provider_attempts_produce_two_distinct_rows(
         timeout=30.0,
         stale_threshold=5.0,
         provider_name="minimax",
-        provider_fallback_env={
-            **{key: f"fallback-{key}" for key in sink_env},
-            "ANTHROPIC_API_KEY": "sk-test",
-        },
-        provider_fallback_name="anthropic",
         managed_lineage_observer=lineage_observer,
         session_id="parent-two-attempts",
         child_role="Explore",
@@ -272,26 +259,25 @@ async def test_two_provider_attempts_produce_two_distinct_rows(
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
-    assert result.success
+    assert not result.success
     outcomes = co.collect_child_outcomes(
         backend="claude_code", parent_session_id="parent-two-attempts", log_root=log_root
     )
-    assert len(outcomes) == 2
+    assert len(outcomes) == 1
     child_ids = {o["child_id"] for o in outcomes}
-    assert len(child_ids) == 2
+    assert len(child_ids) == 1
     by_reason = {o["terminal_reason"]: o for o in outcomes}
-    assert set(by_reason) == {"unknown", "completed"}
+    assert set(by_reason) == {"unknown"}
     assert by_reason["unknown"]["raw_reason"] == "stale"
     assert by_reason["unknown"]["role"] == "Explore"
     assert by_reason["unknown"]["attribution_skill"] == "do-a"
-    assert by_reason["completed"]["role"] == "Explore"
 
 
-# --- 3. retry with managed lineage disabled: fallback id path ----------------
+# --- 3. terminal attempt with managed lineage disabled ----------------------
 
 
 @pytest.mark.anyio
-async def test_retry_without_lineage_observer_still_produces_two_distinct_rows(
+async def test_post_start_budget_exhaustion_produces_one_terminal_row(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.headless import _execute_claude_headless
@@ -312,8 +298,6 @@ async def test_retry_without_lineage_observer_still_produces_two_distinct_rows(
         timeout=30.0,
         stale_threshold=5.0,
         provider_name="minimax",
-        provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
-        provider_fallback_name="anthropic",
         session_id="parent-no-observer",
         child_role="Explore",
         child_attribution_skill="do-a",
@@ -321,15 +305,15 @@ async def test_retry_without_lineage_observer_still_produces_two_distinct_rows(
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
-    assert result.success
+    assert not result.success
     outcomes = co.collect_child_outcomes(
         backend="claude_code", parent_session_id="parent-no-observer", log_root=log_root
     )
-    assert len(outcomes) == 2
+    assert len(outcomes) == 1
     child_ids = {o["child_id"] for o in outcomes}
-    assert len(child_ids) == 2
+    assert len(child_ids) == 1
     by_reason = {o["terminal_reason"]: o for o in outcomes}
-    assert set(by_reason) == {"unknown", "completed"}
+    assert set(by_reason) == {"unknown"}
     assert by_reason["unknown"]["raw_reason"] == "budget_exhausted"
 
 

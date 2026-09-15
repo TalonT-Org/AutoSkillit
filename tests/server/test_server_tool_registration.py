@@ -656,6 +656,7 @@ class TestSafetyConfigWiring:
         tool_ctx_kitchen_open.config = AutomationConfig(
             safety=SafetyConfig(require_dry_walkthrough=False)
         )
+        tool_ctx_kitchen_open.config.quota_guard.enabled = False
 
         plan = tmp_path / "plan.md"
         plan.write_text("# No marker plan")

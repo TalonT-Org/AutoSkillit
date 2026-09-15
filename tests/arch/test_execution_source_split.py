@@ -17,6 +17,7 @@ NEW_HEADLESS_MODULES = [
     "_headless_execute.py",
     "_headless_evidence.py",
     "_headless_model_evidence.py",
+    "_headless_prepare.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,

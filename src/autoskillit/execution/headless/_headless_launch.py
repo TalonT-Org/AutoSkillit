@@ -1,15 +1,14 @@
-"""Plugin-bound command construction and launch-attempt lifecycle."""
-
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    CandidatePreSpawnRejection,
     CmdSpec,
     CodingAgentBackend,
     InfrastructureFaultError,
@@ -41,15 +40,12 @@ from autoskillit.execution.headless._headless_recovery import (
 )
 from autoskillit.execution.headless._managed import (
     _BuildSpec,
-    _headless_plugin_load_mode,
     _ManagedLineageObserver,
 )
 from autoskillit.execution.headless._managed._attempt import _generated_home_attempt
 from autoskillit.execution.headless._managed._launch_adapter import (
     _binding_identity,
-    _food_truck_launch_spec_builder,
     _HeadlessLaunchAdapter,
-    _skill_launch_spec_builder,
 )
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 
@@ -61,15 +57,8 @@ logger = get_logger(__name__)
 _NUDGE_TIMEOUT: float = 60.0
 
 
-def _report_plugin_binding_close_failure(
-    primary_error: BaseException,
-    _cleanup_error: BaseException,
-) -> None:
-    logger.warning(
-        "plugin_launch_binding_close_failed",
-        primary_error=repr(primary_error),
-        exc_info=True,
-    )
+def _report_plugin_binding_close_failure(error: BaseException, _: BaseException) -> None:
+    logger.warning("plugin_launch_binding_close_failed", primary_error=repr(error), exc_info=True)
 
 
 def _plugin_launch_binding(
@@ -121,17 +110,18 @@ async def _run_headless_attempt(
     lifecycle_observation_enabled: bool,
     force_inactive_agent_teams: bool = False,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    pre_spawn_admission: Callable[
+        [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+    ]
+    | None = None,
+    mark_execution_started: Callable[[], None] | None = None,
     on_spec_built: Callable[[CmdSpec], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
     attempt: int = 1,
     retained_binding: PluginLaunchBinding | None = None,
-) -> tuple[SubprocessResult, CmdSpec]:
-    """Build and execute one provider attempt under one owned plugin binding.
-
-    ``retained_binding``, when set, is the caller's already-owned binding for
-    the complete logical dispatch; reuse it instead of acquiring a fresh one.
-    """
+) -> tuple[SubprocessResult, CmdSpec] | CandidatePreSpawnRejection:
+    """Build and execute one attempt under its owned or retained plugin binding."""
     binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
         if retained_binding is not None
@@ -167,6 +157,10 @@ async def _run_headless_attempt(
             managed_lineage_observer.bind_launch_contract_digest(launch_contract.digest)
         if on_launch_resolved is not None:
             on_launch_resolved(launch_contract)
+        if pre_spawn_admission is not None:
+            rejection = await pre_spawn_admission(launch_contract)
+            if rejection is not None:
+                return rejection
         spec = launch_resolver.rehydrate_secret_environment(
             launch_contract,
             adapter.secret_environment,
@@ -193,6 +187,8 @@ async def _run_headless_attempt(
                 )
             if on_spec_built is not None:
                 on_spec_built(spec)
+            if mark_execution_started is not None:
+                mark_execution_started()
             result = await runner(
                 list(spec.cmd),
                 cwd=Path(spec.cwd),
@@ -256,13 +252,19 @@ async def _attempt_contract_nudge(
     launch_preparation: LaunchPreparation | None = None,
     expected_launch_contract: ResolvedLaunchContract | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    pre_spawn_admission: Callable[
+        [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+    ]
+    | None = None,
+    mark_execution_started: Callable[[], None] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     force_inactive_agent_teams: bool = False,
     natural_exit_grace_seconds: float,
+    nudge_timeout: float = _NUDGE_TIMEOUT,
     attempt: int = 2,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
     retained_binding: PluginLaunchBinding | None = None,
-) -> SkillResult | None:
+) -> SkillResult | CandidatePreSpawnRejection | None:
     """Resume once for missing structured tokens/marker, reusing the retained binding."""
     if (
         backend is None
@@ -404,6 +406,10 @@ async def _attempt_contract_nudge(
                 managed_lineage_observer.bind_launch_contract_digest(launch_contract.digest)
             if on_launch_resolved is not None:
                 on_launch_resolved(launch_contract)
+            if pre_spawn_admission is not None:
+                rejection = await pre_spawn_admission(launch_contract)
+                if rejection is not None:
+                    return rejection
             spec = launch_resolver.rehydrate_secret_environment(
                 launch_contract,
                 adapter.secret_environment,
@@ -426,10 +432,12 @@ async def _attempt_contract_nudge(
                         ),
                     )
                 nudge_start_ts = datetime.now(UTC).isoformat()
+                if mark_execution_started is not None:
+                    mark_execution_started()
                 nudge_result = await runner(
                     list(spec.cmd),
                     cwd=Path(spec.cwd),
-                    timeout=_NUDGE_TIMEOUT,
+                    timeout=nudge_timeout,
                     env=spec.env,
                     pty_mode=(
                         pty_override if pty_override is not None else _resolve_pty_mode(backend)
@@ -487,13 +495,3 @@ async def _attempt_contract_nudge(
         combined_turn_usage,
         combined_usage,
     )
-
-
-__all__ = [
-    "_NUDGE_TIMEOUT",
-    "_attempt_contract_nudge",
-    "_food_truck_launch_spec_builder",
-    "_headless_plugin_load_mode",
-    "_run_headless_attempt",
-    "_skill_launch_spec_builder",
-]

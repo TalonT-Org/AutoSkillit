@@ -23,6 +23,7 @@ from autoskillit.core import (
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    CandidatePreSpawnRejection,
     EffectiveSkillInvocationAuthority,
     ManagedJoinAttestation,
     ManagedWorkerPermit,
@@ -270,6 +271,10 @@ class _ManagedLeafLaunchAdapter:
                     child_role=leaf_projection.binding.assignment.role,
                     child_attribution_skill=self.source_name,
                 )
+                if isinstance(result, CandidatePreSpawnRejection):
+                    raise SkillContractError(
+                        "Managed fixed-batch leaf rejected before its runner started"
+                    )
                 return ManagedLeafLaunchResult(
                     outcome=OUTCOME_SUCCESS if result.success else OUTCOME_FAILURE,
                     backend_session_id=result.session_id,

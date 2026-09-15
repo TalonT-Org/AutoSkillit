@@ -26,6 +26,7 @@ _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
         # Default passthrough is required byte-for-byte-preservation behavior; see
         # tests/execution/test_launch_force_inactive_default.py.
         "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+        "CLAUDE_CODE_OAUTH_TOKEN",  # intentional: Claude OAuth authentication
         # not a real env var: __all__ list member in core/types/_type_constants_env.py
         # (R4 predicate-(b) scanner false positive) -- the constant's own identifier
         # name, never itself set as an OS environment variable.

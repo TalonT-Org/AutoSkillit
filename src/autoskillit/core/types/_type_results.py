@@ -11,14 +11,14 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from ..audit.closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ExecutionIdentity
-from ._type_results_execution import ApiFailureOutcome
+from ._type_results_execution import ApiFailureOutcome, ExecutionSelection, RateLimitWindow
 from ._type_results_records import (
     SESSION_INDEX_SCHEMA_VERSION,
     CapturedStream,
@@ -44,6 +44,9 @@ from ._type_results_records import (
     ValidatedWorktreePath,
 )
 from ._type_token import TurnTokenEntry
+
+if TYPE_CHECKING:
+    from ._type_launch import ResolvedLaunchContract
 
 T = TypeVar("T")
 _EXTERNAL_EFFECT_VALUES = ("none", "serialized-idempotent", "serialized-unknown-completion")
@@ -83,6 +86,7 @@ __all__ = [
     "PreLaunchReadiness",
     "InfraOutcome",
     "ApiRetryOutcome",
+    "CandidatePreSpawnRejection",
     "NdjsonDriftOutcome",
     "SkillResult",
     "CleanupResult",
@@ -184,6 +188,15 @@ class ClosureAuthoritySpec:
                 raise ValueError(
                     f"ClosureAuthoritySpec.plan_paths[{idx}] must be absolute, got {pp!r}"
                 )
+
+
+@dataclass(frozen=True, slots=True)
+class CandidatePreSpawnRejection:
+    """A candidate is ineligible before its subprocess is started."""
+
+    reason: str
+    attempted_contract: ResolvedLaunchContract
+    rate_limit: RateLimitWindow = field(default_factory=RateLimitWindow)
 
 
 def closure_authority_spec_from_args(
@@ -422,6 +435,10 @@ class SkillResult:
     """True when the headless session called an MCP tool (heuristic for server lifespan)."""
     provider: ProviderOutcome = field(default_factory=ProviderOutcome.none_used)
     """Provider execution outcome bundle."""
+    execution_selection: ExecutionSelection | None = None
+    """Candidate-selection evidence supplied by dispatch before execution."""
+    candidate_exhausted: bool = False
+    """True when every configured candidate was rejected before execution."""
     infra: InfraOutcome = field(default_factory=InfraOutcome)
     """Infrastructure exit classification bundle."""
     api_retry: ApiRetryOutcome = field(default_factory=ApiRetryOutcome)
@@ -478,6 +495,12 @@ class SkillResult:
             "api_terminal_reason": self.api_failure.terminal_reason,
             "api_error_code": self.api_failure.error_code,
             "api_error_message_seen": self.api_failure.api_error_message_seen,
+            "candidate_exhausted": self.candidate_exhausted,
+            "execution_selection": (
+                self.execution_selection.to_payload()
+                if self.execution_selection is not None
+                else None
+            ),
             "rate_limit_status": self.api_failure.rate_limit.status,
             "rate_limit_type": self.api_failure.rate_limit.limit_type,
             "rate_limit_resets_at_epoch": self.api_failure.rate_limit.resets_at_epoch,

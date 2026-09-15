@@ -234,6 +234,18 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         ),
     ),
     DurableArtifactWriterDef(
+        writer=(
+            "autoskillit.execution.evidence._session_retention:"
+            "write_execution_candidate_manifest_at_root"
+        ),
+        artifact=(
+            "execution-candidates/<selection-id>.json — ordered execution-candidate "
+            "selection evidence written before candidate admission or launch"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.execution.process._process_tether:write_tether",
         artifact=(
             "process-tethers/*.json under default_log_dir() — per-spawn spawner/child "

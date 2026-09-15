@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
+from autoskillit.core import CandidatePreSpawnRejection, RetryReason, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
@@ -303,6 +303,11 @@ async def prepare_issue(
                 )
             finally:
                 dispatch.cleanup(tool_ctx)
+
+            if isinstance(result, CandidatePreSpawnRejection):
+                return json.dumps(
+                    {"success": False, "error": f"Pre-spawn rejection: {result.reason}"}
+                )
 
             if not result.success:
                 extra = _extract_partial_issue_data(result.result) if result.result else {}

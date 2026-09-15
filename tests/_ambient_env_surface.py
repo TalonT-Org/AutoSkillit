@@ -820,11 +820,11 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),
-    "server/lifecycle/_guards.py:398": (
+    "server/lifecycle/_guards.py:474": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/lifecycle/_lifespan/_session_boots.py:537": (
+    "server/lifecycle/_lifespan/_session_boots.py:541": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -843,6 +843,14 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
     "server/tools/tools_evidence_reader.py:174": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
+    ),
+    "server/tools/tools_execution/_candidate_policy.py:189": (
+        "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
+        "runtime from config, not a module-level constant this AST scanner can resolve."
+    ),
+    "server/tools/tools_execution/_run_skill_prepare.py:275": (
+        "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
+        "runtime from the persisted launch contract, not a statically resolvable name."
     ),
 }
 
@@ -1537,15 +1545,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "as internal state that must not leak across test boundaries."
         ),
     ),
-    "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS": AmbientEnvDisposition(
-        var="AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit quota-policy override read by production hook code; scrubbed "
-            "as internal state that must not leak across test boundaries."
-        ),
-    ),
     "AUTOSKILLIT_QUOTA_GUARD__DISABLED": AmbientEnvDisposition(
         var="AUTOSKILLIT_QUOTA_GUARD__DISABLED",
         disposition="scrub",
@@ -1806,6 +1805,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "CLAUDE_CODE_OAUTH_TOKEN": AmbientEnvDisposition(
+        var="CLAUDE_CODE_OAUTH_TOKEN",
+        disposition="scrub",
+        owner="claude-code",
+        justification=(
+            "Claude Code OAuth credential read only to derive a quota-account fingerprint; "
+            "scrubbed to prevent cross-test credential leakage."
         ),
     ),
     "CLAUDE_CODE_SSE_PORT": AmbientEnvDisposition(

@@ -565,10 +565,23 @@ def make_tool_ctx(monkeypatch, tmp_path):
     from autoskillit.core.types import SubprocessRunner
     from autoskillit.server._factory import make_context
     from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools.tools_execution import _run_skill_prepare
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
     created_authorities: list[FakePluginArtifactAuthority] = []
     created_contexts = []
+    real_which = _run_skill_prepare.shutil.which
+
+    def _test_which(binary, *args, **kwargs):
+        if binary in {"claude", "codex"}:
+            return f"/test-bin/{binary}"
+        return real_which(binary, *args, **kwargs)
+
+    monkeypatch.setattr(
+        _run_skill_prepare.shutil,
+        "which",
+        _test_which,
+    )
 
     def _factory(
         config: AutomationConfig | None = None,
@@ -584,6 +597,10 @@ def make_tool_ctx(monkeypatch, tmp_path):
             plugin_authority=plugin_authority,
             project_dir=tmp_path,
         )
+        if config is None:
+            # Generic server fixtures exercise dispatch without live OAuth authority.
+            # Quota-focused tests explicitly enable the guard and supply credentials.
+            ctx.config.quota_guard.enabled = False
         ctx.audit_admission_ledger.recover_all()
         ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
         ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
@@ -669,6 +686,8 @@ def bind_test_skill_resume_contract(
 ) -> None:
     """Bind a minimal valid projected contract for resume-path tests."""
     import hashlib
+    import json
+    import time
     from pathlib import Path
 
     from autoskillit.core import (
@@ -676,6 +695,8 @@ def bind_test_skill_resume_contract(
         BackendAuthorityKind,
         BackendAuthorityTier,
         CmdSpec,
+        ExecutionCandidateAttempt,
+        ExecutionSelection,
         LaunchResolutionRequest,
         LaunchSurface,
         LaunchValueSource,
@@ -790,6 +811,56 @@ def bind_test_skill_resume_contract(
     )
     store.finalize(correlation_key, session_id)
     tool_ctx.skill_session_contract_store = store
+
+    selection_id = f"resume-{session_id}"
+    recorded_at = int(time.time())
+    terminal_attempt = ExecutionCandidateAttempt(
+        candidate_id=f"{selection_id}:0",
+        ordinal=0,
+        attempt=1,
+        parent_backend=launch_contract.effective_backend,
+        parent_provider=launch_contract.provider,
+        requested_backend=launch_contract.effective_backend,
+        requested_provider=launch_contract.provider,
+        effective_backend=launch_contract.effective_backend,
+        effective_provider=launch_contract.provider,
+        backend_source_path=launch_contract.backend_authority.key_path,
+        provider_source_path=launch_contract.provider_source.key_path,
+        model_source_path=launch_contract.physical_model_source.key_path,
+        admission_status="started",
+        admission_at_epoch=recorded_at,
+        transition="completed",
+        execution_started=True,
+        child_session_id=session_id,
+    )
+    selection = ExecutionSelection(
+        selection_id=selection_id,
+        attempts=(terminal_attempt,),
+        terminal_candidate_id=terminal_attempt.candidate_id,
+        invocation_deadline_epoch=recorded_at + 3600,
+        remaining_retry_budget=1,
+        completed=True,
+    )
+    log_root = Path(tool_ctx.config.linux_tracing.log_dir)
+    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+
+    write_execution_candidate_manifest(
+        selection,
+        str(log_root),
+        max_sessions=tool_ctx.config.linux_tracing.max_sessions,
+    )
+    log_root.mkdir(parents=True, exist_ok=True)
+    (log_root / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "execution_selection": selection.to_payload(),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------

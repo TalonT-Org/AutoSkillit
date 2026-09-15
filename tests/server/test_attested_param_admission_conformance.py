@@ -145,18 +145,17 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     step_provider; the call must still succeed (never denied), proving the
     with: mapped field (provider), not the parameter name (step_provider),
     is what a recipe author writes."""
-    from autoskillit.server.lifecycle import _guards
-    from autoskillit.server.tools.tools_execution import run_skill
+    from autoskillit.server.tools.tools_execution import _run_skill_prepare, run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
     resolved_step_providers: list[str] = []
-    resolve_provider_profile = _guards._resolve_provider_profile
+    resolve_candidate_policy = _run_skill_prepare.resolve_candidate_policy
 
     def record_step_provider(*args, **kwargs):
         resolved_step_providers.append(kwargs.get("step_provider", ""))
-        return resolve_provider_profile(*args, **kwargs)
+        return resolve_candidate_policy(*args, **kwargs)
 
-    monkeypatch.setattr(_guards, "_resolve_provider_profile", record_step_provider)
+    monkeypatch.setattr(_run_skill_prepare, "resolve_candidate_policy", record_step_provider)
 
     ready = tool_ctx_ready_recipe
     monkeypatch.setitem(ready.tool_ctx.config.features, "providers", True)

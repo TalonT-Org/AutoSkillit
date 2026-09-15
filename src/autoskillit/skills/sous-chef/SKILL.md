@@ -122,13 +122,13 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   work or a scheduled wakeup remained unresolved, the bounded completion drain expired,
   or authoritative lifecycle evidence was unavailable. Start fresh; do not poll or resume
   the prior session.
-- **If `retry_reason: rate_limited` AND the step defines `on_rate_limit`** → follow `on_rate_limit`.
-  HTTP 429 or text-based rate-limit signal detected. Route to the designated recovery step
-  (typically `test`) to continue after the rate limit window resets. Partial progress may
-  exist on disk.
-- **If `retry_reason: rate_limited` AND the step has no `on_rate_limit`** → fall through to `on_failure`.
-  All run_skill steps should declare on_rate_limit explicitly. If missing, treat as a
-  configuration error and fail safely via on_failure.
+- **If `candidate_exhausted: true`** → route from the structured result before generic
+  failure handling. If `retry_reason: rate_limited` and the step defines `on_rate_limit`,
+  follow `on_rate_limit`; otherwise follow `on_failure`. The ordered
+  `execution_selection.attempts` records why every candidate was rejected before spawn.
+  Do not re-execute the original call.
+- **If `retry_reason: rate_limited` after a started candidate** → follow the RATE LIMIT
+  RETRY PROTOCOL below. Do not infer that the original call is replayable.
 - **If `retry_reason: early_stop` AND `has_progress_evidence` is true in the result AND the step
   defines `on_context_limit`** → follow `on_context_limit`. The model made progress (wrote files
   or created a worktree) but stopped before emitting the completion marker. Partial progress
@@ -180,8 +180,9 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=false` → `on_failure`.
-         `needs_retry=true` + `retry_reason=rate_limited` + step has `on_rate_limit` → follow `on_rate_limit`.
-         `needs_retry=true` + `retry_reason=rate_limited` + no `on_rate_limit` → `on_failure`.
+         `candidate_exhausted=true` + `retry_reason=rate_limited` + step has `on_rate_limit` → `on_rate_limit`.
+         `candidate_exhausted=true` + otherwise → `on_failure`.
+         `needs_retry=true` + `retry_reason=rate_limited` after a started candidate → RATE LIMIT RETRY PROTOCOL.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
@@ -200,22 +201,25 @@ routing target — the recipe is structurally incomplete.
 
 ## RATE LIMIT RETRY PROTOCOL
 
-When a `run_skill` call returns `retry_reason: rate_limited`:
+Use only the structured `run_skill` result. Hook diagnostics are not a retry
+instruction.
 
-1. **Wait before routing.** Sleep 60 seconds before following the `on_rate_limit` route.
-   This gives the rate-limit window time to reset. Do NOT immediately re-dispatch.
+1. **Pre-spawn exhaustion.** When `candidate_exhausted: true`, no candidate started.
+   Inspect `retry_reason` and `execution_selection.attempts`: a quota-blocked compatible
+   candidate is reported as `retry_reason: rate_limited`. Follow `on_rate_limit` when it
+   is declared; otherwise follow `on_failure`. Do not replay the original `run_skill`
+   call or add a fixed delay.
 
-2. **Track rate-limit retry count.** Maintain a per-step counter of consecutive
-   rate-limit retries. If the same step returns `retry_reason: rate_limited` three
-   times consecutively, route to `on_failure` instead of `on_rate_limit` — the rate
-   limit is not transient and continued retrying wastes budget.
+2. **Post-start rate limit.** When the terminal candidate started, never rerun the
+   original call or advance to another candidate. Resume only when the result includes a
+   non-empty `execution_selection.continuation.resume_session_id`. Pass that exact ID to
+   the supported same-backend/provider binding, and only while the recommendation's
+   `reset_after_seconds` fits within `remaining_deadline_seconds`.
 
-3. **Check deadline budget.** If `AUTOSKILLIT_SESSION_DEADLINE` is set and fewer than
-   120 seconds remain before the deadline, route to `on_failure` instead of waiting.
-   Do not sleep past the session deadline.
-
-4. **Reset counter on success.** When a step completes successfully (or with a
-   non-rate-limit retry reason), reset its rate-limit retry counter to zero.
+3. **No continuation.** If the explicit same-binding recommendation is absent or
+   unavailable, immediately follow `on_rate_limit` when declared, otherwise
+   `on_failure`. Let the destination step perform its normal cleanup; do not poll for a
+   reset or manufacture a replay-safe outcome from local write evidence.
 
 ---
 
@@ -745,53 +749,26 @@ closed due to a stale base):
 
 ## QUOTA WAIT PROTOCOL — MANDATORY
 
-When quota-related events occur during pipeline execution:
+Quota admission is server-owned and appears only in a structured `run_skill` result.
+Do not treat a quota hook diagnostic, warning text, or an elapsed interval as authority to
+replay a call.
 
-### PreToolUse Denial (run_skill blocked)
+1. **Candidate exhaustion before start.** `candidate_exhausted: true` means every
+   compatible candidate was rejected before a worker started. Use the ordered
+   `execution_selection.attempts` and `retry_reason` from that result: route a
+   `rate_limited` exhaustion to `on_rate_limit` when declared, and all other cases (or
+   a missing `on_rate_limit`) to `on_failure`.
 
-When a `run_skill` call is DENIED by the quota guard hook:
+2. **Rate limit after start.** A started candidate can have external effects even when
+   no local writes were observed. Never rerun the original call or choose a different
+   candidate. Resume only through the result's explicit same-binding
+   `execution_selection.continuation.resume_session_id`, subject to its reset and
+   remaining-deadline values.
 
-1. This is a **temporary** block — NOT a permanent error, NOT a pipeline failure.
-2. The deny message contains a `run_cmd` sleep command with the required duration.
-3. **MANDATORY**: Execute the sleep command via `run_cmd` immediately.
-4. After the sleep completes, retry the **exact same** `run_skill` call with
-   identical arguments (`skill_command`, `cwd`, `model`, `step_name`).
-5. Do NOT follow `on_failure`. Do NOT report to the user. Do NOT skip the step.
-6. Before executing, state aloud: "Quota denied. Sleeping N seconds, then retrying."
-
-### Post-Execution Warning (quota high after run_skill)
-
-When `run_skill` output contains `--- QUOTA WARNING ---`:
-
-1. The warning contains a `run_cmd` sleep command.
-2. **MANDATORY**: Execute the sleep command via `run_cmd` BEFORE calling the next
-   `run_skill` (whether it is the next pipeline step or a retry).
-3. After sleeping, proceed normally with the next step.
-4. Before executing, state aloud: "Quota warning. Sleeping N seconds before next step."
-
-### Budget-Exceeded Denial (quota sleep exceeds session wall-clock budget)
-
-When a `run_skill` call is DENIED with "QUOTA BUDGET EXCEEDED":
-
-1. The required quota sleep exceeds the session's remaining wall-clock budget.
-2. **MANDATORY**: Do NOT execute the sleep command.
-3. Instead, emit your result block immediately with:
-   - `"success": false`
-   - `"reason": "fleet_quota_exhausted"`
-   - `"wait_seconds": <seconds_until_reset>`
-   - `"summary": "Quota exceeded; session budget insufficient for sleep. Resume after window resets."`
-4. Then STOP — do not call any more tools.
-5. Do NOT follow `on_failure`. Do NOT report to the user.
-6. The fleet dispatcher will handle retry scheduling.
-
-### Key Rules
-
-- Quota denials are **always temporary**. The API enforces multiple rate-limit windows (e.g. one-minute, one-hour, five-hour, one-day). The guard waits for the most constrained window — the one that resets latest among all windows above the threshold — to reset before retrying.
-- A denied `run_skill` has **zero side effects** — no partial state, no worktree changes.
-  Retrying with the same arguments is always safe.
-- Multiple consecutive denials may occur if the sleep duration was underestimated.
-  Keep sleeping and retrying until the call succeeds.
-- NEVER use `AskUserQuestion` for quota events — they are fully automated.
+3. **Immediate route otherwise.** With no explicit continuation, follow
+   `on_rate_limit` when declared or `on_failure` otherwise. The routed step owns cleanup.
+   Do not add a fixed delay, poll for quota, or emit a quota-exhausted sentinel on behalf
+   of the server.
 
 ---
 

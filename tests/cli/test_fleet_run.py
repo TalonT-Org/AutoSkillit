@@ -459,7 +459,7 @@ class TestFleetRunDispatch:
         assert "dispatch_status" in envelope
 
     def test_fleet_run_disable_quota_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """--disable-quota-guard passes a no-op quota checker."""
+        """--disable-quota-guard disables the dispatched context's quota guard."""
         monkeypatch.setattr(
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
@@ -468,6 +468,7 @@ class TestFleetRunDispatch:
         fake_ctx = MagicMock()
         fake_ctx.backend = _mock_backend()
         fake_ctx.config = MagicMock()
+        fake_ctx.config.quota_guard.enabled = True
         monkeypatch.setattr(
             "autoskillit.server.make_context",
             lambda cfg, **kwargs: fake_ctx,
@@ -476,8 +477,7 @@ class TestFleetRunDispatch:
         captured: dict[str, object] = {}
 
         async def fake_execute_dispatch(**kwargs: object) -> DispatchResult:
-            captured["quota_checker"] = kwargs["quota_checker"]
-            captured["quota_refresher"] = kwargs["quota_refresher"]
+            captured["tool_ctx"] = kwargs["tool_ctx"]
             return _mock_success_result()
 
         monkeypatch.setattr(
@@ -490,11 +490,8 @@ class TestFleetRunDispatch:
         with pytest.raises(SystemExit):
             fleet_run("test-recipe", task="test", disable_quota_guard=True)
 
-        import asyncio
-
-        quota_checker = captured["quota_checker"]
-        result = asyncio.run(quota_checker(None))
-        assert result == {"should_sleep": False}
+        assert captured["tool_ctx"] is fake_ctx
+        assert fake_ctx.config.quota_guard.enabled is False
 
     def test_fleet_run_passes_resume_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """--resume-session-id and --prior-dispatch-id are forwarded to execute_dispatch."""

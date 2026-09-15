@@ -293,6 +293,10 @@ class AutomationConfig:
             result.process_tether.validate()
         except ValueError as exc:
             raise ValueError(f"process_tether config: {exc}") from exc
+        if result.providers.execution_candidates and result.features.get("providers") is False:
+            raise ValueError(
+                "providers.execution_candidates requires the providers feature to be enabled"
+            )
         _timeout_coherence_gate(result.run_skill)
         _codex_mcp_timeout_coherence_gate(
             result.run_skill, result.fleet, tool_timeout=result.run_skill.mcp_tool_timeout_sec

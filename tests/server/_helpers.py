@@ -824,35 +824,8 @@ def _simple_prompt_builder(**kwargs) -> str:
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
 
 
-async def _no_sleep_quota_checker(config: Any, **kwargs) -> dict:
-    """Quota checker stub: always returns no-sleep result."""
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config: Any, **kwargs) -> None:
     """Quota refresher stub: no-op."""
-
-
-def _patch_dispatch_quota_no_sleep(monkeypatch: Any) -> None:
-    """Patch dispatch_food_truck's quota dependencies for non-quota tests."""
-    from autoskillit.server import _misc
-
-    monkeypatch.setattr(
-        _misc,
-        "check_and_sleep_if_needed",
-        _no_sleep_quota_checker,
-    )
-    monkeypatch.setattr(
-        _misc,
-        "_refresh_quota_cache",
-        _noop_quota_refresher,
-    )
 
 
 def _make_recipe_info(name: str = "test-recipe"):

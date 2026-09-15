@@ -40,16 +40,6 @@ def _simple_prompt_builder(**kwargs) -> str:
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"
 
 
-async def _no_sleep_quota_checker(config, **kwargs) -> dict:
-    return {
-        "should_sleep": False,
-        "sleep_seconds": 0,
-        "utilization": None,
-        "resets_at": None,
-        "window_name": None,
-    }
-
-
 async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
@@ -112,7 +102,6 @@ async def _run(
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     return json.loads(result.outcome.to_envelope())

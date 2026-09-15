@@ -428,7 +428,6 @@ class TestSidecarBasedResultSynthesis:
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
         from tests.fleet._helpers import (
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
             _simple_prompt_builder,
         )
@@ -473,7 +472,6 @@ class TestSidecarBasedResultSynthesis:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             capture={"pr_url": "${{ result.pr_url }}"},
         )

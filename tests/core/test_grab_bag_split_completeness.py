@@ -225,7 +225,6 @@ _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES: frozenset[str] = frozenset(
         "test_codex_interactive_required_env_includes_max_mcp_output_tokens",
         "test_codex_cook_storage_and_environment_constants_are_pinned",
         # test_type_constants_misc_markers.py
-        "test_quota_trigger_constants_exported",
         "test_investigation_complete_marker_defined",
         "test_investigation_complete_marker_in_all",
     }
@@ -345,7 +344,6 @@ _SPLIT_TARGETS: dict[str, str] = {  # noqa: E501 — table-style mapping, one te
     "test_order_interactive_required_env_importable_from_core": "tests.core.test_type_constants_env",  # noqa: E501
     "test_codex_interactive_required_env_includes_max_mcp_output_tokens": "tests.core.test_type_constants_env",  # noqa: E501
     "test_codex_cook_storage_and_environment_constants_are_pinned": "tests.core.test_type_constants_env",  # noqa: E501
-    "test_quota_trigger_constants_exported": "tests.core.test_type_constants_misc_markers",
     "test_investigation_complete_marker_defined": "tests.core.test_type_constants_misc_markers",
     "test_investigation_complete_marker_in_all": "tests.core.test_type_constants_misc_markers",
 }
@@ -383,7 +381,7 @@ def test_pre_split_test_types_inventory_is_frozen() -> None:
 def test_pre_split_test_type_constants_inventory_is_frozen() -> None:
     """The pre-split inventory must be a frozen set with no leading-dot or duplicate names."""
     assert isinstance(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES, frozenset)
-    assert len(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES) == 70
+    assert len(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES) == 69
     for name in _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES:
         assert "." not in name, f"Invalid name with dot: {name}"
 

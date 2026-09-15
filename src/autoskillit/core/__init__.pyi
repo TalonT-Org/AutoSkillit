@@ -624,10 +624,6 @@ from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
 from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
 from .types import PROVIDER_PROFILE_ENV_VAR as PROVIDER_PROFILE_ENV_VAR
-from .types import QUOTA_BUDGET_EXCEEDED_TRIGGER as QUOTA_BUDGET_EXCEEDED_TRIGGER
-from .types import QUOTA_GUARD_DENY_TRIGGER as QUOTA_GUARD_DENY_TRIGGER
-from .types import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER as QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
-from .types import QUOTA_POST_WARNING_TRIGGER as QUOTA_POST_WARNING_TRIGGER
 from .types import READING_TOKEN_PATTERN as READING_TOKEN_PATTERN
 from .types import RECIPE_ARTIFACT_DESCRIPTOR_VERSION as RECIPE_ARTIFACT_DESCRIPTOR_VERSION
 from .types import RECIPE_ARTIFACT_MAX_BLOB_BYTES as RECIPE_ARTIFACT_MAX_BLOB_BYTES
@@ -843,6 +839,7 @@ from .types import BoundValueOrigin as BoundValueOrigin
 from .types import BoundValueState as BoundValueState
 from .types import BytesToTokensPolicy as BytesToTokensPolicy
 from .types import CampaignProtector as CampaignProtector
+from .types import CandidatePreSpawnRejection as CandidatePreSpawnRejection
 from .types import CanonicalRepresentationManifest as CanonicalRepresentationManifest
 from .types import CanonicalSpanId as CanonicalSpanId
 from .types import CanonicalSpanOwner as CanonicalSpanOwner
@@ -909,6 +906,7 @@ from .types import ContextLineage as ContextLineage
 from .types import ContextSessionId as ContextSessionId
 from .types import ContextThreadId as ContextThreadId
 from .types import ContextWindowSnapshot as ContextWindowSnapshot
+from .types import ContinuationRecommendation as ContinuationRecommendation
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState
@@ -929,9 +927,11 @@ from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
 from .types import EvidenceSpec as EvidenceSpec
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
+from .types import ExecutionCandidateAttempt as ExecutionCandidateAttempt
 from .types import ExecutionIdentity as ExecutionIdentity
 from .types import ExecutionIdentityDict as ExecutionIdentityDict
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
+from .types import ExecutionSelection as ExecutionSelection
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import ExplorationBindingFailed as ExplorationBindingFailed

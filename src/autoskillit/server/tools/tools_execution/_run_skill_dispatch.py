@@ -1,12 +1,10 @@
-"""MCP tool handler: run_skill. Orchestrates the admission, prepare, session
-and finalize dispatch phases over a shared ``_RunSkillDispatchState``.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import time
+from dataclasses import replace
 from pathlib import Path
 
 import anyio
@@ -14,8 +12,16 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit.config import ExecutionCandidateSpec
 from autoskillit.core import (
+    CAMPAIGN_ID_ENV_VAR,
+    ApiFailureOutcome,
+    CandidatePreSpawnRejection,
+    ExecutionCandidateAttempt,
+    ExecutionSelection,
     InfrastructureFaultError,
+    RateLimitWindow,
+    RetryReason,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -25,6 +31,11 @@ from autoskillit.core import (
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
+from autoskillit.execution import (
+    read_session_index_rows,
+    resolve_log_dir,
+    write_execution_candidate_manifest,
+)
 from autoskillit.fleet import warm_failure_path_imports
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
@@ -242,6 +253,47 @@ async def run_skill(
                 )
                 if state._resume_launch_contract is None:
                     raise SkillContractError("Resume contract has no resolved launch contract")
+                log_root = resolve_log_dir(state.tool_ctx.config.linux_tracing.log_dir)
+                index_rows = read_session_index_rows(
+                    log_root / "sessions.jsonl",
+                    max_bytes=max(
+                        2_000_000,
+                        state.tool_ctx.config.linux_tracing.max_sessions * 4096,
+                    ),
+                )
+                selection_payload = next(
+                    (
+                        row.get("execution_selection")
+                        for row in reversed(index_rows)
+                        if row.get("session_id") == resume_session_id
+                    ),
+                    None,
+                )
+                if not isinstance(selection_payload, dict):
+                    raise SkillContractError("Resume selection evidence is unavailable")
+                selection = ExecutionSelection.from_payload(selection_payload)
+                expected_ref = f"execution-candidates/{selection.selection_id}.json"
+                if selection.manifest_ref != expected_ref:
+                    raise SkillContractError("Resume selection manifest reference is invalid")
+                with (log_root / selection.manifest_ref).open("rb") as manifest_file:
+                    manifest_bytes = manifest_file.read(1_000_001)
+                if len(manifest_bytes) > 1_000_000:
+                    raise SkillContractError("Resume selection manifest is too large")
+                if json.loads(manifest_bytes) != selection.to_payload():
+                    raise SkillContractError("Resume selection manifest does not match session")
+                terminal_attempt = selection.terminal_attempt
+                if (
+                    not selection.completed
+                    or terminal_attempt is None
+                    or not terminal_attempt.execution_started
+                    or terminal_attempt.child_session_id != resume_session_id
+                    or terminal_attempt.effective_backend
+                    != state._resume_launch_contract.effective_backend
+                    or terminal_attempt.effective_provider
+                    != state._resume_launch_contract.provider
+                ):
+                    raise SkillContractError("Resume selection binding is invalid")
+                state.execution_selection = selection
                 state._resume_backend_authority = state._resume_launch_contract.backend_authority
                 state._resume_backend_obj = state.tool_ctx.launch_resolver.backend_for_authority(
                     state._resume_backend_authority
@@ -380,26 +432,307 @@ async def run_skill(
         if (terminal := _te_pkg._admit_recipe_execution(state)) is not None:
             return terminal
 
+        state._invocation_cwd = state.cwd
+        started_epoch = time.time()
+        started_monotonic = time.monotonic()
+        run_config = state.tool_ctx.config.run_skill
+        deadline_epoch = min(
+            started_epoch + run_config.timeout,
+            started_epoch + run_config.mcp_tool_timeout_sec,
+        )
+        try:
+            inherited_deadline = float(os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""))
+        except ValueError:
+            inherited_deadline = 0.0
+        if 0 < inherited_deadline < deadline_epoch:
+            deadline_epoch = inherited_deadline
+        if resume_session_id and state.execution_selection is not None:
+            original_deadline = state.execution_selection.invocation_deadline_epoch
+            if original_deadline is None or original_deadline <= started_epoch:
+                raise SkillContractError("Resume continuation deadline is unavailable or expired")
+            deadline_epoch = min(deadline_epoch, float(original_deadline))
+        state._invocation_deadline_epoch = deadline_epoch
+        state._invocation_deadline_monotonic = started_monotonic + (deadline_epoch - started_epoch)
+        state._completion_invocation_id = _te_pkg._begin_run_skill_completion(
+            state.tool_ctx,
+            request_context=state.ctx,
+            order_id=state.order_id,
+            step_name=state.step_name,
+            tracker_target=state._tracker_target,
+        )
+        if state._completion_invocation_id is None:
+            raise SkillContractError("Completion invocation identity is unavailable")
+        if state.execution_selection is None:
+            state.execution_selection = ExecutionSelection(
+                selection_id=state._completion_invocation_id,
+                campaign_id=os.environ.get(CAMPAIGN_ID_ENV_VAR, ""),
+                invocation_deadline_epoch=int(state._invocation_deadline_epoch),
+                remaining_retry_budget=(state.tool_ctx.config.providers.provider_retry_limit),
+            )
+        else:
+            budget = state.execution_selection.remaining_retry_budget
+            if budget is None or budget <= 0:
+                raise SkillContractError("Resume continuation retry budget is exhausted")
+            state.execution_selection = replace(
+                state.execution_selection,
+                completed=False,
+                continuation=None,
+                remaining_retry_budget=budget - 1,
+            )
+
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
-            if (terminal := await _te_pkg._prepare_dispatch_backend(state)) is not None:
-                return terminal
-            _te_pkg._prepare_dispatch_session(state)
-            resource_request = _ChildResourceOwnerRequest(
-                source_cwd=Path(state.cwd),
-                prepare=lambda owned_cwd: _prepare_owned_dispatch_session(state, owned_cwd),
-                session_manager=state.tool_ctx.session_skill_manager,
-                generated_home_id=state._cleanup_session_id,
-                generated_home_materialized=lambda: state._generated_home_cleanup_required,
-                copied_snapshot_path=lambda: state._copied_snapshot_dir,
-                cleanup_errors_are_terminal=False,
+            config = state.tool_ctx.config
+
+            def _persist_selection() -> None:
+                assert state.execution_selection is not None
+                write_execution_candidate_manifest(
+                    state.execution_selection,
+                    config.linux_tracing.log_dir,
+                    max_sessions=config.linux_tracing.max_sessions,
+                    project_dir=str(state.tool_ctx.project_dir),
+                    build_protected_campaign_ids=(state.tool_ctx.build_protected_campaign_ids),
+                )
+
+            alternatives = (
+                list(config.providers.execution_candidates)
+                if not resume_session_id
+                and _te_pkg.is_feature_enabled(
+                    "providers",
+                    config.features,
+                    experimental_enabled=config.experimental_enabled,
+                )
+                else []
             )
-            resource_owner = _te_pkg.scoped_child_resource_owner(resource_request)
-            prepared = await resource_owner.__aenter__()
-            state._child_resource_owner = resource_owner
-            if prepared.value is not None:
-                return prepared.value
-            return await _te_pkg._execute_and_finalize_run_skill(state)
+            routes: list[tuple[int, ExecutionCandidateSpec | None]]
+            if resume_session_id:
+                assert state.execution_selection is not None
+                prior_attempt = state.execution_selection.terminal_attempt
+                assert prior_attempt is not None
+                routes = [(prior_attempt.ordinal, None)]
+            else:
+                routes = list(enumerate((None, *alternatives)))
+            with anyio.fail_after(
+                max(0.0, state._invocation_deadline_monotonic - time.monotonic())
+            ):
+                for ordinal, candidate in routes:
+                    state.cwd = state._invocation_cwd
+                    state._current_launch_contract = None
+                    assert state.execution_selection is not None
+                    if resume_session_id:
+                        assert prior_attempt is not None
+                        attempt = replace(
+                            prior_attempt,
+                            attempt=1
+                            + max(
+                                row.attempt
+                                for row in state.execution_selection.attempts
+                                if row.candidate_id == prior_attempt.candidate_id
+                            ),
+                            admission_status="pending",
+                            admission_at_epoch=None,
+                            admission_cache_status="",
+                            admission_cache_age_seconds=None,
+                            rate_limit_status="",
+                            rate_limit_type="",
+                            rate_limit_resets_at_epoch=None,
+                            rejection_reason=None,
+                            transition="same_binding_resume",
+                            execution_started=False,
+                            child_session_id=None,
+                        )
+                    else:
+                        attempt = ExecutionCandidateAttempt(
+                            candidate_id=f"{state.execution_selection.selection_id}:{ordinal}",
+                            ordinal=ordinal,
+                            attempt=1,
+                            parent_backend=(
+                                state.tool_ctx.backend.name if state.tool_ctx.backend else ""
+                            ),
+                            parent_provider=config.model.provider,
+                            parent_model=config.model.default_model,
+                            requested_backend=(candidate.backend if candidate is not None else ""),
+                            requested_provider=(
+                                candidate.profile
+                                if candidate is not None and candidate.profile is not None
+                                else state.requested_step_provider or state.step_provider
+                            ),
+                            requested_model=(
+                                candidate.model
+                                if candidate is not None and candidate.model is not None
+                                else state.model
+                            ),
+                            admission_status="pending",
+                            transition=("primary" if ordinal == 0 else "configured_alternative"),
+                        )
+                    state.execution_selection = replace(
+                        state.execution_selection,
+                        attempts=(*state.execution_selection.attempts, attempt),
+                    )
+                    _persist_selection()
+                    try:
+                        if (
+                            terminal := await _te_pkg._prepare_dispatch_backend(
+                                state, candidate, ordinal
+                            )
+                        ) is not None:
+                            return terminal
+                        assert state._backend_authority is not None
+                        assert state.execution_selection is not None
+                        attempt = replace(
+                            state.execution_selection.attempts[-1],
+                            effective_backend=state._backend_authority.backend,
+                            effective_provider=(
+                                state.provider_binding.provider
+                                if state.provider_binding is not None
+                                else ""
+                            ),
+                            effective_model=state.effective_model,
+                            backend_source_path=state._backend_authority.key_path,
+                            provider_source_path=(
+                                state.provider_binding.provider_source.key_path
+                                if state.provider_binding is not None
+                                else ""
+                            ),
+                            model_source_path=(
+                                state.model_pin.source.key_path
+                                if state.model_pin is not None
+                                else ""
+                            ),
+                        )
+                        state.execution_selection = replace(
+                            state.execution_selection,
+                            attempts=(*state.execution_selection.attempts[:-1], attempt),
+                        )
+                        _persist_selection()
+                        if state._candidate_rejection_reason is not None:
+                            attempt = replace(
+                                attempt,
+                                admission_status="incompatible",
+                                rejection_reason=state._candidate_rejection_reason,
+                            )
+                            state.execution_selection = replace(
+                                state.execution_selection,
+                                attempts=(*state.execution_selection.attempts[:-1], attempt),
+                            )
+                            _persist_selection()
+                            continue
+
+                        _te_pkg._prepare_dispatch_session(state)
+                        resource_request = _ChildResourceOwnerRequest(
+                            source_cwd=Path(state._invocation_cwd),
+                            prepare=lambda owned_cwd: _prepare_owned_dispatch_session(
+                                state, owned_cwd
+                            ),
+                            session_manager=state.tool_ctx.session_skill_manager,
+                            generated_home_id=state._cleanup_session_id,
+                            generated_home_materialized=lambda: (
+                                state._generated_home_cleanup_required
+                            ),
+                            copied_snapshot_path=lambda: state._copied_snapshot_dir,
+                            cleanup_errors_are_terminal=False,
+                        )
+                        resource_owner = _te_pkg.scoped_child_resource_owner(resource_request)
+                        prepared = await resource_owner.__aenter__()
+                        state._child_resource_owner = resource_owner
+                        if prepared.value is not None:
+                            return prepared.value
+                        outcome = await _te_pkg._execute_and_finalize_run_skill(state)
+                        if isinstance(outcome, CandidatePreSpawnRejection):
+                            if state.contract_lifecycle.execution_started:
+                                raise SkillContractError(
+                                    "A started worker cannot advance to another candidate"
+                                )
+                            assert state.execution_selection is not None
+                            rejected = replace(
+                                state.execution_selection.attempts[-1],
+                                admission_status="rejected",
+                                rejection_reason=outcome.reason,
+                                rate_limit_status=outcome.rate_limit.status,
+                                rate_limit_type=outcome.rate_limit.limit_type,
+                                rate_limit_resets_at_epoch=(outcome.rate_limit.resets_at_epoch),
+                            )
+                            state.execution_selection = replace(
+                                state.execution_selection,
+                                attempts=(*state.execution_selection.attempts[:-1], rejected),
+                            )
+                            _persist_selection()
+                            continue
+                        return outcome
+                    finally:
+                        if (
+                            not state.contract_lifecycle.execution_started
+                            and state.contract_lifecycle.correlation_key is not None
+                        ):
+                            state.contract_lifecycle.cleanup()
+                            state.contract_lifecycle.correlation_key = None
+                        if state._quota_lease is not None:
+                            state._quota_lease.close()
+                            state._quota_lease = None
+                            state._quota_scope = ""
+                        if (
+                            state._explorer_launch_lease is not None
+                            and not state.contract_lifecycle.execution_started
+                        ):
+                            exploration_store = state.tool_ctx.exploration_context_store
+                            if exploration_store is not None:
+                                _te_pkg._cleanup_explorer_launch(
+                                    exploration_store,
+                                    session_id=state._explorer_launch_lease.session_id,
+                                    session_home=state._explorer_launch_lease.session_home,
+                                    backend=state._explorer_launch_lease.backend,
+                                )
+                            state._explorer_launch_lease = None
+                        if (
+                            state._child_resource_owner is not None
+                            and not state.contract_lifecycle.execution_started
+                        ):
+                            await state._child_resource_owner.__aexit__(None, None, None)
+                            state._child_resource_owner = None
+                        state.cwd = state._invocation_cwd
+
+            assert state.execution_selection is not None
+            state.execution_selection = replace(
+                state.execution_selection, completed=True, terminal_candidate_id=None
+            )
+            _persist_selection()
+            exhausted = SkillResult.crashed(
+                exception=SkillContractError("candidate_exhausted"),
+                skill_command=skill_command,
+                order_id=order_id,
+            )
+            exhausted.candidate_exhausted = True
+            exhausted.execution_selection = state.execution_selection
+            blocked = [
+                attempt
+                for attempt in state.execution_selection.attempts
+                if attempt.rate_limit_type
+                or attempt.rejection_reason in {"observed_quota_blocked", "quota_exhausted"}
+            ]
+            if blocked:
+                next_admission = min(
+                    blocked,
+                    key=lambda attempt: (
+                        attempt.rate_limit_resets_at_epoch
+                        if attempt.rate_limit_resets_at_epoch is not None
+                        else float("inf")
+                    ),
+                )
+                exhausted.needs_retry = True
+                exhausted.retry_reason = RetryReason.RATE_LIMITED
+                exhausted.api_failure = ApiFailureOutcome(
+                    rate_limit=RateLimitWindow(
+                        status="rejected",
+                        limit_type=next_admission.rate_limit_type,
+                        resets_at_epoch=next_admission.rate_limit_resets_at_epoch,
+                    )
+                )
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                state._completion_invocation_id,
+                exhausted.to_json(),
+                child_session_id="",
+            )
     except InfrastructureFaultError as exc:
         logger.error("run_skill unhandled infrastructure fault", exc_info=True)
         _unhandled_infra_fault_result = SkillResult.infrastructure_fault(

@@ -104,7 +104,7 @@ class TestProviderFieldsReachFlush:
         assert outcome.fallback_activated is False
 
     @pytest.mark.anyio
-    async def test_normal_path_provider_fallback_in_flush_kwargs(
+    async def test_post_start_stale_does_not_switch_provider_in_flush_kwargs(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
         from autoskillit.core.types import RetryReason, SkillResult
@@ -155,13 +155,6 @@ class TestProviderFieldsReachFlush:
             "collect_version_snapshot",
             lambda backend=None: {},
         )
-        monkeypatch.setattr(minimal_ctx.config.providers, "provider_retry_limit", 2)
-        monkeypatch.setattr(
-            _patch_headless__headless_execute,
-            "is_feature_enabled",
-            lambda name, *a, **kw: name == "providers",  # noqa: ARG005
-        )
-
         flush_calls: list[dict] = []
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: flush_calls.append(kw))
 
@@ -175,18 +168,17 @@ class TestProviderFieldsReachFlush:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
-            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
-            provider_fallback_name="anthropic",
             step_name="implement",
             **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
-        assert result.provider.fallback_activated is True
-        assert result.provider.provider_used == "anthropic"
+        assert result.provider.fallback_activated is False
+        assert result.provider.provider_used == "minimax"
+        assert call_count == [1]
         assert len(flush_calls) == 1
         outcome = flush_calls[0]["provider_outcome"]
-        assert outcome.provider_used == "anthropic"
-        assert outcome.fallback_activated is True
+        assert outcome.provider_used == "minimax"
+        assert outcome.fallback_activated is False
 
     @pytest.mark.anyio
     async def test_crash_path_provider_used_in_flush_kwargs(

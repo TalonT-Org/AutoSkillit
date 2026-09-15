@@ -106,50 +106,6 @@ def test_response_backstop_exemption_mirror_matches_core_registry():
     )
 
 
-def test_quota_guard_deny_trigger_sync():
-    """QUOTA_GUARD_DENY_TRIGGER must be identical in core and quota_guard."""
-    from autoskillit.core import QUOTA_GUARD_DENY_TRIGGER
-    from autoskillit.hooks.guards.quota_guard import QUOTA_GUARD_DENY_TRIGGER as _HOOK
-
-    assert QUOTA_GUARD_DENY_TRIGGER == _HOOK, (
-        f"QUOTA_GUARD_DENY_TRIGGER mismatch: "
-        f"core={QUOTA_GUARD_DENY_TRIGGER!r} vs quota_guard={_HOOK!r}"
-    )
-
-
-def test_quota_budget_exceeded_trigger_sync():
-    """QUOTA_BUDGET_EXCEEDED_TRIGGER must be identical in core and quota_guard."""
-    from autoskillit.core import QUOTA_BUDGET_EXCEEDED_TRIGGER
-    from autoskillit.hooks.guards.quota_guard import QUOTA_BUDGET_EXCEEDED_TRIGGER as _HOOK
-
-    assert QUOTA_BUDGET_EXCEEDED_TRIGGER == _HOOK, (
-        f"QUOTA_BUDGET_EXCEEDED_TRIGGER mismatch: "
-        f"core={QUOTA_BUDGET_EXCEEDED_TRIGGER!r} vs quota_guard={_HOOK!r}"
-    )
-
-
-def test_quota_post_warning_trigger_sync():
-    """QUOTA_POST_WARNING_TRIGGER must be identical in core and quota_post_hook."""
-    from autoskillit.core import QUOTA_POST_WARNING_TRIGGER
-    from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER as _HOOK
-
-    assert QUOTA_POST_WARNING_TRIGGER == _HOOK, (
-        f"QUOTA_POST_WARNING_TRIGGER mismatch: "
-        f"core={QUOTA_POST_WARNING_TRIGGER!r} vs quota_post_hook={_HOOK!r}"
-    )
-
-
-def test_quota_post_budget_exceeded_trigger_sync():
-    """QUOTA_POST_BUDGET_EXCEEDED_TRIGGER must be identical in core and quota_post_hook."""
-    from autoskillit.core import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
-    from autoskillit.hooks.quota_post_hook import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER as _HOOK
-
-    assert QUOTA_POST_BUDGET_EXCEEDED_TRIGGER == _HOOK, (
-        f"QUOTA_POST_BUDGET_EXCEEDED_TRIGGER mismatch: "
-        f"core={QUOTA_POST_BUDGET_EXCEEDED_TRIGGER!r} vs quota_post_hook={_HOOK!r}"
-    )
-
-
 def test_ingredient_lock_deny_trigger_sync():
     """INGREDIENT_LOCK_DENY_TRIGGER must be identical in server and hook guard."""
     from autoskillit.hooks.guards.ingredient_lock_guard import INGREDIENT_LOCK_DENY_TRIGGER

@@ -299,6 +299,24 @@ orphan or interactive-only parent). See [Child Terminal
 Reasons](../developer/diagnostics.md#child-terminal-reasons) for the full
 row shape and reason taxonomy.
 
+## Candidate selection and continuation
+
+`run_skill` writes a candidate-selection manifest before each pre-spawn route;
+see [Execution-candidate manifests](../developer/diagnostics.md#execution-candidate-manifests).
+When the result reports `candidate_exhausted: true`, inspect the ordered attempt
+records and route through the recipe's rate-limit or failure handling. The
+result does not mean an execution may be repeated: no configured alternative is
+started after a worker has begun, including after an API error, deadline, or
+rate limit.
+
+A terminal rate-limited attempt may include a continuation recommendation. A
+caller may resume only the returned `resume_session_id`, using the same verified
+backend/provider binding, and only while the recommendation's reset delay and
+remaining invocation deadline permit it. The reset delay is bounded to 60
+seconds and continuation consumes the configured provider retry budget. If the
+result lacks that explicit recommendation, do not resume or replay the original
+call.
+
 ## Recording and replay
 
 `execution/recording.py` provides `RecordingSubprocessRunner` (records every

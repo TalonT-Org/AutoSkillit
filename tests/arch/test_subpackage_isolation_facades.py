@@ -104,6 +104,7 @@ def test_tools_execution_decomposition_has_expected_siblings() -> None:
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_audit_response",
+        "_candidate_policy",
         "_fixed_batch_handlers",
         "_fixed_batch_request",
         "_gates",

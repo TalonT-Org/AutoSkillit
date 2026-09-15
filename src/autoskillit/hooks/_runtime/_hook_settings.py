@@ -32,11 +32,9 @@ HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 
 DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 DEFAULT_CACHE_MAX_AGE = 300
-DEFAULT_BUFFER_SECONDS = 60
 
 ENV_CACHE_PATH = "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH"
 ENV_CACHE_MAX_AGE = "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE"
-ENV_BUFFER_SECONDS = "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS"
 ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 
 # The exact keys this module reads from hook_config["quota_guard"].
@@ -46,7 +44,6 @@ QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {
         "cache_path",
         "cache_max_age",
-        "buffer_seconds",
         "disabled",
         "quota_account_scope",
     }
@@ -118,15 +115,12 @@ class QuotaHookSettings:
 
     Marked ``kw_only`` to defend against positional construction silently
     re-enabling the ``disabled`` flag when callers insert fields before it.
-    The previous field order (cache_path, cache_max_age, buffer_seconds,
-    quota_account_scope, disabled) led to ``disabled`` being bindable by
-    positional arguments whose type truthiness was unintended — e.g. a test
-    passing a scope string positionally would set ``disabled=True``.
+    Keyword-only fields prevent positional construction from silently binding
+    a quota account scope as the ``disabled`` flag.
     """
 
     cache_path: str
     cache_max_age: int
-    buffer_seconds: int
     quota_account_scope: str = ""
     disabled: bool = False
 
@@ -347,7 +341,7 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
     """Resolve quota hook settings from the layered hierarchy.
 
     ``cache_path``: ``cache_path_override`` > env var > hook config > default.
-    ``cache_max_age`` / ``buffer_seconds``: env var > hook config > default.
+    ``cache_max_age``: env var > hook config > default.
     """
     hook_config = _read_hook_config()
 
@@ -364,12 +358,6 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
         DEFAULT_CACHE_MAX_AGE,
     )
 
-    buffer_seconds = _resolve_int(
-        os.environ.get(ENV_BUFFER_SECONDS),
-        hook_config.get("buffer_seconds"),
-        DEFAULT_BUFFER_SECONDS,
-    )
-
     env_disabled = os.environ.get(ENV_DISABLED, "").strip().lower()
     if env_disabled in ("1", "true", "yes"):
         disabled = True
@@ -381,7 +369,6 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
     return QuotaHookSettings(
         cache_path=cache_path,
         cache_max_age=cache_max_age,
-        buffer_seconds=buffer_seconds,
         quota_account_scope=str(hook_config.get("quota_account_scope", "")),
         disabled=disabled,
     )

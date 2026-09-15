@@ -24,7 +24,6 @@ class TestResumeWithoutPriorDispatchId:
         self, tool_ctx, monkeypatch
     ):
         from tests.fleet._helpers import (
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
             _setup_dispatch,
         )
@@ -40,7 +39,6 @@ class TestResumeWithoutPriorDispatchId:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-123",
             prior_dispatch_id=None,
@@ -65,7 +63,6 @@ class TestResumeWithoutPriorDispatchId:
         from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fleet._helpers import (
             _mock_backend_with_locator,
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
             _setup_dispatch,
         )
@@ -105,7 +102,6 @@ class TestResumeWithoutPriorDispatchId:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-123",
             prior_dispatch_id=None,
@@ -209,7 +205,6 @@ class TestCaptureChainAcrossResumeBoundary:
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
         from tests.fleet._helpers import (
             _make_recipe_info,
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
         )
 
@@ -254,7 +249,6 @@ class TestCaptureChainAcrossResumeBoundary:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-resume-1",
             prior_dispatch_id=prior_id,
@@ -288,7 +282,6 @@ class TestSessionChainAccumulatesAcrossResume:
         from autoskillit.fleet.campaign_state.state import read_state
         from tests.fleet._helpers import (
             _mock_backend_with_locator,
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
             _setup_dispatch,
         )
@@ -374,7 +367,6 @@ class TestSessionChainAccumulatesAcrossResume:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
             resume_session_id="sess-resume-1",
             prior_dispatch_id=prior_id,
@@ -402,7 +394,6 @@ class TestDispatchedSessionLogDirPopulated:
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
         from tests.fleet._helpers import (
             _make_recipe_info,
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
         )
 
@@ -452,7 +443,6 @@ class TestDispatchedSessionLogDirPopulated:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -484,7 +474,6 @@ class TestProcessIdentityPreservation:
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fleet._helpers import (
             _make_recipe_info,
-            _no_sleep_quota_checker,
             _noop_quota_refresher,
         )
 
@@ -591,7 +580,6 @@ class TestProcessIdentityPreservation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **_: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 

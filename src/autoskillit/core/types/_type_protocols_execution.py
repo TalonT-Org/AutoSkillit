@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -18,7 +18,7 @@ from ._type_launch import (
     ResolvedLaunchContract,
     SkillProjectionBinding,
 )
-from ._type_launch_authority import BackendAuthority
+from ._type_launch_authority import BackendAuthority, ModelPinResolution, ProviderBinding
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -27,6 +27,7 @@ from ._type_plugin_source import PluginLaunchBinding
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_protocols_workspace import PluginArtifactAuthority, SkillProjectionContextAuthority
 from ._type_results import (
+    CandidatePreSpawnRejection,
     ClosureAuthoritySpec,
     InputSpec,
     SkillResult,
@@ -34,6 +35,7 @@ from ._type_results import (
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
+from ._type_results_execution import ExecutionSelection
 from ._type_skill_contract import SkillSessionContract, StoredSkillSessionContract
 
 __all__ = [
@@ -333,8 +335,8 @@ class HeadlessExecutor(Protocol):
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
+        provider_binding: ProviderBinding | None = None,
+        model_pin: ModelPinResolution | None = None,
         resume_session_id: str = "",
         resume_launch_contract: ResolvedLaunchContract | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -353,10 +355,17 @@ class HeadlessExecutor(Protocol):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        pre_spawn_admission: Callable[
+            [ResolvedLaunchContract], Awaitable[CandidatePreSpawnRejection | None]
+        ]
+        | None = None,
+        mark_execution_started: Callable[[], None] | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity.empty(),
+        execution_selection: ExecutionSelection | None = None,
+        execution_selection_provider: Callable[[], ExecutionSelection | None] | None = None,
         child_role: str | None = None,
         child_attribution_skill: str = "",
-    ) -> SkillResult: ...
+    ) -> SkillResult | CandidatePreSpawnRejection: ...
 
     async def dispatch_food_truck(
         self,
@@ -385,8 +394,6 @@ class HeadlessExecutor(Protocol):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
         marker_dir: Path | None = None,

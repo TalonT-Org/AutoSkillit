@@ -13,8 +13,8 @@ Symbol origin:
   - ``_dataclasses_execution`` → QuotaGuardConfig, RunSkillConfig
   - ``_dataclasses_fleet`` → FleetConfig, ProcessTetherConfig, _MAX_CONCURRENT_DISPATCHES
   - ``_dataclasses_github`` → GitHubConfig, ReportBugConfig
-  - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ProvidersConfig,
-    ProviderProfileDef, RETIRED_PROFILE_KEYS
+  - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ExecutionCandidateSpec,
+    ProvidersConfig, ProviderProfileDef, RETIRED_PROFILE_KEYS
   - ``_dataclasses_errors`` → ConfigSchemaError, _METADATA_KEYS, _SECRETS_ONLY_KEYS
   - ``_dataclasses_surfaces`` → PacksConfig, SkillsConfig, SubsetsConfig,
     WorkspaceConfig, WorktreeSetupConfig
@@ -82,6 +82,9 @@ from autoskillit.config._dataclasses_providers import (
 )
 from autoskillit.config._dataclasses_providers import (
     CoreRunConfig as CoreRunConfig,
+)
+from autoskillit.config._dataclasses_providers import (
+    ExecutionCandidateSpec as ExecutionCandidateSpec,
 )
 from autoskillit.config._dataclasses_providers import (
     ProviderProfileDef as ProviderProfileDef,
@@ -176,6 +179,7 @@ __all__ = [
     "ConfigSchemaError",
     "CoreRunConfig",
     "DiagnosticsConfig",
+    "ExecutionCandidateSpec",
     "FleetConfig",
     "GitHubConfig",
     "ImplementGateConfig",

@@ -61,9 +61,7 @@ async def test_explicit_caller_model_beats_recipe_step_model(
 async def test_both_model_sources_empty_does_not_crash(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """Neither caller nor recipe step declares model -> "" reaches the executor
-    (downstream resolve_model_pin's tier-5 default_model applies from there; this
-    only pins that the vacancy is left alone, not what the eventual default is)."""
+    """Neither caller nor recipe step declares model -> model.default is resolved."""
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     step = RecipeStep(name="implement")
@@ -72,7 +70,7 @@ async def test_both_model_sources_empty_does_not_crash(
 
     await run_skill("/implement ...", str(tmp_path), step_name="implement")
 
-    assert executor.calls[0].model == ""
+    assert executor.calls[0].model == tool_ctx_kitchen_open.config.model.default_model
 
 
 @pytest.mark.anyio
@@ -140,7 +138,7 @@ async def test_unresolved_model_template_is_not_forwarded(
     await run_skill("/implement ...", str(tmp_path), step_name="implement")
 
     assert "${{" not in executor.calls[0].model
-    assert executor.calls[0].model == ""
+    assert executor.calls[0].model == tool_ctx_kitchen_open.config.model.default_model
 
 
 def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None:
@@ -159,8 +157,11 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     import inspect
 
     from autoskillit.server.tools import tools_execution
+    from autoskillit.server.tools.tools_execution._run_skill_prepare import (
+        _prepare_dispatch_backend,
+    )
 
-    tree = ast.parse(inspect.getsource(tools_execution._prepare_dispatch_backend))
+    tree = ast.parse(inspect.getsource(_prepare_dispatch_backend))
     read_fields = {
         node.attr
         for node in ast.walk(tree)

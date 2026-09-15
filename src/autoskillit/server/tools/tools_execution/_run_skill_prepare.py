@@ -20,8 +20,10 @@ from autoskillit.core import (
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    BackendPinResolution,
+    ModelPinResolution,
+    ProviderBinding,
     SkillContractError,
-    SkillResult,
     closure_authority_spec_from_args,
     get_logger,
     parse_plan_paths,
@@ -32,20 +34,31 @@ from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
 )
-from autoskillit.server.lifecycle._guards import _check_dry_walkthrough, _check_input_contracts
+from autoskillit.server.lifecycle._guards import (
+    _check_dry_walkthrough,
+    _check_input_contracts,
+    _profile_to_env,
+)
 from autoskillit.server.tools import tools_execution as _te_pkg
+from autoskillit.server.tools._backend_compat import _candidate_backend_rejection_reason
 from autoskillit.server.tools._execution_helpers import (
     aggregate_sandbox_overrides as _aggregate_sandbox_overrides,
 )
 from autoskillit.server.tools._execution_helpers import (
     bind_projection_backend,
+    build_fresh_projection_context,
     resolve_skill_dispatch_metadata,
 )
 from autoskillit.server.tools._types import ToolFailureEnvelope
+from autoskillit.server.tools.tools_execution._candidate_policy import (
+    candidate_authority,
+    resolve_candidate_policy,
+)
 
 if TYPE_CHECKING:
+    from autoskillit.config import ExecutionCandidateSpec
     from autoskillit.core import CodingAgentBackend
-    from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
+from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
 logger = get_logger(__name__)
 
@@ -78,7 +91,11 @@ def _record_explorer_launch_lease(
     return backend
 
 
-async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None:
+async def _prepare_dispatch_backend(
+    state: _RunSkillDispatchState,
+    candidate: ExecutionCandidateSpec | None = None,
+    ordinal: int = 0,
+) -> str | None:
     await _te_pkg._notify(
         state.ctx,
         "info",
@@ -115,7 +132,17 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
     if state.tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
 
+    state._candidate_rejection_reason = None
+    if ordinal and state._stored_contract_entry is None:
+        if state.invocation is None:
+            raise SkillContractError("Candidate selection lacks an invocation")
+        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+
+    if ordinal == 0:
+        state.requested_step_provider = state.step_provider
     state.provider_extras = None
+    state.provider_binding = None
+    state.model_pin = None
     state.profile_name_out = ""
     state.effective_model = state.model
 
@@ -144,46 +171,11 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
                 provider=state.step_provider,
             )
 
-    if _te_pkg.is_feature_enabled(
-        "providers", state._cfg.features, experimental_enabled=state._cfg.experimental_enabled
-    ):
-        from autoskillit.server.lifecycle._guards import (  # circular-break
-            _resolve_model_as_profile,
-            _resolve_provider_profile,
-        )
-
-        state._profile, state._env_dict = _resolve_provider_profile(
-            state.step_name or "",
-            state.tool_ctx.recipe_name or "",
-            state._cfg.providers,
-            step_provider=state.step_provider or "",
-        )
-        if state._profile != "anthropic":
-            state.provider_extras = state._env_dict
-            state.profile_name_out = state._profile
-        else:
-            state.effective_model, prof_name, prof_extras = _resolve_model_as_profile(
-                state.model, state._cfg.providers
-            )
-            if prof_extras is not None:
-                state.provider_extras = prof_extras
-                state.profile_name_out = prof_name
-
-    if state._cfg.model.model_override:
-        state.effective_model = state._cfg.model.model_override
-    else:
-        if state.tool_ctx.recipe_name:
-            state._mo_recipe_map = state._cfg.providers.model_overrides.get(
-                state.tool_ctx.recipe_name
-            )
-            if state._mo_recipe_map:
-                state._step_mo = (
-                    state._mo_recipe_map.get(state.step_name) if state.step_name else None
-                )
-                if state._step_mo is None:
-                    state._step_mo = state._mo_recipe_map.get("*")
-                if state._step_mo:
-                    state.effective_model = state._step_mo
+    step_model = state.model
+    if not step_model and state.step_name and state.tool_ctx.active_recipe_steps is not None:
+        _recipe_step = state.tool_ctx.active_recipe_steps.get(state.step_name)
+        if _recipe_step is not None and _recipe_step.model and "${{" not in _recipe_step.model:
+            step_model = _recipe_step.model
 
     # The fresh branch resolved the complete effective invocation before any
     # notification or provider/executor work. Backend-specific rendering waits
@@ -257,27 +249,118 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
             state._backend_authority
         )
 
-    if state._explicit_resolution is not None:
-        state._explicit_binary = state._effective_backend_obj.capabilities.process_name
-        if state._explicit_binary and shutil.which(state._explicit_binary) is None:
-            return SkillResult.crashed(
-                exception=RuntimeError(
-                    f"Step explicitly pinned to backend "
-                    f"{state._explicit_resolution.backend!r} but required binary "
-                    f"{state._explicit_binary!r} is not found on PATH."
+    if candidate is not None:
+        state._backend_authority = candidate_authority(
+            state._backend_authority, candidate, ordinal
+        )
+        state._explicit_resolution = BackendPinResolution(
+            candidate.backend,
+            "execution_candidate",
+            state._backend_authority.key_path,
+            BackendAuthorityKind.GLOBAL,
+        )
+        state._effective_backend_obj = state.tool_ctx.launch_resolver.backend_for_authority(
+            state._backend_authority
+        )
+
+    if state._stored_contract is not None:
+        contract = state._resume_launch_contract
+        if contract is None or contract.backend_authority != state._backend_authority:
+            raise SkillContractError("Resume launch authority changed")
+        state._env_dict = {}
+        if contract.profile and contract.profile != "default":
+            definition = state._cfg.providers.resolved_profiles.get(contract.profile)
+            if definition is None:
+                raise SkillContractError("Resume provider profile is unavailable")
+            if definition.api_key_env and not os.environ.get(definition.api_key_env):
+                raise SkillContractError("Resume provider credential is unavailable")
+            state._env_dict = _profile_to_env(definition)
+            if (definition.base_url or "") != contract.normalized_endpoint:
+                raise SkillContractError("Resume provider endpoint changed")
+        secret_keys = tuple(
+            key
+            for key in state._env_dict
+            if any(token in key.upper() for token in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+        )
+        state.provider_binding = (
+            ProviderBinding(
+                provider=contract.provider,
+                profile=contract.profile,
+                required_backend=contract.backend_authority.backend,
+                normalized_endpoint=contract.normalized_endpoint,
+                key_path=contract.provider_source.key_path,
+                provider_source=contract.provider_source,
+                profile_source=contract.profile_source,
+                endpoint_source=contract.endpoint_source,
+                environment={
+                    key: value for key, value in state._env_dict.items() if key not in secret_keys
+                },
+                secret_environment_keys=secret_keys,
+            )
+            if contract.provider and contract.profile
+            else None
+        )
+        state.model_pin = ModelPinResolution(
+            contract.configured_model or "", contract.configured_model_source
+        )
+    else:
+        try:
+            state.provider_binding, state.model_pin, state._env_dict = resolve_candidate_policy(
+                state._cfg,
+                authority=state._backend_authority,
+                candidate=candidate,
+                ordinal=ordinal,
+                step_name=state.step_name or "",
+                recipe_name=state.tool_ctx.recipe_name or "",
+                step_provider=state.step_provider or "",
+                requested_model=step_model,
+                providers_enabled=_te_pkg.is_feature_enabled(
+                    "providers",
+                    state._cfg.features,
+                    experimental_enabled=state._cfg.experimental_enabled,
                 ),
-                skill_command=state.resolved_command,
-                order_id=state.effective_order_id,
-            ).to_json()
+            )
+        except SkillContractError as exc:
+            state._candidate_rejection_reason = str(exc)
+            return None
+    state.effective_model = state.model_pin.model
+    state._profile = state.provider_binding.provider if state.provider_binding is not None else ""
+    state.profile_name_out = (
+        state.provider_binding.profile
+        if state.provider_binding is not None and state.provider_binding.profile != "default"
+        else ""
+    )
+    state.provider_extras = state._env_dict or None
+
+    state.expected_output_patterns, state.write_spec, state._skill_contract = (
+        resolve_skill_dispatch_metadata(
+            state.tool_ctx,
+            state.skill_command,
+            state._stored_contract,
+            audit_output_mode=state._audit_output_mode,
+        )
+    )
+    state._fresh_parent_sandbox_mode = (
+        "read-only"
+        if state.tool_ctx.read_only_resolver
+        and state.tool_ctx.read_only_resolver(state.skill_command)
+        else "workspace-write"
+    )
+    if state._stored_contract is None:
+        binary = state._effective_backend_obj.capabilities.process_name
+        state._candidate_rejection_reason = _candidate_backend_rejection_reason(
+            skill_info=state._effective_skill_contract,
+            effective_backend_obj=state._effective_backend_obj,
+            parent_sandbox_mode=state._fresh_parent_sandbox_mode,
+            write_spec=state.write_spec,
+            binary_available=not binary or shutil.which(binary) is not None,
+        )
+        if state._candidate_rejection_reason is not None:
+            return None
+
     if state._stored_contract is None:
         if state.projection_context is None:
             raise SkillContractError("Fresh execution lacks projection authority")
-        state._fresh_parent_sandbox_mode = (
-            "read-only"
-            if state.tool_ctx.read_only_resolver
-            and state.tool_ctx.read_only_resolver(state.skill_command)
-            else "workspace-write"
-        )
         state._active_exploration_applicabilities = _resolve_exploration_applicabilities(
             state.projection_context,
             skill_inputs=state.skill_inputs,
@@ -318,15 +401,6 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
             target_backend=state._backend_authority.backend,
         )
 
-    state.expected_output_patterns, state.write_spec, state._skill_contract = (
-        resolve_skill_dispatch_metadata(
-            state.tool_ctx,
-            state.skill_command,
-            state._stored_contract,
-            audit_output_mode=state._audit_output_mode,
-        )
-    )
-
     # Resolve closure spec from explicit MCP tool parameters.
     # Closure args are first-class parameters (not embedded in skill_command text)
     # because the skill_command string is prompt text consumed by the LLM session,
@@ -344,18 +418,20 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
     from uuid import uuid4
 
     # Backend compatibility gate — fail-closed, fires before replay and live session paths.
-    if compat_error := _te_pkg._check_backend_compat(
-        skill_command=state.skill_command,
-        resolved_command=state.resolved_command,
-        effective_order_id=state.effective_order_id,
-        target_name=state.target_name,
-        skill_info=state._effective_skill_contract,
-        effective_backend_obj=state._effective_backend_obj,
-        skill_resolver=(
-            state._effective_skill_resolver
-            if state._effective_skill_resolver is not None
-            else state._stored_contract_entry
-        ),
+    if state._stored_contract is not None and (
+        compat_error := _te_pkg._check_backend_compat(
+            skill_command=state.skill_command,
+            resolved_command=state.resolved_command,
+            effective_order_id=state.effective_order_id,
+            target_name=state.target_name,
+            skill_info=state._effective_skill_contract,
+            effective_backend_obj=state._effective_backend_obj,
+            skill_resolver=(
+                state._effective_skill_resolver
+                if state._effective_skill_resolver is not None
+                else state._stored_contract_entry
+            ),
+        )
     ):
         return compat_error
 
@@ -382,23 +458,6 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
             # an explicit caller value for these fields is denied upstream by the
             # runtime gate before reaching here. For unattested calls, an explicit
             # caller value survives untouched, as intended.
-            if (
-                state.effective_model == ""
-                and _recipe_step.model
-                and "${{" not in _recipe_step.model
-            ):
-                # Skip values containing unresolved template references —
-                # ${{ inputs.* }}/${{ context.* }} placeholders may survive
-                # (see the output_dir fallback above for the same guard).
-                # A template string is never a valid
-                # --model value.
-                state.effective_model = _recipe_step.model
-                logger.warning(
-                    "model_resolved_from_recipe",
-                    step=state.step_name,
-                    value=state.effective_model,
-                )
-
             if state.stale_threshold is None and _recipe_step.stale_threshold is not None:
                 state.stale_threshold = _recipe_step.stale_threshold
                 logger.warning(

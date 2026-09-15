@@ -1211,6 +1211,8 @@ class TestBuildSkillResultCrossValidation:
         "lifespan_started",
         "provider_used",
         "provider_fallback",
+        "candidate_exhausted",
+        "execution_selection",
         "needs_retry",
         "retry_reason",
         "order_id",

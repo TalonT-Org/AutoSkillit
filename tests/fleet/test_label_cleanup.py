@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import autoskillit.fleet._api as fleet_api
-from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
+from tests.fleet._helpers import _noop_quota_refresher, _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -57,7 +57,6 @@ class TestDispatchSidecarCleanupOnCrash:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -107,7 +106,6 @@ class TestDispatchSidecarCleanupOnCrash:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -142,7 +140,6 @@ class TestDispatchSidecarCleanupOnCrash:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -184,7 +181,6 @@ class TestDispatchSidecarCleanupOnCrash:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -228,7 +224,6 @@ class TestDispatchSidecarCleanupOnCrash:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -295,7 +290,6 @@ class TestDispatchSidecarCleanupOnNormalFailure:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 

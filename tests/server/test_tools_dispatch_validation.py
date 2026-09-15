@@ -13,7 +13,6 @@ from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
     _make_recipe_info,
     _make_standard_recipe,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _simple_prompt_builder,
 )
@@ -75,7 +74,6 @@ class TestDispatchFoodTruckGates:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -129,7 +127,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -157,7 +154,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -181,7 +177,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -206,7 +201,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -234,7 +228,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -277,7 +270,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -333,7 +325,6 @@ class TestDispatchFoodTruckValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -389,7 +380,6 @@ class TestDispatchFoodTruckSemanticValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -428,7 +418,6 @@ class TestDispatchFoodTruckSemanticValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(raw.outcome.to_envelope())
@@ -459,7 +448,6 @@ class TestDispatchFoodTruckSemanticValidation:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
@@ -503,7 +491,6 @@ async def test_dispatch_food_truck_plugin_authority_succeeds(tool_ctx, monkeypat
         dispatch_name=None,
         timeout_sec=None,
         prompt_builder=_simple_prompt_builder,
-        quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
     result = json.loads(_dispatch_result.outcome.to_envelope())

@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from tests.fleet._helpers import (
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _setup_dispatch,
     _simple_prompt_builder,
@@ -71,7 +70,6 @@ class TestCrashPathDiagnosticPersistence:
             dispatch_name="dispatch-a",
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -124,7 +122,6 @@ class TestCrashPathDiagnosticPersistence:
             dispatch_name="dispatch-a",
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -156,7 +153,6 @@ class TestCrashPathDiagnosticPersistence:
             dispatch_name="dispatch-a",
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -206,7 +202,6 @@ class TestCrashPathDiagnosticPersistence:
                 dispatch_name="my-test-dispatch",
                 timeout_sec=None,
                 prompt_builder=_simple_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -261,7 +256,6 @@ class TestCrashPathDiagnosticPersistence:
             dispatch_name="dispatch-b",
             timeout_sec=None,
             prompt_builder=_simple_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 

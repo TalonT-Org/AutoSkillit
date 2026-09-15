@@ -79,24 +79,29 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
     if _transition_start(ctx, "quota_task_start"):
         if ctx.quota_refresh_task is not None:
             ctx.quota_refresh_task.cancel()
-        try:
-            ctx.quota_refresh_task = _tk_pkg.create_background_task(
-                _tk_pkg._quota_refresh_loop(
-                    ctx.config.quota_guard,
-                    supports_quota_check=_supports_quota,
-                ),
-                label="quota_refresh_loop",
-            )
-        except Exception as exc:
-            ctx.gate.disable()
-            transition_ambiguous(ctx, "quota_task_start", exc)
-            logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
+            ctx.quota_refresh_task = None
+        if _supports_quota:
+            try:
+                ctx.quota_refresh_task = _tk_pkg.create_background_task(
+                    _tk_pkg._quota_refresh_loop(
+                        ctx.config.quota_guard,
+                        diagnostic_log_root=_tk_pkg.resolve_log_dir(
+                            ctx.config.linux_tracing.log_dir
+                        ),
+                        supports_quota_check=True,
+                    ),
+                    label="quota_refresh_loop",
+                )
+            except Exception as exc:
+                ctx.gate.disable()
+                transition_ambiguous(ctx, "quota_task_start", exc)
+                logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
         transition_confirm(
             ctx,
             "quota_task_start",
-            receipt="quota_task:owned",
-            downstream_identity=str(id(ctx.quota_refresh_task)),
+            receipt="quota_task:owned" if _supports_quota else "quota_task:not_applicable",
+            downstream_identity=str(id(ctx.quota_refresh_task)) if _supports_quota else "",
         )
 
     if _transition_start(ctx, "registry_update"):

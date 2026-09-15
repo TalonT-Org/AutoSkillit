@@ -10,12 +10,14 @@ from uuid import uuid4
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
+    SKILL_CAPABILITY_REGISTRY,
     CodingAgentBackend,
     SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
     ValidatedAddDir,
+    WriteBehaviorSpec,
     extract_skill_name,
     render_target_skill_command,
 )
@@ -51,6 +53,70 @@ class DirectSkillDispatch:
     def cleanup(self, tool_ctx: ToolContext) -> None:
         if tool_ctx.session_skill_manager is not None:
             tool_ctx.session_skill_manager.cleanup_session(self.session_id)
+
+
+def _candidate_backend_rejection_reason(
+    *,
+    skill_info: object | None,
+    effective_backend_obj: CodingAgentBackend,
+    parent_sandbox_mode: str,
+    write_spec: WriteBehaviorSpec | None,
+    binary_available: bool,
+    adaptation_context: SemanticAdaptationContext | None = None,
+) -> str | None:
+    """Return the first reason a fresh execution candidate cannot launch.
+
+    Candidate selection evaluates the whole resolved closure against the exact
+    worker backend. Direct callers retain the historical root-only gate below.
+    """
+    closure = tuple(getattr(skill_info, "closure", ()))
+    capabilities = set(getattr(skill_info, "capability_union", ()))
+    capabilities.update(
+        capability for member in closure for capability in getattr(member, "uses_capabilities", ())
+    )
+    if not effective_backend_obj.capabilities.anthropic_provider_capable:
+        not_applicable = sorted(
+            capability
+            for capability in capabilities
+            if (capability_def := SKILL_CAPABILITY_REGISTRY.get(capability)) is not None
+            and capability_def.codex_status == "not-applicable"
+        )
+        if not_applicable:
+            return (
+                f"backend {effective_backend_obj.name!r} cannot run skill closure with "
+                f"not-applicable capabilities {not_applicable!r}"
+            )
+
+    root = getattr(skill_info, "root", None)
+    semantic_error = check_skill_semantic_feasibility(
+        getattr(root, "semantic_plan", None),
+        effective_backend_obj,
+        adaptation_context=adaptation_context,
+    )
+    if semantic_error:
+        return semantic_error
+
+    requires_workspace_write = write_spec is not None and (
+        write_spec.mode is not None or write_spec.external_effect != "none"
+    )
+    requires_workspace_write = requires_workspace_write or any(
+        override.startswith("sandbox_workspace_write.")
+        for capability in capabilities
+        if (capability_def := SKILL_CAPABILITY_REGISTRY.get(capability)) is not None
+        for override in capability_def.required_sandbox_overrides
+    )
+    if parent_sandbox_mode != "workspace-write" and requires_workspace_write:
+        return (
+            "candidate requires a workspace-write sandbox for its declared "
+            "write behavior or capability overrides"
+        )
+
+    if not binary_available:
+        binary = effective_backend_obj.capabilities.process_name
+        return (
+            f"candidate backend {effective_backend_obj.name!r} requires binary {binary!r} on PATH"
+        )
+    return None
 
 
 def _check_backend_compat(

@@ -56,8 +56,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     if pipeline:
         header = f"run_skill: {'OK' if success else 'FAIL'} [{status}]"
         lines = [header]
-        session_id = data.get("session_id", "")
-        if session_id:
+        if session_id := data.get("session_id", ""):
             lines.append(f"session_id: {session_id}")
         if data.get("receipt_id"):
             lines.append(f"receipt_id: {data['receipt_id']}")
@@ -83,8 +82,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
 
     lines = [f"## run_skill {mark} {status}", ""]
     lines.append(f"success: {success}")
-    session_id = data.get("session_id", "")
-    if session_id:
+    if session_id := data.get("session_id", ""):
         lines.append(f"session_id: {session_id}")
     if data.get("receipt_id"):
         lines.append(f"receipt_id: {data['receipt_id']}")
@@ -262,6 +260,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "api_terminal_reason",
         "api_error_code",
         "api_error_message_seen",
+        "candidate_exhausted",
+        "execution_selection",
         "rate_limit_status",
         "rate_limit_type",
         "rate_limit_resets_at_epoch",

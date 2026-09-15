@@ -34,6 +34,7 @@ from autoskillit.execution import (
     find_orphaned_codex_processes,
     reap_orphaned_autoskillit_daemons,
     reap_orphaned_codex_processes,
+    resolve_log_dir,
 )
 from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
@@ -166,16 +167,18 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     except Exception:
         logger.warning("fleet_auto_gate_boot_prime_quota_cache_failed", exc_info=True)
 
-    try:
-        ctx.quota_refresh_task = _lifespan_pkg.create_background_task(
-            _quota_refresh_loop(
-                ctx.config.quota_guard,
-                supports_quota_check=_supports_quota,
-            ),
-            label="quota_refresh_loop",
-        )
-    except Exception:
-        logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
+    if _supports_quota:
+        try:
+            ctx.quota_refresh_task = _lifespan_pkg.create_background_task(
+                _quota_refresh_loop(
+                    ctx.config.quota_guard,
+                    diagnostic_log_root=resolve_log_dir(ctx.config.linux_tracing.log_dir),
+                    supports_quota_check=True,
+                ),
+                label="quota_refresh_loop",
+            )
+        except Exception:
+            logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
         _retain_context_tracker_authority(ctx)
@@ -354,11 +357,12 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        if ctx.config is not None:
+        if ctx.config is not None and _supports_quota:
             ctx.quota_refresh_task = _lifespan_pkg.create_background_task(
                 _quota_refresh_loop(
                     ctx.config.quota_guard,
-                    supports_quota_check=_supports_quota,
+                    diagnostic_log_root=resolve_log_dir(ctx.config.linux_tracing.log_dir),
+                    supports_quota_check=True,
                 ),
                 label="quota_refresh_loop",
             )

@@ -126,8 +126,8 @@ class TestCoreSubpackages:
             + len(retirements)
             + len(skill_contract)
         ), "Duplicate symbols across split modules"
-        assert len(combined) == 166, (
-            f"Expected 166 symbols total, got {len(combined)} "
+        assert len(combined) == 162, (
+            f"Expected 162 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, durable_writers={len(durable_writers)}, "
             f"env={len(env)}, features={len(features)}, "
             f"registries={len(registries)}, retirements={len(retirements)}, "
@@ -184,10 +184,13 @@ class TestExecutionSubpackages:
             "_headless_helpers",
             "_headless_launch",
             "_headless_model_evidence",
+            "_headless_model",
             "_headless_outcome",
             "_headless_path_tokens",
+            "_headless_prepare",
             "_headless_recovery",
             "_headless_result",
+            "_headless_terminal",
         }
         actual = {p.stem for p in (SRC / "execution" / "headless").glob("_headless_*.py")}
         assert actual == expected

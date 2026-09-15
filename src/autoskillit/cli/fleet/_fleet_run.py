@@ -73,6 +73,8 @@ async def _execute_fleet_run(
         project_dir=Path.cwd(),
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
     )
+    if disable_quota_guard:
+        ctx.config.quota_guard.enabled = False
 
     effective_backend = dispatch_backend or ctx.backend
     if effective_backend is None:
@@ -131,20 +133,6 @@ async def _execute_fleet_run(
         projected_sous_chef=projected_sous_chef,
     )
 
-    if disable_quota_guard:
-
-        async def quota_checker(_cfg: object) -> dict[str, object]:
-            return {"should_sleep": False}
-    else:
-        from autoskillit.execution import check_and_sleep_if_needed
-
-        _supports_quota = effective_backend.capabilities.anthropic_provider_capable
-
-        async def quota_checker(_cfg: object) -> dict[str, object]:
-            return await check_and_sleep_if_needed(
-                _cfg, provider="anthropic" if _supports_quota else ""
-            )
-
     async def quota_refresher(_cfg: object) -> None:
         pass
 
@@ -156,7 +144,6 @@ async def _execute_fleet_run(
         dispatch_name=None,
         timeout_sec=timeout_sec,
         prompt_builder=prompt_builder,
-        quota_checker=quota_checker,
         quota_refresher=quota_refresher,
         cache_invalidator=None,
         resume_session_id=resume_session_id,

@@ -422,17 +422,3 @@ async def test_in_memory_executor_accepts_provider_name():
     executor = InMemoryHeadlessExecutor()
     await executor.run("/skill", "/cwd", provider_name="bedrock")
     assert executor.calls[0].provider_name == "bedrock"
-
-
-@pytest.mark.anyio
-async def test_in_memory_executor_accepts_provider_fallback_env():
-    executor = InMemoryHeadlessExecutor()
-    await executor.run("/skill", "/cwd", provider_fallback_env={"KEY": "val"})
-    assert executor.calls[0].provider_fallback_env == {"KEY": "val"}
-
-
-@pytest.mark.anyio
-async def test_in_memory_executor_accepts_provider_fallback_name():
-    executor = InMemoryHeadlessExecutor()
-    await executor.run("/skill", "/cwd", provider_fallback_name="anthropic")
-    assert executor.calls[0].provider_fallback_name == "anthropic"

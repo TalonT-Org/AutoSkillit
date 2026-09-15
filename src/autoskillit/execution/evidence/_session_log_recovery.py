@@ -18,6 +18,9 @@ from autoskillit.core import (
     read_boot_id,
     read_starttime_ticks,
 )
+from autoskillit.execution.evidence._session_retention import (
+    prune_execution_candidate_manifests_at_root,
+)
 from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
 from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
 
@@ -205,6 +208,22 @@ def recover_crashed_sessions(
         reconcile_child_outcome_snapshots(resolve_log_dir(log_dir))
     except Exception:
         logger.debug("child_outcome_snapshot_reconciliation_failed", exc_info=True)
+
+    try:
+        log_root = resolve_log_dir(log_dir)
+        if (log_root / "execution-candidates").is_dir():
+            protected_ids = (
+                build_protected_campaign_ids(Path(project_dir))
+                if project_dir and build_protected_campaign_ids is not None
+                else frozenset()
+            )
+            prune_execution_candidate_manifests_at_root(
+                log_root,
+                max_sessions=max_sessions,
+                protected_ids=protected_ids,
+            )
+    except Exception:
+        logger.debug("execution_candidate_manifest_retention_failed", exc_info=True)
 
     tmpfs = Path(tmpfs_path)
     if not tmpfs.is_dir():

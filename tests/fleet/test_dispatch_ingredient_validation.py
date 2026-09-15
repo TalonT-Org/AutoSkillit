@@ -6,7 +6,6 @@ import pytest
 
 from tests.fleet._helpers import (
     _make_recipe_info,
-    _no_sleep_quota_checker,
     _noop_quota_refresher,
     _run,
 )
@@ -127,7 +126,6 @@ class TestMissingRequiredIngredient:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_capture_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -156,7 +154,6 @@ class TestMissingRequiredIngredient:
             dispatch_name=None,
             timeout_sec=None,
             prompt_builder=_capture_prompt_builder,
-            quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
 
@@ -220,7 +217,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -268,7 +264,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -314,7 +309,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -374,7 +368,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -421,7 +414,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=lambda **kw: "prompt",
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -487,7 +479,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 
@@ -543,7 +534,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
 

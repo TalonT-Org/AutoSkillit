@@ -108,6 +108,8 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     audit_attempt_id: str | None
     provider_fallback: bool
     provider_used: str
+    candidate_exhausted: bool
+    execution_selection: dict[str, Any] | None
     api_retry_count: int
     api_retry_last_error: str
     api_retry_last_status: int

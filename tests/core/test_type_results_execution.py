@@ -86,6 +86,9 @@ class TestExecutionTypesNotInResults:
             "SubagentModelOutcomeDict",
             "ApiFailureOutcome",
             "RateLimitWindow",
+            "ContinuationRecommendation",
+            "ExecutionCandidateAttempt",
+            "ExecutionSelection",
         }
         assert expected == set(exec_all)
 

@@ -742,6 +742,8 @@ class TestSkillResult:
             "lifespan_started",
             "provider_fallback",
             "provider_used",
+            "candidate_exhausted",
+            "execution_selection",
             "needs_retry",
             "retry_reason",
             "order_id",

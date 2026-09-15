@@ -1,30 +1,10 @@
-"""Tests for quota trigger constants + INVESTIGATION_COMPLETE_MARKER."""
+"""Tests for INVESTIGATION_COMPLETE_MARKER."""
 
 from __future__ import annotations
 
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
-
-
-# ---------------------------------------------------------------------------
-# T1: Quota trigger constants exported from core
-# ---------------------------------------------------------------------------
-
-
-def test_quota_trigger_constants_exported() -> None:
-    """All four QUOTA_* trigger constants must be importable from autoskillit.core."""
-    from autoskillit.core import (
-        QUOTA_BUDGET_EXCEEDED_TRIGGER,
-        QUOTA_GUARD_DENY_TRIGGER,
-        QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
-        QUOTA_POST_WARNING_TRIGGER,
-    )
-
-    assert isinstance(QUOTA_GUARD_DENY_TRIGGER, str)
-    assert isinstance(QUOTA_BUDGET_EXCEEDED_TRIGGER, str)
-    assert isinstance(QUOTA_POST_WARNING_TRIGGER, str)
-    assert isinstance(QUOTA_POST_BUDGET_EXCEEDED_TRIGGER, str)
 
 
 # ---------------------------------------------------------------------------

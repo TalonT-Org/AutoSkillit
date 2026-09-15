@@ -239,7 +239,6 @@ async def dispatch_food_truck(
         from autoskillit.server import _get_ctx  # circular-break
         from autoskillit.server._misc import (  # circular-break
             _refresh_quota_cache,
-            check_and_sleep_if_needed,
             invalidate_cache,
         )
 
@@ -396,10 +395,6 @@ async def dispatch_food_truck(
             if _preflight_err is not None:
                 return _preflight_err
 
-        _supports_quota = (
-            _override_backend is not None
-            and _override_backend.capabilities.anthropic_provider_capable
-        )
         effective_dispatch_backend = _override_backend or tool_ctx.backend
         if effective_dispatch_backend is None:
             return fleet_error(
@@ -438,10 +433,6 @@ async def dispatch_food_truck(
                                 tool_ctx,
                                 effective_dispatch_backend,
                             ),
-                        ),
-                        quota_checker=lambda cfg: check_and_sleep_if_needed(
-                            cfg,
-                            provider="anthropic" if _supports_quota else "",
                         ),
                         quota_refresher=_refresh_quota_cache,
                         cache_invalidator=invalidate_cache,

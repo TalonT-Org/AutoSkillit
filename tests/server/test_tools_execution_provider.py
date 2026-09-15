@@ -84,6 +84,7 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
 async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
+    from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -91,12 +92,9 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        default_provider="bedrock",
+        profiles={"bedrock": {"AWS_REGION": "us-east-1"}},
     )
 
     captured: dict = {}
@@ -115,10 +113,88 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
     assert captured.get("provider_name") == "bedrock"
 
 
+def test_execution_candidates_build_fresh_profile_environment(tool_ctx) -> None:
+    """A rejected candidate cannot leak its profile variables into the next candidate."""
+    from autoskillit.config import ExecutionCandidateSpec
+    from autoskillit.config.settings import ProvidersConfig
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+    from autoskillit.server.tools.tools_execution._candidate_policy import resolve_candidate_policy
+
+    tool_ctx.config.providers = ProvidersConfig(
+        profiles={
+            "first": {"base_url": "https://first.example"},
+            "second": {"base_url": "https://second.example"},
+        }
+    )
+    authority = BackendAuthority(
+        backend="claude-code",
+        kind=BackendAuthorityKind.GLOBAL,
+        tier=BackendAuthorityTier.GLOBAL,
+        key_path="agent_backend.backend",
+    )
+    _, _, first_environment = resolve_candidate_policy(
+        tool_ctx.config,
+        authority=authority,
+        candidate=ExecutionCandidateSpec(backend="claude-code", profile="first"),
+        ordinal=1,
+        step_name="",
+        recipe_name="",
+        step_provider="",
+        requested_model="",
+        providers_enabled=True,
+    )
+    first_environment["CANDIDATE_ONLY"] = "leaked"
+    _, _, second_environment = resolve_candidate_policy(
+        tool_ctx.config,
+        authority=authority,
+        candidate=ExecutionCandidateSpec(backend="claude-code", profile="second"),
+        ordinal=2,
+        step_name="",
+        recipe_name="",
+        step_provider="",
+        requested_model="",
+        providers_enabled=True,
+    )
+
+    assert first_environment["ANTHROPIC_BASE_URL"] == "https://first.example"
+    assert second_environment == {"ANTHROPIC_BASE_URL": "https://second.example"}
+
+
+def test_backend_named_candidate_profile_supplies_its_environment(tool_ctx) -> None:
+    from autoskillit.config import ExecutionCandidateSpec
+    from autoskillit.config.settings import ProvidersConfig
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+    from autoskillit.server.tools.tools_execution._candidate_policy import resolve_candidate_policy
+
+    tool_ctx.config.providers = ProvidersConfig(profiles={"codex": {"CODEX_API_KEY": "key"}})
+    authority = BackendAuthority(
+        backend="codex",
+        kind=BackendAuthorityKind.GLOBAL,
+        tier=BackendAuthorityTier.GLOBAL,
+        key_path="agent_backend.backend",
+    )
+
+    binding, _, environment = resolve_candidate_policy(
+        tool_ctx.config,
+        authority=authority,
+        candidate=ExecutionCandidateSpec(backend="codex", profile="codex"),
+        ordinal=1,
+        step_name="",
+        recipe_name="",
+        step_provider="",
+        requested_model="",
+        providers_enabled=True,
+    )
+
+    assert binding.profile == "codex"
+    assert environment == {"CODEX_API_KEY": "key"}
+
+
 @pytest.mark.anyio
 async def test_run_skill_model_as_profile_resolves_provider(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
+    from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -126,59 +202,14 @@ async def test_run_skill_model_as_profile_resolves_provider(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {}),
-    )
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_model_as_profile",
-        lambda *a: ("M2.7", "minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
-    )
-
-    captured: dict = {}
-    original_run = executor.run
-
-    async def spy_run(*args, **kwargs):
-        captured.update(kwargs)
-        return await original_run(*args, **kwargs)
-
-    monkeypatch.setattr(executor, "run", spy_run)
-
-    await run_skill("/autoskillit:probe", str(tmp_path))
-
-    assert captured.get("model") == "M2.7"
-    assert _provider_specific_extras(captured) == {"BASE_URL": "https://api.minimax.chat/v1"}
-    assert captured.get("profile_name") == "minimax"
-    assert captured.get("provider_name") == "minimax"
-
-
-@pytest.mark.anyio
-async def test_run_skill_step_overrides_win_over_model_as_profile(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-) -> None:
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    executor = InMemoryHeadlessExecutor()
-    tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
-    _feat = tools_execution
-    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
-    )
-    map_called = []
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_model_as_profile",
-        lambda *a: map_called.append(True) or ("", "", None),
+    monkeypatch.setitem(tool_ctx_kitchen_open.config.features, "providers", True)
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        profiles={
+            "minimax": {
+                "base_url": "https://api.minimax.chat/v1",
+                "ANTHROPIC_MODEL": "M2.7",
+            }
+        }
     )
 
     captured: dict = {}
@@ -192,9 +223,47 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
 
     await run_skill("/autoskillit:probe", str(tmp_path), model="minimax")
 
+    assert captured.get("model") == "M2.7"
+    assert _provider_specific_extras(captured) == {
+        "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1",
+        "ANTHROPIC_MODEL": "M2.7",
+    }
+    assert captured.get("profile_name") == "minimax"
+    assert captured.get("provider_name") == "minimax"
+
+
+@pytest.mark.anyio
+async def test_run_skill_step_overrides_win_over_model_as_profile(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.config.settings import ProvidersConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    tool_ctx_kitchen_open.recipe_name = "implementation"
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        profiles={"bedrock": {"AWS_REGION": "us-east-1"}},
+        step_overrides={"probe": "bedrock"},
+    )
+
+    captured: dict = {}
+    original_run = executor.run
+
+    async def spy_run(*args, **kwargs):
+        captured.update(kwargs)
+        return await original_run(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "run", spy_run)
+
+    await run_skill("/autoskillit:probe", str(tmp_path), step_name="probe", model="minimax")
+
     assert _provider_specific_extras(captured) == {"AWS_REGION": "us-east-1"}
     assert captured.get("profile_name") == "bedrock"
-    assert not map_called
+    assert captured.get("model") == "minimax"
 
 
 @pytest.mark.anyio
@@ -235,18 +304,6 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("anthropic", {}),
-    )
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_model_as_profile",
-        lambda *a: ("", "", None),
-    )
 
     captured: dict = {}
     original_run = executor.run
@@ -259,7 +316,7 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert captured.get("model") == ""
+    assert captured.get("model") == "sonnet"
     assert _provider_specific_extras(captured) is None
 
 
@@ -646,6 +703,7 @@ async def test_run_skill_forwards_provider_name_matching_profile(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     """run_skill must pass provider_name=profile_name_out so telemetry is populated."""
+    from autoskillit.config.settings import ProvidersConfig
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -653,12 +711,9 @@ async def test_run_skill_forwards_provider_name_matching_profile(
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     _feat = tools_execution
     monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
-    from autoskillit.server.lifecycle import _guards
-
-    monkeypatch.setattr(
-        _guards,
-        "_resolve_provider_profile",
-        lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
+    tool_ctx_kitchen_open.config.providers = ProvidersConfig(
+        default_provider="minimax",
+        profiles={"minimax": {"base_url": "https://api.minimax.chat/v1"}},
     )
 
     await run_skill("/autoskillit:probe", str(tmp_path))

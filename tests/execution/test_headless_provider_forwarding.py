@@ -1,5 +1,4 @@
-"""Tests verifying provider_extras, profile_name, provider_name, and provider_fallback_env
-forwarding through the headless call chain."""
+"""Tests verifying provider extras and provider identity forwarding through headless execution."""
 
 from __future__ import annotations
 
@@ -9,7 +8,12 @@ import pytest
 
 import autoskillit.execution.headless as _patch_execution_headless
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
-from autoskillit.core.types import RetryReason, SkillResult
+from autoskillit.core.types import (
+    ExecutionCandidateAttempt,
+    ExecutionSelection,
+    RetryReason,
+    SkillResult,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env
 
@@ -26,6 +30,66 @@ _STUB_RESULT = SkillResult(
     retry_reason=RetryReason.NONE,
     stderr="",
 )
+
+
+def test_launch_quota_scope_failure_is_diagnostic(minimal_ctx, monkeypatch) -> None:
+    import structlog.testing
+
+    import autoskillit.execution.headless._headless_helpers as helpers
+
+    backend = _mock_backend(anthropic_provider_capable=True)
+
+    def unavailable_scope(*args, **kwargs):  # noqa: ARG001
+        raise OSError("credentials unavailable")
+
+    monkeypatch.setattr(helpers, "quota_scope", unavailable_scope)
+
+    with structlog.testing.capture_logs() as logs:
+        identity = helpers.resolve_launch_quota_identity(
+            backend=backend,
+            binding=None,
+            provider_extras=None,
+            config=minimal_ctx.config,
+        )
+
+    assert identity["credential_scope"] == ""
+    failure = next(log for log in logs if log["event"] == "launch_quota_scope_unavailable")
+    assert failure["error"] == "credentials unavailable"
+    assert failure["error_type"] == "OSError"
+    assert failure["exc_info"] is True
+
+
+def test_launch_quota_identity_treats_anthropic_case_insensitively(
+    minimal_ctx, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_helpers as helpers
+    from autoskillit.core import LaunchValueSource, LaunchValueSourceKind, ProviderBinding
+
+    source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "test.provider")
+    binding = ProviderBinding(
+        provider="Anthropic",
+        profile="default",
+        required_backend="claude-code",
+        normalized_endpoint="https://api.anthropic.com",
+        key_path="test.provider",
+        provider_source=source,
+        profile_source=source,
+        endpoint_source=source,
+    )
+    monkeypatch.setattr(helpers, "quota_scope", lambda *args, **kwargs: "anthropic-oauth:test")
+
+    identity = helpers.resolve_launch_quota_identity(
+        backend=_mock_backend(anthropic_provider_capable=True),
+        binding=binding,
+        provider_extras=None,
+        config=minimal_ctx.config,
+    )
+
+    assert identity == {
+        "provider": "Anthropic",
+        "mode": "anthropic-oauth",
+        "credential_scope": "anthropic-oauth:test",
+    }
 
 
 @pytest.mark.anyio
@@ -107,16 +171,22 @@ async def test_default_executor_run_forwards_provider_extras(
 
     monkeypatch.setattr(_headless_mod, "run_headless_core", fake_core)
 
+    selection = ExecutionSelection(selection_id="selection-1")
+
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.run(
         "/autoskillit:probe",
         str(tmp_path),
         provider_extras={"KEY": "val"},
         profile_name="vertex",
+        execution_selection=selection,
+        execution_selection_provider=lambda: selection,
     )
 
     assert captured["provider_extras"] == {"KEY": "val"}
     assert captured["profile_name"] == "vertex"
+    assert captured["execution_selection"] is selection
+    assert captured["execution_selection_provider"]() is selection
 
 
 @pytest.mark.anyio
@@ -141,38 +211,35 @@ async def test_default_executor_run_defaults_provider_extras(
     assert captured["profile_name"] == ""
 
 
-def test_execute_claude_headless_accepts_provider_name_and_fallback_env() -> None:
+def test_execute_claude_headless_accepts_provider_name() -> None:
     import inspect
 
     from autoskillit.execution.headless import _execute_claude_headless
 
     sig = inspect.signature(_execute_claude_headless)
     assert sig.parameters["provider_name"].default == ""
-    assert sig.parameters["provider_fallback_env"].default is None
 
 
-def test_run_headless_core_accepts_provider_name_and_fallback_env() -> None:
+def test_run_headless_core_accepts_provider_name() -> None:
     import inspect
 
     from autoskillit.execution.headless import run_headless_core
 
     sig = inspect.signature(run_headless_core)
     assert sig.parameters["provider_name"].default == ""
-    assert sig.parameters["provider_fallback_env"].default is None
 
 
-def test_default_executor_run_accepts_provider_name_and_fallback_env() -> None:
+def test_default_executor_run_accepts_provider_name() -> None:
     import inspect
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     sig = inspect.signature(DefaultHeadlessExecutor.run)
     assert sig.parameters["provider_name"].default == ""
-    assert sig.parameters["provider_fallback_env"].default is None
 
 
 @pytest.mark.anyio
-async def test_run_headless_core_forwards_provider_name_and_fallback_env(
+async def test_run_headless_core_forwards_provider_name(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.core import CmdSpec
@@ -192,16 +259,20 @@ async def test_run_headless_core_forwards_provider_name_and_fallback_env(
 
     monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
 
+    selection = ExecutionSelection(selection_id="selection-1")
+
     await run_headless_core(
         "/autoskillit:probe",
         str(tmp_path),
         minimal_ctx,
         provider_name="bedrock",
-        provider_fallback_env={"KEY": "val"},
+        execution_selection=selection,
+        execution_selection_provider=lambda: selection,
     )
 
     assert execute_kwargs["provider_name"] == "bedrock"
-    assert execute_kwargs["provider_fallback_env"] == {"KEY": "val"}
+    assert execute_kwargs["execution_selection"] is selection
+    assert execute_kwargs["execution_selection_provider"]() is selection
 
 
 @pytest.mark.anyio
@@ -238,7 +309,7 @@ async def test_run_headless_core_bridges_profile_to_provider_when_empty(
 
 
 @pytest.mark.anyio
-async def test_default_executor_run_forwards_provider_name_and_fallback_env(
+async def test_default_executor_run_forwards_provider_name(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     import autoskillit.execution.headless as _headless_mod
@@ -257,11 +328,9 @@ async def test_default_executor_run_forwards_provider_name_and_fallback_env(
         "/autoskillit:probe",
         str(tmp_path),
         provider_name="vertex",
-        provider_fallback_env={"K": "v"},
     )
 
     assert captured["provider_name"] == "vertex"
-    assert captured["provider_fallback_env"] == {"K": "v"}
 
 
 @pytest.mark.anyio
@@ -362,15 +431,37 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
 
 
 @pytest.mark.anyio
-async def test_provider_name_stamps_provider_used_on_result(
-    minimal_ctx, tmp_path, monkeypatch
+@pytest.mark.parametrize("is_resume", (False, True), ids=("fresh", "resume"))
+async def test_terminal_launch_provider_stamps_selection_and_result(
+    minimal_ctx, tmp_path, monkeypatch, is_resume
 ) -> None:
+    import autoskillit.execution.evidence.session_log as session_log
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _sr
 
     _spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     _sub_result = _sr()
+    earlier_attempt = ExecutionCandidateAttempt(
+        candidate_id="candidate-1",
+        attempt=1,
+        effective_backend="previous-backend",
+        effective_provider="previous-provider",
+        execution_started=True,
+        child_session_id="previous-session",
+    )
+    terminal_attempt = ExecutionCandidateAttempt(
+        candidate_id="candidate-1",
+        attempt=2 if is_resume else 1,
+        effective_provider="configured-provider",
+    )
+    attempts = (earlier_attempt, terminal_attempt) if is_resume else (terminal_attempt,)
+    selection = ExecutionSelection(
+        selection_id="selection-1",
+        attempts=attempts,
+    )
+    persisted_selections: list[ExecutionSelection] = []
+    resolved_contracts: list = []
 
     async def fake_runner(cmd, **kwargs):  # noqa: ARG001
         return _sub_result
@@ -393,6 +484,11 @@ async def test_provider_name_stamps_provider_used_on_result(
         "_capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
     )
+    monkeypatch.setattr(
+        session_log,
+        "write_execution_candidate_manifest",
+        lambda persisted, log_dir, **_kwargs: persisted_selections.append(persisted),  # noqa: ARG005
+    )
 
     result = await _execute_claude_headless(
         lambda _binding, _extras: _spec,
@@ -403,10 +499,85 @@ async def test_provider_name_stamps_provider_used_on_result(
         provider_name="bedrock",
         launch_resolver=minimal_ctx.launch_resolver,
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        execution_selection=selection,
+        on_launch_resolved=resolved_contracts.append,
     )
 
+    assert resolved_contracts
     assert result.provider.provider_used == "bedrock"
     assert result.provider.fallback_activated is False
+    assert result.execution_selection is not None
+    assert result.execution_selection.completed is True
+    assert result.execution_selection.terminal_attempt is not None
+    assert (
+        result.execution_selection.terminal_attempt.effective_provider
+        == result.provider.provider_used
+    )
+    assert result.execution_selection.terminal_attempt.execution_started is True
+    assert result.execution_selection.terminal_attempt.child_session_id == result.session_id
+    assert result.execution_selection.terminal_candidate_id == "candidate-1"
+    assert result.execution_selection.attempts[-1].attempt == terminal_attempt.attempt
+    if is_resume:
+        assert result.execution_selection.attempts[0] == earlier_attempt
+    assert persisted_selections == [result.execution_selection]
+
+
+@pytest.mark.anyio
+async def test_manifest_write_failure_does_not_skip_terminal_flush(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    import autoskillit.execution.evidence.session_log as session_log
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+    from tests.execution.conftest import _sr
+
+    subprocess_result = _sr()
+    selection = ExecutionSelection(
+        selection_id="selection-1",
+        attempts=(ExecutionCandidateAttempt(candidate_id="candidate-1", attempt=1),),
+    )
+    flushed: list[dict] = []
+
+    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        return subprocess_result
+
+    def fail_manifest_write(*args, **kwargs):  # noqa: ARG001
+        raise OSError("manifest unavailable")
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_build_skill_result",
+        lambda *args, **kwargs: _STUB_RESULT,  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_compute_post_session_metrics",
+        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        _patch_headless__headless_execute,
+        "_capture_git_head_sha",
+        lambda *args: "",  # noqa: ARG005
+    )
+    monkeypatch.setattr(session_log, "write_execution_candidate_manifest", fail_manifest_write)
+    monkeypatch.setattr(session_log, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+
+    result = await _execute_claude_headless(
+        lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        step_name="manifest-failure",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        execution_selection=selection,
+    )
+
+    assert result.success is True
+    assert len(flushed) == 1
 
 
 def test_headless_executor_protocol_includes_provider_params() -> None:
@@ -416,7 +587,6 @@ def test_headless_executor_protocol_includes_provider_params() -> None:
 
     sig = inspect.signature(HeadlessExecutor.run)
     assert sig.parameters["provider_name"].default == ""
-    assert sig.parameters["provider_fallback_env"].default is None
 
 
 def test_build_skill_result_accepts_provider_used_kwarg() -> None:

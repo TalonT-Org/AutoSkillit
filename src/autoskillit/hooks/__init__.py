@@ -12,12 +12,6 @@
 # recomputed against the populated list (the placeholder cached in
 # ``hook_registry.__init__`` against the empty list is overwritten here).
 import autoskillit.hook_registry as _hr
-from autoskillit.core import (
-    QUOTA_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_GUARD_DENY_TRIGGER,
-    QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
-    QUOTA_POST_WARNING_TRIGGER,
-)
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HookDef,
@@ -108,10 +102,6 @@ __all__ = [
     "OUTCOME_SUCCESS",
     "OUTCOME_TIMEOUT",
     "PROTECTED_SOURCE_PATH_PATTERNS",
-    "QUOTA_BUDGET_EXCEEDED_TRIGGER",
-    "QUOTA_GUARD_DENY_TRIGGER",
-    "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
-    "QUOTA_POST_WARNING_TRIGGER",
     "REVIEW_LOOP_DENY_TRIGGER",
     "RISKY_GH_SUBCOMMANDS",
     "RISKY_GIT_OPERATIONS",

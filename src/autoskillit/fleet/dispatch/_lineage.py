@@ -13,7 +13,6 @@ carrying every value Phase C needs to spawn the executor.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -196,7 +195,6 @@ async def run_lineage_preparation(
     caller_backend_name: str,
     dispatch_name: str | None,
     prompt_builder: Callable[..., str],
-    quota_checker: Callable[..., Any],
     capture: dict[str, CaptureEntrySpec] | None,
     resume_session_id: str | None,
     resume_checkpoint: SessionCheckpoint | None,
@@ -411,10 +409,6 @@ async def run_lineage_preparation(
                 effective_name=effective_name,
                 tool_ctx=tool_ctx,
             )
-
-    quota_result = await quota_checker(tool_ctx.config.quota_guard)
-    if quota_result.get("should_sleep"):
-        await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
     resolved_timeout = resolve_dispatch_timeout(
         timeout_sec, tool_ctx.config.fleet.default_timeout_sec

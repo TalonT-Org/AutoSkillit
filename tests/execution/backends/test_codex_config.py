@@ -945,7 +945,7 @@ def test_mcp_writer_facade_owns_the_shared_config_lock(
     ]
 
 
-def test_composed_prelaunch_uses_one_destination_lock_for_runtime_mutators(
+def test_composed_prelaunch_uses_one_destination_lock_for_all_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import autoskillit.execution.backends._codex_prelaunch as prelaunch
@@ -981,6 +981,12 @@ def test_composed_prelaunch_uses_one_destination_lock_for_runtime_mutators(
         events.append("mcp")
         return True
 
+    def fake_snapshot(path: Path, data: bytes) -> None:
+        assert lock_held is True
+        assert path == config_path
+        assert data == b'model = "source"\n'
+        events.append("snapshot")
+
     def fake_hooks(*, config_path: Path, **_: object) -> bool:
         assert lock_held is True
         assert config_path == destination_home / "config.toml"
@@ -993,6 +999,7 @@ def test_composed_prelaunch_uses_one_destination_lock_for_runtime_mutators(
         events.append("runtime")
 
     monkeypatch.setattr(prelaunch, "CodexConfigLock", RecordingLock)
+    monkeypatch.setattr(prelaunch, "atomic_write", fake_snapshot)
     monkeypatch.setattr(
         prelaunch,
         "_ensure_codex_mcp_registered_unlocked",
@@ -1014,4 +1021,12 @@ def test_composed_prelaunch_uses_one_destination_lock_for_runtime_mutators(
         assert lock_held is True
         events.append("yield")
 
-    assert events == ["lock-enter", "mcp", "runtime", "hooks", "yield", "lock-exit"]
+    assert events == [
+        "lock-enter",
+        "snapshot",
+        "mcp",
+        "runtime",
+        "hooks",
+        "yield",
+        "lock-exit",
+    ]

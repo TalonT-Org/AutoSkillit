@@ -45,12 +45,11 @@ def codex_prelaunch_transaction(
         raise _staged_error("source-config read", exc) from exc
 
     config_path = Path(destination_home).expanduser().resolve(strict=False) / "config.toml"
-    try:
-        atomic_write(config_path, source_bytes)
-    except Exception as exc:
-        raise _staged_error("destination snapshot", exc) from exc
-
     with CodexConfigLock(config_path):
+        try:
+            atomic_write(config_path, source_bytes)
+        except Exception as exc:
+            raise _staged_error("destination snapshot", exc) from exc
         try:
             _ensure_codex_mcp_registered_unlocked(config_path=config_path)
         except Exception as exc:

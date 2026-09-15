@@ -38,6 +38,7 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
+    ValidatedAddDir,
     atomic_write,
     default_log_dir,
     get_logger,
@@ -103,6 +104,80 @@ def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
         if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
             command.extend((flag, value))
     return tuple(command)
+
+
+def _validate_managed_skill_catalog(skills_dir: Path) -> list[str]:
+    if skills_dir.is_symlink() or not skills_dir.is_dir():
+        return [f"managed skills catalog must be a real directory: {skills_dir}"]
+    managed_entries = [entry for entry in skills_dir.iterdir() if not entry.name.startswith(".")]
+    if not managed_entries:
+        return [f"managed skills catalog has no managed skills: {skills_dir}"]
+    if any(
+        entry.is_symlink() or not entry.is_dir() or not (entry / "SKILL.md").is_file()
+        for entry in managed_entries
+    ):
+        return [f"managed skills catalog must contain real skill directories: {skills_dir}"]
+    return []
+
+
+def _append_symlink_shape_error(errors: list[str], path: Path, diagnostic: str) -> None:
+    if path.exists() and not path.is_symlink():
+        errors.append(diagnostic)
+
+
+def _run_interactive_native_probes(
+    spec: CmdSpec,
+    *,
+    origin: CmdOrigin,
+    generated_home: Path,
+    catalog_dir: Path,
+    managed_catalog: ValidatedAddDir,
+    config_bytes: bytes,
+    before_fingerprint: tuple[tuple[str, str, int, int], ...],
+) -> list[str]:
+    probe_command = (*_interactive_probe_prefix(origin), "mcp", "list", CodexFlags.JSON)
+    errors = _validate_mcp_probe(
+        probe_command,
+        env=spec.env,
+        cwd=spec.cwd,
+        config_bytes=config_bytes,
+    )
+    after_errors, after_fingerprint = _validate_inert_rollout_paths(generated_home)
+    errors.extend(after_errors)
+    if not after_errors and after_fingerprint != before_fingerprint:
+        errors.append("Codex MCP validation mutated the inert rollout path topology")
+    if errors:
+        return errors
+
+    raw_version, _, version_errors = probe_codex_version(
+        executable=origin.binary,
+        env=spec.env,
+        cwd=spec.cwd,
+        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+    )
+    if version_errors:
+        return version_errors
+
+    discovery_command = (
+        *_interactive_probe_prefix(origin),
+        *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
+    )
+    errors = attest_catalog_discovery(
+        probe_command=discovery_command,
+        env=spec.env,
+        cwd=spec.cwd,
+        catalog_dir=catalog_dir,
+        expected_discovery_root=generated_home
+        / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
+        expected_entries=managed_catalog.skill_entries,
+        version=raw_version,
+        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+    )
+    final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
+    errors.extend(final_errors)
+    if not final_errors and final_fingerprint != before_fingerprint:
+        errors.append("Codex skill discovery mutated the inert rollout path topology")
+    return errors
 
 
 __all__ = [
@@ -395,21 +470,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
         )
         discovery_skills_dir = session_dir / self.conventions.skills_subdir
-        if skills_dir.is_symlink() or not skills_dir.is_dir():
-            errors.append(f"managed skills catalog must be a real directory: {skills_dir}")
-        else:
-            managed_entries = [
-                entry for entry in skills_dir.iterdir() if not entry.name.startswith(".")
-            ]
-            if not managed_entries:
-                errors.append(f"managed skills catalog has no managed skills: {skills_dir}")
-            elif any(
-                entry.is_symlink() or not entry.is_dir() or not (entry / "SKILL.md").is_file()
-                for entry in managed_entries
-            ):
-                errors.append(
-                    f"managed skills catalog must contain real skill directories: {skills_dir}"
-                )
+        errors.extend(_validate_managed_skill_catalog(skills_dir))
         if not discovery_skills_dir.is_symlink():
             errors.append(f"skills must be a symlink: {discovery_skills_dir}")
         elif os.readlink(discovery_skills_dir) != "add-dir/skills":
@@ -424,17 +485,24 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             if "[mcp_servers.autoskillit]" not in toml_content:
                 errors.append("config.toml missing [mcp_servers.autoskillit] section")
         auth_path = session_dir / "auth.json"
-        if auth_path.exists() and not auth_path.is_symlink():
-            errors.append(f"auth.json must be a symlink, not a regular file: {auth_path}")
+        _append_symlink_shape_error(
+            errors,
+            auth_path,
+            f"auth.json must be a symlink, not a regular file: {auth_path}",
+        )
 
         sessions_path = session_dir / "sessions"
-        if sessions_path.exists() and not sessions_path.is_symlink():
-            errors.append(f"sessions/ must be a symlink, not a regular directory: {sessions_path}")
+        _append_symlink_shape_error(
+            errors,
+            sessions_path,
+            f"sessions/ must be a symlink, not a regular directory: {sessions_path}",
+        )
         archived_path = session_dir / "archived_sessions"
-        if archived_path.exists() and not archived_path.is_symlink():
-            errors.append(
-                f"archived_sessions/ must be a symlink, not a regular directory: {archived_path}"
-            )
+        _append_symlink_shape_error(
+            errors,
+            archived_path,
+            f"archived_sessions/ must be a symlink, not a regular directory: {archived_path}",
+        )
 
         rollout_errors, _ = _validate_inert_rollout_paths(session_dir)
         errors.extend(rollout_errors)
@@ -506,49 +574,15 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         if layout_errors:
             return layout_errors
 
-        probe_command = (*_interactive_probe_prefix(origin), "mcp", "list", CodexFlags.JSON)
-        errors = _validate_mcp_probe(
-            probe_command,
-            env=spec.env,
-            cwd=spec.cwd,
-            config_bytes=config_bytes,
-        )
-        after_errors, after_fingerprint = _validate_inert_rollout_paths(generated_home)
-        errors.extend(after_errors)
-        if not after_errors and after_fingerprint != before_fingerprint:
-            errors.append("Codex MCP validation mutated the inert rollout path topology")
-        if errors:
-            return errors
-
-        raw_version, _, version_errors = probe_codex_version(
-            executable=origin.binary,
-            env=spec.env,
-            cwd=spec.cwd,
-            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-        )
-        if version_errors:
-            return version_errors
-
-        discovery_command = (
-            *_interactive_probe_prefix(origin),
-            *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
-        )
-        errors = attest_catalog_discovery(
-            probe_command=discovery_command,
-            env=spec.env,
-            cwd=spec.cwd,
+        return _run_interactive_native_probes(
+            spec,
+            origin=origin,
+            generated_home=generated_home,
             catalog_dir=catalog_dir,
-            expected_discovery_root=generated_home
-            / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
-            expected_entries=managed_catalog.skill_entries,
-            version=raw_version,
-            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+            managed_catalog=managed_catalog,
+            config_bytes=config_bytes,
+            before_fingerprint=before_fingerprint,
         )
-        final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
-        errors.extend(final_errors)
-        if not final_errors and final_fingerprint != before_fingerprint:
-            errors.append("Codex skill discovery mutated the inert rollout path topology")
-        return errors
 
     configure_managed_session_dir = project_managed_route
 

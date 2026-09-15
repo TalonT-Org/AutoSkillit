@@ -279,6 +279,7 @@ def _make_controlled_context_exhaustion_result(
             infra=InfraOutcome(exit_category=InfraExitCategory.CONTEXT_EXHAUSTED.value),
         ),
         last_stop_reason=CODEX_AUTO_COMPACTION_DENIED_REASON,
+        cli_subtype=CliSubtype.CONTEXT_EXHAUSTION.value,
     )
 
 

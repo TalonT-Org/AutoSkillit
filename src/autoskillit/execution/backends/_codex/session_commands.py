@@ -82,12 +82,34 @@ from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVER
 logger = get_logger(__name__)
 
 
-def _codex_home_from_plugin_binding(
+def _configure_interactive_home(
+    *,
+    generated_home: Path | None,
     plugin_binding: PluginLaunchBinding | None,
-) -> str | None:
+    base_env: dict[str, str],
+    merged_extras: dict[str, str],
+) -> tuple[tuple[str, str], ...]:
+    if generated_home is not None:
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            merged_extras[reserved_key] = str(generated_home)
+        return ()
     if plugin_binding is None:
-        return None
-    return str(plugin_binding.plugin_dir)
+        return ()
+    if plugin_binding.load_mode is not PluginLoadMode.PROJECTED_HOME:
+        merged_extras.setdefault(CODEX_HOME_ENV_VAR, str(plugin_binding.plugin_dir))
+        return ()
+
+    projected_home = plugin_binding.plugin_dir
+    if projected_home is None or not projected_home.is_dir():
+        raise ValueError("projected CODEX_HOME must be an existing directory")
+    if projected_home != projected_home.resolve(strict=True):
+        raise ValueError("projected CODEX_HOME must already be canonical")
+    if not plugin_binding.skill_entries:
+        raise ValueError("projected CODEX_HOME requires nonempty skill entries")
+    base_env.pop("CODEX_SQLITE_HOME", None)
+    merged_extras.pop("CODEX_SQLITE_HOME", None)
+    merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
+    return plugin_binding.skill_entries
 
 
 class CodexCommandMixin(BackendCmdBuilderBase):
@@ -578,29 +600,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
-        projected_skill_entries: tuple[tuple[str, str], ...] = ()
-        if generated_home is not None:
-            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-                merged_extras[reserved_key] = str(generated_home)
-        elif (
-            plugin_binding is not None
-            and plugin_binding.load_mode is PluginLoadMode.PROJECTED_HOME
-        ):
-            projected_home = plugin_binding.plugin_dir
-            if projected_home is None or not projected_home.is_dir():
-                raise ValueError("projected CODEX_HOME must be an existing directory")
-            if projected_home != projected_home.resolve(strict=True):
-                raise ValueError("projected CODEX_HOME must already be canonical")
-            if not plugin_binding.skill_entries:
-                raise ValueError("projected CODEX_HOME requires nonempty skill entries")
-            base_env.pop("CODEX_SQLITE_HOME", None)
-            merged_extras.pop("CODEX_SQLITE_HOME", None)
-            merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
-            projected_skill_entries = plugin_binding.skill_entries
-        else:
-            projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
-            if projected_codex_home is not None:
-                merged_extras.setdefault(CODEX_HOME_ENV_VAR, projected_codex_home)
+        projected_skill_entries = _configure_interactive_home(
+            generated_home=generated_home,
+            plugin_binding=plugin_binding,
+            base_env=base_env,
+            merged_extras=merged_extras,
+        )
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         if generated_home is not None:
             effective_required |= CODEX_RESERVED_HOME_ENV_VARS

@@ -19,7 +19,10 @@ from autoskillit.core import (
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
-from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -40,11 +43,7 @@ CodexBackend = GeneratedHomeCodexBackend
 
 @pytest.fixture(autouse=True)
 def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        CodexBackend,
-        "generated_home",
-        tmp_path / "generated-home",
-    )
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 @pytest.fixture(autouse=True)

@@ -799,49 +799,49 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --
-    f"{_SL}::L103": _self_limiting(
+    f"{_SL}::L104": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
         "equivalent of a reaper excluding the generation it is currently claiming."
     ),
-    f"{_SL}::L119": RetentionDecision(
+    f"{_SL}::L120": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected campaign id is honoured unconditionally, retaining "
         "the session directory regardless of its age, the same self-exclusion family as "
         "the dispatch reaper's protected-id set.",
     ),
     # -- execution._session_retention::apply_execution_candidate_manifest_retention --
-    f"{_ECMR}::L158": _self_limiting(
+    f"{_ECMR}::L159": _self_limiting(
         "The manifest currently being written is excluded from the retention pass that it "
         "triggered, so it cannot be reclaimed before publication completes."
     ),
-    f"{_ECMR}::L162": _self_limiting(
+    f"{_ECMR}::L163": _self_limiting(
         "A manifest that vanished during its observed scan is already absent and requires no "
         "further retention action."
     ),
-    f"{_ECMR}::L170": _retries_after_input_changes(
+    f"{_ECMR}::L171": _retries_after_input_changes(
         "Unreadable candidate evidence is retained until its file can be read or is replaced; "
         "a parse failure is never proof that the selection may be discarded."
     ),
-    f"{_ECMR}::L174": RetentionDecision(
+    f"{_ECMR}::L175": RetentionDecision(
         Revocability.REVOCABLE,
         "Candidate evidence for a protected campaign is retained unconditionally while the "
         "caller declares that campaign live.",
     ),
-    f"{_ECMR}::L183": _retries_after_input_changes(
+    f"{_ECMR}::L184": _retries_after_input_changes(
         "Without a telemetry-clear marker, or while the manifest is newer than that marker, "
         "the clear-based pass retains it until retention evidence changes."
     ),
-    f"{_ECMR}::L185": RetentionDecision(
+    f"{_ECMR}::L186": RetentionDecision(
         Revocability.REVOCABLE,
         "The current, protected, or still-pending manifest name is retained as live "
         "execution evidence.",
     ),
-    f"{_ECMR}::L200": _self_limiting(
+    f"{_ECMR}::L201": _self_limiting(
         "The normal size window is satisfied, so the capacity pass stops without further "
         "candidate deletion."
     ),
-    f"{_ECMR}::L202": RetentionDecision(
+    f"{_ECMR}::L203": RetentionDecision(
         Revocability.REVOCABLE,
         "Protected and pending manifest names remain durable evidence even when the size "
         "window would otherwise evict them.",

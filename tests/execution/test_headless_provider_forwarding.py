@@ -59,6 +59,39 @@ def test_launch_quota_scope_failure_is_diagnostic(minimal_ctx, monkeypatch) -> N
     assert failure["exc_info"] is True
 
 
+def test_launch_quota_identity_treats_anthropic_case_insensitively(
+    minimal_ctx, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_helpers as helpers
+    from autoskillit.core import LaunchValueSource, LaunchValueSourceKind, ProviderBinding
+
+    source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "test.provider")
+    binding = ProviderBinding(
+        provider="Anthropic",
+        profile="default",
+        required_backend="claude-code",
+        normalized_endpoint="https://api.anthropic.com",
+        key_path="test.provider",
+        provider_source=source,
+        profile_source=source,
+        endpoint_source=source,
+    )
+    monkeypatch.setattr(helpers, "quota_scope", lambda *args, **kwargs: "anthropic-oauth:test")
+
+    identity = helpers.resolve_launch_quota_identity(
+        backend=_mock_backend(anthropic_provider_capable=True),
+        binding=binding,
+        provider_extras=None,
+        config=minimal_ctx.config,
+    )
+
+    assert identity == {
+        "provider": "Anthropic",
+        "mode": "anthropic-oauth",
+        "credential_scope": "anthropic-oauth:test",
+    }
+
+
 @pytest.mark.anyio
 async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     minimal_ctx, tmp_path, monkeypatch

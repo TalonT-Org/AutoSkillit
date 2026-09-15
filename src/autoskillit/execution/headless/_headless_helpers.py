@@ -87,7 +87,7 @@ def resolve_launch_quota_identity(
             "mode": "api-key",
             "credential_scope": f"api-key:{sha256(api_key.encode()).hexdigest()}",
         }
-    if provider != "anthropic":
+    if provider.casefold() != "anthropic":
         endpoint = binding.normalized_endpoint if binding is not None else ""
         scope = sha256(f"{provider}:{endpoint}".encode()).hexdigest()[:16]
         return {

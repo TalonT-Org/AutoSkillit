@@ -37,13 +37,13 @@ Already defined in `core/types/_type_inspector.py`:
   `confidence`, `elapsed_seconds`
 - **`InspectorCallback`** (line 35): `Callable[[InspectorEvidence], Awaitable[InspectorVerdict]]`
 
-The callback is threaded through `execution/process/_process_race.py`: the parameter is
-declared at line 189, guarded at 253, invoked at 279, and a timeout warning emitted at 281.
-Related `inspector_verdict` fields (lines 75, 102, 116) and inspector-state transitions
-(lines 262, 265, 287, 295, 540) complete the protocol surface in the same file. The callback
-also appears in `recording.py` at lines 141 and 432.
-The wiring point is `execution/headless/_headless_execute.py:270` where
-`inspector_callback=None` is hardcoded (no backend currently provides an inspector).
+The public process facade accepts the callback in `run_managed_async()` and injects it into
+`execution/process/_race_watchers.py`'s idle watcher. That watcher packages the evidence,
+applies the bounded inspection budget, and records non-spare verdicts on the
+`RaceAccumulator` defined in `_process_race.py`. The callback also appears in
+`recording.py`. The backend wiring point remains
+`execution/headless/_headless_execute.py`, where `inspector_callback=None` is hardcoded
+because no backend currently provides an inspector.
 
 ## Required Steps
 
@@ -52,8 +52,8 @@ The wiring point is `execution/headless/_headless_execute.py:270` where
 2. Implement `build_inspector_cmd()` on `CodexBackend` — or leave as `CapabilityNotSupportedError`
    if Codex cannot support inspection.
 3. Set `inspector_capable=True` on backends with a working implementation.
-4. Wire the callback into `_process_race._run_race()` via the `inspector_callback` parameter
-   (currently hardcoded to `None` in `_headless_execute.py:270`).
+4. Pass the backend callback from `_headless_execute.py` into
+   `run_managed_async(inspector_callback=...)` instead of the current `None` value.
 
 ## Arch Enforcement
 

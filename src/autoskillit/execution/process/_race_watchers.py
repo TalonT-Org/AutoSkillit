@@ -14,7 +14,7 @@ import anyio.abc
 from autoskillit.execution.process._process_race import RaceAccumulator
 
 if TYPE_CHECKING:
-    from autoskillit.core import InspectorCallback, StreamParser
+    from autoskillit.core import InspectorCallback, StreamParser, SupportsDebug
     from autoskillit.execution.process._lifecycle.line_driver_tee import LineDriverSession
     from autoskillit.execution.process._process_kill import OwnedProcessGroup
 
@@ -192,7 +192,7 @@ async def _await_race_and_drain(
     session_log_dir: Path | None,
     channel_b_ready: anyio.Event,
     completion_drain_timeout: float,
-    proc_log: Any,
+    proc_log: SupportsDebug,
 ) -> anyio.CancelScope | None:
     """Await the race, draining Channel B after exit, then cancel its watchers."""
     _enroll_child_activity_watcher(

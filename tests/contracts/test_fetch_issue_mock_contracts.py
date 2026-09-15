@@ -12,12 +12,29 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 TESTS_DIR = Path(__file__).parents[2] / "tests"
 
 
-def _collect_failures(test_file: Path) -> list[str]:
-    source = test_file.read_text()
-    tree = ast.parse(source)
+_REQUIRED_FETCH_ISSUE_KEYS = ("state", "body")
 
-    # Track dict literals assigned to named variables (for variable-based mocks)
-    variable_dicts: dict[str, tuple[int, bool, bool]] = {}
+
+def _literal_string_key_values(dict_node: ast.Dict) -> dict[str, ast.expr]:
+    return {
+        key.value: value
+        for key, value in zip(dict_node.keys, dict_node.values)
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+
+
+def _missing_key_diagnostics(
+    test_file: Path, lineno: int, label: str, keys: dict[str, ast.expr]
+) -> list[str]:
+    return [
+        f"{test_file.name}:{lineno} {label} missing '{key}' key"
+        for key in _REQUIRED_FETCH_ISSUE_KEYS
+        if key not in keys
+    ]
+
+
+def _named_dictionary_definitions(tree: ast.AST) -> dict[str, tuple[int, dict[str, ast.expr]]]:
+    definitions: dict[str, tuple[int, dict[str, ast.expr]]] = {}
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Assign)
@@ -25,70 +42,84 @@ def _collect_failures(test_file: Path) -> list[str]:
             and isinstance(node.targets[0], ast.Name)
             and isinstance(node.value, ast.Dict)
         ):
-            var_name = node.targets[0].id
-            keys = {
-                k.value
-                for k in node.value.keys
-                if isinstance(k, ast.Constant) and isinstance(k.value, str)
-            }
-            variable_dicts[var_name] = (node.lineno, "state" in keys, "body" in keys)
+            definitions[node.targets[0].id] = (
+                node.lineno,
+                _literal_string_key_values(node.value),
+            )
+    return definitions
 
-    failures = []
 
-    def _check_dict(dict_node: ast.Dict, lineno: int, label: str) -> None:
-        keys_and_values = {
-            k.value: v
-            for k, v in zip(dict_node.keys, dict_node.values)
-            if isinstance(k, ast.Constant) and isinstance(k.value, str)
-        }
-        success_val = keys_and_values.get("success")
-        is_success_true = isinstance(success_val, ast.Constant) and success_val.value is True
-        if is_success_true:
-            if "state" not in keys_and_values:
-                failures.append(f"{test_file.name}:{lineno} {label} missing 'state' key")
-            if "body" not in keys_and_values:
-                failures.append(f"{test_file.name}:{lineno} {label} missing 'body' key")
+def _fetch_issue_mock_values(node: ast.Assign) -> list[tuple[ast.expr, str]]:
+    target = node.targets[0] if node.targets else None
+    if (
+        isinstance(target, ast.Attribute)
+        and target.attr == "return_value"
+        and isinstance(target.value, ast.Attribute)
+        and target.value.attr == "fetch_issue"
+    ):
+        return [(node.value, ".fetch_issue.return_value =")]
+    if (
+        isinstance(target, ast.Attribute)
+        and target.attr == "fetch_issue"
+        and isinstance(node.value, ast.Call)
+    ):
+        return [
+            (keyword.value, "fetch_issue AsyncMock return_value")
+            for keyword in node.value.keywords
+            if keyword.arg == "return_value"
+        ]
+    return []
 
-    def _check_value(value_node: ast.expr, lineno: int, label: str) -> None:
-        if isinstance(value_node, ast.Dict):
-            _check_dict(value_node, lineno, label)
-        elif isinstance(value_node, ast.Name):
-            var_name = value_node.id
-            if var_name in variable_dicts:
-                var_lineno, has_state, has_body = variable_dicts[var_name]
-                if not has_state:
-                    failures.append(
-                        f"{test_file.name}:{lineno} variable '{var_name}' "
-                        f"(defined at line {var_lineno}) missing 'state' key"
-                    )
-                if not has_body:
-                    failures.append(
-                        f"{test_file.name}:{lineno} variable '{var_name}' "
-                        f"(defined at line {var_lineno}) missing 'body' key"
-                    )
 
+def _mock_value_failures(
+    value_node: ast.expr,
+    lineno: int,
+    label: str,
+    variable_dicts: dict[str, tuple[int, dict[str, ast.expr]]],
+    test_file: Path,
+) -> list[str]:
+    if isinstance(value_node, ast.Dict):
+        keys = _literal_string_key_values(value_node)
+        success = keys.get("success")
+        if isinstance(success, ast.Constant) and success.value is True:
+            return _missing_key_diagnostics(test_file, lineno, label, keys)
+    elif isinstance(value_node, ast.Name) and value_node.id in variable_dicts:
+        definition_line, keys = variable_dicts[value_node.id]
+        variable_label = f"variable '{value_node.id}' (defined at line {definition_line})"
+        return _missing_key_diagnostics(test_file, lineno, variable_label, keys)
+    return []
+
+
+def _collect_failures(test_file: Path) -> list[str]:
+    source = test_file.read_text()
+    tree = ast.parse(source)
+    variable_dicts = _named_dictionary_definitions(tree)
+    failures: list[str] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        target = node.targets[0] if node.targets else None
-
-        # Pattern 1: foo.fetch_issue.return_value = {...}
-        if (
-            isinstance(target, ast.Attribute)
-            and target.attr == "return_value"
-            and isinstance(target.value, ast.Attribute)
-            and target.value.attr == "fetch_issue"
-        ):
-            _check_value(node.value, node.lineno, ".fetch_issue.return_value =")
-
-        # Pattern 2: foo.fetch_issue = AsyncMock(return_value={...})
-        if isinstance(target, ast.Attribute) and target.attr == "fetch_issue":
-            if isinstance(node.value, ast.Call):
-                for kw in node.value.keywords:
-                    if kw.arg == "return_value":
-                        _check_value(kw.value, node.lineno, "fetch_issue AsyncMock return_value")
+        if isinstance(node, ast.Assign):
+            for value, label in _fetch_issue_mock_values(node):
+                failures.extend(
+                    _mock_value_failures(value, node.lineno, label, variable_dicts, test_file)
+                )
 
     return failures
+
+
+def test_collect_failures_preserves_inline_and_named_dictionary_guards(tmp_path: Path) -> None:
+    test_file = tmp_path / "synthetic.py"
+    test_file.write_text(
+        'api.fetch_issue.return_value = {"success": True}\n'
+        'api.fetch_issue.return_value = {"success": False}\n'
+        "api.fetch_issue = AsyncMock(return_value=later)\n"
+        'later = {"success": False}\n'
+    )
+
+    assert _collect_failures(test_file) == [
+        "synthetic.py:1 .fetch_issue.return_value = missing 'state' key",
+        "synthetic.py:1 .fetch_issue.return_value = missing 'body' key",
+        "synthetic.py:3 variable 'later' (defined at line 4) missing 'state' key",
+        "synthetic.py:3 variable 'later' (defined at line 4) missing 'body' key",
+    ]
 
 
 def test_all_fetch_issue_mocks_include_state_and_body_field() -> None:

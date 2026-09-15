@@ -337,23 +337,35 @@ def test_standard_dispatch_reads_retained_marker_and_preserves_adaptive_selectio
 def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) -> None:
     case = _make_gate_case(tmp_path)
     metrics = case["metrics"]
-    if reason == "metrics_missing":
-        case["env"]["diff_metrics_path"] = str(case["output_dir"] / "missing.json")
+    env_updates = {
+        "metrics_missing": (
+            "diff_metrics_path",
+            str(case["output_dir"] / "missing.json"),
+        ),
+        "ref_missing": ("FAKE_GH_MISSING_AUTHORITY", "1"),
+    }
+    metric_key_deletions = {
+        "manifest_missing": "artifacts",
+        "gate_missing": "run_overengineering_audits",
+    }
+    scalar_metric_updates = {
+        "manifest_invalid": (metrics, "diff_byte_length", "17"),
+        "profile_invalid": (metrics["diff_source"], "profile_id", "wrong"),
+        "snapshot_mismatch": (metrics, "_head_sha", "b" * 40),
+        "gate_not_boolean": (metrics, "run_overengineering_audits", "true"),
+    }
+
+    if env_update := env_updates.get(reason):
+        key, value = env_update
+        case["env"][key] = value
     elif reason == "metrics_invalid_json":
         case["metrics_path"].write_text("{")
-    elif reason == "manifest_missing":
-        metrics.pop("artifacts")
+    elif metric_key := metric_key_deletions.get(reason):
+        metrics.pop(metric_key)
         _write_metrics(case)
-    elif reason == "manifest_invalid":
-        metrics["diff_byte_length"] = "17"
-        _write_metrics(case)
-    elif reason == "profile_invalid":
-        metrics["diff_source"]["profile_id"] = "wrong"
-        _write_metrics(case)
-    elif reason == "ref_missing":
-        case["env"]["FAKE_GH_MISSING_AUTHORITY"] = "1"
-    elif reason == "snapshot_mismatch":
-        metrics["_head_sha"] = "b" * 40
+    elif scalar_metric_update := scalar_metric_updates.get(reason):
+        target, key, value = scalar_metric_update
+        target[key] = value
         _write_metrics(case)
     elif reason == "artifact_missing":
         case["annotated"].unlink()
@@ -387,12 +399,6 @@ def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) ->
         case["env"]["MUTATION_SENTINEL"] = str(case["output_dir"] / "mutated")
         case["env"]["MUTATE_MARKER_PATH"] = str(case["metrics_path"])
         case["env"]["REAL_SHA256SUM"] = real_sha256sum
-    elif reason == "gate_missing":
-        metrics.pop("run_overengineering_audits")
-        _write_metrics(case)
-    elif reason == "gate_not_boolean":
-        metrics["run_overengineering_audits"] = "true"
-        _write_metrics(case)
 
     result, _ = _run_gate(case)
     state, actual_reason, audit_state, revalidate_status = result.split("|")

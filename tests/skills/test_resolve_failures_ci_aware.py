@@ -143,41 +143,21 @@ def test_skill_verdict_covers_all_required_values(skill_text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _find_table_row_verdict(skill_text: str, subtype: str) -> str | None:
-    """Find the verdict assigned to a given failure_subtype in the decision table.
+def _is_verdict_table_header(line: str) -> bool:
+    """Return whether a line qualifies as a verdict decision-table header."""
+    return all(column in line for column in ("Local result", "failure_subtype", "Verdict"))
 
-    Scans the markdown table in the Verdict Decision Tree section for a row
-    containing the subtype, and extracts the verdict value from that row.
-    Returns the FIRST matching row's verdict.
-    """
-    in_table = False
+
+def _verdict_table_column_indexes(line: str) -> tuple[int, int]:
+    """Return the last matching failure-subtype and verdict column indexes."""
     subtype_col = -1
     verdict_col = -1
-    for line in skill_text.splitlines():
-        if "Local result" in line and "failure_subtype" in line and "Verdict" in line:
-            in_table = True
-            header_cells = [c.strip() for c in line.split("|")]
-            for i, cell in enumerate(header_cells):
-                if "failure_subtype" in cell:
-                    subtype_col = i
-                if "Verdict" in cell:
-                    verdict_col = i
-            continue
-        if in_table and line.strip().startswith("|---"):
-            continue
-        if in_table and "|" in line:
-            cells = [c.strip() for c in line.split("|")]
-            if len(cells) <= max(subtype_col, verdict_col):
-                continue
-            subtype_cell = cells[subtype_col]
-            verdict_cell = cells[verdict_col]
-            if subtype in subtype_cell:
-                match = re.search(r"`(\w+)`", verdict_cell)
-                if match:
-                    return match.group(1)
-        elif in_table and line.strip() == "":
-            break
-    return None
+    for i, cell in enumerate(line.split("|")):
+        if "failure_subtype" in cell:
+            subtype_col = i
+        if "Verdict" in cell:
+            verdict_col = i
+    return subtype_col, verdict_col
 
 
 def _find_all_table_row_verdicts(skill_text: str, subtype: str) -> list[str]:
@@ -187,14 +167,9 @@ def _find_all_table_row_verdicts(skill_text: str, subtype: str) -> list[str]:
     subtype_col = -1
     verdict_col = -1
     for line in skill_text.splitlines():
-        if "Local result" in line and "failure_subtype" in line and "Verdict" in line:
+        if _is_verdict_table_header(line):
             in_table = True
-            header_cells = [c.strip() for c in line.split("|")]
-            for i, cell in enumerate(header_cells):
-                if "failure_subtype" in cell:
-                    subtype_col = i
-                if "Verdict" in cell:
-                    verdict_col = i
+            subtype_col, verdict_col = _verdict_table_column_indexes(line)
             continue
         if in_table and line.strip().startswith("|---"):
             continue

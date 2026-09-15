@@ -526,6 +526,13 @@ def _with_finalized_projection(
     return result
 
 
+def _check_recipe_section_total(previous: int | None, observed: int) -> int:
+    if previous is None:
+        return observed
+    assert observed == previous
+    return previous
+
+
 async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "content") -> Any:
     """Reconstruct one typed recipe section from inline or paginated delivery."""
     assert result.get("success") is True, f"recipe response was not successful: {result}"
@@ -615,10 +622,9 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
             assert response["byte_start"] == expected_range_start
             assert response["byte_end"] == response["byte_start"] + len(chunk.encode("utf-8"))
             expected_range_start = response["byte_end"]
-            if expected_section_total is None:
-                expected_section_total = response["byte_total"]
-            else:
-                assert response["byte_total"] == expected_section_total
+            expected_section_total = _check_recipe_section_total(
+                expected_section_total, response["byte_total"]
+            )
             range_identity = (
                 content_format,
                 response["byte_start"],
@@ -650,10 +656,9 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
                 decoded.encode("utf-8")
             )
             expected_range_start = response["scalar_byte_end"]
-            if expected_section_total is None:
-                expected_section_total = response["scalar_byte_total"]
-            else:
-                assert response["scalar_byte_total"] == expected_section_total
+            expected_section_total = _check_recipe_section_total(
+                expected_section_total, response["scalar_byte_total"]
+            )
             range_identity = (
                 content_format,
                 response["scalar_byte_start"],
@@ -688,10 +693,9 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
                 and response["has_more"] is False
             )
             expected_range_start = response["element_end"]
-            if expected_section_total is None:
-                expected_section_total = response["element_total"]
-            else:
-                assert response["element_total"] == expected_section_total
+            expected_section_total = _check_recipe_section_total(
+                expected_section_total, response["element_total"]
+            )
             range_identity = (
                 content_format,
                 response["element_start"],

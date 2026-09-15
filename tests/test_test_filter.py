@@ -1035,6 +1035,15 @@ class TestReexportClosureIntegration:
         assert result is not None
         assert tests_root / "core" in result
 
+    def test_original_unclassifiable_init_requests_full_run(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            changed_files={"src/autoskillit/__init__.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=_make_tests_tree(tmp_path),
+        )
+
+        assert result is FullRunReason.UNMAPPED_FILE
+
     def test_unclassifiable_init_does_not_cause_full_run(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -94,14 +94,8 @@ def _provider_annotation_run_side_effect(
                     "baseRepoFullName": repository,
                 }
             return subprocess.CompletedProcess(args, 0, json.dumps(payload).encode(), b"")
-        if args[:3] == ["gh", "pr", "diff"]:
-            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
         if args[:3] == ["git", "rev-parse", "HEAD"]:
             return subprocess.CompletedProcess(args, 0, checkout_head.encode(), b"")
-        if args[:3] == ["git", "rev-parse", "--verify"]:
-            if local_base_tip is None:
-                return subprocess.CompletedProcess(args, 1, b"", b"")
-            return subprocess.CompletedProcess(args, 0, local_base_tip.encode(), b"")
         if args[:2] == ["git", "rev-parse"]:
             if local_base_tip is None:
                 return subprocess.CompletedProcess(args, 1, b"", b"")
@@ -115,12 +109,14 @@ def _provider_annotation_run_side_effect(
             return subprocess.CompletedProcess(
                 args, 0, f"git@github.com:{repository.lower()}.git\n".encode(), b""
             )
-        if args[:2] == ["git", "fetch"]:
-            return subprocess.CompletedProcess(args, 0, b"", b"")
-        if args[:2] == ["git", "merge-base"]:
-            return subprocess.CompletedProcess(args, 0, local_merge_base.encode(), b"")
-        if args[:2] == ["git", "diff"]:
-            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        for prefix, stdout in (
+            (["gh", "pr", "diff"], diff_output),
+            (["git", "fetch"], ""),
+            (["git", "merge-base"], local_merge_base),
+            (["git", "diff"], diff_output),
+        ):
+            if args[: len(prefix)] == prefix:
+                return subprocess.CompletedProcess(args, 0, stdout.encode(), b"")
         raise AssertionError(f"unexpected annotation command: {args}")
 
     return _run

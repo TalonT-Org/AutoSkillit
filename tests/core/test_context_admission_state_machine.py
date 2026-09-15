@@ -516,6 +516,11 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             AdmissionDecisionKind.QUARANTINED,
         }:
             return ()
+        quarantine_suffix = (
+            (QuarantineRecordedEffect,)
+            if transition.decision.kind is AdmissionDecisionKind.QUARANTINED
+            else ()
+        )
         if isinstance(event, ProposeOccurrenceEvent | StartGenerationEvent):
             return ()
         if isinstance(event, ReserveRequestEvent):
@@ -543,9 +548,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 ChargeCommittedEffect,
                 *(OccurrenceStateChangedEffect for _ in record.batch.occurrence_ids),
             )
-            if transition.decision.kind is AdmissionDecisionKind.QUARANTINED:
-                effect_types += (QuarantineRecordedEffect,)
-            return effect_types
+            return effect_types + quarantine_suffix
         if isinstance(
             event,
             ReleaseNonAdmissionEvent
@@ -572,9 +575,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             )
         if isinstance(event, ReconcileGenerationEvent):
             effect_types = (GenerationReconciledEffect,)
-            if transition.decision.kind is AdmissionDecisionKind.QUARANTINED:
-                effect_types += (QuarantineRecordedEffect,)
-            return effect_types
+            return effect_types + quarantine_suffix
         if isinstance(event, ExpireIdempotencyKeyEvent):
             return (IdempotencyExpiredEffect,)
         if isinstance(event, RolloverEpochEvent):

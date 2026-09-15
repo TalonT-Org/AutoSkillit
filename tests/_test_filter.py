@@ -1686,6 +1686,11 @@ def resolve_test_base_ref_from_env(explicit: str | None = None) -> str | None:
     return f"origin/{github_base}" if github_base else None
 
 
+def _paths_from_git_output(output: str) -> set[str]:
+    """Return the non-blank, stripped paths emitted by a Git command."""
+    return {line.strip() for line in output.strip().splitlines() if line.strip()}
+
+
 def git_changed_files(
     cwd: str | Path,
     base_ref: str | None = None,
@@ -1728,10 +1733,7 @@ def git_changed_files(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
-    files: set[str] = set()
-    for line in diff_result.stdout.strip().splitlines():
-        if line.strip():
-            files.add(line.strip())
+    files = _paths_from_git_output(diff_result.stdout)
 
     untracked = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -1742,9 +1744,7 @@ def git_changed_files(
         check=False,
     )
     if untracked.returncode == 0:
-        for line in untracked.stdout.strip().splitlines():
-            if line.strip():
-                files.add(line.strip())
+        files.update(_paths_from_git_output(untracked.stdout))
 
     return files
 
@@ -1778,10 +1778,7 @@ def git_changed_files_local(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
-    files: set[str] = set()
-    for line in diff_result.stdout.strip().splitlines():
-        if line.strip():
-            files.add(line.strip())
+    files = _paths_from_git_output(diff_result.stdout)
 
     try:
         untracked = subprocess.run(
@@ -1799,9 +1796,7 @@ def git_changed_files_local(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return files
     if untracked.returncode == 0:
-        for line in untracked.stdout.strip().splitlines():
-            if line.strip():
-                files.add(line.strip())
+        files.update(_paths_from_git_output(untracked.stdout))
 
     return files
 
@@ -1975,6 +1970,52 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
         return None
 
 
+def _decode_coverage_publication(
+    raw: object,
+    map_path: Path,
+) -> tuple[dict[str, set[str]], str] | None:
+    """Validate a coverage publication and return its map with its source SHA."""
+    if not isinstance(raw, dict):
+        _reject_coverage_map(map_path, SourceMapRejection.NOT_AN_OBJECT, stacklevel=3)
+        return None
+
+    schema_version = raw.get("schema_version")
+    if schema_version is None:
+        _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE, stacklevel=3)
+        return None
+    if schema_version != 1:
+        _reject_coverage_map(map_path, SourceMapRejection.UNKNOWN_SCHEMA_VERSION, stacklevel=3)
+        return None
+    provenance = raw.get("provenance")
+    if not isinstance(provenance, dict) or "pytest_exit_code" not in provenance:
+        _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE, stacklevel=3)
+        return None
+    if provenance.get("pytest_exit_code") != 0:
+        _reject_coverage_map(map_path, SourceMapRejection.PRODUCER_FAILED, stacklevel=3)
+        return None
+    source_commit = provenance.get("source_commit")
+    if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE, stacklevel=3)
+        return None
+
+    source_map = raw.get("map")
+    if not isinstance(source_map, dict):
+        _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY, stacklevel=3)
+        return None
+
+    result: dict[str, set[str]] = {}
+    for src, tests in source_map.items():
+        if (
+            not isinstance(src, str)
+            or not isinstance(tests, list)
+            or not all(isinstance(test, str) for test in tests)
+        ):
+            _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY, stacklevel=3)
+            return None
+        result[src] = set(tests)
+    return result, source_commit
+
+
 def load_coverage_map(
     map_path: str | Path,
     max_age_days: int = 30,
@@ -2009,36 +2050,10 @@ def load_coverage_map(
     except json.JSONDecodeError:
         return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_JSON)
 
-    if not isinstance(raw, dict):
-        return _reject_coverage_map(map_path, SourceMapRejection.NOT_AN_OBJECT)
-
-    schema_version = raw.get("schema_version")
-    if schema_version is None:
-        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
-    if schema_version != 1:
-        return _reject_coverage_map(map_path, SourceMapRejection.UNKNOWN_SCHEMA_VERSION)
-    provenance = raw.get("provenance")
-    if not isinstance(provenance, dict) or "pytest_exit_code" not in provenance:
-        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
-    if provenance.get("pytest_exit_code") != 0:
-        return _reject_coverage_map(map_path, SourceMapRejection.PRODUCER_FAILED)
-    source_commit = provenance.get("source_commit")
-    if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
-        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
-
-    source_map = raw.get("map")
-    if not isinstance(source_map, dict):
-        return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY)
-
-    result: dict[str, set[str]] = {}
-    for src, tests in source_map.items():
-        if (
-            not isinstance(src, str)
-            or not isinstance(tests, list)
-            or not all(isinstance(test, str) for test in tests)
-        ):
-            return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY)
-        result[src] = set(tests)
+    decoded = _decode_coverage_publication(raw, map_path)
+    if decoded is None:
+        return None
+    result, source_commit = decoded
 
     try:
         ancestry = subprocess.run(
@@ -2067,10 +2082,12 @@ def load_coverage_map(
 def _reject_coverage_map(
     map_path: Path,
     rejection: SourceMapRejection,
+    *,
+    stacklevel: int = 2,
 ) -> dict[str, set[str]] | None:
     warnings.warn(
         f"Coverage map {map_path}: {_REJECTION_DETAIL[rejection]}",
-        stacklevel=2,
+        stacklevel=stacklevel,
     )
     return None
 
@@ -2215,6 +2232,359 @@ def _file_to_execution_subpkg(filepath: str) -> str | None:
     return None
 
 
+def _initial_scope(
+    changed_files: set[str] | None,
+    mode: FilterMode,
+    cwd: str | Path | None,
+    base_ref: str | None,
+) -> tuple[set[str], set[str]] | FullRunReason:
+    """Apply fail-open gates and return files left for classification and support dirs."""
+    if mode == FilterMode.NONE:
+        return FullRunReason.DISABLED
+    if changed_files is None:
+        return FullRunReason.GIT_UNAVAILABLE
+    if (
+        mode == FilterMode.CONSERVATIVE
+        and len(changed_files) > _LARGE_CHANGESET_THRESHOLD_CONSERVATIVE
+    ):
+        return FullRunReason.LARGE_CHANGESET
+
+    if cwd is not None and base_ref is not None:
+        scoped_test_dirs = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
+        if scoped_test_dirs is None:
+            return FullRunReason.BUCKET_A
+        version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
+        if version_bump_in_bucket_a:
+            changed_files = changed_files - version_bump_in_bucket_a
+    else:
+        scoped_test_dirs = compute_bucket_a_scope(changed_files)
+        if scoped_test_dirs is None:
+            return FullRunReason.BUCKET_A
+    return changed_files, scoped_test_dirs
+
+
+def _resolve_core_cascade(
+    filepath: str,
+    cascade_map: dict[str, frozenset[str]],
+    cwd: str | Path | None,
+    base_ref: str | None,
+    is_original: bool,
+    changed_src_py: set[str],
+) -> set[str]:
+    """Resolve conservative core cascades, including narrowed re-export initializers."""
+    stem = Path(filepath).stem
+    if stem in _CORE_UNIVERSAL_MODULES:
+        if (
+            stem in _CORE_UNIVERSAL_EXCLUSIONS
+            and cwd is not None
+            and base_ref is not None
+            and _is_additive_only(cwd, base_ref, filepath)
+        ):
+            return set(cascade_map["core"] - _CORE_UNIVERSAL_EXCLUSIONS[stem])
+        return set(cascade_map["core"])
+    if stem != "__init__" or is_original:
+        return set(MODULE_CASCADE_CORE.get(stem, cascade_map["core"]))
+
+    cause_stems = {
+        Path(cause).stem
+        for cause in changed_src_py
+        if _file_to_package(cause) == "core" and Path(cause).stem != "__init__"
+    }
+    if cause_stems and all(
+        cause in MODULE_CASCADE_CORE and cause not in _CORE_UNIVERSAL_MODULES
+        for cause in cause_stems
+    ):
+        result: set[str] = set()
+        for cause in cause_stems:
+            result.update(MODULE_CASCADE_CORE[cause])
+        return result
+    return set(cascade_map["core"])
+
+
+def _resolve_execution_cascade(
+    filepath: str,
+    cascade_map: dict[str, frozenset[str]],
+    is_original: bool,
+    changed_src_py: set[str],
+) -> set[str]:
+    """Resolve conservative execution cascades with subpackage precedence."""
+    subpkg = _file_to_execution_subpkg(filepath)
+    if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
+        return set(SUBPKG_CASCADE_EXECUTION[subpkg])
+
+    stem = Path(filepath).stem
+    if stem != "__init__" or is_original:
+        return set(MODULE_CASCADE_EXECUTION.get(stem, cascade_map["execution"]))
+
+    cause_files = [
+        cause
+        for cause in changed_src_py
+        if _file_to_package(cause) == "execution" and Path(cause).stem != "__init__"
+    ]
+    if not cause_files:
+        return set(cascade_map["execution"])
+
+    result: set[str] = set()
+    for cause in cause_files:
+        cause_subpkg = _file_to_execution_subpkg(cause)
+        if cause_subpkg and cause_subpkg in SUBPKG_CASCADE_EXECUTION:
+            result.update(SUBPKG_CASCADE_EXECUTION[cause_subpkg])
+        elif Path(cause).stem in MODULE_CASCADE_EXECUTION:
+            result.update(MODULE_CASCADE_EXECUTION[Path(cause).stem])
+        else:
+            return set(cascade_map["execution"])
+    return result
+
+
+def _resolve_source_cascade(
+    filepath: str,
+    mode: FilterMode,
+    cascade_map: dict[str, frozenset[str]],
+    cwd: str | Path | None,
+    base_ref: str | None,
+    is_original: bool,
+    changed_src_py: set[str],
+) -> set[str] | None:
+    """Resolve one source path, failing open only for an unmapped original source."""
+    package = _file_to_package(filepath)
+    if mode != FilterMode.CONSERVATIVE:
+        return set(cascade_map[package]) if package in cascade_map else None
+
+    if package == "core":
+        return _resolve_core_cascade(
+            filepath,
+            cascade_map,
+            cwd,
+            base_ref,
+            is_original,
+            changed_src_py,
+        )
+    if package == "execution":
+        return _resolve_execution_cascade(filepath, cascade_map, is_original, changed_src_py)
+
+    stem = Path(filepath).stem
+    if package == "pipeline":
+        if stem == "__init__" and not is_original:
+            cause_stems = {
+                Path(cause).stem
+                for cause in changed_src_py
+                if _file_to_package(cause) == "pipeline" and Path(cause).stem != "__init__"
+            }
+            if cause_stems and all(cause in MODULE_CASCADE_PIPELINE for cause in cause_stems):
+                result: set[str] = set()
+                for cause in cause_stems:
+                    result.update(MODULE_CASCADE_PIPELINE[cause])
+                return result
+        return set(MODULE_CASCADE_PIPELINE.get(stem, cascade_map["pipeline"]))
+    if package == "server":
+        return set(cascade_map["server"]) | set(MODULE_CASCADE_SERVER_CROSS_LAYER.get(stem, ()))
+    if package == "recipe":
+        if stem == "__init__" and not is_original:
+            cause_stems = {
+                Path(cause).stem
+                for cause in changed_src_py
+                if _file_to_package(cause) == "recipe" and Path(cause).stem != "__init__"
+            }
+            if cause_stems and all(cause in MODULE_CASCADE_RECIPE for cause in cause_stems):
+                result = set()
+                for cause in cause_stems:
+                    result.update(MODULE_CASCADE_RECIPE[cause])
+                return result
+            if not cause_stems:
+                logging.getLogger(__name__).debug(  # noqa: TID251
+                    "recipe/__init__ backtrace: no non-init recipe cause stems"
+                    " — failing open to full recipe cascade (expected behavior"
+                    " when only recipe/__init__.py changed)"
+                )
+        return set(MODULE_CASCADE_RECIPE.get(stem, cascade_map["recipe"]))
+    if package == "config":
+        if stem == "__init__" and not is_original:
+            cause_stems = {
+                Path(cause).stem
+                for cause in changed_src_py
+                if _file_to_package(cause) == "config" and Path(cause).stem != "__init__"
+            }
+            if cause_stems and all(cause in MODULE_CASCADE_CONFIG for cause in cause_stems):
+                result = set()
+                for cause in cause_stems:
+                    result.update(MODULE_CASCADE_CONFIG[cause])
+                return result
+            if not cause_stems:
+                logging.getLogger(__name__).debug(  # noqa: TID251
+                    "config/__init__ backtrace: no non-init config cause stems"
+                    " — failing open to full config cascade (expected behavior"
+                    " when only config/__init__.py changed)"
+                )
+        return set(MODULE_CASCADE_CONFIG.get(stem, cascade_map["config"]))
+    if package in cascade_map:
+        return set(cascade_map[package])
+    return None if is_original else set()
+
+
+def _classify_changed_files(
+    changed_files: set[str],
+    mode: FilterMode,
+    manifest: dict[str, Any] | None,
+    cascade_map: dict[str, frozenset[str]],
+    cwd: str | Path | None,
+    base_ref: str | None,
+) -> tuple[set[str], set[str], set[str]] | FullRunReason:
+    """Classify direct tests, source cascades, and manifest-selected paths."""
+    test_dirs: set[str] = set()
+    direct_test_files: set[str] = set()
+    changed_src_py = {
+        filepath
+        for filepath in changed_files
+        if filepath.startswith("src/") and filepath.endswith(".py")
+    }
+    compiled_matchers: dict[str, pathspec.PathSpec] | None = None
+    for filepath in changed_files:
+        if filepath.startswith("tests/") and filepath.endswith(".py"):
+            if not _scoped_test_dirs_for_file(filepath):
+                direct_test_files.add(filepath)
+        elif filepath in changed_src_py:
+            source_dirs = _resolve_source_cascade(
+                filepath,
+                mode,
+                cascade_map,
+                cwd,
+                base_ref,
+                True,
+                changed_src_py,
+            )
+            if source_dirs is None:
+                return FullRunReason.UNMAPPED_FILE
+            test_dirs.update(source_dirs)
+        else:
+            if manifest is not None and compiled_matchers is None:
+                compiled_matchers = _compile_manifest_matchers(manifest)
+            manifest_dirs = apply_manifest(
+                {filepath},
+                manifest,
+                compiled_matchers=compiled_matchers,
+            )
+            if manifest_dirs is None:
+                return FullRunReason.UNMAPPED_FILE
+            test_dirs.update(manifest_dirs)
+    return test_dirs, direct_test_files, changed_src_py
+
+
+def _add_reexport_cascades(
+    test_dirs: set[str],
+    changed_src_py: set[str],
+    tests_root: Path,
+    mode: FilterMode,
+    cascade_map: dict[str, frozenset[str]],
+    cwd: str | Path | None,
+    base_ref: str | None,
+) -> None:
+    """Add cascades for re-exporting initializers without broadening on unknown expansions."""
+    if not changed_src_py:
+        return
+    try:
+        expanded = _expand_reexport_closure(changed_src_py, tests_root.parent)
+        for filepath in expanded - changed_src_py:
+            source_dirs = _resolve_source_cascade(
+                filepath,
+                mode,
+                cascade_map,
+                cwd,
+                base_ref,
+                False,
+                changed_src_py,
+            )
+            if source_dirs is not None:
+                test_dirs.update(source_dirs)
+    except Exception:
+        logging.getLogger(__name__).debug(  # noqa: TID251
+            "_expand_reexport_closure suppressed", exc_info=True
+        )  # fail-open: expansion errors do not affect the computed scope
+
+
+def _add_always_run_paths(
+    test_dirs: set[str],
+    direct_test_files: set[str],
+    changed_files: set[str],
+    mode: FilterMode,
+    tests_root: Path,
+    always_run: frozenset[str],
+) -> None:
+    """Add mode-specific always-run directories and direct support-file tests."""
+    if mode == FilterMode.CONSERVATIVE and changed_files:
+        test_dirs.update(_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
+        if any(
+            filepath.startswith(_DOCS_TRIGGER_PREFIX) or filepath in _DOCS_TRIGGER_FILES
+            for filepath in changed_files
+        ):
+            test_dirs.add("docs")
+        else:
+            direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
+        for filename in _INFRA_UNCONDITIONAL_FILES:
+            direct_test_files.add(str(tests_root / "infra" / filename))
+        for filename in _HOOKS_UNCONDITIONAL_FILES:
+            direct_test_files.add(str(tests_root / "hooks" / filename))
+        if any(
+            filepath.startswith(_INFRA_HOOK_TRIGGER_PREFIX)
+            or filepath.startswith(_INFRA_CI_TRIGGER_PREFIX)
+            or filepath in _INFRA_CI_TRIGGER_FILES
+            for filepath in changed_files
+        ):
+            test_dirs.add("infra")
+    else:
+        test_dirs.update(always_run)
+
+
+def _refine_with_coverage(
+    test_dirs: set[str],
+    direct_test_files: set[str],
+    changed_src_py: set[str],
+    coverage_map_path: str | Path | None,
+    cwd: str | Path | None,
+    tests_root: Path,
+) -> None:
+    """Use a valid coverage map to replace complete source groups with test files.
+
+    Use the aggressive cascade here in every filter mode so conservative
+    cross-package cascades remain intact during file-level refinement.
+    """
+    if coverage_map_path is None or cwd is None:
+        return
+    coverage_map = load_coverage_map(coverage_map_path, cwd=cwd)
+    if coverage_map is None:
+        return
+
+    dir_to_src_files: dict[str, set[str]] = {}
+    for filepath in changed_src_py:
+        package = _file_to_package(filepath)
+        if package and package in LAYER_CASCADE_AGGRESSIVE:
+            for test_dir in LAYER_CASCADE_AGGRESSIVE[package]:
+                dir_to_src_files.setdefault(test_dir, set()).add(filepath)
+    for test_dir, source_files in dir_to_src_files.items():
+        if test_dir in test_dirs and all(
+            filepath in coverage_map and coverage_map[filepath] for filepath in source_files
+        ):
+            test_dirs.discard(test_dir)
+            for filepath in source_files:
+                direct_test_files.update(
+                    str(tests_root.parent / test_file) for test_file in coverage_map[filepath]
+                )
+
+
+def _resolve_test_paths(
+    test_dirs: set[str],
+    direct_test_files: set[str],
+    tests_root: Path,
+) -> set[Path]:
+    """Resolve selected directories when they exist and preserve direct-file paths."""
+    result: set[Path] = set()
+    for test_dir in test_dirs:
+        path = tests_root / test_dir
+        if path.is_dir() or path.is_file():
+            result.add(path)
+    result.update(Path(filepath) for filepath in direct_test_files)
+    return result
+
+
 def build_test_scope(
     changed_files: set[str] | None,
     mode: FilterMode,
@@ -2236,31 +2606,10 @@ def build_test_scope(
     7. Coverage oracle file-level refinement; restore required support directories
     8. Resolve to concrete paths
     """
-    if mode == FilterMode.NONE:
-        return FullRunReason.DISABLED
-
-    if changed_files is None:
-        return FullRunReason.GIT_UNAVAILABLE
-
-    if (
-        mode == FilterMode.CONSERVATIVE
-        and len(changed_files) > _LARGE_CHANGESET_THRESHOLD_CONSERVATIVE
-    ):
-        return FullRunReason.LARGE_CHANGESET
-
-    if cwd is not None and base_ref is not None:
-        scoped_test_dirs = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
-        if scoped_test_dirs is None:
-            return FullRunReason.BUCKET_A
-        # Exclude version-bump files that passed the content-aware check from classification.
-        version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
-        if version_bump_in_bucket_a:
-            changed_files = changed_files - version_bump_in_bucket_a
-    else:
-        scoped_test_dirs = compute_bucket_a_scope(changed_files)
-        if scoped_test_dirs is None:
-            return FullRunReason.BUCKET_A
-
+    initial_scope = _initial_scope(changed_files, mode, cwd, base_ref)
+    if isinstance(initial_scope, FullRunReason):
+        return initial_scope
+    changed_files, scoped_test_dirs = initial_scope
     tests_root = Path(tests_root)
 
     cascade_map = (
@@ -2270,296 +2619,46 @@ def build_test_scope(
         ALWAYS_RUN_CONSERVATIVE if mode == FilterMode.CONSERVATIVE else ALWAYS_RUN_AGGRESSIVE
     )
 
-    test_dirs: set[str] = set(scoped_test_dirs)
-    direct_test_files: set[str] = set()
-    compiled_matchers: dict[str, pathspec.PathSpec] | None = None
-    for f in changed_files:
-        if f.startswith("tests/") and f.endswith(".py"):
-            if not _scoped_test_dirs_for_file(f):
-                direct_test_files.add(f)
-        elif f.startswith("src/") and f.endswith(".py"):
-            pkg = _file_to_package(f)
-            if pkg == "core" and mode == FilterMode.CONSERVATIVE:
-                stem = Path(f).stem
-                if stem in _CORE_UNIVERSAL_MODULES:
-                    if (
-                        stem in _CORE_UNIVERSAL_EXCLUSIONS
-                        and cwd is not None
-                        and base_ref is not None
-                        and _is_additive_only(cwd, base_ref, f)
-                    ):
-                        test_dirs.update(cascade_map["core"] - _CORE_UNIVERSAL_EXCLUSIONS[stem])
-                    else:
-                        test_dirs.update(cascade_map["core"])
-                elif stem == "__init__":
-                    test_dirs.update(cascade_map["core"])
-                elif stem in MODULE_CASCADE_CORE:
-                    test_dirs.update(MODULE_CASCADE_CORE[stem])
-                else:
-                    test_dirs.update(cascade_map["core"])  # fail-open: future unclassified stems
-            elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
-                subpkg = _file_to_execution_subpkg(f)
-                if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
-                    test_dirs.update(SUBPKG_CASCADE_EXECUTION[subpkg])
-                else:
-                    stem = Path(f).stem
-                    if stem in MODULE_CASCADE_EXECUTION:
-                        test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
-                    else:
-                        test_dirs.update(
-                            cascade_map["execution"]
-                        )  # fail-open: unknown execution modules
-            elif pkg == "pipeline" and mode == FilterMode.CONSERVATIVE:
-                stem = Path(f).stem
-                if stem in MODULE_CASCADE_PIPELINE:
-                    test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
-                else:
-                    test_dirs.update(cascade_map["pipeline"])  # fail-open
-            elif pkg == "server" and mode == FilterMode.CONSERVATIVE:
-                test_dirs.update(cascade_map["server"])
-                test_dirs.update(MODULE_CASCADE_SERVER_CROSS_LAYER.get(Path(f).stem, ()))
-            elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
-                stem = Path(f).stem
-                if stem in MODULE_CASCADE_RECIPE:
-                    test_dirs.update(MODULE_CASCADE_RECIPE[stem])
-                else:
-                    test_dirs.update(cascade_map["recipe"])  # fail-open
-            elif pkg == "config" and mode == FilterMode.CONSERVATIVE:
-                stem = Path(f).stem
-                if stem in MODULE_CASCADE_CONFIG:
-                    test_dirs.update(MODULE_CASCADE_CONFIG[stem])
-                else:
-                    test_dirs.update(
-                        cascade_map["config"]
-                    )  # fail-open: __init__, settings, _config_dataclasses, etc.
-            elif pkg and pkg in cascade_map:
-                test_dirs.update(cascade_map[pkg])
-            else:
-                return FullRunReason.UNMAPPED_FILE
-        else:
-            if manifest is not None and compiled_matchers is None:
-                compiled_matchers = _compile_manifest_matchers(manifest)
-            manifest_dirs = apply_manifest({f}, manifest, compiled_matchers=compiled_matchers)
-            if manifest_dirs is None:
-                return FullRunReason.UNMAPPED_FILE
-            test_dirs.update(manifest_dirs)
+    classified = _classify_changed_files(
+        changed_files,
+        mode,
+        manifest,
+        cascade_map,
+        cwd,
+        base_ref,
+    )
+    if isinstance(classified, FullRunReason):
+        return classified
+    classified_dirs, direct_test_files, changed_src_py = classified
+    test_dirs = set(scoped_test_dirs)
+    test_dirs.update(classified_dirs)
 
-    # Expand src Python files via re-export closure: add __init__.py files that
-    # directly re-export any of the changed modules, then cascade-classify them.
-    changed_src_py = {f for f in changed_files if f.startswith("src/") and f.endswith(".py")}
-    if changed_src_py:
-        try:
-            expanded = _expand_reexport_closure(changed_src_py, tests_root.parent)
-            for f in expanded - changed_src_py:
-                if f.startswith("src/") and f.endswith(".py"):
-                    pkg = _file_to_package(f)
-                    if pkg == "core" and mode == FilterMode.CONSERVATIVE:
-                        stem = Path(f).stem
-                        if stem in _CORE_UNIVERSAL_MODULES:
-                            if (
-                                stem in _CORE_UNIVERSAL_EXCLUSIONS
-                                and cwd is not None
-                                and base_ref is not None
-                                and _is_additive_only(cwd, base_ref, f)
-                            ):
-                                test_dirs.update(
-                                    cascade_map["core"] - _CORE_UNIVERSAL_EXCLUSIONS[stem]
-                                )
-                            else:
-                                test_dirs.update(cascade_map["core"])
-                        elif stem == "__init__":
-                            core_cause_stems = {
-                                Path(c).stem
-                                for c in changed_src_py
-                                if _file_to_package(c) == "core" and Path(c).stem != "__init__"
-                            }
-                            if core_cause_stems and all(
-                                s in MODULE_CASCADE_CORE and s not in _CORE_UNIVERSAL_MODULES
-                                for s in core_cause_stems
-                            ):
-                                for s in core_cause_stems:
-                                    test_dirs.update(MODULE_CASCADE_CORE[s])
-                            else:
-                                test_dirs.update(cascade_map["core"])
-                        elif stem in MODULE_CASCADE_CORE:
-                            test_dirs.update(MODULE_CASCADE_CORE[stem])
-                        else:
-                            test_dirs.update(
-                                cascade_map["core"]
-                            )  # fail-open: future unclassified stems
-                    elif pkg == "execution" and mode == FilterMode.CONSERVATIVE:
-                        subpkg = _file_to_execution_subpkg(f)
-                        if subpkg and subpkg in SUBPKG_CASCADE_EXECUTION:
-                            test_dirs.update(SUBPKG_CASCADE_EXECUTION[subpkg])
-                        else:
-                            stem = Path(f).stem
-                            if stem == "__init__":
-                                exec_cause_files = [
-                                    c
-                                    for c in changed_src_py
-                                    if _file_to_package(c) == "execution"
-                                    and Path(c).stem != "__init__"
-                                ]
-                                # empty list → fail-open: only execution/__init__ changed,
-                                # no cause to narrow on
-                                all_narrow = bool(exec_cause_files)
-                                narrow_dirs: set[str] = set()
-                                for c in exec_cause_files:
-                                    c_subpkg = _file_to_execution_subpkg(c)
-                                    if c_subpkg and c_subpkg in SUBPKG_CASCADE_EXECUTION:
-                                        narrow_dirs.update(SUBPKG_CASCADE_EXECUTION[c_subpkg])
-                                    elif Path(c).stem in MODULE_CASCADE_EXECUTION:
-                                        narrow_dirs.update(MODULE_CASCADE_EXECUTION[Path(c).stem])
-                                    else:
-                                        all_narrow = False
-                                        break
-                                if all_narrow:
-                                    test_dirs.update(narrow_dirs)
-                                else:
-                                    test_dirs.update(cascade_map["execution"])  # fail-open
-                            elif stem in MODULE_CASCADE_EXECUTION:
-                                test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
-                            else:
-                                test_dirs.update(cascade_map["execution"])  # fail-open
-                    elif pkg == "pipeline" and mode == FilterMode.CONSERVATIVE:
-                        stem = Path(f).stem
-                        if stem == "__init__":
-                            pipeline_cause_stems = {
-                                Path(c).stem
-                                for c in changed_src_py
-                                if _file_to_package(c) == "pipeline" and Path(c).stem != "__init__"
-                            }
-                            if pipeline_cause_stems and all(
-                                s in MODULE_CASCADE_PIPELINE for s in pipeline_cause_stems
-                            ):
-                                for s in pipeline_cause_stems:
-                                    test_dirs.update(MODULE_CASCADE_PIPELINE[s])
-                            else:
-                                test_dirs.update(cascade_map["pipeline"])
-                        elif stem in MODULE_CASCADE_PIPELINE:
-                            test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
-                        else:
-                            test_dirs.update(cascade_map["pipeline"])  # fail-open
-                    elif pkg == "server" and mode == FilterMode.CONSERVATIVE:
-                        test_dirs.update(cascade_map["server"])
-                        test_dirs.update(MODULE_CASCADE_SERVER_CROSS_LAYER.get(Path(f).stem, ()))
-                    elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
-                        stem = Path(f).stem
-                        if stem == "__init__":
-                            recipe_cause_stems = {
-                                Path(c).stem
-                                for c in changed_src_py
-                                if _file_to_package(c) == "recipe" and Path(c).stem != "__init__"
-                            }
-                            if recipe_cause_stems and all(
-                                s in MODULE_CASCADE_RECIPE for s in recipe_cause_stems
-                            ):
-                                for s in recipe_cause_stems:
-                                    test_dirs.update(MODULE_CASCADE_RECIPE[s])
-                            else:
-                                if not recipe_cause_stems:
-                                    logging.getLogger(__name__).debug(  # noqa: TID251
-                                        "recipe/__init__ backtrace: no non-init recipe cause stems"
-                                        " — failing open to full recipe cascade (expected behavior"
-                                        " when only recipe/__init__.py changed)"
-                                    )
-                                test_dirs.update(cascade_map["recipe"])  # fail-open
-                        elif stem in MODULE_CASCADE_RECIPE:
-                            test_dirs.update(MODULE_CASCADE_RECIPE[stem])
-                        else:
-                            test_dirs.update(cascade_map["recipe"])  # fail-open
-                    elif pkg == "config" and mode == FilterMode.CONSERVATIVE:
-                        stem = Path(f).stem
-                        if stem == "__init__":
-                            config_cause_stems = {
-                                Path(c).stem
-                                for c in changed_src_py
-                                if _file_to_package(c) == "config" and Path(c).stem != "__init__"
-                            }
-                            if config_cause_stems and all(
-                                s in MODULE_CASCADE_CONFIG for s in config_cause_stems
-                            ):
-                                for s in config_cause_stems:
-                                    test_dirs.update(MODULE_CASCADE_CONFIG[s])
-                            else:
-                                if not config_cause_stems:
-                                    logging.getLogger(__name__).debug(  # noqa: TID251
-                                        "config/__init__ backtrace: no non-init config cause stems"
-                                        " — failing open to full config cascade (expected behavior"
-                                        " when only config/__init__.py changed)"
-                                    )
-                                test_dirs.update(cascade_map["config"])  # fail-open
-                        elif stem in MODULE_CASCADE_CONFIG:
-                            test_dirs.update(MODULE_CASCADE_CONFIG[stem])
-                        else:
-                            test_dirs.update(
-                                cascade_map["config"]
-                            )  # fail-open: non-__init__ unmapped config stems
-                    elif pkg and pkg in cascade_map:
-                        test_dirs.update(cascade_map[pkg])
-        except Exception:
-            logging.getLogger(__name__).debug(  # noqa: TID251
-                "_expand_reexport_closure suppressed", exc_info=True
-            )  # fail-open: expansion errors do not affect the computed scope
+    # Expand source files through re-exporting initializers.
+    _add_reexport_cascades(
+        test_dirs,
+        changed_src_py,
+        tests_root,
+        mode,
+        cascade_map,
+        cwd,
+        base_ref,
+    )
 
-    if mode == FilterMode.CONSERVATIVE and changed_files:
-        # REQ-TIER-001: arch and contracts always unconditional
-        test_dirs.update(_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
-
-        # REQ-TIER-002: docs gated on documentation file changes
-        if any(
-            f.startswith(_DOCS_TRIGGER_PREFIX) or f in _DOCS_TRIGGER_FILES for f in changed_files
-        ):
-            test_dirs.add("docs")
-        else:
-            direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
-
-        # REQ-TIER-003: 10 infra + 3 hooks structural files always; full infra dir only on trigger
-        for fname in _INFRA_UNCONDITIONAL_FILES:
-            direct_test_files.add(str(tests_root / "infra" / fname))
-        for fname in _HOOKS_UNCONDITIONAL_FILES:
-            direct_test_files.add(str(tests_root / "hooks" / fname))
-        if any(
-            f.startswith(_INFRA_HOOK_TRIGGER_PREFIX)
-            or f.startswith(_INFRA_CI_TRIGGER_PREFIX)
-            or f in _INFRA_CI_TRIGGER_FILES
-            for f in changed_files
-        ):
-            test_dirs.add("infra")
-    else:
-        # REQ-TIER-004: fail-open for empty changeset; aggressive mode uses its own set
-        test_dirs.update(always_run)
-
-    # Step 7: File-level refinement via coverage oracle.
-    # Uses LAYER_CASCADE_AGGRESSIVE for grouping regardless of mode, ensuring
-    # only same-package test directories are narrowed — cross-package cascade
-    # directories from conservative mode remain untouched.
-    if coverage_map_path is not None and cwd is not None:
-        cov_map = load_coverage_map(coverage_map_path, cwd=cwd)
-        if cov_map is not None:
-            oracle_cascade = LAYER_CASCADE_AGGRESSIVE
-            dir_to_src_files: dict[str, set[str]] = {}
-            for f in changed_src_py:
-                pkg = _file_to_package(f)
-                if pkg and pkg in oracle_cascade:
-                    for d in oracle_cascade[pkg]:
-                        dir_to_src_files.setdefault(d, set()).add(f)
-
-            for d, src_files in dir_to_src_files.items():
-                if d in test_dirs and all(f in cov_map and cov_map[f] for f in src_files):
-                    test_dirs.discard(d)
-                    for f in src_files:
-                        direct_test_files.update(str(tests_root.parent / fp) for fp in cov_map[f])
-
+    _add_always_run_paths(
+        test_dirs,
+        direct_test_files,
+        changed_files,
+        mode,
+        tests_root,
+        always_run,
+    )
+    _refine_with_coverage(
+        test_dirs,
+        direct_test_files,
+        changed_src_py,
+        coverage_map_path,
+        cwd,
+        tests_root,
+    )
     test_dirs.update(scoped_test_dirs)
-
-    result: set[Path] = set()
-    for d in test_dirs:
-        dir_path = tests_root / d
-        if dir_path.is_dir() or dir_path.is_file():
-            result.add(dir_path)
-
-    for f in direct_test_files:
-        result.add(Path(f))
-
-    return result
+    return _resolve_test_paths(test_dirs, direct_test_files, tests_root)

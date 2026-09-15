@@ -344,15 +344,20 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
             raise Cancelled()
         if failure in {"spawn", "runtime", "timeout", "oversized-result"}:
             raise EvidenceReaderLaunchError(failure)
-        if failure == "malformed-result":
-            payload_json = "not-json"
-            status = EvidenceReaderResultStatus.ANSWERED
-        elif failure == "incomplete-result":
-            payload_json = json.dumps({"complete": False, "truncated": False})
-            status = EvidenceReaderResultStatus.PARTIAL
-        else:
-            payload_json = json.dumps({"complete": True, "truncated": False})
-            status = EvidenceReaderResultStatus.ANSWERED
+        result_status_pairs = {
+            "malformed-result": ("not-json", EvidenceReaderResultStatus.ANSWERED),
+            "incomplete-result": (
+                json.dumps({"complete": False, "truncated": False}),
+                EvidenceReaderResultStatus.PARTIAL,
+            ),
+        }
+        payload_json, status = result_status_pairs.get(
+            failure,
+            (
+                json.dumps({"complete": True, "truncated": False}),
+                EvidenceReaderResultStatus.ANSWERED,
+            ),
+        )
         citation = EvidenceCitation("missing-receipt", 0, 1, 1, 1)
         return EvidenceReaderLaunchResult(
             status,
@@ -366,16 +371,15 @@ def test_delegate_failures_revoke_authority_and_remove_invocation(
 
     monkeypatch.setattr(delegate_module, "launch_evidence_reader", fail_or_return)
 
-    if failure == "cancel":
-        expected_exception: type[BaseException] = Cancelled
-    elif failure == "preflight":
-        expected_exception = delegate_module._DelegateError
-    elif failure == "recapture":
-        expected_exception = delegate_module._DelegateError
-    elif failure in {"malformed-result", "incomplete-result", "receipt-mismatch"}:
-        expected_exception = delegate_module._DelegateError
-    else:
-        expected_exception = EvidenceReaderLaunchError
+    expected_exceptions: dict[str, type[BaseException]] = {
+        "cancel": Cancelled,
+        "preflight": delegate_module._DelegateError,
+        "recapture": delegate_module._DelegateError,
+        "malformed-result": delegate_module._DelegateError,
+        "incomplete-result": delegate_module._DelegateError,
+        "receipt-mismatch": delegate_module._DelegateError,
+    }
+    expected_exception = expected_exceptions.get(failure, EvidenceReaderLaunchError)
     with pytest.raises(expected_exception) as raised:
         delegate_module._delegate_sync(
             context,

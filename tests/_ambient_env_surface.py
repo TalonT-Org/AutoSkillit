@@ -462,7 +462,7 @@ def _comprehension_exclusion_set(gen: ast.comprehension) -> str:
     return ""
 
 
-def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvSurface:
+def _parse_production_modules(src_root: Path) -> tuple[dict[Path, ast.Module], list[str]]:
     files = sorted(src_root.rglob("*.py"))
     trees: dict[Path, ast.Module] = {}
     unparseable: list[str] = []
@@ -472,17 +472,27 @@ def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvS
         except SyntaxError:
             unparseable.append(f.relative_to(src_root).as_posix())
             continue
+    return trees, unparseable
 
+
+def _scalar_tables(
+    trees: dict[Path, ast.Module],
+) -> tuple[dict[Path, dict[str, str]], dict[str, str]]:
     module_scalars: dict[Path, dict[str, str]] = {}
     flat_scalars: dict[str, str] = {}
-    for f, tree in trees.items():
+    for path, tree in trees.items():
         scalars = _collect_scalars(tree)
-        module_scalars[f] = scalars
+        module_scalars[path] = scalars
         flat_scalars.update(scalars)
+    return module_scalars, flat_scalars
 
+
+def _collection_tables(
+    trees: dict[Path, ast.Module], flat_scalars: dict[str, str]
+) -> tuple[dict[Path, dict[str, frozenset[str]]], dict[str, frozenset[str]]]:
     module_collections: dict[Path, dict[str, frozenset[str]]] = {}
     flat_collections: dict[str, frozenset[str]] = {}
-    for f, tree in trees.items():
+    for path, tree in trees.items():
         local: dict[str, frozenset[str]] = {}
         for stmt in tree.body:
             target, value = _module_level_binding(stmt)
@@ -491,8 +501,107 @@ def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvS
             members = _resolve_collection_members(value, flat_scalars, local, flat_collections)
             if members is not None:
                 local[target] = members
-        module_collections[f] = local
+        module_collections[path] = local
         flat_collections.update(local)
+    return module_collections, flat_collections
+
+
+def _record_module_collection_reads(
+    tree: ast.Module,
+    rel: str,
+    collections: dict[str, frozenset[str]],
+    reads: list[EnvRead],
+    prefixes: set[str],
+) -> None:
+    for stmt in tree.body:
+        target, value = _module_level_binding(stmt)
+        if target is None or value is None:
+            continue
+        members = collections.get(target)
+        if members is None:
+            continue
+        if _ENV_PREFIX_DENYLIST_NAME_RE.search(target):
+            prefixes.update(members)
+            continue
+        name_matches = "env" in target.lower()
+        members_upper = bool(members) and all(_UPPER_SNAKE_RE.match(m) for m in members)
+        if name_matches or members_upper:
+            for member in members:
+                reads.append(EnvRead(var=member, file=rel, line=value.lineno, rule="R4"))
+
+
+def _recognize_read_node(
+    node: ast.AST,
+    rel: str,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    reads: list[EnvRead],
+    unresolved: list[UnresolvedRead],
+) -> None:
+    if isinstance(node, ast.Call):
+        _handle_call(node, rel, module_scalars, flat_scalars, reads, unresolved)
+    elif isinstance(node, ast.Subscript):
+        _handle_subscript(node, rel, module_scalars, flat_scalars, reads, unresolved)
+    elif isinstance(node, ast.Compare):
+        _handle_membership(node, rel, module_scalars, flat_scalars, reads, unresolved)
+    elif isinstance(node, ast.keyword):
+        if node.arg is not None:
+            _handle_env_named_site(
+                node.arg, node.value, node, rel, module_scalars, flat_scalars, reads
+            )
+    elif (
+        isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.value is not None
+    ):
+        _handle_env_named_site(
+            node.target.id, node.value, node, rel, module_scalars, flat_scalars, reads
+        )
+
+
+def _record_comprehension_forwarding(
+    node: ast.DictComp | ast.SetComp | ast.ListComp | ast.GeneratorExp,
+    rel: str,
+    forwarding: list[ForwardingSite],
+) -> None:
+    for gen in node.generators:
+        if not _environ_forwarding_source(gen.iter):
+            continue
+        forwarding.append(
+            ForwardingSite(
+                file=rel,
+                line=gen.iter.lineno,
+                exclusion_set=_comprehension_exclusion_set(gen),
+            )
+        )
+
+
+def _record_forwarding_node(node: ast.AST, rel: str, forwarding: list[ForwardingSite]) -> None:
+    if isinstance(node, ast.keyword):
+        if (
+            node.arg is not None
+            and _FORWARDING_KEYWORD_RE.search(node.arg)
+            and _is_environ_attr(node.value)
+        ):
+            forwarding.append(ForwardingSite(file=rel, line=node.lineno, exclusion_set=""))
+    elif isinstance(node, ast.AnnAssign):
+        if node.value is not None and _environ_forwarding_source(node.value):
+            forwarding.append(ForwardingSite(file=rel, line=node.value.lineno, exclusion_set=""))
+    elif isinstance(node, ast.Assign):
+        if _environ_forwarding_source(node.value):
+            forwarding.append(ForwardingSite(file=rel, line=node.value.lineno, exclusion_set=""))
+    elif isinstance(node, ast.Return):
+        if node.value is not None and _environ_forwarding_source(node.value):
+            forwarding.append(ForwardingSite(file=rel, line=node.value.lineno, exclusion_set=""))
+    elif isinstance(node, (ast.DictComp, ast.SetComp, ast.ListComp, ast.GeneratorExp)):
+        _record_comprehension_forwarding(node, rel, forwarding)
+
+
+def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvSurface:
+    trees, unparseable = _parse_production_modules(src_root)
+
+    module_scalars, flat_scalars = _scalar_tables(trees)
+    module_collections, _ = _collection_tables(trees, flat_scalars)
 
     reads: list[EnvRead] = []
     unresolved: list[UnresolvedRead] = []
@@ -504,68 +613,11 @@ def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvS
         scalars = module_scalars[f]
         collections = module_collections[f]
 
-        for stmt in tree.body:
-            target, value = _module_level_binding(stmt)
-            if target is None or value is None:
-                continue
-            members = collections.get(target)
-            if members is None:
-                continue
-            if _ENV_PREFIX_DENYLIST_NAME_RE.search(target):
-                prefixes.update(members)
-                continue
-            name_matches = "env" in target.lower()
-            members_upper = bool(members) and all(_UPPER_SNAKE_RE.match(m) for m in members)
-            if name_matches or members_upper:
-                for member in members:
-                    reads.append(EnvRead(var=member, file=rel, line=value.lineno, rule="R4"))
+        _record_module_collection_reads(tree, rel, collections, reads, prefixes)
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                _handle_call(node, rel, scalars, flat_scalars, reads, unresolved)
-            elif isinstance(node, ast.Subscript):
-                _handle_subscript(node, rel, scalars, flat_scalars, reads, unresolved)
-            elif isinstance(node, ast.Compare):
-                _handle_membership(node, rel, scalars, flat_scalars, reads, unresolved)
-            elif isinstance(node, ast.keyword):
-                if node.arg is not None:
-                    _handle_env_named_site(
-                        node.arg, node.value, node, rel, scalars, flat_scalars, reads
-                    )
-                    if _FORWARDING_KEYWORD_RE.search(node.arg) and _is_environ_attr(node.value):
-                        forwarding.append(
-                            ForwardingSite(file=rel, line=node.lineno, exclusion_set="")
-                        )
-            elif isinstance(node, ast.AnnAssign):
-                if isinstance(node.target, ast.Name) and node.value is not None:
-                    _handle_env_named_site(
-                        node.target.id, node.value, node, rel, scalars, flat_scalars, reads
-                    )
-                if node.value is not None and _environ_forwarding_source(node.value):
-                    forwarding.append(
-                        ForwardingSite(file=rel, line=node.value.lineno, exclusion_set="")
-                    )
-            elif isinstance(node, ast.Assign):
-                if _environ_forwarding_source(node.value):
-                    forwarding.append(
-                        ForwardingSite(file=rel, line=node.value.lineno, exclusion_set="")
-                    )
-            elif isinstance(node, ast.Return):
-                if node.value is not None and _environ_forwarding_source(node.value):
-                    forwarding.append(
-                        ForwardingSite(file=rel, line=node.value.lineno, exclusion_set="")
-                    )
-            elif isinstance(node, (ast.DictComp, ast.SetComp, ast.ListComp, ast.GeneratorExp)):
-                for gen in node.generators:
-                    if not _environ_forwarding_source(gen.iter):
-                        continue
-                    forwarding.append(
-                        ForwardingSite(
-                            file=rel,
-                            line=gen.iter.lineno,
-                            exclusion_set=_comprehension_exclusion_set(gen),
-                        )
-                    )
+            _recognize_read_node(node, rel, scalars, flat_scalars, reads, unresolved)
+            _record_forwarding_node(node, rel, forwarding)
 
     names = frozenset(r.var for r in reads)
     return ProductionEnvSurface(
@@ -662,41 +714,190 @@ def _carrier_from_boundary_value(node: ast.expr) -> str | None:
     return None
 
 
+def _record_return_write_boundary(node: ast.Return, found: dict[str, set[str]]) -> None:
+    if isinstance(node.value, ast.Name) and node.value.id in _ENV_WRITE_CARRIERS:
+        found.setdefault(node.value.id, set()).add("return(env carrier)")
+    elif isinstance(node.value, ast.Dict):
+        found.setdefault("return_env", set()).add("return(env mapping)")
+
+
+def _record_call_keyword_write_boundaries(node: ast.Call, found: dict[str, set[str]]) -> None:
+    call_name = _call_name(node.func)
+    direct_boundary = _subprocess_boundary_name(node)
+    for keyword in node.keywords:
+        if keyword.arg is None:
+            continue
+        carrier = _carrier_from_boundary_value(keyword.value)
+        if (
+            carrier is None
+            and call_name is not None
+            and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
+            and isinstance(keyword.value, ast.Dict)
+        ):
+            carrier = keyword.arg
+        if carrier is None:
+            continue
+        boundary: str | None = None
+        if keyword.arg == "env" and direct_boundary is not None:
+            boundary = direct_boundary
+        elif call_name is not None and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS:
+            boundary = f"{call_name}({keyword.arg})"
+        if boundary is not None:
+            found.setdefault(carrier, set()).add(boundary)
+
+
 def _write_boundaries(tree: ast.Module) -> dict[str, tuple[str, ...]]:
     """Find explicit process/builder handoffs for the frozen carrier set."""
     found: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Return):
-            if isinstance(node.value, ast.Name) and node.value.id in _ENV_WRITE_CARRIERS:
-                found.setdefault(node.value.id, set()).add("return(env carrier)")
-            elif isinstance(node.value, ast.Dict):
-                found.setdefault("return_env", set()).add("return(env mapping)")
-            continue
-        if not isinstance(node, ast.Call):
-            continue
-        call_name = _call_name(node.func)
-        direct_boundary = _subprocess_boundary_name(node)
-        for keyword in node.keywords:
-            if keyword.arg is None:
-                continue
-            carrier = _carrier_from_boundary_value(keyword.value)
-            if (
-                carrier is None
-                and call_name is not None
-                and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
-                and isinstance(keyword.value, ast.Dict)
-            ):
-                carrier = keyword.arg
-            if carrier is None:
-                continue
-            boundary: str | None = None
-            if keyword.arg == "env" and direct_boundary is not None:
-                boundary = direct_boundary
-            elif call_name is not None and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS:
-                boundary = f"{call_name}({keyword.arg})"
-            if boundary is not None:
-                found.setdefault(carrier, set()).add(boundary)
+            _record_return_write_boundary(node, found)
+        elif isinstance(node, ast.Call):
+            _record_call_keyword_write_boundaries(node, found)
     return {carrier: tuple(sorted(boundaries)) for carrier, boundaries in found.items()}
+
+
+def _append_write_key_candidate(
+    key: ast.expr,
+    carrier: str,
+    line: int,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    resolved = _resolve_key_expr(key, module_scalars, flat_scalars)
+    if resolved is not None:
+        candidates.append((resolved[0], carrier, line))
+
+
+def _append_write_mapping_candidates(
+    value: ast.expr,
+    carrier: str,
+    line: int,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    for key in _literal_mapping_keys(value, module_scalars, flat_scalars):
+        candidates.append((key, carrier, line))
+
+
+def _record_assignment_write_candidates(
+    node: ast.Assign | ast.AnnAssign,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Subscript):
+                carrier = _write_carrier(target.value)
+                if carrier is not None:
+                    _append_write_key_candidate(
+                        target.slice,
+                        carrier,
+                        target.lineno,
+                        module_scalars,
+                        flat_scalars,
+                        candidates,
+                    )
+            elif isinstance(target, ast.Name) and target.id in _ENV_WRITE_CARRIERS:
+                _append_write_mapping_candidates(
+                    node.value, target.id, node.lineno, module_scalars, flat_scalars, candidates
+                )
+        return
+
+    if isinstance(node.target, ast.Subscript) and node.value is not None:
+        carrier = _write_carrier(node.target.value)
+        if carrier is not None:
+            _append_write_key_candidate(
+                node.target.slice,
+                carrier,
+                node.target.lineno,
+                module_scalars,
+                flat_scalars,
+                candidates,
+            )
+    elif isinstance(node.target, ast.Name) and node.target.id in _ENV_WRITE_CARRIERS:
+        if node.value is not None:
+            _append_write_mapping_candidates(
+                node.value, node.target.id, node.lineno, module_scalars, flat_scalars, candidates
+            )
+
+
+def _record_carrier_method_write_candidates(
+    node: ast.AugAssign | ast.Call,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    if isinstance(node, ast.AugAssign):
+        carrier = _write_carrier(node.target)
+        if carrier is not None and isinstance(node.op, ast.BitOr):
+            _append_write_mapping_candidates(
+                node.value, carrier, node.lineno, module_scalars, flat_scalars, candidates
+            )
+        return
+
+    if not isinstance(node.func, ast.Attribute):
+        return
+    carrier = _write_carrier(node.func.value)
+    if carrier is None:
+        return
+    if node.func.attr == "setdefault":
+        key = _get_call_key_arg(node)
+        if key is not None:
+            _append_write_key_candidate(
+                key, carrier, node.lineno, module_scalars, flat_scalars, candidates
+            )
+    elif node.func.attr == "update" and len(node.args) == 1 and not node.keywords:
+        _append_write_mapping_candidates(
+            node.args[0], carrier, node.lineno, module_scalars, flat_scalars, candidates
+        )
+
+
+def _record_write_mutation_candidates(
+    node: ast.AST,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        _record_assignment_write_candidates(node, module_scalars, flat_scalars, candidates)
+    elif isinstance(node, (ast.AugAssign, ast.Call)):
+        _record_carrier_method_write_candidates(node, module_scalars, flat_scalars, candidates)
+
+
+def _record_delivered_mapping_candidates(
+    node: ast.AST,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+    candidates: list[tuple[str, str, int]],
+) -> None:
+    if isinstance(node, ast.Return):
+        if isinstance(node.value, ast.Dict):
+            _append_write_mapping_candidates(
+                node.value, "return_env", node.lineno, module_scalars, flat_scalars, candidates
+            )
+        return
+    if not isinstance(node, ast.Call):
+        return
+    call_name = _call_name(node.func)
+    for keyword in node.keywords:
+        if (
+            keyword.arg is not None
+            and call_name is not None
+            and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
+            and isinstance(keyword.value, ast.Dict)
+        ):
+            _append_write_mapping_candidates(
+                keyword.value,
+                keyword.arg,
+                node.lineno,
+                module_scalars,
+                flat_scalars,
+                candidates,
+            )
 
 
 def _write_candidates(
@@ -706,67 +907,9 @@ def _write_candidates(
 ) -> tuple[tuple[str, str, int], ...]:
     """Collect (variable, carrier, line) triples before boundary filtering."""
     candidates: list[tuple[str, str, int]] = []
-
-    def record_key(key: ast.expr, carrier: str, line: int) -> None:
-        resolved = _resolve_key_expr(key, module_scalars, flat_scalars)
-        if resolved is not None:
-            candidates.append((resolved[0], carrier, line))
-
-    def record_mapping(value: ast.expr, carrier: str, line: int) -> None:
-        for key in _literal_mapping_keys(value, module_scalars, flat_scalars):
-            candidates.append((key, carrier, line))
-
     for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Subscript):
-                    carrier = _write_carrier(target.value)
-                    if carrier is not None:
-                        record_key(target.slice, carrier, target.lineno)
-                elif isinstance(target, ast.Name) and target.id in _ENV_WRITE_CARRIERS:
-                    record_mapping(node.value, target.id, node.lineno)
-        elif isinstance(node, ast.AnnAssign):
-            if (
-                isinstance(node.target, ast.Subscript)
-                and node.value is not None
-                and (carrier := _write_carrier(node.target.value)) is not None
-            ):
-                record_key(node.target.slice, carrier, node.target.lineno)
-            elif (
-                isinstance(node.target, ast.Name)
-                and node.target.id in _ENV_WRITE_CARRIERS
-                and node.value is not None
-            ):
-                record_mapping(node.value, node.target.id, node.lineno)
-        elif isinstance(node, ast.AugAssign):
-            carrier = _write_carrier(node.target)
-            if carrier is not None and isinstance(node.op, ast.BitOr):
-                record_mapping(node.value, carrier, node.lineno)
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            carrier = _write_carrier(node.func.value)
-            if carrier is not None and node.func.attr == "setdefault":
-                key = _get_call_key_arg(node)
-                if key is not None:
-                    record_key(key, carrier, node.lineno)
-            elif (
-                carrier is not None
-                and node.func.attr == "update"
-                and len(node.args) == 1
-                and not node.keywords
-            ):
-                record_mapping(node.args[0], carrier, node.lineno)
-        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
-            record_mapping(node.value, "return_env", node.lineno)
-        if isinstance(node, ast.Call):
-            call_name = _call_name(node.func)
-            for keyword in node.keywords:
-                if (
-                    keyword.arg is not None
-                    and call_name is not None
-                    and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
-                    and isinstance(keyword.value, ast.Dict)
-                ):
-                    record_mapping(keyword.value, keyword.arg, node.lineno)
+        _record_write_mutation_candidates(node, module_scalars, flat_scalars, candidates)
+        _record_delivered_mapping_candidates(node, module_scalars, flat_scalars, candidates)
     return tuple(candidates)
 
 
@@ -779,21 +922,8 @@ def production_env_write_surface(src_root: Path) -> ProductionEnvWriteSurface:
     read scanner: contract evidence must show a route into the hook process,
     rather than merely an unrelated dictionary mutation.
     """
-    files = sorted(src_root.rglob("*.py"))
-    trees: dict[Path, ast.Module] = {}
-    unparseable: list[str] = []
-    for path in files:
-        try:
-            trees[path] = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except SyntaxError:
-            unparseable.append(path.relative_to(src_root).as_posix())
-
-    module_scalars: dict[Path, dict[str, str]] = {}
-    flat_scalars: dict[str, str] = {}
-    for path, tree in trees.items():
-        scalars = _collect_scalars(tree)
-        module_scalars[path] = scalars
-        flat_scalars.update(scalars)
+    trees, unparseable = _parse_production_modules(src_root)
+    module_scalars, flat_scalars = _scalar_tables(trees)
 
     writes: list[EnvWrite] = []
     for path, tree in trees.items():

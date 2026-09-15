@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from pathlib import Path
-from typing import cast, get_args, get_type_hints
+from typing import Union, cast, get_args, get_origin, get_type_hints
 
 import pytest
 
@@ -643,10 +643,25 @@ def test_tool_context_has_input_contract_resolver_field() -> None:
     )
 
 
+def _is_protocol_type(annotation) -> bool:
+    """Check if an annotation references a Protocol from core.types."""
+    protocol_module_prefixes = ("autoskillit.core.types.",)
+    if get_origin(annotation) is Union:
+        for arg in get_args(annotation):
+            if arg is type(None):
+                continue
+            if _is_protocol_type(arg):
+                return True
+        return False
+    return hasattr(annotation, "__module__") and any(
+        annotation.__module__.startswith(p) for p in protocol_module_prefixes
+    )
+
+
 def test_toolcontext_protocol_fields_documented_in_docstring() -> None:
     """Every protocol-typed field on ToolContext must appear in the Fields docstring."""
     import inspect
-    from typing import Union, get_args, get_origin, get_type_hints
+    from typing import get_type_hints
 
     from autoskillit.pipeline.context import ToolContext
 
@@ -675,27 +690,11 @@ def test_toolcontext_protocol_fields_documented_in_docstring() -> None:
             field_name = stripped.split(":")[0].strip()
             documented.add(field_name)
 
-    # Find all protocol-typed fields (those importing from core.types)
-    protocol_module_prefixes = ("autoskillit.core.types.",)
-
-    def _is_protocol_type(annotation) -> bool:
-        """Check if an annotation references a Protocol from core.types."""
-        if get_origin(annotation) is Union:
-            for arg in get_args(annotation):
-                if arg is type(None):
-                    continue
-                if _is_protocol_type(arg):
-                    return True
-            return False
-        return hasattr(annotation, "__module__") and any(
-            annotation.__module__.startswith(p) for p in protocol_module_prefixes
-        )
-
-    protocol_fields = []
+    protocol_fields: set[str] = set()
     for f in dataclasses.fields(ToolContext):
         ann = hints.get(f.name)
         if ann is not None and _is_protocol_type(ann):
-            protocol_fields.append(f.name)
+            protocol_fields.add(f.name)
 
-    missing = sorted(set(protocol_fields) - documented)
+    missing = sorted(protocol_fields - documented)
     assert not missing, f"Protocol-typed fields missing from ToolContext docstring: {missing}"

@@ -36,36 +36,6 @@ def _has_verdict_on_result(step) -> bool:
     return False
 
 
-def _step_reaches_push(recipe, start_name: str, max_hops: int = 5) -> bool:
-    """Return True if push_to_remote is reachable from start_name within max_hops."""
-    visited: set[str] = set()
-    queue = [(start_name, 0)]
-    while queue:
-        name, hops = queue.pop(0)
-        if name in visited or hops > max_hops:
-            continue
-        visited.add(name)
-        step = recipe.steps.get(name)
-        if step is None:
-            continue
-        if step.tool == "push_to_remote":
-            return True
-        # Expand successors
-        successors: list[str] = []
-        if step.on_success:
-            successors.append(step.on_success)
-        if step.on_failure:
-            successors.append(step.on_failure)
-        if step.on_result:
-            for cond in step.on_result.conditions or []:
-                if cond.route:
-                    successors.append(cond.route)
-        for s in successors:
-            if s in recipe.steps:
-                queue.append((s, hops + 1))
-    return False
-
-
 _CI_RECOVERY_STEP_NAMES = {"resolve_ci", "resolve_review"}
 
 

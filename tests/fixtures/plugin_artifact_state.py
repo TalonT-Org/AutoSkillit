@@ -341,16 +341,23 @@ def build_plugin_artifact_state(
             identity = _publish_exact(spec, plugin_version=f"{version}-wrong")
         else:
             identity = _publish_exact(spec)
-            if selected is PluginArtifactStateKind.WRONG_SEMANTIC_KEY:
-                _rewrite_identity(spec, "semantic_key", f"{plugin_ref}:wrong")
-            elif selected is PluginArtifactStateKind.WRONG_INCARNATION:
-                _rewrite_identity(spec, "incarnation_id", "not-a-canonical-incarnation")
-            elif selected is PluginArtifactStateKind.WRONG_MANAGED_PATH:
-                _rewrite_identity(
-                    spec,
+            identity_rewrites = {
+                PluginArtifactStateKind.WRONG_SEMANTIC_KEY: (
+                    "semantic_key",
+                    f"{plugin_ref}:wrong",
+                ),
+                PluginArtifactStateKind.WRONG_INCARNATION: (
+                    "incarnation_id",
+                    "not-a-canonical-incarnation",
+                ),
+                PluginArtifactStateKind.WRONG_MANAGED_PATH: (
                     "managed_path",
                     str(spec.managed_root.parent / "elsewhere"),
-                )
+                ),
+            }
+            if selected in identity_rewrites:
+                field, value = identity_rewrites[selected]
+                _rewrite_identity(spec, field, value)
             elif selected is PluginArtifactStateKind.DIGEST_MISMATCH:
                 (spec.managed_root / "tampered-content.txt").write_text(
                     "content added after identity publication",

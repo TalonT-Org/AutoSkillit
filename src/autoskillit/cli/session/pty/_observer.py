@@ -166,21 +166,23 @@ class PtyObserver:
                 self.check_readiness()
                 for key, _events in selector.select(_RELAY_SELECT_SECONDS):
                     source_fd = int(key.fd)
+                    source_is_master = key.data == "master"
                     try:
                         chunk = os.read(source_fd, _RELAY_CHUNK_SIZE)
                     except OSError as exc:
-                        if key.data == "master" and exc.errno == errno.EIO:
-                            return
-                        if exc.errno in {errno.EAGAIN, errno.EINTR}:
+                        if source_is_master and exc.errno == errno.EIO:
+                            chunk = b""
+                        elif exc.errno in {errno.EAGAIN, errno.EINTR}:
                             continue
-                        raise
+                        else:
+                            raise
                     if not chunk:
-                        if key.data == "master":
+                        if source_is_master:
                             return
                         with contextlib.suppress(Exception):
                             selector.unregister(stdin_fd)
                         continue
-                    if key.data == "master":
+                    if source_is_master:
                         self._write_all(stdout_fd, self.observe_output(chunk))
                     else:
                         self._write_all(master_fd, chunk)

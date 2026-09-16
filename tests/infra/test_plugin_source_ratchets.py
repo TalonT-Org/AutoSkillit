@@ -422,13 +422,10 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Managed order forwards the deduplicated command, home, projection, and attempt leases.",
     ),
-    ("cli/session/_session_process.py", "run_cook_attempt", "inherited_fds"): (
+    ("cli/session/_session_process.py", "run_cook_attempt", "spawn_fds"): (
         1,
-        "Direct PTY-free cook launch forwards the normalized owned descriptor tuple.",
-    ),
-    ("cli/session/_session_process.py", "run_cook_attempt", "launcher_fds"): (
-        1,
-        "PTY launch adds only the slave descriptor to the owned descriptor tuple.",
+        "The common cook spawn forwards caller leases directly, while PTY mode adds only "
+        "its slave descriptor.",
     ),
     (
         "execution/backends/_codex/session_attempt_lease.py",

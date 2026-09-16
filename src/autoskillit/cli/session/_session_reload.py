@@ -10,6 +10,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    NamedResume,
     acquire_flock_with_timeout,
     get_logger,
     safe_mtime,
@@ -89,3 +90,17 @@ def consume_reload_sentinel(project_dir: Path) -> str | None:
     except TimeoutError:
         logger.warning("reload_sentinel_lock_timeout", path=str(sentinel_dir))
         return None
+
+
+def admit_reload(
+    session_id: str,
+    seen_session_ids: set[str],
+    maximum: int,
+) -> NamedResume:
+    """Admit one reload request and return its named resume specification."""
+    if len(seen_session_ids) >= maximum:
+        raise SystemExit(f"Too many reloads ({maximum} max). Check for infinite loop.")
+    if session_id in seen_session_ids:
+        raise SystemExit(f"Repeated reload_id {session_id!r} — aborting.")
+    seen_session_ids.add(session_id)
+    return NamedResume(session_id=session_id)

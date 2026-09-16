@@ -2,11 +2,9 @@
 
 Complements tests/execution/test_force_inactive_config_reaches_builders.py, which proves
 the value reaches the backend spec builders. These tests prove the CLI corridors that
-call ``_run_interactive_session`` and ``build_interactive_cmd`` — the managed-launch fork
-that bypasses ``prepare_interactive_launch``, ``_launch_cook_session``, and both
-``_launch_fleet_session`` call sites — actually thread the caller's intent (or the
-config value the caller read) all the way into the kwarg the backend receives, rather
-than stopping at a parameter nobody forwards further.
+call ``_run_interactive_session`` and ``build_interactive_cmd`` — managed launch
+finalization, ``_launch_cook_session``, and fleet session launches — forward the caller's
+intent or configured value into the kwarg the backend receives.
 """
 
 from __future__ import annotations
@@ -37,9 +35,8 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 # ---------------------------------------------------------------------------
-# 1. The non-probe fork of _run_interactive_session (cook_exact_binding_probe_
-#    required=False — the fork Codex `order` takes). Its two direct
-#    build_interactive_cmd calls bypass prepare_interactive_launch entirely.
+# 1. Managed launch finalization with cook_exact_binding_probe_required=False.
+#    The finalizer preserves both provisional and executable-bound builds.
 # ---------------------------------------------------------------------------
 
 
@@ -47,8 +44,8 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
     """A managed-launch backend double recording every build_interactive_cmd call.
 
     capabilities.cook_exact_binding_probe_required defaults to False, so
-    _run_interactive_session takes the direct two-call fork instead of routing
-    through prepare_interactive_launch.
+    _run_interactive_session selects the finalizer's non-probe mode, which makes
+    both a provisional build and an executable-bound build.
     """
     captured_kwargs: list[dict[str, object]] = []
 

@@ -208,6 +208,96 @@ def prepare_interactive_launch(
     return PreparedInteractiveLaunch(spec=spec, executable=final)
 
 
+def _finalize_interactive_launch(
+    backend: CodingAgentBackend,
+    *,
+    exact_binding_probe_required: bool,
+    project_dir: Path,
+    extra_env: Mapping[str, str] | None,
+    required_env: frozenset[str] | None,
+    plugin_binding: PluginLaunchBinding | None,
+    resume_spec: ResumeSpec,
+    system_prompt: str | None,
+    initial_prompt: str | None,
+    tools: Sequence[str] = (),
+    add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+    generated_home: Path | None = None,
+    force_inactive_agent_teams: bool = False,
+    mcp_tool_timeout_sec: float | None = None,
+) -> PreparedInteractiveLaunch:
+    """Build and validate the finalized invocation with its exact executable binding."""
+    from autoskillit.execution import assert_interactive_ordering
+
+    if exact_binding_probe_required:
+        try:
+            prepared = prepare_interactive_launch(
+                backend,
+                project_dir=project_dir,
+                extra_env=extra_env,
+                required_env=required_env,
+                plugin_binding=plugin_binding,
+                resume_spec=resume_spec,
+                system_prompt=system_prompt,
+                initial_prompt=initial_prompt,
+                add_dirs=add_dirs,
+                generated_home=generated_home,
+                tools=tools,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+            )
+        except ValueError as exc:
+            _exit_launch_preparation_error(exc)
+        built_spec = prepared.spec
+        executable = prepared.executable
+    else:
+        candidate_spec = backend.build_interactive_cmd(
+            initial_prompt=initial_prompt,
+            resume_spec=resume_spec,
+            system_prompt=system_prompt,
+            env_extras=extra_env,
+            required_env=required_env,
+            plugin_binding=plugin_binding,
+            add_dirs=add_dirs,
+            generated_home=generated_home,
+            tools=tools,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=project_dir,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
+        selector = backend.capabilities.explicit_path_env_var
+        try:
+            executable = resolve_executable_launch_binding(
+                binary_name=backend.binary_name(),
+                environment=candidate_spec.env,
+                cwd=project_dir,
+                explicit_path_env=(selector if selector in candidate_spec.env else None),
+            )
+        except ValueError as exc:
+            _exit_launch_preparation_error(exc)
+        built_spec = backend.build_interactive_cmd(
+            initial_prompt=initial_prompt,
+            executable=executable,
+            resume_spec=resume_spec,
+            system_prompt=system_prompt,
+            env_extras=extra_env,
+            required_env=required_env,
+            plugin_binding=plugin_binding,
+            add_dirs=add_dirs,
+            generated_home=generated_home,
+            tools=tools,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=project_dir,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
+    spec = replace(built_spec, cwd=str(project_dir))
+    assert_interactive_ordering(spec=spec)
+    validation_errors = backend.validate_interactive_invocation(spec)
+    if validation_errors:
+        _exit_launch_validation_errors(validation_errors)
+
+    return PreparedInteractiveLaunch(spec=spec, executable=executable)
+
+
 def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
     for line in str(exc).splitlines() or [str(exc)]:
         sys.stderr.write(f"ERROR: {line}\n")
@@ -302,80 +392,30 @@ def _run_interactive_session(
         ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()
     )
 
-    from autoskillit.execution import assert_interactive_ordering
-
     final_resume_spec = resume_spec if resume_spec is not None else NoResume()
     if managed:
         assert managed_home is not None
         assert attempt is not None
         assert retained_projection_binding is not None
         assert startup_trace is not None
-        if backend.capabilities.cook_exact_binding_probe_required:
-            try:
-                prepared = prepare_interactive_launch(
-                    backend,
-                    project_dir=_project_dir,
-                    extra_env=extra_env,
-                    required_env=required_env,
-                    plugin_binding=plugin_binding,
-                    resume_spec=final_resume_spec,
-                    system_prompt=system_prompt,
-                    initial_prompt=initial_message,
-                    add_dirs=[managed_home.skills_dir],
-                    generated_home=managed_home.generated_home,
-                    tools=tools_arg,
-                    force_inactive_agent_teams=force_inactive_agent_teams,
-                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-                )
-            except ValueError as exc:
-                _exit_launch_preparation_error(exc)
-            built_spec = prepared.spec
-            executable = prepared.executable
-        else:
-            candidate_spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
-                required_env=required_env,
-                plugin_binding=plugin_binding,
-                add_dirs=[managed_home.skills_dir],
-                generated_home=managed_home.generated_home,
-                tools=tools_arg,
-                force_inactive_agent_teams=force_inactive_agent_teams,
-                project_root=_project_dir,
-                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-            )
-            selector = backend.capabilities.explicit_path_env_var
-            try:
-                executable = resolve_executable_launch_binding(
-                    binary_name=backend.binary_name(),
-                    environment=candidate_spec.env,
-                    cwd=_project_dir,
-                    explicit_path_env=(selector if selector in candidate_spec.env else None),
-                )
-            except ValueError as exc:
-                _exit_launch_preparation_error(exc)
-            built_spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                executable=executable,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
-                required_env=required_env,
-                plugin_binding=plugin_binding,
-                add_dirs=[managed_home.skills_dir],
-                generated_home=managed_home.generated_home,
-                tools=tools_arg,
-                force_inactive_agent_teams=force_inactive_agent_teams,
-                project_root=_project_dir,
-                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-            )
-        spec = replace(built_spec, cwd=str(_project_dir))
-        assert_interactive_ordering(spec=spec)
-        validation_errors = backend.validate_interactive_invocation(spec)
-        if validation_errors:
-            _exit_launch_validation_errors(validation_errors)
+        prepared = _finalize_interactive_launch(
+            backend,
+            exact_binding_probe_required=backend.capabilities.cook_exact_binding_probe_required,
+            project_dir=_project_dir,
+            extra_env=extra_env,
+            required_env=required_env,
+            plugin_binding=plugin_binding,
+            resume_spec=final_resume_spec,
+            system_prompt=system_prompt,
+            initial_prompt=initial_message,
+            add_dirs=[managed_home.skills_dir],
+            generated_home=managed_home.generated_home,
+            tools=tools_arg,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
+        spec = prepared.spec
+        executable = prepared.executable
 
         from autoskillit.cli.session._session_process import run_cook_attempt
 
@@ -446,31 +486,23 @@ def _run_interactive_session(
             backend=backend,
             load_mode=load_mode,
         ) as binding:
-            try:
-                prepared = prepare_interactive_launch(
-                    backend,
-                    project_dir=_project_dir,
-                    extra_env=extra_env,
-                    required_env=required_env,
-                    plugin_binding=binding,
-                    resume_spec=final_resume_spec,
-                    system_prompt=system_prompt,
-                    initial_prompt=initial_message,
-                    tools=tools_arg,
-                    force_inactive_agent_teams=force_inactive_agent_teams,
-                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-                )
-            except ValueError as exc:
-                _exit_launch_preparation_error(exc)
-            spec = replace(prepared.spec, cwd=str(_project_dir))
+            prepared = _finalize_interactive_launch(
+                backend,
+                exact_binding_probe_required=True,
+                project_dir=_project_dir,
+                extra_env=extra_env,
+                required_env=required_env,
+                plugin_binding=binding,
+                resume_spec=final_resume_spec,
+                system_prompt=system_prompt,
+                initial_prompt=initial_message,
+                tools=tools_arg,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+            )
+            spec = prepared.spec
             executable = prepared.executable
             assert Path(spec.cwd) == executable.cwd
-            # Raw fleet and campaign sessions validate the finalized projected-home
-            # catalog while its reader lease remains held by this binding scope.
-            assert_interactive_ordering(spec=spec)
-            validation_errors = backend.validate_interactive_invocation(spec)
-            if validation_errors:
-                _exit_launch_validation_errors(validation_errors)
             if not executable_binding_matches_current_file(executable):
                 sys.stderr.write(
                     "ERROR: interactive executable changed after capability probing\n"
@@ -562,6 +594,8 @@ def _launch_cook_session(
     mcp_tool_timeout_sec: float | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
+    from autoskillit.cli.session._session_reload import admit_reload
+
     _max_reloads = 10
     _max_infra_resumes = 3
     launch_project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
@@ -614,14 +648,7 @@ def _launch_cook_session(
                 current_resume_spec = NamedResume(session_id=session_signal.session_id)
                 _current_initial_message = None
                 continue
-            if len(seen_reload_ids) >= _max_reloads:
-                raise SystemExit(
-                    f"Too many reloads ({_max_reloads} max). Check for infinite loop."
-                )
-            if session_signal in seen_reload_ids:
-                raise SystemExit(f"Repeated reload_id {session_signal!r} — aborting.")
-            seen_reload_ids.add(session_signal)
-            current_resume_spec = NamedResume(session_id=session_signal)
+            current_resume_spec = admit_reload(session_signal, seen_reload_ids, _max_reloads)
             _current_initial_message = None
 
     if not backend.capabilities.session_dir_persistent:

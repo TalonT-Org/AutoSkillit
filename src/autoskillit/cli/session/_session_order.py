@@ -181,7 +181,37 @@ def order(
         recipe = None
         resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
 
-    if _resume and recipe is None:
+    if not _resume and recipe is None:
+        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
+        from autoskillit.recipe import GROUP_LABELS, group_rank
+
+        available = list_recipes(
+            Path.cwd(),
+            exclude_kinds=NON_INTERACTIVE_KINDS,
+        ).items
+        if not available:
+            print("No recipes found. Run 'autoskillit recipes list' to check.")
+            sys.exit(1)
+
+        resolved = run_selection_menu(
+            available,
+            header="Available recipes:",
+            slot_zero_label="Open kitchen (no recipe)",
+            group_classifier=group_rank,
+            group_labels=GROUP_LABELS,
+            name_key=lambda r: r.name,
+            timeout=120,
+            label="autoskillit order",
+        )
+        if resolved is None:
+            print("Invalid selection.")
+            sys.exit(1)
+        if resolved is not SLOT_ZERO_SELECTED:
+            if isinstance(resolved, str):
+                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
+            recipe = resolved.name
+
+    if recipe is None:
         from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
         from autoskillit.cli.session._session_picker import pick_session as _pick_session
 
@@ -208,211 +238,135 @@ def order(
             if isinstance(resume_spec, NoResume)
             else ""
         )
+        greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
         launch_id, launch_env = _write_order_entry(project_dir, None)
-        _launch_cook_session(
-            system_prompt,
-            initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
-            resume_spec=resume_spec,
-            project_dir=project_dir,
-            extra_env=launch_env,
-            required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-            backend=backend,
-            skill_compilation=skill_compilation,
-            launch_id=launch_id,
-            default_base_branch=config.branching.default_base_branch,
-            workspace_temp_dir=config.workspace.temp_dir,
-            force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
-            mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
-        )
-        return
+        launch_extra_env = launch_env
+    else:
+        from autoskillit.cli.ui._timed_input import timed_prompt
+        from autoskillit.core import YAMLError
 
-    from autoskillit.cli.ui._timed_input import timed_prompt
-
-    if recipe is None:
-        from autoskillit.cli.prompts import _build_open_kitchen_prompt
-        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
-        from autoskillit.recipe import GROUP_LABELS, group_rank
-
-        available = list_recipes(
-            Path.cwd(),
-            exclude_kinds=NON_INTERACTIVE_KINDS,
-        ).items
-        if not available:
-            print("No recipes found. Run 'autoskillit recipes list' to check.")
+        _match = find_recipe_by_name(recipe, Path.cwd())
+        if _match is None:
+            available = list_recipes(
+                Path.cwd(),
+                exclude_kinds=NON_INTERACTIVE_KINDS,
+            ).items
+            print(f"Recipe not found: '{recipe}'")
+            if available:
+                print("Available recipes:")
+                for r in available:
+                    print(f"  - {r.name}")
+            else:
+                print("No recipes found")
+            sys.exit(1)
+        # Validate recipe before launching session
+        try:
+            parsed = load_recipe(_match.path)
+        except YAMLError as exc:
+            print(f"Recipe YAML parse error: {exc}")
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"Recipe structure error: {exc}")
             sys.exit(1)
 
-        resolved = run_selection_menu(
-            available,
-            header="Available recipes:",
-            slot_zero_label="Open kitchen (no recipe)",
-            group_classifier=group_rank,
-            group_labels=GROUP_LABELS,
-            name_key=lambda r: r.name,
-            timeout=120,
-            label="autoskillit order",
-        )
-        if resolved is SLOT_ZERO_SELECTED:
-            from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS
+        errors = validate_recipe_structure(parsed)
+        if errors:
+            print(f"Recipe '{recipe}' failed validation:")
+            for err in errors:
+                print(f"  - {err}")
+            sys.exit(1)
 
-            system_prompt = (
-                _build_open_kitchen_prompt(
-                    mcp_prefix=mcp_prefix,
-                    has_unguarded_filesystem_access=(backend_caps.has_unguarded_filesystem_access),
-                    skill_compilation=skill_compilation,
-                    project_root=project_dir,
-                    backend=backend,
+        # Subset-disabled gate (REQ-VAL-004)
+        from autoskillit.config import load_config as _load_config
+
+        _cfg = _load_config(Path.cwd())
+        _disabled = frozenset(_cfg.subsets.disabled)
+        _extra_env: dict[str, str] = {}
+
+        if _disabled:
+            _needed = _get_subsets_needed(parsed, _disabled)
+            if _needed:
+                subset_list = ", ".join(sorted(_needed))
+                print(f"\nThis recipe requires subset(s): {subset_list}")
+                print("  1. Enable temporarily (for this run only)")
+                print("  2. Enable permanently (update .autoskillit/config.yaml)")
+                print("  3. Cancel")
+                _choice = timed_prompt(
+                    "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
                 )
-                if isinstance(resume_spec, NoResume)
-                else ""
-            )
-            launch_id, launch_env = _write_order_entry(project_dir, None)
-            _launch_cook_session(
-                system_prompt,
-                initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
-                resume_spec=resume_spec,
-                project_dir=project_dir,
-                extra_env=launch_env,
-                required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-                backend=backend,
-                skill_compilation=skill_compilation,
-                launch_id=launch_id,
-                default_base_branch=config.branching.default_base_branch,
-                workspace_temp_dir=config.workspace.temp_dir,
-                force_inactive_agent_teams=(config.agent_backend.force_inactive_agent_teams),
-                mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
-            )
+                if _choice == "1":
+                    _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+                elif _choice == "2":
+                    _enable_subsets_permanently(Path.cwd(), _needed)
+                else:
+                    return
+
+        # Pack gate — check default-disabled packs (REQ-PACK-010)
+        from autoskillit.core import PACK_REGISTRY as _PACK_REGISTRY
+
+        _default_disabled = frozenset(
+            tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
+        )
+        _pack_enabled = frozenset(_cfg.packs.enabled)
+        _default_disabled_packs = _default_disabled - _pack_enabled
+
+        if _default_disabled_packs:
+            _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
+            if _packs_needed:
+                pack_list = ", ".join(sorted(_packs_needed))
+                print(f"\nThis recipe requires pack(s): {pack_list}")
+                print("  1. Enable temporarily (for this run only)")
+                print("  2. Enable permanently (update .autoskillit/config.yaml)")
+                print("  3. Cancel")
+                _pack_choice = timed_prompt(
+                    "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+                )
+                if _pack_choice == "1":
+                    import json as _json
+
+                    _extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + _json.dumps(
+                        sorted(_packs_needed)
+                    )
+                elif _pack_choice == "2":
+                    _enable_packs_permanently(Path.cwd(), _packs_needed)
+                else:
+                    return
+
+        from autoskillit.cli._preview import show_cook_preview
+        from autoskillit.cli.prompts import _COOK_GREETINGS
+
+        _itable = _get_ingredients_table(recipe, _match, Path.cwd())
+        show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
+
+        from autoskillit.cli.ui._ansi import permissions_warning
+
+        print(permissions_warning())
+        confirm = timed_prompt(
+            "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
+        )
+        if confirm.lower() in ("n", "no"):
             return
-        elif resolved is None:
-            print("Invalid selection.")
-            sys.exit(1)
-        else:
-            if isinstance(resolved, str):
-                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
-            recipe = resolved.name
-
-    from autoskillit.core import YAMLError
-
-    _match = find_recipe_by_name(recipe, Path.cwd())
-    if _match is None:
-        available = list_recipes(
-            Path.cwd(),
-            exclude_kinds=NON_INTERACTIVE_KINDS,
-        ).items
-        print(f"Recipe not found: '{recipe}'")
-        if available:
-            print("Available recipes:")
-            for r in available:
-                print(f"  - {r.name}")
-        else:
-            print("No recipes found")
-        sys.exit(1)
-    # Validate recipe before launching session
-    try:
-        parsed = load_recipe(_match.path)
-    except YAMLError as exc:
-        print(f"Recipe YAML parse error: {exc}")
-        sys.exit(1)
-    except ValueError as exc:
-        print(f"Recipe structure error: {exc}")
-        sys.exit(1)
-
-    errors = validate_recipe_structure(parsed)
-    if errors:
-        print(f"Recipe '{recipe}' failed validation:")
-        for err in errors:
-            print(f"  - {err}")
-        sys.exit(1)
-
-    # Subset-disabled gate (REQ-VAL-004)
-    from autoskillit.config import load_config as _load_config
-
-    _cfg = _load_config(Path.cwd())
-    _disabled = frozenset(_cfg.subsets.disabled)
-    _extra_env: dict[str, str] = {}
-
-    if _disabled:
-        _needed = _get_subsets_needed(parsed, _disabled)
-        if _needed:
-            subset_list = ", ".join(sorted(_needed))
-            print(f"\nThis recipe requires subset(s): {subset_list}")
-            print("  1. Enable temporarily (for this run only)")
-            print("  2. Enable permanently (update .autoskillit/config.yaml)")
-            print("  3. Cancel")
-            _choice = timed_prompt(
-                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+        greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
+        launch_id, launch_env = _write_order_entry(project_dir, recipe)
+        launch_extra_env = {**_extra_env, **launch_env}
+        system_prompt = (
+            _build_orchestrator_prompt(
+                recipe,
+                mcp_prefix=mcp_prefix,
+                ingredients_table=_itable,
+                has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
+                skill_compilation=skill_compilation,
+                project_root=project_dir,
+                backend=backend,
             )
-            if _choice == "1":
-                _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
-            elif _choice == "2":
-                _enable_subsets_permanently(Path.cwd(), _needed)
-            else:
-                return
-
-    # Pack gate — check default-disabled packs (REQ-PACK-010)
-    from autoskillit.core import PACK_REGISTRY as _PACK_REGISTRY
-
-    _default_disabled = frozenset(
-        tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
-    )
-    _pack_enabled = frozenset(_cfg.packs.enabled)
-    _default_disabled_packs = _default_disabled - _pack_enabled
-
-    if _default_disabled_packs:
-        _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
-        if _packs_needed:
-            pack_list = ", ".join(sorted(_packs_needed))
-            print(f"\nThis recipe requires pack(s): {pack_list}")
-            print("  1. Enable temporarily (for this run only)")
-            print("  2. Enable permanently (update .autoskillit/config.yaml)")
-            print("  3. Cancel")
-            _pack_choice = timed_prompt(
-                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
-            )
-            if _pack_choice == "1":
-                import json as _json
-
-                _extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + _json.dumps(
-                    sorted(_packs_needed)
-                )
-            elif _pack_choice == "2":
-                _enable_packs_permanently(Path.cwd(), _packs_needed)
-            else:
-                return
-
-    from autoskillit.cli._preview import show_cook_preview
-    from autoskillit.cli.prompts import _COOK_GREETINGS
-
-    _itable = _get_ingredients_table(recipe, _match, Path.cwd())
-    show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
-
-    from autoskillit.cli.ui._ansi import permissions_warning
-
-    print(permissions_warning())
-    confirm = timed_prompt(
-        "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
-    )
-    if confirm.lower() in ("n", "no"):
-        return
-    greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
-    launch_id, launch_env = _write_order_entry(project_dir, recipe)
-    _extra_env |= launch_env
-    system_prompt = (
-        _build_orchestrator_prompt(
-            recipe,
-            mcp_prefix=mcp_prefix,
-            ingredients_table=_itable,
-            has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-            skill_compilation=skill_compilation,
-            project_root=project_dir,
-            backend=backend,
+            if isinstance(resume_spec, NoResume)
+            else ""
         )
-        if isinstance(resume_spec, NoResume)
-        else ""
-    )
+
     _launch_cook_session(
         system_prompt,
         initial_message=greeting,
-        extra_env=_extra_env,
+        extra_env=launch_extra_env,
         resume_spec=resume_spec,
         project_dir=project_dir,
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,

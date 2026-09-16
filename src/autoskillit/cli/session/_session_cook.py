@@ -390,7 +390,7 @@ def cook(
         attempt = 0
 
         from autoskillit.cli.session._session_process import run_cook_attempt
-        from autoskillit.cli.session._session_reload import consume_reload_sentinel
+        from autoskillit.cli.session._session_reload import admit_reload, consume_reload_sentinel
         from autoskillit.execution import assert_interactive_ordering
 
         try:
@@ -517,14 +517,11 @@ def cook(
                     trace.close(status="success")
                     return
 
-                if len(seen_reload_ids) >= max_reloads:
-                    raise SystemExit(
-                        f"Too many reloads ({max_reloads} max). Check for infinite loop."
-                    )
-                if reload_session_id in seen_reload_ids:
-                    raise SystemExit(f"Repeated reload_id {reload_session_id!r} — aborting.")
-                seen_reload_ids.add(reload_session_id)
-                current_resume_spec = NamedResume(session_id=reload_session_id)
+                current_resume_spec = admit_reload(
+                    reload_session_id,
+                    seen_reload_ids,
+                    max_reloads,
+                )
                 current_initial_prompt = None
         except BaseException:
             trace.close(status="failed")

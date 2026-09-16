@@ -7,7 +7,7 @@ import os
 import signal
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,45 +69,36 @@ def run_cook_attempt(
     with terminal_guard():
         try:
             if observer is None:
-                owner = spawn_owned_process(
-                    wrap_systemd_scope(
-                        list(spec.cmd),
-                        enabled=systemd_scope_enabled,
-                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
-                    ),
-                    cwd=cwd,
-                    env=dict(spec.env),
-                    pass_fds=inherited_fds,
-                    process_group=0,
-                    start_new_session=False,
-                    tether=TetherSpec(
-                        origin="cook", ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS
-                    ),
-                )
+                spawn_argv: Sequence[str] = list(spec.cmd)
+                spawn_fds = inherited_fds
+                process_group: int | None = 0
+                start_new_session = False
             else:
                 master_fd, slave_fd = os.openpty()
-                launcher_fds = _merge_launcher_fds(inherited_fds, slave_fd)
-                # systemd-run wraps the PTY launcher (script(1)) itself here, not
-                # the workload it execvpe's into — same leader-wrapping shape as
-                # the non-PTY branch above, one process earlier in the chain.
-                owner = spawn_owned_process(
-                    wrap_systemd_scope(
-                        launcher_argv(
-                            slave_fd,
-                            spec.cmd,
-                            lease_fds=inherited_fds,
-                        ),
-                        enabled=systemd_scope_enabled,
-                        ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
-                    ),
-                    cwd=cwd,
-                    env=dict(spec.env),
-                    pass_fds=launcher_fds,
-                    start_new_session=True,
-                    tether=TetherSpec(
-                        origin="cook", ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS
-                    ),
+                spawn_argv = launcher_argv(
+                    slave_fd,
+                    spec.cmd,
+                    lease_fds=inherited_fds,
                 )
+                spawn_fds = _merge_launcher_fds(inherited_fds, slave_fd)
+                process_group = None
+                start_new_session = True
+            # PTY mode places the launcher and its replacement workload in the same scope.
+            owner = spawn_owned_process(
+                wrap_systemd_scope(
+                    spawn_argv,
+                    enabled=systemd_scope_enabled,
+                    ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS,
+                ),
+                cwd=cwd,
+                env=dict(spec.env),
+                pass_fds=spawn_fds,
+                process_group=process_group,
+                start_new_session=start_new_session,
+                tether=TetherSpec(
+                    origin="cook", ceiling_seconds=INTERACTIVE_TETHER_CEILING_SECONDS
+                ),
+            )
 
             pid = owner.pid
             pgid = owner.pgid

@@ -1,4 +1,4 @@
-"""Context-admission StrEnum discriminators.
+"""Context-admission and durable outcome StrEnum discriminators.
 
 Zero autoskillit imports. Provides the closed vocabularies for the
 context-admission protocol v1 (lifecycle states, decision kinds, accounting
@@ -27,6 +27,8 @@ __all__ = [
     "ReserveClass",
     "WitnessKind",
     "ProducerSurface",
+    "WorkspaceOutcomeKind",
+    "CommitFailureClass",
 ]
 
 
@@ -202,3 +204,24 @@ class ProducerSurface(StrEnum):
     HEADLESS_CHILD_PROMPT = "headless_child_prompt"
     PARENT_VISIBLE_CHILD_DELIVERY = "parent_visible_child_delivery"
     COMPACTION_MODEL_WINDOW_TRANSITION = "compaction_model_window_transition"
+
+
+@unique
+class WorkspaceOutcomeKind(StrEnum):
+    """Durable workspace operations whose outcomes affect later decisions."""
+
+    COMMIT_ATTEMPT = "commit_attempt"
+    TEST_RUN = "test_run"
+
+
+@unique
+class CommitFailureClass(StrEnum):
+    """Stable classifications for an unsuccessful commit attempt."""
+
+    PATH_REJECTED = "path_rejected"
+    GIT_ADD_FAILED = "git_add_failed"
+    HOOK_REJECTED = "hook_rejected"
+    HOOK_INFRASTRUCTURE = "hook_infrastructure"
+    GIT_COMMIT_FAILED = "git_commit_failed"
+    TOOLING_MISSING = "tooling_missing"
+    UNHANDLED = "unhandled"

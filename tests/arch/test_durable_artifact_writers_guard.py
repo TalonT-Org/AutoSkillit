@@ -272,7 +272,7 @@ def test_skill_unavailability_metadata_writer_is_registered() -> None:
 
 def test_workspace_outcome_ledger_writer_is_registered() -> None:
     """The ledger record method remains the registered persistence boundary."""
-    rel = "pipeline/workspace_outcomes/__init__.py"
+    rel = "pipeline/workspace_outcomes/_ledger.py"
     path = SRC_ROOT / rel
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     ledger_class = next(
@@ -296,9 +296,9 @@ def test_workspace_outcome_ledger_writer_is_registered() -> None:
         entry
         for entry in DURABLE_ARTIFACT_WRITERS
         if entry.writer
-        == ("autoskillit.pipeline.workspace_outcomes:DefaultWorkspaceOutcomeLedger.record")
+        == ("autoskillit.pipeline.workspace_outcomes._ledger:DefaultWorkspaceOutcomeLedger.record")
     )
     assert registered.machine_local is True
     assert registered.detection == (
-        "autoskillit.pipeline.workspace_outcomes:find_stale_workspace_outcome_shards"
+        "autoskillit.pipeline.workspace_outcomes._ledger:find_stale_workspace_outcome_shards"
     )

@@ -17,7 +17,6 @@ from enum import StrEnum, unique
 from typing import assert_never
 
 from ._type_enums_context_admission import *  # noqa: F401, F403
-from ._type_enums_workspace_outcomes import *  # noqa: F401, F403
 
 __all__ = [
     "RetryReason",

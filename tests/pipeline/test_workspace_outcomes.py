@@ -19,7 +19,7 @@ from autoskillit.core import (
     WorkspaceOutcomeRecord,
 )
 from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
-from autoskillit.pipeline import workspace_outcomes as outcome_module
+from autoskillit.pipeline.workspace_outcomes import _ledger as outcome_module
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.medium]

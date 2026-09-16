@@ -56,8 +56,6 @@ from ._type_enums import *  # noqa: F401, F403
 from ._type_enums import __all__ as _enums_all
 from ._type_enums_context_admission import *  # noqa: F401, F403
 from ._type_enums_context_admission import __all__ as _enums_context_admission_all
-from ._type_enums_workspace_outcomes import *  # noqa: F401, F403
-from ._type_enums_workspace_outcomes import __all__ as _enums_workspace_outcomes_all
 from ._type_exceptions import *  # noqa: F401, F403
 from ._type_exceptions import __all__ as _exceptions_all
 from ._type_execution_identity import *  # noqa: F401, F403
@@ -164,7 +162,6 @@ __all__ = (
     + _dimensions_all
     + _enums_all
     + _enums_context_admission_all
-    + _enums_workspace_outcomes_all
     + _exceptions_all
     + _exploration_all
     + _execution_identity_all

@@ -141,12 +141,12 @@ _EXPECTED_ACQUISITIONS = (
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),
     ("planner/merge.py", "replace_item", "acquire_flock_with_timeout"),
     (
-        "pipeline/workspace_outcomes/__init__.py",
+        "pipeline/workspace_outcomes/_ledger.py",
         "read",
         "ArtifactLease.acquire_shared",
     ),
     (
-        "pipeline/workspace_outcomes/__init__.py",
+        "pipeline/workspace_outcomes/_ledger.py",
         "record",
         "ArtifactLease.acquire_exclusive",
     ),

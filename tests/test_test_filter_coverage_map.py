@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
+from autoskillit.core.coverage_schema import (
+    REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
+    REASON_NOT_MEASURED,
+)
 from tests import _test_filter as test_filter
 from tests._test_filter import load_coverage_map
 
@@ -22,19 +24,6 @@ pytestmark = [pytest.mark.medium]
 SOURCE_COMMIT = "a" * 40
 
 REPO_ROOT = Path(__file__).parent.parent
-_COV_AST_SCRIPT = REPO_ROOT / "scripts" / "compare-coverage-ast.py"
-
-
-@pytest.fixture(scope="module")
-def _cov_ast_constants():
-    """Import the producer's reason-string constants without polluting sys.path."""
-    spec = importlib.util.spec_from_file_location("compare_coverage_ast", _COV_AST_SCRIPT)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    yield mod
-    sys.modules.pop(spec.name, None)
 
 
 def _envelope(
@@ -176,9 +165,7 @@ class TestLoadCoverageMap:
         with pytest.warns(UserWarning, match=re.escape(detail)):
             assert load_coverage_map(map_file, cwd=tmp_path) is None
 
-    def test_schema_v2_with_unobservable_sources_loads(
-        self, tmp_path: Path, _cov_ast_constants
-    ) -> None:
+    def test_schema_v2_with_unobservable_sources_loads(self, tmp_path: Path) -> None:
         """A v2 artifact loads through the unchanged v1 per-entry parser.
 
         unobservable_sources is a sibling top-level key the consumer never reads —
@@ -188,11 +175,8 @@ class TestLoadCoverageMap:
         payload = _envelope({"src/foo.py": ["tests/test_foo.py"]})
         payload["schema_version"] = 2
         payload["unobservable_sources"] = [
-            {"path": "src/bar.py", "reason": _cov_ast_constants.REASON_NOT_MEASURED},
-            {
-                "path": "src/baz.py",
-                "reason": _cov_ast_constants.REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
-            },
+            {"path": "src/bar.py", "reason": REASON_NOT_MEASURED},
+            {"path": "src/baz.py", "reason": REASON_ATTRIBUTED_ONLY_BY_FIXTURE},
         ]
         map_file.write_text(json.dumps(payload), encoding="utf-8")
         result = load_coverage_map(map_file, cwd=tmp_path)

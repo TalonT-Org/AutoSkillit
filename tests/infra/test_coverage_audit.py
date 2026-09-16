@@ -11,6 +11,11 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.coverage_schema import (
+    REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
+    REASON_NOT_MEASURED,
+)
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -234,7 +239,7 @@ class TestBuildTestSourceMap:
         assert fixture_only == [
             {
                 "path": "src/autoskillit/core/io.py",
-                "reason": cov_ast.REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
+                "reason": REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
             }
         ]
 
@@ -647,10 +652,7 @@ class TestBuildTestSourceMap:
 
         parsed = json.loads(output_path.read_text())
         unobservable = {entry["path"]: entry["reason"] for entry in parsed["unobservable_sources"]}
-        assert (
-            unobservable["src/autoskillit/hooks/guards/example_guard.py"]
-            == cov_ast.REASON_NOT_MEASURED
-        )
+        assert unobservable["src/autoskillit/hooks/guards/example_guard.py"] == REASON_NOT_MEASURED
 
     def test_observed_source_appears_in_map_not_unobservable(self, cov_ast, tmp_path, monkeypatch):
         """A source with a |run attribution belongs in map, never in unobservable_sources."""

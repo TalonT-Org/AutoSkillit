@@ -26,14 +26,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from autoskillit import __version__
+from autoskillit.core.coverage_schema import (
+    REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
+    REASON_NOT_MEASURED,
+)
 from autoskillit.core.io import write_versioned_json
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-# Reason strings for the artifact's `unobservable_sources` entries. Centralized
-# so the producer boundary and tests share the exact wire values.
-REASON_NOT_MEASURED = "not_measured"
-REASON_ATTRIBUTED_ONLY_BY_FIXTURE = "attributed_only_by_fixture"
 
 
 @dataclass

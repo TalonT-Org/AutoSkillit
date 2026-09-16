@@ -107,6 +107,56 @@ def _filter_pytest_output(raw: str) -> str:
     )
 
 
+def _bound_artifact_text(rendered: str, limit: int, *, artifact_backed: bool) -> str:
+    """Bound text only when a trusted artifact retains the complete response."""
+    if artifact_backed and len(rendered) > limit:
+        return rendered[:limit] + "..."
+    return rendered
+
+
+def _fmt_generic_list(key: str, value: list, *, artifact_backed: bool) -> list[str]:
+    """Render one complete top-level list value."""
+    value = list(value)
+    visible = value[:20] if artifact_backed else value
+    if not value:
+        return [f"{key}: []"]
+    if all(isinstance(item, str) for item in value):
+        return [f"{key}:", *(f"  - {item}" for item in visible)]
+
+    lines = [f"{key}:"]
+    for item in visible:
+        if isinstance(item, dict):
+            kvs = [
+                f"{nested_key}: "
+                f"{_bound_artifact_text(str(nested_value), 120, artifact_backed=artifact_backed)}"
+                for nested_key, nested_value in item.items()
+            ]
+            lines.append(f"  - {', '.join(kvs)}")
+        else:
+            rendered = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+            rendered = _bound_artifact_text(rendered, 2000, artifact_backed=artifact_backed)
+            lines.append(f"  - {rendered}")
+    if artifact_backed and len(value) > 20:
+        lines.append(f"  ... and {len(value) - 20} more")
+    return lines
+
+
+def _fmt_generic_mapping(key: str, value: dict, *, artifact_backed: bool) -> list[str]:
+    """Render one complete top-level mapping value in insertion order."""
+    if not value:
+        return [f"{key}: {{}}"]
+
+    lines = [f"{key}:"]
+    for nested_key, nested_value in value.items():
+        if isinstance(nested_value, (dict, list)):
+            rendered = json.dumps(nested_value, ensure_ascii=False, separators=(",", ":"))
+            rendered = _bound_artifact_text(rendered, 2000, artifact_backed=artifact_backed)
+            lines.append(f"  {nested_key}: {rendered}")
+        else:
+            lines.append(f"  {nested_key}: {nested_value}")
+    return lines
+
+
 def _fmt_generic(
     short_name: str,
     data: dict,
@@ -118,46 +168,9 @@ def _fmt_generic(
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
         if isinstance(val, list):
-            val = list(val)
-            visible = val[:20] if artifact_backed else val
-            if not val:
-                lines.append(f"{key}: []")
-            elif all(isinstance(item, str) for item in val):
-                lines.append(f"{key}:")
-                lines.extend(f"  - {item}" for item in visible)
-            else:
-                lines.append(f"{key}:")
-                for item in visible:
-                    if isinstance(item, dict):
-                        kvs = []
-                        for nested_key, nested_value in item.items():
-                            rendered = str(nested_value)
-                            if artifact_backed and len(rendered) > 120:
-                                rendered = rendered[:120] + "..."
-                            kvs.append(f"{nested_key}: {rendered}")
-                        lines.append(f"  - {', '.join(kvs)}")
-                    else:
-                        rendered = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
-                        if artifact_backed and len(rendered) > 2000:
-                            rendered = rendered[:2000] + "..."
-                        lines.append(f"  - {rendered}")
-            if artifact_backed and len(val) > 20:
-                lines.append(f"  ... and {len(val) - 20} more")
+            lines.extend(_fmt_generic_list(key, val, artifact_backed=artifact_backed))
         elif isinstance(val, dict):
-            if not val:
-                lines.append(f"{key}: {{}}")
-            else:
-                lines.append(f"{key}:")
-                for nested_key, nested_value in val.items():
-                    if isinstance(nested_value, (dict, list)):
-                        rendered = json.dumps(
-                            nested_value, ensure_ascii=False, separators=(",", ":")
-                        )
-                        if artifact_backed and len(rendered) > 2000:
-                            rendered = rendered[:2000] + "..."
-                        lines.append(f"  {nested_key}: {rendered}")
-                    else:
-                        lines.append(f"  {nested_key}: {nested_value}")
+            lines.extend(_fmt_generic_mapping(key, val, artifact_backed=artifact_backed))
         else:
             lines.append(f"{key}: {val}")
     return "\n".join(lines)

@@ -105,6 +105,16 @@ def _fmt_recipe_segment(carrier: object) -> str:
     return f"--- RECIPE SEGMENT ---\n{rendered}\n--- END RECIPE SEGMENT ---"
 
 
+def _prepare_recipe_content(data: Mapping[str, Any]) -> str | None:
+    content = data.get("content")
+    if not content:
+        return None
+    for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
+        if data.get(derived_field):
+            content = _strip_yaml_ingredients_block(content)
+    return compact_recipe_display(content)
+
+
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
     """Render flow before content so bounded heads preserve step ordering."""
     lines: list[str] = []
@@ -118,13 +128,8 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         lines.append("\n--- FLOW DIAGRAM ---")
         lines.append(diagram)
         lines.append("--- END DIAGRAM ---")
-    content = data.get("content")
-    if content:
-        display_content = content
-        for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
-            if data.get(derived_field):
-                display_content = _strip_yaml_ingredients_block(display_content)
-        display_content = compact_recipe_display(display_content)
+    display_content = _prepare_recipe_content(data)
+    if display_content is not None:
         lines.append("\n--- RECIPE ---")
         lines.append(display_content)
         lines.append("--- END RECIPE ---")

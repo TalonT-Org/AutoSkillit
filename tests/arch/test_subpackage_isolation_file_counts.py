@@ -125,7 +125,7 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
 )
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 10,  # 10 files + __init__ + buffer (was 21 before 11 files moved to sub-packages)
+    "core": 11,  # 10 files + __init__ + buffer + coverage_schema.py (#5051)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)

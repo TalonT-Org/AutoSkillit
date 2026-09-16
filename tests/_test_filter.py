@@ -256,6 +256,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "install_detect": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
     "conventions": frozenset({"core", "execution", "server", "workspace"}),
+    "coverage_schema": frozenset({"core", "infra", "test_test_filter_coverage_map.py"}),
     "delivery_bounds": frozenset({"core", "execution", "server"}),
     "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),

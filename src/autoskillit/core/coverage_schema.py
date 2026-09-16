@@ -12,5 +12,3 @@ from __future__ import annotations
 
 REASON_NOT_MEASURED: str = "not_measured"
 REASON_ATTRIBUTED_ONLY_BY_FIXTURE: str = "attributed_only_by_fixture"
-
-__all__ = ["REASON_NOT_MEASURED", "REASON_ATTRIBUTED_ONLY_BY_FIXTURE"]

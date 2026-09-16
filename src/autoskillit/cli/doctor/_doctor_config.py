@@ -253,7 +253,6 @@ def _check_target_step_semantics(
         backend=backend_name,
     )
     if unsupported_operation is not None:
-        assert adaptation.diagnostic is not None
         return [
             DoctorResult(
                 Severity.ERROR,

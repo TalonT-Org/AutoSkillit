@@ -25,6 +25,7 @@ from autoskillit.core import (
     LaunchSurface,
     LaunchValueSource,
     LaunchValueSourceKind,
+    PositionalRole,
     ProviderBinding,
     ResolvedLaunchContract,
     SemanticLaunchPlan,
@@ -130,7 +131,10 @@ def _adapter_result(preparation, **changes: object) -> LaunchAdapterResult:
             origin=CmdOrigin(
                 binary="/usr/bin/claude",
                 mode_flags=("-p",),
-                positional=(preparation.command, *preparation.arguments),
+                positional=tuple(
+                    (PositionalRole.PROMPT, value)
+                    for value in (preparation.command, *preparation.arguments)
+                ),
             ),
             process_idle_timeout_ms=90_000,
             inherited_fds=(9, 11),

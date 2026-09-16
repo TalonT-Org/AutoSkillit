@@ -137,14 +137,14 @@ class TestCodexInteractiveCmdResumeVariants:
             kv_flags=(
                 (CodexFlags.PROFILE, "test-profile"),
                 (CodexFlags.MODEL, "gpt-5.6-sol"),
-                (CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"),
-                (CodexFlags.CONFIG_OVERRIDE, 'sqlite_home="/session/home"'),
             ),
             positional=(
                 (PositionalRole.RESUME_TARGET, "abc123"),
                 (PositionalRole.PROMPT, "continue"),
             ),
             variadic_pairs=(
+                (CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"),
+                (CodexFlags.CONFIG_OVERRIDE, 'sqlite_home="/session/home"'),
                 (CodexFlags.ADD_DIR, "/first"),
                 (CodexFlags.ADD_DIR, "/second"),
             ),

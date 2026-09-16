@@ -13,8 +13,8 @@ import pytest
 
 import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_launch_intent as _patch_session__session_picker
 import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
-import autoskillit.cli.session._session_picker as _patch_session__session_picker
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
@@ -39,6 +39,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     atomic_write,
 )
+from tests.cli._interactive_process import interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -128,6 +129,12 @@ class _Backend:
     def session_locator(self) -> object:
         return SimpleNamespace()
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+
+        backend = CodexBackend() if self.binary_name() == "codex" else ClaudeCodeBackend()
+        return backend.interactive_ordering_flags()
+
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         self.build_calls.append(kwargs)
         command = ["claude", "--dangerously-skip-permissions"]
@@ -140,6 +147,7 @@ class _Backend:
         return CmdSpec(
             cmd=tuple(command),
             env=dict(kwargs["env_extras"]),  # type: ignore[arg-type]
+            **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
             inherited_fds=(
                 *self.extra_inherited_fds,
                 *getattr(plugin_binding, "inherited_fds", ()),
@@ -310,6 +318,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return self._command_backend.interactive_ordering_flags()
 
     backend = _DelegatingCodexBackend()
     captured = _install_harness(monkeypatch, tmp_path)
@@ -788,7 +799,16 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             events.append(("build",))
-            return CmdSpec(cmd=("claude",), env={})
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             events.append(("validate", spec))

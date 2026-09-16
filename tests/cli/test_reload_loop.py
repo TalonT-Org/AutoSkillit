@@ -23,7 +23,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from tests.cli._cook_launch_helpers import RecordingLifecycle
-from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -160,8 +160,14 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             return CmdSpec(
                 cmd=("claude",),
                 env={"ATTEMPT": str(len(events))},
+                **interactive_launch_metadata(binary="claude", launch=launch),
                 inherited_fds=plugin_binding.inherited_fds,
             )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             events.append(("validate", spec))
@@ -348,7 +354,16 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             return None
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
-            return CmdSpec(cmd=("claude",), env={})
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             return []

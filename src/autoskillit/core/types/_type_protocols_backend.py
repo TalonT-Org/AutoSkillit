@@ -27,14 +27,13 @@ from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat, SkillExecutionRole
 from ._type_execution_identity import ExecutionIdentity
 from ._type_exploration import ExplorationRouterPlan
-from ._type_launch_intent import FreshLaunch, InteractiveLaunch
+from ._type_launch_intent import FreshLaunch, InteractiveLaunch, ResumeSpec
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
 )
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import PreLaunchReadiness, ValidatedAddDir
-from ._type_resume import ResumeSpec
 from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import (
     SemanticAdaptationContext,

@@ -31,6 +31,7 @@ from autoskillit.core import (
     SessionAttemptHandle,
     ValidatedAddDir,
 )
+from tests.cli._interactive_process import interactive_launch_metadata
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -71,9 +72,18 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             del spec
             return []
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import CodexBackend
+
+            return CodexBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             captured_kwargs.append(kwargs)
-            return CmdSpec(cmd=("codex",), env={})
+            return CmdSpec(
+                cmd=("codex",),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
         def session_attempt_context(
             self,

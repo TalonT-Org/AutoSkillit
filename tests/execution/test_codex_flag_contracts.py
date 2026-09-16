@@ -7,13 +7,13 @@ import pytest
 from autoskillit.core import FreshLaunch, OutputFormat, RestoreSession, ResumeWithBriefing
 from autoskillit.core.types import CmdSpec
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
-from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _GENERATED_HOME = Path("/work/codex-home")
+_CODEX_VALUE_BEARING_FLAGS = CodexBackend().interactive_ordering_flags()[1]
 
 
 def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:

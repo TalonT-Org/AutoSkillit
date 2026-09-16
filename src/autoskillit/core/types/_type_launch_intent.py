@@ -1,4 +1,4 @@
-"""Closed launch intent for an interactive coding-agent session.
+"""Closed CLI and launch intents for an interactive coding-agent session.
 
 The variants are sealed for static callers with :func:`typing.final`; Python
 does not prohibit subclassing them at runtime. Backend builders match directly
@@ -17,11 +17,45 @@ from dataclasses import dataclass
 from typing import final
 
 __all__ = [
+    "NoResume",
+    "BareResume",
+    "NamedResume",
+    "ResumeSpec",
+    "resume_spec_from_cli",
     "FreshLaunch",
     "RestoreSession",
     "ResumeWithBriefing",
     "InteractiveLaunch",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class NoResume:
+    """No resume: start a fresh session."""
+
+
+@dataclass(frozen=True, slots=True)
+class BareResume:
+    """Bare --resume: ask AutoSkillit to select a session."""
+
+
+@dataclass(frozen=True, slots=True)
+class NamedResume:
+    """--resume <id>: resume a specific named session."""
+
+    session_id: str
+
+
+ResumeSpec = NoResume | BareResume | NamedResume
+
+
+def resume_spec_from_cli(*, resume: bool, session_id: str | None) -> ResumeSpec:
+    """Construct a ResumeSpec from CLI input without any I/O."""
+    if session_id:
+        return NamedResume(session_id=session_id)
+    if resume:
+        return BareResume()
+    return NoResume()
 
 
 @final

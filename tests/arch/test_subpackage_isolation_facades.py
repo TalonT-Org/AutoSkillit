@@ -167,7 +167,7 @@ def test_session_decomposition_has_expected_siblings() -> None:
         "_session_launch",
         "_session_onboarding",
         "_session_order",
-        "_session_picker",
+        "_session_launch_intent",
         "_session_process",
         "_session_reload",
         "_session_startup_trace",

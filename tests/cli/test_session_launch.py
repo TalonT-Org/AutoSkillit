@@ -42,7 +42,7 @@ from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
 )
 from tests.cli._cook_launch_helpers import RecordingLifecycle
-from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -108,6 +108,12 @@ class _BackendLifecycleStub:
 
     name = "claude-code"
     conventions = BackendConventions()
+
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+
+        backend = CodexBackend() if self.binary_name() == "codex" else ClaudeCodeBackend()
+        return backend.interactive_ordering_flags()
 
     def validate_interactive_invocation(self, spec):
         return []
@@ -235,6 +241,7 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
             return CmdSpec(
                 cmd=("claude", "--dangerously-skip-permissions"),
                 env=dict(kwargs.get("env_extras") or {}),
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
                 inherited_fds=inherited_fds,
             )
 
@@ -641,7 +648,11 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
 
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
@@ -704,6 +715,7 @@ def test_binary_name_from_backend_used_in_which(
             return CmdSpec(
                 cmd=(binary, "--dangerously-skip-permissions"),
                 env={"PATH": str(tmp_path)},
+                **interactive_launch_metadata(binary=binary, launch=kwargs["launch"]),
             )
 
     binary_path = tmp_path / "test-agent-binary"
@@ -759,7 +771,11 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
 
         def build_interactive_cmd(self, **kwargs):
             build_called.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
@@ -790,7 +806,11 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
         def build_interactive_cmd(self, **kwargs):
             from autoskillit.core import CmdSpec
 
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -844,7 +864,11 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
 
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -896,7 +920,11 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
 
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -949,7 +977,11 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
 
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -1006,7 +1038,11 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
 
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
-            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+            return CmdSpec(
+                cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
     captured: dict = {}
 
@@ -1052,7 +1088,11 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
 
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("claude-code")
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     class _CodexStub(_BackendLifecycleStub):
         def binary_name(self) -> str:
@@ -1079,7 +1119,11 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
 
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("codex")
-            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+            return CmdSpec(
+                cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
@@ -1144,7 +1188,11 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("codex")
-            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+            return CmdSpec(
+                cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
@@ -1205,7 +1253,11 @@ def test_launch_cook_session_accepts_backend_param(
 
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
     monkeypatch.setattr(
         subprocess,
@@ -1497,7 +1549,11 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
             return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs):
-            return CmdSpec(cmd=("codex",), env={})
+            return CmdSpec(
+                cmd=("codex",),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
     def mock_run(cmd, **kwargs):
         call_sequence.append("subprocess")
@@ -1546,7 +1602,11 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
             return PreLaunchReadiness(("Failed to ensure MCP registration: some error",), {})
 
         def build_interactive_cmd(self, **kwargs):
-            return CmdSpec(cmd=("codex",), env={})
+            return CmdSpec(
+                cmd=("codex",),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
     def _must_not_call(*a, **kw):
         raise AssertionError("subprocess.Popen must not be called")
@@ -1581,7 +1641,12 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
             return "claude"
 
         def build_interactive_cmd(self, **kwargs):
-            return CmdSpec(cmd=("claude",), env={}, inherited_fds=(3,))
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+                inherited_fds=(3,),
+            )
 
         def validate_interactive_invocation(self, spec):
             events.append("validated")
@@ -1651,7 +1716,11 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
         def build_interactive_cmd(self, **kwargs):
             executable = kwargs.get("executable")
             command = str(executable.path) if executable is not None else "claude"
-            return CmdSpec(cmd=(command,), env={})
+            return CmdSpec(
+                cmd=(command,),
+                env={},
+                **interactive_launch_metadata(binary=command, launch=kwargs["launch"]),
+            )
 
     monkeypatch.setattr(
         _patch_session__session_process,
@@ -2297,6 +2366,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                     "INITIAL": getattr(launch, "initial_prompt", None) or "",
                     "RESUME": type(launch).__name__,
                 },
+                **interactive_launch_metadata(binary="true", launch=launch),
                 inherited_fds=(3,),
                 managed_skill_catalog=managed_skill_catalog,
             )

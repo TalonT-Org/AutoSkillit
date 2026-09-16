@@ -43,6 +43,7 @@ from autoskillit.workspace import (
     SkillUnavailableMetadata,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
+from tests.cli._interactive_process import interactive_launch_metadata
 from tests.contracts._skill_admission_ledger import (
     COOK_SESSION_COMBINATION,
     SKILL_ADMISSION_LEDGER,
@@ -83,6 +84,9 @@ def _make_mock_backend_class(
         def recover_cook_history(self) -> None:
             return None
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return ClaudeCodeBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
             if system_prompts is not None:
@@ -90,7 +94,11 @@ def _make_mock_backend_class(
                 system_prompts.append(
                     getattr(launch, "system_prompt", None) or getattr(launch, "briefing", None)
                 )
-            return CmdSpec(cmd=("claude",), env={})
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             return []
@@ -461,6 +469,9 @@ def _run_finalized_profile_cook(
         def recover_cook_history(self) -> None:
             return None
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return CodexBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             captured["build_kwargs"] = kwargs
             env = dict(kwargs["env_extras"])  # type: ignore[arg-type]
@@ -477,6 +488,7 @@ def _run_finalized_profile_cook(
                 ),
                 env=env,
                 cwd="/ambient-cwd-must-not-survive",
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
             )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:

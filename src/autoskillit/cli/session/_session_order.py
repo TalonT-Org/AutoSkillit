@@ -370,7 +370,7 @@ def order(
             )
 
     _launch_cook_session(
-        launch,
+        launch=launch,
         extra_env=launch_extra_env,
         project_dir=project_dir,
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,

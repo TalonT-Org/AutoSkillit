@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli.session._session_picker import (
+from autoskillit.cli.session._session_launch_intent import (
     _classify_session,
     _format_session_row,
     _run_picker,

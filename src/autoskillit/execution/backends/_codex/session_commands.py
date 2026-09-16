@@ -608,6 +608,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         selected_profile = (env_extras or {}).get(PROVIDER_PROFILE_ENV_VAR, "")
         if selected_profile:
             builder.kv_flag(CodexFlags.PROFILE, selected_profile)
+        config_overrides: list[str] = []
         match launch:
             case FreshLaunch(system_prompt=system_prompt, initial_prompt=initial_prompt):
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
@@ -625,9 +626,8 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 assert_never(unreachable)
         if model:
             builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
-            for override in self.model_config_overrides(model):
-                builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
-        builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
+            config_overrides.extend(self.model_config_overrides(model))
+        config_overrides.append(_IMAGE_GENERATION_DISABLED)
         if isinstance(launch, FreshLaunch):
             # Interactive TUI tasks are unknown at launch (including manual runs), so
             # they retain full scope coverage without a dispatch-time skill identity
@@ -638,8 +638,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 if system_prompt is not None
                 else _interactive_suffix
             )
-            builder.kv_flag(
-                CodexFlags.CONFIG_OVERRIDE,
+            config_overrides.append(
                 f"developer_instructions={_format_toml_value(developer_instructions)}",
             )
         if generated_home is None and (
@@ -651,12 +650,13 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 generated_home,
                 argument_name="generated_home",
             )
-            builder.kv_flag(
-                CodexFlags.CONFIG_OVERRIDE,
+            config_overrides.append(
                 f"sqlite_home={_format_toml_value(str(generated_home))}",
             )
         if initial_prompt is not None:
             builder.positional(initial_prompt, role=PositionalRole.PROMPT)
+        for override in config_overrides:
+            builder.variadic_pair(CodexFlags.CONFIG_OVERRIDE, override)
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         env, projected_skill_entries, route = self._prepare_interactive_environment(

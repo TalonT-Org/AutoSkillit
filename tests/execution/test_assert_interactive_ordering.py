@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, PositionalRole
 from autoskillit.core.types._type_backend import CmdOrigin
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.execution.headless._headless_helpers import assert_interactive_ordering
@@ -82,7 +82,7 @@ def test_origin_does_not_bypass_validation():
         env={},
         origin=CmdOrigin(
             binary="claude",
-            positional=("prompt",),
+            positional=((PositionalRole.PROMPT, "prompt"),),
             variadic_pairs=(("--add-dir", "/path"),),
         ),
     )

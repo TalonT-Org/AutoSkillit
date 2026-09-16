@@ -46,7 +46,7 @@ from autoskillit.core._plugin_ids import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
-from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
@@ -123,12 +123,17 @@ class _RecordingBackend:
     def session_locator(self) -> object:
         return SimpleNamespace()
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        backend = CodexBackend() if self.name == "codex" else ClaudeCodeBackend()
+        return backend.interactive_ordering_flags()
+
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         self.build_calls.append(kwargs)
         binding = kwargs.get("plugin_binding")
         return CmdSpec(
             cmd=(self.binary_name(),),
             env={},
+            **interactive_launch_metadata(binary=self.binary_name(), launch=kwargs["launch"]),
             inherited_fds=getattr(binding, "inherited_fds", ()),
         )
 

@@ -673,7 +673,7 @@ def test_interactive_validator_rejects_spec_without_declared_route(tmp_path: Pat
     ]
 
 
-def test_interactive_validator_rejects_route_catalog_mismatch(tmp_path: Path) -> None:
+def test_interactive_validator_rejects_missing_managed_catalog_evidence(tmp_path: Path) -> None:
     backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
 
     assert backend.validate_interactive_invocation(replace(spec, managed_skill_catalog=None)) == [

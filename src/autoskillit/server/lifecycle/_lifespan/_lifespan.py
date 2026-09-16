@@ -155,8 +155,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         yield
     finally:
         for task in bg_tasks:
-            if not task.done():
-                task.cancel()
+            task.cancel()
         if bg_tasks:
             try:
                 await _asyncio.gather(*bg_tasks, return_exceptions=True)

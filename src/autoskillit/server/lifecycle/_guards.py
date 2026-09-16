@@ -339,14 +339,14 @@ def _check_input_contracts(
 
         match spec.type:
             case "file_path":
-                resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+                resolved = _input_path(cwd, value)
                 if not resolved.is_file():
                     return gate_error_result(
                         f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
                         f"expected a file, path does not exist or is a directory: {resolved}"
                     )
             case "directory_path":
-                resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+                resolved = _input_path(cwd, value)
                 if not resolved.is_dir():
                     return gate_error_result(
                         f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
@@ -356,9 +356,7 @@ def _check_input_contracts(
                 members = parse_plan_paths(value)
                 missing: list[str] = []
                 for member in members:
-                    member_path = (
-                        Path(cwd) / member if not Path(member).is_absolute() else Path(member)
-                    )
+                    member_path = _input_path(cwd, member)
                     if not member_path.is_file():
                         missing.append(str(member_path))
                 if missing:
@@ -371,6 +369,11 @@ def _check_input_contracts(
                 assert_never(unreachable)
 
     return None
+
+
+def _input_path(cwd: str, token: str) -> Path:
+    path = Path(token)
+    return path if path.is_absolute() else Path(cwd) / token
 
 
 def _provider_configuration_can_use_anthropic(config: Any) -> bool:
@@ -480,6 +483,21 @@ def _profile_to_env(profile: ProviderProfileDef) -> dict[str, str]:
     return env
 
 
+def _resolved_provider_result(
+    provider: str,
+    config_providers: ProvidersConfig,
+    warning_tier: str,
+    missing_result_name: str,
+) -> tuple[str, dict[str, str]]:
+    if provider == "anthropic":
+        return ("anthropic", {})
+    profile = config_providers.resolved_profiles.get(provider)
+    if profile is None:
+        logger.warning("provider_profile_not_found", provider=provider, tier=warning_tier)
+        return (missing_result_name, {})
+    return (provider, _profile_to_env(profile))
+
+
 def _resolve_provider_profile(
     step_name: str,
     recipe_name: str,
@@ -522,15 +540,12 @@ def _resolve_provider_profile(
                 tier="step_override",
                 profile=step_override,
             )
-            if step_override == "anthropic":
-                return ("anthropic", {})
-            profile = config_providers.resolved_profiles.get(step_override)
-            if profile is None:
-                logger.warning(
-                    "provider_profile_not_found", provider=step_override, tier="step_override"
-                )
-                return (step_override, {})
-            return (step_override, _profile_to_env(profile))
+            return _resolved_provider_result(
+                step_override,
+                config_providers,
+                "step_override",
+                step_override,
+            )
 
     # Tier 2: wildcard override (requires recipe context)
     if recipe_name:
@@ -541,41 +556,29 @@ def _resolve_provider_profile(
                 tier="recipe_wildcard",
                 profile=wildcard,
             )
-            if wildcard == "anthropic":
-                return ("anthropic", {})
-            profile = config_providers.resolved_profiles.get(wildcard)
-            if profile is None:
-                logger.warning(
-                    "provider_profile_not_found", provider=wildcard, tier="wildcard_override"
-                )
-                return (wildcard, {})
-            return (wildcard, _profile_to_env(profile))
+            return _resolved_provider_result(
+                wildcard,
+                config_providers,
+                "wildcard_override",
+                wildcard,
+            )
 
     # Tier 3: explicit step-level provider declaration (YAML provider: field)
     if step_provider:
         logger.debug(
             "provider_profile_resolved", tier="step_provider_field", profile=step_provider
         )
-        if step_provider == "anthropic":
-            return ("anthropic", {})
-        profile = config_providers.resolved_profiles.get(step_provider)
-        if profile is None:
-            logger.warning(
-                "provider_profile_not_found", provider=step_provider, tier="step_provider_field"
-            )
-            return ("anthropic", {})
-        return (step_provider, _profile_to_env(profile))
+        return _resolved_provider_result(
+            step_provider,
+            config_providers,
+            "step_provider_field",
+            "anthropic",
+        )
 
     # Tier 4: default
     name = config_providers.default_provider or "anthropic"
     logger.debug("provider_profile_resolved", tier="default", profile=name)
-    if name == "anthropic":
-        return ("anthropic", {})
-    profile = config_providers.resolved_profiles.get(name)
-    if profile is None:
-        logger.warning("provider_profile_not_found", provider=name, tier="default")
-        return (name, {})
-    return (name, _profile_to_env(profile))
+    return _resolved_provider_result(name, config_providers, "default", name)
 
 
 def _resolve_backend_override(

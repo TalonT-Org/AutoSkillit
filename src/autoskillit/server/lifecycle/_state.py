@@ -127,18 +127,21 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
                 },
             )
         accounting_recovery = ctx.context_admission_ledger.recover_all()
-        failed_streams = tuple(
-            health
-            for health in accounting_recovery.stream_healths
-            if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+        failed_stream = next(
+            (
+                health
+                for health in accounting_recovery.stream_healths
+                if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+            ),
+            None,
         )
         if (
             accounting_recovery.status is not ContextAdmissionStorageHealthStatus.HEALTHY
-            or failed_streams
+            or failed_stream is not None
         ):
             failure_reason = accounting_recovery.store_health.failure_reason
-            if failure_reason is None and failed_streams:
-                failure_reason = failed_streams[0].failure_reason
+            if failure_reason is None and failed_stream is not None:
+                failure_reason = failed_stream.failure_reason
             logger.warning(
                 "context_admission_recovery_failed",
                 extra={

@@ -938,13 +938,16 @@ steps:
       worktree_path: ${{ context.work_dir }}
       branch: ${{ context.merge_target }}
     on_result:
+    - when: ${{ result.remote_ref_state }} == absent
+      route: register_clone_unconfirmed
     - when: ${{ result.remote_is_ancestor }} == true
       route: register_clone_unconfirmed
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: "Authoritative re-check before escalating ref-push budget exhaustion. If\
-      \ the local branch is still a clean fast-forward of remote (remote_is_ancestor=true),\
-      \ the work is audit-approved and push-recoverable \u2014 route to register_clone_unconfirmed\
+      \ the exact network ref is absent, or the local branch is still a clean fast-forward\
+      \ of it (remote_is_ancestor=true), the work is audit-approved and push-recoverable\
+      \ \u2014 route to register_clone_unconfirmed\
       \ (preserves the in-progress label for operator recovery) instead of applying\
       \ the fail label. Follows the check_ci_already_passed precedent (implementation.yaml:1472)\
       \ \u2014 the pattern of an authoritative re-check before escalating is what's\

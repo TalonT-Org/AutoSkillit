@@ -188,13 +188,13 @@ def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:
 
 
 def check_ref_state(worktree_path: str, branch: str) -> dict[str, str]:
-    """Report whether ``branch`` is a clean fast-forward of the remote tracking ref.
+    """Report the network ref state and whether it is an ancestor of ``branch``.
 
     Authoritative re-check used by ``verify_ref_push_exhaustion`` after the
     ref-push budget is exhausted. Runs ``git merge-base --is-ancestor`` to test
-    whether the local ``branch``'s tip has the remote tracking ref as a
-    strict ancestor (i.e. local is ahead of or equal to remote — push is a
-    no-op or trivially recoverable). Returns ``{"remote_is_ancestor": "true"|"false"}``.
+    whether the local ``branch``'s tip has the authoritative network ref as
+    an ancestor (i.e. local is ahead of or equal to remote — push is a no-op
+    or trivially recoverable).
 
     Used by the recipe to distinguish a benign ref-push exhaustion (local
     clean ahead of remote — push failure is recoverable) from a genuine
@@ -203,43 +203,72 @@ def check_ref_state(worktree_path: str, branch: str) -> dict[str, str]:
     """
     import subprocess  # noqa: PLC0415
 
-    # Resolve the local branch tip and its remote tracking ref.
-    local_tip = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", branch],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
+    from autoskillit.core import (  # noqa: PLC0415
+        local_branch_ref,
+        resolve_clone_remote_name_sync,
+        verify_qualified_ref_sync,
     )
-    if local_tip.returncode != 0:
-        return {"remote_is_ancestor": "false"}
-    remote_ref = f"origin/{branch}"
-    remote_tip = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", remote_ref],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
-    )
+
+    repo_path = Path(worktree_path)
+    local_tip = verify_qualified_ref_sync(repo_path, local_branch_ref(branch), timeout=60)
+    if local_tip is None:
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+
+    remote = resolve_clone_remote_name_sync(repo_path)
+    try:
+        remote_url = subprocess.run(
+            ["git", "remote", "get-url", remote],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+    if remote_url.returncode != 0 or remote_url.stdout.strip().startswith("file://"):
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+
+    qualified_remote_ref = local_branch_ref(branch)
+    try:
+        remote_tip = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "--refs", remote, qualified_remote_ref],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+    if remote_tip.returncode == 2:
+        return {"remote_ref_state": "absent", "remote_is_ancestor": "false"}
     if remote_tip.returncode != 0:
-        return {"remote_is_ancestor": "false"}
-    ancestor = subprocess.run(
-        [
-            "git",
-            "merge-base",
-            "--is-ancestor",
-            remote_tip.stdout.strip(),
-            local_tip.stdout.strip(),
-        ],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
-    )
-    return {"remote_is_ancestor": "true" if ancestor.returncode == 0 else "false"}
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+
+    matching_rows = [
+        line.split("\t", 1)[0]
+        for line in remote_tip.stdout.splitlines()
+        if line.endswith(f"\t{qualified_remote_ref}") and "\t" in line
+    ]
+    if len(matching_rows) != 1:
+        return {"remote_ref_state": "unknown", "remote_is_ancestor": "false"}
+
+    try:
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", matching_rows[0], local_tip.sha],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return {"remote_ref_state": "present", "remote_is_ancestor": "false"}
+    return {
+        "remote_ref_state": "present",
+        "remote_is_ancestor": "true" if ancestor.returncode == 0 else "false",
+    }
 
 
 def close_issue_already_done(issue_url: str) -> dict[str, str]:

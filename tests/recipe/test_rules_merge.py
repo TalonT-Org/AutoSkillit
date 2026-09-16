@@ -980,29 +980,40 @@ def test_check_ref_push_loop_max_exceeded_routes_through_verify() -> None:
         )
 
 
-def test_verify_ref_push_exhaustion_routes_benign_state_to_register_clone() -> None:
-    """verify_ref_push_exhaustion routes remote_is_ancestor=true to register_clone_unconfirmed.
-
-    When the local branch is a clean fast-forward of remote, the work is
-    audit-approved and push-recoverable. The recipe must preserve the
-    in-progress label (route to register_clone_unconfirmed), not apply the
-    fail label.
-    """
+@pytest.mark.parametrize(
+    ("remote_ref_state", "remote_is_ancestor", "expected_route_index"),
+    [
+        ("absent", "false", 0),
+        ("present", "true", 1),
+        ("present", "false", 2),
+        ("unknown", "false", 2),
+    ],
+    ids=["absent", "present-ancestor", "present-diverged", "unknown"],
+)
+def test_verify_ref_push_exhaustion_routes_each_remote_ref_state(
+    remote_ref_state: str,
+    remote_is_ancestor: str,
+    expected_route_index: int,
+) -> None:
+    """The recovery recipe distinguishes absent, present, and unknown probes."""
     recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
 
     verify_step = recipe.steps["verify_ref_push_exhaustion"]
     assert verify_step.on_result is not None, (
         "verify_ref_push_exhaustion must declare on_result conditions"
     )
-    ancestry_route = None
-    for cond in verify_step.on_result.conditions:
-        if cond.when and "remote_is_ancestor" in cond.when:
-            ancestry_route = cond.route
-            break
-    assert ancestry_route == "register_clone_unconfirmed", (
-        f"verify_ref_push_exhaustion must route remote_is_ancestor=true to "
-        f"register_clone_unconfirmed (preserves in-progress label); "
-        f"got {ancestry_route!r}"
+    routes = [(condition.when, condition.route) for condition in verify_step.on_result.conditions]
+    assert routes == [
+        ("${{ result.remote_ref_state }} == absent", "register_clone_unconfirmed"),
+        ("${{ result.remote_is_ancestor }} == true", "register_clone_unconfirmed"),
+        (None, "release_issue_failure"),
+    ]
+
+    selected_route = routes[expected_route_index][1]
+    assert selected_route == (
+        "register_clone_unconfirmed"
+        if remote_ref_state == "absent" or remote_is_ancestor == "true"
+        else "release_issue_failure"
     )
 
 

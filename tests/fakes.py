@@ -1502,7 +1502,7 @@ class MockSubprocessRunner(SubprocessRunner):
     """
 
     def __init__(self) -> None:
-        self._queue: deque[SubprocessResult] = deque()
+        self._queue: deque[tuple[SubprocessResult, list[str] | None]] = deque()
         self._default = SubprocessResult(
             returncode=0,
             stdout="",
@@ -1513,9 +1513,9 @@ class MockSubprocessRunner(SubprocessRunner):
         self.call_args_list: list[tuple] = []  # type: ignore[type-arg]
         self.last_pty_mode: bool | None = None
 
-    def push(self, result: SubprocessResult) -> None:
+    def push(self, result: SubprocessResult, *, expect: list[str] | None = None) -> None:
         """Queue a result to be returned by the next __call__."""
-        self._queue.append(result)
+        self._queue.append((result, list(expect) if expect is not None else None))
 
     def set_default(self, result: SubprocessResult) -> None:
         """Set the result returned when the queue is empty."""
@@ -1537,7 +1537,12 @@ class MockSubprocessRunner(SubprocessRunner):
         kwargs["on_process_reaped"] = on_process_reaped
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
         self.last_pty_mode = bool(kwargs.get("pty_mode", False))
-        result = self._queue.popleft() if self._queue else self._default
+        if self._queue:
+            result, expected = self._queue.popleft()
+        else:
+            result, expected = self._default, None
+        if expected is not None:
+            assert cmd == expected, f"subprocess argv mismatch: expected {expected!r}, got {cmd!r}"
         if callable(on_process_spawned) and result.pid > 0:
             on_process_spawned(result.pid, result.process_group_id or result.pid)
         on_pid_resolved = kwargs.get("on_pid_resolved")

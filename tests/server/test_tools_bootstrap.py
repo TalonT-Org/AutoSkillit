@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -690,11 +691,18 @@ class TestCreateAndPublishBranch:
         monkeypatch: pytest.MonkeyPatch,
     ):
         # ls-remote: empty (branch available)
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
         # branch --show-current
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
         # git checkout -b
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -715,13 +723,23 @@ class TestCreateAndPublishBranch:
     @pytest.mark.anyio
     async def test_create_and_publish_branch_collision(self, tool_ctx_kitchen_open, tmp_path):
         # ls-remote: branch exists
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
         # ls-remote: suffix -2 is free
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42-2"],
+        )
         # branch --show-current
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
         # git checkout -b
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42-2"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -743,9 +761,16 @@ class TestCreateAndPublishBranch:
         tmp_path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {
             "success": False,
@@ -783,9 +808,17 @@ class TestCreateAndPublishBranch:
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_no_issue(self, tool_ctx_kitchen_open, tmp_path):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        branch_name = f"impl/{date.today().strftime('%Y%m%d')}"
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", f"refs/heads/{branch_name}"],
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", branch_name]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -803,9 +836,15 @@ class TestCreateAndPublishBranch:
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_timings(self, tool_ctx_kitchen_open, tmp_path):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "ls-remote", "origin", "refs/heads/x/1"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "x/1"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr

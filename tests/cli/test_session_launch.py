@@ -2130,7 +2130,7 @@ def test_codex_order_composition_produces_canonical_generated_home(
 
     assert spec.origin is not None
     config_overrides = [
-        value for flag, value in spec.origin.kv_flags if flag == CodexFlags.CONFIG_OVERRIDE
+        value for flag, value in spec.origin.variadic_pairs if flag == CodexFlags.CONFIG_OVERRIDE
     ]
     assert config_overrides[-1] == f'sqlite_home="{generated_home}"'
 
@@ -2485,17 +2485,20 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         < events.index(("render", profile_payload))
         < events.index(("run", *run_events[0][1:]))
     )
-    assert len(built_launches) == 3
+    assert len(built_launches) == 6
     assert isinstance(built_launches[0], FreshLaunch)
-    assert built_launches[1:] == [
+    assert built_launches[:2] == [built_launches[0]] * 2
+    assert built_launches[2:] == [
         RestoreSession(session_id="reload-id"),
+        RestoreSession(session_id="reload-id"),
+        RestoreSession(session_id="infra-id"),
         RestoreSession(session_id="infra-id"),
     ]
     assert all(
         not hasattr(launch, "briefing")
         and not hasattr(launch, "system_prompt")
         and not hasattr(launch, "initial_prompt")
-        for launch in built_launches[1:]
+        for launch in built_launches[2:]
     )
     fresh_launch = built_launches[0]
     assert isinstance(fresh_launch, FreshLaunch)

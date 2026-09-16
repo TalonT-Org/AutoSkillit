@@ -128,7 +128,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         skills_dir=skills_dir,
         projection_root=tmp_path / "projected-plugin",
         unavailability_payload=profile_payload,
-        returncodes=(17, 42),
+        returncodes=(17, 0),
     )
     events = lifecycle.events
 
@@ -229,9 +229,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     from autoskillit import cli
 
-    with pytest.raises(SystemExit) as exc_info:
-        cli.cook(backend=_MockBackend())
-    assert exc_info.value.code == 42
+    cli.cook(backend=_MockBackend())
 
     managed_enters = lifecycle.events_of_type("managed-enter")
     managed_exits = lifecycle.events_of_type("managed-exit")

@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_constants import SESSION_ADD_DIR_SUBDIR
@@ -24,6 +24,7 @@ from ._type_enums import (
     SkillDiscoveryMechanism,
     UpstreamSupportStatus,
 )
+from ._type_execution_identity import CodexRuntimeSpec, ExecutableLaunchBinding
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -71,44 +72,6 @@ CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
     "Automatic Codex context compaction was blocked. Start an explicit new session, "
     "or compact manually and deliberately resume."
 )
-
-
-@dataclass(frozen=True, slots=True)
-class CodexRuntimeSpec:
-    """Immutable Codex runtime policy selected before launch construction."""
-
-    auto_compaction_policy: Literal["deny"] = "deny"
-    context_window_tokens: int | None = None
-    auto_compact_threshold_tokens: int | None = None
-
-    def __post_init__(self) -> None:
-        if self.auto_compaction_policy != "deny":
-            raise ValueError(
-                f"auto_compaction_policy must be 'deny', got {self.auto_compaction_policy!r}."
-            )
-        for field_name in (
-            "context_window_tokens",
-            "auto_compact_threshold_tokens",
-        ):
-            value = getattr(self, field_name)
-            if value is not None and (
-                not isinstance(value, int) or isinstance(value, bool) or value <= 0
-            ):
-                raise ValueError(f"{field_name}={value!r} must be a positive integer or null.")
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutableLaunchBinding:
-    """Canonical executable and sealed environment for one interactive launch."""
-
-    path: Path
-    device: int
-    inode: int
-    size: int
-    mtime_ns: int
-    file_sha256: str
-    cwd: Path
-    launch_environment: Mapping[str, str] = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)

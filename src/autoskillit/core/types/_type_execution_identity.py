@@ -7,9 +7,11 @@ without introducing the ``_type_backend`` <-> ``_type_results`` cycle.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import NamedTuple, TypedDict
+from pathlib import Path
+from typing import Literal, NamedTuple, TypedDict
 
 __all__ = [
     "BackendAuthorityKind",
@@ -17,9 +19,49 @@ __all__ = [
     "ChildExecutionIdentity",
     "ChildExecutionIdentityDict",
     "ChildOutcomeDict",
+    "CodexRuntimeSpec",
+    "ExecutableLaunchBinding",
     "ExecutionIdentity",
     "ExecutionIdentityDict",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class CodexRuntimeSpec:
+    """Immutable Codex runtime policy selected before launch construction."""
+
+    auto_compaction_policy: Literal["deny"] = "deny"
+    context_window_tokens: int | None = None
+    auto_compact_threshold_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.auto_compaction_policy != "deny":
+            raise ValueError(
+                f"auto_compaction_policy must be 'deny', got {self.auto_compaction_policy!r}."
+            )
+        for field_name in (
+            "context_window_tokens",
+            "auto_compact_threshold_tokens",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            ):
+                raise ValueError(f"{field_name}={value!r} must be a positive integer or null.")
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutableLaunchBinding:
+    """Canonical executable and sealed environment for one interactive launch."""
+
+    path: Path
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+    file_sha256: str
+    cwd: Path
+    launch_environment: Mapping[str, str] = field(repr=False, compare=False)
 
 
 class BackendAuthorityKind(StrEnum):

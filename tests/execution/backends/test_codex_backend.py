@@ -1343,12 +1343,14 @@ class TestCodexBuildInteractiveCmd:
         assert str(CodexFlags.DANGEROUSLY_BYPASS) == "--dangerously-bypass-approvals-and-sandbox"
 
     def test_no_resume_produces_correct_base_command(self) -> None:
+        from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
         spec = CodexBackend().build_interactive_cmd()
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
-        assert spec.skill_discovery_route is None
-        assert "CODEX_HOME" not in spec.env
+        assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
     def test_named_resume_produces_resume_subcommand_with_session_id(self) -> None:
         from autoskillit.core import NamedResume
@@ -1443,7 +1445,7 @@ class TestCodexBuildInteractiveCmd:
             skill_entries=(("projected-skill", "projected-skill/SKILL.md"),),
         )
 
-        spec = CodexBackend().build_interactive_cmd(plugin_binding=binding)
+        spec = _CodexBackend().build_interactive_cmd(plugin_binding=binding)
 
         assert spec.skill_discovery_route is CODEX_PROJECTED_HOME_ROUTE
 

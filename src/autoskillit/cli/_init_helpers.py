@@ -547,7 +547,8 @@ def _register_backend_integrations(
 def _configure_github_repo(
     project_dir: Path,
     *,
-    colors: tuple[str, str, str, str, str, str],
+    warning_color: str,
+    reset_color: str,
 ) -> str | None:
     """Prompt for and persist github.default_repo when stdin is interactive."""
     if not sys.stdin.isatty():
@@ -557,7 +558,6 @@ def _configure_github_repo(
     if not github_repo:
         return None
 
-    *_unused, _Y, _R = colors
     config_path = project_dir / ".autoskillit" / "config.yaml"
     if config_path.exists():
         try:
@@ -566,14 +566,20 @@ def _configure_github_repo(
                 config_data.setdefault("github", {})["default_repo"] = github_repo
                 write_config_layer(config_path, config_data)
         except (OSError, YAMLError) as exc:
-            print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
+            print(
+                f"  {warning_color}Warning:{reset_color} "
+                f"could not write github.default_repo: {exc}"
+            )
     else:
         try:
             autoskillit_dir = project_dir / ".autoskillit"
             autoskillit_dir.mkdir(exist_ok=True)
             write_config_layer(config_path, {"github": {"default_repo": github_repo}})
         except (OSError, YAMLError) as exc:
-            print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
+            print(
+                f"  {warning_color}Warning:{reset_color} "
+                f"could not write github.default_repo: {exc}"
+            )
     return github_repo
 
 
@@ -681,7 +687,11 @@ def _register_all(
         backend=backend,
         mcp_tool_timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
     )
-    github_repo = _configure_github_repo(project_dir, colors=colors)
+    github_repo = _configure_github_repo(
+        project_dir,
+        warning_color=colors[4],
+        reset_color=colors[5],
+    )
 
     _create_secrets_template(project_dir)
     _render_init_summary(

@@ -98,7 +98,10 @@ def _is_uv_run_pytest(args: list[str]) -> bool:
         if re.match(r"python3?$", run_basename):
             remaining = args[idx + 2 :]
             return len(remaining) >= 2 and remaining[0] == "-m" and remaining[1] in _PYTEST_NAMES
-        return False
+        # Non-flag, non-pytest, non-python3 token: not a pytest invocation
+        # itself but keep scanning — pytest (or another match) may appear
+        # later in the arg list (e.g. `uv run helper.py pytest`).
+        continue
     return False
 
 

@@ -135,6 +135,22 @@ class TestDenyPatterns:
         output = _run_hook(event, monkeypatch, headless=True)
         assert _is_denied(output)
 
+    def test_blocks_uv_run_pytest_after_helper_script(self, monkeypatch):
+        # Regression: `_is_uv_run_pytest` previously short-circuited on the
+        # first non-flag, non-pytest, non-python3 token. Inputs like
+        # `uv run helper.py pytest` should still resolve to a pytest
+        # invocation because the second token matches.
+        event = _build_event("uv run helper.py pytest")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_blocks_uv_run_pytest_after_global_flag(self, monkeypatch):
+        # Same regression: a non-pytest positional after a global flag
+        # should not suppress a later pytest match.
+        event = _build_event("uv run --foo bar pytest")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
     def test_blocks_pytest_after_cd(self, monkeypatch):
         event = _build_event("cd /some/path && pytest")
         output = _run_hook(event, monkeypatch, headless=True)

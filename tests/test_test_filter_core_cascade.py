@@ -230,6 +230,7 @@ class TestModuleCascadeCore:
             "context_admission_generation",
             "context_admission_expiry_rollover",
             "_delivery_bounds",
+            "coverage_schema",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

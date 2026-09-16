@@ -120,22 +120,22 @@ def _fmt_generic_list(key: str, value: list, *, artifact_backed: bool) -> list[s
     visible = value[:20] if artifact_backed else value
     if not value:
         return [f"{key}: []"]
-    if all(isinstance(item, str) for item in value):
-        return [f"{key}:", *(f"  - {item}" for item in visible)]
-
     lines = [f"{key}:"]
-    for item in visible:
-        if isinstance(item, dict):
-            kvs = [
-                f"{nested_key}: "
-                f"{_bound_artifact_text(str(nested_value), 120, artifact_backed=artifact_backed)}"
-                for nested_key, nested_value in item.items()
-            ]
-            lines.append(f"  - {', '.join(kvs)}")
-        else:
-            rendered = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
-            rendered = _bound_artifact_text(rendered, 2000, artifact_backed=artifact_backed)
-            lines.append(f"  - {rendered}")
+    if all(isinstance(item, str) for item in value):
+        lines.extend(f"  - {item}" for item in visible)
+    else:
+        for item in visible:
+            if isinstance(item, dict):
+                kvs = [
+                    f"{nested_key}: "
+                    + _bound_artifact_text(str(nested_value), 120, artifact_backed=artifact_backed)
+                    for nested_key, nested_value in item.items()
+                ]
+                lines.append(f"  - {', '.join(kvs)}")
+            else:
+                rendered = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+                rendered = _bound_artifact_text(rendered, 2000, artifact_backed=artifact_backed)
+                lines.append(f"  - {rendered}")
     if artifact_backed and len(value) > 20:
         lines.append(f"  ... and {len(value) - 20} more")
     return lines

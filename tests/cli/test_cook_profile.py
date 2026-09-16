@@ -31,6 +31,7 @@ from autoskillit.core import (
     SkillSemanticPlan,
     SkillSource,
     ValidatedAddDir,
+    atomic_write,
     pkg_root,
 )
 from autoskillit.core.runtime.session_registry import registry_path
@@ -124,6 +125,10 @@ def _run_cook(
     )
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
+    claude_shim = generated_home.parent / "bin" / "claude"
+    claude_shim.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(claude_shim, "#!/bin/sh\nexit 0\n")
+    claude_shim.chmod(0o755)
 
     @contextmanager
     def managed_session(
@@ -142,7 +147,7 @@ def _run_cook(
 
     mock_mgr.managed_session.side_effect = managed_session
     with (
-        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("shutil.which", return_value=str(claude_shim)),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         # cook() derives project_dir via the shared git-toplevel helper; pin it so
         # the test does not depend on the caller's checkout.

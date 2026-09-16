@@ -746,6 +746,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             events.append(("managed-exit", launch_id))
 
     manager.managed_session.side_effect = managed_session
+    claude_shim = tmp_path / "claude"
+    atomic_write(claude_shim, "#!/bin/sh\nexit 0\n")
+    claude_shim.chmod(0o755)
 
     class _Backend:
         name = "claude-code"
@@ -814,7 +817,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         cli.cook(backend=_Backend())
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(claude_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     monkeypatch.setattr(

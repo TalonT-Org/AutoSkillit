@@ -35,6 +35,7 @@ from ._detect import (
     detect_uncommitted_changes,
     detect_unpublished_branch,
 )
+from ._refs import BaseBranchResolution, ensure_base_branch_local
 from ._registry import (
     CloneRegistry,
     CloneStatus,
@@ -61,6 +62,7 @@ logger = get_logger(__name__)
 
 __all__ = [
     "CleanupResult",
+    "BaseBranchResolution",
     "CloneRegistry",
     "CloneSourceResolution",
     "CloneStatus",
@@ -79,6 +81,7 @@ __all__ = [
     "detect_source_dir",
     "detect_uncommitted_changes",
     "detect_unpublished_branch",
+    "ensure_base_branch_local",
     "list_git_worktrees",
     "push_to_remote",
     "read_registry",

@@ -26,6 +26,27 @@ def _write_settings_data(settings_path: Path, data: dict) -> None:
     atomic_write(settings_path, json.dumps(data, indent=2))
 
 
+def _find_autoskillit_hook_commands_in_event(entries: object) -> tuple[str, ...]:
+    """Return AutoSkillit commands from one event's ordered hook entries."""
+    if not isinstance(entries, list):
+        return ()
+
+    commands: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_hooks = entry.get("hooks")
+        if not isinstance(entry_hooks, list):
+            continue
+        for hook in entry_hooks:
+            if not isinstance(hook, dict):
+                continue
+            command = hook.get("command")
+            if isinstance(command, str) and _is_autoskillit_hook_command(command):
+                commands.append(command)
+    return tuple(commands)
+
+
 def _find_autoskillit_hook_commands(data: object) -> tuple[str, ...]:
     """Return AutoSkillit hook commands from the canonical settings shape."""
     if not isinstance(data, dict):
@@ -36,20 +57,7 @@ def _find_autoskillit_hook_commands(data: object) -> tuple[str, ...]:
 
     commands: list[str] = []
     for entries in hooks.values():
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            entry_hooks = entry.get("hooks")
-            if not isinstance(entry_hooks, list):
-                continue
-            for hook in entry_hooks:
-                if not isinstance(hook, dict):
-                    continue
-                command = hook.get("command")
-                if isinstance(command, str) and _is_autoskillit_hook_command(command):
-                    commands.append(command)
+        commands.extend(_find_autoskillit_hook_commands_in_event(entries))
     return tuple(commands)
 
 

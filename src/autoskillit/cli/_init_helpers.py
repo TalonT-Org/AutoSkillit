@@ -498,122 +498,97 @@ def _print_next_steps(*, context: str = "install") -> None:
         print(f"  {_D}{i}.{_R} {_G}{cmd}{_R}  {_D}{desc}{_R}")
 
 
-def _register_all(
-    scope: str, project_dir: Path, *, backend: CodingAgentBackend | None = None
-) -> None:
-    """Ensure project temp dir, register hooks and MCP server, print summary."""
-    import autoskillit.core.paths as _core_paths
-    from autoskillit.cli._hooks import (
-        _claude_settings_path,
-        _evict_stale_autoskillit_hooks,
-        sweep_all_scopes_for_orphans,
-        sync_hooks_to_settings,
-    )
-    from autoskillit.config import load_config
-    from autoskillit.core import ensure_project_temp
-    from autoskillit.execution import get_backend
-
-    # Refuse to register from inside the autoskillit source tree — this would
-    # plant source-tree absolute paths in the project scope.
-    if project_dir.resolve().is_relative_to(_core_paths.pkg_root().resolve()):
-        from autoskillit.cli.app import CliError
-
-        raise CliError(
-            "Refusing to run `autoskillit init` from inside the autoskillit source tree — "
-            "this would plant source-tree absolute paths in your project scope. "
-            "`cd` to a different directory first."
-        )
-
-    if _core_paths.is_git_worktree(_core_paths.pkg_root()):
-        from autoskillit.cli.app import CliError
-
-        raise CliError(
-            "Refusing to run `autoskillit init` from a git linked worktree — "
-            "hook paths would be written from a transient pkg_root(). "
-            "Use `task install-worktree` instead."
-        )
-
-    # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.
-    sweep_all_scopes_for_orphans(project_dir)
-
-    _B, _C, _D, _G, _Y, _R = _colors()
-
-    ensure_project_temp(project_dir)
-
-    _cfg = None
-    try:
-        _cfg = load_config(project_dir)
-        if backend is None:
-            backend = get_backend(_cfg.agent_backend.backend)
-    except Exception:
-        logger.warning("backend resolution failed, defaulting to claude-code", exc_info=True)
-        if backend is None:
-            backend = get_backend("claude-code")
-        if _cfg is None:
-            # Preserve the idle-abort ceiling even when config load failed:
-            # fall back to a freshly-constructed AutomationConfig (which carries
-            # the canonical mcp_tool_timeout_sec default) instead of passing
-            # None and silently omitting Claude Code's `timeout` field.
-            from autoskillit.config import AutomationConfig
-
-            _cfg = AutomationConfig()
-
+def _register_backend_integrations(
+    scope: str,
+    project_dir: Path,
+    *,
+    backend: CodingAgentBackend,
+    mcp_tool_timeout_sec: float,
+) -> tuple[bool | None, str]:
+    """Register the resolved backend's hooks, plugin, and MCP integrations."""
     if backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch()
         if readiness.errors:
             raise RuntimeError(
                 "Backend pre-launch configuration failed: " + "; ".join(readiness.errors)
             )
-        plugin_ok = None
-        codex_status = "ok"
+        return None, "ok"
+
+    from autoskillit.cli._hooks import (
+        _claude_settings_path,
+        _evict_stale_autoskillit_hooks,
+        sync_hooks_to_settings,
+    )
+
+    settings_path = _claude_settings_path(scope, cwd=project_dir)
+    _evict_stale_autoskillit_hooks(settings_path)
+    sync_hooks_to_settings(settings_path)
+
+    plugin_ok = _is_plugin_installed(capabilities=backend.capabilities)
+    if not plugin_ok:
+        _register_mcp_server(
+            _user_claude_json_path(),
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
     else:
-        settings_path = _claude_settings_path(scope, cwd=project_dir)
-        _evict_stale_autoskillit_hooks(settings_path)
-        sync_hooks_to_settings(settings_path)
+        evict_direct_mcp_entry(_user_claude_json_path())
 
-        plugin_ok = _is_plugin_installed(capabilities=backend.capabilities)
-        if not plugin_ok:
-            _register_mcp_server(
-                _user_claude_json_path(),
-                mcp_tool_timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
-            )
-        else:
-            evict_direct_mcp_entry(_user_claude_json_path())
+    from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
 
-        from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+    try:
+        codex_registered = ensure_codex_mcp_registered()
+        codex_status = "registered" if codex_registered else "ok"
+    except Exception:
+        codex_status = "failed"
+        logger.warning("Codex MCP registration failed", exc_info=True)
+    return plugin_ok, codex_status
 
+
+def _configure_github_repo(
+    project_dir: Path,
+    *,
+    colors: tuple[str, str, str, str, str, str],
+) -> str | None:
+    """Prompt for and persist github.default_repo when stdin is interactive."""
+    if not sys.stdin.isatty():
+        return None
+
+    github_repo = _prompt_github_repo()
+    if not github_repo:
+        return None
+
+    *_unused, _Y, _R = colors
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    if config_path.exists():
         try:
-            codex_registered = ensure_codex_mcp_registered()
-            codex_status = "registered" if codex_registered else "ok"
-        except Exception:
-            codex_status = "failed"
-            logger.warning("Codex MCP registration failed", exc_info=True)
+            config_data = load_yaml(config_path) or {}
+            if not config_data.get("github", {}).get("default_repo"):
+                config_data.setdefault("github", {})["default_repo"] = github_repo
+                write_config_layer(config_path, config_data)
+        except (OSError, YAMLError) as exc:
+            print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
+    else:
+        try:
+            autoskillit_dir = project_dir / ".autoskillit"
+            autoskillit_dir.mkdir(exist_ok=True)
+            write_config_layer(config_path, {"github": {"default_repo": github_repo}})
+        except (OSError, YAMLError) as exc:
+            print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
+    return github_repo
 
-    # Prompt for github.default_repo if running interactively
-    github_repo = None
-    if sys.stdin.isatty():
-        github_repo = _prompt_github_repo()
-        if github_repo:
-            config_path = project_dir / ".autoskillit" / "config.yaml"
-            if config_path.exists():
-                try:
-                    config_data = load_yaml(config_path) or {}
-                    if not config_data.get("github", {}).get("default_repo"):
-                        config_data.setdefault("github", {})["default_repo"] = github_repo
-                        write_config_layer(config_path, config_data)
-                except (OSError, YAMLError) as exc:
-                    print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
-            else:
-                try:
-                    autoskillit_dir = project_dir / ".autoskillit"
-                    autoskillit_dir.mkdir(exist_ok=True)
-                    write_config_layer(config_path, {"github": {"default_repo": github_repo}})
-                except (OSError, YAMLError) as exc:
-                    print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
 
-    _create_secrets_template(project_dir)
-
-    # --- Summary block ---
+def _render_init_summary(
+    scope: str,
+    project_dir: Path,
+    *,
+    backend: CodingAgentBackend,
+    github_repo: str | None,
+    plugin_ok: bool | None,
+    codex_status: str,
+    colors: tuple[str, str, str, str, str, str],
+) -> None:
+    """Render the project initialization summary."""
+    _B, _C, _D, _G, _Y, _R = colors
     print()
     from autoskillit import __version__
 
@@ -643,3 +618,78 @@ def _register_all(
 
     print()
     _print_next_steps(context="init")
+
+
+def _register_all(
+    scope: str, project_dir: Path, *, backend: CodingAgentBackend | None = None
+) -> None:
+    """Ensure project temp dir, register hooks and MCP server, print summary."""
+    import autoskillit.core.paths as _core_paths
+    from autoskillit.cli._hooks import sweep_all_scopes_for_orphans
+    from autoskillit.config import load_config
+    from autoskillit.core import ensure_project_temp
+    from autoskillit.execution import get_backend
+
+    # Refuse to register from inside the autoskillit source tree — this would
+    # plant source-tree absolute paths in the project scope.
+    if project_dir.resolve().is_relative_to(_core_paths.pkg_root().resolve()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from inside the autoskillit source tree — "
+            "this would plant source-tree absolute paths in your project scope. "
+            "`cd` to a different directory first."
+        )
+
+    if _core_paths.is_git_worktree(_core_paths.pkg_root()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from a git linked worktree — "
+            "hook paths would be written from a transient pkg_root(). "
+            "Use `task install-worktree` instead."
+        )
+
+    # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.
+    sweep_all_scopes_for_orphans(project_dir)
+
+    colors = _colors()
+
+    ensure_project_temp(project_dir)
+
+    _cfg = None
+    try:
+        _cfg = load_config(project_dir)
+        if backend is None:
+            backend = get_backend(_cfg.agent_backend.backend)
+    except Exception:
+        logger.warning("backend resolution failed, defaulting to claude-code", exc_info=True)
+        if backend is None:
+            backend = get_backend("claude-code")
+        if _cfg is None:
+            # Preserve the idle-abort ceiling even when config load failed:
+            # fall back to a freshly-constructed AutomationConfig (which carries
+            # the canonical mcp_tool_timeout_sec default) instead of passing
+            # None and silently omitting Claude Code's `timeout` field.
+            from autoskillit.config import AutomationConfig
+
+            _cfg = AutomationConfig()
+
+    plugin_ok, codex_status = _register_backend_integrations(
+        scope,
+        project_dir,
+        backend=backend,
+        mcp_tool_timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
+    )
+    github_repo = _configure_github_repo(project_dir, colors=colors)
+
+    _create_secrets_template(project_dir)
+    _render_init_summary(
+        scope,
+        project_dir,
+        backend=backend,
+        github_repo=github_repo,
+        plugin_ok=plugin_ok,
+        codex_status=codex_status,
+        colors=colors,
+    )

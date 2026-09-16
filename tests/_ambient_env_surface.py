@@ -990,7 +990,7 @@ FORWARDING_SITES: dict[str, str] = {
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:309": (
+    "cli/app.py:311": (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),

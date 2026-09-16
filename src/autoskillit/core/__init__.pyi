@@ -92,6 +92,10 @@ from .fs_observation import scan_observed as scan_observed
 from .git.bash_write_targets import contains_test_gate_command as contains_test_gate_command
 from .git.bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .git.branch_guard import is_protected_branch as is_protected_branch
+from .git.git_refs import ResolvedRef as ResolvedRef
+from .git.git_refs import local_branch_ref as local_branch_ref
+from .git.git_refs import remote_tracking_ref as remote_tracking_ref
+from .git.git_refs import verify_qualified_ref_sync as verify_qualified_ref_sync
 from .git.git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
 from .git.git_remote import GitHubRepositoryRef as GitHubRepositoryRef
 from .git.git_remote import RemoteIdentityProbe as RemoteIdentityProbe
@@ -101,10 +105,6 @@ from .git.git_remote import resolve_clone_remote_name_sync as resolve_clone_remo
 from .git.git_remote import (
     resolve_repository_remote_identity_sync as resolve_repository_remote_identity_sync,
 )
-from .git.git_refs import ResolvedRef as ResolvedRef
-from .git.git_refs import local_branch_ref as local_branch_ref
-from .git.git_refs import remote_tracking_ref as remote_tracking_ref
-from .git.git_refs import verify_qualified_ref_sync as verify_qualified_ref_sync
 from .git.github_url import _parse_issue_ref as _parse_issue_ref
 from .git.github_url import normalize_owner_repo as normalize_owner_repo
 from .git.github_url import parse_github_repo as parse_github_repo

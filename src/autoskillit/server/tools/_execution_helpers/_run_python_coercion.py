@@ -116,19 +116,16 @@ def _coerce_scalar(val: object, annotation: object) -> object:
         if len(non_none) == 1:
             actual = non_none[0]
 
-    conversion: typing.Callable[[typing.Any], object]
-    if actual is str and isinstance(val, (int, float)):
-        conversion = str
-    elif actual is int and isinstance(val, str):
-        conversion = int
-    elif actual is float and isinstance(val, (str, int)):
-        conversion = float
-    else:
-        return val
     try:
-        return conversion(val)
+        if actual is str and isinstance(val, (int, float)):
+            return str(val)
+        if actual is int and isinstance(val, str):
+            return int(val)
+        if actual is float and isinstance(val, (str, int)):
+            return float(val)
     except ValueError:
-        return val
+        pass
+    return val
 
 
 def _assemble_trusted_args(

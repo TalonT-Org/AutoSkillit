@@ -12,29 +12,13 @@ import autoskillit.server.tools.tools_workspace as tools_workspace
 from autoskillit.core import WorkspaceOutcomeKind
 from autoskillit.server.tools.tools_workspace import test_check
 from tests.conftest import _make_result
+from tests.server._outcome_ledger_fakes import _FailingLedger, _RecordingLedger
 from tests.server._recipe_segment_test_helpers import (
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-class _RecordingLedger:
-    def __init__(self) -> None:
-        self.records = []
-
-    def record(self, record) -> None:
-        self.records.append(record)
-
-
-class _FailingLedger:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def record(self, record) -> None:
-        self.calls += 1
-        raise OSError("ledger unavailable")
 
 
 def _worktree(tmp_path):

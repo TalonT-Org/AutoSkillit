@@ -13,25 +13,9 @@ from autoskillit.core import CommitFailureClass, WorkspaceOutcomeKind
 from autoskillit.server.git import validate_commit_paths
 from autoskillit.server.tools.tools_workspace import commit_files
 from tests.conftest import _make_result
+from tests.server._outcome_ledger_fakes import _FailingLedger, _RecordingLedger
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-class _RecordingLedger:
-    def __init__(self) -> None:
-        self.records = []
-
-    def record(self, record) -> None:
-        self.records.append(record)
-
-
-class _FailingLedger:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def record(self, record) -> None:
-        self.calls += 1
-        raise OSError("ledger unavailable")
 
 
 # ---------------------------------------------------------------------------

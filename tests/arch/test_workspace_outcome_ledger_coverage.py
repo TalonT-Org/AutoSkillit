@@ -109,9 +109,12 @@ def _audit_function(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     expected: _ReturnInventory,
 ) -> list[str]:
+    # Walk only direct children of the function body (not all descendants) so
+    # nested helpers in test_check/commit_files don't get counted as top-level
+    # per-tool _finish closures.
     helpers = [
         node
-        for node in ast.walk(function)
+        for node in function.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_finish"
     ]
     outer_returns = _returns_in(function.body)

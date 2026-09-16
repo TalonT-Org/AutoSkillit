@@ -2205,13 +2205,34 @@ class ScopeAccumulator:
         self._files: set[str] = set()
 
     def add_targets(self, *names: str) -> None:
+        """Record *names* as relative entries to be joined with ``tests_root`` by ``resolve``.
+
+        Targets are directory or file names that exist under the test root at
+        resolution time; resolution discards any whose joined path does not
+        exist. Use this for directory-level scope that should be discovered
+        against the test root.
+        """
         self._targets.update(names)
 
     def add_files(self, *paths: str) -> None:
+        """Record *paths* verbatim for ``resolve`` to keep as-is.
+
+        Unlike :meth:`add_targets`, recorded paths are not joined with
+        ``tests_root``; they are preserved verbatim so callers can stash
+        already-resolved absolute or repo-root-relative file paths without
+        double-joining during resolve.
+        """
         self._files.update(paths)
 
     def resolve(self, tests_root: Path) -> set[Path]:
-        """Resolve directory/file targets that exist and preserve direct-file paths."""
+        """Materialize the accumulator into concrete ``Path`` objects.
+
+        For each recorded target, joins with ``tests_root`` and keeps entries
+        whose resulting path exists on disk. For each recorded file, keeps
+        the path verbatim (no ``tests_root`` join). The two semantics are
+        what make :meth:`add_targets` and :meth:`add_files` serve different
+        call-site needs.
+        """
         result: set[Path] = set()
         for name in self._targets:
             path = tests_root / name

@@ -342,6 +342,109 @@ def record_from_dict(value: object) -> CaptureLifecycleRecord:
     return record
 
 
+def _validate_outcome_authority(record: CaptureLifecycleRecord) -> None:
+    manifest = record.manifest
+    if (
+        type(record.capture_status) is not CaptureStatus
+        or type(record.snapshot_status) is not CaptureSnapshotStatus
+    ):
+        raise LedgerCodecError("invalid capture outcome axes")
+    if manifest is None:
+        if record.manifest_bytes or record.finalized_at_revision is not None:
+            raise LedgerCodecError("manifest fields exist without FINAL authority")
+    elif (
+        type(manifest) is not CaptureFinalManifest
+        or not record.manifest_bytes
+        or record.finalized_at_revision != manifest.finalized_at_revision
+        or manifest.capture_id != record.capture_id
+        or manifest.incarnation != record.incarnation
+        or manifest.project_identity != record.project_identity
+        or manifest.root_identity != record.root_identity
+        or manifest.carrier_name != record.public_name
+        or manifest.carrier_identity != record.artifact_identity
+        or record.manifest_bytes != _snapshot.encode_capture_final_manifest(manifest)
+        or record.state
+        not in {
+            CaptureState.FINALIZED,
+            CaptureState.DELETING,
+            CaptureState.DELETED,
+            CaptureState.TAMPERED,
+        }
+    ):
+        raise LedgerCodecError("invalid immutable FINAL manifest")
+    if (manifest is None) != (record.snapshot_status is CaptureSnapshotStatus.ABSENT):
+        raise LedgerCodecError("snapshot status does not match immutable authority")
+    if (manifest is None) != (record.capture_status is not CaptureStatus.COMPLETE):
+        raise LedgerCodecError("complete capture outcome does not match FINAL authority")
+    if manifest is not None and (
+        record.capture_status is not CaptureStatus.COMPLETE
+        or manifest.capture_status is not CaptureStatus.COMPLETE
+    ):
+        raise LedgerCodecError("FINAL manifest does not carry complete capture status")
+    if record.state is CaptureState.FINALIZED and (
+        record.capture_status is not CaptureStatus.COMPLETE
+        or record.snapshot_status is not CaptureSnapshotStatus.VERIFIED
+    ):
+        raise LedgerCodecError("FINALIZED state lacks verified complete outcome")
+    if record.state in {
+        CaptureState.RESERVED,
+        CaptureState.STAGED,
+        CaptureState.PUBLISHED_WRITING,
+    } and (
+        record.capture_status is not CaptureStatus.PENDING
+        or record.snapshot_status is not CaptureSnapshotStatus.ABSENT
+    ):
+        raise LedgerCodecError("pending lifecycle state carries terminal outcome")
+    if record.state is CaptureState.FAILED and record.failure is None:
+        raise LedgerCodecError("FAILED capture lacks failure evidence")
+    if record.failure is not None and record.state not in {
+        CaptureState.FAILED,
+        CaptureState.DELETING,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    }:
+        raise LedgerCodecError("failure evidence exists outside FAILED state")
+    if (record.failure is None) != (record.capture_status is not CaptureStatus.FAILED):
+        raise LedgerCodecError("failed capture outcome is inconsistent")
+    if record.legacy_cleanup is not None and manifest is not None:
+        raise LedgerCodecError("legacy cleanup evidence cannot carry authority")
+    if (record.legacy_cleanup is None) != (
+        record.capture_status is not CaptureStatus.LEGACY_CLEANUP_ONLY
+    ):
+        raise LedgerCodecError("legacy cleanup outcome is inconsistent")
+    if record.capture_status is CaptureStatus.PENDING and any(
+        value is not None for value in (manifest, record.failure, record.legacy_cleanup)
+    ):
+        raise LedgerCodecError("pending capture carries terminal evidence")
+    if record.reference_status is CaptureReferenceStatus.NOT_REQUESTED:
+        if manifest is not None and manifest.reference_hash is not None:
+            raise LedgerCodecError("issued manifest has not-requested reference state")
+    elif manifest is None or manifest.reference_hash is None:
+        raise LedgerCodecError("reference state lacks an issued manifest binding")
+    if manifest is None and (
+        record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+        or record.reference_status is not CaptureReferenceStatus.NOT_REQUESTED
+    ):
+        raise LedgerCodecError("non-FINAL capture carries delivery authority")
+    if (
+        record.reference_status is CaptureReferenceStatus.ISSUED
+        and record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+    ):
+        raise LedgerCodecError("issued reference cannot have begun delivery")
+    if (record.retention_phase is CaptureRetentionPhase.DELETED) != (
+        record.state is CaptureState.DELETED
+    ):
+        raise LedgerCodecError("deleted retention state is inconsistent")
+    if (record.retention_phase is CaptureRetentionPhase.TAMPERED) != (
+        record.state is CaptureState.TAMPERED
+    ):
+        raise LedgerCodecError("tampered retention state is inconsistent")
+    if (record.retention_phase is CaptureRetentionPhase.DELETING) != (
+        record.state is CaptureState.DELETING
+    ):
+        raise LedgerCodecError("deleting retention state is inconsistent")
+
+
 def validate_record(record: CaptureLifecycleRecord) -> None:
     if (
         type(record) is not CaptureLifecycleRecord
@@ -383,105 +486,7 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
         and record.artifact_identity is None
     ):
         raise LedgerCodecError("artifact identity does not match lifecycle state")
-    if (
-        type(record.capture_status) is not CaptureStatus
-        or type(record.snapshot_status) is not CaptureSnapshotStatus
-    ):
-        raise LedgerCodecError("invalid capture outcome axes")
-    if record.manifest is None:
-        if record.manifest_bytes or record.finalized_at_revision is not None:
-            raise LedgerCodecError("manifest fields exist without FINAL authority")
-    elif (
-        type(record.manifest) is not CaptureFinalManifest
-        or not record.manifest_bytes
-        or record.finalized_at_revision != record.manifest.finalized_at_revision
-        or record.manifest.capture_id != record.capture_id
-        or record.manifest.incarnation != record.incarnation
-        or record.manifest.project_identity != record.project_identity
-        or record.manifest.root_identity != record.root_identity
-        or record.manifest.carrier_name != record.public_name
-        or record.manifest.carrier_identity != record.artifact_identity
-        or record.manifest_bytes != _snapshot.encode_capture_final_manifest(record.manifest)
-        or record.state
-        not in {
-            CaptureState.FINALIZED,
-            CaptureState.DELETING,
-            CaptureState.DELETED,
-            CaptureState.TAMPERED,
-        }
-    ):
-        raise LedgerCodecError("invalid immutable FINAL manifest")
-    if (record.manifest is None) != (record.snapshot_status is CaptureSnapshotStatus.ABSENT):
-        raise LedgerCodecError("snapshot status does not match immutable authority")
-    if (record.manifest is None) != (record.capture_status is not CaptureStatus.COMPLETE):
-        raise LedgerCodecError("complete capture outcome does not match FINAL authority")
-    if record.manifest is not None and (
-        record.capture_status is not CaptureStatus.COMPLETE
-        or record.manifest.capture_status is not CaptureStatus.COMPLETE
-    ):
-        raise LedgerCodecError("FINAL manifest does not carry complete capture status")
-    if record.state is CaptureState.FINALIZED and (
-        record.capture_status is not CaptureStatus.COMPLETE
-        or record.snapshot_status is not CaptureSnapshotStatus.VERIFIED
-    ):
-        raise LedgerCodecError("FINALIZED state lacks verified complete outcome")
-    if record.state in {
-        CaptureState.RESERVED,
-        CaptureState.STAGED,
-        CaptureState.PUBLISHED_WRITING,
-    } and (
-        record.capture_status is not CaptureStatus.PENDING
-        or record.snapshot_status is not CaptureSnapshotStatus.ABSENT
-    ):
-        raise LedgerCodecError("pending lifecycle state carries terminal outcome")
-    if record.state is CaptureState.FAILED and record.failure is None:
-        raise LedgerCodecError("FAILED capture lacks failure evidence")
-    if record.failure is not None and record.state not in {
-        CaptureState.FAILED,
-        CaptureState.DELETING,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    }:
-        raise LedgerCodecError("failure evidence exists outside FAILED state")
-    if (record.failure is None) != (record.capture_status is not CaptureStatus.FAILED):
-        raise LedgerCodecError("failed capture outcome is inconsistent")
-    if record.legacy_cleanup is not None and record.manifest is not None:
-        raise LedgerCodecError("legacy cleanup evidence cannot carry authority")
-    if (record.legacy_cleanup is None) != (
-        record.capture_status is not CaptureStatus.LEGACY_CLEANUP_ONLY
-    ):
-        raise LedgerCodecError("legacy cleanup outcome is inconsistent")
-    if record.capture_status is CaptureStatus.PENDING and any(
-        value is not None for value in (record.manifest, record.failure, record.legacy_cleanup)
-    ):
-        raise LedgerCodecError("pending capture carries terminal evidence")
-    if record.reference_status is CaptureReferenceStatus.NOT_REQUESTED:
-        if record.manifest is not None and record.manifest.reference_hash is not None:
-            raise LedgerCodecError("issued manifest has not-requested reference state")
-    elif record.manifest is None or record.manifest.reference_hash is None:
-        raise LedgerCodecError("reference state lacks an issued manifest binding")
-    if record.manifest is None and (
-        record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
-        or record.reference_status is not CaptureReferenceStatus.NOT_REQUESTED
-    ):
-        raise LedgerCodecError("non-FINAL capture carries delivery authority")
-    if (
-        record.reference_status is CaptureReferenceStatus.ISSUED
-        and record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
-    ):
-        raise LedgerCodecError("issued reference cannot have begun delivery")
-    if (record.retention_phase is CaptureRetentionPhase.DELETED) != (
-        record.state is CaptureState.DELETED
-    ):
-        raise LedgerCodecError("deleted retention state is inconsistent")
-    if (record.retention_phase is CaptureRetentionPhase.TAMPERED) != (
-        record.state is CaptureState.TAMPERED
-    ):
-        raise LedgerCodecError("tampered retention state is inconsistent")
-    if (record.retention_phase is CaptureRetentionPhase.DELETING) != (
-        record.state is CaptureState.DELETING
-    ):
-        raise LedgerCodecError("deleting retention state is inconsistent")
+    _validate_outcome_authority(record)
 
 
 def validate_successor(

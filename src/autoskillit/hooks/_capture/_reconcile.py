@@ -163,6 +163,30 @@ class CaptureStoreStats:
     unledgered_aged_bytes: int = 0
 
 
+def _capture_directory_stats(
+    root_fd: int,
+    tracked: frozenset[str],
+    now: float,
+) -> tuple[int, int, int]:
+    directory_files = 0
+    unledgered_aged_files = 0
+    unledgered_aged_bytes = 0
+    for entry in os.scandir(root_fd):
+        directory_files += 1
+        if PUBLIC_NAME_RE.fullmatch(entry.name) is None or entry.name in tracked:
+            continue
+        try:
+            value = entry.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(value.st_mode):
+            continue
+        if now - value.st_mtime >= _orphan_scan.ADOPTION_AGE_SECONDS:
+            unledgered_aged_files += 1
+            unledgered_aged_bytes += value.st_size
+    return directory_files, unledgered_aged_files, unledgered_aged_bytes
+
+
 def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
     """Report capture-store ledger and directory statistics without mutating.
 
@@ -190,22 +214,9 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                 if record.retention_phase is not CaptureRetentionPhase.DELETED
             )
             now = store._wall_clock()
-            directory_files = 0
-            unledgered_aged_files = 0
-            unledgered_aged_bytes = 0
-            for entry in os.scandir(store._root_fd):
-                directory_files += 1
-                if PUBLIC_NAME_RE.fullmatch(entry.name) is None or entry.name in tracked:
-                    continue
-                try:
-                    value = entry.stat(follow_symlinks=False)
-                except FileNotFoundError:
-                    continue
-                if not stat.S_ISREG(value.st_mode):
-                    continue
-                if now - value.st_mtime >= _orphan_scan.ADOPTION_AGE_SECONDS:
-                    unledgered_aged_files += 1
-                    unledgered_aged_bytes += value.st_size
+            directory_files, unledgered_aged_files, unledgered_aged_bytes = (
+                _capture_directory_stats(store._root_fd, tracked, now)
+            )
             return CaptureStoreStats(
                 blocker=CleanupBlocker.NONE,
                 live_records=sum(

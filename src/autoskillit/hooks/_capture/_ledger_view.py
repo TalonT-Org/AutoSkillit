@@ -289,7 +289,11 @@ class LedgerView:
                 account_replay=account_replay,
                 compact_legacy=compact_legacy,
             )
-        if (value.st_dev, value.st_ino) != (incarnation.device, incarnation.inode):
+        if (
+            (value.st_dev, value.st_ino) != (incarnation.device, incarnation.inode)
+            or value.st_size < snapshot.decoded_offset
+            or (value.st_size == snapshot.size and value.st_ctime_ns != snapshot.ctime_ns)
+        ):
             return self._load_full(
                 fd,
                 value,
@@ -297,21 +301,7 @@ class LedgerView:
                 compact_legacy=compact_legacy,
             )
         if value.st_size == snapshot.size:
-            if value.st_ctime_ns == snapshot.ctime_ns:
-                return records, incarnation.compaction_epoch, value.st_size
-            return self._load_full(
-                fd,
-                value,
-                account_replay=account_replay,
-                compact_legacy=compact_legacy,
-            )
-        if value.st_size < snapshot.decoded_offset:
-            return self._load_full(
-                fd,
-                value,
-                account_replay=account_replay,
-                compact_legacy=compact_legacy,
-            )
+            return records, incarnation.compaction_epoch, value.st_size
         tail_size = value.st_size - snapshot.decoded_offset
         account_replay(tail_size)
         decoded = _ledger.decode_ledger(_read_range(fd, snapshot.decoded_offset, tail_size))

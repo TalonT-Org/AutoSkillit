@@ -311,6 +311,39 @@ def _open_and_match_directory(parent_fd: int, name: str, expected: FileIdentity)
     return fd
 
 
+def _open_bound_capture_directory(
+    anchor: ProjectAnchor, root: CaptureRoot, opened: list[int]
+) -> int:
+    try:
+        project_path = Path(os.path.realpath(anchor.supplied_path))
+        project_fd = os.open(project_path, _DIRECTORY_FLAGS)
+    except OSError:
+        return -1
+    opened.append(project_fd)
+    if not _same_identity(project_fd, anchor.identity):
+        return -1
+
+    autoskillit_fd = _open_and_match_directory(
+        project_fd, CAPTURE_PATH_COMPONENTS[0], root.autoskillit_identity
+    )
+    if autoskillit_fd < 0:
+        return -1
+    opened.append(autoskillit_fd)
+
+    temp_fd = _open_and_match_directory(
+        autoskillit_fd, CAPTURE_PATH_COMPONENTS[1], root.temp_identity
+    )
+    if temp_fd < 0:
+        return -1
+    opened.append(temp_fd)
+
+    capture_fd = _open_and_match_directory(temp_fd, CAPTURE_PATH_COMPONENTS[2], root.identity)
+    if capture_fd < 0:
+        return -1
+    opened.append(capture_fd)
+    return capture_fd
+
+
 def verify_reference_publication_binding(
     anchor: ProjectAnchor,
     root: CaptureRoot,
@@ -331,36 +364,9 @@ def verify_reference_publication_binding(
         return False
     opened: list[int] = []
     try:
-        try:
-            project_path = Path(os.path.realpath(anchor.supplied_path))
-            project_fd = os.open(
-                project_path,
-                _DIRECTORY_FLAGS,
-            )
-        except OSError:
-            return False
-        opened.append(project_fd)
-        if not _same_identity(project_fd, anchor.identity):
-            return False
-
-        autoskillit_fd = _open_and_match_directory(
-            project_fd, CAPTURE_PATH_COMPONENTS[0], root.autoskillit_identity
-        )
-        if autoskillit_fd < 0:
-            return False
-        opened.append(autoskillit_fd)
-
-        temp_fd = _open_and_match_directory(
-            autoskillit_fd, CAPTURE_PATH_COMPONENTS[1], root.temp_identity
-        )
-        if temp_fd < 0:
-            return False
-        opened.append(temp_fd)
-
-        capture_fd = _open_and_match_directory(temp_fd, CAPTURE_PATH_COMPONENTS[2], root.identity)
+        capture_fd = _open_bound_capture_directory(anchor, root, opened)
         if capture_fd < 0:
             return False
-        opened.append(capture_fd)
 
         try:
             current_artifact_fd = os.open(artifact.name, _READ_FLAGS, dir_fd=capture_fd)

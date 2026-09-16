@@ -269,11 +269,9 @@ def settle_failed_capture(
                 action = "killed"
             except _RUNTIME_ERRORS:
                 action = "unknown"
+    returncode: int | None = None
     try:
-        return RunnerSettlementEvidence(
-            action=action,
-            returncode=process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS),
-        )
+        returncode = process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         try:
             process.kill()
@@ -281,11 +279,9 @@ def settle_failed_capture(
         except _RUNTIME_ERRORS:
             action = "unknown"
         try:
-            return RunnerSettlementEvidence(
-                action=action,
-                returncode=process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS),
-            )
+            returncode = process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
         except _RUNTIME_ERRORS:
-            return RunnerSettlementEvidence(action=action, returncode=None)
+            pass
     except _RUNTIME_ERRORS:
-        return RunnerSettlementEvidence(action=action, returncode=None)
+        pass
+    return RunnerSettlementEvidence(action=action, returncode=returncode)

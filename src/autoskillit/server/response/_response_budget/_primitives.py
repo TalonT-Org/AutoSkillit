@@ -88,7 +88,12 @@ def _restore_projected_response_type(handler_result: Any, rendered: str) -> Any:
         return rendered
     try:
         return json.loads(rendered)
-    except (ValueError, RecursionError):
+    except (ValueError, RecursionError) as exc:
+        _response_budget_pkg.logger.warning(
+            "response_budget_projection_invalid",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         return {"success": False, "error": "response_budget_projection_invalid"}
 
 

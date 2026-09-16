@@ -250,10 +250,10 @@ def _verify_projected_native_packets(
     for match in message_pattern.finditer(projected_skill):
         try:
             decoded = json.loads(match.group(1))
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as exc:
             raise SkillContractError(
                 "Projected native exploration packet message is not valid JSON"
-            )
+            ) from exc
         if not isinstance(decoded, str):
             raise SkillContractError("Projected native exploration packet message is not a string")
         decoded_prompts.append(decoded)

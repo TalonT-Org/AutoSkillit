@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CLIENT_CHARS_PER_TOKEN_POLICY,
@@ -109,6 +109,10 @@ def enforce_response_budget(
                 original_utf8_bytes=original_size,
             )
         if over_delivery_bound:
+            if selected_result_token_limit is None:
+                raise RuntimeError(
+                    "over_delivery_bound requires a non-None selected_result_token_limit"
+                )
             return _spill_for_delivery_bound(
                 result,
                 tool_name=tool_name,
@@ -116,7 +120,7 @@ def enforce_response_budget(
                 artifact_dir=artifact_dir,
                 original=original,
                 original_size=original_size,
-                selected_result_token_limit=cast(int, selected_result_token_limit),
+                selected_result_token_limit=selected_result_token_limit,
             )
         _response_budget_pkg._emit_response_budget_event(
             "response_budget_exemption",

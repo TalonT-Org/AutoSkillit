@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from tests.execution.backends._conformance_assertions import _developer_instruction_text
+
 
 @dataclass(frozen=True, slots=True)
 class GeneratedChildEvidence:
@@ -84,26 +86,6 @@ def _spawn_record(meta: dict) -> dict:
         return {}
     record = subagent.get("thread_spawn", {})
     return record if isinstance(record, dict) else {}
-
-
-def _developer_instruction_text(child_events: list[dict]) -> str:
-    developer_blocks: list[str] = []
-    for event in child_events:
-        payload = event.get("payload", {})
-        if (
-            event.get("type") != "response_item"
-            or payload.get("type") != "message"
-            or payload.get("role") != "developer"
-        ):
-            continue
-        content = payload.get("content", [])
-        if isinstance(content, str):
-            developer_blocks.append(content)
-        elif isinstance(content, list):
-            developer_blocks.extend(
-                str(block.get("text", "")) for block in content if isinstance(block, dict)
-            )
-    return "\n".join(developer_blocks)
 
 
 def _assert_linked_child_evidence(

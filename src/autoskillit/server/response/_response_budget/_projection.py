@@ -319,18 +319,19 @@ def _tiered_projection(
 
         if include_deprioritized:
             for k in present_deprioritized:
-                if deprioritized_projector is None:
-                    env[k] = parsed[k]
-                else:
-                    projected = deprioritized_projector(parsed[k])
-                    env[k] = projected
-                    if not (
-                        isinstance(projected, (list, dict))
-                        and RESPONSE_SPILL_METADATA_KEY in projected
-                    ):
-                        chars, items = _total_omissions(parsed[k])
-                        base_chars += chars
-                        base_items += items
+                projected = (
+                    parsed[k]
+                    if deprioritized_projector is None
+                    else deprioritized_projector(parsed[k])
+                )
+                env[k] = projected
+                if deprioritized_projector is not None and not (
+                    isinstance(projected, (list, dict))
+                    and RESPONSE_SPILL_METADATA_KEY in projected
+                ):
+                    chars, items = _total_omissions(parsed[k])
+                    base_chars += chars
+                    base_items += items
 
         if include_droppable:
             for k in present_droppable:

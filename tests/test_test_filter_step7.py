@@ -454,7 +454,7 @@ class TestBuildTestScopeStep7:
         dir_names = {p.name for p in result if p.is_dir()}
         assert "core" in dir_names
 
-    def test_step7_all_files_covered_replaces_directory(self, tmp_path: Path) -> None:
+    def test_step7_all_files_covered_keeps_directory(self, tmp_path: Path) -> None:
         """When all cascade-dir src files have oracle data, files are added; dir stays."""
         tests_root = tmp_path / "tests"
         (tests_root / "core").mkdir(parents=True)

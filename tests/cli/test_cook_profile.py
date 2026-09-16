@@ -405,6 +405,9 @@ def _run_finalized_profile_cook(
     generated_home = tmp_path / "generated-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
+    codex_shim = tmp_path / "codex"
+    atomic_write(codex_shim, "#!/bin/sh\nexit 0\n")
+    codex_shim.chmod(0o755)
     manager = MagicMock()
     captured: dict[str, object] = {}
 
@@ -525,7 +528,7 @@ def _run_finalized_profile_cook(
     monkeypatch.setenv("AUTOSKILLIT_CODEX_STARTUP_TRACE", "1")
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
     with (
-        patch("shutil.which", return_value="/usr/bin/codex"),
+        patch("shutil.which", return_value=str(codex_shim)),
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch.object(cook_module, "is_feature_enabled", return_value=True),

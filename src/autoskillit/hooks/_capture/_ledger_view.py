@@ -289,11 +289,15 @@ class LedgerView:
                 account_replay=account_replay,
                 compact_legacy=compact_legacy,
             )
-        if (
-            (value.st_dev, value.st_ino) != (incarnation.device, incarnation.inode)
-            or value.st_size < snapshot.decoded_offset
-            or (value.st_size == snapshot.size and value.st_ctime_ns != snapshot.ctime_ns)
-        ):
+        identity_changed = (value.st_dev, value.st_ino) != (
+            incarnation.device,
+            incarnation.inode,
+        )
+        content_truncated = value.st_size < snapshot.decoded_offset
+        same_size_rewritten = (
+            value.st_size == snapshot.size and value.st_ctime_ns != snapshot.ctime_ns
+        )
+        if identity_changed or content_truncated or same_size_rewritten:
             return self._load_full(
                 fd,
                 value,

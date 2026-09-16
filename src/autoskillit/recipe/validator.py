@@ -148,7 +148,6 @@ def _validate_step_operation(step_name: str, step: RecipeStep) -> list[str]:
 
 def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str]) -> list[str]:
     errors: list[str] = []
-    # Routing target validation
     for goto_field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
         target = getattr(step, goto_field)
         if target and target not in step_names and target not in RECIPE_TERMINAL_TARGETS:
@@ -160,7 +159,6 @@ def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str
             f"Step '{step_name}'.on_exhausted references unknown step '{step.on_exhausted}'."
         )
 
-    # retries must be a non-negative integer
     if not isinstance(step.retries, int) or step.retries < 0:
         errors.append(
             f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
@@ -189,7 +187,6 @@ def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str
                 f"they are mutually exclusive."
             )
         if step.on_result.conditions:
-            # Predicate format validation
             for i, cond in enumerate(step.on_result.conditions):
                 if not cond.route:
                     errors.append(f"Step '{step_name}'.on_result[{i}].route must be non-empty.")
@@ -199,7 +196,6 @@ def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str
                         f"unknown step '{cond.route}'."
                     )
         else:
-            # Legacy format validation
             if not step.on_result.field:
                 errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
             if not step.on_result.routes:

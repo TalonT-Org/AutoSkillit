@@ -52,6 +52,17 @@ _MEDIA_TYPES = {
 }
 
 
+def _verify_semantic_references(
+    verifier: AuditCycleVerifier,
+    audited_plan_refs: tuple[ArtifactRef, ...],
+    remediation_ref: ArtifactRef | None,
+) -> None:
+    for reference in audited_plan_refs:
+        verifier.verify_artifact_ref(reference)
+    if remediation_ref is not None:
+        verifier.verify_artifact_ref(remediation_ref)
+
+
 def normalize_audited_plan_refs(
     raw_paths: str,
     *,
@@ -285,10 +296,9 @@ class DefaultAuditAuthorityMaterializer:
                 )
 
             verifier = AuditCycleVerifier(reservation.allowed_root)
-            for reference in reservation.audited_plan_refs:
-                verifier.verify_artifact_ref(reference)
-            if semantic.remediation_ref is not None:
-                verifier.verify_artifact_ref(semantic.remediation_ref)
+            _verify_semantic_references(
+                verifier, reservation.audited_plan_refs, semantic.remediation_ref
+            )
 
             inventory_bytes = canonical_json_bytes(
                 _inventory_payload(
@@ -354,10 +364,9 @@ class DefaultAuditAuthorityMaterializer:
             for effect in effects[1:]:
                 _write_or_verify(effect, reservation.allowed_root)
 
-            for reference in reservation.audited_plan_refs:
-                verifier.verify_artifact_ref(reference)
-            if semantic.remediation_ref is not None:
-                verifier.verify_artifact_ref(semantic.remediation_ref)
+            _verify_semantic_references(
+                verifier, reservation.audited_plan_refs, semantic.remediation_ref
+            )
             verifier.verify_artifact_ref(inventory_ref)
 
             head = AuditCycleHead(

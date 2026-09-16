@@ -159,6 +159,57 @@ def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
     return Path(source_path).is_relative_to(worktree_path)
 
 
+def _scan_direct_url_metadata(direct_url_file: Path, worktree_path: Path) -> EditableScanResult:
+    try:
+        data = json.loads(direct_url_file.read_text())
+    except OSError as exc:
+        condition = "vanished" if isinstance(exc, FileNotFoundError) else "failed"
+        reason = f"metadata read {condition}: {direct_url_file} ({type(exc).__name__}: {exc})"
+        logger.debug(
+            "editable_guard_metadata_read_failed",
+            path=str(direct_url_file),
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return EditableScanResult(unverified=(reason,))
+    except UnicodeDecodeError as exc:
+        reason = f"could not decode metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
+        logger.warning(
+            "editable_guard_metadata_invalid",
+            path=str(direct_url_file),
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return EditableScanResult(unverified=(reason,))
+    except json.JSONDecodeError as exc:
+        reason = f"malformed metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
+        logger.warning(
+            "editable_guard_metadata_invalid",
+            path=str(direct_url_file),
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return EditableScanResult(unverified=(reason,))
+
+    if not isinstance(data, dict):
+        reason = f"metadata is not a JSON object: {direct_url_file}"
+        logger.warning(
+            "editable_guard_metadata_invalid",
+            path=str(direct_url_file),
+            error="top-level JSON value is not an object",
+            error_type=type(data).__name__,
+        )
+        return EditableScanResult(unverified=(reason,))
+
+    if _is_editable_in_worktree(data, worktree_path):
+        dist_info_name = direct_url_file.parent.name
+        pkg_name = dist_info_name.split("-")[0] if "-" in dist_info_name else dist_info_name
+        url = data.get("url", "")
+        return EditableScanResult(findings=(f"{pkg_name} editable at {url} ({dist_info_name})",))
+
+    return EditableScanResult()
+
+
 def scan_editable_installs_for_worktree(
     worktree_path: Path,
     site_packages_dirs: list[Path] | None = None,
@@ -213,61 +264,8 @@ def scan_editable_installs_for_worktree(
             unverified.append(reason)
             continue
         for direct_url_file in direct_url_files:
-            try:
-                data = json.loads(direct_url_file.read_text())
-            except OSError as exc:
-                condition = "vanished" if isinstance(exc, FileNotFoundError) else "failed"
-                reason = (
-                    f"metadata read {condition}: {direct_url_file} ({type(exc).__name__}: {exc})"
-                )
-                logger.debug(
-                    "editable_guard_metadata_read_failed",
-                    path=str(direct_url_file),
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                unverified.append(reason)
-                continue
-            except UnicodeDecodeError as exc:
-                reason = (
-                    f"could not decode metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
-                )
-                logger.warning(
-                    "editable_guard_metadata_invalid",
-                    path=str(direct_url_file),
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                unverified.append(reason)
-                continue
-            except json.JSONDecodeError as exc:
-                reason = f"malformed metadata: {direct_url_file} ({type(exc).__name__}: {exc})"
-                logger.warning(
-                    "editable_guard_metadata_invalid",
-                    path=str(direct_url_file),
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                unverified.append(reason)
-                continue
-
-            if not isinstance(data, dict):
-                reason = f"metadata is not a JSON object: {direct_url_file}"
-                logger.warning(
-                    "editable_guard_metadata_invalid",
-                    path=str(direct_url_file),
-                    error="top-level JSON value is not an object",
-                    error_type=type(data).__name__,
-                )
-                unverified.append(reason)
-                continue
-
-            if _is_editable_in_worktree(data, worktree_path):
-                dist_info_name = direct_url_file.parent.name
-                pkg_name = (
-                    dist_info_name.split("-")[0] if "-" in dist_info_name else dist_info_name
-                )
-                url = data.get("url", "")
-                findings.append(f"{pkg_name} editable at {url} ({dist_info_name})")
+            result = _scan_direct_url_metadata(direct_url_file, worktree_path)
+            findings.extend(result.findings)
+            unverified.extend(result.unverified)
 
     return EditableScanResult(findings=tuple(findings), unverified=tuple(unverified))

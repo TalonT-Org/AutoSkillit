@@ -718,7 +718,7 @@ async def _execute_read_db_query(
     reader: DatabaseReader,
     db_path: str,
     query: str,
-    params: list | dict,
+    params: list[object] | dict[str, object],
     timeout: int,
     max_rows: int,
 ) -> str:

@@ -123,7 +123,7 @@ class DatabaseReader(Protocol):
         self,
         db_path: str,
         sql: str,
-        params: list | dict,  # type: ignore[type-arg]  # sqlite3 cursor.execute accepts any sequence or mapping
+        params: list[object] | dict[str, object],
         timeout_sec: int,
         max_rows: int,
     ) -> dict[str, Any]: ...

@@ -346,6 +346,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "recipe", "server", "workspace"}
     ),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
+    "git_refs": frozenset({"core", "server", "smoke_utils", "workspace"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),
     # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the

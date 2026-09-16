@@ -144,20 +144,19 @@ def _strip_ticket_body(raw: str) -> str:
     lines = raw.splitlines()
     result: list[str] = []
     skip_exceptions_section = False
+    excluded_markers = (
+        ".autoskillit/",
+        "contested_findings_",
+        "| CONTESTED |",
+        "| VALID BUT EXCEPTION WARRANTED |",
+        "**Exception note:**",
+    )
     for line in lines:
         if line.strip().startswith("validated: true"):
             continue
-        if ".autoskillit/" in line:
+        if any(marker in line for marker in excluded_markers):
             continue
-        if "contested_findings_" in line:
-            continue
-        if "| CONTESTED |" in line or "| VALID BUT EXCEPTION WARRANTED |" in line:
-            continue
-        if re.search(r"\*\*Contested:\*\*\s+\d+", line) or re.search(
-            r"\*\*Exception warranted:\*\*\s+\d+", line
-        ):
-            continue
-        if "**Exception note:**" in line:
+        if re.search(r"\*\*(?:Contested|Exception warranted):\*\*\s+\d+", line):
             continue
         if re.match(r"## Findings with Exceptions\s*$", line):
             skip_exceptions_section = True
@@ -255,6 +254,58 @@ def create_audit_run_dir(temp_dir: str) -> dict[str, str]:
     return {"audit_run_dir": str(run_dir)}
 
 
+def _create_issue_chunk(
+    workspace: str,
+    chunk: list[tuple[str, str]],
+    repo_id: str,
+    label_ids: list[str],
+) -> list[str]:
+    """Create one GraphQL mutation chunk and return its issue URLs in alias order."""
+    mutation_parts: list[str] = []
+    variables: dict[str, object] = {}
+    for idx, (title, body) in enumerate(chunk):
+        alias = f"issue{idx}"
+        mutation_parts.append(f"{alias}: createIssue(input: $i{idx}) {{ issue {{ number url }} }}")
+        variables[f"i{idx}"] = {
+            "repositoryId": repo_id,
+            "title": title,
+            "body": body,
+            "labelIds": label_ids,
+        }
+    mutation = (
+        "mutation("
+        + ",".join(f"$i{k}: CreateIssueInput!" for k in range(len(chunk)))
+        + ") {"
+        + " ".join(mutation_parts)
+        + "}"
+    )
+    _validate_mutation_variables(mutation, variables)
+    payload = json.dumps({"query": mutation, "variables": variables})
+    result = run_gh(["api", "graphql", "--input", "-"], cwd=workspace, input_data=payload)
+    if result.returncode != 0:
+        msg = f"gh graphql createIssue failed: {result.stderr}"
+        raise RuntimeError(msg)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        msg = f"gh graphql createIssue: non-JSON output: {result.stdout!r}"
+        raise RuntimeError(msg) from exc
+    if "errors" in data:
+        raise RuntimeError(f"gh graphql createIssue errors: {data['errors']}")
+    resp_data = data.get("data") or {}
+    urls: list[str] = []
+    for idx in range(len(chunk)):
+        alias = f"issue{idx}"
+        alias_result = resp_data.get(alias)
+        if alias_result is None:
+            raise RuntimeError(f"createIssue response missing alias {alias!r}: {data}")
+        issue_data = alias_result.get("issue")
+        if issue_data is None:
+            raise RuntimeError(f"createIssue alias {alias!r} returned null issue: {data}")
+        urls.append(issue_data["url"])
+    return urls
+
+
 def batch_create_issues(
     workspace: str,
     chunk_size: str = "20",
@@ -291,7 +342,7 @@ def batch_create_issues(
     if not ticket_bodies:
         return {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
 
-    parsed: list[tuple[str, str, str]] = []
+    parsed: list[tuple[str, str]] = []
     skipped: list[str] = []
     for entry in ticket_bodies:
         try:
@@ -299,11 +350,9 @@ def batch_create_issues(
         except VANISHED_ERRORS:
             skipped.append(entry.name)
             continue
-        m = re.match(r"ticket_body_\w+_\d+_(.+)\.md", entry.name)
-        ts = m.group(1) if m else ""
         title = _extract_title(raw)
         body = _strip_ticket_body(raw)
-        parsed.append((title, body, ts))
+        parsed.append((title, body))
 
     owner, repo_name, repo_id = _resolve_repo_identity(workspace)
     label_ids = _ensure_and_resolve_labels(workspace, owner, repo_name)
@@ -317,49 +366,7 @@ def batch_create_issues(
         raise ValueError(f"chunk_size must be positive, got: {chunk_sz}")
     for offset in range(0, len(parsed), chunk_sz):
         chunk = parsed[offset : offset + chunk_sz]
-        mutation_parts = []
-        variables: dict[str, object] = {}
-        for idx, (title, body, _) in enumerate(chunk):
-            alias = f"issue{idx}"
-            mutation_parts.append(
-                f"{alias}: createIssue(input: $i{idx}) {{ issue {{ number url }} }}"
-            )
-            variables[f"i{idx}"] = {
-                "repositoryId": repo_id,
-                "title": title,
-                "body": body,
-                "labelIds": label_ids,
-            }
-        mutation = (
-            "mutation("
-            + ",".join(f"$i{k}: CreateIssueInput!" for k in range(len(chunk)))
-            + ") {"
-            + " ".join(mutation_parts)
-            + "}"
-        )
-        _validate_mutation_variables(mutation, variables)
-        payload = json.dumps({"query": mutation, "variables": variables})
-        result = run_gh(["api", "graphql", "--input", "-"], cwd=workspace, input_data=payload)
-        if result.returncode != 0:
-            msg = f"gh graphql createIssue failed: {result.stderr}"
-            raise RuntimeError(msg)
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            msg = f"gh graphql createIssue: non-JSON output: {result.stdout!r}"
-            raise RuntimeError(msg) from exc
-        if "errors" in data:
-            raise RuntimeError(f"gh graphql createIssue errors: {data['errors']}")
-        resp_data = data.get("data") or {}
-        for idx in range(len(chunk)):
-            alias = f"issue{idx}"
-            alias_result = resp_data.get(alias)
-            if alias_result is None:
-                raise RuntimeError(f"createIssue response missing alias {alias!r}: {data}")
-            issue_data = alias_result.get("issue")
-            if issue_data is None:
-                raise RuntimeError(f"createIssue alias {alias!r} returned null issue: {data}")
-            all_urls.append(issue_data["url"])
+        all_urls.extend(_create_issue_chunk(workspace, chunk, repo_id, label_ids))
         if offset + chunk_sz < len(parsed):
             time.sleep(1)
 

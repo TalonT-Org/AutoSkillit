@@ -27,6 +27,12 @@ from autoskillit.core import (
     read_stable_contained_bytes,
     run_git,
 )
+from autoskillit.core import (
+    AuditCycleAuthority as _AuditCycleAuthority,
+)
+from autoskillit.core import (
+    PlanDispositionReport as _PlanDispositionReport,
+)
 
 logger = get_logger(__name__)
 
@@ -110,6 +116,34 @@ def check_dropped_ci_loop(
     return {"status": status, "count": str(count)}
 
 
+def _remove_nested_worktrees(clone_path: str) -> None:
+    clone_resolved = Path(clone_path).resolve()
+    wt_list = run_git(["worktree", "list", "--porcelain"], cwd=clone_path)
+    if wt_list.returncode == 0:
+        first = True
+        for line in wt_list.stdout.splitlines():
+            if not line.startswith("worktree "):
+                continue
+            if first:
+                first = False
+                continue  # main worktree is always first in porcelain output
+            wt_path = Path(line.split(" ", 1)[1].strip())
+            if wt_path.resolve().is_relative_to(clone_resolved):
+                rm_result = run_git(
+                    ["worktree", "remove", "--force", str(wt_path)], cwd=clone_path
+                )
+                if rm_result.returncode != 0 and wt_path.exists():
+                    shutil.rmtree(wt_path, ignore_errors=True)
+
+
+def _clean_status_result(clone_path: str, cleaned: str) -> dict[str, str]:
+    verify = run_git(["status", "--porcelain"], cwd=clone_path)
+    if verify.returncode == 0 and verify.stdout.strip():
+        remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
+        return {"cleaned": "failed", "remaining": remaining}
+    return {"cleaned": cleaned}
+
+
 def main_repo_guard(clone_path: str) -> dict[str, str]:
     """Stash dirty state from the main repo before merge.
 
@@ -128,24 +162,7 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     if not result.stdout.strip():
         return {"cleaned": "false"}
 
-    # Detect and remove linked worktrees nested inside the clone.
-    clone_resolved = Path(clone_path).resolve()
-    wt_list = run_git(["worktree", "list", "--porcelain"], cwd=clone_path)
-    if wt_list.returncode == 0:
-        first = True
-        for line in wt_list.stdout.splitlines():
-            if not line.startswith("worktree "):
-                continue
-            if first:
-                first = False
-                continue  # main worktree is always first in porcelain output
-            wt_path = Path(line.split(" ", 1)[1].strip())
-            if wt_path.resolve().is_relative_to(clone_resolved):
-                rm_result = run_git(
-                    ["worktree", "remove", "--force", str(wt_path)], cwd=clone_path
-                )
-                if rm_result.returncode != 0 and wt_path.exists():
-                    shutil.rmtree(wt_path, ignore_errors=True)
+    _remove_nested_worktrees(clone_path)
 
     stash_result = run_git(
         ["stash", "--include-untracked", "-m", "autoskillit: main_repo_guard pre-merge stash"],
@@ -180,19 +197,9 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             )
         if co.returncode != 0 and cl.returncode != 0:
             return {"cleaned": "failed"}
-        verify = run_git(["status", "--porcelain"], cwd=clone_path)
-        if verify.returncode == 0 and verify.stdout.strip():
-            remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[
-                :200
-            ]
-            return {"cleaned": "failed", "remaining": remaining}
-        return {"cleaned": "force"}
+        return _clean_status_result(clone_path, "force")
 
-    verify = run_git(["status", "--porcelain"], cwd=clone_path)
-    if verify.returncode == 0 and verify.stdout.strip():
-        remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
-        return {"cleaned": "failed", "remaining": remaining}
-    return {"cleaned": "true"}
+    return _clean_status_result(clone_path, "true")
 
 
 def _normalize_plan_parts(plan_parts: str) -> list[str] | None:
@@ -235,29 +242,13 @@ def _log_plan_disposition_rejection(
     )
 
 
-def _resolve_plan_disposition(
+def _load_associated_disposition(
     *,
-    audit_cycle_path: str,
+    authority: _AuditCycleAuthority,
+    authority_path: Path,
+    cycle_dir: Path,
     current_plan_path: Path,
-    committed_disposition_resolver: CommittedDispositionResolver | None,
-) -> str | None:
-    authority_path = Path(audit_cycle_path)
-    if not authority_path.is_absolute() or not current_plan_path.is_absolute():
-        return None
-    cycle_dir = authority_path.parent
-    try:
-        authority = AuditCycleVerifier(cycle_dir).load_authority(authority_path)
-    except (OSError, ValueError) as exc:
-        _log_plan_disposition_rejection(
-            "authority loading or validation failed",
-            authority_path=authority_path,
-            current_plan_path=current_plan_path,
-            error=exc,
-        )
-        return None
-    if authority.verdict is not AuditVerdict.NO_GO:
-        return None
-
+) -> tuple[_PlanDispositionReport, ArtifactRef, ArtifactRef] | None:
     try:
         plan_ref_candidates: list[ArtifactRef] = []
         associations_dir = cycle_dir / "associations"
@@ -361,6 +352,41 @@ def _resolve_plan_disposition(
             error=exc,
         )
         return None
+    return report, plan_ref, disposition_ref
+
+
+def _resolve_plan_disposition(
+    *,
+    audit_cycle_path: str,
+    current_plan_path: Path,
+    committed_disposition_resolver: CommittedDispositionResolver | None,
+) -> str | None:
+    authority_path = Path(audit_cycle_path)
+    if not authority_path.is_absolute() or not current_plan_path.is_absolute():
+        return None
+    cycle_dir = authority_path.parent
+    try:
+        authority = AuditCycleVerifier(cycle_dir).load_authority(authority_path)
+    except (OSError, ValueError) as exc:
+        _log_plan_disposition_rejection(
+            "authority loading or validation failed",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+            error=exc,
+        )
+        return None
+    if authority.verdict is not AuditVerdict.NO_GO:
+        return None
+
+    associated = _load_associated_disposition(
+        authority=authority,
+        authority_path=authority_path,
+        cycle_dir=cycle_dir,
+        current_plan_path=current_plan_path,
+    )
+    if associated is None:
+        return None
+    report, plan_ref, disposition_ref = associated
 
     identity_checks = {
         "execution_generation": report.execution_generation == authority.execution_generation,
@@ -545,11 +571,12 @@ def _check_regression(
     wt_per_file = _parse_numstat_per_file(wt_diff.stdout)
 
     sources_with_regression: set[str] = set()
+    reverted_files: list[str] = []
     for f in files_to_add:
-        c_net = committed_per_file.get(f, 0)
-        w_net = wt_per_file.get(f, 0)
-        if c_net - w_net > 5:
+        delta = committed_per_file.get(f, 0) - wt_per_file.get(f, 0)
+        if delta > 5:
             sources_with_regression.add(f)
+            reverted_files.append(f)
 
     untracked_destinations: list[str] = []
     for f in files_to_add:
@@ -558,7 +585,7 @@ def _check_regression(
         f_dir = str(Path(f).parent)
         for source in sources_with_regression:
             s_dir = str(Path(source).parent)
-            if f_dir == s_dir or f.startswith(s_dir + "/") or s_dir == ".":
+            if s_dir in (f_dir, ".") or f.startswith(s_dir + "/"):
                 untracked_destinations.append(f)
                 break
 
@@ -567,13 +594,6 @@ def _check_regression(
         adjusted_regression = regression_lines - new_file_lines
         if adjusted_regression <= 10:
             return None  # CONTENT_MOVED: accounted for by new untracked files
-
-    reverted_files: list[str] = []
-    for f in files_to_add:
-        c_net = committed_per_file.get(f, 0)
-        w_net = wt_per_file.get(f, 0)
-        if c_net - w_net > 5:
-            reverted_files.append(f)
 
     if not reverted_files:
         return None  # CLEAR: no per-file reversion evidence

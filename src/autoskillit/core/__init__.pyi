@@ -824,9 +824,6 @@ from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
 from .types import BackendPinResolution as BackendPinResolution
-from .types import SkillDiscoveryMechanism as SkillDiscoveryMechanism
-from .types import SkillDiscoveryRouteDef as SkillDiscoveryRouteDef
-from .types import UpstreamSupportStatus as UpstreamSupportStatus
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import BindingFailure as BindingFailure
@@ -1216,6 +1213,8 @@ from .types import SkillContractError as SkillContractError
 from .types import SkillContractRemediationDef as SkillContractRemediationDef
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillContractView as SkillContractView
+from .types import SkillDiscoveryMechanism as SkillDiscoveryMechanism
+from .types import SkillDiscoveryRouteDef as SkillDiscoveryRouteDef
 from .types import SkillExclusionAuthority as SkillExclusionAuthority
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
@@ -1279,6 +1278,7 @@ from .types import TurnTokenEntry as TurnTokenEntry
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )
+from .types import UpstreamSupportStatus as UpstreamSupportStatus
 from .types import Utf8ByteLimit as Utf8ByteLimit
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath

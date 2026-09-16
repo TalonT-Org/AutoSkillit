@@ -18,8 +18,8 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import _merge_caller_env_extras
 from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
-from autoskillit.execution.backends._codex.session_commands import (
-    CodexCommandMixin,
+from autoskillit.execution.backends._codex.session_commands import CodexCommandMixin
+from autoskillit.execution.backends._codex.session_home import (
     _canonical_generated_home,
     _generated_home_config_overrides,
 )

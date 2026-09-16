@@ -104,6 +104,9 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: context_exhausted`** → fall through to `on_failure`. Automatic
+  context compaction was deliberately denied, so this session is terminal and must not
+  be resumed or routed to `on_context_limit`.
 - **If `retry_reason: contract_recovery` AND `has_progress_evidence` is true AND the step
   defines `on_context_limit`** → follow `on_context_limit`. The session wrote files but omitted
   the structured output token. Partial progress is confirmed on disk.

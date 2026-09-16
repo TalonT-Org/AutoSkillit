@@ -13,6 +13,8 @@ from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_GENERATED_HOME = Path("/work/codex-home")
+
 
 def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:
     return {tok for tok in cmd if tok.startswith("-")}
@@ -94,9 +96,11 @@ class TestNoApprovalFlagInExecBuilders:
             ),
             _build_food_truck,
             lambda: _build_food_truck(resume_session_id="sess-test"),
-            lambda: CodexBackend().build_headless_cmd("do stuff"),
+            lambda: CodexBackend().build_headless_cmd("do stuff", generated_home=_GENERATED_HOME),
             lambda: CodexBackend().build_resume_cmd(
-                resume_session_id="sess-test", prompt="continue"
+                resume_session_id="sess-test",
+                prompt="continue",
+                session_home=str(_GENERATED_HOME),
             ),
         ],
         ids=[
@@ -125,7 +129,9 @@ class TestInteractiveCmdUsesNoExecOnlyFlags:
         ids=["no_resume", "named_resume", "bare_resume"],
     )
     def test_interactive_excludes_exec_only_flags(self, resume_spec) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=resume_spec)
+        spec = CodexBackend().build_interactive_cmd(
+            resume_spec=resume_spec, generated_home=_GENERATED_HOME
+        )
         flags = _extract_flags(spec.cmd)
         assert "--json" not in flags
         assert "--sandbox" not in flags

@@ -276,6 +276,7 @@ async def _credit_initialization_sections(
     envelope: dict[str, Any],
     *,
     counter: McpCallCounter | None = None,
+    complete: bool = True,
 ) -> None:
     """Page every required section of a bounded envelope through the real pull tool.
 
@@ -334,6 +335,8 @@ async def _credit_initialization_sections(
             assert response.get("page_plan_sha256") == requirement["page_plan_sha256"], response
             continuation = response.get("continuation")
 
+    if not complete:
+        return
     raw_completion = await complete_recipe_initialization(initialization_id=initialization_id)
     completion = json.loads(raw_completion)
     if counter is not None:
@@ -347,12 +350,17 @@ async def _credit_initialization_sections(
     assert completion.get("success") is True, f"completion failed: {completion}"
 
 
-async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[str, Any]:
+async def _pull_step_section(
+    envelope: dict[str, Any],
+    step_name: str,
+    *,
+    counter: McpCallCounter | None = None,
+) -> dict[str, Any]:
     """Return one step's YAML subtree, pulled through the real ``get_recipe_section`` tool."""
     from autoskillit.core.io import load_yaml
 
     shim = {"success": True, "recipe_pull": envelope["recipe_pull"]}
-    body = await _resolve_recipe_section(shim, section=step_name)
+    body = await _resolve_recipe_section(shim, section=step_name, counter=counter)
     assert isinstance(body, str) and body, f"step section {step_name!r} came back empty"
     parsed = load_yaml(body)
     assert isinstance(parsed, dict), f"step section {step_name!r} is not a mapping"
@@ -533,7 +541,30 @@ def _check_recipe_section_total(previous: int | None, observed: int) -> int:
     return previous
 
 
-async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "content") -> Any:
+def _record_recipe_section_page(
+    counter: McpCallCounter | None,
+    *,
+    raw_response: str,
+    section: str,
+    part: int,
+) -> None:
+    if counter is None:
+        return
+    counter.record(
+        "get_recipe_section",
+        response=raw_response,
+        delivery_shape="NON_SEGMENTED_ENVELOPE",
+        segment_or_section=section,
+        part=part,
+    )
+
+
+async def _resolve_recipe_section(
+    result: dict[str, Any],
+    *,
+    section: str = "content",
+    counter: McpCallCounter | None = None,
+) -> Any:
     """Reconstruct one typed recipe section from inline or paginated delivery."""
     assert result.get("success") is True, f"recipe response was not successful: {result}"
     pull = result.get("recipe_pull")
@@ -563,14 +594,19 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
     page_plan_sha256: str | None = None
     continuation: str | None = None
     while True:
-        response = json.loads(
-            await get_recipe_section(
-                section=section,
-                part=part,
-                page_plan_sha256=page_plan_sha256,
-                continuation=continuation,
-                **identity,
-            )
+        raw_response = await get_recipe_section(
+            section=section,
+            part=part,
+            page_plan_sha256=page_plan_sha256,
+            continuation=continuation,
+            **identity,
+        )
+        response = json.loads(raw_response)
+        _record_recipe_section_page(
+            counter,
+            raw_response=raw_response,
+            section=section,
+            part=part,
         )
         assert response.get("success") is True, f"get_recipe_section returned error: {response}"
         assert response["pagination_version"] == RECIPE_SECTION_PAGINATION_VERSION

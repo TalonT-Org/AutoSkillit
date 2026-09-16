@@ -12,11 +12,12 @@ After compaction, the agent loses the recipe steps it needs to complete the pipe
 
 Two defenses exist:
 
-1. **Primary — disable compaction**: `ensure_codex_mcp_registered` writes
-   `model_auto_compact_token_limit = 999_999_999` (an unreachable threshold) to
-   `~/.codex/config.toml`. `setup_session_dir` copies this config into each session
-   directory, ensuring every headless session inherits the setting. *Re-verified at
-   codex-cli 0.145.0 and found neutralized upstream — see "Re-verification" below.*
+1. **Primary — veto automatic compaction**: every AutoSkillit Codex launch receives a
+   wrapper-owned home with a synchronous, trusted `PreCompact` hook matched only to
+   `auto`. The hook returns `continue: false`, the stable
+   `autoskillit_auto_compaction_denied` stop reason, and a visible `systemMessage`.
+   It preserves native `~/.codex/config.toml` bytes and cannot be disabled by native
+   hook preferences.
 
 2. **Guard — block raw recipe reads**: The `recipe_read_guard.py` PreToolUse hook
    blocks `run_cmd`/`Bash` from reading recipe YAML, SKILL.md, or agent definition
@@ -24,9 +25,8 @@ Two defenses exist:
    This prevents the agent from self-recovering from compaction loss via raw file
    access — compaction loss is treated as a hard failure, not a recoverable state.
 
-If the primary defense is ever relaxed (e.g., Codex fixes its compaction behavior or
-the context window grows), the agent needs a sanctioned channel to re-acquire recipe
-knowledge without reading raw files.
+The re-delivery path remains necessary when model-visible recipe content is lost for any
+reason. It re-acquires recipe knowledge without reading raw files.
 
 ## Decision
 
@@ -62,10 +62,10 @@ response retry can reproduce the segment without crediting progress twice. A pos
 delivery failure carries the selected recovery authority and explicitly forbids repeating
 the operation.
 
-This is a forward obligation: when the primary defense (unreachable auto-compact limit)
-is relaxed, the `load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end
-recovery path — including envelope re-delivery plus per-step pulls — must be tested as
-the recovery path.
+The delivery-reachability suite tests this recovery path by discarding an initial
+delivery, obtaining a fresh supported response, then using that response's identities
+to consume fixed sections and every post-prune step before initialization and one
+authorized step. It covers both complete and bounded-envelope re-delivery.
 
 ### Schema-driven pull continuation
 
@@ -123,22 +123,18 @@ Four invariants are non-negotiable:
   separate completion call as a compatibility fallback for non-receipt responses.
 - Segmented recipes recover from the latest `recipe_segment`; the startup credential is
   intentionally scoped to delivered bodies rather than the full future recipe.
-- Future work relaxing `CODEX_AUTO_COMPACT_LIMIT` must add integration tests verifying
-  `load_recipe` / `open_kitchen` / `get_recipe_section` re-delivery restores full
-  pipeline execution capability, including envelope re-delivery plus per-step pulls.
-- `test_snapshotted_config_has_auto_compact_limit` validates the primary defense path:
-  `setup_session_dir` preserves the override in the copied `config.toml`.
+- The delivery-reachability suite verifies `load_recipe` / `open_kitchen` /
+  `get_recipe_section` re-delivery restores pipeline execution capability, including
+  complete-envelope and bounded-envelope per-step pulls.
+- Generated homes retain the wrapper-owned automatic-compaction veto while native
+  configuration remains unmodified.
 
-## Re-verification at codex-cli 0.145.0 (2026-07-26)
+## Historical clamp finding at codex-cli 0.145.0 (2026-07-26)
 
-Issue #4369 re-verified the primary defense against upstream `rust-v0.145.0`
+Issue #4369 evaluated the former sentinel approach against upstream `rust-v0.145.0`
 (commit `25af12f7e61572b0bc18ddb1008be543b91519b0`). `ModelInfo::auto_compact_token_limit()`
 clamps the configured `model_auto_compact_token_limit` to 90% of the resolved context
 window; for gpt-5.6-sol (`resolved_context_window = 272_000`) the clamped, effective
-threshold is **244,800** — not the configured `999_999_999`. **`CODEX_AUTO_COMPACT_LIMIT`
-is measurably neutralized upstream at this CLI version**: 34 compaction events were
-observed under 0.145.0. The forward obligation recorded above — testing the
-`load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end recovery path — is
-therefore live, not hypothetical, and is owned by #4271. The finding is recorded
-machine-readably in `CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_AUTO_COMPACT_LIMIT"]`
-(`execution/backends/_codex_config.py`).
+threshold is **244,800**, not the configured sentinel. Thirty-four compaction events
+were observed under 0.145.0. This historical finding explains why the generated-home
+veto, rather than numeric tuning, is the primary defense.

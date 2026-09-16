@@ -1,6 +1,7 @@
 """Architectural invariant: skill and food-truck builders must set the same required base env vars."""  # noqa: E501
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,6 +11,16 @@ from tests.fixtures.codex import codex_skill_add_dirs
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/repo", skill_name="investigate")
+_CODEX_TEST_HOME = Path("/repo/codex-home")
+
+
+def _interactive_home_kwargs(backend: Any) -> dict[str, object]:
+    return {"generated_home": _CODEX_TEST_HOME} if backend.name == "codex" else {}
+
+
+def _resume_home_kwargs(backend: Any) -> dict[str, object]:
+    return {"session_home": str(_CODEX_TEST_HOME)} if backend.name == "codex" else {}
+
 
 _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     {
@@ -79,7 +90,11 @@ def test_resume_cmd_has_baseline_env() -> None:
         backend = cls()
         if not backend.capabilities.session_resume_capable:
             continue
-        resume_spec = backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        resume_spec = backend.build_resume_cmd(
+            resume_session_id="test-session",
+            prompt="continue",
+            **_resume_home_kwargs(backend),
+        )
         assert "MAX_MCP_OUTPUT_TOKENS" in resume_spec.env, (
             f"{name}: MAX_MCP_OUTPUT_TOKENS missing from build_resume_cmd env"
         )
@@ -92,7 +107,7 @@ def test_interactive_cmd_has_baseline_env() -> None:
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
-        spec = backend.build_interactive_cmd()
+        spec = backend.build_interactive_cmd(**_interactive_home_kwargs(backend))
         assert "MAX_MCP_OUTPUT_TOKENS" in spec.env, (
             f"{name}: MAX_MCP_OUTPUT_TOKENS missing from build_interactive_cmd env"
         )
@@ -216,9 +231,13 @@ def _call_builder(backend: object, builder_name: str) -> object:
                 managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
     if builder_name == "build_interactive_cmd":
-        return backend.build_interactive_cmd()
+        return backend.build_interactive_cmd(**_interactive_home_kwargs(backend))
     if builder_name == "build_resume_cmd":
-        return backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        return backend.build_resume_cmd(
+            resume_session_id="test-session",
+            prompt="continue",
+            **_resume_home_kwargs(backend),
+        )
     msg = f"Unknown builder: {builder_name}"
     raise ValueError(msg)
 
@@ -248,14 +267,18 @@ def test_agent_backend_flat_and_dynaconf_values_match_in_interactive_and_resume(
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
-        interactive_spec = backend.build_interactive_cmd()
+        interactive_spec = backend.build_interactive_cmd(**_interactive_home_kwargs(backend))
         assert (
             interactive_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
             == interactive_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
         ), f"{name}: nested and flat AGENT_BACKEND values differ in build_interactive_cmd"
         if not backend.capabilities.session_resume_capable:
             continue
-        resume_spec = backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        resume_spec = backend.build_resume_cmd(
+            resume_session_id="test-session",
+            prompt="continue",
+            **_resume_home_kwargs(backend),
+        )
         assert (
             resume_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
             == resume_spec.env["AUTOSKILLIT_AGENT_BACKEND"]

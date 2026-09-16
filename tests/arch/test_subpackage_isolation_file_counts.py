@@ -161,7 +161,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/session": 20,
     "workspace": 1,  # was 6; #5018 moved 5 skill-capability modules into skill_capabilities/
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
-    "hooks/guards": 41,
+    "hooks/guards": 42,
     "smoke_utils": 11,
 }
 

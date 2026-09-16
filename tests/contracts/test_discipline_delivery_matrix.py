@@ -38,6 +38,25 @@ from tests.fixtures.codex import codex_skill_add_dirs, prompt_text
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _bind_codex_builder_homes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Give shared backend-matrix calls a concrete wrapper home for Codex."""
+    generated_home = tmp_path / "generated-home"
+    interactive = CodexBackend.build_interactive_cmd
+    resume = CodexBackend.build_resume_cmd
+
+    def build_interactive(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", generated_home)
+        return interactive(self, *args, **kwargs)
+
+    def build_resume(self, *args, **kwargs):
+        kwargs.setdefault("session_home", str(generated_home))
+        return resume(self, *args, **kwargs)
+
+    monkeypatch.setattr(CodexBackend, "build_interactive_cmd", build_interactive)
+    monkeypatch.setattr(CodexBackend, "build_resume_cmd", build_resume)
+
+
 def _assert_interactive_primary_channel(backend, spec) -> None:
     """Assert the interactive primary delivery channel is populated."""
     if isinstance(backend, ClaudeCodeBackend):

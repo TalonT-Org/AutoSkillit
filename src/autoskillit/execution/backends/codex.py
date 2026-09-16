@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdOrigin,
     CmdSpec,
+    CodexRuntimeSpec,
     ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
@@ -40,7 +41,6 @@ from autoskillit.core import (
     SkillSemanticOperation,
     SkillSemanticPlan,
     ValidatedAddDir,
-    atomic_write,
     default_log_dir,
     get_logger,
     required_join_is_unsupported,
@@ -88,7 +88,7 @@ from autoskillit.execution.backends._codex_prelaunch import (
     codex_prelaunch_transaction,
 )
 from autoskillit.execution.backends._codex_probes import (
-    _validate_global_codex_home,
+    _validate_generated_codex_home,
     _validate_inert_rollout_paths,
     _validate_mcp_probe,
 )
@@ -291,6 +291,7 @@ def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
 @dataclass(frozen=True, slots=True)
 class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     source_codex_home: Path | None = None
+    runtime_spec: CodexRuntimeSpec = field(default_factory=CodexRuntimeSpec)
 
     def __post_init__(self) -> None:
         source_home = (
@@ -407,8 +408,14 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer:
         return CODEX_EXPLORATION_DISPATCH_RENDERER
 
-    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
-        spec = self.build_headless_cmd(skill_command)
+    def build_cmd(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        generated_home: Path | str | None = None,
+    ) -> CmdSpec:
+        spec = self.build_headless_cmd(skill_command, generated_home=generated_home)
         spec = replace(spec, cwd=cwd)
         if spec.app_server_plan is not None:
             spec = replace(spec, app_server_plan=replace(spec.app_server_plan, cwd=cwd))
@@ -752,31 +759,37 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
     ) -> PreLaunchReadiness:
+        if session_dir is None:
+            return PreLaunchReadiness(())
         try:
             assert self.source_codex_home is not None
+            generated_home = Path(session_dir).expanduser().resolve(strict=False)
             with codex_prelaunch_transaction(
                 source_codex_home=self.source_codex_home,
+                destination_home=generated_home,
+                runtime_spec=self.runtime_spec,
                 hook_config_format=self.capabilities.hook_config_format,
                 plugin_dir=plugin_dir,
             ) as config_path:
-                if session_dir is not None:
+                errors: tuple[str, ...] = ()
+                if executable is not None:
                     try:
-                        snapshot = config_path.read_bytes()
-                        atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
-                    except Exception as exc:
-                        raise _staged_error("snapshot write", exc) from exc
-                    return PreLaunchReadiness(())
-                try:
-                    errors = tuple(
-                        _validate_global_codex_home(
-                            self.source_codex_home,
-                            config_path=config_path,
-                            executable=executable,
+                        errors = tuple(
+                            _validate_generated_codex_home(
+                                generated_home,
+                                config_path=config_path,
+                                executable=executable,
+                            )
                         )
-                    )
-                except Exception as exc:
-                    raise _staged_error("native home validation", exc) from exc
-                return PreLaunchReadiness(errors)
+                    except Exception as exc:
+                        raise _staged_error("generated home validation", exc) from exc
+                return PreLaunchReadiness(
+                    errors,
+                    {
+                        CODEX_HOME_ENV_VAR: str(generated_home),
+                        _CODEX_SQLITE_HOME_ENV_VAR: str(generated_home),
+                    },
+                )
         except Exception as exc:
             logger.error("codex_prelaunch_transaction_failed", exc_info=True)
             return PreLaunchReadiness((f"Codex pre-launch configuration failed: {exc}",))

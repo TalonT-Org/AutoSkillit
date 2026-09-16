@@ -87,6 +87,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "join_followup_guard.py",  # NEW (#4575, #4520)
         "resource_exhaustion_guard.py",  # NEW (#4678 rectify)
         "child_outcome_hook.py",  # NEW (#4623)
+        "auto_compact_guard.py",  # NEW (#4271)
     }
 )
 
@@ -544,6 +545,15 @@ def _build_hook_registry() -> list[HookDef]:
             session_scope="interactive_only",
             mechanism="additionalContext",
             enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        HookDef(
+            matcher="auto",
+            event_type="PreCompact",
+            scripts=["guards/auto_compact_guard.py"],
+            codex_status="works-as-is",
+            mechanism="deny",
+            enforcement_strength={"claude_code": "not-applicable", "codex": "works-as-is"},
+            runtime_only=True,
         ),
         # Child terminal-reason observation (issue #4623). Purely observational
         # (mechanism="side-effect"): records durable child-outcome evidence,

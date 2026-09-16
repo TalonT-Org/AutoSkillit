@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -120,7 +121,7 @@ class TestFoodTruckBackendOverridePrelaunch:
         assert runner.call_args_list
 
     @pytest.mark.anyio
-    async def test_non_global_codex_dispatch_still_runs_prelaunch(
+    async def test_non_global_codex_dispatch_defers_prelaunch_to_materialization(
         self,
         tool_ctx,
         monkeypatch: pytest.MonkeyPatch,
@@ -210,12 +211,46 @@ class TestFoodTruckBackendOverridePrelaunch:
         await _run_with_backend(tool_ctx, dispatch_backend=backend)
 
         assert runner.call_args_list
-        prelaunch.assert_called_once_with()
+        prelaunch.assert_not_called()
         assert admissions[0]["provider"] == "codex"
         assert admissions[0]["diagnostic_log_root"] == Path(tool_ctx.config.linux_tracing.log_dir)
 
 
 class TestDispatchBackendOverrideThreadsToExecutor:
+    def test_caller_override_retains_codex_runtime_spec_and_terminal_outcome(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core import (
+            CodexRuntimeSpec,
+            FleetErrorCode,
+            RetryReason,
+        )
+        from autoskillit.fleet import DispatchStatus
+        from autoskillit.fleet._outcome import classify_dispatch_outcome
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+        from tests.fleet._helpers import _make_completed_clean
+
+        runtime_spec = CodexRuntimeSpec(
+            context_window_tokens=200_000,
+            auto_compact_threshold_tokens=180_000,
+        )
+        monkeypatch.setattr(tool_ctx.launch_resolver, "_codex_runtime_spec", runtime_spec)
+
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
+        assert backend.name == "codex"
+        assert getattr(backend, "runtime_spec") == runtime_spec
+
+        status, reason = classify_dispatch_outcome(
+            _make_completed_clean(success=True),
+            dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+            ),
+        )
+        assert status is DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
     @pytest.mark.anyio
     async def test_dispatch_backend_override_threads_to_executor(self, tool_ctx, monkeypatch):
         _setup(tool_ctx, monkeypatch)
@@ -333,14 +368,6 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
 
         record = _read_dispatch_record(tool_ctx)
         assert "codex-logs" in record["dispatched_session_log_dir"]
-
-
-class TestDispatchBackendOverrideInvalidNameRaises:
-    def test_dispatch_backend_override_invalid_name_raises(self):
-        from autoskillit.server._misc import resolve_backend_override
-
-        with pytest.raises(ValueError, match="Unknown backend"):
-            resolve_backend_override("nonexistent")
 
 
 class TestDispatchBackendOverridePreservedAcrossRetry:

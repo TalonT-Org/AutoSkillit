@@ -17,7 +17,9 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestLaunchCookSessionInfraResume:
-    def test_infra_exit_triggers_resume(self, launch_kwargs: dict[str, object]) -> None:
+    def test_context_exhaustion_does_not_auto_resume(
+        self, launch_kwargs: dict[str, object], capsys: pytest.CaptureFixture[str]
+    ) -> None:
         call_count = 0
 
         def mock_run_interactive(system_prompt, **kwargs):
@@ -34,7 +36,8 @@ class TestLaunchCookSessionInfraResume:
         ):
             _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
 
-        assert call_count == 2
+        assert call_count == 1
+        assert "Automatic Codex context compaction was blocked" in capsys.readouterr().out
 
     def test_infra_exit_uses_named_resume(self, launch_kwargs: dict[str, object]) -> None:
         resume_specs: list = []

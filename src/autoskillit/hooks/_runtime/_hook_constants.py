@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Final
 
+CODEX_AUTO_COMPACTION_DENIED_REASON: Final[str] = "autoskillit_auto_compaction_denied"
+
 # ── Risky operations requiring PreToolUse guard coverage ──────────────────────
 
 RISKY_GIT_OPERATIONS: Final[frozenset[tuple[str, ...]]] = frozenset(

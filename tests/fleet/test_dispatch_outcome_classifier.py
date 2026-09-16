@@ -6,7 +6,13 @@ import dataclasses
 
 import pytest
 
-from autoskillit.core import FleetErrorCode, InfraOutcome, SessionCheckpoint, SkillResult
+from autoskillit.core import (
+    FleetErrorCode,
+    InfraOutcome,
+    RetryReason,
+    SessionCheckpoint,
+    SkillResult,
+)
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet._outcome import classify_dispatch_outcome
 from autoskillit.fleet.result_parser import L3ParseResult
@@ -72,6 +78,25 @@ class TestClassifyDispatchOutcomeCompletedClean:
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
+
+    def test_context_exhaustion_overrides_completed_clean_success(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+            infra=InfraOutcome(exit_category="context_exhausted"),
+        )
+
+        status, reason = classify_dispatch_outcome(parsed, skill_result)
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     def test_completed_clean_failure(self):
         parsed = L3ParseResult(

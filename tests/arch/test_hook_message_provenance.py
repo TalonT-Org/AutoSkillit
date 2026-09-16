@@ -38,6 +38,10 @@ _EXEMPT_LITERALS = frozenset(
         "access (kitchen) is not automatically restored on resume. ",
         "Call /autoskillit:open-kitchen first to regain access to all AutoSkillit MCP "
         "tools before continuing your work.",
+        # The runtime-only guard runs as a stdlib-only standalone hook and must
+        # return the documented visible Codex message verbatim.
+        "AutoSkillit blocked automatic compaction before changing history. Start a new "
+        "session, or compact manually and resume deliberately.",
         "') to regain access to all AutoSkillit MCP tools before continuing your work.",
         # Stop completion gate docstring describes the platform's success/completion
         # marker by name; the gate itself emits PolicyEvent-rendered messages.

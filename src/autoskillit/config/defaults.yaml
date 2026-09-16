@@ -86,6 +86,11 @@ quota_guard:
   credentials_path: "~/.claude/.credentials.json"
   cache_path: "~/.claude/autoskillit_quota_cache.json"
 
+codex_runtime:
+  auto_compaction_policy: "deny"
+  context_window_tokens: null
+  auto_compact_threshold_tokens: null
+
 github:
   token: null
   default_repo: null

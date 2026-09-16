@@ -10,7 +10,7 @@ that compare dataclass instances by identity (e.g. ``is`` checks on
 Symbol origin:
   - ``_dataclasses_diagnostics`` → DiagnosticsConfig, LinuxTracingConfig,
     LoggingConfig, McpResponseConfig, OutputBudgetConfig, TokenUsageConfig
-  - ``_dataclasses_execution`` → QuotaGuardConfig, RunSkillConfig
+  - ``_dataclasses_execution`` → CodexRuntimeConfig, QuotaGuardConfig, RunSkillConfig
   - ``_dataclasses_fleet`` → FleetConfig, ProcessTetherConfig, _MAX_CONCURRENT_DISPATCHES
   - ``_dataclasses_github`` → GitHubConfig, ReportBugConfig
   - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ExecutionCandidateSpec,
@@ -52,6 +52,9 @@ from autoskillit.config._dataclasses_errors import (
 )
 from autoskillit.config._dataclasses_errors import (
     ConfigSchemaError as ConfigSchemaError,
+)
+from autoskillit.config._dataclasses_execution import (
+    CodexRuntimeConfig as CodexRuntimeConfig,
 )
 from autoskillit.config._dataclasses_execution import (
     QuotaGuardConfig as QuotaGuardConfig,
@@ -176,6 +179,7 @@ __all__ = [
     "BranchingConfig",
     "CIConfig",
     "ClassifyFixConfig",
+    "CodexRuntimeConfig",
     "ConfigSchemaError",
     "CoreRunConfig",
     "DiagnosticsConfig",

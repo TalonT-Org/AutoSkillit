@@ -12,9 +12,24 @@ import pytest
 
 from autoskillit.core import BareResume, CmdOrigin, CmdSpec, NamedResume, NoResume
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
-from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
+from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
+from autoskillit.execution.backends.codex import CodexFlags
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+CodexBackend = GeneratedHomeCodexBackend
+
+
+@pytest.fixture(autouse=True)
+def _bind_generated_home_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 def _developer_instructions(spec: CmdSpec) -> str | None:
@@ -37,6 +52,22 @@ def _developer_instructions(spec: CmdSpec) -> str | None:
 
 
 class TestCodexInteractiveCmdBaseStructure:
+    def test_requires_and_pins_a_canonical_generated_home(self, tmp_path: Path) -> None:
+        backend = _CodexBackend()
+        with pytest.raises(ValueError, match="generated_home is required"):
+            backend.build_interactive_cmd()
+
+        generated_home = tmp_path / "generated-home"
+        spec = backend.build_interactive_cmd(generated_home=generated_home)
+
+        assert spec.env["CODEX_HOME"] == str(generated_home)
+        assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+        assert spec.origin is not None
+        assert (
+            CodexFlags.CONFIG_OVERRIDE,
+            f'sqlite_home="{generated_home}"',
+        ) in spec.origin.kv_flags
+
     def test_no_resume_base_command(self) -> None:
         spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
         assert spec.cmd[0] == "codex"
@@ -196,11 +227,12 @@ class TestCodexInteractiveCmdSystemPrompt:
                 config_pairs.extend(spec.cmd[index : index + 2])
 
         overrides = config_pairs[1::2]
-        assert len(config_pairs) == 4
-        assert len(overrides) == 2
+        assert len(config_pairs) == 6
+        assert len(overrides) == 3
         assert {value.partition("=")[0] for value in overrides} == {
             "developer_instructions",
             "features.image_generation",
+            "sqlite_home",
         }
         assert caller_prompt in _developer_instructions(spec)
 
@@ -243,7 +275,7 @@ class TestCodexInteractiveCmdAddDirs:
     def test_empty_list_excludes_add_dir(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
         assert CodexFlags.ADD_DIR not in spec.cmd
-        assert "CODEX_HOME" not in spec.env
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
 
 class TestCodexInteractiveCmdCodexHome:
@@ -255,16 +287,17 @@ class TestCodexInteractiveCmdCodexHome:
         assert spec.env["CODEX_HOME"] == "/session/home"
         assert spec.env["CODEX_SQLITE_HOME"] == "/session/home"
 
-    def test_add_dirs_do_not_define_generated_home(self) -> None:
+    def test_add_dirs_do_not_replace_generated_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             add_dirs=[Path("/first"), Path("/second")],
         )
-        assert "CODEX_HOME" not in spec.env
-        assert "CODEX_SQLITE_HOME" not in spec.env
+        expected = str(CodexBackend._fixture_home())
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.env["CODEX_SQLITE_HOME"] == expected
 
-    def test_empty_add_dirs_excludes_codex_home(self) -> None:
+    def test_empty_add_dirs_keeps_generated_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
-        assert "CODEX_HOME" not in spec.env
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
     def test_generated_home_takes_precedence_over_caller_env_extras(self) -> None:
         spec = CodexBackend().build_interactive_cmd(

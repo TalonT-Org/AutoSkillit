@@ -1293,6 +1293,24 @@ class TestClassifyStaleDispatch:
         assert status == DispatchStatus.INTERRUPTED
         assert sidecar_path_out == ""
 
+    def test_persisted_context_exhaustion_reason_returns_interrupted(self, tmp_path: Path) -> None:
+        """The terminal retry reason wins even when persisted progress exists."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        sidecar.write_text(
+            '{"issue_url":"https://github.com/o/r/issues/1","status":"completed","ts":"t"}\n'
+        )
+        record = DispatchRecord(
+            name="d1",
+            status=DispatchStatus.RUNNING,
+            sidecar_path=str(sidecar),
+            retry_reason="context_exhausted",
+        )
+
+        status, sidecar_path_out = classify_stale_dispatch(record)
+
+        assert status == DispatchStatus.INTERRUPTED
+        assert sidecar_path_out == ""
+
     def test_idle_stall_kill_reason_returns_interrupted(self, tmp_path: Path) -> None:
         """kill_reason=idle_stall (abandon) + empty sidecar → INTERRUPTED."""
         sidecar = tmp_path / "sidecar.jsonl"

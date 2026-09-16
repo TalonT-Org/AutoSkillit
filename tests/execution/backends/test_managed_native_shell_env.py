@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -17,7 +18,11 @@ from autoskillit.core import (
     SkillSessionConfig,
     resolve_native_shell_capture_decision,
 )
-from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.execution.backends import ClaudeCodeBackend
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -33,6 +38,12 @@ _PROTECTED_KEYS = frozenset(
         MANAGED_LINEAGE_REF_ENV_VAR,
     }
 )
+CodexBackend = GeneratedHomeCodexBackend
+
+
+@pytest.fixture(autouse=True)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 @pytest.fixture(autouse=True)

@@ -7,6 +7,8 @@ for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -404,11 +406,11 @@ def test_build_interactive_cmd_satisfies_protocol_claude():
     assert isinstance(ClaudeCodeBackend(), CodingAgentBackend)
 
 
-def test_build_interactive_cmd_codex_returns_cmd_spec():
+def test_build_interactive_cmd_codex_returns_cmd_spec(tmp_path: Path):
     from autoskillit.core import CmdSpec
     from autoskillit.execution.backends import CodexBackend
 
-    spec = CodexBackend().build_interactive_cmd()
+    spec = CodexBackend().build_interactive_cmd(generated_home=tmp_path / "generated-home")
     assert isinstance(spec, CmdSpec)
 
 

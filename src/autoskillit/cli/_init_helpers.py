@@ -507,12 +507,19 @@ def _register_backend_integrations(
 ) -> tuple[bool | None, str]:
     """Register the resolved backend's hooks, plugin, and MCP integrations."""
     if backend.capabilities.mcp_config_capable:
-        readiness = backend.ensure_pre_launch()
-        if readiness.errors:
-            raise RuntimeError(
-                "Backend pre-launch configuration failed: " + "; ".join(readiness.errors)
-            )
-        return None, "ok"
+        from autoskillit.execution import (  # noqa: PLC0415
+            ensure_codex_mcp_registered,
+            sync_hooks_to_codex_config,
+        )
+
+        try:
+            codex_registered = ensure_codex_mcp_registered()
+            sync_hooks_to_codex_config()
+            codex_status = "registered" if codex_registered else "ok"
+        except Exception:
+            codex_status = "failed"
+            logger.warning("Codex native integration registration failed", exc_info=True)
+        return None, codex_status
 
     from autoskillit.cli._hooks import (
         _claude_settings_path,

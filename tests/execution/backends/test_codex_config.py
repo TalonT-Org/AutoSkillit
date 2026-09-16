@@ -12,6 +12,7 @@ from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    CodexRuntimeSpec,
 )
 from autoskillit.execution.backends import (
     CODEX_RECIPE_DELIVERY_BUDGET,
@@ -21,11 +22,11 @@ from autoskillit.execution.backends import (
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_config import (
-    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+    _apply_codex_runtime_spec_unlocked,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
@@ -312,8 +313,6 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -327,8 +326,6 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -343,8 +340,6 @@ class TestIsAutoskillitRegistered:
                     "extra_field": 42,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -390,37 +385,15 @@ class TestIsAutoskillitRegistered:
                 f"Should reject config missing {var}"
             )
 
-    def test_missing_tool_output_token_limit_returns_false(self):
-        """Must return False when top-level tool_output_token_limit is missing."""
-        config = {
-            "mcp_servers": {
-                "autoskillit": {
-                    "command": "autoskillit",
-                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
-                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
-                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-                }
-            }
-        }
-        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
-
-    def test_low_tool_output_token_limit_returns_false(self):
-        """Must return False when tool_output_token_limit is below the floor."""
-        config = {
-            "mcp_servers": {
-                "autoskillit": {
-                    "command": "autoskillit",
-                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
-                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
-                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-                }
-            },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT - 1,
-        }
-        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
-
-    def test_high_tool_output_token_limit_returns_false(self):
-        """The tool-output setting is exact, not a minimum."""
+    @pytest.mark.parametrize(
+        "runtime_tuning",
+        (
+            {},
+            {"tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT - 1},
+            {"model_auto_compact_token_limit": 100_000},
+        ),
+    )
+    def test_runtime_tuning_does_not_affect_native_registration(self, runtime_tuning):
         config = {
             "mcp_servers": {
                 "autoskillit": {
@@ -430,55 +403,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT + 1,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
-        }
-        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
-
-    def test_missing_auto_compact_limit_returns_false(self):
-        """Must return False when model_auto_compact_token_limit is missing."""
-        config = {
-            "mcp_servers": {
-                "autoskillit": {
-                    "command": "autoskillit",
-                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
-                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
-                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-                }
-            },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-        }
-        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
-
-    def test_low_auto_compact_limit_returns_false(self):
-        """Must return False when model_auto_compact_token_limit is below the sentinel."""
-        config = {
-            "mcp_servers": {
-                "autoskillit": {
-                    "command": "autoskillit",
-                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
-                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
-                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-                }
-            },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": 100_000,
-        }
-        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
-
-    def test_auto_compact_limit_at_sentinel_returns_true(self):
-        """Must return True when model_auto_compact_token_limit is at the sentinel."""
-        config = {
-            "mcp_servers": {
-                "autoskillit": {
-                    "command": "autoskillit",
-                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
-                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
-                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-                }
-            },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
+            **runtime_tuning,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -495,51 +420,17 @@ class TestEnsureCodexMcpRegistered:
         assert entry["startup_timeout_sec"] == CODEX_MCP_STARTUP_TIMEOUT_SEC
         assert entry["tool_timeout_sec"] == CODEX_MCP_TOOL_TIMEOUT_FLOOR
 
-    def test_tool_output_token_limit_written_to_top_level(self, tmp_path):
-        """ensure_codex_mcp_registered must set tool_output_token_limit at the top level."""
+    def test_native_registration_preserves_runtime_tuning(self, tmp_path):
         p = tmp_path / "config.toml"
-        ensure_codex_mcp_registered(config_path=p)
-        config = _read_codex_config(p).data
-        assert "tool_output_token_limit" in config
-        assert config["tool_output_token_limit"] == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-        assert "tool_output_token_limit" not in config["mcp_servers"]["autoskillit"], (
-            "tool_output_token_limit is a Codex global key, not a server-entry key"
+        p.write_text(
+            "tool_output_token_limit = 50000\nmodel_auto_compact_token_limit = 100000\n",
+            encoding="utf-8",
         )
-
-    def test_auto_compact_limit_written_to_top_level(self, tmp_path):
-        """ensure_codex_mcp_registered must set model_auto_compact_token_limit at the top level."""
-        p = tmp_path / "config.toml"
-        ensure_codex_mcp_registered(config_path=p)
-        config = _read_codex_config(p).data
-        assert config["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
-        assert "model_auto_compact_token_limit" not in config.get("mcp_servers", {}).get(
-            "autoskillit", {}
-        )
-
-    def test_stale_auto_compact_limit_triggers_rewrite(self, tmp_path):
-        """A below-sentinel limit must trigger a rewrite to the sentinel."""
-        p = tmp_path / "config.toml"
-        ensure_codex_mcp_registered(config_path=p)
-        text = p.read_text().replace(str(CODEX_AUTO_COMPACT_LIMIT), "100000")
-        p.write_text(text)
-        result = ensure_codex_mcp_registered(config_path=p)
-        assert result is True
-        config = _read_codex_config(p).data
-        assert config["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
-
-    def test_parseable_config_rewrites_tool_limit_without_lowering_compact_minimum(self, tmp_path):
-        p = tmp_path / "config.toml"
-        ensure_codex_mcp_registered(config_path=p)
-        higher_compact_limit = CODEX_AUTO_COMPACT_LIMIT + 1
-        text = p.read_text(encoding="utf-8")
-        text = text.replace(str(CODEX_HISTORY_RETENTION_TOKEN_LIMIT), "50000")
-        text = text.replace(str(CODEX_AUTO_COMPACT_LIMIT), str(higher_compact_limit))
-        p.write_text(text, encoding="utf-8")
 
         assert ensure_codex_mcp_registered(config_path=p) is True
         config = _read_codex_config(p).data
-        assert config["tool_output_token_limit"] == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-        assert config["model_auto_compact_token_limit"] == higher_compact_limit
+        assert config["tool_output_token_limit"] == 50_000
+        assert config["model_auto_compact_token_limit"] == 100_000
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -713,58 +604,47 @@ class TestDestructiveOverwritePrevention:
         assert result.data["mcp_servers"]["other"]["command"] == "other"
         assert "autoskillit" in result.data["mcp_servers"]
 
-    def test_corrupt_file_path_writes_tool_output_token_limit(self, tmp_path):
-        """The corrupt-file path must also insert tool_output_token_limit at the top level."""
-        p = tmp_path / "config.toml"
-        p.write_text("not valid toml = =", encoding="utf-8")
-        ensure_codex_mcp_registered(config_path=p)
-        content = p.read_text(encoding="utf-8")
-        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
-        assert "[mcp_servers.autoskillit]" in content
-
-    def test_corrupt_file_rewrites_existing_tool_output_limit_exactly(self, tmp_path):
+    def test_corrupt_file_preserves_runtime_tuning(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_text(
-            "tool_output_token_limit = 50_000\nnot valid toml = =\n",
+            "tool_output_token_limit = 50_000\n"
+            "model_auto_compact_token_limit = 100_000\n"
+            "not valid toml = =\n",
             encoding="utf-8",
         )
 
         ensure_codex_mcp_registered(config_path=p)
 
         content = p.read_text(encoding="utf-8")
-        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
-        assert "tool_output_token_limit = 50_000" not in content
-        assert content.count("tool_output_token_limit =") == 1
-
-    def test_corrupt_file_writes_auto_compact_limit(self, tmp_path):
-        """The corrupt-file path must also insert the auto-compact limit at the top."""
-        p = tmp_path / "config.toml"
-        p.write_text("not valid toml = =", encoding="utf-8")
-        ensure_codex_mcp_registered(config_path=p)
-        content = p.read_text(encoding="utf-8")
-        assert f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}" in content
-
-    @pytest.mark.parametrize(
-        ("existing", "expected"),
-        [
-            (100_000, CODEX_AUTO_COMPACT_LIMIT),
-            (CODEX_AUTO_COMPACT_LIMIT + 1, CODEX_AUTO_COMPACT_LIMIT + 1),
-        ],
-    )
-    def test_corrupt_file_preserves_auto_compact_minimum_semantics(
-        self, tmp_path, existing, expected
-    ):
-        p = tmp_path / "config.toml"
-        p.write_text(
-            f"model_auto_compact_token_limit = {existing}\nnot valid toml = =\n",
-            encoding="utf-8",
-        )
-
-        ensure_codex_mcp_registered(config_path=p)
-
-        content = p.read_text(encoding="utf-8")
-        assert f"model_auto_compact_token_limit = {expected}" in content
+        assert "tool_output_token_limit = 50_000" in content
+        assert "model_auto_compact_token_limit = 100_000" in content
         assert content.count("model_auto_compact_token_limit =") == 1
+
+    def test_corrupt_file_replaces_owned_runtime_tuning(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "tool_output_token_limit = 50_000\n"
+            "model_context_window = 120_000\n"
+            "model_auto_compact_token_limit = 100_000\n"
+            "not valid toml = =\n",
+            encoding="utf-8",
+        )
+
+        _apply_codex_runtime_spec_unlocked(
+            config_path=p,
+            runtime_spec=CodexRuntimeSpec(
+                context_window_tokens=200_000,
+                auto_compact_threshold_tokens=180_000,
+            ),
+        )
+
+        content = p.read_text(encoding="utf-8")
+        assert content.count("tool_output_token_limit =") == 1
+        assert content.count("model_context_window =") == 1
+        assert content.count("model_auto_compact_token_limit =") == 1
+        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
+        assert "model_context_window = 200000" in content
+        assert "model_auto_compact_token_limit = 180000" in content
 
     def test_preserves_unknown_top_level_scalars(self, tmp_path):
         """Unknown top-level scalar keys (model/theme/disable_telemetry) must survive
@@ -864,8 +744,6 @@ class TestConfigEnvBoundary:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -1017,8 +895,6 @@ class TestIsRegisteredRequiresAllForwardVars:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
 
     def test_all_forward_vars_present_is_registered(self) -> None:
@@ -1097,13 +973,17 @@ def test_mcp_writer_facade_owns_the_shared_config_lock(
     ]
 
 
-def test_composed_prelaunch_uses_one_lock_for_both_unlocked_mutators(
+def test_composed_prelaunch_uses_one_destination_lock_for_all_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import autoskillit.execution.backends._codex_prelaunch as prelaunch
+    from autoskillit.core import CodexRuntimeSpec
 
     source_home = tmp_path / "source-home"
-    config_path = source_home / "config.toml"
+    source_home.mkdir()
+    (source_home / "config.toml").write_text('model = "source"\n', encoding="utf-8")
+    destination_home = tmp_path / "destination-home"
+    config_path = destination_home / "config.toml"
     events: list[str] = []
     lock_held = False
 
@@ -1125,17 +1005,29 @@ def test_composed_prelaunch_uses_one_lock_for_both_unlocked_mutators(
 
     def fake_mcp(*, config_path: Path, **_: object) -> bool:
         assert lock_held is True
-        assert config_path == source_home / "config.toml"
+        assert config_path == destination_home / "config.toml"
         events.append("mcp")
         return True
 
+    def fake_snapshot(path: Path, data: bytes) -> None:
+        assert lock_held is True
+        assert path == config_path
+        assert data == b'model = "source"\n'
+        events.append("snapshot")
+
     def fake_hooks(*, config_path: Path, **_: object) -> bool:
         assert lock_held is True
-        assert config_path == source_home / "config.toml"
+        assert config_path == destination_home / "config.toml"
         events.append("hooks")
         return True
 
+    def fake_runtime(*, config_path: Path, **_: object) -> None:
+        assert lock_held is True
+        assert config_path == destination_home / "config.toml"
+        events.append("runtime")
+
     monkeypatch.setattr(prelaunch, "CodexConfigLock", RecordingLock)
+    monkeypatch.setattr(prelaunch, "atomic_write", fake_snapshot)
     monkeypatch.setattr(
         prelaunch,
         "_ensure_codex_mcp_registered_unlocked",
@@ -1146,10 +1038,23 @@ def test_composed_prelaunch_uses_one_lock_for_both_unlocked_mutators(
         "_sync_hooks_to_codex_config_unlocked",
         fake_hooks,
     )
+    monkeypatch.setattr(prelaunch, "_apply_codex_runtime_spec_unlocked", fake_runtime)
 
-    with prelaunch.codex_prelaunch_transaction(source_codex_home=source_home) as target:
+    with prelaunch.codex_prelaunch_transaction(
+        source_codex_home=source_home,
+        destination_home=destination_home,
+        runtime_spec=CodexRuntimeSpec(),
+    ) as target:
         assert target == config_path
         assert lock_held is True
         events.append("yield")
 
-    assert events == ["lock-enter", "mcp", "hooks", "yield", "lock-exit"]
+    assert events == [
+        "lock-enter",
+        "snapshot",
+        "mcp",
+        "runtime",
+        "hooks",
+        "yield",
+        "lock-exit",
+    ]

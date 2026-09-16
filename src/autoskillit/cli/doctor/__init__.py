@@ -73,6 +73,7 @@ from ._doctor_runtime import (
     _check_codex_limits_verified,
     _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
+    _check_codex_runtime_policy,
     _check_orphaned_autoskillit_daemons,
     _check_orphaned_codex_processes,
     _check_orphaned_process_tethers,
@@ -98,7 +99,10 @@ def _collect_doctor_results() -> list[DoctorResult]:
     cfg, results = _load_config_guarded(Path.cwd())
     if cfg.agent_backend.backend:
         try:
-            _backend = get_backend(cfg.agent_backend.backend)
+            _backend = get_backend(
+                cfg.agent_backend.backend,
+                codex_runtime_spec=cfg.codex_runtime.resolve(),
+            )
         except ValueError:
             logger.warning("unknown_backend_fallback", backend=cfg.agent_backend.backend)
             _backend = None
@@ -238,6 +242,16 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_standing_backend_pins_feasibility)))
     results.extend(_run_check(functools.partial(_check_local_recipe_validity)))
     results.extend(_run_check(functools.partial(_check_codex_limits_verified, backend=_backend)))
+    results.extend(
+        _run_check(
+            functools.partial(
+                _check_codex_runtime_policy,
+                backend=_backend,
+                project_dir=Path.cwd(),
+                workspace_temp_dir=cfg.workspace.temp_dir,
+            )
+        )
+    )
     results.extend(_run_check(functools.partial(_check_skill_capability_authenticity)))
     results.extend(_run_check(functools.partial(_check_capture_store_stats)))
     results.extend(_run_check(functools.partial(_check_project_local_skill_contracts)))

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from autoskillit.core import CodingAgentBackend
+from autoskillit.core import CodexRuntimeSpec, CodingAgentBackend
 
 from ._codex_config import (
-    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     CODEX_MCP_REQUIRED_KEYS,
@@ -73,13 +72,19 @@ BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
 }
 
 
-def get_backend(name: str) -> CodingAgentBackend:
+def get_backend(
+    name: str,
+    *,
+    codex_runtime_spec: CodexRuntimeSpec | None = None,
+) -> CodingAgentBackend:
     try:
         cls = BACKEND_REGISTRY[name]
     except KeyError:
         valid = ", ".join(sorted(BACKEND_REGISTRY))
         msg = f"Unknown backend {name!r}. Valid names: {valid}"
         raise ValueError(msg) from None
+    if cls is CodexBackend:
+        return CodexBackend(runtime_spec=codex_runtime_spec or CodexRuntimeSpec())
     return cls()
 
 
@@ -124,7 +129,6 @@ __all__ = [
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST",
     "SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY",
     "CODEX_LIMITS_LAST_VERIFIED_VERSION",
-    "CODEX_AUTO_COMPACT_LIMIT",
     "NON_VARIADIC_CODEX_FLAGS",
     "NullProtectedHostAttestationProvider",
     "ProtectedHostAttestationProvider",

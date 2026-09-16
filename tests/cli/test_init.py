@@ -344,7 +344,7 @@ class TestCodexInitFlow:
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
         monkeypatch.setattr(
             _patch_backends_codex,
-            "_validate_global_codex_home",
+            "_validate_generated_codex_home",
             lambda *_args, **_kwargs: [],
         )
         cfg_dir = tmp_path / ".autoskillit"

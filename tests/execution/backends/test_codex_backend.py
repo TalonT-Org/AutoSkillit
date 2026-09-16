@@ -20,6 +20,7 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,
+    CODEX_RESERVED_HOME_ENV_VARS,
     DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
@@ -50,7 +51,6 @@ from autoskillit.core import (
 from autoskillit.execution.backends._codex_config import effective_codex_agent_names
 from autoskillit.execution.backends.codex import (
     CODEX_ENV_PREFIX_DENYLIST,
-    CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
     CodexResultParser,
@@ -59,11 +59,26 @@ from autoskillit.execution.backends.codex import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
+from autoskillit.execution.backends.codex import (
+    CodexBackend as _CodexBackend,
+)
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+CodexBackend = GeneratedHomeCodexBackend
+
+
+@pytest.fixture(autouse=True)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bind_generated_home_backend(tmp_path, monkeypatch)
+
 
 _OTLP_OVERRIDES = (
     'otel.exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/logs",protocol="json"}}',
@@ -251,6 +266,23 @@ class TestCodexBackend:
 
 
 class TestCodexBackendCommands:
+    def test_headless_builder_requires_and_pins_a_canonical_generated_home(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        backend = _CodexBackend()
+        with pytest.raises(ValueError, match="generated_home is required"):
+            backend.build_headless_cmd("do stuff")
+
+        generated_home = tmp_path / "generated-home"
+        spec = backend.build_headless_cmd("do stuff", generated_home=generated_home)
+
+        assert spec.env["CODEX_HOME"] == str(generated_home)
+        assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.session_home == str(generated_home)
+        assert spec.app_server_plan.config_overrides["sqlite_home"] == str(generated_home)
+
     def test_build_headless_cmd_codex_at_0(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.cmd[0] == "codex"
@@ -432,18 +464,13 @@ class TestCodexBackendCommands:
         assert spec.env["CODEX_HOME"] == "/session-home"
         assert spec.env["CODEX_SQLITE_HOME"] == "/session-home"
 
-    def test_build_resume_cmd_does_not_select_plugin_home_without_session_home(self) -> None:
-        """Part D: 'Do not select a plugin projection as CODEX_HOME' for resume —
-        without an explicit/managed home, resume proceeds against the selected
-        native home and registers no managed root at all."""
-        spec = CodexBackend().build_resume_cmd(
-            resume_session_id="sess-123",
-            prompt="continue",
-            plugin_binding=plugin_binding(Path("/plugin")),
-        )
-        assert "CODEX_HOME" not in spec.env
-        assert "CODEX_SQLITE_HOME" not in spec.env
-        assert spec.app_server_plan.session_home == ""
+    def test_build_resume_cmd_requires_a_generated_home(self) -> None:
+        with pytest.raises(ValueError, match="session_home is required"):
+            _CodexBackend().build_resume_cmd(
+                resume_session_id="sess-123",
+                prompt="continue",
+                plugin_binding=plugin_binding(Path("/plugin")),
+            )
 
     def test_build_resume_cmd_env_uses_filtered_base(self, monkeypatch) -> None:
         monkeypatch.setenv("PATH", "/usr/bin")
@@ -631,23 +658,17 @@ class TestCodexHeadlessCmd:
         assert spec.app_server_plan.expected_skill_names == frozenset()
         assert spec.app_server_plan.expected_skill_entries == ()
 
-    def test_empty_home_sentinel_when_no_finalized_codex_home(self) -> None:
-        # The central `_scrub_ambient_env` autouse fixture already scrubs
-        # CODEX_HOME from every test's environment; no explicit delenv needed.
+    def test_fixture_home_is_used_when_caller_omits_finalized_home(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.app_server_plan.session_home == ""
+        assert spec.app_server_plan.session_home == str(CodexBackend._fixture_home())
 
-    def test_explicit_home_resolved_from_finalized_env(self, monkeypatch) -> None:
-        """CODEX_HOME is one of _HEADLESS_EXCLUSIVE_VARS (stripped from the base env
-        this builder assembles for the child, to block host leakage) and one of the
-        reserved keys _merge_caller_env_extras always blocks from caller extras — so
-        an explicit ambient home is read directly off this process's own environment
-        and re-injected as the child's reserved home keys."""
+    def test_ambient_home_does_not_override_finalized_home(self, monkeypatch) -> None:
         monkeypatch.setenv("CODEX_HOME", "/tmp/explicit-codex-home")
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.app_server_plan.session_home == "/tmp/explicit-codex-home"
-        assert spec.env["CODEX_HOME"] == "/tmp/explicit-codex-home"
-        assert spec.env["CODEX_SQLITE_HOME"] == "/tmp/explicit-codex-home"
+        expected = str(CodexBackend._fixture_home())
+        assert spec.app_server_plan.session_home == expected
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.env["CODEX_SQLITE_HOME"] == expected
 
 
 class TestCodexResumeCmd:
@@ -704,7 +725,9 @@ class TestCodexResumeCmd:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
         reinjected = frozenset(SHARED_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
-        leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_RESERVED_HOME_ENV_VARS
+        ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 
     def test_bypass_hook_trust_absent_from_argv_true_in_plan(self) -> None:
@@ -718,15 +741,16 @@ class TestCodexResumeCmd:
         assert spec.app_server_plan.catalog_root == ""
         assert spec.app_server_plan.expected_skill_names == frozenset()
 
-    def test_no_plugin_projection_selected_as_codex_home(self) -> None:
+    def test_plugin_projection_does_not_replace_generated_home(self) -> None:
         """Part D removed CODEX_HOME-from-plugin-binding selection for resume; a
         non-managed resume preserves the selected native/explicit home only."""
         binding = plugin_binding(Path("/some-plugin-dir"))
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="abc123", prompt="continue", plugin_binding=binding
         )
-        assert "CODEX_HOME" not in spec.env
-        assert spec.app_server_plan.session_home == ""
+        expected = str(CodexBackend._fixture_home())
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.app_server_plan.session_home == expected
 
     def test_managed_catalog_requires_nonempty_session_home(self) -> None:
         catalog = ValidatedAddDir(
@@ -785,7 +809,9 @@ class TestCodexHeadlessCmdEnv:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_headless_cmd("do stuff")
-        leaking = (_HEADLESS_EXCLUSIVE_VARS - CODEX_MCP_ENV_FORWARD_VARS) & spec.env.keys()
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - CODEX_MCP_ENV_FORWARD_VARS - CODEX_RESERVED_HOME_ENV_VARS
+        ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into headless env: {leaking}"
 
 
@@ -1317,12 +1343,14 @@ class TestCodexBuildInteractiveCmd:
         assert str(CodexFlags.DANGEROUSLY_BYPASS) == "--dangerously-bypass-approvals-and-sandbox"
 
     def test_no_resume_produces_correct_base_command(self) -> None:
+        from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
         spec = CodexBackend().build_interactive_cmd()
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
-        assert spec.skill_discovery_route is None
-        assert "CODEX_HOME" not in spec.env
+        assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
     def test_named_resume_produces_resume_subcommand_with_session_id(self) -> None:
         from autoskillit.core import NamedResume
@@ -1417,7 +1445,7 @@ class TestCodexBuildInteractiveCmd:
             skill_entries=(("projected-skill", "projected-skill/SKILL.md"),),
         )
 
-        spec = CodexBackend().build_interactive_cmd(plugin_binding=binding)
+        spec = _CodexBackend().build_interactive_cmd(plugin_binding=binding)
 
         assert spec.skill_discovery_route is CODEX_PROJECTED_HOME_ROUTE
 
@@ -1425,14 +1453,16 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
         assert spec.cmd[-1] == "hello"
 
-    def test_plugin_binding_is_delivered_through_codex_home(self) -> None:
+    def test_plugin_binding_does_not_replace_generated_home(self) -> None:
         from pathlib import Path
+
+        from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
         spec = CodexBackend().build_interactive_cmd(plugin_binding=plugin_binding(Path("/x")))
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
-        assert spec.env["CODEX_HOME"] == "/x"
-        assert spec.skill_discovery_route is None
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
+        assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
 
     def test_env_excludes_headless_vars(self, monkeypatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
@@ -2208,12 +2238,7 @@ class TestCodexDiscardDispositions:
 
 
 class TestCodexBackendEnsurePreLaunchStageTagging:
-    """No existing test drives a failure through ensure_pre_launch's composed
-    transaction — every existing caller only exercises the success path. The
-    4 sub-steps (source-config sync, hook update; then, mutually exclusive per
-    call, snapshot write or native home validation) each get their own stage
-    prefix inside the single ``errors`` tuple element, since ``PreLaunchReadiness``
-    has no dedicated ``stage`` field."""
+    """Pre-launch errors identify the failed destination-provisioning stage."""
 
     _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
         "[mcp_servers.autoskillit]\n"
@@ -2236,7 +2261,7 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         (self.session_dir / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
 
-    def test_source_config_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_runtime_mcp_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             _patch_backends__codex_prelaunch,
             "_ensure_codex_mcp_registered_unlocked",
@@ -2244,10 +2269,10 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "source-config sync" in readiness.errors[0]
+        assert "runtime MCP sync" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_runtime_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             _patch_backends__codex_prelaunch,
             "_sync_hooks_to_codex_config_unlocked",
@@ -2255,31 +2280,35 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "hook update" in readiness.errors[0]
+        assert "runtime hook update" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_snapshot_write_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_destination_snapshot_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        (self.session_dir / "config.toml").unlink()
         monkeypatch.setattr(
-            _patch_backends_codex,
+            _patch_backends__codex_prelaunch,
             "atomic_write",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "snapshot write" in readiness.errors[0]
+        assert "destination snapshot" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_native_home_validation_failure_is_tagged(
+    def test_generated_home_validation_failure_is_tagged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
             _patch_backends_codex,
-            "_validate_global_codex_home",
+            "_validate_generated_codex_home",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(session_dir=None)
+        readiness = CodexBackend().ensure_pre_launch(
+            session_dir=self.session_dir,
+            executable=object(),
+        )
         assert len(readiness.errors) == 1
-        assert "native home validation" in readiness.errors[0]
+        assert "generated home validation" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
 
@@ -3302,6 +3331,7 @@ class TestCodexBackendSetupSessionDir:
             encoding="utf-8",
         )
         (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        (self.session_dir / "config.toml").unlink()
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "pre-test-backend")
         backend = CodexBackend()
 
@@ -3332,6 +3362,7 @@ class TestCodexBackendSetupSessionDir:
             encoding="utf-8",
         )
         (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        (self.session_dir / "config.toml").unlink()
         backend = CodexBackend()
 
         assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors
@@ -3520,17 +3551,14 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / ".git").exists()
 
-    def test_snapshotted_config_has_auto_compact_limit(self) -> None:
-        from autoskillit.execution.backends import CODEX_AUTO_COMPACT_LIMIT
-
+    def test_setup_preserves_generated_auto_compact_limit(self) -> None:
         (self.session_dir / "config.toml").write_text(
-            f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}\n"
-            + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+            "model_auto_compact_token_limit = 100000\n" + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
         )
         (self.codex_home / "auth.json").write_text("{}")
         CodexBackend().setup_session_dir(self.session_dir)
         data = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
-        assert data["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
+        assert data["model_auto_compact_token_limit"] == 100_000
 
     def test_session_config_lacks_key_when_source_lacks_it(self) -> None:
         (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")

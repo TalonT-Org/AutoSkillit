@@ -98,16 +98,20 @@ def classify_dispatch_outcome(
 
     Pure function — no filesystem access, no side effects.
     Rules applied in order:
-      0. timeout + session_id + lifespan_started + (checkpoint or sidecar)
+      0. controlled context exhaustion → FAILURE
+      1. timeout + session_id + lifespan_started + (checkpoint or sidecar)
          + not abandon → RESUMABLE
-      0b. timeout (any other case) → FAILURE
-      1. completed_clean + success flag → SUCCESS
-      2. completed_clean + no success → FAILURE
-      3. completed_dirty → FAILURE (fleet_l3_parse_failed)
-      4. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar)
+      2. timeout (any other case) → FAILURE
+      3. completed_clean + success flag → SUCCESS
+      4. completed_clean + no success → FAILURE
+      5. completed_dirty → FAILURE (fleet_l3_parse_failed)
+      6. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar)
          + not abandon → RESUMABLE
-      5. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
+      7. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
     """
+    if skill_result.retry_reason == RetryReason.CONTEXT_EXHAUSTED:
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
     if subtype == "timeout":
         has_progress = checkpoint is not None or sidecar_exists
         if skill_result.session_id and skill_result.lifespan_started and has_progress:

@@ -19,8 +19,6 @@ import pytest
 
 from autoskillit.core.types._type_enums import CodexEventType, CodexItemType
 from autoskillit.execution.backends._codex_config import (
-    CODEX_AUTO_COMPACT_LIMIT,
-    CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
 )
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
@@ -87,18 +85,7 @@ def _generate_config_template() -> dict:
             key: {"expected_type": _MCP_KEY_EXPECTED_TYPES[key]}
             for key in sorted(CODEX_MCP_REQUIRED_KEYS)
         },
-        "top_level_keys": {
-            "tool_output_token_limit": {
-                "expected_type": "int",
-                "constraint": "exact",
-                "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-            },
-            "model_auto_compact_token_limit": {
-                "expected_type": "int",
-                "constraint": "minimum",
-                "floor_value": CODEX_AUTO_COMPACT_LIMIT,
-            },
-        },
+        "top_level_keys": {},
     }
 
 
@@ -214,18 +201,9 @@ class TestCodexHookEventFormatFixture:
 class TestCodexConfigTomlSchemaTemplate:
     _TEMPLATE_PATH = FIXTURES_DIR / "config_toml_schema_template.json"
 
-    def test_generator_preserves_distinct_top_level_constraint_semantics(self) -> None:
+    def test_generator_excludes_wrapper_runtime_tuning(self) -> None:
         top = _generate_config_template()["top_level_keys"]
-        assert top["tool_output_token_limit"] == {
-            "constraint": "exact",
-            "expected_type": "int",
-            "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-        }
-        assert top["model_auto_compact_token_limit"] == {
-            "constraint": "minimum",
-            "expected_type": "int",
-            "floor_value": CODEX_AUTO_COMPACT_LIMIT,
-        }
+        assert top == {}
 
     def test_required_keys_present(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
@@ -240,16 +218,7 @@ class TestCodexConfigTomlSchemaTemplate:
     def test_pinned_constants_match(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         top = template["top_level_keys"]
-        assert top["tool_output_token_limit"] == {
-            "constraint": "exact",
-            "expected_type": "int",
-            "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-        }
-        assert top["model_auto_compact_token_limit"]["floor_value"] == CODEX_AUTO_COMPACT_LIMIT, (
-            f"CODEX_AUTO_COMPACT_LIMIT drift: "
-            f"fixture={top['model_auto_compact_token_limit']['floor_value']} "
-            f"vs live={CODEX_AUTO_COMPACT_LIMIT}"
-        )
+        assert top == {}
         mcp_keys = template["mcp_server_entry_required_keys"]
         assert "startup_timeout_sec" in mcp_keys, (
             "startup_timeout_sec missing from MCP entry template"
@@ -271,14 +240,7 @@ class TestCodexConfigTomlSchemaTemplate:
 
         reloaded = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         assert set(reloaded["_codex_mcp_required_keys"]) == CODEX_MCP_REQUIRED_KEYS
-        assert (
-            reloaded["top_level_keys"]["tool_output_token_limit"]["expected_value"]
-            == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-        )
-        assert (
-            reloaded["top_level_keys"]["model_auto_compact_token_limit"]["floor_value"]
-            == CODEX_AUTO_COMPACT_LIMIT
-        )
+        assert reloaded["top_level_keys"] == {}
 
 
 class TestConformanceAssertionsSyntheticExercise:

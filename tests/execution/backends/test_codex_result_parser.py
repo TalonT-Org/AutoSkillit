@@ -22,6 +22,7 @@ from autoskillit.execution.backends._codex_parse import (
     _scan_codex_ndjson,
     extract_codex_turn_usage,
 )
+from tests.execution.backends._codex_fixtures import app_server_fixture
 from tests.fixtures.codex import fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -1078,6 +1079,36 @@ class TestCodexResultParserAppServerEquivalence:
             "cached_input_tokens": 400,
             "output_tokens": 2500,
         }
+
+
+class TestCodexResultParserAutoCompactionCorrelation:
+    def test_app_server_capture_preserves_correlated_denial(self) -> None:
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
+
+        result = CodexResultParser().parse_stdout(
+            "\n".join((json.dumps(hook), json.dumps(terminal)))
+        )
+
+        assert result.success is False
+        assert result.error == "autoskillit_auto_compaction_denied"
+        assert result.raw["error_code"] == "autoskillit_auto_compaction_denied"
+
+    def test_event_list_failed_terminal_never_becomes_success(self) -> None:
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
+        terminal["params"]["turn"]["status"] = "failed"
+        stream = CodexStreamParser()
+        assert stream.parse_line(json.dumps(hook)) is None
+        event = stream.parse_line(json.dumps(terminal))
+        assert event is not None
+        completed = stream.parse_line(json.dumps({"type": "turn.completed"}))
+        assert completed is not None
+
+        result = CodexResultParser().parse_result([event, completed])
+
+        assert result.success is False
+        assert result.error == "failed"
 
 
 class TestExtractCodexTurnUsage:

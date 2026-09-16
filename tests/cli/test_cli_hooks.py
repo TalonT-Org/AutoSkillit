@@ -243,6 +243,8 @@ def test_hooks_json_matches_hook_registry_after_generate():
 
     data = generate_hooks_json()
     for hook_def in HOOK_REGISTRY:
+        if hook_def.runtime_only:
+            continue
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
         # Per REQ-B39: matcherless events (SessionStart, Stop, matcherless
         # PreToolUse) omit the matcher key entirely; matcher-bearing events

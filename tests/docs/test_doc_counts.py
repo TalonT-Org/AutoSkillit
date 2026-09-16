@@ -180,7 +180,7 @@ def _hook_files() -> list[Path]:
 
 
 def _count_hooks_by_event() -> dict[str, int]:
-    """Group unique hook scripts by their PreToolUse / PostToolUse / SessionStart event.
+    """Group unique Claude hook scripts by event type.
 
     Imports HOOK_REGISTRY and counts the distinct script files referenced by
     each event type — duplicates (e.g. branch_protection_guard registered for
@@ -191,6 +191,8 @@ def _count_hooks_by_event() -> dict[str, int]:
     by_event: dict[str, set[str]] = {}
     # join_followup_guard adds one PreToolUse script to the count.
     for hook_def in HOOK_REGISTRY:
+        if hook_def.runtime_only:
+            continue
         for script in hook_def.scripts:
             by_event.setdefault(hook_def.event_type, set()).add(script)
     return {event: len(scripts) for event, scripts in by_event.items()}
@@ -285,12 +287,12 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_56() -> None:
-    # Combined-tree canonical count: 46 numbered checks + 10 lettered sub-checks.
+def test_doctor_check_count_is_57() -> None:
+    # Combined-tree canonical count: 47 numbered checks + 10 lettered sub-checks.
     # Check 47 (S2-5): pytest-generation temp-root capacity and orphaned-generation count.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 56, f"Expected 56 doctor checks; found {count}"
+    assert count == 57, f"Expected 57 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:
@@ -315,9 +317,9 @@ def test_bundled_recipe_count_is_15() -> None:
     assert recipes == expected, f"Recipes drifted: {recipes}"
 
 
-def test_retry_reason_value_count_is_18() -> None:
+def test_retry_reason_value_count_is_19() -> None:
     values = _retry_reason_values()
-    assert len(values) == 18, f"RetryReason has {len(values)} values: {values}"
+    assert len(values) == 19, f"RetryReason has {len(values)} values: {values}"
 
 
 def test_semantic_rule_family_count_is_current() -> None:
@@ -424,8 +426,8 @@ def test_recipes_overview_states_6_recipes() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
 
 
-def test_orchestration_states_18_retry_reasons() -> None:
-    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 18)
+def test_orchestration_states_19_retry_reasons() -> None:
+    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 19)
 
 
 def test_architecture_doc_names_declared_interactive_discovery_route() -> None:

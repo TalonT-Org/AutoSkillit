@@ -488,6 +488,7 @@ async def _execute_claude_headless(
                 try:
                     physical_attempt += 1
                     same_binding_nudge_attempted = True
+                    app_server_plan = spec.app_server_plan
                     nudge_success = await _attempt_contract_nudge(
                         skill_result,
                         result,
@@ -504,7 +505,7 @@ async def _execute_claude_headless(
                         plugin_authority=plugin_authority,
                         plugin_load_mode=plugin_load_mode,
                         retained_binding=retained_binding,
-                        session_env=spec.env,
+                        session_home=app_server_plan.session_home if app_server_plan else None,
                         managed_skill_catalog=spec.managed_skill_catalog,
                         launch_resolver=launch_resolver,
                         launch_preparation=launch_preparation,

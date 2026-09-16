@@ -113,6 +113,8 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
 
     registry_pairs: set[tuple[str, str]] = set()
     for hook_def in HOOK_REGISTRY:
+        if hook_def.runtime_only:
+            continue
         for script in hook_def.scripts:
             registry_pairs.add((hook_def.matcher, script))
 

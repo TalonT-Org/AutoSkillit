@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Literal, cast
 
-from autoskillit.core import OutputFormat
+from autoskillit.core import CodexRuntimeSpec, OutputFormat
 
 
 @dataclass
@@ -32,6 +32,23 @@ class QuotaGuardConfig:
     cache_refresh_interval: int = 240
     credentials_path: str = "~/.claude/.credentials.json"
     cache_path: str = "~/.claude/autoskillit_quota_cache.json"
+
+
+@dataclass
+class CodexRuntimeConfig:
+    auto_compaction_policy: str = "deny"
+    context_window_tokens: int | None = None
+    auto_compact_threshold_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        self.resolve()
+
+    def resolve(self) -> CodexRuntimeSpec:
+        return CodexRuntimeSpec(
+            auto_compaction_policy=cast(Literal["deny"], self.auto_compaction_policy),
+            context_window_tokens=self.context_window_tokens,
+            auto_compact_threshold_tokens=self.auto_compact_threshold_tokens,
+        )
 
 
 @dataclass

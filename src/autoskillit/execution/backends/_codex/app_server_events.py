@@ -38,6 +38,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.process import _marker_is_standalone
+from autoskillit.hooks import CODEX_AUTO_COMPACTION_DENIED_REASON
 
 logger = get_logger(__name__)
 
@@ -148,20 +149,90 @@ _APP_SERVER_METHOD_HANDLERS: Mapping[str, Callable[[Mapping[str, Any]], dict[str
 }
 
 
-def _app_server_to_exec_event(obj: Mapping[str, Any]) -> dict[str, Any] | None:
+@dataclass(slots=True)
+class _AutoCompactionCorrelation:
+    """Pending AutoSkillit PreCompact veto for one app-server stream."""
+
+    thread_id: str | None = None
+    turn_id: str | None = None
+
+    def clear(self) -> None:
+        self.thread_id = None
+        self.turn_id = None
+
+    def remember_hook_stop(self, params: Mapping[str, Any]) -> None:
+        thread_id = params.get("threadId")
+        turn_id = params.get("turnId")
+        run = params.get("run")
+        if (
+            not isinstance(thread_id, str)
+            or not thread_id
+            or not isinstance(turn_id, str)
+            or not turn_id
+            or not isinstance(run, Mapping)
+            or run.get("eventName") != "preCompact"
+            or run.get("status") != "stopped"
+        ):
+            return
+        entries = run.get("entries")
+        if not isinstance(entries, list):
+            return
+        if not any(
+            isinstance(entry, Mapping)
+            and entry.get("kind") == "stop"
+            and entry.get("text") == CODEX_AUTO_COMPACTION_DENIED_REASON
+            for entry in entries
+        ):
+            return
+        self.thread_id = thread_id
+        self.turn_id = turn_id
+
+    def correlated_interruption(self, params: Mapping[str, Any]) -> bool:
+        turn = params.get("turn")
+        if (
+            not isinstance(turn, Mapping)
+            or params.get("threadId") != self.thread_id
+            or turn.get("id") != self.turn_id
+        ):
+            return False
+        matched = turn.get("status") == "interrupted"
+        self.clear()
+        return matched
+
+
+def _app_server_to_exec_event(
+    obj: Mapping[str, Any], *, correlation: _AutoCompactionCorrelation | None = None
+) -> dict[str, Any] | None:
     """Adapt one parsed line into the canonical exec event shape, or None.
 
     ``None`` covers both a JSON-RPC response (no ``method``, no ``type`` —
-    the driver's own concern, never a session event) and an empty/malformed
-    object; an object already in exec shape (no ``method``, has ``type``)
-    passes through unchanged so exec- and app-server-transport launches
-    share this one parsing path.
+    the driver's own concern, never a session event), hook lifecycle
+    notifications, and an empty/malformed object; an object already in exec
+    shape (no ``method``, has ``type``) passes through unchanged so exec- and
+    app-server-transport launches share this one parsing path.
     """
     method = obj.get("method")
     if method is None:
         return dict(obj) if "type" in obj else None
     params = obj.get("params")
     params = params if isinstance(params, Mapping) else {}
+    if method == "hook/completed":
+        if correlation is not None:
+            correlation.remember_hook_stop(params)
+        return None
+    if method == "turn/started" and correlation is not None:
+        correlation.clear()
+    if method == "turn/completed":
+        event = _handle_turn_completed(params)
+        if correlation is not None and correlation.correlated_interruption(params):
+            return {
+                "type": CodexEventType.TURN_FAILED.value,
+                "error": {
+                    "message": CODEX_AUTO_COMPACTION_DENIED_REASON,
+                    "code": CODEX_AUTO_COMPACTION_DENIED_REASON,
+                },
+            }
+        return event
     handler = _APP_SERVER_METHOD_HANDLERS.get(method)
     if handler is None:
         return {"type": method}
@@ -184,6 +255,9 @@ class CodexStreamParser:
     ndjson_unknown_item_count: int = field(default=0, init=False, repr=False)
     _last_usage: Mapping[str, Any] | None = field(default=None, init=False, repr=False)
     _cumulative_usage: Mapping[str, Any] | None = field(default=None, init=False, repr=False)
+    _auto_compaction_correlation: _AutoCompactionCorrelation = field(
+        default_factory=_AutoCompactionCorrelation, init=False, repr=False
+    )
 
     def _check_marker_text(self, text: str) -> None:
         if self.completion_marker and _marker_is_standalone(text, self.completion_marker):
@@ -199,7 +273,7 @@ class CodexStreamParser:
             return None
         if not isinstance(raw_obj, dict):
             return None
-        obj = _app_server_to_exec_event(raw_obj)
+        obj = _app_server_to_exec_event(raw_obj, correlation=self._auto_compaction_correlation)
         if obj is None:
             return None
 

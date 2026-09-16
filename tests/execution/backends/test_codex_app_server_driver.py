@@ -13,6 +13,7 @@ from autoskillit.execution.backends._codex.app_server import (
     _parse_user_agent_version,
 )
 from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
+from tests.execution.backends._codex_fixtures import app_server_fixture
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -345,6 +346,23 @@ class TestThreadAndTurn:
         assert not driver.finished
         lines = driver.on_line(_notification("turn/completed", {"status": "completed"}))
         assert lines == ()
+        assert driver.finished
+        assert driver.failure is None
+
+    def test_interrupted_turn_notification_finishes_after_hook_notification(self) -> None:
+        driver = CodexAppServerDriver(_make_plan())
+        _advance_to_thread_request(driver)
+        driver.on_line(_response(4, result=_thread_result()))
+        driver.on_line(_response(5, result={}))
+
+        driver.on_line(
+            json.dumps(app_server_fixture("app_server_hook_completed_pre_compact_stopped.json"))
+        )
+        assert not driver.finished
+        driver.on_line(
+            json.dumps(app_server_fixture("app_server_turn_completed_interrupted.json"))
+        )
+
         assert driver.finished
         assert driver.failure is None
 

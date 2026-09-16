@@ -12,7 +12,6 @@ from pathlib import Path
 
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
-    CODEX_HOME_ENV_VAR,
     CODEX_RESERVED_HOME_ENV_VARS,
     CmdSpec,
     CodexAppServerPlan,
@@ -20,6 +19,10 @@ from autoskillit.core import (
 from autoskillit.execution.backends._backend_cmd_builder_base import _merge_caller_env_extras
 from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
 from autoskillit.execution.backends._codex.session_commands import CodexCommandMixin
+from autoskillit.execution.backends._codex.session_home import (
+    _canonical_generated_home,
+    _generated_home_config_overrides,
+)
 from autoskillit.execution.backends._codex_cmd_builders import (
     _codex_app_server_base,
     _codex_exec_extras,
@@ -39,6 +42,7 @@ class CodexOrdinaryHeadlessCommandMixin(CodexCommandMixin):
         force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
         env_extras: Mapping[str, str] | None = None,
         project_root: Path | str | None = None,
+        generated_home: Path | str | None = None,
     ) -> CmdSpec:
         """Ordinary headless launch: no managed catalog, app-server transport.
 
@@ -51,21 +55,27 @@ class CodexOrdinaryHeadlessCommandMixin(CodexCommandMixin):
         """
         headless_extras = _codex_exec_extras(session_type="")
         _merge_caller_env_extras(headless_extras, env_extras)
-        # CODEX_HOME is stripped from the base env and blocked from caller
-        # extras (_HEADLESS_EXCLUSIVE_VARS / CODEX_RESERVED_HOME_ENV_VARS), so
-        # an explicit ambient home must be read directly off this process's
-        # env and re-injected here, like other builders inject a bound home.
-        session_home = os.environ.get(CODEX_HOME_ENV_VAR, "")
-        if session_home:
-            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-                headless_extras[reserved_key] = session_home
+        if generated_home is None:
+            raise ValueError("generated_home is required for Codex headless launches")
+        session_home = str(
+            _canonical_generated_home(generated_home, argument_name="generated_home")
+        )
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            headless_extras[reserved_key] = session_home
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = self.env_policy().build_env(filtered_base, extras=headless_extras)
+        env = self.env_policy().build_env(
+            filtered_base,
+            extras=headless_extras,
+            required=CODEX_RESERVED_HOME_ENV_VARS,
+        )
         cmd = _codex_app_server_base(extra_overrides=self._otlp_overrides(headless_extras))
         bypass_hook_trust = _should_bypass_hook_trust(
             self.capabilities.hook_trust_policy, automated_session=True
         )
-        config_overrides: dict[str, object] = {"bypass_hook_trust": bypass_hook_trust}
+        config_overrides: dict[str, object] = {
+            "bypass_hook_trust": bypass_hook_trust,
+            **_generated_home_config_overrides(Path(session_home)),
+        }
         if model:
             for override in self.model_config_overrides(model):
                 key, _, value = override.partition("=")

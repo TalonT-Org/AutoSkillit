@@ -10,13 +10,17 @@ from types import MappingProxyType
 
 from autoskillit.core import (
     BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     CmdSpec,
+    CodexRuntimeSpec,
     CodingAgentBackend,
     LaunchAdapter,
     LaunchAdapterResult,
     LaunchContractError,
     LaunchPreparation,
     LaunchResolutionRequest,
+    LaunchResolver,
     LaunchValueSource,
     LaunchValueSourceKind,
     ResolvedLaunchContract,
@@ -26,7 +30,7 @@ from autoskillit.core import (
     strip_context_window_suffix,
 )
 
-__all__ = ["DefaultLaunchResolver"]
+__all__ = ["DefaultLaunchResolver", "resolve_backend_override"]
 
 logger = get_logger(__name__)
 
@@ -59,6 +63,22 @@ def _default_source() -> LaunchValueSource:
     return LaunchValueSource(LaunchValueSourceKind.DEFAULT, "backend.default")
 
 
+def resolve_backend_override(
+    name: str,
+    *,
+    launch_resolver: LaunchResolver,
+) -> CodingAgentBackend:
+    """Resolve a caller backend override through the configured authority boundary."""
+    return launch_resolver.backend_for_authority(
+        BackendAuthority(
+            backend=name,
+            kind=BackendAuthorityKind.CALLER,
+            tier=BackendAuthorityTier.CALLER,
+            key_path="request.backend",
+        )
+    )
+
+
 class DefaultLaunchResolver:
     """Select only typed explicit authorities and finalize one adapter result."""
 
@@ -67,12 +87,14 @@ class DefaultLaunchResolver:
         *,
         known_backends: tuple[str, ...] = ("claude-code", "codex"),
         backend_aliases: Mapping[str, str] | None = None,
+        codex_runtime_spec: CodexRuntimeSpec | None = None,
     ) -> None:
         self._known_backends = frozenset(known_backends)
         aliases = dict(_DEFAULT_BACKEND_ALIASES)
         if backend_aliases is not None:
             aliases.update(backend_aliases)
         self._backend_aliases = aliases
+        self._codex_runtime_spec = codex_runtime_spec or CodexRuntimeSpec()
 
     def _canonical_backend(self, backend: str, *, key_path: str) -> str:
         canonical = self._backend_aliases.get(backend, backend)
@@ -304,7 +326,7 @@ class DefaultLaunchResolver:
         from autoskillit.execution.backends import get_backend
 
         backend = self._canonical_backend(authority.backend, key_path=authority.key_path)
-        return get_backend(backend)
+        return get_backend(backend, codex_runtime_spec=self._codex_runtime_spec)
 
     @staticmethod
     def _native_model_owners(model: str) -> tuple[str, ...]:

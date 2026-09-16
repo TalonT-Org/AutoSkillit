@@ -1,0 +1,28 @@
+{
+  "method": "hook/completed",
+  "params": {
+    "threadId": "019d3147-6d49-7620-99a8-f36b030f6e85",
+    "turnId": "019d3147-6d4a-7b76-9eb9-fc509b2a418a",
+    "run": {
+      "id": "019d3147-6d4b-7411-937d-d1d99b614a8d",
+      "eventName": "preCompact",
+      "handlerType": "command",
+      "executionMode": "sync",
+      "scope": "turn",
+      "sourcePath": "/tmp/autoskillit/hooks.json",
+      "source": "user",
+      "displayOrder": 0,
+      "status": "stopped",
+      "statusMessage": null,
+      "startedAt": 1778526692,
+      "completedAt": 1778526692,
+      "durationMs": 22,
+      "entries": [
+        {
+          "kind": "stop",
+          "text": "autoskillit_auto_compaction_denied"
+        }
+      ]
+    }
+  }
+}

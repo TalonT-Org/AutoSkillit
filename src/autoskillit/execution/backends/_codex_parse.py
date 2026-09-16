@@ -21,6 +21,7 @@ from autoskillit.core import (
     BackendEventKind,
     CanonicalTokenUsage,
     CliSubtype,
+    CodexEventData,
     CodexEventType,
     CodexItemType,
     SessionEvent,
@@ -38,6 +39,7 @@ from autoskillit.execution.backends._codex.app_server_events import (
 )
 from autoskillit.execution.backends._codex.app_server_events import (
     _app_server_to_exec_event,
+    _AutoCompactionCorrelation,
 )
 from autoskillit.execution.session._turn_usage import (
     build_turn_token_entry,
@@ -510,6 +512,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
     if not stdout.strip():
         return _CodexParseAccumulator()
     acc = _CodexParseAccumulator()
+    correlation = _AutoCompactionCorrelation()
     for line in stdout.strip().splitlines():
         line = line.strip()
         if not line:
@@ -520,7 +523,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             continue
         if not isinstance(raw_obj, dict):
             continue
-        obj = _app_server_to_exec_event(raw_obj)
+        obj = _app_server_to_exec_event(raw_obj, correlation=correlation)
         if obj is None:
             continue
         event_type = CodexEventType.from_ndjson(obj.get("type", ""))
@@ -570,17 +573,34 @@ class CodexResultParser:
             )
         session_id: str | None = None
         has_completion = False
+        saw_failed_terminal = False
+        failed_terminal_error = ""
         for event in events:
             if event.kind == BackendEventKind.SESSION_META and event.session_id:
                 session_id = event.session_id
             if event.kind == BackendEventKind.COMPLETION:
-                has_completion = True
+                backend_data = event.backend_data
+                if (
+                    isinstance(backend_data, CodexEventData)
+                    and backend_data.record_type == "turn.failed"
+                ):
+                    saw_failed_terminal = True
+                    error = backend_data.raw.get("error")
+                    if isinstance(error, Mapping):
+                        message = error.get("message")
+                        if isinstance(message, str):
+                            failed_terminal_error = message
+                    elif isinstance(error, str):
+                        failed_terminal_error = error
+                else:
+                    has_completion = True
         return AgentSessionResult(
-            success=has_completion,
-            exit_code=0 if has_completion else 1,
+            success=has_completion and not saw_failed_terminal,
+            exit_code=0 if has_completion and not saw_failed_terminal else 1,
             backend_name=AGENT_BACKEND_CODEX,
             elapsed_seconds=0.0,
             session_id=session_id,
+            error=failed_terminal_error,
         )
 
     def parse_stdout(self, stdout: str, *, exit_code: int = 0) -> AgentSessionResult:

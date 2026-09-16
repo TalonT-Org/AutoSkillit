@@ -34,6 +34,7 @@ class HookDef:
         "SubagentStart",
         "SubagentStop",
         "SessionEnd",
+        "PreCompact",
     ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
@@ -54,6 +55,7 @@ class HookDef:
     produces_resources: frozenset[str] = field(default_factory=frozenset)
     reclaims_resources: frozenset[str] = field(default_factory=frozenset)
     self_reclaims_resources: frozenset[str] = field(default_factory=frozenset)
+    runtime_only: bool = False
 
     def __post_init__(self) -> None:
         if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:

@@ -31,6 +31,7 @@ from autoskillit.core import (
     SkillSemanticPlan,
     SkillSource,
     ValidatedAddDir,
+    atomic_write,
     pkg_root,
 )
 from autoskillit.core.runtime.session_registry import registry_path
@@ -68,6 +69,7 @@ def _make_mock_backend_class(
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            explicit_path_env_var="",
             supports_tool_list_changed=supports_tool_list_changed,
             cook_exact_binding_probe_required=False,
             skill_injection_capable=False,
@@ -123,6 +125,10 @@ def _run_cook(
     )
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
+    claude_shim = generated_home.parent / "bin" / "claude"
+    claude_shim.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(claude_shim, "#!/bin/sh\nexit 0\n")
+    claude_shim.chmod(0o755)
 
     @contextmanager
     def managed_session(
@@ -141,7 +147,7 @@ def _run_cook(
 
     mock_mgr.managed_session.side_effect = managed_session
     with (
-        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("shutil.which", return_value=str(claude_shim)),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         # cook() derives project_dir via the shared git-toplevel helper; pin it so
         # the test does not depend on the caller's checkout.
@@ -304,7 +310,7 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
             system_prompts=system_prompts,
         )
 
-    assert system_prompts == [None]
+    assert system_prompts == [None, None]
     assert (
         "2 skills unavailable on this backend "
         "(required_join: fixed join unavailable): alpha, zeta"
@@ -341,7 +347,7 @@ def test_cook_reload_attempts_each_receive_one_unavailability_block(
             reload_sentinels=("reload-id", None),
         )
 
-    assert len(system_prompts) == 2
+    assert len(system_prompts) == 4
     assert all(prompt is not None for prompt in system_prompts)
     assert all(
         prompt.count("<autoskillit_skill_unavailability>") == 1
@@ -349,7 +355,7 @@ def test_cook_reload_attempts_each_receive_one_unavailability_block(
         for prompt in system_prompts
         if prompt is not None
     )
-    assert system_prompts[0] == system_prompts[1]
+    assert len(set(system_prompts)) == 1
 
 
 def test_profile_feature_disabled_exits(capsys, _mock_mgr):
@@ -399,6 +405,9 @@ def _run_finalized_profile_cook(
     generated_home = tmp_path / "generated-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
+    codex_shim = tmp_path / "codex"
+    atomic_write(codex_shim, "#!/bin/sh\nexit 0\n")
+    codex_shim.chmod(0o755)
     manager = MagicMock()
     captured: dict[str, object] = {}
 
@@ -434,6 +443,7 @@ def _run_finalized_profile_cook(
             session_dir_persistent=True,
             session_scoped_explorer_capable=False,
             terminal_explorer_capable=True,
+            explicit_path_env_var="",
             supports_tool_list_changed=False,
             cook_startup_observer_capable=False,
             cook_exact_binding_probe_required=False,
@@ -518,7 +528,7 @@ def _run_finalized_profile_cook(
     monkeypatch.setenv("AUTOSKILLIT_CODEX_STARTUP_TRACE", "1")
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
     with (
-        patch("shutil.which", return_value="/usr/bin/codex"),
+        patch("shutil.which", return_value=str(codex_shim)),
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch.object(cook_module, "is_feature_enabled", return_value=True),

@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING, NoReturn, overload
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     LAUNCH_ID_ENV_VAR,
+    InfraExitCategory,
     NamedResume,
     NoResume,
     SkillContractError,
@@ -142,6 +144,7 @@ def prepare_interactive_launch(
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
+    home_prepared: bool = False,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -161,11 +164,15 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    readiness = backend.ensure_pre_launch(executable=provisional)
-    if readiness.errors:
-        raise ValueError("\n".join(readiness.errors))
-
-    merged_extras = {**(extra_env or {}), **readiness.attested_env}
+    merged_extras = dict(extra_env or {})
+    if not home_prepared or backend.capabilities.cook_exact_binding_probe_required:
+        readiness = backend.ensure_pre_launch(
+            session_dir=generated_home,
+            executable=provisional,
+        )
+        if readiness.errors:
+            raise ValueError("\n".join(readiness.errors))
+        merged_extras.update(readiness.attested_env)
     env_spec = backend.build_interactive_cmd(
         initial_prompt=initial_prompt,
         resume_spec=resume_spec,
@@ -186,7 +193,7 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    if final != provisional:
+    if backend.capabilities.cook_exact_binding_probe_required and final != provisional:
         raise ValueError(
             "interactive executable identity changed between probe and launch preparation"
         )
@@ -222,6 +229,7 @@ def _finalize_interactive_launch(
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
+    home_prepared: bool = False,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -241,6 +249,7 @@ def _finalize_interactive_launch(
                 initial_prompt=initial_prompt,
                 add_dirs=add_dirs,
                 generated_home=generated_home,
+                home_prepared=home_prepared,
                 tools=tools,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 mcp_tool_timeout_sec=mcp_tool_timeout_sec,
@@ -345,7 +354,10 @@ def _run_interactive_session(
         from autoskillit.config import load_config
 
         config = load_config()
-        backend = resolve_global_backend(config.agent_backend.backend)
+        backend = resolve_global_backend(
+            config.agent_backend.backend,
+            codex_runtime_spec=config.codex_runtime.resolve(),
+        )
         configured_base_branch = config.branching.default_base_branch
         if isinstance(configured_base_branch, str):
             default_base_branch = configured_base_branch
@@ -364,7 +376,7 @@ def _run_interactive_session(
         systemd_scope_enabled = False
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
-    from autoskillit.core import InfraExitCategory, bind_session_owner
+    from autoskillit.core import bind_session_owner
 
     managed = managed_home is not None
     if managed != (attempt is not None):
@@ -410,6 +422,7 @@ def _run_interactive_session(
             initial_prompt=initial_message,
             add_dirs=[managed_home.skills_dir],
             generated_home=managed_home.generated_home,
+            home_prepared=True,
             tools=tools_arg,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
@@ -639,6 +652,9 @@ def _launch_cook_session(
             if session_signal is None:
                 return
             if isinstance(session_signal, _InfraExitSignal):
+                if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                    print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
+                    return
                 infra_resume_count += 1
                 if infra_resume_count >= _max_infra_resumes:
                     raise SystemExit(

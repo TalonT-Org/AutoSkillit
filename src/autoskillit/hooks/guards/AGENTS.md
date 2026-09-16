@@ -115,6 +115,7 @@ Files with no registration support their folder; files with several registration
 
 - `__init__.py` — Support module: PreToolUse guard scripts — invoked as standalone python3 commands.
 - `_git_command_classification.py` — Support module: Classification primitives for git operations — extracted from git_ops_guard.
+- `auto_compact_guard.py` — Runtime-only Codex `PreCompact` guard registered outside the generated Claude hooks manifest.
 - `branch_protection_guard.py` — Groups 2 registrations: PreToolUse hook: branch protection guard for merge_worktree and push_to_remote.
 - `ingredient_lock_guard.py` — Groups 2 registrations: PreToolUse guard: deny run_skill calls for steps locked by lock_ingredients.
 - `join_settle_guard.py` — Groups 2 registrations: PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.

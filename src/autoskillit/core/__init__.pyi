@@ -491,6 +491,7 @@ from .types import (
 from .types import (
     CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR as CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR,
 )
+from .types import CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE as CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
 from .types import (
     CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET as CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET,
@@ -886,6 +887,7 @@ from .types import CodexAppServerPlan as CodexAppServerPlan
 from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
+from .types import CodexRuntimeSpec as CodexRuntimeSpec
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CommittedDispositionResolver as CommittedDispositionResolver
 from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority

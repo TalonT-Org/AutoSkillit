@@ -35,7 +35,7 @@ CAPABILITY_METHOD_MAP: dict[str, tuple[str, dict]] = {
     ),
     "session_resume_capable": (
         "build_resume_cmd",
-        {"resume_session_id": "x", "prompt": "x"},
+        {"resume_session_id": "x", "prompt": "x", "session_home": "/tmp/session"},
     ),
 }
 

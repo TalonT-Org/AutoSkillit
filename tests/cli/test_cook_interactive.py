@@ -105,6 +105,7 @@ class _Backend:
         session_dir_persistent=False,
         session_scoped_explorer_capable=True,
         terminal_explorer_capable=False,
+        explicit_path_env_var="",
         cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
@@ -459,7 +460,7 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         executable=None,
         plugin_dir=None,
     ):
-        if session_dir is None:
+        if session_dir is None or executable is not None:
             return PreLaunchReadiness((), {})
         return original_ensure_pre_launch(
             self,
@@ -685,7 +686,7 @@ def test_cook_resolves_default_backend(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: requested.append(name) or backend,
+        lambda name, **_kwargs: requested.append(name) or backend,
     )
 
     cli.cook()
@@ -745,6 +746,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             events.append(("managed-exit", launch_id))
 
     manager.managed_session.side_effect = managed_session
+    claude_shim = tmp_path / "claude"
+    atomic_write(claude_shim, "#!/bin/sh\nexit 0\n")
+    claude_shim.chmod(0o755)
 
     class _Backend:
         name = "claude-code"
@@ -754,6 +758,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            explicit_path_env_var="",
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             supports_tool_list_changed=True,
@@ -812,7 +817,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         cli.cook(backend=_Backend())
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(claude_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     monkeypatch.setattr(
@@ -852,6 +857,7 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         session_dir_persistent=True,
         session_scoped_explorer_capable=False,
         terminal_explorer_capable=False,
+        explicit_path_env_var="",
         cook_startup_observer_capable=False,
         cook_exact_binding_probe_required=False,
         skill_injection_capable=True,

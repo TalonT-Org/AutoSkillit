@@ -13,12 +13,22 @@ from autoskillit.core import (
     CmdSpec,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.evidence.otlp_sink import _build_env
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+CodexBackend = GeneratedHomeCodexBackend
+
+
+@pytest.fixture(autouse=True)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 @pytest.fixture(autouse=True)

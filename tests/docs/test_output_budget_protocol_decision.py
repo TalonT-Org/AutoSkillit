@@ -61,7 +61,6 @@ def test_decision_names_all_four_layers(decision_text: str, required: str) -> No
         f"(({RECIPE_RESPONSE_MAX_UTF8_BYTES:_} + 3) // 4) + 8_000",
         "authoritative_attested_recipe_result_token_limit = 56_750",
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750",
-        "CODEX_AUTO_COMPACT_LIMIT = 999_999_999",
         "inline_max_chars = 5_000",
         f"response_max_bytes = {RECIPE_RESPONSE_DEFAULT_BYTES:_}",
         f"MAX_MCP_OUTPUT_TOKENS = {CLAUDE_INJECTED_CLIENT_RESULT_TOKENS:_}",
@@ -135,7 +134,6 @@ def test_adr_0005_contains_per_repo_ceiling_and_upgrade_tracking(decision_text: 
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT",
         "ordinary_omitted_result_token_limit",
         "history-retained tokens",
-        "372,000",
         "CODEX_LIMITS_LAST_VERIFIED_VERSION",
         "codex_limits_verified",
     ]:

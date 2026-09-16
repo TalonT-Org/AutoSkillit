@@ -24,6 +24,7 @@ from ._type_enums import (
     SkillDiscoveryMechanism,
     UpstreamSupportStatus,
 )
+from ._type_execution_identity import CodexRuntimeSpec, ExecutableLaunchBinding
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -39,6 +40,7 @@ __all__ = [
     "BackendConventions",
     "CLAUDE_CODE_CAPABILITIES",
     "CLAUDE_MODEL_ALIASES",
+    "CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE",
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
@@ -48,6 +50,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "CodexRuntimeSpec",
     "CodexAppServerPlan",
     "SessionAttemptHandle",
     "ExecutableLaunchBinding",
@@ -65,18 +68,10 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True, slots=True)
-class ExecutableLaunchBinding:
-    """Canonical executable and sealed environment for one interactive launch."""
-
-    path: Path
-    device: int
-    inode: int
-    size: int
-    mtime_ns: int
-    file_sha256: str
-    cwd: Path
-    launch_environment: Mapping[str, str] = field(repr=False, compare=False)
+CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
+    "Automatic Codex context compaction was blocked. Start an explicit new session, "
+    "or compact manually and deliberately resume."
+)
 
 
 @dataclass(frozen=True, slots=True)

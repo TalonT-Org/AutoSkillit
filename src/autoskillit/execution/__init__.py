@@ -8,7 +8,6 @@ execution/headless/ has TYPE_CHECKING-only references to pipeline/.
 from autoskillit.core import CmdSpec, SkillResult
 from autoskillit.execution.backends import (
     BACKEND_REGISTRY,
-    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     CODEX_MCP_REQUIRED_KEYS,
@@ -206,7 +205,10 @@ from autoskillit.execution.runtime.db import (
 from autoskillit.execution.runtime.db import (
     _execute_readonly_query as execute_readonly_query,
 )
-from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
+from autoskillit.execution.runtime.launch_resolution import (
+    DefaultLaunchResolver,
+    resolve_backend_override,
+)
 from autoskillit.execution.runtime.testing import (
     DefaultTestRunner,
     build_sanitized_env,
@@ -314,6 +316,7 @@ __all__ = [
     "run_headless_core",
     "DefaultHeadlessExecutor",
     "DefaultLaunchResolver",
+    "resolve_backend_override",
     "assert_interactive_ordering",
     "resolve_model_pin",
     # testing
@@ -381,7 +384,6 @@ __all__ = [
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST",
     "SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY",
     "CODEX_LIMITS_LAST_VERIFIED_VERSION",
-    "CODEX_AUTO_COMPACT_LIMIT",
     "MANAGED_CODEX_LEAF_GUARD_SET",
     "MANAGED_CODEX_PARENT_GUARD_SET",
     "ClaudeCodeBackend",

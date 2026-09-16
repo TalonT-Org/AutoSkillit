@@ -139,6 +139,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            explicit_path_env_var="",
             supports_tool_list_changed=False,
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
@@ -255,7 +256,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     run_events = lifecycle.events_of_type("run")
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
     build_prompts = [cast(str, event[2]) for event in events if event[0] == "build"]
-    assert len(build_prompts) == 2
+    assert len(build_prompts) == 4
     assert all(prompt.count("<autoskillit_skill_unavailability>") == 1 for prompt in build_prompts)
     assert all("profile-required-join" in prompt for prompt in build_prompts)
     assert len(lifecycle.projection_bindings) == 1
@@ -325,6 +326,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             session_dir_persistent=False,
             session_scoped_explorer_capable=True,
             terminal_explorer_capable=False,
+            explicit_path_env_var="",
             supports_tool_list_changed=True,
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,

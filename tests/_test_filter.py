@@ -473,7 +473,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_execution_identity": frozenset({"core", "execution", "server", "cli", "fleet"}),
     "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
     "_type_backend": frozenset(
-        {"core", "execution", "cli", "migration", "recipe", "server", "workspace"}
+        {"core", "config", "execution", "cli", "migration", "recipe", "server", "workspace"}
     ),
     "_type_launch": frozenset(
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
@@ -1320,7 +1320,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_fixed_batch_results.py",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
-            "fleet/test_dispatch_backend_override.py",
             "fleet/test_dispatch_crash_diagnostics.py",
             "fleet/test_fleet_e2e.py",
             "fleet/test_pack_enforcement.py",

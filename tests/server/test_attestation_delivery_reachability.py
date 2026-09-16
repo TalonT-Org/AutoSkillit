@@ -499,6 +499,105 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
     assert set(block) == RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS
 
 
+@pytest.mark.parametrize(
+    "page_budget",
+    [None, 10_000],
+    ids=["default-budget-spill", "oversized-bounded-envelope"],
+)
+async def test_recipe_redelivery_recovers_after_discarded_delivery_context(
+    page_budget: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    forbid_artifact_reads,
+    tool_ctx_kitchen_open,
+) -> None:
+    """T9: a fresh public delivery recovers recipe authority after context loss."""
+    from autoskillit.config import OutputBudgetConfig
+    from autoskillit.pipeline import InitializingRecipe
+    from autoskillit.server.tools.tools_execution import run_skill
+    from autoskillit.server.tools.tools_recipe import complete_recipe_initialization, load_recipe
+    from tests.fakes import InMemoryHeadlessExecutor
+    from tests.server._helpers import (
+        McpCallCounter,
+        _credit_initialization_sections,
+        _open_kitchen_patched,
+        _pull_step_section,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    tool_ctx_kitchen_open.session_serve_overrides = None
+    tool_ctx_kitchen_open.session_serve_defer_unresolved = False
+    tool_ctx_kitchen_open.recipe_name = ""
+
+    if page_budget is not None:
+        tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
+            response_max_bytes=page_budget,
+            page_max_bytes=page_budget,
+        )
+
+    first_delivery = await _open_kitchen_patched(_RECIPE_ENVELOPE, _OVERRIDES, monkeypatch)
+    assert first_delivery["success"] is True
+    assert first_delivery["delivery_bound_spill"] is True
+    del first_delivery
+
+    recovered = json.loads(await load_recipe(name=_RECIPE_ENVELOPE))
+    assert recovered["success"] is True
+    assert recovered["delivery_bound_spill"] is True
+    assert recovered["recipe_pull"]["pull_tool"] == "get_recipe_section"
+
+    state = tool_ctx_kitchen_open.recipe_initialization_state
+    assert isinstance(state, InitializingRecipe)
+    step_names = tuple(state.finalized_projection.ordered_step_names)
+    assert step_names
+
+    await _credit_initialization_sections(recovered, complete=False)
+    dynamic_pages = McpCallCounter()
+    step_bodies = {
+        step_name: await _pull_step_section(recovered, step_name, counter=dynamic_pages)
+        for step_name in step_names
+    }
+    assert {record.segment_or_section for record in dynamic_pages.responses} == set(step_names)
+    receipt = json.loads(
+        await complete_recipe_initialization(initialization_id=recovered["initialization_id"])
+    )
+    assert receipt["success"] is True
+    credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    step_name = _ATTESTED_STEP
+    with_args = step_bodies[step_name]["with"]
+    declared_inputs = with_args.get("skill_inputs")
+    optional_inputs = (
+        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
+        if declared_inputs
+        else {}
+    )
+    _write_tracker(
+        tool_ctx_kitchen_open.project_dir,
+        "AB",
+        {step_name: {"status": "pending"}},
+        {},
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+    )
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    forbid_artifact_reads()
+
+    result = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=step_name,
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=credential["execution_id"],
+            invocation_template_digest=credential["invocation_template_digests"][step_name],
+            **optional_inputs,
+        )
+    )
+    assert result.get("stage") != "preflight:recipe_execution", result
+    assert len(executor.calls) == 1
+
+
 async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

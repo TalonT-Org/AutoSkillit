@@ -23,14 +23,13 @@ from autoskillit.core import (
     pipeline_tracker_directory,
 )
 from autoskillit.execution import (
-    BACKEND_REGISTRY,
+    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
+)
+from autoskillit.execution import (
     SessionState,
     clear_session_state,
     persist_session_state,
     resolve_remote_repo,
-)
-from autoskillit.execution import (
-    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
 )
 from autoskillit.execution import (
     _refresh_quota_cache as _refresh_quota_cache,
@@ -52,6 +51,9 @@ from autoskillit.execution import (
 )
 from autoskillit.execution import (
     oauth_admission_lock_path as oauth_admission_lock_path,
+)
+from autoskillit.execution import (
+    resolve_backend_override as resolve_backend_override,
 )
 from autoskillit.execution import (
     resolve_log_dir as resolve_log_dir,
@@ -95,20 +97,9 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
-    from autoskillit.core import CodingAgentBackend, SkillResult
+    from autoskillit.core import SkillResult
 
 logger = get_logger(__name__)
-
-
-def resolve_backend_override(name: str) -> CodingAgentBackend:
-    """Resolve a backend name to a CodingAgentBackend instance.
-
-    Raises ValueError if the name is not in BACKEND_REGISTRY.
-    """
-    if name not in BACKEND_REGISTRY:
-        valid = ", ".join(sorted(BACKEND_REGISTRY))
-        raise ValueError(f"Unknown backend {name!r}. Valid names: {valid}")
-    return get_backend(name)
 
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]

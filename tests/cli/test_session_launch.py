@@ -791,7 +791,7 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
 
-    def fake_get_backend(name: str):
+    def fake_get_backend(name: str, **_kwargs: object):
         get_backend_called.append(name)
         return _FakeBackend()
 
@@ -849,7 +849,7 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _DIBackend(),
+        lambda name, **_kwargs: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
@@ -902,7 +902,7 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _DIBackend(),
+        lambda name, **_kwargs: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
@@ -954,7 +954,7 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _NoInjectDIBackend(),
+        lambda name, **_kwargs: _NoInjectDIBackend(),
     )
 
     def mock_run(cmd, **kwargs):
@@ -1082,7 +1082,7 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
     mock_config.features = {}
     mock_config.experimental_enabled = False
 
-    def fake_get_backend(name: str):
+    def fake_get_backend(name: str, **_kwargs: object):
         if name == "claude-code":
             return _ClaudeStub()
         return _CodexStub()
@@ -1151,7 +1151,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _CodexStub(),
+        lambda name, **_kwargs: _CodexStub(),
     )
     monkeypatch.setattr(
         subprocess,
@@ -1264,6 +1264,7 @@ def test_interactive_builder_satisfies_order_required_env(backend_name: str) -> 
     spec = backend.build_interactive_cmd(
         env_extras={SESSION_TYPE_ENV_VAR: "orchestrator"},
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+        generated_home=Path("/tmp/codex-home") if backend_name == "codex" else None,
     )
     for key in ORDER_INTERACTIVE_REQUIRED_ENV:
         assert key in spec.env, f"{backend_name}: missing required key {key!r}"
@@ -1306,8 +1307,12 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
-        backend = backend_cls()
+        backend = GeneratedHomeCodexBackend() if backend_name == "codex" else backend_cls()
         captured.clear()
         _run_interactive_session(system_prompt="test", backend=backend)
         cmd = captured.get("cmd", [])
@@ -1350,7 +1355,14 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
-    backend = BACKEND_REGISTRY[backend_name]()
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+    backend = (
+        GeneratedHomeCodexBackend()
+        if backend_name == "codex"
+        else BACKEND_REGISTRY[backend_name]()
+    )
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 
@@ -1396,7 +1408,14 @@ def test_cross_validation_contract_all_flags_known(
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
-    backend = BACKEND_REGISTRY[backend_name]()
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+    backend = (
+        GeneratedHomeCodexBackend()
+        if backend_name == "codex"
+        else BACKEND_REGISTRY[backend_name]()
+    )
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 
@@ -2032,7 +2051,7 @@ def test_codex_order_composition_produces_canonical_generated_home(
     generated_home = Path(spec.env["CODEX_HOME"])
     assert generated_home == generated_home.resolve()
     assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
-    assert captured["pre_launch_dirs"] == [generated_home]
+    assert captured["pre_launch_dirs"] == [generated_home, generated_home]
 
     assert spec.origin is not None
     config_overrides = [

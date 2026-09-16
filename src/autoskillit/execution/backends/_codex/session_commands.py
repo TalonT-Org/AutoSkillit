@@ -245,7 +245,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         plugin_binding: PluginLaunchBinding | None,
         env_extras: Mapping[str, str] | None,
         required_env: frozenset[str] | None,
-    ) -> tuple[dict[str, str], tuple[tuple[str, str], ...]]:
+    ) -> tuple[dict[str, str], tuple[tuple[str, str], ...], SkillDiscoveryRouteDef | None]:
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         merged_extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         merged_extras.update(
@@ -282,7 +282,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         )
         # build_env strips this key, so inject it after the call like other builders.
         env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
-        return env, projected_skill_entries
+        return env, projected_skill_entries, route
 
     def build_skill_session_cmd(
         self,
@@ -676,7 +676,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             builder.positional(initial_prompt)
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
-        env, projected_skill_entries = self._prepare_interactive_environment(
+        env, projected_skill_entries, route = self._prepare_interactive_environment(
             generated_home=generated_home,
             plugin_binding=plugin_binding,
             env_extras=env_extras,

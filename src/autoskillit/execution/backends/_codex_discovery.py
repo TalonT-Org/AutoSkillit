@@ -353,6 +353,7 @@ def _catalog_discovery_errors(
     *,
     expected_discovery_root: Path,
     catalog_dir: Path,
+    managed_root_scope: Path | None,
     context: str,
 ) -> list[str]:
     missing = sorted(set(expected_paths) - discovered.names)
@@ -385,6 +386,7 @@ def _catalog_discovery_errors(
             discovered,
             expected_discovery_root=expected_discovery_root,
             catalog_dir=catalog_dir,
+            managed_root_scope=managed_root_scope,
             context=context,
         )
     )

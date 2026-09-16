@@ -200,6 +200,35 @@ def _parse_recipe_candidate(
     return parse_recipe(data, declared_data=declared_data), raw
 
 
+def _read_recipe_candidate(path: Path, parse_recipe: _RecipeParser) -> tuple[Recipe, str]:
+    yaml_stat = path.stat()
+    json_path = path.with_suffix(".json")
+    try:
+        json_stat = json_path.stat()
+    except FileNotFoundError:
+        json_stat = None
+    except OSError as exc:
+        logger.warning(
+            "Recipe JSON sidecar unreadable — parsing from YAML",
+            path=str(json_path),
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+        json_stat = None
+    # Performance-only metadata cache; Git enumeration still runs on every call.
+    return _parse_recipe_candidate(
+        path,
+        yaml_stat.st_mtime_ns,
+        yaml_stat.st_ctime_ns,
+        yaml_stat.st_size,
+        json_stat is not None,
+        json_stat.st_mtime_ns if json_stat is not None else None,
+        json_stat.st_ctime_ns if json_stat is not None else None,
+        json_stat.st_size if json_stat is not None else None,
+        parse_recipe,
+    )
+
+
 def _collect_recipes_from_candidates(
     project_base: Path,
     project_files: Iterable[Path],
@@ -231,32 +260,7 @@ def _collect_recipes_from_candidates(
 
         for _, path in sorted(ordered):
             try:
-                yaml_stat = path.stat()
-                json_path = path.with_suffix(".json")
-                try:
-                    json_stat = json_path.stat()
-                except FileNotFoundError:
-                    json_stat = None
-                except OSError as exc:
-                    logger.warning(
-                        "Recipe JSON sidecar unreadable — parsing from YAML",
-                        path=str(json_path),
-                        error_type=type(exc).__name__,
-                        error=str(exc),
-                    )
-                    json_stat = None
-                # Performance-only metadata cache; Git enumeration still runs on every call.
-                recipe, raw = _parse_recipe_candidate(
-                    path,
-                    yaml_stat.st_mtime_ns,
-                    yaml_stat.st_ctime_ns,
-                    yaml_stat.st_size,
-                    json_stat is not None,
-                    json_stat.st_mtime_ns if json_stat is not None else None,
-                    json_stat.st_ctime_ns if json_stat is not None else None,
-                    json_stat.st_size if json_stat is not None else None,
-                    parse_recipe,
-                )
+                recipe, raw = _read_recipe_candidate(path, parse_recipe)
                 if not recipe.name:
                     continue
 

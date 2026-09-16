@@ -232,7 +232,10 @@ class TestBuildTestSourceMap:
         result, fixture_only = cov_ast.query_contexts_map(tmp_path / ".coverage")
         assert "src/autoskillit/core/io.py" not in result
         assert fixture_only == [
-            {"path": "src/autoskillit/core/io.py", "reason": "attributed_only_by_fixture"}
+            {
+                "path": "src/autoskillit/core/io.py",
+                "reason": cov_ast.REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
+            }
         ]
 
     def test_build_test_source_map_writes_json(self, cov_ast, tmp_path, monkeypatch):
@@ -644,7 +647,10 @@ class TestBuildTestSourceMap:
 
         parsed = json.loads(output_path.read_text())
         unobservable = {entry["path"]: entry["reason"] for entry in parsed["unobservable_sources"]}
-        assert unobservable["src/autoskillit/hooks/guards/example_guard.py"] == "not_measured"
+        assert (
+            unobservable["src/autoskillit/hooks/guards/example_guard.py"]
+            == cov_ast.REASON_NOT_MEASURED
+        )
 
     def test_observed_source_appears_in_map_not_unobservable(self, cov_ast, tmp_path, monkeypatch):
         """A source with a |run attribution belongs in map, never in unobservable_sources."""

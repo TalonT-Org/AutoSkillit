@@ -30,6 +30,11 @@ from autoskillit.core.io import write_versioned_json
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Reason strings for the artifact's `unobservable_sources` entries. Centralized
+# so the producer boundary and tests share the exact wire values.
+REASON_NOT_MEASURED = "not_measured"
+REASON_ATTRIBUTED_ONLY_BY_FIXTURE = "attributed_only_by_fixture"
+
 
 @dataclass
 class FuncInfo:
@@ -223,7 +228,7 @@ def query_contexts_map(
         if test_files:
             result[rel] = test_files
         else:
-            fixture_only.append({"path": rel, "reason": "attributed_only_by_fixture"})
+            fixture_only.append({"path": rel, "reason": REASON_ATTRIBUTED_ONLY_BY_FIXTURE})
     return result, sorted(fixture_only, key=lambda entry: entry["path"])
 
 
@@ -300,7 +305,7 @@ def find_not_measured_unobservable_sources(
             # Could not determine; skip rather than silently misclassify as testable.
             continue
         if rel in hook_script_paths or _under_hooks_dir(rel) or has_main_guard:
-            entries.append({"path": rel, "reason": "not_measured"})
+            entries.append({"path": rel, "reason": REASON_NOT_MEASURED})
     return entries
 
 

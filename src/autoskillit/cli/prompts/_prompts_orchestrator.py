@@ -208,6 +208,9 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - The session wrote files outside its working directory. This is a CWD boundary violation,
     not a context limit. No partial worktree progress should be resumed.
   - Fall through to on_failure regardless of whether on_context_limit is defined.
+- When run_skill returns "needs_retry: true" AND "retry_reason: context_exhausted":
+  - Automatic context compaction was deliberately denied and the session is terminal.
+  - Fall through to on_failure; do not resume or route to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: clone_contamination":
   - Route: Fall through to on_failure regardless of whether on_context_limit is defined.
   - The clone has been reverted to its pre-session state — no partial progress to resume.

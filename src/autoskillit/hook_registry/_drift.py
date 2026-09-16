@@ -31,7 +31,7 @@ def _load_settings_data(settings_path: Path) -> dict:
 
 def canonical_script_basenames() -> frozenset[str]:
     """Return the set of all known autoskillit hook script basenames."""
-    return frozenset(s for h in HOOK_REGISTRY for s in h.scripts)
+    return frozenset(s for h in HOOK_REGISTRY if not h.runtime_only for s in h.scripts)
 
 
 def _is_own_hook(command: str) -> bool:

@@ -1,6 +1,7 @@
 """Architectural invariant: mcp_env_forward_vars must appear in CmdSpec.env for all builders."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -9,6 +10,14 @@ from tests.fixtures.codex import codex_skill_add_dirs
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/repo", skill_name="investigate")
+_CODEX_TEST_HOME = Path("/repo/codex-home")
+
+
+def _codex_home_kwargs(backend: Any, parameter: str) -> dict[str, object]:
+    if backend.name != "codex":
+        return {}
+    value: object = str(_CODEX_TEST_HOME) if parameter == "session_home" else _CODEX_TEST_HOME
+    return {parameter: value}
 
 
 @pytest.fixture(autouse=True)
@@ -69,7 +78,9 @@ def test_mcp_env_forward_vars_in_headless_cmd() -> None:
             continue
         if not hasattr(backend, "build_headless_cmd"):
             continue
-        spec = backend.build_headless_cmd(prompt="test")
+        spec = backend.build_headless_cmd(
+            prompt="test", **_codex_home_kwargs(backend, "generated_home")
+        )
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_headless_cmd env"
 
@@ -84,7 +95,11 @@ def test_mcp_env_forward_vars_in_resume_cmd() -> None:
             continue
         if not backend.capabilities.session_resume_capable:
             continue
-        spec = backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        spec = backend.build_resume_cmd(
+            resume_session_id="test-session",
+            prompt="continue",
+            **_codex_home_kwargs(backend, "session_home"),
+        )
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_resume_cmd env"
 
@@ -97,6 +112,6 @@ def test_mcp_env_forward_vars_in_interactive_cmd() -> None:
         backend = cls()
         if not backend.capabilities.mcp_env_forward_vars:
             continue
-        spec = backend.build_interactive_cmd()
+        spec = backend.build_interactive_cmd(**_codex_home_kwargs(backend, "generated_home"))
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_interactive_cmd env"

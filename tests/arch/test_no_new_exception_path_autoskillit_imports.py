@@ -31,7 +31,7 @@ _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
         ("cli/_init_helpers.py", 680),
         # Kitchen tracker-authority import inside a server lifespan
         # teardown/cleanup path.
-        ("server/lifecycle/_lifespan/_lifespan.py", 201),
+        ("server/lifecycle/_lifespan/_lifespan.py", 171),
     }
 )
 

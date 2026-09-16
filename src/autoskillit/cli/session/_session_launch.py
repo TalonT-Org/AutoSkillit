@@ -144,6 +144,7 @@ def prepare_interactive_launch(
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
+    home_prepared: bool = False,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -163,14 +164,15 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    readiness = backend.ensure_pre_launch(
-        session_dir=generated_home,
-        executable=provisional,
-    )
-    if readiness.errors:
-        raise ValueError("\n".join(readiness.errors))
-
-    merged_extras = {**(extra_env or {}), **readiness.attested_env}
+    merged_extras = dict(extra_env or {})
+    if not home_prepared:
+        readiness = backend.ensure_pre_launch(
+            session_dir=generated_home,
+            executable=provisional,
+        )
+        if readiness.errors:
+            raise ValueError("\n".join(readiness.errors))
+        merged_extras.update(readiness.attested_env)
     env_spec = backend.build_interactive_cmd(
         initial_prompt=initial_prompt,
         resume_spec=resume_spec,
@@ -227,6 +229,7 @@ def _finalize_interactive_launch(
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
+    home_prepared: bool = False,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -246,6 +249,7 @@ def _finalize_interactive_launch(
                 initial_prompt=initial_prompt,
                 add_dirs=add_dirs,
                 generated_home=generated_home,
+                home_prepared=home_prepared,
                 tools=tools,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 mcp_tool_timeout_sec=mcp_tool_timeout_sec,
@@ -418,6 +422,7 @@ def _run_interactive_session(
             initial_prompt=initial_message,
             add_dirs=[managed_home.skills_dir],
             generated_home=managed_home.generated_home,
+            home_prepared=True,
             tools=tools_arg,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,

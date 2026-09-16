@@ -20,6 +20,7 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,
+    CODEX_RESERVED_HOME_ENV_VARS,
     DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
@@ -657,23 +658,17 @@ class TestCodexHeadlessCmd:
         assert spec.app_server_plan.expected_skill_names == frozenset()
         assert spec.app_server_plan.expected_skill_entries == ()
 
-    def test_empty_home_sentinel_when_no_finalized_codex_home(self) -> None:
-        # The central `_scrub_ambient_env` autouse fixture already scrubs
-        # CODEX_HOME from every test's environment; no explicit delenv needed.
+    def test_fixture_home_is_used_when_caller_omits_finalized_home(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.app_server_plan.session_home == ""
+        assert spec.app_server_plan.session_home == str(CodexBackend._fixture_home())
 
-    def test_explicit_home_resolved_from_finalized_env(self, monkeypatch) -> None:
-        """CODEX_HOME is one of _HEADLESS_EXCLUSIVE_VARS (stripped from the base env
-        this builder assembles for the child, to block host leakage) and one of the
-        reserved keys _merge_caller_env_extras always blocks from caller extras — so
-        an explicit ambient home is read directly off this process's own environment
-        and re-injected as the child's reserved home keys."""
+    def test_ambient_home_does_not_override_finalized_home(self, monkeypatch) -> None:
         monkeypatch.setenv("CODEX_HOME", "/tmp/explicit-codex-home")
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.app_server_plan.session_home == "/tmp/explicit-codex-home"
-        assert spec.env["CODEX_HOME"] == "/tmp/explicit-codex-home"
-        assert spec.env["CODEX_SQLITE_HOME"] == "/tmp/explicit-codex-home"
+        expected = str(CodexBackend._fixture_home())
+        assert spec.app_server_plan.session_home == expected
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.env["CODEX_SQLITE_HOME"] == expected
 
 
 class TestCodexResumeCmd:
@@ -730,7 +725,9 @@ class TestCodexResumeCmd:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
         reinjected = frozenset(SHARED_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
-        leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_RESERVED_HOME_ENV_VARS
+        ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 
     def test_bypass_hook_trust_absent_from_argv_true_in_plan(self) -> None:
@@ -744,15 +741,16 @@ class TestCodexResumeCmd:
         assert spec.app_server_plan.catalog_root == ""
         assert spec.app_server_plan.expected_skill_names == frozenset()
 
-    def test_no_plugin_projection_selected_as_codex_home(self) -> None:
+    def test_plugin_projection_does_not_replace_generated_home(self) -> None:
         """Part D removed CODEX_HOME-from-plugin-binding selection for resume; a
         non-managed resume preserves the selected native/explicit home only."""
         binding = plugin_binding(Path("/some-plugin-dir"))
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="abc123", prompt="continue", plugin_binding=binding
         )
-        assert "CODEX_HOME" not in spec.env
-        assert spec.app_server_plan.session_home == ""
+        expected = str(CodexBackend._fixture_home())
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.app_server_plan.session_home == expected
 
     def test_managed_catalog_requires_nonempty_session_home(self) -> None:
         catalog = ValidatedAddDir(
@@ -811,7 +809,9 @@ class TestCodexHeadlessCmdEnv:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_headless_cmd("do stuff")
-        leaking = (_HEADLESS_EXCLUSIVE_VARS - CODEX_MCP_ENV_FORWARD_VARS) & spec.env.keys()
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - CODEX_MCP_ENV_FORWARD_VARS - CODEX_RESERVED_HOME_ENV_VARS
+        ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into headless env: {leaking}"
 
 
@@ -1451,14 +1451,16 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
         assert spec.cmd[-1] == "hello"
 
-    def test_plugin_binding_is_delivered_through_codex_home(self) -> None:
+    def test_plugin_binding_does_not_replace_generated_home(self) -> None:
         from pathlib import Path
+
+        from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
         spec = CodexBackend().build_interactive_cmd(plugin_binding=plugin_binding(Path("/x")))
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
-        assert spec.env["CODEX_HOME"] == "/x"
-        assert spec.skill_discovery_route is None
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
+        assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
 
     def test_env_excludes_headless_vars(self, monkeypatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")

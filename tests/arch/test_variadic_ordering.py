@@ -43,7 +43,10 @@ def test_positional_precedes_all_variadic_flags(variadic_kwargs):
     ],
 )
 def test_all_backends_positional_precedes_variadic(backend_cls, variadic_kwargs):
-    result = backend_cls().build_interactive_cmd(initial_prompt="test prompt", **variadic_kwargs)
+    generated_home = Path("/tmp/codex-home") if backend_cls is CodexBackend else None
+    result = backend_cls().build_interactive_cmd(
+        initial_prompt="test prompt", generated_home=generated_home, **variadic_kwargs
+    )
     prompt_idx = list(result.cmd).index("test prompt")
     flag_val = CodexFlags.ADD_DIR if backend_cls is CodexBackend else ClaudeFlags.ADD_DIR
     assert flag_val in result.cmd, (

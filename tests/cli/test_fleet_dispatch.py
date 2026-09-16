@@ -109,6 +109,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
     _process_tether = type(
         "ProcessTether", (), {"cook_ceiling_seconds": 172800.0, "systemd_scope_enabled": False}
     )()
+    _workspace = type("Workspace", (), {"temp_dir": None})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -122,6 +123,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "branching": _branching,
                 "run_skill": _run_skill,
                 "process_tether": _process_tether,
+                "workspace": _workspace,
                 "codex_runtime": CodexRuntimeConfig(),
             },
         )(),
@@ -198,6 +200,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
     _process_tether = type(
         "ProcessTether", (), {"cook_ceiling_seconds": 172800.0, "systemd_scope_enabled": False}
     )()
+    _workspace = type("Workspace", (), {"temp_dir": None})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -211,6 +214,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "branching": _branching,
                 "run_skill": _run_skill,
                 "process_tether": _process_tether,
+                "workspace": _workspace,
                 "codex_runtime": CodexRuntimeConfig(),
             },
         )(),

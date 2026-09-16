@@ -1264,6 +1264,7 @@ def test_interactive_builder_satisfies_order_required_env(backend_name: str) -> 
     spec = backend.build_interactive_cmd(
         env_extras={SESSION_TYPE_ENV_VAR: "orchestrator"},
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+        generated_home=Path("/tmp/codex-home") if backend_name == "codex" else None,
     )
     for key in ORDER_INTERACTIVE_REQUIRED_ENV:
         assert key in spec.env, f"{backend_name}: missing required key {key!r}"
@@ -1306,8 +1307,12 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
-        backend = backend_cls()
+        backend = GeneratedHomeCodexBackend() if backend_name == "codex" else backend_cls()
         captured.clear()
         _run_interactive_session(system_prompt="test", backend=backend)
         cmd = captured.get("cmd", [])
@@ -1350,7 +1355,14 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
-    backend = BACKEND_REGISTRY[backend_name]()
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+    backend = (
+        GeneratedHomeCodexBackend()
+        if backend_name == "codex"
+        else BACKEND_REGISTRY[backend_name]()
+    )
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 
@@ -1396,7 +1408,14 @@ def test_cross_validation_contract_all_flags_known(
     _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
-    backend = BACKEND_REGISTRY[backend_name]()
+    from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+
+    monkeypatch.setattr(GeneratedHomeCodexBackend, "generated_home", Path("/tmp/codex-home"))
+    backend = (
+        GeneratedHomeCodexBackend()
+        if backend_name == "codex"
+        else BACKEND_REGISTRY[backend_name]()
+    )
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 

@@ -218,14 +218,13 @@ class TestFoodTruckBackendOverridePrelaunch:
 
 class TestDispatchBackendOverrideThreadsToExecutor:
     def test_caller_override_retains_codex_runtime_spec_and_terminal_outcome(
-        self, tool_ctx
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from autoskillit.core import (
             CodexRuntimeSpec,
             FleetErrorCode,
             RetryReason,
         )
-        from autoskillit.execution import CodexBackend, DefaultLaunchResolver
         from autoskillit.fleet import DispatchStatus
         from autoskillit.fleet._outcome import classify_dispatch_outcome
         from tests.fakes import _DEFAULT_SKILL_RESULT
@@ -235,11 +234,11 @@ class TestDispatchBackendOverrideThreadsToExecutor:
             context_window_tokens=200_000,
             auto_compact_threshold_tokens=180_000,
         )
-        tool_ctx.launch_resolver = DefaultLaunchResolver(codex_runtime_spec=runtime_spec)
+        monkeypatch.setattr(tool_ctx.launch_resolver, "_codex_runtime_spec", runtime_spec)
 
         backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
-        assert isinstance(backend, CodexBackend)
-        assert backend.runtime_spec == runtime_spec
+        assert backend.name == "codex"
+        assert getattr(backend, "runtime_spec") == runtime_spec
 
         status, reason = classify_dispatch_outcome(
             _make_completed_clean(success=True),

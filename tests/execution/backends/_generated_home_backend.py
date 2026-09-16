@@ -21,15 +21,18 @@ class GeneratedHomeCodexBackend(CodexBackend):
         return cls.generated_home
 
     def build_headless_cmd(self, *args: Any, **kwargs: Any):
-        kwargs.setdefault("generated_home", self._fixture_home())
+        if kwargs.get("generated_home") is None:
+            kwargs["generated_home"] = self._fixture_home()
         return super().build_headless_cmd(*args, **kwargs)
 
     def build_interactive_cmd(self, *args: Any, **kwargs: Any):
-        kwargs.setdefault("generated_home", self._fixture_home())
+        if kwargs.get("generated_home") is None:
+            kwargs["generated_home"] = self._fixture_home()
         return super().build_interactive_cmd(*args, **kwargs)
 
     def build_resume_cmd(self, *args: Any, **kwargs: Any):
-        kwargs.setdefault("session_home", str(self._fixture_home()))
+        if kwargs.get("session_home") is None and kwargs.get("managed_skill_catalog") is None:
+            kwargs["session_home"] = str(self._fixture_home())
         return super().build_resume_cmd(*args, **kwargs)
 
 

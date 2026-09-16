@@ -15,7 +15,6 @@ import pytest
 from autoskillit.core import (
     ManagedHeadlessSessionKind,
     NativeShellCaptureMode,
-    PreLaunchReadiness,
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.backends.codex import CodexBackend
@@ -310,7 +309,9 @@ def _snapshot_codex_hooks(
     monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
     backend = CodexBackend(source_codex_home=source_home)
 
-    assert backend.ensure_pre_launch(session_dir=generated_home) == PreLaunchReadiness((), {})
+    readiness = backend.ensure_pre_launch(session_dir=generated_home)
+    assert readiness.errors == ()
+    assert set(readiness.attested_env.values()) == {str(generated_home)}
     source_bytes = source_config.read_bytes()
     assert (generated_home / "config.toml").read_bytes() == source_bytes
     config = tomllib.loads(source_bytes.decode("utf-8"))

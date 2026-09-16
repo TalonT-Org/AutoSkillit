@@ -16,6 +16,8 @@ from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_CODEX_HOME = Path("/tmp/codex-home")
+
 
 def _with_plugin_binding(build_spec):
     with plugin_binding(Path("/plugins")) as binding:
@@ -377,8 +379,12 @@ def test_cwd_in_headless_exclusive_vars() -> None:
                 managed_skill_catalog=codex_skill_add_dirs("/tmp")[0],
             )
         ),
-        lambda: CodexBackend().build_headless_cmd("do stuff"),
-        lambda: CodexBackend().build_resume_cmd(resume_session_id="sess-test", prompt="continue"),
+        lambda: CodexBackend().build_headless_cmd("do stuff", generated_home=_CODEX_HOME),
+        lambda: CodexBackend().build_resume_cmd(
+            resume_session_id="sess-test",
+            prompt="continue",
+            session_home=str(_CODEX_HOME),
+        ),
         lambda: CodexBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",

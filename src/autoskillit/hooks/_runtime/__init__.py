@@ -10,6 +10,7 @@ from typing import Any
 # name resolves through __getattr__ on first attribute access.
 _NAME_TO_MODULE: dict[str, str] = {
     "ArgvToken": "_command_classification",
+    "CODEX_AUTO_COMPACTION_DENIED_REASON": "_hook_constants",
     "DECLARABLE_SOURCE_PATH_PATTERNS": "_command_classification",
     "DEFAULT_CACHE_MAX_AGE": "_hook_settings",
     "DEFAULT_CACHE_PATH": "_hook_settings",
@@ -235,6 +236,7 @@ _NAME_TO_MODULE: dict[str, str] = {
 
 __all__ = [
     "ArgvToken",
+    "CODEX_AUTO_COMPACTION_DENIED_REASON",
     "DECLARABLE_SOURCE_PATH_PATTERNS",
     "DEFAULT_CACHE_MAX_AGE",
     "DEFAULT_CACHE_PATH",

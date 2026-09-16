@@ -259,6 +259,9 @@ insertion control, not a measurement of remaining context.
   context window, which the model catalog further scales with
   `effective_context_window_percent`. The generated `PreCompact(auto)` veto is the
   recipe-preservation defense; numeric values only tune when that veto is reached.
+- Advance `CODEX_LIMITS_LAST_VERIFIED_VERSION` only after the `codex_limits_verified`
+  probe confirms both the per-repository outer ceiling and history-retained tokens for
+  the upgraded CLI.
 - openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug — until
   the upstream bug is fixed, `codex --json` sessions cannot reliably deliver
   task-envelope context to sub-agents, so the intake discipline requires sub-agents to

@@ -227,11 +227,12 @@ class TestCodexInteractiveCmdSystemPrompt:
                 config_pairs.extend(spec.cmd[index : index + 2])
 
         overrides = config_pairs[1::2]
-        assert len(config_pairs) == 4
-        assert len(overrides) == 2
+        assert len(config_pairs) == 6
+        assert len(overrides) == 3
         assert {value.partition("=")[0] for value in overrides} == {
             "developer_instructions",
             "features.image_generation",
+            "sqlite_home",
         }
         assert caller_prompt in _developer_instructions(spec)
 
@@ -274,7 +275,7 @@ class TestCodexInteractiveCmdAddDirs:
     def test_empty_list_excludes_add_dir(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
         assert CodexFlags.ADD_DIR not in spec.cmd
-        assert "CODEX_HOME" not in spec.env
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
 
 class TestCodexInteractiveCmdCodexHome:
@@ -286,16 +287,17 @@ class TestCodexInteractiveCmdCodexHome:
         assert spec.env["CODEX_HOME"] == "/session/home"
         assert spec.env["CODEX_SQLITE_HOME"] == "/session/home"
 
-    def test_add_dirs_do_not_define_generated_home(self) -> None:
+    def test_add_dirs_do_not_replace_generated_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             add_dirs=[Path("/first"), Path("/second")],
         )
-        assert "CODEX_HOME" not in spec.env
-        assert "CODEX_SQLITE_HOME" not in spec.env
+        expected = str(CodexBackend._fixture_home())
+        assert spec.env["CODEX_HOME"] == expected
+        assert spec.env["CODEX_SQLITE_HOME"] == expected
 
-    def test_empty_add_dirs_excludes_codex_home(self) -> None:
+    def test_empty_add_dirs_keeps_generated_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
-        assert "CODEX_HOME" not in spec.env
+        assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
     def test_generated_home_takes_precedence_over_caller_env_extras(self) -> None:
         spec = CodexBackend().build_interactive_cmd(

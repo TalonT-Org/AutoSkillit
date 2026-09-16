@@ -690,16 +690,19 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 CodexFlags.CONFIG_OVERRIDE,
                 f"developer_instructions={_format_toml_value(developer_instructions)}",
             )
-        if generated_home is None:
+        if generated_home is None and (
+            plugin_binding is None or plugin_binding.load_mode is not PluginLoadMode.PROJECTED_HOME
+        ):
             raise ValueError("generated_home is required for Codex interactive launches")
-        generated_home = _canonical_generated_home(
-            generated_home,
-            argument_name="generated_home",
-        )
-        builder.kv_flag(
-            CodexFlags.CONFIG_OVERRIDE,
-            f"sqlite_home={_format_toml_value(str(generated_home))}",
-        )
+        if generated_home is not None:
+            generated_home = _canonical_generated_home(
+                generated_home,
+                argument_name="generated_home",
+            )
+            builder.kv_flag(
+                CodexFlags.CONFIG_OVERRIDE,
+                f"sqlite_home={_format_toml_value(str(generated_home))}",
+            )
         if initial_prompt is not None:
             builder.positional(initial_prompt)
         for d in add_dirs:

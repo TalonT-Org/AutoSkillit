@@ -198,6 +198,8 @@ def finalize_recipe_delivery(
             and current_initialization.flow_generation == flow_generation
         ):
             initialization_id = current_initialization.initialization_id
+            generation = current_initialization.artifact_generation
+            surface_payload["recipe_pull"] = generation.pull_identity()
             active_requirements = current_initialization.requirements
     if initialization_id is not None:
         surface_payload["initialization_id"] = initialization_id

@@ -21,9 +21,13 @@ from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+_GENERATED_HOME = Path("/work/codex-home")
+
 
 def _build_headless():
-    return CodexBackend().build_headless_cmd("test prompt", env_extras=OTLP_EXTRAS)
+    return CodexBackend().build_headless_cmd(
+        "test prompt", env_extras=OTLP_EXTRAS, generated_home=_GENERATED_HOME
+    )
 
 
 def _build_skill_session():
@@ -63,7 +67,10 @@ def _build_food_truck():
 
 def _build_resume():
     return CodexBackend().build_resume_cmd(
-        resume_session_id="sess-abc", prompt="continue", env_extras=OTLP_EXTRAS
+        resume_session_id="sess-abc",
+        prompt="continue",
+        env_extras=OTLP_EXTRAS,
+        session_home=str(_GENERATED_HOME),
     )
 
 

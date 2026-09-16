@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.core import (
     CLIENT_CHARS_PER_TOKEN_POLICY,
@@ -29,6 +29,7 @@ from autoskillit.server.response._response_budget._primitives import (
     _canonical_json,
     _estimated_tokens,
     _ProjectionNonconvergentError,
+    _restore_projected_response_type,
     _serialized,
 )
 from autoskillit.server.response._response_budget._projection import (
@@ -108,10 +109,6 @@ def enforce_response_budget(
                 original_utf8_bytes=original_size,
             )
         if over_delivery_bound:
-            if selected_result_token_limit is None:
-                raise RuntimeError(
-                    "over_delivery_bound requires a non-None selected_result_token_limit"
-                )
             return _spill_for_delivery_bound(
                 result,
                 tool_name=tool_name,
@@ -119,7 +116,7 @@ def enforce_response_budget(
                 artifact_dir=artifact_dir,
                 original=original,
                 original_size=original_size,
-                selected_result_token_limit=selected_result_token_limit,
+                selected_result_token_limit=cast(int, selected_result_token_limit),
             )
         _response_budget_pkg._emit_response_budget_event(
             "response_budget_exemption",
@@ -245,12 +242,7 @@ def enforce_response_budget(
         original_utf8_bytes=original_size,
         projected_utf8_bytes=len(rendered.encode("utf-8")),
     )
-    if isinstance(result, str):
-        return rendered
-    try:
-        return json.loads(rendered)
-    except (ValueError, RecursionError):
-        return {"success": False, "error": "response_budget_projection_invalid"}
+    return _restore_projected_response_type(result, rendered)
 
 
 def _checkpoint_segmented_mapping(

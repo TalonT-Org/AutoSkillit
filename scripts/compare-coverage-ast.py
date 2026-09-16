@@ -26,11 +26,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from autoskillit import __version__
+from autoskillit.core import get_logger
 from autoskillit.core.coverage_schema import (
     REASON_ATTRIBUTED_ONLY_BY_FIXTURE,
     REASON_NOT_MEASURED,
 )
 from autoskillit.core.io import write_versioned_json
+
+_LOG = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -236,11 +239,13 @@ def _has_main_guard(source_path: Path) -> bool | None:
     """
     try:
         source = source_path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError) as exc:
+        _LOG.debug("Cannot read %s for main-guard detection: %s", source_path, exc)
         return None
     try:
         tree = ast.parse(source, filename=str(source_path))
-    except SyntaxError:
+    except SyntaxError as exc:
+        _LOG.debug("Cannot parse %s for main-guard detection: %s", source_path, exc)
         return None
     for node in ast.walk(tree):
         if (
@@ -276,7 +281,8 @@ def _registered_hook_script_paths() -> frozenset[str]:
     try:
         from autoskillit import hooks  # noqa: F401  (triggers HOOK_REGISTRY population)
         from autoskillit.hook_registry import HOOK_REGISTRY
-    except ImportError:
+    except ImportError as exc:
+        _LOG.debug("Cannot import HOOK_REGISTRY; not_measured will be empty: %s", exc)
         return frozenset()
     paths: set[str] = set()
     for hook_def in HOOK_REGISTRY:

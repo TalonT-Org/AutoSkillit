@@ -32,10 +32,14 @@ def _route(**overrides: object):
 def test_route_status_requires_tracking_issue_exactly_for_deprecation() -> None:
     from autoskillit.core import UpstreamSupportStatus
 
-    with pytest.raises(ValueError, match="tracking issue"):
+    expected = "tracking_issue is required exactly for deprecated routes"
+    with pytest.raises(ValueError) as deprecated_error:
         _route(tracking_issue=None)
-    with pytest.raises(ValueError, match="tracking issue"):
+    with pytest.raises(ValueError) as supported_error:
         _route(upstream_status=UpstreamSupportStatus.SUPPORTED)
+
+    assert str(deprecated_error.value) == expected
+    assert str(supported_error.value) == expected
 
 
 @pytest.mark.parametrize("relpath", ("", "/skills", "add-dir/../skills"))
@@ -70,8 +74,10 @@ def test_declared_paths_are_resolved_from_launch_home() -> None:
 def test_backend_conventions_rejects_route_with_different_catalog_layout() -> None:
     from autoskillit.core import BackendConventions
 
-    with pytest.raises(ValueError, match="must match the backend session layout"):
+    with pytest.raises(ValueError) as error:
         BackendConventions(
             skills_subdir=Path("skills"),
             managed_skill_discovery=_route(catalog_relpath="different/skills"),
         )
+
+    assert str(error.value) == "catalog 'different/skills' must match 'add-dir/skills'"

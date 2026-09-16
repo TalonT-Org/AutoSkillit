@@ -98,7 +98,7 @@ class SkillDiscoveryRouteDef:
             raise ValueError("skill discovery route upstream citation must be non-empty")
         deprecated = self.upstream_status is UpstreamSupportStatus.DEPRECATED
         if deprecated != (self.tracking_issue is not None):
-            raise ValueError("deprecated skill discovery routes require a tracking issue")
+            raise ValueError("tracking_issue is required exactly for deprecated routes")
         self._validate_relpath("catalog_relpath", self.catalog_relpath)
         if self.discovery_root_relpath is not None:
             self._validate_relpath("discovery_root_relpath", self.discovery_root_relpath)
@@ -162,7 +162,7 @@ class BackendConventions:
         expected_catalog = PurePosixPath(SESSION_ADD_DIR_SUBDIR) / self.skills_subdir.as_posix()
         if PurePosixPath(route.catalog_relpath) != expected_catalog:
             raise ValueError(
-                "managed skill discovery catalog must match the backend session layout"
+                f"catalog {route.catalog_relpath!r} must match {expected_catalog.as_posix()!r}"
             )
 
 

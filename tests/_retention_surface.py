@@ -450,10 +450,6 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     # Mutation helpers and retirement-owner adapters.
     ("scripts/pytest_tmp_lifecycle.py", "_remove_candidate"): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/cli/_install_snapshot/_snapshot.py",
-        "_InstallSnapshot._remove",
-    ): _DELEGATED_MUTATION_REASON,
-    (
         "src/autoskillit/cli/fleet/__init__.py",
         "_remove_clone_fn",
     ): _DELEGATED_MUTATION_REASON,

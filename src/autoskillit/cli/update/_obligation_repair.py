@@ -128,6 +128,103 @@ class ObligationRepairResult:
     findings: tuple[str, ...] = ()
 
 
+def _probe_repair_version(
+    *,
+    entrypoint: Path,
+    environment: Mapping[str, str],
+    working_dir: Path,
+    runner: _ProcessRunner,
+) -> str | ObligationRepairResult:
+    """Run the typed maintenance version probe and translate its failures."""
+    try:
+        probe_invocation = MaintenanceSubprocessInvocation.for_version_probe(
+            entrypoint, environment=environment, cwd=working_dir
+        )
+    except ValueError as exc:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"obligation_repair_invocation_invalid: {exc}",),
+        )
+    try:
+        version_check = runner(
+            list(probe_invocation.argv),
+            check=False,
+            env=probe_invocation.env,
+            cwd=probe_invocation.cwd,
+            capture_output=probe_invocation.capture_output,
+            text=True,
+        )
+    except OSError as exc:
+        logger.warning("obligation_repair_probe_failed", exc_info=True)
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"obligation_repair_probe_failed: {exc}",),
+        )
+    if version_check.returncode != 0:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(
+                "obligation_repair_probe_failed: --version returned "
+                f"{version_check.returncode}: {version_check.stderr.strip()}",
+            ),
+        )
+    probed_version = (version_check.stdout or "").strip()
+    if not probed_version or _valid_version_or_unknown(probed_version) is None:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+            findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
+        )
+    return probed_version
+
+
+def _run_repair_install(
+    *,
+    entrypoint: Path,
+    expected_version: str,
+    environment: Mapping[str, str],
+    working_dir: Path,
+    runner: _ProcessRunner,
+) -> ObligationRepairResult | None:
+    """Run the typed maintenance install and translate its failures."""
+    try:
+        install_invocation = MaintenanceSubprocessInvocation.for_install(
+            entrypoint,
+            expected_version,
+            environment=environment,
+            cwd=working_dir,
+            require_registered_plugin=True,
+        )
+    except ValueError as exc:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"obligation_repair_invocation_invalid: {exc}",),
+        )
+
+    try:
+        install_result = runner(
+            list(install_invocation.argv),
+            check=False,
+            env=install_invocation.env,
+            cwd=install_invocation.cwd,
+            capture_output=install_invocation.capture_output,
+        )
+    except OSError as exc:
+        logger.warning("obligation_repair_install_launch_failed", exc_info=True)
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"Could not launch obligation repair install: {exc}",),
+        )
+    if install_result.returncode != 0:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(
+                "autoskillit install --maintenance-update exited with "
+                f"status {install_result.returncode}",
+            ),
+        )
+    return None
+
+
 def attempt_obligation_repair(
     home: Path,
     *,
@@ -181,44 +278,15 @@ def attempt_obligation_repair(
 
     try:
         # A maintenance install does not change the distribution version, so probe once.
-        try:
-            probe_invocation = MaintenanceSubprocessInvocation.for_version_probe(
-                repair_entrypoint, environment=child_env, cwd=working_dir
-            )
-        except ValueError as exc:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(f"obligation_repair_invocation_invalid: {exc}",),
-            )
-        try:
-            version_check = runner(
-                list(probe_invocation.argv),
-                check=False,
-                env=probe_invocation.env,
-                cwd=probe_invocation.cwd,
-                capture_output=probe_invocation.capture_output,
-                text=True,
-            )
-        except OSError as exc:
-            logger.warning("obligation_repair_probe_failed", exc_info=True)
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(f"obligation_repair_probe_failed: {exc}",),
-            )
-        if version_check.returncode != 0:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(
-                    "obligation_repair_probe_failed: --version returned "
-                    f"{version_check.returncode}: {version_check.stderr.strip()}",
-                ),
-            )
-        probed_version = (version_check.stdout or "").strip()
-        if not probed_version or _valid_version_or_unknown(probed_version) is None:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
-                findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
-            )
+        version_probe = _probe_repair_version(
+            entrypoint=repair_entrypoint,
+            environment=child_env,
+            working_dir=working_dir,
+            runner=runner,
+        )
+        if isinstance(version_probe, ObligationRepairResult):
+            return version_probe
+        probed_version = version_probe
 
         # Prefer the exact branch identity when schema v2 and the published
         # install-root metadata make it available. Degraded records retain the
@@ -251,42 +319,15 @@ def attempt_obligation_repair(
         # reason this repair runs is to complete a registered-plugin
         # publication obligation, so the install child must always ask for
         # republication, not silently fall back to InstallOutcome.NOT_REQUIRED.
-        try:
-            install_invocation = MaintenanceSubprocessInvocation.for_install(
-                repair_entrypoint,
-                probed_version,
-                environment=child_env,
-                cwd=working_dir,
-                require_registered_plugin=True,
-            )
-        except ValueError as exc:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(f"obligation_repair_invocation_invalid: {exc}",),
-            )
-
-        try:
-            install_result = runner(
-                list(install_invocation.argv),
-                check=False,
-                env=install_invocation.env,
-                cwd=install_invocation.cwd,
-                capture_output=install_invocation.capture_output,
-            )
-        except OSError as exc:
-            logger.warning("obligation_repair_install_launch_failed", exc_info=True)
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(f"Could not launch obligation repair install: {exc}",),
-            )
-        if install_result.returncode != 0:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(
-                    "autoskillit install --maintenance-update exited with "
-                    f"status {install_result.returncode}",
-                ),
-            )
+        install_failure = _run_repair_install(
+            entrypoint=repair_entrypoint,
+            expected_version=probed_version,
+            environment=child_env,
+            working_dir=working_dir,
+            runner=runner,
+        )
+        if install_failure is not None:
+            return install_failure
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)
 

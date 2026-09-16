@@ -249,8 +249,11 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
                     resume_source_relpath=relative.as_posix(),
                 )
                 return thread_lease
-            except BaseException:
-                thread_lease.release()
+            except BaseException as exc:
+                try:
+                    thread_lease.release()
+                except BaseException as release_exc:
+                    exc.add_note(f"Codex resume thread lease release also failed: {release_exc!r}")
                 raise
         if isinstance(current_resume_spec, BareResume):
             raise RuntimeError("Bare resume must be resolved before attempt preparation")

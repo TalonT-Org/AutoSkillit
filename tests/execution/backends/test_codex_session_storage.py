@@ -252,6 +252,35 @@ def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_link
     assert not index_path.exists()
 
 
+def test_resume_staging_preserves_primary_error_when_thread_lease_release_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    original_release = storage._FileLease.release
+
+    def release_then_fail(lease: storage._FileLease) -> None:
+        original_release(lease)
+        if lease.path.name.startswith("thread-"):
+            raise RuntimeError("release failed")
+
+    monkeypatch.setattr(storage._FileLease, "release", release_then_fail)
+
+    with pytest.raises(FileNotFoundError, match="rollout not found") as exc_info:
+        store.prepare_attempt(
+            session_home=home,
+            project_dir=tmp_path,
+            launch_id="0123456789abcdef",
+            attempt=1,
+            current_resume_spec=NamedResume("missing-thread"),
+        )
+
+    assert exc_info.value.__notes__ == [
+        "Codex resume thread lease release also failed: RuntimeError('release failed')"
+    ]
+
+
 def test_resume_archive_transition_leaves_exactly_one_canonical_rollout(
     tmp_path: Path,
 ) -> None:

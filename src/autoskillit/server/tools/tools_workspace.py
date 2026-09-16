@@ -106,7 +106,7 @@ def _build_test_check_response(
     return response
 
 
-async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> str | None:
+async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> dict[str, object] | None:
     pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
     uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
     hook_cmd: list[str] | None = None
@@ -116,12 +116,10 @@ async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> str | None:
         elif pre_commit_bin:
             hook_cmd = [pre_commit_bin, "run", "--files"] + paths
         else:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "pre-commit config exists but no pre-commit binary found",
-                }
-            )
+            return {
+                "success": False,
+                "error": "pre-commit config exists but no pre-commit binary found",
+            }
 
     if hook_cmd is not None:
         rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
@@ -131,11 +129,11 @@ async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> str | None:
             )
             if rc2 != 0:
                 _err = f"pre-commit + re-add failed: {stderr.strip()}"
-                return json.dumps({"success": False, "error": _err})
+                return {"success": False, "error": _err}
             rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
             if rc3 != 0:
                 _err = f"pre-commit retry failed: {stderr3.strip()}"
-                return json.dumps({"success": False, "error": _err})
+                return {"success": False, "error": _err}
     return None
 
 
@@ -337,7 +335,7 @@ async def commit_files(
                     )
 
                 if (hook_error := await _run_pre_commit_transaction(cwd, paths)) is not None:
-                    return hook_error
+                    return json.dumps(hook_error)
 
                 rc, stdout, stderr = await _run_subprocess(
                     ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30

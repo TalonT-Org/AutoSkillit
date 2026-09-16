@@ -155,6 +155,12 @@ def _run_direct_command(bash_path: str, command: str) -> int:
                 settlement=direct_settlement,
             )
         )
+    finally:
+        if process is not None and process.stdout is not None:
+            try:
+                process.stdout.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
 
 
 def run_capture(

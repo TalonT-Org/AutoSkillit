@@ -139,6 +139,58 @@ def _resolve_request_session(
     return consume_exploration_request_record(root, expected_tool_name, token)
 
 
+async def _activate_session_exploration(
+    store: OwnerBoundExplorationContextStore,
+    *,
+    session_id: str,
+    cwd: Path,
+    repository_root: Path,
+    ctx: Context,
+) -> None:
+    """Durably bind one session before making exploration tools visible."""
+
+    from autoskillit.server import _get_ctx  # circular-break: composition root
+
+    # Durable, symmetric to bind_launch (which always writes a signed authority
+    # file): a per-session authority directory prevents concurrent sessions from
+    # colliding on the fixed authority filename.
+    authority_home = _get_ctx().temp_dir / "exploration-session-authority" / session_id
+    authority_home.mkdir(parents=True, exist_ok=True)
+    try:
+        bind_session_scoped_durable(
+            store,
+            authority_home=authority_home,
+            owner_id=f"uid:{os.getuid()}",
+            session_id=session_id,
+            cwd=cwd,
+            repository_root=repository_root,
+            source_identity=f"interactive:{session_id}",
+        )
+    except tuple(EXPLORATION_STORE_FAILURE_CODES):
+        raise
+    except Exception as exc:
+        raise BindSessionScopedFailed(str(exc)) from exc
+    exploration_enabled = False
+    try:
+        try:
+            await ctx.enable_components(tags={"exploration"})
+        except Exception as exc:
+            raise EnableComponentsFailed(str(exc)) from exc
+        exploration_enabled = True
+    finally:
+        # A bind without visibility is an orphan authority. Keep each cleanup
+        # independent so neither masks the original failure or skips the other.
+        if not exploration_enabled:
+            try:
+                store.cleanup_session(session_id)
+            except Exception:
+                logger.warning("enable_exploration_cleanup_session_failed", exc_info=True)
+            try:
+                await ctx.disable_components(tags={"exploration"})
+            except Exception:
+                logger.warning("enable_exploration_disable_components_failed", exc_info=True)
+
+
 def _try_session_scoped_submit(
     store: ExplorationContextStoreProtocol[object],
     request: ExplorationQuerySpec,
@@ -518,52 +570,13 @@ async def enable_exploration(
         if session_id is None:
             return _failure(ExplorationFailureCode.NO_SESSION_ID)
         repository_root = store.trusted_root
-        # Durable, symmetric to bind_launch (which always writes a signed
-        # authority file): bind_session_scoped alone is in-process-memory
-        # only, lost on a server crash within the lease TTL. authority_home
-        # is a per-session subdirectory under the project's temp dir — real,
-        # writable, and unique per session_id so concurrent sessions never
-        # collide on the fixed authority filename (#4684 Fix E).
-        authority_home = _get_ctx().temp_dir / "exploration-session-authority" / session_id
-        authority_home.mkdir(parents=True, exist_ok=True)
-        try:
-            bind_session_scoped_durable(
-                store,
-                authority_home=authority_home,
-                owner_id=f"uid:{os.getuid()}",
-                session_id=session_id,
-                cwd=cwd,
-                repository_root=repository_root,
-                source_identity=f"interactive:{session_id}",
-            )
-        except tuple(EXPLORATION_STORE_FAILURE_CODES):
-            raise
-        except Exception as exc:
-            raise BindSessionScopedFailed(str(exc)) from exc
-        exploration_enabled = False
-        try:
-            try:
-                await ctx.enable_components(tags={"exploration"})
-            except Exception as exc:
-                raise EnableComponentsFailed(str(exc)) from exc
-            exploration_enabled = True
-        finally:
-            # Symmetric grant/revoke: if the tag never became visible, undo
-            # the lease too — a bound-but-invisible session is an orphan
-            # authority; disable_components is the mirror of enable_components,
-            # so a partial-success enable_components call never leaves the tag
-            # visible without a live lease behind it (#4684 Fix E). Each
-            # cleanup call is independently guarded so a failure in one
-            # cannot mask the original in-flight exception or skip the other.
-            if not exploration_enabled:
-                try:
-                    store.cleanup_session(session_id)
-                except Exception:
-                    logger.warning("enable_exploration_cleanup_session_failed", exc_info=True)
-                try:
-                    await ctx.disable_components(tags={"exploration"})
-                except Exception:
-                    logger.warning("enable_exploration_disable_components_failed", exc_info=True)
+        await _activate_session_exploration(
+            store,
+            session_id=session_id,
+            cwd=cwd,
+            repository_root=repository_root,
+            ctx=ctx,
+        )
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
@@ -125,7 +125,13 @@ VALID_INPUT_SPEC_TYPES = frozenset({"file_path", "directory_path", "file_path_li
 InputSpecType = Literal["file_path", "directory_path", "file_path_list"]
 
 
-def _require_aware_timestamp(value: str, *, field_name: str) -> None:
+def _require_aware_timestamp(value: str, *, field_name: str) -> datetime:
+    """Validate that ``value`` is an ISO-8601 timestamp with a UTC offset.
+
+    Returns the parsed ``datetime`` in UTC so callers can reuse the parsed value
+    rather than re-parsing the same string. Raises ``ValueError`` with the
+    canonical error wording for any malformed input.
+    """
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
     try:
@@ -134,6 +140,7 @@ def _require_aware_timestamp(value: str, *, field_name: str) -> None:
         raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{field_name} must include a UTC offset")
+    return parsed.astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True)

@@ -37,6 +37,15 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
     prepare_recipe_segment_delivery,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._pre_commit_failure import (
+    parse_combined_process_output as _combined_process_output,
+)
+from autoskillit.server.tools._pre_commit_failure import (
+    parse_hook_failure_class as _parse_hook_failure_class,
+)
+from autoskillit.server.tools._pre_commit_failure import (
+    pre_commit_failure_class as _pre_commit_failure_class,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import TestResult
@@ -111,33 +120,6 @@ def _build_test_check_response(
     return response
 
 
-_PRE_COMMIT_INFRASTRUCTURE_SIGNATURES = frozenset(
-    {
-        "os error 30",
-        "read-only file system",
-    }
-)
-_PRE_COMMIT_CACHE_PATH_SIGNATURES = frozenset({".cache", "/cache/", "uv-cache"})
-
-
-def _combined_process_output(stderr: str, stdout: str, fallback: str) -> str:
-    combined = "\n".join(part for part in (stderr.strip(), stdout.strip()) if part)
-    return combined or fallback
-
-
-def _pre_commit_failure_class(output: str) -> CommitFailureClass:
-    normalized = output.casefold()
-    known_infrastructure_failure = any(
-        signature in normalized for signature in _PRE_COMMIT_INFRASTRUCTURE_SIGNATURES
-    )
-    cache_permission_failure = "permission denied" in normalized and any(
-        signature in normalized for signature in _PRE_COMMIT_CACHE_PATH_SIGNATURES
-    )
-    if known_infrastructure_failure or cache_permission_failure:
-        return CommitFailureClass.HOOK_INFRASTRUCTURE
-    return CommitFailureClass.HOOK_REJECTED
-
-
 async def _run_pre_commit_transaction(
     cwd: str,
     paths: list[str],
@@ -200,6 +182,12 @@ async def _run_pre_commit_transaction(
             if (
                 before_rc == 0
                 and after_rc == 0
+                # Skip the staged-tree equality optimization when the before-tree
+                # stdout was empty/whitespace-only (e.g. `git write-tree` on an
+                # empty staging area or a stray `b'\n'`). Without this guard,
+                # the optimization would collapse to False on every empty case
+                # and fall through to a retry that will fail with the same
+                # output, masking the no-op pre-commit failure mode.
                 and bool(before_stdout.strip())
                 and before_stdout.strip() == after_stdout.strip()
             ):
@@ -296,7 +284,7 @@ async def test_check(
                             ),
                         )
                     )
-                except Exception as exc:
+                except (OSError, ValueError, RuntimeError) as exc:
                     logger.error("test_check outcome recording failed", exc_info=True)
                     wire_response = attach_recipe_segment(
                         {
@@ -429,10 +417,13 @@ async def commit_files(
                 *,
                 failure_class: CommitFailureClass | None = None,
             ) -> str:
+                # Build a fresh envelope so callers can reuse the response dict without
+                # us silently corrupting their copy via .pop() / item assignment.
+                envelope = dict(response)
                 if failure_class is not None:
-                    response["failure_class"] = failure_class.value
-                commit_sha = response.get("commit_sha")
-                succeeded = response.get("success") is True
+                    envelope["failure_class"] = failure_class.value
+                commit_sha = envelope.get("commit_sha")
+                succeeded = envelope.get("success") is True
                 try:
                     tool_ctx.workspace_outcome_ledger.record(
                         WorkspaceOutcomeRecord(
@@ -444,7 +435,7 @@ async def commit_files(
                             failure_class=None if succeeded else failure_class,
                         )
                     )
-                except Exception as exc:
+                except (OSError, ValueError, RuntimeError) as exc:
                     logger.error("commit_files outcome recording failed", exc_info=True)
                     ledger_failure: dict[str, object] = {
                         "success": False,
@@ -456,7 +447,7 @@ async def commit_files(
                     if isinstance(commit_sha, str) and commit_sha:
                         ledger_failure["commit_sha"] = commit_sha
                     return json.dumps(ledger_failure)
-                return json.dumps(response)
+                return json.dumps(envelope)
 
             if not cwd or not os.path.isdir(resolved):
                 return _finish(
@@ -510,7 +501,7 @@ async def commit_files(
                         workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
                     )
                 ) is not None:
-                    hook_failure_class = CommitFailureClass(str(hook_error.pop("failure_class")))
+                    hook_failure_class = _parse_hook_failure_class(hook_error.pop("failure_class"))
                     return _finish(hook_error, failure_class=hook_failure_class)
 
                 rc, stdout, stderr = await _run_subprocess(

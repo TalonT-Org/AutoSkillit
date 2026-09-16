@@ -7,7 +7,7 @@ import json
 import os
 import stat
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +19,14 @@ from autoskillit.core import (
     WorkspaceOutcomeRecord,
     atomic_write,
 )
+from autoskillit.core.types._type_results import _require_aware_timestamp
 
 __all__ = ["DefaultWorkspaceOutcomeLedger", "find_stale_workspace_outcome_shards"]
 
 MAX_RECORD_BYTES = 64 * 1024
 MAX_RETAINED_RECORDS = 2048
 MAX_SHARD_BYTES = 4 * 1024 * 1024
+QUARANTINE_DIRNAME = "quarantine"
 
 _RECORD_KEYS = frozenset(
     {
@@ -41,21 +43,20 @@ _RECORD_KEYS = frozenset(
 
 
 def _parse_instant(value: str, *, field_name: str) -> datetime:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError(f"{field_name} must include a UTC offset")
-    return parsed.astimezone(UTC)
+    # Thin wrapper over the core helper so the ledger's public parsing
+    # contract stays intact while validation rules live in one place.
+    return _require_aware_timestamp(value, field_name=field_name)
 
 
 def _canonical_workspace(workspace: str) -> str:
     if not isinstance(workspace, str) or not workspace:
         raise ValueError("workspace must be non-empty")
-    return os.path.realpath(workspace)
+    # realpath() returns the input unchanged for non-existent paths. Use abspath
+    # for normalization (collapses relative segments without filesystem lookups)
+    # and only invoke realpath when the path actually resolves.
+    if os.path.exists(workspace):
+        return os.path.realpath(workspace)
+    return os.path.abspath(workspace)
 
 
 def _record_payload(record: WorkspaceOutcomeRecord) -> dict[str, Any]:
@@ -189,6 +190,28 @@ class DefaultWorkspaceOutcomeLedger:
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         return canonical, self.root / f"{digest}.jsonl", self.root / f"{digest}.lock"
 
+    def _quarantine_corrupt_shard(self, shard_path: Path) -> None:
+        """Move an unreadable shard aside so subsequent writes can succeed.
+
+        Without this, every write attempt to the same workspace keeps failing
+        with the same RuntimeError until the corrupt file is manually removed.
+        The quarantine preserves the bytes for post-mortem inspection.
+        """
+        quarantine = self.root / QUARANTINE_DIRNAME
+        try:
+            quarantine.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha256(str(shard_path).encode("utf-8")).hexdigest()[:16]
+            destination = quarantine / f"{shard_path.name}.{digest}.corrupt"
+            counter = 0
+            while destination.exists():
+                counter += 1
+                destination = quarantine / f"{shard_path.name}.{digest}.{counter}.corrupt"
+            shard_path.rename(destination)
+        except OSError:
+            # Quarantine failure must not prevent the new write from proceeding;
+            # the caller will surface its own RuntimeError on the next attempt.
+            return
+
     def record(self, record: WorkspaceOutcomeRecord) -> None:
         canonical, shard_path, lock_path = self._paths(record.workspace)
         record = replace(record, workspace=canonical)
@@ -203,10 +226,14 @@ class DefaultWorkspaceOutcomeLedger:
             if shard_path.exists():
                 loaded = _read_shard(shard_path, canonical_workspace=canonical)
                 if loaded is None:
-                    raise RuntimeError(f"workspace outcome shard is unreadable: {shard_path}")
-                discarded_through, records = loaded
+                    self._quarantine_corrupt_shard(shard_path)
+                    discarded_through = None
+                    records: list[WorkspaceOutcomeRecord] = []
+                else:
+                    discarded_through, records = loaded
             else:
-                discarded_through, records = None, []
+                discarded_through = None
+                records = []
 
             records.append(record)
             record_lines = [_encode_row(_record_payload(item)) for item in records]

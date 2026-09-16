@@ -408,7 +408,7 @@ def make_context(
     audit_admission_ledger = DefaultAuditAdmissionLedger(resolved_audit_admission_store_authority)
     child_outcome_log_dir = os.environ.get(CHILD_OUTCOME_LOG_DIR_ENV_VAR)
     shared_outcome_root = (
-        Path(child_outcome_log_dir)
+        Path(child_outcome_log_dir).resolve()
         if child_outcome_log_dir
         else resolve_log_dir(config.linux_tracing.log_dir)
     )

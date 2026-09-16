@@ -252,7 +252,6 @@ def _verify_fresh_version_advance(
                     progress,
                     "Could not read the staged branch commit identity after upgrade.",
                 )
-            assert info.requested_revision is not None
             observed = ReleaseIdentity(
                 ReleaseChannel.BRANCH,
                 version=expected_version,

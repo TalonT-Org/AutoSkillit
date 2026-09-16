@@ -23,6 +23,7 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+from tests.cli._cook_launch_helpers import RecordingLifecycle
 from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 
@@ -101,22 +102,15 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
-        CompiledSessionSkillCatalogAuthority,
         HookTrustPolicy,
-        ManagedSessionHome,
         NamedResume,
         NoResume,
-        SessionAttemptHandle,
-        SkillProjectionContextAuthority,
         SkillUnavailabilityPayload,
-        ValidatedAddDir,
     )
 
-    events: list[tuple[object, ...]] = []
     generated_home = tmp_path / "managed-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
-    manager = MagicMock()
     profile_payload: SkillUnavailabilityPayload = {
         "backend": "claude-code",
         "unavailable": (
@@ -128,27 +122,14 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             },
         ),
     }
-
-    @contextmanager
-    def managed_session(
-        launch_id: str,
-        compilation: CompiledSessionSkillCatalogAuthority,
-        projection_context: SkillProjectionContextAuthority,
-    ):
-        assert projection_context.catalog == compilation.catalog
-        events.append(("managed-enter", launch_id, projection_context))
-        try:
-            yield ManagedSessionHome(
-                launch_id=launch_id,
-                generated_home=generated_home,
-                skills_dir=ValidatedAddDir(str(skills_dir)),
-                pass_fds=(7,),
-                unavailability_payload=profile_payload,
-            )
-        finally:
-            events.append(("managed-exit", launch_id))
-
-    manager.managed_session.side_effect = managed_session
+    lifecycle = RecordingLifecycle(
+        generated_home=generated_home,
+        skills_dir=skills_dir,
+        projection_root=tmp_path / "projected-plugin",
+        unavailability_payload=profile_payload,
+        returncodes=(17, 42),
+    )
+    events = lifecycle.events
 
     class _MockBackend:
         name = "claude-code"
@@ -184,65 +165,14 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             events.append(("validate", spec))
             return []
 
-        @contextmanager
-        def session_attempt_context(
-            self,
-            *,
-            session_home: Path,
-            project_dir: Path,
-            launch_id: str,
-            attempt: int,
-            current_resume_spec: object,
-            ceiling_seconds: float = 172800.0,
-            systemd_scope_enabled: bool = False,
-        ):
-            del ceiling_seconds, systemd_scope_enabled
-            events.append(
-                (
-                    "attempt-enter",
-                    attempt,
-                    current_resume_spec,
-                    session_home,
-                    project_dir,
-                    launch_id,
-                )
-            )
-            try:
-                yield SessionAttemptHandle(
-                    view_id=f"{launch_id}-{attempt}",
-                    pass_fds=(11,),
-                    _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),
-                    _record_reaped=lambda pid, pgid: events.append(("reaped", attempt, pid, pgid)),
-                )
-            finally:
-                events.append(("attempt-exit", attempt, current_resume_spec))
-
-    results = iter(
-        (
-            SimpleNamespace(pid=101, pgid=101, returncode=17),
-            SimpleNamespace(pid=102, pgid=102, returncode=42),
-        )
-    )
-
-    def fake_run_cook_attempt(
-        spec: CmdSpec,
-        *,
-        pass_fds: tuple[int, ...],
-        on_spawn,
-        on_reaped,
-        **_: object,
-    ) -> object:
-        attempt = sum(event[0] == "run" for event in events) + 1
-        events.append(("run", attempt, spec, pass_fds))
-        on_spawn(100 + attempt, 100 + attempt)
-        on_reaped(100 + attempt, 100 + attempt)
-        return next(results)
+        def session_attempt_context(self, **kwargs):  # type: ignore[no-untyped-def]
+            return lifecycle.session_attempt_context(**kwargs)
 
     sentinels = iter(("sess-001", None))
     onboarded: list[Path] = []
 
     def consume_sentinel(project_dir: Path) -> str | None:
-        assert bindings and not bindings[-1].closed
+        assert lifecycle.projection_bindings and not lifecycle.projection_bindings[-1].closed
         value = next(sentinels)
         events.append(("sentinel", value, project_dir))
         return value
@@ -263,39 +193,28 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     )
     monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *args, **kwargs: "")
     monkeypatch.setattr(
-        "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
+        "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: lifecycle
     )
-    rendered_payloads: list[SkillUnavailabilityPayload] = []
-
-    def record_render(payload: SkillUnavailabilityPayload) -> None:
-        rendered_payloads.append(payload)
-        events.append(("render", payload))
-
     monkeypatch.setattr(
         _patch_session__session_cook,
         "render_skill_unavailability",
-        record_render,
+        lifecycle.record_render,
     )
-    monkeypatch.setattr(_patch_session__session_process, "run_cook_attempt", fake_run_cook_attempt)
+    monkeypatch.setattr(
+        _patch_session__session_process,
+        "run_cook_attempt",
+        lifecycle.run_cook_attempt,
+    )
     monkeypatch.setattr(
         _patch_session__session_reload, "consume_reload_sentinel", consume_sentinel
     )
     from autoskillit.core import PluginLoadMode
 
-    bindings: list[_ReloadBinding] = []
-
-    class _SessionAuthority:
-        def acquire_launch_binding(self, **_kwargs: object) -> _ReloadBinding:
-            binding = _ReloadBinding(tmp_path / "projected-plugin")
-            binding.inherited_fds = (5, 7)
-            bindings.append(binding)
-            return binding
-
     monkeypatch.setattr(
         _patch_install__plugin_artifact,
         "interactive_plugin_authority",
         lambda **_kwargs: (
-            _SessionAuthority(),
+            lifecycle,
             PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         ),
     )
@@ -306,28 +225,26 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         cli.cook(backend=_MockBackend())
     assert exc_info.value.code == 42
 
-    managed_enters = [event for event in events if event[0] == "managed-enter"]
-    managed_exits = [event for event in events if event[0] == "managed-exit"]
+    managed_enters = lifecycle.events_of_type("managed-enter")
+    managed_exits = lifecycle.events_of_type("managed-exit")
     assert len(managed_enters) == len(managed_exits) == 1
-    assert rendered_payloads == [profile_payload]
+    assert lifecycle.rendered_payloads == [profile_payload]
     assert (
         events.index(managed_enters[0])
         < events.index(("render", profile_payload))
-        < events.index(next(event for event in events if event[0] == "build"))
+        < events.index(lifecycle.events_of_type("build")[0])
     )
 
-    attempt_enters = [event for event in events if event[0] == "attempt-enter"]
+    attempt_enters = lifecycle.events_of_type("attempt-enter")
     assert [event[1] for event in attempt_enters] == [1, 2]
     assert all(event[3] == generated_home for event in attempt_enters)
     assert isinstance(attempt_enters[0][2], NoResume)
     assert isinstance(attempt_enters[1][2], NamedResume)
     assert attempt_enters[1][2].session_id == "sess-001"
 
-    first_sentinel = events.index(
-        next(event for event in events if event[:2] == ("sentinel", "sess-001"))
-    )
-    first_reaped = events.index(next(event for event in events if event[:2] == ("reaped", 1)))
-    first_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 1)))
+    first_sentinel = events.index(lifecycle.event_for("sentinel", "sess-001"))
+    first_reaped = events.index(lifecycle.event_for("reaped", 1))
+    first_exit = events.index(lifecycle.event_for("attempt-exit", 1))
     second_build = events.index(
         next(
             event for event in events if event[0] == "build" and isinstance(event[1], NamedResume)
@@ -335,17 +252,15 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     )
     assert first_reaped < first_sentinel < first_exit < second_build
 
-    run_events = [event for event in events if event[0] == "run"]
+    run_events = lifecycle.events_of_type("run")
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
     build_prompts = [cast(str, event[2]) for event in events if event[0] == "build"]
     assert len(build_prompts) == 2
     assert all(prompt.count("<autoskillit_skill_unavailability>") == 1 for prompt in build_prompts)
     assert all("profile-required-join" in prompt for prompt in build_prompts)
-    assert len(bindings) == 1
-    assert bindings[0].closed
-    assert events.index(managed_exits[0]) > events.index(
-        next(event for event in events if event[:2] == ("attempt-exit", 2))
-    )
+    assert len(lifecycle.projection_bindings) == 1
+    assert lifecycle.projection_bindings[0].closed
+    assert events.index(managed_exits[0]) > events.index(lifecycle.event_for("attempt-exit", 2))
     assert onboarded == []
     assert ("recover",) not in events
 

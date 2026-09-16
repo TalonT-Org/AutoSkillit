@@ -23,6 +23,7 @@ and ``env=<literal dict>`` at every claude-launching site.
 from __future__ import annotations
 
 import ast
+from collections.abc import Collection, Iterator
 from pathlib import Path
 
 import pytest
@@ -184,12 +185,20 @@ def test_update_command_all_subprocess_calls_have_env_kwarg() -> None:
 SERVER_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "server"
 
 
+def _is_os_environ(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+        and node.attr == "environ"
+    )
+
+
 def _dict_has_os_environ_unpack(dict_node: ast.Dict) -> bool:
     """True if the dict literal contains **os.environ."""
     for key, val in zip(dict_node.keys, dict_node.values):
-        if key is None and isinstance(val, ast.Attribute):
-            if isinstance(val.value, ast.Name) and val.value.id == "os" and val.attr == "environ":
-                return True
+        if key is None and _is_os_environ(val):
+            return True
     return False
 
 
@@ -225,6 +234,21 @@ def _check_env_value(
     return None
 
 
+def _iter_runner_env_kwargs(
+    func_node: ast.AST, runner_names: Collection[str]
+) -> Iterator[tuple[ast.Call, str, ast.expr]]:
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Name) and func.id in runner_names):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "env":
+                yield node, func.id, kw.value
+                break
+
+
 def _find_run_subprocess_env_violations(source: str, path: Path) -> list[str]:
     """Find _run_subprocess() calls with unsafe env= kwargs, per-function."""
     tree = ast.parse(source)
@@ -241,19 +265,7 @@ def _find_run_subprocess_env_violations(source: str, path: Path) -> list[str]:
             elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
                 if isinstance(stmt.target, ast.Name):
                     bindings[stmt.target.id] = stmt.value
-        for node in ast.walk(func_node):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            if not (isinstance(func, ast.Name) and func.id == "_run_subprocess"):
-                continue
-            env_kw = None
-            for kw in node.keywords:
-                if kw.arg == "env":
-                    env_kw = kw.value
-                    break
-            if env_kw is None:
-                continue
+        for node, _, env_kw in _iter_runner_env_kwargs(func_node, {"_run_subprocess"}):
             violation = _check_env_value(env_kw, bindings, node.lineno, path)
             if violation:
                 violations.append(violation)
@@ -298,11 +310,8 @@ _SUBPROCESS_RUNNER_NAMES = frozenset({"_run_subprocess", "_run_subprocess_captur
 def _resolves_to_sealing_builder_call(env_val: ast.expr, bindings: dict[str, ast.expr]) -> bool:
     """True if env_val is (or resolves via bound-name lookup to) a call to one of
     the three sealing builder functions."""
-    if isinstance(env_val, ast.Call):
-        func = env_val.func
-        if isinstance(func, ast.Name) and func.id in _SEALING_BUILDER_NAMES:
-            return True
-        return isinstance(func, ast.Attribute) and func.attr in _SEALING_BUILDER_NAMES
+    if _is_named_call(env_val, _SEALING_BUILDER_NAMES):
+        return True
     if isinstance(env_val, ast.Name):
         bound = bindings.get(env_val.id)
         if bound is None:
@@ -344,26 +353,18 @@ def _find_sealed_env_violations(source: str, path: Path) -> list[str]:
         if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         bindings = _collect_own_scope_bindings(func_node)
-        for node in ast.walk(func_node):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            if not (isinstance(func, ast.Name) and func.id in _SUBPROCESS_RUNNER_NAMES):
-                continue
-            env_kw = None
-            for kw in node.keywords:
-                if kw.arg == "env":
-                    env_kw = kw.value
-                    break
-            if env_kw is None:
-                continue
+        for node, runner_name, env_kw in _iter_runner_env_kwargs(
+            func_node, _SUBPROCESS_RUNNER_NAMES
+        ):
             rel = path.relative_to(SERVER_ROOT.parents[2])
             if isinstance(env_kw, ast.Constant) and env_kw.value is None:
-                violations.append(f"{rel}:{node.lineno}: {func.id}(env=None) is not a sealed env")
+                violations.append(
+                    f"{rel}:{node.lineno}: {runner_name}(env=None) is not a sealed env"
+                )
                 continue
             if not _resolves_to_sealing_builder_call(env_kw, bindings):
                 violations.append(
-                    f"{rel}:{node.lineno}: {func.id}(env=...) does not trace to a sealing "
+                    f"{rel}:{node.lineno}: {runner_name}(env=...) does not trace to a sealing "
                     "builder call (build_sanitized_env/build_agent_env/build_maintenance_env)"
                 )
     return violations
@@ -402,11 +403,13 @@ def _call_func_name(func: ast.AST) -> str:
     return ""
 
 
+def _is_named_call(node: ast.AST, names: Collection[str]) -> bool:
+    return isinstance(node, ast.Call) and _call_func_name(node.func) in names
+
+
 def _is_claude_builder_call(node: ast.AST) -> bool:
     """True if *node* is a call to any claude command builder."""
-    if not isinstance(node, ast.Call):
-        return False
-    return _call_func_name(node.func) in _CLAUDE_BUILDER_NAMES
+    return _is_named_call(node, _CLAUDE_BUILDER_NAMES)
 
 
 def _is_literal_claude_list(node: ast.AST) -> bool:
@@ -415,6 +418,20 @@ def _is_literal_claude_list(node: ast.AST) -> bool:
         return False
     first = node.elts[0]
     return isinstance(first, ast.Constant) and first.value == "claude"
+
+
+def _classify_claude_env_shape(env_val: ast.expr) -> tuple[bool, str] | None:
+    if isinstance(env_val, ast.Constant) and env_val.value is None:
+        return False, "env=None is not allowed"
+    if isinstance(env_val, ast.Dict):
+        return False, "env=<literal dict> is not allowed"
+    if _is_os_environ(env_val):
+        return False, "env=os.environ is not allowed"
+    if isinstance(env_val, ast.Attribute) and env_val.attr == "env":
+        return True, ""
+    if _is_named_call(env_val, {"build_claude_env", "build_agent_env"}):
+        return True, ""
+    return None
 
 
 class _ClaudeLaunchWalker:
@@ -458,41 +475,23 @@ class _ClaudeLaunchWalker:
 
     def _cmd_is_claude_launching(self, cmd_arg: ast.AST) -> bool:
         """True if *cmd_arg* refers to a claude-launching argv (via spec or literal)."""
-        # Direct literal: ["claude", ...]
-        if _is_literal_claude_list(cmd_arg):
-            return True
-
-        # spec.cmd attribute access where spec was assigned from a builder.
-        if isinstance(cmd_arg, ast.Attribute) and cmd_arg.attr == "cmd":
-            bound = self._resolve_name(cmd_arg.value)
-            if bound is not None and _is_claude_builder_call(bound):
-                return True
-
-        # Name: resolve one level.
         if isinstance(cmd_arg, ast.Name):
             bound = self._resolve_name(cmd_arg)
             if bound is None:
                 return False
-            # cmd = ["claude", ...]
-            if _is_literal_claude_list(bound):
-                return True
-            # cmd = spec.cmd (+ [...])  or  cmd = spec.cmd
-            if isinstance(bound, ast.Attribute) and bound.attr == "cmd":
-                return self._cmd_is_claude_launching(bound)
-            if isinstance(bound, ast.BinOp) and isinstance(bound.op, ast.Add):
-                return self._cmd_is_claude_launching(bound.left) or self._cmd_is_claude_launching(
-                    bound.right
-                )
-            # cmd = spec_result_of_builder  → treat attribute .cmd the same way
             if _is_claude_builder_call(bound):
                 return True
+            cmd_arg = bound
 
-        # cmd = spec.cmd + [...] passed inline as BinOp.
+        if _is_literal_claude_list(cmd_arg):
+            return True
+        if isinstance(cmd_arg, ast.Attribute) and cmd_arg.attr == "cmd":
+            bound = self._resolve_name(cmd_arg.value)
+            return bound is not None and _is_claude_builder_call(bound)
         if isinstance(cmd_arg, ast.BinOp) and isinstance(cmd_arg.op, ast.Add):
             return self._cmd_is_claude_launching(cmd_arg.left) or self._cmd_is_claude_launching(
                 cmd_arg.right
             )
-
         return False
 
     @staticmethod
@@ -515,26 +514,9 @@ class _ClaudeLaunchWalker:
     def _env_shape_ok(self, env_val: ast.expr | None) -> tuple[bool, str]:
         if env_val is None:
             return False, "missing env= kwarg"
-        if isinstance(env_val, ast.Constant) and env_val.value is None:
-            return False, "env=None is not allowed"
-        if isinstance(env_val, ast.Dict):
-            # env={**os.environ, ...} or env={"K": "V"} — both are banned.
-            return False, "env=<literal dict> is not allowed"
-        if isinstance(env_val, ast.Attribute):
-            # env=os.environ
-            if (
-                isinstance(env_val.value, ast.Name)
-                and env_val.value.id == "os"
-                and env_val.attr == "environ"
-            ):
-                return False, "env=os.environ is not allowed"
-            # env=spec.env / env=foo.env
-            if env_val.attr == "env":
-                return True, ""
-        if isinstance(env_val, ast.Call):
-            fn = _call_func_name(env_val.func)
-            if fn in {"build_claude_env", "build_agent_env"}:
-                return True, ""
+        classification = _classify_claude_env_shape(env_val)
+        if classification is not None:
+            return classification
         if isinstance(env_val, ast.Name):
             # Resolve one level of local binding to catch aliased os.environ.
             bound = self._resolve_name(env_val)

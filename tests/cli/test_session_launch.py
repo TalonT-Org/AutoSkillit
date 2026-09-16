@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tomllib
-from contextlib import contextmanager, nullcontext
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -40,6 +40,7 @@ from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
 )
+from tests.cli._cook_launch_helpers import RecordingLifecycle
 from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
@@ -2208,15 +2209,11 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
 ) -> None:
     from autoskillit.core import (
         CmdSpec,
-        CompiledSessionSkillCatalogAuthority,
         InfraExitCategory,
-        ManagedSessionHome,
         NamedResume,
         NoResume,
         PluginLoadMode,
-        SessionAttemptHandle,
         SkillExecutionRole,
-        SkillProjectionContextAuthority,
         SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
@@ -2224,7 +2221,6 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 
-    events: list[tuple[object, ...]] = []
     generated_home = tmp_path / "managed-home"
     skills_dir = generated_home / "autoskillit-add-dir"
     skills_dir.mkdir(parents=True)
@@ -2242,53 +2238,16 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             },
         ),
     }
-    rendered_payloads: list[SkillUnavailabilityPayload] = []
     built_prompts: list[str | None] = []
-
-    def record_render(payload: SkillUnavailabilityPayload) -> None:
-        rendered_payloads.append(payload)
-        events.append(("render", payload))
-
-    class _LifecycleManager:
-        def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
-            return 0
-
-        @contextmanager
-        def managed_session(
-            self,
-            session_id: str,
-            compilation: CompiledSessionSkillCatalogAuthority,
-            projection_context: SkillProjectionContextAuthority,
-        ):
-            assert projection_context.catalog == compilation.catalog
-            events.append(("managed-enter", session_id))
-            try:
-                yield ManagedSessionHome(
-                    launch_id=session_id,
-                    generated_home=generated_home,
-                    skills_dir=ValidatedAddDir(str(skills_dir)),
-                    pass_fds=(7,),
-                    unavailability_payload=profile_payload,
-                )
-            finally:
-                events.append(("managed-exit", session_id))
-
-    class _LifecycleBinding:
-        def __init__(self) -> None:
-            self.identity = SimpleNamespace(managed_path=projection_root)
-            self.inherited_fds = (5, 7)
-            self.closed = False
-
-        def close(self) -> None:
-            self.closed = True
-            events.append(("projection-exit",))
-
-    binding = _LifecycleBinding()
-
-    class _LifecycleAuthority:
-        def acquire_launch_binding(self, **_kwargs):  # type: ignore[no-untyped-def]
-            events.append(("projection-enter",))
-            return binding
+    lifecycle = RecordingLifecycle(
+        generated_home=generated_home,
+        skills_dir=skills_dir,
+        projection_root=projection_root,
+        unavailability_payload=profile_payload,
+        returncodes=(17, 42, 0),
+        record_trace_spawn=True,
+    )
+    events = lifecycle.events
 
     class _LifecycleCodexBackend(CodexBackend):
         def binary_name(self) -> str:
@@ -2317,38 +2276,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             events.append(("validated", spec.env["RESUME"]))
             return []
 
-        @contextmanager
-        def session_attempt_context(
-            self,
-            *,
-            session_home: Path,
-            project_dir: Path,
-            launch_id: str,
-            attempt: int,
-            current_resume_spec: object,
-            ceiling_seconds: float = 172800.0,
-            systemd_scope_enabled: bool = False,
-        ):
-            del ceiling_seconds, systemd_scope_enabled
-            events.append(
-                (
-                    "attempt-enter",
-                    attempt,
-                    current_resume_spec,
-                    session_home,
-                    project_dir,
-                    launch_id,
-                )
-            )
-            try:
-                yield SessionAttemptHandle(
-                    view_id=f"{launch_id}-{attempt}",
-                    pass_fds=(11,),
-                    _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),
-                    _record_reaped=lambda pid, pgid: events.append(("reaped", attempt, pid, pgid)),
-                )
-            finally:
-                events.append(("attempt-exit", attempt, current_resume_spec))
+        def session_attempt_context(self, **kwargs):  # type: ignore[no-untyped-def]
+            return lifecycle.session_attempt_context(**kwargs)
 
     source_home = tmp_path / "source-codex"
     source_home.mkdir()
@@ -2362,55 +2291,22 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     monkeypatch.setattr(
         _patch_session__session_launch,
         "render_skill_unavailability",
-        record_render,
+        lifecycle.record_render,
     )
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
-        lambda *args, **kwargs: _LifecycleManager(),
+        lambda *args, **kwargs: lifecycle,
     )
     monkeypatch.setattr(
         _patch_install__plugin_artifact,
         "interactive_plugin_authority",
-        lambda **_kwargs: (_LifecycleAuthority(), PluginLoadMode.GENERATED_HOME),
+        lambda **_kwargs: (lifecycle, PluginLoadMode.GENERATED_HOME),
     )
-
-    results = iter(
-        (
-            SimpleNamespace(pid=101, pgid=101, returncode=17),
-            SimpleNamespace(pid=102, pgid=102, returncode=42),
-            SimpleNamespace(pid=103, pgid=103, returncode=0),
-        )
-    )
-
-    def run_attempt(
-        spec: CmdSpec,
-        *,
-        pass_fds: tuple[int, ...],
-        on_spawn,
-        on_reaped,
-        trace,
-        **_kwargs: object,
-    ) -> object:
-        attempt = sum(event[0] == "run" for event in events) + 1
-        events.append(
-            (
-                "run",
-                attempt,
-                spec.env["INITIAL"],
-                spec.env["RESUME"],
-                pass_fds,
-                spec.managed_skill_catalog,
-            )
-        )
-        on_spawn(100 + attempt, 100 + attempt)
-        trace.record_spawn()
-        on_reaped(100 + attempt, 100 + attempt)
-        return next(results)
 
     monkeypatch.setattr(
         _patch_session__session_process,
         "run_cook_attempt",
-        run_attempt,
+        lifecycle.run_cook_attempt,
     )
     sentinels = iter(("reload-id", None, None))
 
@@ -2450,7 +2346,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         workspace_temp_dir=None,
     )
 
-    attempt_enters = [event for event in events if event[0] == "attempt-enter"]
+    attempt_enters = lifecycle.events_of_type("attempt-enter")
     assert [event[1] for event in attempt_enters] == [1, 2, 3]
     assert {event[5] for event in attempt_enters} == {launch_id}
     assert all(event[3] == generated_home for event in attempt_enters)
@@ -2460,27 +2356,35 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         "infra-id",
     ]
 
-    run_events = [event for event in events if event[0] == "run"]
-    assert [event[2] for event in run_events] == ["greeting", "", ""]
-    assert [event[3] for event in run_events] == ["NoResume", "NamedResume", "NamedResume"]
-    assert [event[4] for event in run_events] == [(3, 7, 5, 11)] * 3
-    assert [event[5] for event in run_events] == [ValidatedAddDir(str(skills_dir))] * 3
-    assert len([event for event in events if event[0] == "spawn"]) == 3
-    assert len([event for event in events if event[0] == "reaped"]) == 3
+    run_events = lifecycle.events_of_type("run")
+    run_specs = [cast(CmdSpec, event[2]) for event in run_events]
+    assert [spec.env["INITIAL"] for spec in run_specs] == ["greeting", "", ""]
+    assert [spec.env["RESUME"] for spec in run_specs] == [
+        "NoResume",
+        "NamedResume",
+        "NamedResume",
+    ]
+    assert [event[3] for event in run_events] == [(3, 7, 5, 11)] * 3
+    assert [spec.managed_skill_catalog for spec in run_specs] == [
+        ValidatedAddDir(str(skills_dir))
+    ] * 3
+    assert len(lifecycle.events_of_type("spawn")) == 3
+    assert len(lifecycle.events_of_type("reaped")) == 3
     for attempt in (1, 2, 3):
         assert events.index(("attempt-enter", *attempt_enters[attempt - 1][1:])) < events.index(
-            next(event for event in events if event[:2] == ("run", attempt))
+            lifecycle.event_for("run", attempt)
         )
 
-    first_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 1)))
+    first_exit = events.index(lifecycle.event_for("attempt-exit", 1))
     first_sentinel = events.index(("sentinel", "reload-id"))
-    second_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 2)))
+    second_exit = events.index(lifecycle.event_for("attempt-exit", 2))
     infra_classified = events.index(("infra-classified", InfraExitCategory.API_ERROR))
     assert first_exit < first_sentinel
     assert second_exit < infra_classified
-    assert rendered_payloads == [profile_payload]
+    assert lifecycle.rendered_payloads == [profile_payload]
+    managed_enter = lifecycle.event_for("managed-enter", launch_id)
     assert (
-        events.index(("managed-enter", launch_id))
+        events.index(managed_enter)
         < events.index(("render", profile_payload))
         < events.index(("run", *run_events[0][1:]))
     )
@@ -2492,7 +2396,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     )
     assert all("profile-required-join" in prompt for prompt in built_prompts if prompt is not None)
     assert events.index(("managed-exit", launch_id)) > events.index(
-        next(event for event in events if event[:2] == ("attempt-exit", 3))
+        lifecycle.event_for("attempt-exit", 3)
     )
     assert events.index(("projection-exit",)) > events.index(("managed-exit", launch_id))
-    assert binding.closed
+    assert lifecycle.projection_bindings[0].closed

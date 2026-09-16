@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,155 @@ import autoskillit.cli.session._session_onboarding as _patch_session__session_on
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.config import AutomationConfig
-from autoskillit.core import CmdSpec, ManagedSessionHome, PluginLoadMode, ValidatedAddDir
+from autoskillit.core import (
+    CmdSpec,
+    CompiledSessionSkillCatalogAuthority,
+    ManagedSessionHome,
+    PluginLoadMode,
+    SessionAttemptHandle,
+    SkillProjectionContextAuthority,
+    SkillUnavailabilityPayload,
+    ValidatedAddDir,
+)
+
+
+class _RecordingProjectionBinding:
+    def __init__(
+        self,
+        managed_path: Path,
+        inherited_fds: tuple[int, ...],
+        events: list[tuple[object, ...]],
+    ) -> None:
+        self.plugin_dir = managed_path
+        self.identity = SimpleNamespace(managed_path=managed_path)
+        self.inherited_fds = inherited_fds
+        self.closed = False
+        self._events = events
+
+    def close(self) -> None:
+        self.closed = True
+        self._events.append(("projection-exit",))
+
+
+class RecordingLifecycle:
+    """Fresh managed-session and attempt recording for one launch test."""
+
+    def __init__(
+        self,
+        *,
+        generated_home: Path,
+        skills_dir: Path,
+        projection_root: Path,
+        unavailability_payload: SkillUnavailabilityPayload,
+        returncodes: Iterable[int],
+        record_trace_spawn: bool = False,
+    ) -> None:
+        self.events: list[tuple[object, ...]] = []
+        self._generated_home = generated_home
+        self._skills_dir = skills_dir
+        self._projection_root = projection_root
+        self._unavailability_payload = unavailability_payload
+        self._results = iter(
+            SimpleNamespace(pid=100 + attempt, pgid=100 + attempt, returncode=returncode)
+            for attempt, returncode in enumerate(returncodes, start=1)
+        )
+        self._record_trace_spawn = record_trace_spawn
+        self.projection_bindings: list[_RecordingProjectionBinding] = []
+        self.rendered_payloads: list[SkillUnavailabilityPayload] = []
+
+    def events_of_type(self, event_type: str) -> list[tuple[object, ...]]:
+        return [event for event in self.events if event[0] == event_type]
+
+    def event_for(self, event_type: str, subject: object) -> tuple[object, ...]:
+        return next(event for event in self.events if event[:2] == (event_type, subject))
+
+    def record_render(self, payload: SkillUnavailabilityPayload) -> None:
+        self.rendered_payloads.append(payload)
+        self.events.append(("render", payload))
+
+    def acquire_launch_binding(self, **_kwargs: object) -> _RecordingProjectionBinding:
+        self.events.append(("projection-enter",))
+        binding = _RecordingProjectionBinding(self._projection_root, (5, 7), self.events)
+        self.projection_bindings.append(binding)
+        return binding
+
+    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+        del max_age_seconds
+        return 0
+
+    @contextmanager
+    def managed_session(
+        self,
+        launch_id: str,
+        compilation: CompiledSessionSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> Iterator[ManagedSessionHome]:
+        assert projection_context.catalog == compilation.catalog
+        self.events.append(("managed-enter", launch_id, projection_context))
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=self._generated_home,
+                skills_dir=ValidatedAddDir(str(self._skills_dir)),
+                pass_fds=(7,),
+                unavailability_payload=self._unavailability_payload,
+            )
+        finally:
+            self.events.append(("managed-exit", launch_id))
+
+    @contextmanager
+    def session_attempt_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: object,
+        ceiling_seconds: float = 172800.0,
+        systemd_scope_enabled: bool = False,
+    ) -> Iterator[SessionAttemptHandle]:
+        del ceiling_seconds, systemd_scope_enabled
+        self.events.append(
+            (
+                "attempt-enter",
+                attempt,
+                current_resume_spec,
+                session_home,
+                project_dir,
+                launch_id,
+            )
+        )
+        try:
+            yield SessionAttemptHandle(
+                view_id=f"{launch_id}-{attempt}",
+                pass_fds=(11,),
+                _record_spawn=lambda pid, pgid: self.events.append(("spawn", attempt, pid, pgid)),
+                _record_reaped=lambda pid, pgid: self.events.append(
+                    ("reaped", attempt, pid, pgid)
+                ),
+            )
+        finally:
+            self.events.append(("attempt-exit", attempt, current_resume_spec))
+
+    def run_cook_attempt(
+        self,
+        spec: CmdSpec,
+        *,
+        pass_fds: tuple[int, ...],
+        on_spawn,
+        on_reaped,
+        trace: object | None = None,
+        **_kwargs: object,
+    ) -> SimpleNamespace:  # type: ignore[no-untyped-def]
+        attempt = sum(event[0] == "run" for event in self.events) + 1
+        self.events.append(("run", attempt, spec, pass_fds))
+        result = next(self._results)
+        on_spawn(result.pid, result.pgid)
+        if self._record_trace_spawn:
+            trace.record_spawn()  # type: ignore[union-attr]
+        on_reaped(result.pid, result.pgid)
+        return result
 
 
 class _Binding:

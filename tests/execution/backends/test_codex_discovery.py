@@ -52,7 +52,8 @@ def _catalog(
     entries: tuple[str, ...] = ("alpha", "beta"),
 ) -> tuple[Path, tuple[tuple[str, str], ...]]:
     session_home = tmp_path / "session-home"
-    catalog_dir = session_home / "add-dir" / "skills"
+    route = discovery.CODEX_MANAGED_HOME_ROUTE
+    catalog_dir = route.catalog_dir(session_home)
     catalog_dir.mkdir(parents=True)
     expected_entries: list[tuple[str, str]] = []
     for name in entries:
@@ -63,7 +64,9 @@ def _catalog(
     native_skill = catalog_dir / ".system" / "native" / "SKILL.md"
     native_skill.parent.mkdir(parents=True)
     native_skill.write_text("native", encoding="utf-8")
-    (session_home / "skills").symlink_to(catalog_dir, target_is_directory=True)
+    discovery_root = route.discovery_root(session_home)
+    assert discovery_root is not None
+    discovery_root.symlink_to(route.alias_target, target_is_directory=True)
     return catalog_dir, tuple(expected_entries)
 
 
@@ -72,7 +75,9 @@ def _loader_output(name: str, catalog_dir: Path) -> str:
 
 
 def _discovery_root(catalog_dir: Path) -> Path:
-    return catalog_dir.parent.parent / "skills"
+    discovery_root = discovery.CODEX_MANAGED_HOME_ROUTE.discovery_root(catalog_dir.parent.parent)
+    assert discovery_root is not None
+    return discovery_root
 
 
 def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -> str:
@@ -82,6 +87,18 @@ def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -
     return _with_skills_text(
         document,
         _skills_text(document).replace(str(source_root), str(discovery_root)),
+    )
+
+
+def _loader_output_with_extra_root(name: str, catalog_dir: Path, extra_root: Path) -> str:
+    document = json.loads(_loader_output(name, catalog_dir))
+    assert isinstance(document, list)
+    return _with_skills_text(
+        document,
+        _skills_text(document).replace(
+            "### Available skills",
+            f"- `r9` = `{extra_root}`\n### Available skills",
+        ),
     )
 
 
@@ -265,6 +282,11 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
 ) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     expected_discovery_root = _discovery_root(catalog_dir) if use_managed_alias else catalog_dir
+    route = (
+        discovery.CODEX_MANAGED_HOME_ROUTE
+        if use_managed_alias
+        else discovery.CODEX_PROJECTED_HOME_ROUTE
+    )
     command, env = _install_prompt_stub(
         tmp_path,
         _loader_output_at_root(
@@ -280,12 +302,119 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=expected_discovery_root,
+        route=route,
         expected_entries=expected_entries,
         version="0.153.4",
     )
 
     assert errors == []
     assert (catalog_dir / ".system" / "native" / "SKILL.md").is_file()
+
+
+def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    scope = catalog_dir.parents[2]
+    other_home = scope / "other-home"
+    other_catalog = other_home / "add-dir" / "skills"
+    other_catalog.mkdir(parents=True)
+    foreign_root = other_home / "skills"
+    foreign_root.symlink_to(other_catalog, target_is_directory=True)
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            foreign_root,
+        ),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=scope,
+    )
+
+    assert len(errors) == 1
+    assert "foreign managed root" in errors[0]
+
+
+def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    scope = catalog_dir.parents[2]
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root("discovery_prompt_input_v0153.json", catalog_dir, scope),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=scope,
+    )
+
+    assert len(errors) == 1
+    assert "foreign managed root" in errors[0]
+
+
+def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=catalog_dir.parents[2],
+    )
+
+    assert errors == []
+
+
+def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    outside_root = tmp_path.parent / "outside" / ".agents" / "skills"
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            outside_root,
+        ),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=catalog_dir.parents[2],
+    )
+
+    assert errors == []
 
 
 def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
@@ -314,6 +443,7 @@ def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -339,6 +469,7 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -396,6 +527,7 @@ def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=expected_discovery_root,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -426,6 +558,7 @@ def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=Path("skills"),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -453,6 +586,7 @@ def test_attest_catalog_discovery_rejects_symlinked_catalog_before_probe(
         cwd=str(tmp_path),
         catalog_dir=catalog_alias,
         expected_discovery_root=catalog_alias,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -480,6 +614,7 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -522,6 +657,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -545,6 +681,7 @@ def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -567,6 +704,7 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -601,6 +739,7 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
     )
@@ -610,14 +749,52 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
     assert "mutated the managed catalog" not in diagnostic
 
 
-def test_discovery_contract_pins_verified_upstream_revision() -> None:
-    contract = discovery.CODEX_SKILL_DISCOVERY_CONTRACT
+def test_discovery_routes_and_contract_pin_verified_upstream_revision() -> None:
+    from autoskillit.core import UpstreamSupportStatus
 
-    assert contract.legacy_root_relpath == "skills"
-    assert contract.catalog_relpath == "add-dir/skills"
+    contract = discovery.CODEX_SKILL_DISCOVERY_CONTRACT
+    managed_route = discovery.CODEX_MANAGED_HOME_ROUTE
+    projected_route = discovery.CODEX_PROJECTED_HOME_ROUTE
+
+    assert managed_route.discovery_root_relpath == "skills"
+    assert managed_route.catalog_relpath == "add-dir/skills"
+    assert managed_route.upstream_status is UpstreamSupportStatus.DEPRECATED
+    assert managed_route.tracking_issue == 4717
+    assert projected_route.catalog_relpath == "skills"
+    assert projected_route.discovery_root_relpath == "skills"
     assert contract.upstream_revision == "646f7c0a91b8e327d263335da68ae8ef212895ce"
-    assert contract.upstream_legacy_root_citation == "codex-rs/ext/skills/src/host_roots.rs:94-113"
     assert contract.verified_binary == "codex-cli 0.153.4"
+
+
+def test_select_interactive_discovery_route(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from autoskillit.core import PluginLoadMode
+    from tests.execution.backends._plugin_binding import plugin_binding
+
+    projected_binding = replace(
+        plugin_binding(tmp_path / "projected-plugin"),
+        load_mode=PluginLoadMode.PROJECTED_HOME,
+    )
+
+    assert (
+        discovery.select_interactive_discovery_route(
+            generated_home=tmp_path / "generated-home",
+            plugin_binding=projected_binding,
+        )
+        is discovery.CODEX_MANAGED_HOME_ROUTE
+    )
+    assert (
+        discovery.select_interactive_discovery_route(
+            generated_home=None,
+            plugin_binding=projected_binding,
+        )
+        is discovery.CODEX_PROJECTED_HOME_ROUTE
+    )
+    assert (
+        discovery.select_interactive_discovery_route(generated_home=None, plugin_binding=None)
+        is None
+    )
 
 
 def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
@@ -653,6 +830,7 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
         timeout_seconds=12.5,

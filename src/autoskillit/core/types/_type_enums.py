@@ -24,7 +24,9 @@ __all__ = [
     "MergeState",
     "RestartScope",
     "SkillExecutionRole",
+    "SkillDiscoveryMechanism",
     "SkillSource",
+    "UpstreamSupportStatus",
     "SkillInvalidityKind",
     "RemediationAction",
     "RecipeSource",
@@ -166,6 +168,19 @@ class SkillExecutionRole(StrEnum):
     SESSION = "session"
     ORCHESTRATOR = "orchestrator"
     FLEET = "fleet"
+
+
+@unique
+class SkillDiscoveryMechanism(StrEnum):
+    CODEX_HOME_SKILLS = "codex_home_skills"
+    APP_SERVER_EXTRA_ROOTS = "app_server_extra_roots"
+    CLAUDE_ADD_DIR_SKILLS = "claude_add_dir_skills"
+
+
+@unique
+class UpstreamSupportStatus(StrEnum):
+    SUPPORTED = "supported"
+    DEPRECATED = "deprecated"
 
 
 class SkillSource(StrEnum):

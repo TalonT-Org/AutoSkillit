@@ -35,6 +35,7 @@ from autoskillit.core import (
     ResumeSpec,
     SemanticAdaptationContext,
     SessionAttemptHandle,
+    SkillDiscoveryRouteDef,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
@@ -66,6 +67,8 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.execution.backends._codex_discovery import (
     CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
+    CODEX_MANAGED_HOME_ROUTE,
+    CODEX_PROJECTED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
     probe_codex_version,
@@ -132,6 +135,9 @@ def _run_interactive_native_probes(
     generated_home: Path,
     catalog_dir: Path,
     managed_catalog: ValidatedAddDir,
+    expected_discovery_root: Path,
+    managed_root_scope: Path,
+    route: SkillDiscoveryRouteDef,
     config_bytes: bytes,
     before_fingerprint: tuple[tuple[str, str, int, int], ...],
 ) -> list[str]:
@@ -167,9 +173,10 @@ def _run_interactive_native_probes(
         env=spec.env,
         cwd=spec.cwd,
         catalog_dir=catalog_dir,
-        expected_discovery_root=generated_home
-        / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
+        expected_discovery_root=expected_discovery_root,
         expected_entries=managed_catalog.skill_entries,
+        managed_root_scope=managed_root_scope,
+        route=route,
         version=raw_version,
         timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     )
@@ -215,7 +222,11 @@ def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list
     return origin, []
 
 
-def _validate_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin) -> list[str]:
+def _validate_projected_interactive_invocation(
+    spec: CmdSpec,
+    origin: CmdOrigin,
+    route: SkillDiscoveryRouteDef,
+) -> list[str]:
     home_value = spec.env.get(CODEX_HOME_ENV_VAR)
     if not home_value:
         return ["Codex projected interactive validation requires CODEX_HOME"]
@@ -235,7 +246,10 @@ def _validate_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin)
     ):
         return ["Codex projected interactive CODEX_HOME must be a canonical real directory"]
 
-    catalog_dir = projected_home / "skills"
+    catalog_dir = route.catalog_dir(projected_home)
+    expected_discovery_root = route.discovery_root(projected_home)
+    if expected_discovery_root is None:
+        return ["Codex projected interactive discovery route has no loader entry point"]
     raw_version, _, version_errors = probe_codex_version(
         executable=origin.binary,
         env=spec.env,
@@ -252,9 +266,11 @@ def _validate_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin)
         env=spec.env,
         cwd=spec.cwd,
         catalog_dir=catalog_dir,
-        expected_discovery_root=catalog_dir,
+        expected_discovery_root=expected_discovery_root,
         expected_entries=spec.projected_skill_entries,
+        route=route,
         version=raw_version,
+        managed_root_scope=projected_home.parent,
         timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     )
 
@@ -340,7 +356,6 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             version_check_command="codex --version",
             process_name="codex",
             process_name_aliases=frozenset({"codex", "node"}),
-            skills_subdir="skills",
             hook_config_format="toml_nested",
             write_detection_strategy="file_changes",
             patch_format="codex_star_update",
@@ -381,9 +396,11 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
-            profile_skills_source=source_codex_home / "skills",
+            # Profile admission reads the same deprecated upstream user root.
+            profile_skills_source=CODEX_MANAGED_HOME_ROUTE.discovery_root(source_codex_home),
             persistent_session_root_subdir=Path(CODEX_SESSIONS_SUBDIR),
             skill_sigil=self.capabilities.skill_sigil,
+            managed_skill_discovery=CODEX_MANAGED_HOME_ROUTE,
         )
 
     @property
@@ -464,19 +481,24 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     ) -> list[str]:
         del project_dir
         errors: list[str] = []
-        skills_dir = (
-            session_dir
-            / SESSION_ADD_DIR_SUBDIR
-            / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-        )
-        discovery_skills_dir = session_dir / self.conventions.skills_subdir
+        route = self.conventions.managed_skill_discovery
+        if route is None:
+            return ["backend declares no managed skill discovery route"]
+        skills_dir = route.catalog_dir(session_dir)
+        discovery_entry = route.discovery_root(session_dir)
         errors.extend(_validate_managed_skill_catalog(skills_dir))
-        if not discovery_skills_dir.is_symlink():
-            errors.append(f"skills must be a symlink: {discovery_skills_dir}")
-        elif os.readlink(discovery_skills_dir) != "add-dir/skills":
-            errors.append(f"skills alias must be add-dir/skills: {discovery_skills_dir}")
-        elif discovery_skills_dir.resolve(strict=False) != skills_dir.resolve(strict=False):
-            errors.append(f"skills alias must resolve to managed catalog: {discovery_skills_dir}")
+        if route.entry_point_is_alias:
+            assert discovery_entry is not None
+            if not discovery_entry.is_symlink():
+                errors.append(f"discovery entry point must be a symlink: {discovery_entry}")
+            elif os.readlink(discovery_entry) != route.alias_target:
+                errors.append(
+                    f"discovery entry point has the wrong alias target: {discovery_entry}"
+                )
+            elif discovery_entry.resolve(strict=False) != skills_dir.resolve(strict=False):
+                errors.append(
+                    f"discovery entry point must resolve to managed catalog: {discovery_entry}"
+                )
         config_path = session_dir / "config.toml"
         if not config_path.is_file():
             errors.append(f"config.toml does not exist: {config_path}")
@@ -514,15 +536,24 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             return origin_errors
         assert origin is not None
 
+        route = spec.skill_discovery_route
+        if route is None:
+            return ["Codex interactive validation requires a declared skill discovery route"]
         managed_catalog = spec.managed_skill_catalog
         if managed_catalog is not None and spec.projected_skill_entries:
             return ["Codex interactive validation received mixed managed and projected catalogs"]
-        if managed_catalog is None:
+        if route is CODEX_PROJECTED_HOME_ROUTE:
+            if managed_catalog is not None:
+                return ["Codex projected discovery route cannot use a managed catalog"]
             if not spec.projected_skill_entries:
-                return [
-                    "Codex interactive validation requires managed or projected catalog evidence"
-                ]
-            return _validate_projected_interactive_invocation(spec, origin)
+                return ["Codex projected discovery route requires projected catalog evidence"]
+            return _validate_projected_interactive_invocation(spec, origin, route)
+        if route is not CODEX_MANAGED_HOME_ROUTE:
+            return [f"unsupported Codex interactive discovery route: {route.name}"]
+        if managed_catalog is None:
+            return ["Codex managed discovery route requires managed catalog evidence"]
+        if spec.projected_skill_entries:
+            return ["Codex managed discovery route cannot use projected catalog evidence"]
 
         home_value = spec.env.get(CODEX_HOME_ENV_VAR)
         sqlite_value = spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR)
@@ -545,7 +576,10 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             return ["Codex interactive managed skill catalog is bound to another add-dir"]
         if not managed_catalog.skill_entries:
             return ["Codex interactive managed skill catalog has no frozen entries"]
-        catalog_dir = generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+        catalog_dir = route.catalog_dir(generated_home)
+        expected_discovery_root = route.discovery_root(generated_home)
+        if expected_discovery_root is None:
+            return ["Codex managed discovery route has no loader entry point"]
 
         sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
         config_overrides = [
@@ -580,6 +614,9 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             generated_home=generated_home,
             catalog_dir=catalog_dir,
             managed_catalog=managed_catalog,
+            expected_discovery_root=expected_discovery_root,
+            managed_root_scope=generated_home.parent,
+            route=route,
             config_bytes=config_bytes,
             before_fingerprint=before_fingerprint,
         )

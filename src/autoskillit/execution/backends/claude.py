@@ -52,10 +52,13 @@ from autoskillit.core import (
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
+    SkillDiscoveryMechanism,
+    SkillDiscoveryRouteDef,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
+    UpstreamSupportStatus,
     ValidatedAddDir,
     YAMLError,
     build_agent_env,
@@ -104,6 +107,7 @@ _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer bin
 
 
 __all__ = [
+    "CLAUDE_ADD_DIR_SKILLS_ROUTE",
     "ClaudeCodeBackend",
     "ClaudeEnvPolicy",
     "ClaudeResultParser",
@@ -112,6 +116,19 @@ __all__ = [
     "detect_repository_agent_teams_setting",
     "find_malformed_agent_teams_settings",
 ]
+
+
+CLAUDE_ADD_DIR_SKILLS_ROUTE = SkillDiscoveryRouteDef(
+    name="claude_add_dir_skills",
+    mechanism=SkillDiscoveryMechanism.CLAUDE_ADD_DIR_SKILLS,
+    upstream_status=UpstreamSupportStatus.SUPPORTED,
+    tracking_issue=None,
+    catalog_relpath=(
+        f"{SESSION_ADD_DIR_SUBDIR}/{ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR.as_posix()}"
+    ),
+    discovery_root_relpath=None,
+    upstream_citation="docs.anthropic.com/en/docs/claude-code/skills@2026-09-15",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +170,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                 ".agents/skills",
             ),
             skill_sigil=self.capabilities.skill_sigil,
+            managed_skill_discovery=CLAUDE_ADD_DIR_SKILLS_ROUTE,
         )
 
     @property
@@ -415,6 +433,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            skill_discovery_route=CLAUDE_ADD_DIR_SKILLS_ROUTE,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
@@ -493,9 +512,10 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
     ) -> list[str]:
         del project_dir
         errors: list[str] = []
-        skills_dir = (
-            session_dir / SESSION_ADD_DIR_SUBDIR / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-        )
+        route = self.conventions.managed_skill_discovery
+        if route is None:
+            return ["backend declares no managed skill discovery route"]
+        skills_dir = route.catalog_dir(session_dir)
         if not skills_dir.is_dir():
             errors.append(f"skills directory does not exist: {skills_dir}")
         else:

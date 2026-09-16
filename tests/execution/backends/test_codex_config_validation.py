@@ -409,11 +409,12 @@ def _projected_plugin_binding(
     ),
 ) -> tuple[Any, Path]:
     from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding, PluginLoadMode
+    from autoskillit.execution.backends._codex_discovery import CODEX_PROJECTED_HOME_ROUTE
 
     projected_home = tmp_path / "projected-home"
     projected_home.mkdir()
     for name, relative_path in skill_entries:
-        skill_path = projected_home / "skills" / relative_path
+        skill_path = CODEX_PROJECTED_HOME_ROUTE.catalog_dir(projected_home) / relative_path
         skill_path.parent.mkdir(parents=True, exist_ok=True)
         skill_path.write_text(f"projected skill {name}", encoding="utf-8")
     binding = PluginLaunchBinding(
@@ -598,12 +599,12 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     )
     assert captured["env"] == spec.env
     assert captured["cwd"] == spec.cwd
-    assert captured["catalog_dir"] == (
-        generated_home / codex.CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+    assert captured["route"] is codex.CODEX_MANAGED_HOME_ROUTE
+    assert captured["catalog_dir"] == codex.CODEX_MANAGED_HOME_ROUTE.catalog_dir(generated_home)
+    assert captured["expected_discovery_root"] == codex.CODEX_MANAGED_HOME_ROUTE.discovery_root(
+        generated_home
     )
-    assert captured["expected_discovery_root"] == (
-        generated_home / codex.CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-    )
+    assert captured["managed_root_scope"] == generated_home.parent
     assert captured["expected_entries"] == spec.managed_skill_catalog.skill_entries
     assert captured["timeout_seconds"] == 30
     assert str(executable) == spec.origin.binary
@@ -651,11 +652,33 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
         *codex._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
     )
-    assert discovery_call["catalog_dir"] == projected_home / "skills"
-    assert discovery_call["expected_discovery_root"] == projected_home / "skills"
+    assert discovery_call["route"] is codex.CODEX_PROJECTED_HOME_ROUTE
+    assert discovery_call["catalog_dir"] == codex.CODEX_PROJECTED_HOME_ROUTE.catalog_dir(
+        projected_home
+    )
+    assert discovery_call[
+        "expected_discovery_root"
+    ] == codex.CODEX_PROJECTED_HOME_ROUTE.discovery_root(projected_home)
+    assert discovery_call["managed_root_scope"] == projected_home.parent
     assert discovery_call["expected_entries"] == spec.projected_skill_entries
     assert discovery_call["version"] == "codex-cli 0.153.4"
     assert discovery_call["timeout_seconds"] == 30.0
+
+
+def test_interactive_validator_rejects_spec_without_declared_route(tmp_path: Path) -> None:
+    backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
+
+    assert backend.validate_interactive_invocation(replace(spec, skill_discovery_route=None)) == [
+        "Codex interactive validation requires a declared skill discovery route"
+    ]
+
+
+def test_interactive_validator_rejects_missing_managed_catalog_evidence(tmp_path: Path) -> None:
+    backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
+
+    assert backend.validate_interactive_invocation(replace(spec, managed_skill_catalog=None)) == [
+        "Codex managed discovery route requires managed catalog evidence"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -735,9 +758,12 @@ def test_projected_interactive_validator_rejects_missing_catalog_before_prompt_p
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.execution.backends import codex
+    from autoskillit.execution.backends._codex_discovery import CODEX_PROJECTED_HOME_ROUTE
 
     backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
-    (projected_home / "skills" / "projected-skill" / "SKILL.md").unlink()
+    (
+        CODEX_PROJECTED_HOME_ROUTE.catalog_dir(projected_home) / "projected-skill" / "SKILL.md"
+    ).unlink()
     monkeypatch.setattr(
         codex,
         "probe_codex_version",
@@ -767,7 +793,7 @@ def test_projected_interactive_validator_rejects_attestation_catalog_changes(
     from autoskillit.execution.backends import codex
 
     backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
-    catalog_dir = projected_home / "skills"
+    catalog_dir = discovery.CODEX_PROJECTED_HOME_ROUTE.catalog_dir(projected_home)
     monkeypatch.setattr(
         codex,
         "probe_codex_version",
@@ -803,7 +829,7 @@ def test_projected_interactive_validator_rejects_empty_or_mixed_catalog_evidence
     _, managed_spec, _generated_home, _managed_executable = _interactive_discovery_spec(tmp_path)
 
     assert backend.validate_interactive_invocation(replace(spec, projected_skill_entries=())) == [
-        "Codex interactive validation requires managed or projected catalog evidence"
+        "Codex projected discovery route requires projected catalog evidence"
     ]
     assert backend.validate_interactive_invocation(
         replace(spec, managed_skill_catalog=managed_spec.managed_skill_catalog)

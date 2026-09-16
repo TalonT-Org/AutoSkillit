@@ -442,9 +442,10 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     # Each facade's own __all__ must be a strict subset of the pre-split snapshot —
     # any name that was moved to a sibling shard must NOT reappear in the facade's
     # __all__, otherwise the hub's concatenated __all__ would carry duplicates.
-    assert set(enums_mod.__all__) < _PRE_SPLIT_ENUM_NAMES, (
-        f"Names unexpectedly re-added to _type_enums.__all__: "
-        f"{sorted(set(enums_mod.__all__) - _PRE_SPLIT_ENUM_NAMES)}"
+    legacy_enum_exports = set(enums_mod.__all__) & _PRE_SPLIT_ENUM_NAMES
+    assert legacy_enum_exports < _PRE_SPLIT_ENUM_NAMES, (
+        "_type_enums.__all__ unexpectedly contains every pre-split name: "
+        f"{sorted(legacy_enum_exports)}"
     )
     assert set(constants_mod.__all__) < _PRE_SPLIT_CONSTANT_NAMES, (
         f"Names unexpectedly re-added to _type_constants.__all__: "

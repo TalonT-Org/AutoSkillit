@@ -1010,7 +1010,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:285": (
+    "execution/backends/claude.py:303": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
@@ -1028,19 +1028,19 @@ FORWARDING_SITES: dict[str, str] = {
         "just above, since it is also one of the reserved keys this same filter blocks from"
         "callers."
     ),
-    "execution/backends/_codex/session_commands.py:207": (
+    "execution/backends/_codex/session_commands.py:218": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:533": (
+    "execution/backends/_codex/session_commands.py:549": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:238": (
+    "execution/backends/_codex/session_commands.py:249": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:726": (
+    "execution/backends/_codex/session_commands.py:743": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

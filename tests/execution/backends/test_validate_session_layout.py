@@ -12,7 +12,9 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _write_codex_catalog(session_home: Path, *, skill_name: str = "some-skill") -> Path:
-    catalog = session_home / SESSION_ADD_DIR_SUBDIR / "skills"
+    from autoskillit.execution.backends.codex import CODEX_MANAGED_HOME_ROUTE
+
+    catalog = CODEX_MANAGED_HOME_ROUTE.catalog_dir(session_home)
     skill_dir = catalog / skill_name
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# Skill\n")
@@ -122,33 +124,49 @@ class TestCodexLayoutValidation:
     def test_codex_layout_rejects_real_discovery_directory(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
+        route = CodexBackend().conventions.managed_skill_discovery
+        assert route is not None
+        assert route.entry_point_is_alias
         catalog = _write_codex_catalog(tmp_path)
-        discovery = tmp_path / "skills"
+        assert catalog == route.catalog_dir(tmp_path)
+        discovery = route.discovery_root(tmp_path)
+        assert discovery is not None
         discovery.mkdir()
         (discovery / "some-skill").symlink_to(catalog / "some-skill")
 
         errors = CodexBackend().validate_session_layout(tmp_path)
 
-        assert any("skills must be a symlink" in error for error in errors)
+        assert f"discovery entry point must be a symlink: {discovery}" in errors
 
     def test_codex_layout_rejects_missing_discovery_alias(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        _write_codex_catalog(tmp_path)
+        route = CodexBackend().conventions.managed_skill_discovery
+        assert route is not None
+        assert route.entry_point_is_alias
+        assert _write_codex_catalog(tmp_path) == route.catalog_dir(tmp_path)
+        discovery = route.discovery_root(tmp_path)
+        assert discovery is not None
 
         errors = CodexBackend().validate_session_layout(tmp_path)
 
-        assert any("skills must be a symlink" in error for error in errors)
+        assert f"discovery entry point must be a symlink: {discovery}" in errors
 
     def test_codex_layout_rejects_wrong_discovery_alias(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
+        route = CodexBackend().conventions.managed_skill_discovery
+        assert route is not None
+        assert route.entry_point_is_alias
         catalog = _write_codex_catalog(tmp_path)
-        (tmp_path / "skills").symlink_to(catalog)
+        assert catalog == route.catalog_dir(tmp_path)
+        discovery = route.discovery_root(tmp_path)
+        assert discovery is not None
+        discovery.symlink_to(catalog)
 
         errors = CodexBackend().validate_session_layout(tmp_path)
 
-        assert any("add-dir/skills" in error for error in errors)
+        assert f"discovery entry point has the wrong alias target: {discovery}" in errors
 
     def test_codex_layout_rejects_catalog_with_only_native_system_skills(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend

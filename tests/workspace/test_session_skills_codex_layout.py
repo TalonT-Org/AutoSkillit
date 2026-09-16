@@ -267,8 +267,6 @@ def test_codex_generated_home_skills_is_single_alias_to_catalog(
     make_session_skill_manager,
     codex_env,
 ) -> None:
-    from autoskillit.execution.backends.codex import CODEX_SKILL_DISCOVERY_CONTRACT
-
     mgr = make_session_skill_manager()
     add_dir = _materialize(
         mgr,
@@ -279,16 +277,85 @@ def test_codex_generated_home_skills_is_single_alias_to_catalog(
 
     add_dir_path = Path(str(add_dir))
     generated_home = add_dir_path.parent
+    route = codex_env.backend.conventions.managed_skill_discovery
+    assert route is not None
+    assert route.entry_point_is_alias
     skills_subdir = codex_env.backend.conventions.skills_subdir
-    catalog = generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
-    discovery_root = generated_home / skills_subdir
+    catalog = route.catalog_dir(generated_home)
+    discovery_root = route.discovery_root(generated_home)
+    assert discovery_root is not None
 
     assert catalog == add_dir_path / skills_subdir
     assert discovery_root.is_symlink()
-    assert os.readlink(discovery_root) == CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+    assert os.readlink(discovery_root) == route.alias_target
     assert discovery_root.resolve() == catalog.resolve()
     assert (catalog / "make-arch-diag").is_dir()
     assert not (catalog / "make-arch-diag").is_symlink()
+
+
+def _test_discovery_route(*, name: str, discovery_root_relpath: str | None):
+    from autoskillit.core import (
+        SkillDiscoveryMechanism,
+        SkillDiscoveryRouteDef,
+        UpstreamSupportStatus,
+    )
+
+    return SkillDiscoveryRouteDef(
+        name=name,
+        mechanism=SkillDiscoveryMechanism.CODEX_HOME_SKILLS,
+        upstream_status=UpstreamSupportStatus.SUPPORTED,
+        tracking_issue=None,
+        catalog_relpath="add-dir/skills",
+        discovery_root_relpath=discovery_root_relpath,
+        upstream_citation="test/route:1@revision",
+    )
+
+
+def test_entry_point_is_not_created_when_route_declares_none(
+    make_session_skill_manager,
+) -> None:
+    from dataclasses import replace
+
+    backend = _make_codex_backend()
+    route = _test_discovery_route(name="no-entry-point", discovery_root_relpath=None)
+    backend.capabilities = replace(_CODEX_CAPABILITIES, session_dir_persistent=True)
+    backend.conventions = replace(backend.conventions, managed_skill_discovery=route)
+    add_dir = _materialize(
+        make_session_skill_manager(),
+        "no-entry-point",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    )
+    add_dir_path = Path(str(add_dir))
+    generated_home = add_dir_path.parent
+    catalog = route.catalog_dir(generated_home)
+
+    assert catalog == add_dir_path / backend.conventions.skills_subdir
+    assert (catalog / "make-arch-diag").is_dir()
+    assert not (generated_home / Path(route.catalog_relpath).name).exists()
+
+
+def test_entry_point_is_created_from_declared_route_not_capability(
+    make_session_skill_manager,
+) -> None:
+    from dataclasses import replace
+
+    backend = _make_codex_backend()
+    route = _test_discovery_route(name="alias-entry-point", discovery_root_relpath="loader")
+    backend.capabilities = replace(_CODEX_CAPABILITIES, session_dir_persistent=False)
+    backend.conventions = replace(backend.conventions, managed_skill_discovery=route)
+    add_dir = _materialize(
+        make_session_skill_manager(),
+        "alias-entry-point",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    )
+    generated_home = Path(str(add_dir)).parent
+    entry_point = route.discovery_root(generated_home)
+
+    assert entry_point is not None
+    assert entry_point.is_symlink()
+    assert os.readlink(entry_point) == route.alias_target
 
 
 def test_codex_discovery_root_uses_admitted_profile_union_with_profile_precedence(
@@ -615,12 +682,16 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
     codex_env,
 ) -> None:
     mgr = make_session_skill_manager()
+    route = codex_env.backend.conventions.managed_skill_discovery
+    assert route is not None
 
     def setup_session_dir(session_dir: Path, **_kwargs: object) -> None:
-        (session_dir / "skills").mkdir(parents=True)
+        discovery_root = route.discovery_root(session_dir)
+        assert discovery_root is not None
+        discovery_root.mkdir(parents=True)
 
     codex_env.backend.setup_session_dir.side_effect = setup_session_dir
-    with pytest.raises(SkillContractError, match="legacy discovery alias path already exists"):
+    with pytest.raises(SkillContractError, match="discovery entry point path already exists"):
         with _managed(
             mgr,
             "orchestrator",

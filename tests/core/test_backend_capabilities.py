@@ -131,7 +131,6 @@ def test_backend_capabilities_field_count():
         "min_version",
         "version_check_command",
         "process_name",
-        "skills_subdir",
         "hook_config_format",
         "write_detection_strategy",
         "patch_format",
@@ -174,7 +173,6 @@ def test_backend_capabilities_field_names_locked():
         "min_version",
         "version_check_command",
         "process_name",
-        "skills_subdir",
         "hook_config_format",
         "write_detection_strategy",
         "patch_format",
@@ -253,7 +251,6 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
     assert CLAUDE_CODE_CAPABILITIES.process_name_aliases == frozenset({"claude"})
-    assert CLAUDE_CODE_CAPABILITIES.skills_subdir == ".claude/skills"
     assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_env_forward_vars == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.replay_capable is True

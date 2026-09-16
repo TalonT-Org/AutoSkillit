@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _reference as _capture_reference
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _types as _capture_types
+    from autoskillit.hooks._capture_lifecycle import _errors
     from autoskillit.hooks._capture_lifecycle._store import CaptureLifecycleStore
 else:
     _capture_capacity = importlib.import_module("_capture._capacity")
@@ -43,6 +44,7 @@ else:
     _capture_reference = importlib.import_module("_capture._reference")
     _capture_snapshot = importlib.import_module("_capture._snapshot")
     _capture_types = importlib.import_module("_capture._types")
+    _errors = importlib.import_module("_capture_lifecycle._errors")
 
 _module_identity.register_module_aliases(__name__)
 
@@ -59,6 +61,9 @@ CaptureTransitionCommittedError = _capture_lifecycle_record.CaptureTransitionCom
 CaptureWriteAuthority = _capture_snapshot.CaptureWriteAuthority
 FinalizedCapture = _capture_snapshot.FinalizedCapture
 VerifiedCaptureSnapshot = _capture_snapshot.VerifiedCaptureSnapshot
+CaptureLifecycleError = _errors.CaptureLifecycleError
+CaptureLedgerError = _errors.CaptureLedgerError
+CaptureCapacityError = _errors.CaptureCapacityError
 
 _BYTE_CAPACITY_REASONS = frozenset(
     {
@@ -66,38 +71,6 @@ _BYTE_CAPACITY_REASONS = frozenset(
         CaptureCapacityReason.HARD_LEDGER_CAPACITY,
     }
 )
-
-
-class CaptureLifecycleError(RuntimeError):
-    failure_reason = _capture_failure_policy.CaptureFailureReason.LEDGER_INTEGRITY
-
-    @classmethod
-    def from_os_error(
-        cls,
-        detail: str,
-        exc: OSError,
-    ) -> CaptureLifecycleError:
-        error = cls(detail)
-        error.failure_reason = _capture_failure_policy.os_failure_reason(exc)
-        return error
-
-
-class CaptureLedgerError(CaptureLifecycleError):
-    reason = "corrupt"
-    observed_version: int | None = None
-    current_version: int | None = None
-
-
-class CaptureCapacityError(CaptureLedgerError):
-    def __init__(
-        self,
-        reason: CaptureCapacityReason,
-        assist_transition_limit: int | None = None,
-    ) -> None:
-        self.reason = reason
-        self.assist_transition_limit = assist_transition_limit
-        self.failure_reason = _capture_capacity.failure_reason(reason)
-        super().__init__(_capture_capacity.reason_detail(reason))
 
 
 def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:

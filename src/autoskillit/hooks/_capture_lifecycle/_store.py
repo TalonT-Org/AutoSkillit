@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _sweep_cursor as _capture_sweep_cursor
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
-    from autoskillit.hooks._capture_lifecycle import _admission, _transactions
+    from autoskillit.hooks._capture_lifecycle import _admission, _errors, _transactions
 else:
     _capture_capacity = importlib.import_module("_capture._capacity")
     _capture_delivery = importlib.import_module("_capture._delivery")
@@ -70,6 +70,7 @@ else:
     _capture_syntax = importlib.import_module("_capture._syntax")
     _capture_types = importlib.import_module("_capture._types")
     _admission = importlib.import_module("_capture_lifecycle._admission")
+    _errors = importlib.import_module("_capture_lifecycle._errors")
     _transactions = importlib.import_module("_capture_lifecycle._transactions")
 
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
@@ -114,9 +115,9 @@ _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 _STORE_FACTORY_TOKEN = object()
 
 
-CaptureLifecycleError = _transactions.CaptureLifecycleError
-CaptureLedgerError = _transactions.CaptureLedgerError
-CaptureCapacityError = _transactions.CaptureCapacityError
+CaptureLifecycleError = _errors.CaptureLifecycleError
+CaptureLedgerError = _errors.CaptureLedgerError
+CaptureCapacityError = _errors.CaptureCapacityError
 
 
 CaptureState = _capture_lifecycle_record.CaptureState
@@ -130,17 +131,11 @@ CaptureTransitionCommittedError = _capture_lifecycle_record.CaptureTransitionCom
 TERMINAL_STATES = frozenset({CaptureState.DELETED})
 
 
-_record_to_dict = _transactions._record_to_dict
-
-
 def _record_from_dict(value: object) -> CaptureLifecycleRecord:
     try:
         return _capture_lifecycle_record.record_from_dict(value)
     except _capture_lifecycle_record.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
-
-
-_validate_successor = _transactions._validate_successor
 
 
 class CaptureLifecycleStore:

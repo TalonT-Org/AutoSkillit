@@ -262,11 +262,18 @@ def test_stable_lease_blocks_writer_until_barrier_releases(
     ledger = DefaultWorkspaceOutcomeLedger(tmp_path / "ledger")
     record = _record(workspace, "2026-09-16T10:00:00+00:00")
     _, _, lock_path = ledger._paths(str(workspace))
-    acquisition_attempted = threading.Event()
+    # Use a Barrier so the writer reaches the lock acquisition before the test
+    # thread proceeds, rather than polling acquisition_attempted.wait() with a
+    # tight margin that can flake under xdist load or slow CI.
+    barrier = threading.Barrier(2, timeout=10.0)
     acquire_exclusive = ArtifactLease.acquire_exclusive
 
     def acquire_after_barrier(lock_path: Path, *, timeout: float) -> ArtifactLease:
-        acquisition_attempted.set()
+        # Block until the writer thread has confirmed it is waiting on the
+        # lock and the test thread has finished asserting that no progress
+        # was made; the writer side will then wait for the test thread to
+        # release the shared lease.
+        barrier.wait()
         return acquire_exclusive(lock_path, timeout=timeout)
 
     monkeypatch.setattr(ArtifactLease, "acquire_exclusive", acquire_after_barrier)
@@ -276,7 +283,9 @@ def test_stable_lease_blocks_writer_until_barrier_releases(
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(ledger.record, record)
-            assert acquisition_attempted.wait(timeout=1)
+            # Wait for the writer to reach the patched acquire_exclusive;
+            # release the writer once we have confirmed it has not finished.
+            barrier.wait()
             assert not future.done()
             lease.close()
             future.result(timeout=2)

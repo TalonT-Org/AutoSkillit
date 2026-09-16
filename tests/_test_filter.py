@@ -256,6 +256,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "install_detect": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
     "conventions": frozenset({"core", "execution", "server", "workspace"}),
+    "coverage_schema": frozenset({"core", "infra", "test_test_filter_coverage_map.py"}),
     "delivery_bounds": frozenset({"core", "execution", "server"}),
     "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
@@ -1984,7 +1985,7 @@ def _decode_coverage_publication(
     if schema_version is None:
         _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE, stacklevel=3)
         return None
-    if schema_version != 1:
+    if schema_version not in {1, 2}:
         _reject_coverage_map(map_path, SourceMapRejection.UNKNOWN_SCHEMA_VERSION, stacklevel=3)
         return None
     provenance = raw.get("provenance")
@@ -2031,8 +2032,8 @@ def load_coverage_map(
                       Defaults to 30 days.
         cwd: Repository whose HEAD is being filtered.
 
-    Returns None whenever the artifact is not a successful schema-version-one
-    publication. This preserves the coarser directory-level cascade.
+    Returns None whenever the artifact is not a successful publication at schema
+    version 1 or 2. This preserves the coarser directory-level cascade.
     """
     map_path = Path(map_path)
     try:
@@ -2191,6 +2192,56 @@ def _expand_reexport_closure(
 # ---------------------------------------------------------------------------
 # build_test_scope
 # ---------------------------------------------------------------------------
+
+
+class ScopeAccumulator:
+    """Append-only test selection: directory/file targets plus direct test files.
+
+    Exposes only additive mutators (``add_targets``, ``add_files``) and a
+    read-only ``resolve`` that materializes the selection into concrete paths.
+    No subtractive method exists by construction.
+    """
+
+    def __init__(self) -> None:
+        self._targets: set[str] = set()
+        self._files: set[str] = set()
+
+    def add_targets(self, *names: str) -> None:
+        """Record *names* as relative entries to be joined with ``tests_root`` by ``resolve``.
+
+        Targets are directory or file names that exist under the test root at
+        resolution time; resolution discards any whose joined path does not
+        exist. Use this for directory-level scope that should be discovered
+        against the test root.
+        """
+        self._targets.update(names)
+
+    def add_files(self, *paths: str) -> None:
+        """Record *paths* verbatim for ``resolve`` to keep as-is.
+
+        Unlike :meth:`add_targets`, recorded paths are not joined with
+        ``tests_root``; they are preserved verbatim so callers can stash
+        already-resolved absolute or repo-root-relative file paths without
+        double-joining during resolve.
+        """
+        self._files.update(paths)
+
+    def resolve(self, tests_root: Path) -> set[Path]:
+        """Materialize the accumulator into concrete ``Path`` objects.
+
+        For each recorded target, joins with ``tests_root`` and keeps entries
+        whose resulting path exists on disk. For each recorded file, keeps
+        the path verbatim (no ``tests_root`` join). The two semantics are
+        what make :meth:`add_targets` and :meth:`add_files` serve different
+        call-site needs.
+        """
+        result: set[Path] = set()
+        for name in self._targets:
+            path = tests_root / name
+            if path.is_dir() or path.is_file():
+                result.add(path)
+        result.update(Path(filepath) for filepath in self._files)
+        return result
 
 
 def _file_to_package(filepath: str) -> str | None:
@@ -2471,7 +2522,7 @@ def _classify_changed_files(
 
 
 def _add_reexport_cascades(
-    test_dirs: set[str],
+    scope: ScopeAccumulator,
     changed_src_py: set[str],
     tests_root: Path,
     mode: FilterMode,
@@ -2495,7 +2546,7 @@ def _add_reexport_cascades(
                 changed_src_py,
             )
             if source_dirs is not None:
-                test_dirs.update(source_dirs)
+                scope.add_targets(*source_dirs)
     except Exception:
         logging.getLogger(__name__).debug(  # noqa: TID251
             "_expand_reexport_closure suppressed", exc_info=True
@@ -2503,8 +2554,7 @@ def _add_reexport_cascades(
 
 
 def _add_always_run_paths(
-    test_dirs: set[str],
-    direct_test_files: set[str],
+    scope: ScopeAccumulator,
     changed_files: set[str],
     mode: FilterMode,
     tests_root: Path,
@@ -2512,78 +2562,51 @@ def _add_always_run_paths(
 ) -> None:
     """Add mode-specific always-run directories and direct support-file tests."""
     if mode == FilterMode.CONSERVATIVE and changed_files:
-        test_dirs.update(_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
+        scope.add_targets(*_ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL)
         if any(
             filepath.startswith(_DOCS_TRIGGER_PREFIX) or filepath in _DOCS_TRIGGER_FILES
             for filepath in changed_files
         ):
-            test_dirs.add("docs")
+            scope.add_targets("docs")
         else:
-            direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
+            scope.add_files(str(tests_root / "docs" / "test_doc_counts.py"))
         for filename in _INFRA_UNCONDITIONAL_FILES:
-            direct_test_files.add(str(tests_root / "infra" / filename))
+            scope.add_files(str(tests_root / "infra" / filename))
         for filename in _HOOKS_UNCONDITIONAL_FILES:
-            direct_test_files.add(str(tests_root / "hooks" / filename))
+            scope.add_files(str(tests_root / "hooks" / filename))
         if any(
             filepath.startswith(_INFRA_HOOK_TRIGGER_PREFIX)
             or filepath.startswith(_INFRA_CI_TRIGGER_PREFIX)
             or filepath in _INFRA_CI_TRIGGER_FILES
             for filepath in changed_files
         ):
-            test_dirs.add("infra")
+            scope.add_targets("infra")
     else:
-        test_dirs.update(always_run)
+        scope.add_targets(*always_run)
 
 
-def _refine_with_coverage(
-    test_dirs: set[str],
-    direct_test_files: set[str],
+def _augment_with_coverage(
     changed_src_py: set[str],
     coverage_map_path: str | Path | None,
     cwd: str | Path | None,
     tests_root: Path,
-) -> None:
-    """Use a valid coverage map to replace complete source groups with test files.
+) -> set[str]:
+    """Return concrete test-file paths a valid coverage map adds for *changed_src_py*.
 
-    Use the aggressive cascade here in every filter mode so conservative
-    cross-package cascades remain intact during file-level refinement.
+    Returns an empty set when no coverage map is requested or the map fails
+    admission; otherwise the resolved additions only.
     """
     if coverage_map_path is None or cwd is None:
-        return
+        return set()
     coverage_map = load_coverage_map(coverage_map_path, cwd=cwd)
     if coverage_map is None:
-        return
+        return set()
 
-    dir_to_src_files: dict[str, set[str]] = {}
+    additions: set[str] = set()
     for filepath in changed_src_py:
-        package = _file_to_package(filepath)
-        if package and package in LAYER_CASCADE_AGGRESSIVE:
-            for test_dir in LAYER_CASCADE_AGGRESSIVE[package]:
-                dir_to_src_files.setdefault(test_dir, set()).add(filepath)
-    for test_dir, source_files in dir_to_src_files.items():
-        if test_dir in test_dirs and all(
-            filepath in coverage_map and coverage_map[filepath] for filepath in source_files
-        ):
-            test_dirs.discard(test_dir)
-            for filepath in source_files:
-                direct_test_files.update(
-                    str(tests_root.parent / test_file) for test_file in coverage_map[filepath]
-                )
-
-
-def _resolve_test_paths(
-    test_dirs: set[str],
-    direct_test_files: set[str],
-    tests_root: Path,
-) -> set[Path]:
-    """Resolve selected directories when they exist and preserve direct-file paths."""
-    result: set[Path] = set()
-    for test_dir in test_dirs:
-        path = tests_root / test_dir
-        if path.is_dir() or path.is_file():
-            result.add(path)
-    result.update(Path(filepath) for filepath in direct_test_files)
-    return result
+        for test_file in coverage_map.get(filepath, set()):
+            additions.add(str(tests_root.parent / test_file))
+    return additions
 
 
 def build_test_scope(
@@ -2603,8 +2626,8 @@ def build_test_scope(
     3. Global Bucket A -> full run; scoped support files -> required test directories
     4. Classify: src Python -> cascade, ordinary test Python -> direct, others -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
-    6. Union all sets
-    7. Coverage oracle file-level refinement; restore required support directories
+    6. Union all sets into an append-only scope
+    7. Coverage-oracle augmentation (additive only)
     8. Resolve to concrete paths
     """
     initial_scope = _initial_scope(changed_files, mode, cwd, base_ref)
@@ -2631,12 +2654,15 @@ def build_test_scope(
     if isinstance(classified, FullRunReason):
         return classified
     classified_dirs, direct_test_files, changed_src_py = classified
-    test_dirs = set(scoped_test_dirs)
-    test_dirs.update(classified_dirs)
+
+    scope = ScopeAccumulator()
+    scope.add_targets(*scoped_test_dirs)
+    scope.add_targets(*classified_dirs)
+    scope.add_files(*direct_test_files)
 
     # Expand source files through re-exporting initializers.
     _add_reexport_cascades(
-        test_dirs,
+        scope,
         changed_src_py,
         tests_root,
         mode,
@@ -2646,20 +2672,18 @@ def build_test_scope(
     )
 
     _add_always_run_paths(
-        test_dirs,
-        direct_test_files,
+        scope,
         changed_files,
         mode,
         tests_root,
         always_run,
     )
-    _refine_with_coverage(
-        test_dirs,
-        direct_test_files,
-        changed_src_py,
-        coverage_map_path,
-        cwd,
-        tests_root,
+    scope.add_files(
+        *_augment_with_coverage(
+            changed_src_py,
+            coverage_map_path,
+            cwd,
+            tests_root,
+        )
     )
-    test_dirs.update(scoped_test_dirs)
-    return _resolve_test_paths(test_dirs, direct_test_files, tests_root)
+    return scope.resolve(tests_root)

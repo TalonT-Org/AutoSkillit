@@ -165,7 +165,7 @@ changed files. Controlled by env var + CLI flags:
 4. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
 5. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
 6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
-7. **Coverage refinement**: A valid map can narrow source-driven directory selections to test files. Required support-file directories are re-added afterward, so refinement cannot remove them. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
+7. **Coverage augmentation**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
 8. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
 
 Directory-scoped conftests do not follow cross-package Python imports. The arch helper
@@ -222,7 +222,12 @@ provenance, or whose stamped source commit is definitively not an ancestor of
 Git operational errors warn and retain an otherwise valid map. A map carried from
 a discarded worktree commit through a squash may therefore select coarser test
 directories until a new map is published. Ancestry alone does not detect a map
-that predates newer tests.
+that predates newer tests. Admission checks envelope, freshness, and lineage —
+never relationship *completeness*, which is why augmentation is additive-only
+rather than gated on a per-entry confidence check. The artifact declares its
+own blind spots as a sibling `unobservable_sources` field
+(`{"path": ..., "reason": "not_measured" | "attributed_only_by_fixture"}`); the
+additive consumer never reads it. The consumer accepts schema versions 1 and 2.
 
 The lineage check requires a checkout containing the stamped commit. The CI `test:`
 job uses `fetch-depth: 0`; reducing that depth can make a valid stamp unreachable

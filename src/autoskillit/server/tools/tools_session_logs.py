@@ -11,7 +11,7 @@ import secrets
 import stat
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import regex as re
 
@@ -346,6 +346,15 @@ def _complete_lines(
     return lines, incomplete
 
 
+class _ScanPageResult(NamedTuple):
+    content: list[str]
+    matches: list[dict[str, Any]]
+    consumed_bytes: int
+    returned_bytes: int
+    end_line: int
+    next_line: int
+
+
 def _scan_page(
     *,
     operation: str,
@@ -355,7 +364,7 @@ def _scan_page(
     session_id: str,
     artifact: str,
     next_line: int,
-) -> tuple[list[str], list[dict[str, Any]], int, int, int, int]:
+) -> _ScanPageResult:
     consumed_bytes = 0
     returned_bytes = 0
     end_line = next_line - 1
@@ -392,7 +401,14 @@ def _scan_page(
         consumed_bytes += len(raw_line)
         end_line = next_line
         next_line += 1
-    return content, matches, consumed_bytes, returned_bytes, end_line, next_line
+    return _ScanPageResult(
+        content,
+        matches,
+        consumed_bytes,
+        returned_bytes,
+        end_line,
+        next_line,
+    )
 
 
 def _read_or_search(
@@ -440,7 +456,7 @@ def _read_or_search(
     if not lines and data and offset + len(data) < opened.st_size:
         raise _InspectionError("record_too_large")
     start_line = line_number
-    content, matches, consumed_bytes, returned_bytes, end_line, next_line = _scan_page(
+    page = _scan_page(
         operation=operation,
         lines=lines,
         query=query,
@@ -450,7 +466,7 @@ def _read_or_search(
         next_line=line_number,
     )
 
-    next_offset = offset + consumed_bytes
+    next_offset = offset + page.consumed_bytes
     more = next_offset < opened.st_size and not incomplete_final_line
     next_continuation = ""
     if more:
@@ -463,7 +479,7 @@ def _read_or_search(
                 path=resolved,
                 opened=opened,
                 offset=next_offset,
-                line=next_line,
+                line=page.next_line,
             )
         )
     status = "partial" if incomplete_final_line else "answered"
@@ -473,25 +489,25 @@ def _read_or_search(
         "reason": "incomplete_final_line" if incomplete_final_line else "",
         "session_id": session_id,
         "artifact": artifact,
-        "citation": f"{session_id}/{artifact}:{start_line}-{end_line}",
-        "line_range": {"start": start_line, "end": end_line},
-        "exact_bytes": returned_bytes,
-        "bytes_scanned": consumed_bytes,
+        "citation": f"{session_id}/{artifact}:{start_line}-{page.end_line}",
+        "line_range": {"start": start_line, "end": page.end_line},
+        "exact_bytes": page.returned_bytes,
+        "bytes_scanned": page.consumed_bytes,
         "searched_scope": {
             "start_byte": offset,
             "end_byte": next_offset,
             "start_line": start_line,
-            "end_line": end_line,
+            "end_line": page.end_line,
         },
         "truncated": more,
         "incomplete_final_line": incomplete_final_line,
         "next_continuation": next_continuation,
     }
     if operation == "read":
-        response["content"] = "".join(content)
+        response["content"] = "".join(page.content)
     else:
         response["query"] = query
-        response["matches"] = matches
+        response["matches"] = page.matches
     return _json(response)
 
 

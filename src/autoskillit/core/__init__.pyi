@@ -824,6 +824,9 @@ from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
 from .types import BackendPinResolution as BackendPinResolution
+from .types import SkillDiscoveryMechanism as SkillDiscoveryMechanism
+from .types import SkillDiscoveryRouteDef as SkillDiscoveryRouteDef
+from .types import UpstreamSupportStatus as UpstreamSupportStatus
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import BindingFailure as BindingFailure

@@ -33,6 +33,7 @@ def test_cmd_spec_fields():
         "inherited_fds",
         "managed_skill_catalog",
         "projected_skill_entries",
+        "skill_discovery_route",
         "app_server_plan",
         "force_inactive_agent_teams",
     }
@@ -605,6 +606,7 @@ def test_backend_module_all_exhaustive():
         "ExecutableLaunchBinding",
         "ModelTranslation",
         "SessionSummary",
+        "SkillDiscoveryRouteDef",
         "SKILL_MODEL_CLASSES",
         "SKILL_REASONING_EFFORTS",
         "SkillSessionConfig",

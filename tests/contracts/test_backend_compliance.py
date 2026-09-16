@@ -212,6 +212,18 @@ class TestBackendCompliance:
         for cls in BACKEND_REGISTRY.values():
             assert isinstance(cls().conventions, BackendConventions)
 
+    def test_every_registered_backend_declares_managed_skill_discovery_route(self):
+        from autoskillit.core import SkillDiscoveryRouteDef
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        route_names: set[str] = set()
+        for backend_name, backend_cls in BACKEND_REGISTRY.items():
+            route = backend_cls().conventions.managed_skill_discovery
+            assert isinstance(route, SkillDiscoveryRouteDef), backend_name
+            assert route.name not in route_names, backend_name
+            route_names.add(route.name)
+
     def test_backend_conventions_skills_subdir_non_empty(self):
         from autoskillit.execution.backends import BACKEND_REGISTRY
         from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
@@ -230,13 +242,19 @@ class TestBackendCompliance:
     def test_codex_backend_validate_session_layout_accepts_valid_dir(self, tmp_path):
         from autoskillit.execution.backends import CodexBackend
 
-        skill_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills" / "test-skill"
+        backend = CodexBackend()
+        route = backend.conventions.managed_skill_discovery
+        assert route is not None
+        skill_dir = route.catalog_dir(tmp_path) / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
-        (tmp_path / "skills").symlink_to("add-dir/skills")
+        entry_point = route.discovery_root(tmp_path)
+        if route.entry_point_is_alias:
+            assert entry_point is not None
+            entry_point.symlink_to(route.alias_target)
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         _create_inert_rollout_links(tmp_path)
-        assert CodexBackend().validate_session_layout(tmp_path) == []
+        assert backend.validate_session_layout(tmp_path) == []
 
     def test_validate_session_layout_empty_dir_returns_errors(self, tmp_path):
         from autoskillit.execution.backends import BACKEND_REGISTRY
@@ -255,13 +273,18 @@ class TestBackendCompliance:
         for cls in BACKEND_REGISTRY.values():
             work_dir = tmp_path / cls.__name__
             work_dir.mkdir()
-            skills_subdir = cls().conventions.skills_subdir
-            skill_dir = work_dir / SESSION_ADD_DIR_SUBDIR / str(skills_subdir) / "test-skill"
+            backend = cls()
+            route = backend.conventions.managed_skill_discovery
+            assert route is not None
+            skill_dir = route.catalog_dir(work_dir) / "test-skill"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
             if issubclass(cls, CodexBackend):
-                (work_dir / "skills").symlink_to("add-dir/skills")
+                entry_point = route.discovery_root(work_dir)
+                if route.entry_point_is_alias:
+                    assert entry_point is not None
+                    entry_point.symlink_to(route.alias_target)
                 (work_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
                 _create_inert_rollout_links(work_dir)
-            errors = cls().validate_session_layout(work_dir)
+            errors = backend.validate_session_layout(work_dir)
             assert errors == [], f"{cls.__name__}: {errors}"

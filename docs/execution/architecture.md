@@ -244,7 +244,7 @@ legacy `<generated_home>/skills` alias described above — that migration
 stays open on #4717 and is not resolved by this transport change.
 
 Managed skill and orchestrator roots are derived from the shared
-`CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath`, never from a fresh scan:
+`CODEX_APP_SERVER_ROUTE.catalog_relpath`, never from a fresh scan:
 the frozen catalog an app-server launch registers is exactly the one the
 orchestrator materialized via `SessionSkillManager.managed_catalog()`, which
 compiles a raw effective catalog for the selected backend and then delegates

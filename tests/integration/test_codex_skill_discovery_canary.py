@@ -30,6 +30,7 @@ from autoskillit.core import (
 # member (see CodexAppServerDriver), which this encoder already does.
 from autoskillit.execution.backends._codex.app_server import _encode as _jsonrpc_line
 from autoskillit.execution.backends._codex_discovery import (
+    CODEX_MANAGED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
     parse_skills_instructions,
@@ -510,7 +511,7 @@ def _interactive_spec(
     )
 
 
-def test_installed_codex_discovers_the_session_catalog_through_the_legacy_alias(
+def test_installed_codex_discovers_the_session_catalog_through_the_declared_interactive_route(
     tmp_path: Path,
     selected_codex: _SelectedCodex,
 ) -> None:
@@ -533,7 +534,9 @@ def test_installed_codex_discovers_the_session_catalog_through_the_legacy_alias(
     )
 
     with managed_session as managed:
-        catalog = Path(managed.skills_dir.path) / "skills"
+        catalog = CODEX_MANAGED_HOME_ROUTE.catalog_dir(managed.generated_home)
+        discovery_root = CODEX_MANAGED_HOME_ROUTE.discovery_root(managed.generated_home)
+        assert discovery_root is not None
         expected_entries = _expected_entries(catalog)
         assert {name for name, _ in expected_entries} == {"make-arch-diag", "profile-only"}
         assert "PROFILE_COPY_SENTINEL" in (catalog / "make-arch-diag" / "SKILL.md").read_text(
@@ -553,10 +556,9 @@ def test_installed_codex_discovers_the_session_catalog_through_the_legacy_alias(
                 project=project,
             )
         )
-        legacy_root = managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-        assert legacy_root.is_symlink()
-        assert legacy_root.resolve() == catalog.resolve()
-        assert legacy_root in discovered.roots
+        assert discovery_root.is_symlink()
+        assert discovery_root.resolve() == catalog.resolve()
+        assert discovery_root in discovered.roots
         assert "join-required" not in discovered.names
         for name, _ in expected_entries:
             assert name in discovered.names
@@ -569,7 +571,7 @@ def test_installed_codex_discovers_the_session_catalog_through_the_legacy_alias(
             project,
             selected_codex,
             catalog=str(catalog),
-            legacy_root=str(legacy_root),
+            discovery_root=str(discovery_root),
             discovered_names=sorted(discovered.names),
         )
         assert diagnostic.is_file()
@@ -641,7 +643,9 @@ def test_prelaunch_attestation_matches_the_real_loader(
     )
 
     with managed_session as managed:
-        catalog = Path(managed.skills_dir.path) / "skills"
+        catalog = CODEX_MANAGED_HOME_ROUTE.catalog_dir(managed.generated_home)
+        discovery_root = CODEX_MANAGED_HOME_ROUTE.discovery_root(managed.generated_home)
+        assert discovery_root is not None
         expected_entries = _expected_entries(catalog)
         spec = _interactive_spec(backend, managed, project)
         probe_command = _prompt_input_command(spec, selected_codex.binary)
@@ -652,10 +656,9 @@ def test_prelaunch_attestation_matches_the_real_loader(
                 env=env,
                 cwd=spec.cwd or str(project),
                 catalog_dir=catalog,
-                expected_discovery_root=(
-                    managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-                ),
+                expected_discovery_root=discovery_root,
                 expected_entries=expected_entries,
+                route=CODEX_MANAGED_HOME_ROUTE,
                 version=selected_codex.normalized_version,
                 timeout_seconds=_PROBE_TIMEOUT_SECONDS,
             )
@@ -669,10 +672,9 @@ def test_prelaunch_attestation_matches_the_real_loader(
             env=env,
             cwd=spec.cwd or str(project),
             catalog_dir=catalog,
-            expected_discovery_root=(
-                managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-            ),
+            expected_discovery_root=discovery_root,
             expected_entries=expected_entries,
+            route=CODEX_MANAGED_HOME_ROUTE,
             version=selected_codex.normalized_version,
             timeout_seconds=_PROBE_TIMEOUT_SECONDS,
         )
@@ -706,9 +708,10 @@ async def test_installed_app_server_registers_the_session_catalog(
         catalog = Path(managed.skills_dir.path) / "skills"
         expected_entries = _expected_entries(catalog)
 
-        legacy_root = managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-        assert legacy_root.is_symlink()
-        legacy_root.unlink()
+        discovery_root = CODEX_MANAGED_HOME_ROUTE.discovery_root(managed.generated_home)
+        assert discovery_root is not None
+        assert discovery_root.is_symlink()
+        discovery_root.unlink()
         assert catalog.is_dir()
 
         driver = await _run_registered_roots_probe(
@@ -731,7 +734,7 @@ async def test_installed_app_server_registers_the_session_catalog(
             project,
             selected_codex,
             catalog=str(catalog),
-            legacy_root=str(legacy_root),
+            discovery_root=str(discovery_root),
             registered_names=sorted(driver.first_rows),
             cleared_names=sorted(driver.second_names),
         )
@@ -879,9 +882,10 @@ async def test_installed_food_truck_app_server_registers_the_session_catalog(
         catalog = Path(managed.skills_dir.path) / "skills"
         expected_entries = _expected_entries(catalog)
 
-        legacy_root = managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
-        assert legacy_root.is_symlink()
-        legacy_root.unlink()
+        discovery_root = CODEX_MANAGED_HOME_ROUTE.discovery_root(managed.generated_home)
+        assert discovery_root is not None
+        assert discovery_root.is_symlink()
+        discovery_root.unlink()
         assert catalog.is_dir()
 
         spec = backend.build_food_truck_cmd(
@@ -910,7 +914,7 @@ async def test_installed_food_truck_app_server_registers_the_session_catalog(
             project,
             selected_codex,
             catalog=str(catalog),
-            legacy_root=str(legacy_root),
+            discovery_root=str(discovery_root),
             registered_names=sorted(driver.first_rows),
             cleared_names=sorted(driver.second_names),
             launch_path="food_truck",

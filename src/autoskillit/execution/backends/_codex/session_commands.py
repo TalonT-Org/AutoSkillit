@@ -41,9 +41,9 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
     PluginLaunchBinding,
-    PluginLoadMode,
     ResumeSpec,
     SessionCheckpoint,
+    SkillDiscoveryRouteDef,
     SkillExecutionRole,
     SkillSessionConfig,
     ValidatedAddDir,
@@ -77,39 +77,50 @@ from autoskillit.execution.backends._codex_cmd_builders import (
     _should_bypass_hook_trust,
 )
 from autoskillit.execution.backends._codex_config import _format_toml_value
-from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
+from autoskillit.execution.backends._codex_discovery import (
+    CODEX_APP_SERVER_ROUTE,
+    CODEX_MANAGED_HOME_ROUTE,
+    CODEX_PROJECTED_HOME_ROUTE,
+    select_interactive_discovery_route,
+)
 
 logger = get_logger(__name__)
 
 
 def _configure_interactive_home(
     *,
+    route: SkillDiscoveryRouteDef | None,
     generated_home: Path | None,
     plugin_binding: PluginLaunchBinding | None,
     base_env: dict[str, str],
     merged_extras: dict[str, str],
 ) -> tuple[tuple[str, str], ...]:
-    if generated_home is not None:
+    if route is CODEX_MANAGED_HOME_ROUTE:
+        if generated_home is None:
+            raise ValueError("managed discovery route requires a generated home")
         for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
             merged_extras[reserved_key] = str(generated_home)
         return ()
+    if route is CODEX_PROJECTED_HOME_ROUTE:
+        if plugin_binding is None:
+            raise ValueError("projected discovery route requires a plugin binding")
+        projected_home = plugin_binding.plugin_dir
+        if projected_home is None or not projected_home.is_dir():
+            raise ValueError("projected CODEX_HOME must be an existing directory")
+        if projected_home != projected_home.resolve(strict=True):
+            raise ValueError("projected CODEX_HOME must already be canonical")
+        if not plugin_binding.skill_entries:
+            raise ValueError("projected CODEX_HOME requires nonempty skill entries")
+        base_env.pop("CODEX_SQLITE_HOME", None)
+        merged_extras.pop("CODEX_SQLITE_HOME", None)
+        merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
+        return plugin_binding.skill_entries
+    if route is not None:
+        raise ValueError(f"unsupported Codex interactive discovery route: {route.name}")
     if plugin_binding is None:
         return ()
-    if plugin_binding.load_mode is not PluginLoadMode.PROJECTED_HOME:
-        merged_extras.setdefault(CODEX_HOME_ENV_VAR, str(plugin_binding.plugin_dir))
-        return ()
-
-    projected_home = plugin_binding.plugin_dir
-    if projected_home is None or not projected_home.is_dir():
-        raise ValueError("projected CODEX_HOME must be an existing directory")
-    if projected_home != projected_home.resolve(strict=True):
-        raise ValueError("projected CODEX_HOME must already be canonical")
-    if not plugin_binding.skill_entries:
-        raise ValueError("projected CODEX_HOME requires nonempty skill entries")
-    base_env.pop("CODEX_SQLITE_HOME", None)
-    merged_extras.pop("CODEX_SQLITE_HOME", None)
-    merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
-    return plugin_binding.skill_entries
+    merged_extras.setdefault(CODEX_HOME_ENV_VAR, str(plugin_binding.plugin_dir))
+    return ()
 
 
 class CodexCommandMixin(BackendCmdBuilderBase):
@@ -252,7 +263,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
+        route = select_interactive_discovery_route(
+            generated_home=generated_home,
+            plugin_binding=plugin_binding,
+        )
         projected_skill_entries = _configure_interactive_home(
+            route=route,
             generated_home=generated_home,
             plugin_binding=plugin_binding,
             base_env=base_env,
@@ -399,7 +415,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 config_overrides[key] = value
         if network_access:
             config_overrides["sandbox_workspace_write.network_access"] = True
-        catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+        catalog_root = str(CODEX_APP_SERVER_ROUTE.catalog_dir(Path(session_home)))
         app_server_plan = CodexAppServerPlan(
             session_home=session_home,
             catalog_root=catalog_root,
@@ -558,7 +574,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             for override in self.model_config_overrides(model):
                 key, _, value = override.partition("=")
                 config_overrides[key] = value
-        catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+        catalog_root = str(CODEX_APP_SERVER_ROUTE.catalog_dir(Path(session_home)))
         app_server_plan = CodexAppServerPlan(
             session_home=session_home,
             catalog_root=catalog_root,
@@ -681,6 +697,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             managed_skill_catalog=managed_skill_catalog,
             projected_skill_entries=projected_skill_entries,
+            skill_discovery_route=route,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
@@ -754,7 +771,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         )
         if managed_skill_catalog is not None:
             session_home = cast(str, session_home)
-            catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+            catalog_root = str(CODEX_APP_SERVER_ROUTE.catalog_dir(Path(session_home)))
             expected_entries = managed_skill_catalog.skill_entries
         else:
             catalog_root = ""

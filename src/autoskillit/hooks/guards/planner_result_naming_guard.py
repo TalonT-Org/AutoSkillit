@@ -61,6 +61,11 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
         return None
 
     subdir_parts = path_parts[dir_idx + 1 : -1]
+    # `any(part for part in subdir_parts if part)` (not `any(subdir_parts)`)
+    # because double-slash paths like `//result.json` produce an empty
+    # string segment where `any([""])` would be False — allowing the
+    # subdirectory check to be silently bypassed. An empty-string segment
+    # is not a real subdirectory, so we explicitly skip it here.
     if any(part for part in subdir_parts if part):
         return None
 

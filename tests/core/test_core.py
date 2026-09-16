@@ -164,3 +164,17 @@ def test_closure_walk_does_not_detect_lazy_init():
         )
     finally:
         sys.path.remove(str(tests_dir))
+
+
+def test_git_refs_symbols_are_importable_from_core_gateway():
+    from autoskillit.core import (
+        ResolvedRef,
+        local_branch_ref,
+        remote_tracking_ref,
+        verify_qualified_ref_sync,
+    )
+
+    assert ResolvedRef.__name__ == "ResolvedRef"
+    assert local_branch_ref("x") == "refs/heads/x"
+    assert remote_tracking_ref("origin", "x") == "refs/remotes/origin/x"
+    assert callable(verify_qualified_ref_sync)

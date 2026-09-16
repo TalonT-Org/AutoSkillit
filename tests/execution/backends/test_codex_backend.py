@@ -229,9 +229,6 @@ class TestCodexBackend:
     def test_capabilities_process_name(self) -> None:
         assert CodexBackend().capabilities.process_name == "codex"
 
-    def test_capabilities_skills_subdir(self) -> None:
-        assert CodexBackend().capabilities.skills_subdir == "skills"
-
     def test_capabilities_mcp_env_forward_vars(self) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
 
@@ -1034,11 +1031,15 @@ class TestCodexBuildSkillSessionCmd:
         """app_server_plan carries the catalog root under the frozen add-dir's
         session_home, the expected skill names/entries straight from that
         catalog, and the invocation's cwd — none of which live on argv."""
+        from autoskillit.execution.backends._codex_discovery import CODEX_APP_SERVER_ROUTE
+
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert spec.app_server_plan is not None
         plan = spec.app_server_plan
         assert plan.session_home == "/work"
-        assert plan.catalog_root == "/work/add-dir/skills"
+        assert plan.catalog_root == str(
+            CODEX_APP_SERVER_ROUTE.catalog_dir(Path(plan.session_home))
+        )
         assert plan.expected_skill_names == frozenset({"test-skill"})
         assert plan.expected_skill_entries == (("test-skill", "test-skill/SKILL.md"),)
         assert plan.cwd == "/work"
@@ -1320,6 +1321,8 @@ class TestCodexBuildInteractiveCmd:
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
+        assert spec.skill_discovery_route is None
+        assert "CODEX_HOME" not in spec.env
 
     def test_named_resume_produces_resume_subcommand_with_session_id(self) -> None:
         from autoskillit.core import NamedResume
@@ -1396,6 +1399,27 @@ class TestCodexBuildInteractiveCmd:
             if value == CodexFlags.ADD_DIR
         ]
         assert f'sqlite_home="{generated_home}"' in spec.cmd
+        from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
+        assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
+
+    def test_projected_plugin_binding_declares_projected_discovery_route(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends._codex_discovery import CODEX_PROJECTED_HOME_ROUTE
+
+        projected_home = tmp_path / "projected-home"
+        projected_home.mkdir()
+        binding = replace(
+            plugin_binding(projected_home),
+            load_mode=PluginLoadMode.PROJECTED_HOME,
+            skill_entries=(("projected-skill", "projected-skill/SKILL.md"),),
+        )
+
+        spec = CodexBackend().build_interactive_cmd(plugin_binding=binding)
+
+        assert spec.skill_discovery_route is CODEX_PROJECTED_HOME_ROUTE
 
     def test_initial_prompt_is_final_element(self) -> None:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
@@ -1408,6 +1432,7 @@ class TestCodexBuildInteractiveCmd:
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
         assert spec.env["CODEX_HOME"] == "/x"
+        assert spec.skill_discovery_route is None
 
     def test_env_excludes_headless_vars(self, monkeypatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")

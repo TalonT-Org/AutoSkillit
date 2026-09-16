@@ -4,6 +4,10 @@ create_and_publish_branch."""
 from __future__ import annotations
 
 import json
+import subprocess
+import time
+from datetime import date
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,6 +18,7 @@ import autoskillit.server.tools.tools_issue_composite as tools_issue_composite
 from autoskillit.server.tools.tools_clone import bootstrap_clone
 from autoskillit.server.tools.tools_git import create_and_publish_branch
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
+from autoskillit.workspace.clone import DefaultCloneManager
 from tests.conftest import _make_result
 from tests.server._recipe_segment_test_helpers import (
     assert_recovery_recipe_segment,
@@ -21,7 +26,41 @@ from tests.server._recipe_segment_test_helpers import (
 )
 from tests.server.conftest import assert_step_timed
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+
+def _git_stdout(repo_path: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(repo_path),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _set_origin(repo_path: Path, remote_url: str) -> None:
+    subprocess.run(
+        ["git", "remote", "set-url", "origin", remote_url],
+        cwd=str(repo_path),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _record_clone_removals(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    removals: list[tuple[str, str]] = []
+    original_remove_clone = DefaultCloneManager.remove_clone
+
+    def record_remove_clone(
+        self: DefaultCloneManager, clone_path: str, keep: str = "false"
+    ) -> dict[str, str]:
+        removals.append((clone_path, keep))
+        return original_remove_clone(self, clone_path, keep)
+
+    monkeypatch.setattr(DefaultCloneManager, "remove_clone", record_remove_clone)
+    return removals
 
 
 class TestBootstrapClone:
@@ -29,31 +68,29 @@ class TestBootstrapClone:
     async def test_bootstrap_clone_success(
         self,
         tool_ctx_kitchen_open,
-        tmp_path,
         monkeypatch: pytest.MonkeyPatch,
+        remote_only_base_clone: tuple[Path, str],
     ):
         """bootstrap_clone returns work_dir, remote_url, base_sha, merge_target."""
-        mock_mgr = MagicMock()
-        mock_mgr.clone_repo.return_value = {
-            "clone_path": str(tmp_path),
-            "source_dir": "/src",
-            "remote_url": "https://github.com/o/r.git",
-        }
-        tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123def\n", ""))
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        expected_base_sha = _git_stdout(
+            clone_path, "rev-parse", "refs/remotes/origin/develop^{commit}"
+        )
+        assert isinstance(tool_ctx_kitchen_open.clone_mgr, DefaultCloneManager)
         install_prepared_recipe_segment(monkeypatch, tools_clone, step_name="bootstrap")
         result = json.loads(
             await bootstrap_clone(
-                source_dir="/src",
+                source_dir=str(clone_path),
                 run_name="impl",
-                base_branch="main",
+                base_branch="develop",
                 step_name="bootstrap",
             )
         )
-        assert result["work_dir"] == str(tmp_path)
-        assert result["remote_url"] == "https://github.com/o/r.git"
-        assert result["base_sha"] == "abc123def"
-        assert result["merge_target"] == "main"
+        assert Path(result["work_dir"]).is_dir()
+        assert result["remote_url"] == upstream_url
+        assert result["base_sha"] == expected_base_sha
+        assert result["merge_target"] == "develop"
         assert result["recipe_segment"]["kind"] == "success"
 
     @pytest.mark.anyio
@@ -87,53 +124,202 @@ class TestBootstrapClone:
         assert result["recipe_segment"]["kind"] == "recovery"
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_revparse_failure(self, tool_ctx_kitchen_open, tmp_path):
-        mock_mgr = MagicMock()
-        mock_mgr.clone_repo.return_value = {
-            "clone_path": str(tmp_path),
-            "source_dir": "/src",
-            "remote_url": "url",
-        }
-        tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        tool_ctx_kitchen_open.runner.push(_make_result(128, "", "fatal: not a git repo\n"))
+    async def test_bootstrap_clone_unresolvable_base_preserves_error_contract(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+        remote_only_base_clone: tuple[Path, str],
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        removals = _record_clone_removals(monkeypatch)
         result = json.loads(
-            await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="impl", base_branch="missing"
+            )
         )
         assert "error" in result
-        assert "rev-parse" in result["error"]
-        mock_mgr.remove_clone.assert_called_once_with(str(tmp_path), "false")
+        assert len(removals) == 1
+        assert removals[0][1] == "false"
+        assert not Path(removals[0][0]).exists()
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_timing(self, tool_ctx_kitchen_open, tmp_path):
-        mock_mgr = MagicMock()
-        mock_mgr.clone_repo.return_value = {
-            "clone_path": str(tmp_path),
-            "source_dir": "/src",
-            "remote_url": "url",
-        }
-        tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "sha\n", ""))
+    async def test_bootstrap_clone_timing(
+        self, tool_ctx_kitchen_open, remote_only_base_clone: tuple[Path, str]
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
         await bootstrap_clone(
-            source_dir="/src", run_name="impl", base_branch="main", step_name="bootstrap"
+            source_dir=str(clone_path),
+            run_name="impl",
+            base_branch="develop",
+            step_name="bootstrap",
         )
         assert_step_timed(tool_ctx_kitchen_open.timing_log, "bootstrap")
 
     @pytest.mark.anyio
-    async def test_bootstrap_clone_sub_timings(self, tool_ctx_kitchen_open, tmp_path):
-        mock_mgr = MagicMock()
-        mock_mgr.clone_repo.return_value = {
-            "clone_path": str(tmp_path),
-            "source_dir": "/src",
-            "remote_url": "url",
-        }
-        tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "sha\n", ""))
+    async def test_bootstrap_clone_sub_timings(
+        self, tool_ctx_kitchen_open, remote_only_base_clone: tuple[Path, str]
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
         result = json.loads(
-            await bootstrap_clone(source_dir="/src", run_name="impl", base_branch="main")
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="impl", base_branch="develop"
+            )
         )
         assert "timings" in result
         assert "clone_ms" in result["timings"]
         assert "rev_parse_ms" in result["timings"]
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_resolves_base_from_remote_only_ref(
+        self, tool_ctx_kitchen_open, remote_only_base_clone: tuple[Path, str]
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        expected_base_sha = _git_stdout(
+            clone_path, "rev-parse", "refs/remotes/origin/develop^{commit}"
+        )
+        assert isinstance(tool_ctx_kitchen_open.clone_mgr, DefaultCloneManager)
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="remote-only", base_branch="develop"
+            )
+        )
+
+        assert result["base_sha"] == expected_base_sha
+        assert Path(result["work_dir"]).is_dir()
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_establishes_local_base_ref_invariant(
+        self, tool_ctx_kitchen_open, remote_only_base_clone: tuple[Path, str]
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="invariant", base_branch="develop"
+            )
+        )
+        work_dir = Path(result["work_dir"])
+
+        subprocess.run(
+            ["git", "show-ref", "--verify", "refs/heads/develop"],
+            cwd=str(work_dir),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        local_head_sha = _git_stdout(work_dir, "rev-parse", "refs/heads/develop^{commit}")
+        assert _git_stdout(work_dir, "rev-parse", "develop") == local_head_sha
+        assert result["base_sha"] == local_head_sha
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_base_branch_equals_checkout_branch(
+        self, tool_ctx_kitchen_open, remote_only_base_clone: tuple[Path, str]
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        expected_base_sha = _git_stdout(clone_path, "rev-parse", "refs/heads/feat^{commit}")
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path),
+                run_name="same-branch",
+                base_branch="feat",
+                branch="feat",
+            )
+        )
+
+        assert result["base_sha"] == expected_base_sha
+        assert (
+            _git_stdout(Path(result["work_dir"]), "rev-parse", "refs/heads/feat^{commit}")
+            == expected_base_sha
+        )
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_shadowed_base_fails_closed(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+        remote_only_base_clone_with_shadow_tag: tuple[Path, str],
+    ) -> None:
+        clone_path, _ = remote_only_base_clone_with_shadow_tag
+        removals = _record_clone_removals(monkeypatch)
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path),
+                run_name="shadowed-base",
+                base_branch="develop",
+                strategy="clone_local",
+            )
+        )
+
+        assert "refs/tags/develop" in result["error"]
+        assert len(removals) == 1
+        assert not Path(removals[0][0]).exists()
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_resolution_failure_removes_clone(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+        remote_only_base_clone: tuple[Path, str],
+    ) -> None:
+        from autoskillit.workspace.clone import BaseBranchResolution
+
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        removals = _record_clone_removals(monkeypatch)
+        monkeypatch.setattr(
+            tools_clone,
+            "ensure_base_branch_local",
+            lambda *_args: BaseBranchResolution(
+                resolved=None,
+                created_local_branch=False,
+                ambiguous_refs=(),
+                failure_reason="resolution deliberately failed",
+            ),
+        )
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="resolution-failure", base_branch="develop"
+            )
+        )
+
+        assert "error" in result
+        assert len(removals) == 1
+        assert not Path(removals[0][0]).exists()
+
+    @pytest.mark.anyio
+    async def test_bootstrap_clone_timings_cover_resolution(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+        remote_only_base_clone: tuple[Path, str],
+    ) -> None:
+        clone_path, upstream_url = remote_only_base_clone
+        _set_origin(clone_path, upstream_url)
+        original_ensure_base_branch_local = tools_clone.ensure_base_branch_local
+
+        def delayed_resolution(*args: object):
+            time.sleep(0.01)
+            return original_ensure_base_branch_local(*args)
+
+        monkeypatch.setattr(tools_clone, "ensure_base_branch_local", delayed_resolution)
+
+        result = json.loads(
+            await bootstrap_clone(
+                source_dir=str(clone_path), run_name="timings", base_branch="develop"
+            )
+        )
+
+        assert result["timings"]["rev_parse_ms"] >= 10
 
     @pytest.mark.anyio
     async def test_bootstrap_clone_uncommitted_changes_returns_error(self, tool_ctx_kitchen_open):
@@ -505,11 +691,18 @@ class TestCreateAndPublishBranch:
         monkeypatch: pytest.MonkeyPatch,
     ):
         # ls-remote: empty (branch available)
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
         # branch --show-current
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
         # git checkout -b
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -530,13 +723,23 @@ class TestCreateAndPublishBranch:
     @pytest.mark.anyio
     async def test_create_and_publish_branch_collision(self, tool_ctx_kitchen_open, tmp_path):
         # ls-remote: branch exists
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123\trefs/heads/fix-bug/42\n", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
         # ls-remote: suffix -2 is free
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42-2"],
+        )
         # branch --show-current
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
         # git checkout -b
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42-2"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -558,9 +761,16 @@ class TestCreateAndPublishBranch:
         tmp_path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", "refs/heads/fix-bug/42"],
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "fix-bug/42"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {
             "success": False,
@@ -598,9 +808,17 @@ class TestCreateAndPublishBranch:
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_no_issue(self, tool_ctx_kitchen_open, tmp_path):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        branch_name = f"impl/{date.today().strftime('%Y%m%d')}"
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""),
+            expect=["git", "ls-remote", "origin", f"refs/heads/{branch_name}"],
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", branch_name]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
@@ -618,9 +836,15 @@ class TestCreateAndPublishBranch:
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_timings(self, tool_ctx_kitchen_open, tmp_path):
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "main\n", ""))
-        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "ls-remote", "origin", "refs/heads/x/1"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "main\n", ""), expect=["git", "branch", "--show-current"]
+        )
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "", ""), expect=["git", "checkout", "-b", "x/1"]
+        )
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr

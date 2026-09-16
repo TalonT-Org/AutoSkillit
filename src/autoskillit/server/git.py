@@ -187,7 +187,16 @@ async def _verify_merge_target(
             "worktree_path": "",  # filled in by caller
         }
     sha_rc, sha_out, _ = await _run_git(
-        ["git", "rev-parse", expected_branch], main_repo, 10, runner
+        [
+            "git",
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            f"refs/heads/{expected_branch}^{{commit}}",
+        ],
+        main_repo,
+        10,
+        runner,
     )
     if sha_rc != 0:
         # Local SHA resolution failed, so ancestry cannot be evaluated.

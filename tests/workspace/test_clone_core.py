@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -34,6 +35,44 @@ class TestCloneRepo:
         assert result["source_dir"] == str(git_repo.resolve())
         expected_parent = git_repo.parent / "autoskillit-runs"
         assert clone_path.parent == expected_parent
+
+    def test_clone_pins_origin_namespace_under_ambient_default_remote_name(
+        self, local_with_remote: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remote clone tracking refs stay in the origin namespace despite ambient config."""
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", "clone.defaultRemoteName")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", "src")
+
+        result = clone_repo(str(local_with_remote), "origin-namespace", branch="main")
+        clone_path = Path(result["clone_path"])
+        remote_ref = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(clone_path),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "refs/remotes/origin/main",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert remote_ref.returncode == 0
+
+    def test_clone_result_reports_tracking_remote(self, local_with_remote: Path) -> None:
+        result = clone_repo(str(local_with_remote), "tracking-remote", branch="main")
+
+        assert result["tracking_remote"] == "origin"
+
+    def test_clone_local_reports_unknown_tracking_remote(self, git_repo: Path) -> None:
+        result = clone_repo(str(git_repo), "local-tracking-remote", strategy="clone_local")
+
+        assert result["tracking_remote"] == ""
 
     def test_clone_path_name_format(self, git_repo: Path) -> None:
         """Clone directory name follows run_name-YYYYMMDD-HHMMSS-ffffff format."""

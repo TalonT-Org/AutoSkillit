@@ -15,7 +15,6 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime._command_classification import (
         ArgvToken,
-        _argv_token_after_prefix,
         _argv_token_value_after_key,
         _consume_argv_flag,
         _FlagArity,
@@ -26,7 +25,6 @@ else:
     if __package__ == "autoskillit.hooks._classification":
         from .._runtime._command_classification import (  # noqa: E402
             ArgvToken,
-            _argv_token_after_prefix,
             _argv_token_value_after_key,
             _consume_argv_flag,
             _FlagArity,
@@ -36,7 +34,6 @@ else:
     else:
         from _command_classification import (  # noqa: E402
             ArgvToken,
-            _argv_token_after_prefix,
             _argv_token_value_after_key,
             _consume_argv_flag,
             _FlagArity,
@@ -132,12 +129,9 @@ def _load_literal_github_input(
         return (None, "unsafe_input_provenance", "GitHub --input stdin is unresolved")
     if not value.text or _is_dynamic_shell_value(value):
         return (None, "dynamic_target", "GitHub --input path is dynamic")
-    if os.path.isabs(value.text):
-        path = os.path.normpath(value.text)
-    else:
-        if not cwd or not os.path.isabs(cwd):
-            return (None, "cwd_unresolved", "relative GitHub --input requires an absolute cwd")
-        path = os.path.normpath(os.path.join(cwd, value.text))
+    if not os.path.isabs(value.text) and (not cwd or not os.path.isabs(cwd)):
+        return (None, "cwd_unresolved", "relative GitHub --input requires an absolute cwd")
+    path = os.path.normpath(os.path.join(cwd, value.text))
     try:
         before = os.lstat(path)
         if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
@@ -148,9 +142,7 @@ def _load_literal_github_input(
             )
         if before.st_size > _GITHUB_INPUT_LIMIT:
             return (None, "input_inspection_failed", "GitHub --input exceeds the inspection limit")
-        flags = os.O_RDONLY
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(path, flags)
         try:
             after = os.fstat(fd)
@@ -159,15 +151,8 @@ def _load_literal_github_input(
                 after.st_ino,
             ):
                 return (None, "input_inspection_failed", "GitHub --input file identity changed")
-            chunks: list[bytes] = []
-            remaining = _GITHUB_INPUT_LIMIT + 1
-            while remaining:
-                chunk = os.read(fd, min(65536, remaining))
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                remaining -= len(chunk)
-            raw = b"".join(chunks)
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                raw = stream.read(_GITHUB_INPUT_LIMIT + 1)
         finally:
             os.close(fd)
         if len(raw) > _GITHUB_INPUT_LIMIT:
@@ -198,25 +183,6 @@ def _comment_count_from_payload(payload: dict[str, Any]) -> tuple[int | None, st
     if not isinstance(comments, list):
         return (None, "invalid_input_payload", "GitHub review comments must be a JSON array")
     return (len(comments), "", "")
-
-
-def _flag_value(
-    args: Sequence[ArgvToken], index: int, *, long_name: str, short_name: str | None = None
-) -> tuple[ArgvToken | None, int, bool]:
-    token = args[index]
-    if token.text == long_name or (short_name is not None and token.text == short_name):
-        return (
-            (args[index + 1], index + 2, True)
-            if index + 1 < len(args)
-            else (None, index + 1, False)
-        )
-    if token.text.startswith(f"{long_name}="):
-        value_text = token.text.split("=", 1)[1]
-        return (_argv_token_after_prefix(token, f"{long_name}=", value_text), index + 1, True)
-    if short_name and token.text.startswith(short_name) and token.text != short_name:
-        value_text = token.text[len(short_name) :]
-        return (_argv_token_after_prefix(token, short_name, value_text), index + 1, True)
-    return (None, index, False)
 
 
 _GH_API_FLAG_SPEC: Mapping[str, _FlagArity] = {
@@ -270,35 +236,6 @@ def _analyze_gh_api(
             route = ArgvToken("/graphql", True, "'/graphql'")
             i += 1
             continue
-        value, next_i, matched = _flag_value(args, i, long_name="--method", short_name="-X")
-        if matched or token.text in {"--method", "-X"}:
-            if not matched or value is None:
-                return (None, "missing_required_value", "GitHub API method is missing", False)
-            method, i = value, next_i
-            continue
-        value, next_i, matched = _flag_value(args, i, long_name="--input")
-        if matched or token.text == "--input":
-            if not matched or value is None:
-                return (None, "missing_required_value", "GitHub --input path is missing", False)
-            input_value, has_body_fields, i = value, True, next_i
-            continue
-        field_match = False
-        for long_name, short_name in (("--field", "-F"), ("--raw-field", "-f")):
-            value, next_i, matched = _flag_value(
-                args, i, long_name=long_name, short_name=short_name
-            )
-            if matched or token.text in {long_name, short_name}:
-                if not matched or value is None:
-                    return (None, "missing_required_value", f"{long_name} value is missing", False)
-                field_values.append(value)
-                has_body_fields, i, field_match = True, next_i, True
-                break
-        if field_match:
-            continue
-        if token.text == "--paginate":
-            paginate = True
-            i += 1
-            continue
         if token.text.startswith("-"):
             value, next_i, recognized = _consume_argv_flag(args, i, _GH_API_FLAG_SPEC)
             if not recognized:
@@ -308,7 +245,37 @@ def _analyze_gh_api(
                     f"unrecognized gh api flag: {token.text!r}",
                     False,
                 )
-            if value is None and _GH_API_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
+            option = token.text
+            if option not in _GH_API_FLAG_SPEC:
+                option = option.partition("=")[0] if option.startswith("--") else option[:2]
+            if option in {"--method", "-X"}:
+                if value is None:
+                    return (None, "missing_required_value", "GitHub API method is missing", False)
+                method = value
+            elif option == "--input":
+                if value is None:
+                    return (
+                        None,
+                        "missing_required_value",
+                        "GitHub --input path is missing",
+                        False,
+                    )
+                input_value = value
+                has_body_fields = True
+            elif option in {"--field", "-F", "--raw-field", "-f"}:
+                if value is None:
+                    field_name = "--field" if option in {"--field", "-F"} else "--raw-field"
+                    return (
+                        None,
+                        "missing_required_value",
+                        f"{field_name} value is missing",
+                        False,
+                    )
+                field_values.append(value)
+                has_body_fields = True
+            elif option == "--paginate":
+                paginate = True
+            elif value is None and _GH_API_FLAG_SPEC.get(option) == _FlagArity.VALUE:
                 return (None, "missing_required_value", f"{token.text} value is missing", False)
             i = next_i
             continue

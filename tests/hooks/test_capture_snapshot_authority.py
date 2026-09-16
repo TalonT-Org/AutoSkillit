@@ -300,7 +300,7 @@ def test_descriptor_verification_rejects_replaced_descriptor_and_early_eof(
             )
 
         value = os.fstat(fd)
-        monkeypatch.setattr(capture_snapshot.os, "pread", lambda *_args: b"")
+        monkeypatch.setattr(capture_snapshot._descriptor.os, "pread", lambda *_args: b"")
         with pytest.raises(CaptureAuthorityError, match="ended early"):
             verify_capture_snapshot(
                 fd=fd,

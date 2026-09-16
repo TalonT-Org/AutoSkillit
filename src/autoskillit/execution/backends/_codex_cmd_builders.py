@@ -155,6 +155,21 @@ _SUPPORTED_STATE_CONTRACTS = {
 }
 
 
+def _read_codex_state_readiness(connection: sqlite3.Connection) -> ObserverStatus:
+    """Interpret readiness from an already-open Codex state database."""
+    columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(backfill_state)")
+        if len(row) > 1 and isinstance(row[1], str)
+    }
+    if not {"id", "status"}.issubset(columns):
+        return ObserverStatus.SCHEMA_CHANGED
+    row = connection.execute("SELECT status FROM backfill_state WHERE id = 1").fetchone()
+    if row is None or len(row) != 1 or not isinstance(row[0], str):
+        return ObserverStatus.INCOMPLETE
+    return ObserverStatus.READY if row[0] == "complete" else ObserverStatus.INCOMPLETE
+
+
 @dataclass(frozen=True, slots=True)
 class CodexStateReadinessProbe:
     """Read the version-mapped disposable Codex state database without mutation."""
@@ -207,17 +222,7 @@ class CodexStateReadinessProbe:
             )
             connection.execute("PRAGMA query_only = ON")
             connection.execute("PRAGMA busy_timeout = 0")
-            columns = {
-                row[1]
-                for row in connection.execute("PRAGMA table_info(backfill_state)")
-                if len(row) > 1 and isinstance(row[1], str)
-            }
-            if not {"id", "status"}.issubset(columns):
-                return ObserverStatus.SCHEMA_CHANGED
-            row = connection.execute("SELECT status FROM backfill_state WHERE id = 1").fetchone()
-            if row is None or len(row) != 1 or not isinstance(row[0], str):
-                return ObserverStatus.INCOMPLETE
-            return ObserverStatus.READY if row[0] == "complete" else ObserverStatus.INCOMPLETE
+            return _read_codex_state_readiness(connection)
         except sqlite3.OperationalError as exc:
             message = str(exc).lower()
             if "locked" in message or "busy" in message:

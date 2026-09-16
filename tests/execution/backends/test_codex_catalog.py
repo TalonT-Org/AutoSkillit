@@ -44,11 +44,11 @@ def _catalog_bytes(catalog: object) -> bytes:
     return json.dumps(catalog).encode()
 
 
-def test_skill_discovery_contract_catalog_relpath_matches_codex_session_layout() -> None:
+def test_managed_discovery_route_catalog_relpath_matches_codex_session_layout() -> None:
     from autoskillit.core import SESSION_ADD_DIR_SUBDIR
-    from autoskillit.execution.backends.codex import CODEX_SKILL_DISCOVERY_CONTRACT, CodexBackend
+    from autoskillit.execution.backends.codex import CODEX_MANAGED_HOME_ROUTE, CodexBackend
 
-    assert Path(CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath) == (
+    assert Path(CODEX_MANAGED_HOME_ROUTE.catalog_relpath) == (
         Path(SESSION_ADD_DIR_SUBDIR) / CodexBackend().conventions.skills_subdir
     )
 

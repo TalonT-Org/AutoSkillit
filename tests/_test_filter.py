@@ -346,6 +346,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "recipe", "server", "workspace"}
     ),
     "pipeline_tracker": frozenset({"core", "fleet", "pipeline", "server"}),
+    "git_refs": frozenset({"core", "server", "smoke_utils", "workspace"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server", "smoke_utils"}),
     # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the
@@ -1182,6 +1183,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_kitchen_envelope_hook_drift.py",
             "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_sous_chef.py",
+            "server/test_tools_bootstrap.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_persistent_root.py",
             "server/test_tools_execution_provider.py",

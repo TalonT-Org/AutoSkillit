@@ -18,7 +18,9 @@ from autoskillit.core.types import (
     PluginLoadMode,
     RecipeRepository,
     SkillResult,
+    SubprocessResult,
     SubprocessRunner,
+    TerminationReason,
     TestResult,
     TestRunner,
 )
@@ -68,6 +70,41 @@ def test_in_memory_database_reader_satisfies_protocol():
 
 def test_mock_subprocess_runner_satisfies_protocol():
     assert isinstance(MockSubprocessRunner(), SubprocessRunner)
+
+
+@pytest.mark.anyio
+async def test_expect_mode_rejects_mismatched_argv():
+    """Bound queued results fail when the executed argv changes."""
+    runner = MockSubprocessRunner()
+    runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        ),
+        expect=["git", "rev-parse", "--verify", "refs/heads/main^{commit}"],
+    )
+
+    with pytest.raises(AssertionError, match="subprocess argv mismatch"):
+        await runner(["git", "status", "--porcelain"], cwd=Path("/tmp"), timeout=10)
+
+
+@pytest.mark.anyio
+async def test_unbound_queue_entry_accepts_any_argv():
+    """Queue entries without expect remain useful when argv is not under test."""
+    expected = SubprocessResult(
+        returncode=0,
+        stdout="ok",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+    )
+    runner = MockSubprocessRunner()
+    runner.push(expected)
+
+    assert await runner(["git", "status", "--porcelain"], cwd=Path("/tmp"), timeout=10) == expected
 
 
 def test_fake_plugin_artifact_authority_is_lazy_fresh_and_releasable(tmp_path: Path):

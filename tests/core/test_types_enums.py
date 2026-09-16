@@ -182,7 +182,11 @@ def test_severity_enum_not_equal_to_uppercase_string() -> None:
 
 def test_hook_trust_policy_values_and_public_exports() -> None:
     import autoskillit.core as core
-    from autoskillit.core.types import HookTrustPolicy
+    from autoskillit.core.types import (
+        HookTrustPolicy,
+        SkillDiscoveryMechanism,
+        UpstreamSupportStatus,
+    )
     from autoskillit.core.types._type_enums import __all__ as enum_all
 
     assert issubclass(HookTrustPolicy, StrEnum)
@@ -195,6 +199,10 @@ def test_hook_trust_policy_values_and_public_exports() -> None:
     assert "HookTrustPolicy" in enum_all
     assert "HookTrustPolicy" in core.__all__  # type: ignore[attr-defined]
     assert core.HookTrustPolicy is HookTrustPolicy
+    assert "SkillDiscoveryMechanism" in enum_all
+    assert "UpstreamSupportStatus" in enum_all
+    assert core.SkillDiscoveryMechanism is SkillDiscoveryMechanism
+    assert core.UpstreamSupportStatus is UpstreamSupportStatus
 
 
 def test_pr_state_enum_members_are_locked() -> None:

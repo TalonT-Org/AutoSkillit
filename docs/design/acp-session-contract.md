@@ -459,7 +459,7 @@ relaxed, on the app-server transport:
   skill, resolving one to an unexpected path, or reporting one disabled fails
   the launch (see `_accept_skills_list` in `_codex/app_server.py`).
 - **Managed/native root isolation.** A managed catalog registers exactly one
-  extra root (`catalog_root`, derived from `CODEX_SKILL_DISCOVERY_CONTRACT.
+  extra root (`catalog_root`, derived from `CODEX_APP_SERVER_ROUTE.
   catalog_relpath`); an ordinary no-catalog headless launch (`build_headless_
   cmd`) registers none and skips both `skills/extraRoots/set` and
   `skills/list`, deferring to the server's native or already-finalized home.

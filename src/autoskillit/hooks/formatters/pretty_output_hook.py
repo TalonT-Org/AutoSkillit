@@ -255,6 +255,19 @@ def _resolve_payload(tool_name: str, tool_response: str) -> _Payload | None:
     return _DictPayload(data=data)
 
 
+def _format_dict(short_name: str, data: dict, pipeline: bool, artifact_backed: bool) -> str:
+    if data.get("subtype") == "gate_error":
+        return _fmt_gate_error(data, pipeline)
+    if data.get("subtype") == "tool_exception":
+        return _fmt_tool_exception(data, pipeline)
+    if short_name in _UNFORMATTED_TOOLS:
+        return _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
+    formatter = _FORMATTERS.get(short_name)
+    if formatter is not None:
+        return formatter(data, pipeline)
+    return _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
+
+
 def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str | None:
     """Parse tool_response JSON and dispatch to the appropriate formatter.
 
@@ -267,13 +280,10 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     short_name = _extract_tool_short_name(tool_name)
 
     if isinstance(payload, _PlainTextPayload):
-        # Tool returned pre-formatted content. Named dict-formatters must not
-        # receive this shape. Route through the plain-text dispatch table or
-        # pass through unchanged.
+        # Pre-formatted content uses only the plain-text dispatch table.
         handler = _PLAIN_TEXT_FORMATTERS.get(short_name)
         return handler(payload.text, pipeline) if handler is not None else payload.text
 
-    # DictPayload path — envelope was successfully unwrapped (or was never an envelope).
     data = dict(payload.data)
     recipe_segment = data.pop("recipe_segment", None)
     raw_spill_metadata = data.get(_RESPONSE_SPILL_METADATA_KEY)
@@ -293,16 +303,7 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     if isinstance(spill_metadata, dict) and set(data) == {"preview"}:
         return with_spill(str(data["preview"]))
 
-    if data.get("subtype") == "gate_error":
-        rendered = _fmt_gate_error(data, pipeline)
-    elif data.get("subtype") == "tool_exception":
-        rendered = _fmt_tool_exception(data, pipeline)
-    elif short_name in _UNFORMATTED_TOOLS:
-        rendered = _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
-    elif (formatter := _FORMATTERS.get(short_name)) is not None:
-        rendered = formatter(data, pipeline)
-    else:
-        rendered = _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
+    rendered = _format_dict(short_name, data, pipeline, artifact_backed)
 
     error_text = data.get("error", "")
     if error_text and isinstance(error_text, str) and error_text not in rendered:

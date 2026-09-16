@@ -179,14 +179,7 @@ else:
 # ``_admission`` during the package import.
 MAX_ACTIVE_RECORDS = _MAX_ACTIVE_RECORDS
 
-# Private re-exports — preserve ``capture_lifecycle._capture_ledger`` /
-# ``capture_lifecycle._record_to_dict`` / ``capture_lifecycle.os`` access
-# patterns that ``tests/hooks/test_capture_lifecycle.py`` and friends rely
-# on. The parent plan's Step 7 (sub-ticket F) replaces these accesses with
-# direct ``_capture_lifecycle._store`` / ``_capture_lifecycle._admission``
-# bindings; for THIS sub-ticket, re-binding keeps ``task test-check`` green
-# without rewriting every test fixture. After sub-ticket F lands, these
-# names can be dropped.
+# Low-level facade exports retain their implementation module as the source of truth.
 if TYPE_CHECKING:
     import os as _os
 
@@ -205,8 +198,8 @@ if TYPE_CHECKING:
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-        _record_to_dict,
     )  # noqa: F401
+    from autoskillit.hooks._capture_lifecycle._transactions import _record_to_dict
 elif __package__ == "_capture_lifecycle":
     import os as _os
 
@@ -225,8 +218,8 @@ elif __package__ == "_capture_lifecycle":
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-        _record_to_dict,
     )  # noqa: F401
+    from _capture_lifecycle._transactions import _record_to_dict
 else:
     import os as _os
 
@@ -245,8 +238,8 @@ else:
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-        _record_to_dict,
     )  # noqa: F401
+    from ._transactions import _record_to_dict
 
 # ``os`` is referenced via ``capture_lifecycle.os`` by some test fixtures;
 # rebind it under the original name.

@@ -187,6 +187,43 @@ def _strip_step_descriptions(yaml_text: str) -> str:
     return "".join(out)
 
 
+def _project_scalar_span(
+    lines: list[str], index: int, key_indent: int, key_new: int, value: str
+) -> tuple[int, list[str]]:
+    """Return the exclusive span end and projected scalar continuation lines."""
+    end = _value_span_end(lines, index, key_indent, value)
+    projected: list[str] = []
+    is_block = value.strip() in _BLOCK_INDICATORS
+    is_quoted = bool(value) and value[0] in ("'", '"') and end > index + 1
+    if is_block:
+        # Literal/folded block scalar body: shift every line left by the
+        # same amount the introducing key line shrank, preserving each
+        # line's indentation relative to the others (and all non-
+        # whitespace bytes) — only the block's overall container
+        # indentation changes, per the fixed compaction projection.
+        delta = key_indent - key_new
+        for body_line in lines[index + 1 : end]:
+            if delta <= 0 or body_line.strip() == "":
+                projected.append(body_line)
+                continue
+            cut = min(delta, _leading_spaces(body_line))
+            projected.append(body_line[cut:])
+    elif is_quoted:
+        # Quoted (single/double) scalar continuation lines: YAML folding
+        # discards ALL leading whitespace on every continuation line
+        # before joining them into the scalar's value, so no amount of
+        # leading whitespace changes the parsed string — dropping it
+        # entirely is safe and maximizes compaction.
+        for body_line in lines[index + 1 : end]:
+            if body_line.strip() == "":
+                projected.append(body_line)
+                continue
+            projected.append(body_line[_leading_spaces(body_line) :])
+    else:
+        projected.extend(lines[index + 1 : end])
+    return end, projected
+
+
 def _compact_indentation(yaml_text: str) -> str:
     """Compact structural indentation to one column per nesting level.
 
@@ -251,35 +288,8 @@ def _compact_indentation(yaml_text: str) -> str:
             stack.append((key_indent, key_new))
 
         value = _scalar_intro_value(content)
-        end = _value_span_end(lines, i, key_indent, value)
-        is_block = value.strip() in _BLOCK_INDICATORS
-        is_quoted = bool(value) and value[0] in ("'", '"') and end > i + 1
-        if is_block:
-            # Literal/folded block scalar body: shift every line left by the
-            # same amount the introducing key line shrank, preserving each
-            # line's indentation relative to the others (and all non-
-            # whitespace bytes) — only the block's overall container
-            # indentation changes, per the fixed compaction projection.
-            delta = key_indent - key_new
-            for body_line in lines[i + 1 : end]:
-                if delta <= 0 or body_line.strip() == "":
-                    out.append(body_line)
-                    continue
-                cut = min(delta, _leading_spaces(body_line))
-                out.append(body_line[cut:])
-        elif is_quoted:
-            # Quoted (single/double) scalar continuation lines: YAML folding
-            # discards ALL leading whitespace on every continuation line
-            # before joining them into the scalar's value, so no amount of
-            # leading whitespace changes the parsed string — dropping it
-            # entirely is safe and maximizes compaction.
-            for body_line in lines[i + 1 : end]:
-                if body_line.strip() == "":
-                    out.append(body_line)
-                    continue
-                out.append(body_line[_leading_spaces(body_line) :])
-        else:
-            out.extend(lines[i + 1 : end])
+        end, scalar_lines = _project_scalar_span(lines, i, key_indent, key_new, value)
+        out.extend(scalar_lines)
         i = end
     return "".join(out)
 

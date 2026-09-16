@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import posixpath
 import re as _re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
+from ._type_constants import SESSION_ADD_DIR_SUBDIR
 from ._type_constants_registries import (
     CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS,
     CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
     CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
 )
-from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
+from ._type_enums import (
+    BackendEventKind,
+    HookTrustPolicy,
+    OutputFormat,
+    SkillDiscoveryMechanism,
+    UpstreamSupportStatus,
+)
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -45,6 +53,7 @@ __all__ = [
     "ExecutableLaunchBinding",
     "ModelTranslation",
     "SessionSummary",
+    "SkillDiscoveryRouteDef",
     "SkillSessionConfig",
     "ClaudeEventData",
     "CodexEventData",
@@ -71,6 +80,60 @@ class ExecutableLaunchBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillDiscoveryRouteDef:
+    """One way a backend loader reaches an admitted skill catalog."""
+
+    name: str
+    mechanism: SkillDiscoveryMechanism
+    upstream_status: UpstreamSupportStatus
+    tracking_issue: int | None
+    catalog_relpath: str
+    discovery_root_relpath: str | None
+    upstream_citation: str
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("skill discovery route name must be non-empty")
+        if not self.upstream_citation.strip():
+            raise ValueError("skill discovery route upstream citation must be non-empty")
+        deprecated = self.upstream_status is UpstreamSupportStatus.DEPRECATED
+        if deprecated != (self.tracking_issue is not None):
+            raise ValueError("tracking_issue is required exactly for deprecated routes")
+        self._validate_relpath("catalog_relpath", self.catalog_relpath)
+        if self.discovery_root_relpath is not None:
+            self._validate_relpath("discovery_root_relpath", self.discovery_root_relpath)
+
+    @staticmethod
+    def _validate_relpath(field_name: str, value: str) -> None:
+        path = PurePosixPath(value)
+        if not value or value == "." or "\\" in value or path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"{field_name} must be a non-empty relative POSIX path")
+
+    @property
+    def entry_point_is_alias(self) -> bool:
+        return (
+            self.discovery_root_relpath is not None
+            and self.discovery_root_relpath != self.catalog_relpath
+        )
+
+    @property
+    def alias_target(self) -> str:
+        if not self.entry_point_is_alias:
+            raise ValueError("skill discovery route does not declare an alias entry point")
+        assert self.discovery_root_relpath is not None
+        parent = posixpath.dirname(self.discovery_root_relpath) or "."
+        return posixpath.relpath(self.catalog_relpath, parent)
+
+    def catalog_dir(self, home: Path) -> Path:
+        return home / self.catalog_relpath
+
+    def discovery_root(self, home: Path) -> Path | None:
+        if self.discovery_root_relpath is None:
+            return None
+        return home / self.discovery_root_relpath
+
+
+@dataclass(frozen=True, slots=True)
 class BackendConventions:
     """Per-backend filesystem layout conventions for skill discovery.
 
@@ -89,6 +152,18 @@ class BackendConventions:
     persistent_session_root_subdir: Path | None = None
     #: Native model-facing skill invocation sigil.
     skill_sigil: str = "/"
+    #: Declared loader route for the managed session catalog.
+    managed_skill_discovery: SkillDiscoveryRouteDef | None = None
+
+    def __post_init__(self) -> None:
+        route = self.managed_skill_discovery
+        if route is None:
+            return
+        expected_catalog = PurePosixPath(SESSION_ADD_DIR_SUBDIR) / self.skills_subdir.as_posix()
+        if PurePosixPath(route.catalog_relpath) != expected_catalog:
+            raise ValueError(
+                f"catalog {route.catalog_relpath!r} must match {expected_catalog.as_posix()!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,8 +230,6 @@ class BackendCapabilities:
     # All process names the backend binary may appear as in /proc/comm
     # or ps output (e.g., interpreter names for shebang scripts)
     process_name_aliases: frozenset[str] = field(default_factory=frozenset)
-    # Relative path from session root to the skills directory
-    skills_subdir: str = ""
     # Hook config format identifier (e.g. settings.json vs config.toml)
     hook_config_format: str = ""
     # Write detection strategy (e.g. tool_names, file_change)
@@ -395,7 +468,6 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     version_check_command="claude --version",
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),
-    skills_subdir=".claude/skills",
     hook_config_format="",
     write_detection_strategy="tool_names",
     patch_format="unified_diff",
@@ -569,6 +641,7 @@ class CmdSpec:
     inherited_fds: tuple[int, ...] = ()
     managed_skill_catalog: ValidatedAddDir | None = None
     projected_skill_entries: tuple[tuple[str, str], ...] = ()
+    skill_discovery_route: SkillDiscoveryRouteDef | None = None
     app_server_plan: CodexAppServerPlan | None = None
     # Records that the builder was asked to keep Claude agent teams inactive
     # and honored that request at construction. Post-spawn checkpoints read

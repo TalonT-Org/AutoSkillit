@@ -252,6 +252,35 @@ def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_link
     assert not index_path.exists()
 
 
+def test_resume_staging_preserves_primary_error_when_thread_lease_release_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    original_release = storage._FileLease.release
+
+    def release_then_fail(lease: storage._FileLease) -> None:
+        original_release(lease)
+        if lease.path.name.startswith("thread-"):
+            raise OSError("release failed")
+
+    monkeypatch.setattr(storage._FileLease, "release", release_then_fail)
+
+    with pytest.raises(FileNotFoundError, match="rollout not found") as exc_info:
+        store.prepare_attempt(
+            session_home=home,
+            project_dir=tmp_path,
+            launch_id="0123456789abcdef",
+            attempt=1,
+            current_resume_spec=NamedResume("missing-thread"),
+        )
+
+    assert exc_info.value.__notes__ == [
+        "Codex resume thread lease release also failed: OSError('release failed')"
+    ]
+
+
 def test_resume_archive_transition_leaves_exactly_one_canonical_rollout(
     tmp_path: Path,
 ) -> None:
@@ -909,6 +938,33 @@ def test_darwin_filesystem_classification_uses_diskutil(
             {"capture_output": True, "check": False, "timeout": 5},
         )
     ]
+
+
+def test_linux_filesystem_classification_decodes_and_selects_deepest_mount(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "mount space" / "nested mount" / "child"
+    target.mkdir(parents=True)
+    outer_mount = target.parents[1]
+    nested_mount = target.parent
+    escaped_outer = str(outer_mount).replace(" ", r"\040")
+    escaped_nested = str(nested_mount).replace(" ", r"\040")
+    mountinfo = (
+        f"36 25 0:32 / {escaped_outer} rw - ext4 /dev/root rw\n"
+        f"37 36 0:33 / {escaped_nested} rw - xfs /dev/data rw\n"
+    ).encode()
+    calls: list[tuple[Path, int]] = []
+
+    def read_bounded(path: Path, limit: int) -> bytes:
+        calls.append((path, limit))
+        return mountinfo
+
+    monkeypatch.setattr(atomic.sys, "platform", "linux")
+    monkeypatch.setattr(atomic, "_read_bounded", read_bounded)
+
+    assert storage._filesystem_type(target) == "xfs"
+    assert calls == [(Path("/proc/self/mountinfo"), 4 * 1024 * 1024)]
 
 
 def test_filesystem_mount_root_resolves_and_stops_at_device_boundary(

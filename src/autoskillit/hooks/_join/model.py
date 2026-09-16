@@ -79,20 +79,21 @@ def _aggregate_wave_outcome(assignments: list[object]) -> str:
     outcomes = [str(entry.get("outcome", OUTCOME_PENDING)) for entry in entries]
     if len(entries) != len(assignments) or any(outcome == OUTCOME_PENDING for outcome in outcomes):
         return WAVE_PENDING
+    distinct_outcomes = frozenset(outcomes)
     if any(entry.get("cleanup_outcome") == OUTCOME_REAPED for entry in entries):
         return WAVE_REAPED
-    if all(outcome in _COMPLETED_OUTCOMES for outcome in outcomes):
+    if distinct_outcomes <= _COMPLETED_OUTCOMES:
         return WAVE_COMPLETE
-    if any(outcome == OUTCOME_LAUNCH_FAILED for outcome in outcomes):
+    if OUTCOME_LAUNCH_FAILED in distinct_outcomes:
         return WAVE_LAUNCH_FAILED
-    if any(outcome == OUTCOME_INTERRUPTION for outcome in outcomes):
+    if OUTCOME_INTERRUPTION in distinct_outcomes:
         return WAVE_INTERRUPTION
-    if any(outcome == OUTCOME_CANCELLED for outcome in outcomes):
+    if OUTCOME_CANCELLED in distinct_outcomes:
         return WAVE_CANCELLED
-    if any(outcome == OUTCOME_TIMEOUT for outcome in outcomes):
+    if OUTCOME_TIMEOUT in distinct_outcomes:
         return WAVE_PARTIAL_TIMEOUT
-    if any(outcome == OUTCOME_FAILURE for outcome in outcomes):
+    if OUTCOME_FAILURE in distinct_outcomes:
         return WAVE_FAILURE
-    if all(outcome == OUTCOME_MISSING for outcome in outcomes):
+    if distinct_outcomes == {OUTCOME_MISSING}:
         return WAVE_MISSING_CHILD
     return WAVE_PARTIAL

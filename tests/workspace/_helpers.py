@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
-    ClaudeDirectoryConventions,
     HookTrustPolicy,
     PreLaunchReadiness,
     RepositoryProfileId,
@@ -88,7 +87,6 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     session_record_types=frozenset({"item.completed"}),
     required_session_files=frozenset({"config.toml"}),
     session_dir_symlinks=frozenset({"sessions", "archived_sessions"}),
-    skills_subdir="skills",
     session_dir_persistent=True,
     supports_model_invocation_gating=False,
     hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
@@ -113,10 +111,7 @@ def _make_codex_backend() -> MagicMock:
     b = MagicMock()
     b.name = "codex"
     b.capabilities = _CODEX_CAPABILITIES
-    b.conventions = BackendConventions(
-        skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
-        profile_skills_source=None,
-    )
+    b.conventions = CodexBackend().conventions
     b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     b.setup_session_dir.return_value = None
     b.validate_session_layout.return_value = []

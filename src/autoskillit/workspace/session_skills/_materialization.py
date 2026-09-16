@@ -1,7 +1,7 @@
 """Session-skill materialization transaction.
 
 Single owner of the ordering-sensitive ``_materialize_session`` transaction,
-the single catalog's profile merge, legacy discovery alias, and restore path.
+the single catalog's profile merge, discovery entry point, and restore path.
 
 The step order in ``_materialize_session`` is load-bearing:
 
@@ -31,6 +31,7 @@ from autoskillit.core import (
     CompiledSessionSkillCatalogAuthority,
     SkillAuthority,
     SkillContractError,
+    SkillDiscoveryRouteDef,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     SkillSemanticOperation,
@@ -206,17 +207,19 @@ def materialize_profile_skills(
     )
 
 
-def _alias_legacy_discovery_root(
+def _materialize_discovery_entry_point(
     generated_home: Path,
-    *,
-    skills_subdir: Path,
-) -> None:
-    """Alias Codex's legacy discovery root to the one managed skill catalog."""
-    discovery_root = generated_home / skills_subdir
-    if os.path.lexists(discovery_root):
-        raise SkillContractError(f"legacy discovery alias path already exists: {discovery_root}")
-    target = Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
-    os.symlink(str(target), discovery_root, target_is_directory=True)
+    route: SkillDiscoveryRouteDef,
+) -> Path | None:
+    """Materialize the declared loader entry point when it is an alias."""
+    if not route.entry_point_is_alias:
+        return None
+    entry = route.discovery_root(generated_home)
+    assert entry is not None
+    if os.path.lexists(entry):
+        raise SkillContractError(f"discovery entry point path already exists: {entry}")
+    os.symlink(route.alias_target, entry, target_is_directory=True)
+    return entry
 
 
 def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
@@ -482,12 +485,11 @@ def _materialize_session(
             execution_role=execution_role,
         )
     skill_entries = _freeze_skill_entries(skills_base)
-    if backend is not None and backend.capabilities.session_dir_persistent:
-        _alias_legacy_discovery_root(
-            generated_home,
-            skills_subdir=skills_subdir,
-        )
-        logger.debug("legacy_discovery_root_aliased", path=str(generated_home / skills_subdir))
+    route = backend.conventions.managed_skill_discovery if backend is not None else None
+    if route is not None:
+        entry = _materialize_discovery_entry_point(generated_home, route)
+        if entry is not None:
+            logger.debug("discovery_entry_point_materialized", path=str(entry))
     if backend is not None and backend.capabilities.session_dir_persistent:
         _create_inert_rollout_paths(generated_home, backend)
     if backend is not None:
@@ -534,8 +536,10 @@ def _restore_session(
             parent_sandbox_mode=projection_context.parent_sandbox_mode,
             execution_role=SkillExecutionRole.SESSION,
         )
+        route = backend.conventions.managed_skill_discovery
+        if route is not None:
+            _materialize_discovery_entry_point(generated_home, route)
         if backend.capabilities.session_dir_persistent:
-            _alias_legacy_discovery_root(generated_home, skills_subdir=skills_subdir)
             _create_inert_rollout_paths(generated_home, backend)
         layout_errors = list(
             backend.validate_session_layout(
@@ -668,7 +672,7 @@ __all__ = [
     "_ExplorerBindingEnv",
     "_ExplorerBindingEnvFactory",
     "_SessionSetupKwargs",
-    "_alias_legacy_discovery_root",
+    "_materialize_discovery_entry_point",
     "_create_inert_rollout_paths",
     "_merge_profile_projection",
     "_materialize_profile_skill_infos",

@@ -189,8 +189,7 @@ class CodexLimitVerificationDef(NamedTuple):
     finding: str
 
 
-def validate_codex_limit_verification(entry: CodexLimitVerificationDef, *, key: str) -> None:
-    """Raise ValueError if entry's declared status contradicts its recorded numbers."""
+def _validate_codex_limit_evidence_envelope(entry: CodexLimitVerificationDef, *, key: str) -> None:
     if entry.governed_symbol != key:
         raise ValueError(
             f"{key}: governed_symbol {entry.governed_symbol!r} must equal registry key {key!r}"
@@ -207,6 +206,11 @@ def validate_codex_limit_verification(entry: CodexLimitVerificationDef, *, key: 
         raise ValueError(f"{key}: finding is too thin to act on")
     if entry.codex_config_key is not None and entry.configured_value is None:
         raise ValueError(f"{key}: codex_config_key is set but configured_value is None")
+
+
+def validate_codex_limit_verification(entry: CodexLimitVerificationDef, *, key: str) -> None:
+    """Raise ValueError if entry's declared status contradicts its recorded numbers."""
+    _validate_codex_limit_evidence_envelope(entry, key=key)
     if entry.status == "upstream_honored":
         honored = (
             entry.configured_value is not None
@@ -422,6 +426,26 @@ def _classify_list(key: str, lst: list) -> bool:
     return has_dicts
 
 
+def _partition_toml_entries(
+    d: dict[str, Any],
+) -> tuple[
+    list[tuple[str, Any]],
+    list[tuple[str, dict[str, Any]]],
+    list[tuple[str, list[dict[str, Any]]]],
+]:
+    scalars: list[tuple[str, Any]] = []
+    tables: list[tuple[str, dict[str, Any]]] = []
+    aot_keys: list[tuple[str, list[dict[str, Any]]]] = []
+    for key, value in d.items():
+        if isinstance(value, dict):
+            tables.append((key, value))
+        elif isinstance(value, list) and _classify_list(key, value):
+            aot_keys.append((key, value))
+        else:
+            scalars.append((key, value))
+    return scalars, tables, aot_keys
+
+
 def _emit_aot_entry(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
     """Emit a single [[path]] array-of-tables entry."""
     lines.append(f"\n[[{'.'.join(_quote_key(p) for p in path)}]]")
@@ -441,17 +465,7 @@ def _emit_aot_entry(d: dict[str, Any], path: list[str], lines: list[str]) -> Non
 def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
     header = f"[{'.'.join(_quote_key(p) for p in path)}]"
 
-    scalars: list[tuple[str, Any]] = []
-    tables: list[tuple[str, dict]] = []
-    aot_keys: list[tuple[str, list[dict]]] = []
-    for k, v in d.items():
-        if isinstance(v, dict):
-            tables.append((k, v))
-        elif isinstance(v, list) and _classify_list(k, v):
-            aot_keys.append((k, v))
-        else:
-            scalars.append((k, v))
-
+    scalars, tables, aot_keys = _partition_toml_entries(d)
     has_scalars = bool(scalars)
 
     inline_tables: list[tuple[str, dict[str, Any]]] = []
@@ -483,19 +497,14 @@ def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> No
 
 def _serialize_toml(data: dict[str, Any]) -> str:
     lines: list[str] = []
-    for k, v in data.items():
-        if isinstance(v, dict):
-            continue
-        if isinstance(v, list) and _classify_list(k, v):
-            continue
+    scalars, tables, aot_keys = _partition_toml_entries(data)
+    for k, v in scalars:
         lines.append(f"{_quote_key(k)} = {_format_toml_value(v)}")
-    for k, v in data.items():
-        if isinstance(v, dict):
-            _emit_toml_table(v, [k], lines)
-    for k, v in data.items():
-        if isinstance(v, list) and _classify_list(k, v):
-            for entry in v:
-                _emit_aot_entry(entry, [k], lines)
+    for k, v in tables:
+        _emit_toml_table(v, [k], lines)
+    for k, entries in aot_keys:
+        for entry in entries:
+            _emit_aot_entry(entry, [k], lines)
     text = "\n".join(lines).lstrip("\n")
     return text + "\n" if text else ""
 

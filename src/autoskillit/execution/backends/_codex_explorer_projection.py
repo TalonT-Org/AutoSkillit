@@ -107,15 +107,7 @@ def _preflight_agent_projection(
     )
 
 
-def _render_agent_toml(
-    definition: AgentDef,
-    *,
-    explorer_binding_env: Mapping[str, str] | None = None,
-    explorer_mcp_transport: Mapping[str, object] | None = None,
-    project_explorer_mcp: bool = False,
-) -> str:
-    """Render and parse one role before its output directory is touched."""
-    direct_mcp_tools = _direct_agent_mcp_tools(definition)
+def _render_agent_definition_lines(definition: AgentDef) -> list[str]:
     digest = agent_definition_digest(definition)
     lines = [
         f"name = {_format_toml_value(definition.name)}",
@@ -142,6 +134,19 @@ def _render_agent_toml(
         lines.extend(f"{feature} = false" for feature in definition.codex.disabled_features)
     if not definition.codex.agents_enabled:
         lines.extend(("[agents]", "enabled = false"))
+    return lines
+
+
+def _render_agent_toml(
+    definition: AgentDef,
+    *,
+    explorer_binding_env: Mapping[str, str] | None = None,
+    explorer_mcp_transport: Mapping[str, object] | None = None,
+    project_explorer_mcp: bool = False,
+) -> str:
+    """Render and parse one role before its output directory is touched."""
+    direct_mcp_tools = _direct_agent_mcp_tools(definition)
+    lines = _render_agent_definition_lines(definition)
     if explorer_binding_env is not None and not project_explorer_mcp:
         raise ValueError("an explorer binding requires an explorer MCP projection")
     if explorer_mcp_transport is not None and not project_explorer_mcp and not direct_mcp_tools:

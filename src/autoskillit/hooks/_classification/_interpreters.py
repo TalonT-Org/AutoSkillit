@@ -333,36 +333,25 @@ def tokenize_shell_payload_segments(
     match (fail-open). Returns ``[]`` when the command has no evaluated
     shell payload to traverse.
     """
-    outer = tokenize_command_segments(command)
-    if not outer and command.strip():
-        return None
-
     result: list[list[str]] = []
     seen: set[str] = set()
-    queue: list[tuple[str, bool]] = [
-        (payload, False) for payload in extract_shell_command_payloads(command)
-    ]
-    if include_process_substitutions:
-        for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
-            command
-        ):
-            if not balanced:
-                return None
-            queue.append((body, True))
+    queue: list[tuple[str, bool, bool]] = [(command, False, False)]
     while queue:
-        payload, preserve_occurrence = queue.pop(0)
-        if not preserve_occurrence and payload in seen:
+        payload, preserve_occurrence, emit = queue.pop(0)
+        if emit and not preserve_occurrence and payload in seen:
             continue
-        if not preserve_occurrence:
+        if emit and not preserve_occurrence:
             seen.add(payload)
         if not payload.strip():
             continue
         segments = tokenize_command_segments(payload)
         if not segments and payload.strip():
             return None
-        result.extend(segments)
+        if emit:
+            result.extend(segments)
         queue.extend(
-            (nested, preserve_occurrence) for nested in extract_shell_command_payloads(payload)
+            (nested, preserve_occurrence, True)
+            for nested in extract_shell_command_payloads(payload)
         )
         if include_process_substitutions:
             for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
@@ -370,7 +359,7 @@ def tokenize_shell_payload_segments(
             ):
                 if not balanced:
                     return None
-                queue.append((body, True))
+                queue.append((body, True, True))
     return result
 
 

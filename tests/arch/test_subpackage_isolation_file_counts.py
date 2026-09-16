@@ -129,7 +129,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
-    "core/git": 5,  # 4 files + __init__ + buffer
+    "core/git": 6,  # 5 focused modules + __init__
     "core/audit": 5,  # 4 files + __init__ + buffer
     "core/plugins": 10,  # 7 files + __init__ + buffer
     "core/pipeline": 5,  # 4 files + __init__ + buffer

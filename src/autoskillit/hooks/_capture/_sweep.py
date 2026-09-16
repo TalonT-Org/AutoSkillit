@@ -5,11 +5,11 @@ from __future__ import annotations
 import errno
 import os
 import stat
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-from . import _lifecycle_policy, _orphan_scan, _store_port, _sweep_cursor
+from . import _lifecycle_policy, _orphan_scan, _store_port
 from ._cleanup import close_preserving_primary
 from ._lifecycle_record import (
     CaptureLifecycleRecord,
@@ -37,158 +37,8 @@ from ._types import (
 register_module_aliases(__name__)
 
 
-class SweepRecord(Protocol):
-    @property
-    def capture_id(self) -> str: ...
-
-    @property
-    def state(self) -> object: ...
-
-    @property
-    def next_attempt_at(self) -> float: ...
-
-
 class NamePattern(Protocol):
     def fullmatch(self, value: str) -> object | None: ...
-
-
-def is_due_record(
-    record: SweepRecord,
-    now: float,
-    terminal_states: Collection[object],
-) -> bool:
-    """Return whether one non-terminal lifecycle record is due."""
-    return record.state not in terminal_states and record.next_attempt_at <= now
-
-
-def count_due_records(
-    records: Iterable[SweepRecord],
-    now: float,
-    terminal_states: Collection[object],
-) -> int:
-    """Count due records without sweep ordering or materialization."""
-    return sum(is_due_record(record, now, terminal_states) for record in records)
-
-
-def bounded_due_keys(
-    records: Iterable[SweepRecord],
-    now: float,
-    terminal_states: Collection[object],
-    max_records: int,
-) -> tuple[list[DueKey], bool, int, DueKey | None]:
-    due: list[DueKey] = []
-    inspected = 0
-    complete = True
-    rebuild_key: DueKey | None = None
-    for record in records:
-        if inspected >= max_records:
-            complete = False
-            break
-        inspected += 1
-        if record.state in terminal_states:
-            continue
-        key = DueKey(record.next_attempt_at, record.capture_id)
-        rebuild_key = key if rebuild_key is None else max(rebuild_key, key)
-        if is_due_record(record, now, terminal_states):
-            due.append(key)
-    due.sort()
-    return due, complete, inspected, rebuild_key
-
-
-def select_due_keys(
-    store: _store_port.SweepStorePort,
-    now: float,
-    max_records: int,
-    terminal_states: Collection[object],
-) -> tuple[list[DueKey], bool, bool]:
-    with store._locked():
-        records, compaction_epoch, _size = store._load_locked()
-        due, complete, inspected, rebuild_key = bounded_due_keys(
-            records.values(),
-            now,
-            terminal_states,
-            max_records,
-        )
-        cursor = _sweep_cursor.load_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
-            compaction_epoch=compaction_epoch,
-        )
-        repair_needed = cursor.status is not _sweep_cursor.CursorStatus.VALID
-        repaired = False
-        if repair_needed and complete and not due:
-            budget = store._sweep_budget
-            if budget is None:
-                raise RuntimeError("cursor repair requires an active sweep budget")
-            if store._sweep_cursor_writes >= budget.max_cursor_writes:
-                raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-            if rebuild_key is None:
-                repaired = _sweep_cursor.clear_cursor(store._root_fd)
-            else:
-                _sweep_cursor.write_cursor(
-                    store._root_fd,
-                    project_identity=store._project_identity,
-                    root_identity=store._root_identity,
-                    compaction_epoch=compaction_epoch,
-                    due_key=rebuild_key,
-                )
-                repaired = True
-            if repaired:
-                store._sweep_cursor_writes += 1
-    store._sweep_records_inspected += inspected
-    return (
-        _sweep_cursor.rotate_after(due, cursor.due_key),
-        complete,
-        repaired or (repair_needed and bool(due)),
-    )
-
-
-def advance_cursor(
-    store: _store_port.SweepStorePort,
-    due_key: DueKey,
-    budget: SweepBudgetSpec,
-) -> None:
-    if store._sweep_cursor_writes >= budget.max_cursor_writes:
-        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-    with store._locked():
-        _records, compaction_epoch, _size = store._load_locked()
-        _sweep_cursor.write_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
-            compaction_epoch=compaction_epoch,
-            due_key=due_key,
-        )
-    store._sweep_cursor_writes += 1
-
-
-def account_replay_bytes(store: _store_port.SweepStorePort, amount: int) -> None:
-    budget = store._sweep_budget
-    if budget is not None and store._sweep_replay_bytes + amount > budget.max_replay_bytes:
-        raise SweepBudgetExceeded(CleanupBlocker.REPLAY_BYTE_BUDGET)
-    if budget is not None:
-        store._sweep_replay_bytes += amount
-
-
-def write_cursor_accounted(
-    store: _store_port.SweepStorePort,
-    *,
-    compaction_epoch: int,
-    due_key: DueKey,
-) -> None:
-    budget = store._sweep_budget
-    if budget is not None and store._sweep_cursor_writes >= budget.max_cursor_writes:
-        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-    _sweep_cursor.write_cursor(
-        store._root_fd,
-        project_identity=store._project_identity,
-        root_identity=store._root_identity,
-        compaction_epoch=compaction_epoch,
-        due_key=due_key,
-    )
-    if budget is not None:
-        store._sweep_cursor_writes += 1
 
 
 def validate_store_root(
@@ -345,7 +195,7 @@ def normalize_abandoned(
     staging: ObservedArtifact | None = None
     public: ObservedArtifact | None = None
     lease_target: ObservedArtifact | None = None
-    lease_transferred = False
+    retained_observation: ObservedArtifact | None = None
     try:
         staging = observe(
             record.staging_name,
@@ -376,61 +226,54 @@ def normalize_abandoned(
             if lease_checked:
                 raise CarrierLeaseLive
             try_lease(lease_target)
-            returned_lease = lease_target
-        else:
-            if preleased.identity != lease_target.identity:
-                raise Tampered
-            returned_lease = preleased
+        elif preleased.identity != lease_target.identity:
+            raise Tampered
         identity = lease_target.identity
-        if staging is not None and public is not None:
-            if staging.identity != public.identity or staging.nlink != 2 or public.nlink != 2:
-                raise Tampered
+        if staging is not None:
+            if public is not None:
+                if staging.identity != public.identity or staging.nlink != 2 or public.nlink != 2:
+                    raise Tampered
+            else:
+                try:
+                    linked = create_verified_recovery_link(
+                        link=lambda: os.link(
+                            record.staging_name,
+                            record.public_name,
+                            src_dir_fd=root_fd,
+                            dst_dir_fd=root_fd,
+                            follow_symlinks=False,
+                        ),
+                        observe=lambda: observe(
+                            record.public_name,
+                            identity,
+                            valid_name=public_name_pattern,
+                        ),
+                        rollback=lambda: os.unlink(
+                            record.public_name,
+                            dir_fd=root_fd,
+                        ),
+                        sync=lambda: os.fsync(root_fd),
+                    )
+                except FileExistsError as exc:
+                    raise Tampered from exc
+                os.close(linked.fd)
             os.unlink(record.staging_name, dir_fd=root_fd)
             os.fsync(root_fd)
-        elif staging is not None:
-            try:
-                linked = create_verified_recovery_link(
-                    link=lambda: os.link(
-                        record.staging_name,
-                        record.public_name,
-                        src_dir_fd=root_fd,
-                        dst_dir_fd=root_fd,
-                        follow_symlinks=False,
-                    ),
-                    observe=lambda: observe(
-                        record.public_name,
-                        identity,
-                        valid_name=public_name_pattern,
-                    ),
-                    rollback=lambda: os.unlink(
-                        record.public_name,
-                        dir_fd=root_fd,
-                    ),
-                    sync=lambda: os.fsync(root_fd),
-                )
-            except FileExistsError as exc:
-                raise Tampered from exc
-            os.close(linked.fd)
-            os.unlink(record.staging_name, dir_fd=root_fd)
-            os.fsync(root_fd)
-        result = (
-            replace(
-                record,
-                state=CaptureState.ABANDONED,
-                artifact_identity=identity,
-                retention_at=record.created_at,
-                next_attempt_at=wall_clock(),
-                observed_size=lease_target.size,
-                retention_phase=CaptureRetentionPhase.ELIGIBLE,
-                revision=record.revision + 1,
-            ),
-            returned_lease,
+        normalized = replace(
+            record,
+            state=CaptureState.ABANDONED,
+            artifact_identity=identity,
+            retention_at=record.created_at,
+            next_attempt_at=wall_clock(),
+            observed_size=lease_target.size,
+            retention_phase=CaptureRetentionPhase.ELIGIBLE,
+            revision=record.revision + 1,
         )
-        lease_transferred = preleased is None
-        return result
+        retained_observation = lease_target if preleased is None else None
+        return normalized, preleased if preleased is not None else retained_observation
     finally:
         for observed in (staging, public):
-            if observed is not None and (observed is not lease_target or not lease_transferred):
+            if observed is not None and observed is not retained_observation:
                 os.close(observed.fd)
 
 
@@ -447,6 +290,23 @@ def deleting_record(
         deletion_nonce=nonce,
         quarantine_name=f".capture-quarantine-{record.capture_id}-{nonce}",
         retention_phase=CaptureRetentionPhase.DELETING,
+        revision=record.revision + 1,
+    )
+
+
+def tampered_record(
+    record: CaptureLifecycleRecord,
+    now: float,
+    lifecycle_error: type[RuntimeError],
+) -> CaptureLifecycleRecord:
+    hold_seconds = _lifecycle_policy.STATE_RECLAIMABILITY[CaptureState.TAMPERED].duration_seconds
+    if hold_seconds is None:
+        raise lifecycle_error("tampered state requires a forensic hold duration")
+    return replace(
+        record,
+        state=CaptureState.TAMPERED,
+        retention_phase=CaptureRetentionPhase.TAMPERED,
+        next_attempt_at=now + hold_seconds,
         revision=record.revision + 1,
     )
 
@@ -483,22 +343,15 @@ def quarantine_delete(
             expected,
             valid_name=quarantine_name_pattern,
         )
-        if public is None and quarantine is None:
+        lease_target = public or quarantine
+        if lease_target is None:
             if preleased is not None:
                 raise Tampered
-            if authorize_delete is not None:
-                authorize_delete()
-            return record.size
-        lease_target = public or quarantine
-        if preleased is None and lease_target is not None:
+        elif preleased is None:
             if lease_checked:
                 raise Tampered
             try_lease(lease_target)
-        elif (
-            preleased is not None
-            and lease_target is not None
-            and preleased.identity != lease_target.identity
-        ):
+        elif preleased.identity != lease_target.identity:
             raise Tampered
         if public is not None and quarantine is not None:
             if (
@@ -509,6 +362,8 @@ def quarantine_delete(
                 raise Tampered
         if authorize_delete is not None:
             authorize_delete()
+        if lease_target is None:
+            return record.size
         if public is not None and quarantine is None:
             linked = create_verified_recovery_link(
                 link=lambda: os.link(
@@ -535,11 +390,12 @@ def quarantine_delete(
             expected,
             valid_name=quarantine_name_pattern,
         )
-        if verified is None or verified.nlink != 1:
+        try:
+            if verified is None or verified.nlink != 1:
+                raise Tampered
+        finally:
             if verified is not None:
                 os.close(verified.fd)
-            raise Tampered
-        os.close(verified.fd)
         unlink_quarantine()
         os.fsync(root_fd)
         return record.size
@@ -684,48 +540,32 @@ def sweep_one(
             preleased=lease,
             lease_checked=True,
         )
-        with store._locked():
-            records, compaction_epoch, size = store._load_locked()
-            current = records.get(capture_id)
-            if not same_record(deleting, current):
-                raise lifecycle_error("cleanup authority changed during deletion")
-            deleted = replace(
-                deleting,
+        deleted = _transition_if_current(
+            store,
+            deleting,
+            lambda record: replace(
+                record,
                 state=CaptureState.DELETED,
                 next_attempt_at=now,
                 retention_phase=CaptureRetentionPhase.DELETED,
-                revision=deleting.revision + 1,
-            )
-            store._transition_locked(
-                records=records,
-                compaction_epoch=compaction_epoch,
-                ledger_size=size,
-                authority=store._authority_for(deleting),
-                allowed_states={CaptureState.DELETING},
-                transform=lambda _current: deleted,
-            )
+                revision=record.revision + 1,
+            ),
+        )
+        if deleted is None:
+            raise lifecycle_error("cleanup authority changed during deletion")
         return (SweepAttempt.DELETED, deleted_bytes, 0)
     except CarrierLeaseLive:
         return (SweepAttempt.CARRIER_LEASE_LIVE, 0, 0)
     except Tampered:
         if expected is not None:
-            # Set next_attempt_at to hold-expiry time so the record
-            # becomes sweep-eligible after the forensic window.
-            _tampered_hold = _lifecycle_policy.STATE_RECLAIMABILITY[
-                CaptureState.TAMPERED
-            ].duration_seconds
-            if _tampered_hold is None:
-                raise lifecycle_error("tampered state requires a forensic hold duration")
-            _tampered_expiry = store._wall_clock() + _tampered_hold
+            tampered_at = store._wall_clock()
             _transition_if_current(
                 store,
                 expected,
-                lambda record: replace(
+                lambda record: tampered_record(
                     record,
-                    state=CaptureState.TAMPERED,
-                    retention_phase=CaptureRetentionPhase.TAMPERED,
-                    next_attempt_at=_tampered_expiry,
-                    revision=record.revision + 1,
+                    tampered_at,
+                    lifecycle_error,
                 ),
             )
         return (SweepAttempt.TAMPERED, 0, 0)
@@ -760,8 +600,14 @@ def run_bounded_sweep(
     scan_and_adopt_orphans: Callable[[], OrphanAdoptionOutcome],
 ) -> CaptureCleanupOutcome:
     started = monotonic()
-    examined = deleted = deleted_bytes = carrier_lease_live = 0
-    not_due = tampered = errors = retry_count = 0
+    examined = deleted_bytes = retry_count = 0
+    attempt_counts = {
+        SweepAttempt.DELETED: 0,
+        SweepAttempt.CARRIER_LEASE_LIVE: 0,
+        SweepAttempt.TAMPERED: 0,
+        SweepAttempt.ERROR: 0,
+        SweepAttempt.NOT_DUE: 0,
+    }
     blocker = CleanupBlocker.NONE
     orphan_outcome = OrphanAdoptionOutcome(0, 0, True, 0)
     try:
@@ -816,16 +662,19 @@ def run_bounded_sweep(
         examined += 1
         deleted_bytes += logical_bytes
         retry_count += retries
-        if result is SweepAttempt.DELETED:
-            deleted += 1
-        elif result is SweepAttempt.CARRIER_LEASE_LIVE:
-            carrier_lease_live += 1
-        elif result is SweepAttempt.TAMPERED:
-            tampered += 1
-        elif result is SweepAttempt.ERROR:
-            errors += 1
-        else:
-            not_due += 1
+        classified = (
+            result
+            if isinstance(result, SweepAttempt)
+            and result
+            in {
+                SweepAttempt.DELETED,
+                SweepAttempt.CARRIER_LEASE_LIVE,
+                SweepAttempt.TAMPERED,
+                SweepAttempt.ERROR,
+            }
+            else SweepAttempt.NOT_DUE
+        )
+        attempt_counts[classified] += 1
     # Directory-reconciliation scan phase: budget-bounded (dimension = 0
     # disables it entirely, the RUNNER_TAIL_BUDGET default) and only
     # attempted while duration budget remains from the record-sweep work
@@ -847,7 +696,7 @@ def run_bounded_sweep(
     if orphan_work_remains and blocker is CleanupBlocker.NONE:
         blocker = CleanupBlocker.RECORD_BUDGET
     records_inspected, replay_bytes, transitions, cursor_writes = work_counters()
-    if deleted:
+    if attempt_counts[SweepAttempt.DELETED]:
         progress = CleanupProgress.RETIRED
     elif transitions:
         progress = CleanupProgress.TRANSITIONED
@@ -859,12 +708,12 @@ def run_bounded_sweep(
         progress = CleanupProgress.NONE
     return CaptureCleanupOutcome(
         examined=examined,
-        deleted=deleted,
+        deleted=attempt_counts[SweepAttempt.DELETED],
         deleted_bytes=deleted_bytes,
-        carrier_lease_live=carrier_lease_live,
-        not_due=not_due,
-        tampered=tampered,
-        errors=errors,
+        carrier_lease_live=attempt_counts[SweepAttempt.CARRIER_LEASE_LIVE],
+        not_due=attempt_counts[SweepAttempt.NOT_DUE],
+        tampered=attempt_counts[SweepAttempt.TAMPERED],
+        errors=attempt_counts[SweepAttempt.ERROR],
         retry_count=retry_count,
         remaining_due=remaining_due,
         records_inspected=records_inspected,

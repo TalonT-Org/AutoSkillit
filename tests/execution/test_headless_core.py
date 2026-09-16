@@ -1,6 +1,9 @@
 """Tests for execution/headless/ extracted helper functions."""
 
+import ast
+import inspect
 import json
+import textwrap
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -81,6 +84,124 @@ def _make_locator_backend(project_log_dir_return: Path) -> Mock:
     backend = Mock()
     backend.session_locator.return_value.project_log_dir.return_value = project_log_dir_return
     return backend
+
+
+def _function_source(func: object) -> str:
+    return textwrap.dedent(inspect.getsource(func))  # type: ignore[arg-type]
+
+
+def _called_names(func: object) -> set[str]:
+    """Return direct plain-name and module-alias call targets in ``func``."""
+    tree = ast.parse(_function_source(func))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        target = node.func
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+            names.add(f"{target.value.id}.{target.attr}")
+    return names
+
+
+def _resolve_called_name(name: str, modules: tuple[object, ...]) -> object | None:
+    for module in modules:
+        if "." in name:
+            base, attr = name.split(".", 1)
+            base_obj = getattr(module, base, None)
+            if base_obj is None or not inspect.ismodule(base_obj):
+                continue
+            resolved = getattr(base_obj, attr, None)
+        else:
+            resolved = getattr(module, name, None)
+        if resolved:
+            return resolved
+    return None
+
+
+def _reachable_headless_functions(
+    start: object, fallback_modules: tuple[object, ...]
+) -> dict[str, object]:
+    """Trace the dynamic call graph within the headless package from ``start``."""
+    start_module = inspect.getmodule(start) or fallback_modules[0]
+    start_key = f"{start.__module__}.{start.__qualname__}"  # type: ignore[attr-defined]
+    visited = {start_key: start}
+    queue: list[tuple[object, object]] = [(start, start_module)]
+    while queue:
+        func, home_module = queue.pop()
+        for name in _called_names(func):
+            resolved = _resolve_called_name(name, (home_module, *fallback_modules))
+            if resolved is None or not (
+                inspect.isfunction(resolved) or inspect.iscoroutinefunction(resolved)
+            ):
+                continue
+            module_name = getattr(resolved, "__module__", "") or ""
+            if not module_name.startswith("autoskillit.execution.headless"):
+                continue
+            key = f"{module_name}.{resolved.__qualname__}"
+            if key in visited:
+                continue
+            visited[key] = resolved
+            queue.append((resolved, inspect.getmodule(resolved) or home_module))
+    return visited
+
+
+def _handler_kind(handler: ast.ExceptHandler) -> str | None:
+    if handler.type is None:
+        return "bare"
+    if isinstance(handler.type, ast.Name):
+        return handler.type.id
+    if isinstance(handler.type, ast.Attribute):
+        return handler.type.attr
+    return None
+
+
+def _infrastructure_fault_handler_is_safe(handler: ast.ExceptHandler) -> bool:
+    """Return whether the handler re-raises or builds an infrastructure fault."""
+    for stmt in ast.walk(handler):
+        if isinstance(stmt, ast.Raise) and stmt.exc is None and stmt.cause is None:
+            return True
+        if (
+            isinstance(stmt, ast.Call)
+            and isinstance(stmt.func, ast.Attribute)
+            and stmt.func.attr == "infrastructure_fault"
+        ):
+            return True
+    return False
+
+
+def _inspect_infrastructure_fault_handlers(
+    functions: dict[str, object],
+) -> list[str]:
+    """Assert precedence and propagation at every reachable guarded try."""
+    checked_sites: list[str] = []
+    for key, func in functions.items():
+        tree = ast.parse(_function_source(func))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
+                continue
+            kinds = [_handler_kind(handler) for handler in node.handlers]
+            if "InfrastructureFaultError" not in kinds:
+                continue
+            infra_index = kinds.index("InfrastructureFaultError")
+            broad_indices = [
+                index for index, kind in enumerate(kinds) if kind in ("Exception", "BaseException")
+            ]
+            for broad_index in broad_indices:
+                assert infra_index < broad_index, (
+                    f"{key}: except InfrastructureFaultError at handler {infra_index} "
+                    f"must precede the broad except at handler {broad_index} "
+                    f"(line {node.handlers[broad_index].lineno})"
+                )
+            infra_handler = node.handlers[infra_index]
+            assert _infrastructure_fault_handler_is_safe(infra_handler), (
+                f"{key}: except InfrastructureFaultError handler at line "
+                f"{infra_handler.lineno} must bare-raise or build an "
+                f"infrastructure_fault SkillResult, not swallow the fault"
+            )
+            checked_sites.append(f"{key}:{node.lineno}")
+    return checked_sites
 
 
 def test_effective_execution_identity_dispatches_through_backend_protocol() -> None:
@@ -2927,124 +3048,21 @@ class TestInfrastructureFaultHandlerPrecedence:
     """
 
     def test_infrastructure_fault_catch_precedes_generic_except(self) -> None:
-        import ast
-        import inspect
-        import textwrap
-
         from autoskillit.execution.headless import _headless_execute as hx_module
         from autoskillit.execution.headless import _headless_launch as hl_module
 
-        def _source(func: object) -> str:
-            return textwrap.dedent(inspect.getsource(func))  # type: ignore[arg-type]
-
-        def _called_names(func: object) -> set[str]:
-            """Direct call targets referenced anywhere in func's body.
-
-            Covers plain Name calls (e.g. _attempt_contract_nudge(...)) and
-            single-level Attribute calls on a module alias (e.g. _diag.log_launch(...)).
-            """
-            tree = ast.parse(_source(func))
-            names: set[str] = set()
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                target = node.func
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-                elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-                    names.add(f"{target.value.id}.{target.attr}")
-            return names
-
-        def _resolve(name: str, module: object) -> object | None:
-            if "." in name:
-                base, attr = name.split(".", 1)
-                base_obj = getattr(module, base, None)
-                if base_obj is None or not inspect.ismodule(base_obj):
-                    return None
-                return getattr(base_obj, attr, None)
-            return getattr(module, name, None)
-
-        # BFS the call graph starting at _execute_claude_headless, staying inside the
+        # Trace the call graph starting at _execute_claude_headless, staying inside the
         # autoskillit.execution.headless package. Nothing here names _headless_launch,
         # _run_headless_attempt, or _attempt_contract_nudge as a fixed target — they
         # are discovered because _execute_claude_headless calls them.
         start = hx_module._execute_claude_headless
-        visited: dict[str, object] = {f"{start.__module__}.{start.__qualname__}": start}
-        queue: list[tuple[object, object]] = [(start, hx_module)]
-        while queue:
-            func, home_module = queue.pop()
-            for name in _called_names(func):
-                resolved = (
-                    _resolve(name, home_module)
-                    or _resolve(name, hx_module)
-                    or _resolve(name, hl_module)
-                )
-                if resolved is None or not (
-                    inspect.isfunction(resolved) or inspect.iscoroutinefunction(resolved)
-                ):
-                    continue
-                module_name = getattr(resolved, "__module__", "") or ""
-                if not module_name.startswith("autoskillit.execution.headless"):
-                    continue
-                key = f"{module_name}.{resolved.__qualname__}"
-                if key in visited:
-                    continue
-                visited[key] = resolved
-                target_module = inspect.getmodule(resolved) or home_module
-                queue.append((resolved, target_module))
+        visited = _reachable_headless_functions(start, (hx_module, hl_module))
 
         assert hl_module._attempt_contract_nudge.__qualname__ in {
             k.rsplit(".", 1)[-1] for k in visited
         }, "call-graph trace must reach _attempt_contract_nudge from _execute_claude_headless"
 
-        def _handler_kind(handler: ast.ExceptHandler) -> str | None:
-            if handler.type is None:
-                return "bare"
-            if isinstance(handler.type, ast.Name):
-                return handler.type.id
-            if isinstance(handler.type, ast.Attribute):
-                return handler.type.attr
-            return None
-
-        def _handler_is_safe(handler: ast.ExceptHandler) -> bool:
-            """Bare re-raise, or constructs an infrastructure_fault SkillResult."""
-            for stmt in ast.walk(handler):
-                if isinstance(stmt, ast.Raise) and stmt.exc is None and stmt.cause is None:
-                    return True
-                if (
-                    isinstance(stmt, ast.Call)
-                    and isinstance(stmt.func, ast.Attribute)
-                    and stmt.func.attr == "infrastructure_fault"
-                ):
-                    return True
-            return False
-
-        checked_sites: list[str] = []
-        for key, func in visited.items():
-            tree = ast.parse(_source(func))
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Try):
-                    continue
-                kinds = [_handler_kind(h) for h in node.handlers]
-                if "InfrastructureFaultError" not in kinds:
-                    continue
-                infra_index = kinds.index("InfrastructureFaultError")
-                broad_indices = [
-                    i for i, k in enumerate(kinds) if k in ("Exception", "BaseException")
-                ]
-                for broad_index in broad_indices:
-                    assert infra_index < broad_index, (
-                        f"{key}: except InfrastructureFaultError at handler {infra_index} "
-                        f"must precede the broad except at handler {broad_index} "
-                        f"(line {node.handlers[broad_index].lineno})"
-                    )
-                infra_handler = node.handlers[infra_index]
-                assert _handler_is_safe(infra_handler), (
-                    f"{key}: except InfrastructureFaultError handler at line "
-                    f"{infra_handler.lineno} must bare-raise or build an "
-                    f"infrastructure_fault SkillResult, not swallow the fault"
-                )
-                checked_sites.append(f"{key}:{node.lineno}")
+        checked_sites = _inspect_infrastructure_fault_handlers(visited)
 
         # Verified handler inventory (issue #4597 phase 1): the first-attempt try in
         # _execute_claude_headless (3 handlers: InfrastructureFaultError, Exception,

@@ -563,6 +563,14 @@ class _GeneratedChildRollout(NamedTuple):
     session_ids: set[str]
 
 
+class _GeneratedChildObservation(NamedTuple):
+    rollout: _GeneratedChildRollout
+    child_commands: str
+    child_tool_outputs: dict[str, str]
+    child_tool_names: tuple[str, ...]
+    child_leak_evidence: tuple[str, ...]
+
+
 class _CodexSelectionProbeOutput(NamedTuple):
     final_text: str
     completed_mcp_items: tuple[dict, ...]
@@ -1172,6 +1180,268 @@ def _collect_generated_child_rollout(
     return _GeneratedChildRollout(parent_events, child_events, parent_id, session_ids)
 
 
+def _observe_generated_child_rollout(
+    result: subprocess.CompletedProcess[str],
+    *,
+    session_home: Path,
+) -> _GeneratedChildObservation:
+    rollout = _collect_generated_child_rollout(result, session_home=session_home)
+    child_calls = [
+        event.get("payload", {})
+        for event in rollout.child_events
+        if event.get("type") == "response_item"
+        and event.get("payload", {}).get("type") in {"function_call", "custom_tool_call"}
+    ]
+    child_output_records = [
+        event.get("payload", {})
+        for event in rollout.child_events
+        if event.get("type") == "response_item"
+        and event.get("payload", {}).get("type")
+        in {"function_call_output", "custom_tool_call_output"}
+    ]
+    child_commands = "\n".join(
+        " ".join(
+            (
+                str(call.get("name", "")),
+                str(call.get("arguments", call.get("input", ""))),
+            )
+        )
+        for call in child_calls
+    )
+    child_call_names_by_id = {
+        str(call.get("call_id", "")): str(call.get("name", "")) for call in child_calls
+    }
+    child_outputs_by_id = {
+        str(record.get("call_id", "")): json.dumps(
+            record.get("output", ""), sort_keys=True, default=str
+        )
+        for record in child_output_records
+    }
+    child_tool_outputs = {
+        name: child_outputs_by_id.get(call_id, "")
+        for call_id, name in child_call_names_by_id.items()
+    }
+    child_tool_names = tuple(str(call.get("name", "")) for call in child_calls)
+    child_assistant_messages = tuple(
+        json.dumps(event.get("payload", {}).get("content", ""), sort_keys=True, default=str)
+        for event in rollout.child_events
+        if event.get("type") == "response_item"
+        and event.get("payload", {}).get("type") == "message"
+        and event.get("payload", {}).get("role") == "assistant"
+    )
+    child_leak_evidence = (
+        *(
+            json.dumps(
+                call.get("arguments", call.get("input", "")),
+                sort_keys=True,
+                default=str,
+            )
+            for call in child_calls
+        ),
+        *child_outputs_by_id.values(),
+        *child_assistant_messages,
+    )
+    return _GeneratedChildObservation(
+        rollout=rollout,
+        child_commands=child_commands,
+        child_tool_outputs=child_tool_outputs,
+        child_tool_names=child_tool_names,
+        child_leak_evidence=child_leak_evidence,
+    )
+
+
+def _observed_generated_child_tool_search(
+    child_events: list[dict],
+    security_errors: list[str],
+) -> set[str]:
+    discovered_tool_names: set[str] = set()
+    for event in child_events:
+        payload = event.get("payload", {})
+        if event.get("type") != "response_item" or payload.get("type") != "tool_search_output":
+            continue
+        if payload.get("status") != "completed" or payload.get("execution") != "client":
+            security_errors.append("child tool search did not complete client-side")
+            continue
+        tools = payload.get("tools")
+        if not isinstance(tools, list):
+            security_errors.append("child tool search output was malformed")
+            continue
+        for namespace in tools:
+            if (
+                not isinstance(namespace, dict)
+                or namespace.get("type") != "namespace"
+                or namespace.get("name") != "mcp__explorer_probe"
+                or not isinstance(namespace.get("tools"), list)
+            ):
+                security_errors.append(
+                    f"child tool search exposed an unexpected entry: {namespace!r}"
+                )
+                continue
+            for tool in namespace["tools"]:
+                if not isinstance(tool, dict) or tool.get("type") != "function":
+                    security_errors.append(
+                        f"child tool search exposed a malformed broker tool: {tool!r}"
+                    )
+                    continue
+                name = str(tool.get("name", ""))
+                discovered_tool_names.add(name)
+                if name not in EXPLORER_MCP_TOOLS:
+                    security_errors.append(
+                        f"child tool search exposed a non-allowlisted broker tool: {name!r}"
+                    )
+    return discovered_tool_names
+
+
+def _validate_generated_child_tool_surface(
+    observation: _GeneratedChildObservation,
+    security_errors: list[str],
+) -> None:
+    unexpected_call_types = sorted(
+        {
+            str(event.get("payload", {}).get("type", ""))
+            for event in observation.rollout.child_events
+            if event.get("type") == "response_item"
+            and str(event.get("payload", {}).get("type", "")).endswith("_call")
+            and event.get("payload", {}).get("type")
+            not in {"function_call", "custom_tool_call", "tool_search_call"}
+        }
+    )
+    if unexpected_call_types:
+        security_errors.append(
+            f"child used unaccounted direct call types: {unexpected_call_types!r}"
+        )
+    discovered_tool_names = _observed_generated_child_tool_search(
+        observation.rollout.child_events,
+        security_errors,
+    )
+    if discovered_tool_names != set(EXPLORER_MCP_TOOLS):
+        security_errors.append(
+            "child tool search did not resolve the exact broker allowlist: "
+            f"{sorted(discovered_tool_names)!r}"
+        )
+    if len(observation.rollout.session_ids) != 2:
+        security_errors.append(
+            "probe created an unexpected descendant session: "
+            f"{sorted(observation.rollout.session_ids)!r}"
+        )
+
+
+def _validate_generated_child_broker_and_filesystem(
+    *,
+    broker_audit_path: Path,
+    repository: Path,
+    immutable_files: dict[str, str],
+    security_errors: list[str],
+) -> tuple[dict, ...]:
+    broker_audit = tuple(_read_ndjson(broker_audit_path)) if broker_audit_path.is_file() else ()
+    observed_audit = [(record.get("operation"), record.get("status")) for record in broker_audit]
+    expected_audit = [
+        ("bounded_literal_search", "allowed"),
+        ("parse_python_ast", "allowed"),
+        ("optional_capability_status", "allowed"),
+        *((operation, "denied") for operation in FORBIDDEN_OPERATIONS),
+    ]
+    if sorted(observed_audit) != sorted(expected_audit):
+        security_errors.append(
+            f"probe broker audit mismatch: observed={observed_audit!r} expected={expected_audit!r}"
+        )
+    for name, content in immutable_files.items():
+        path = repository / name
+        if not path.is_file() or path.read_text(encoding="utf-8") != content:
+            security_errors.append(f"repository file mutated: {name}")
+    if (repository / "mode.txt").stat().st_mode & 0o777 != 0o644:
+        security_errors.append("repository file mode mutated: mode.txt")
+    for name in ("ordinary-created.txt", "renamed.txt", "created-link"):
+        if os.path.lexists(repository / name):
+            security_errors.append(f"repository artifact created: {name}")
+    return broker_audit
+
+
+def _validate_generated_child_git_and_leaks(
+    *,
+    repository: Path,
+    env: dict[str, str],
+    network_hits: list[str],
+    repository_policy_marker: str,
+    child_leak_evidence: tuple[str, ...],
+    security_errors: list[str],
+) -> None:
+    git_status = subprocess.run(
+        ["git", "status", "--porcelain=v1"],
+        cwd=repository,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout
+    if git_status:
+        security_errors.append(f"Git worktree mutated: {git_status!r}")
+    git_probe_config = subprocess.run(
+        ["git", "config", "--local", "--get", "probe.changed"],
+        cwd=repository,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if git_probe_config.returncode == 0:
+        security_errors.append("Git config mutated")
+    branches = subprocess.run(
+        ["git", "branch", "--format=%(refname:short)"],
+        cwd=repository,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout.splitlines()
+    if branches != ["main"]:
+        security_errors.append(f"Git refs mutated: {branches!r}")
+    remotes = subprocess.run(
+        ["git", "remote"],
+        cwd=repository,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout.splitlines()
+    if remotes:
+        security_errors.append(f"Git remotes mutated: {remotes!r}")
+    if network_hits:
+        security_errors.append(f"network access succeeded: {network_hits!r}")
+    if any(repository_policy_marker in evidence for evidence in child_leak_evidence):
+        security_errors.append("repository policy was loaded")
+
+
+def _classify_generated_child_optional_capabilities(
+    child_tool_outputs: dict[str, str],
+    security_errors: list[str],
+) -> dict[str, str]:
+    optional_statuses: dict[str, str] = {}
+    for capability, supported_marker, unsupported_marker in (
+        ("lsp", "LSP_SUPPORTED", "LSP_UNSUPPORTED"),
+        ("tree_sitter", "TREE_SITTER_SUPPORTED", "TREE_SITTER_UNSUPPORTED"),
+    ):
+        observed = [
+            status
+            for marker, status in (
+                (supported_marker, "supported"),
+                (unsupported_marker, "unsupported"),
+            )
+            if marker in child_tool_outputs.get("optional_capability_status", "")
+        ]
+        if len(observed) != 1:
+            security_errors.append(
+                f"{capability} capability status was missing or ambiguous: {observed!r}"
+            )
+            optional_statuses[capability] = "unsupported"
+        else:
+            optional_statuses[capability] = observed[0]
+    return optional_statuses
+
+
 def _run_generated_child_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1242,222 +1512,31 @@ def _run_generated_child_probe(
         env=env,
         prompt=prompt,
     )
-    rollout = _collect_generated_child_rollout(result, session_home=session_home)
-    parent_events = rollout.parent_events
-    child_events = rollout.child_events
-    parent_id = rollout.parent_id
-    session_ids = rollout.session_ids
-    child_calls = [
-        event.get("payload", {})
-        for event in child_events
-        if event.get("type") == "response_item"
-        and event.get("payload", {}).get("type") in {"function_call", "custom_tool_call"}
-    ]
-    child_output_records = [
-        event.get("payload", {})
-        for event in child_events
-        if event.get("type") == "response_item"
-        and event.get("payload", {}).get("type")
-        in {"function_call_output", "custom_tool_call_output"}
-    ]
-    child_commands = "\n".join(
-        " ".join(
-            (
-                str(call.get("name", "")),
-                str(
-                    call.get(
-                        "arguments",
-                        call.get("input", ""),
-                    )
-                ),
-            )
-        )
-        for call in child_calls
-    )
-    child_call_names_by_id = {
-        str(call.get("call_id", "")): str(call.get("name", "")) for call in child_calls
-    }
-    child_outputs_by_id = {
-        str(record.get("call_id", "")): json.dumps(
-            record.get("output", ""), sort_keys=True, default=str
-        )
-        for record in child_output_records
-    }
-    child_tool_outputs = {
-        name: child_outputs_by_id.get(call_id, "")
-        for call_id, name in child_call_names_by_id.items()
-    }
-    child_tool_names = tuple(str(call.get("name", "")) for call in child_calls)
-    child_assistant_messages = tuple(
-        json.dumps(event.get("payload", {}).get("content", ""), sort_keys=True, default=str)
-        for event in child_events
-        if event.get("type") == "response_item"
-        and event.get("payload", {}).get("type") == "message"
-        and event.get("payload", {}).get("role") == "assistant"
-    )
-    child_leak_evidence = (
-        *(
-            json.dumps(
-                call.get("arguments", call.get("input", "")),
-                sort_keys=True,
-                default=str,
-            )
-            for call in child_calls
-        ),
-        *child_outputs_by_id.values(),
-        *child_assistant_messages,
-    )
+    observation = _observe_generated_child_rollout(result, session_home=session_home)
     security_errors: list[str] = []
-    unexpected_call_types = sorted(
-        {
-            str(event.get("payload", {}).get("type", ""))
-            for event in child_events
-            if event.get("type") == "response_item"
-            and str(event.get("payload", {}).get("type", "")).endswith("_call")
-            and event.get("payload", {}).get("type")
-            not in {"function_call", "custom_tool_call", "tool_search_call"}
-        }
+    _validate_generated_child_tool_surface(observation, security_errors)
+    broker_audit = _validate_generated_child_broker_and_filesystem(
+        broker_audit_path=broker_audit_path,
+        repository=repository,
+        immutable_files=immutable_files,
+        security_errors=security_errors,
     )
-    if unexpected_call_types:
-        security_errors.append(
-            f"child used unaccounted direct call types: {unexpected_call_types!r}"
-        )
-    discovered_tool_names: set[str] = set()
-    for event in child_events:
-        payload = event.get("payload", {})
-        if event.get("type") != "response_item" or payload.get("type") != "tool_search_output":
-            continue
-        if payload.get("status") != "completed" or payload.get("execution") != "client":
-            security_errors.append("child tool search did not complete client-side")
-            continue
-        tools = payload.get("tools")
-        if not isinstance(tools, list):
-            security_errors.append("child tool search output was malformed")
-            continue
-        for namespace in tools:
-            if (
-                not isinstance(namespace, dict)
-                or namespace.get("type") != "namespace"
-                or namespace.get("name") != "mcp__explorer_probe"
-                or not isinstance(namespace.get("tools"), list)
-            ):
-                security_errors.append(
-                    f"child tool search exposed an unexpected entry: {namespace!r}"
-                )
-                continue
-            for tool in namespace["tools"]:
-                if not isinstance(tool, dict) or tool.get("type") != "function":
-                    security_errors.append(
-                        f"child tool search exposed a malformed broker tool: {tool!r}"
-                    )
-                    continue
-                name = str(tool.get("name", ""))
-                discovered_tool_names.add(name)
-                if name not in EXPLORER_MCP_TOOLS:
-                    security_errors.append(
-                        f"child tool search exposed a non-allowlisted broker tool: {name!r}"
-                    )
-    if discovered_tool_names != set(EXPLORER_MCP_TOOLS):
-        security_errors.append(
-            "child tool search did not resolve the exact broker allowlist: "
-            f"{sorted(discovered_tool_names)!r}"
-        )
-    if len(session_ids) != 2:
-        security_errors.append(
-            f"probe created an unexpected descendant session: {sorted(session_ids)!r}"
-        )
-    broker_audit = tuple(_read_ndjson(broker_audit_path)) if broker_audit_path.is_file() else ()
-    observed_audit = [(record.get("operation"), record.get("status")) for record in broker_audit]
-    expected_audit = [
-        ("bounded_literal_search", "allowed"),
-        ("parse_python_ast", "allowed"),
-        ("optional_capability_status", "allowed"),
-        *((operation, "denied") for operation in FORBIDDEN_OPERATIONS),
-    ]
-    if sorted(observed_audit) != sorted(expected_audit):
-        security_errors.append(
-            f"probe broker audit mismatch: observed={observed_audit!r} expected={expected_audit!r}"
-        )
-    for name, content in immutable_files.items():
-        path = repository / name
-        if not path.is_file() or path.read_text(encoding="utf-8") != content:
-            security_errors.append(f"repository file mutated: {name}")
-    if (repository / "mode.txt").stat().st_mode & 0o777 != 0o644:
-        security_errors.append("repository file mode mutated: mode.txt")
-    for name in ("ordinary-created.txt", "renamed.txt", "created-link"):
-        if os.path.lexists(repository / name):
-            security_errors.append(f"repository artifact created: {name}")
-    git_status = subprocess.run(
-        ["git", "status", "--porcelain=v1"],
-        cwd=repository,
+    _validate_generated_child_git_and_leaks(
+        repository=repository,
         env=env,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    ).stdout
-    if git_status:
-        security_errors.append(f"Git worktree mutated: {git_status!r}")
-    git_probe_config = subprocess.run(
-        ["git", "config", "--local", "--get", "probe.changed"],
-        cwd=repository,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=10,
+        network_hits=network_hits,
+        repository_policy_marker=repository_policy_marker,
+        child_leak_evidence=observation.child_leak_evidence,
+        security_errors=security_errors,
     )
-    if git_probe_config.returncode == 0:
-        security_errors.append("Git config mutated")
-    branches = subprocess.run(
-        ["git", "branch", "--format=%(refname:short)"],
-        cwd=repository,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    ).stdout.splitlines()
-    if branches != ["main"]:
-        security_errors.append(f"Git refs mutated: {branches!r}")
-    remotes = subprocess.run(
-        ["git", "remote"],
-        cwd=repository,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    ).stdout.splitlines()
-    if remotes:
-        security_errors.append(f"Git remotes mutated: {remotes!r}")
-    if network_hits:
-        security_errors.append(f"network access succeeded: {network_hits!r}")
-    if any(repository_policy_marker in evidence for evidence in child_leak_evidence):
-        security_errors.append("repository policy was loaded")
-    optional_statuses: dict[str, str] = {}
-    for capability, supported_marker, unsupported_marker in (
-        ("lsp", "LSP_SUPPORTED", "LSP_UNSUPPORTED"),
-        ("tree_sitter", "TREE_SITTER_SUPPORTED", "TREE_SITTER_UNSUPPORTED"),
-    ):
-        observed = [
-            status
-            for marker, status in (
-                (supported_marker, "supported"),
-                (unsupported_marker, "unsupported"),
-            )
-            if marker in child_tool_outputs.get("optional_capability_status", "")
-        ]
-        if len(observed) != 1:
-            security_errors.append(
-                f"{capability} capability status was missing or ambiguous: {observed!r}"
-            )
-            optional_statuses[capability] = "unsupported"
-        else:
-            optional_statuses[capability] = observed[0]
+    optional_statuses = _classify_generated_child_optional_capabilities(
+        observation.child_tool_outputs,
+        security_errors,
+    )
     return _GeneratedChildProbeOutput(
-        parent_events=parent_events,
-        child_events=child_events,
-        parent_id=parent_id,
+        parent_events=observation.rollout.parent_events,
+        child_events=observation.rollout.child_events,
+        parent_id=observation.rollout.parent_id,
         agent_role=agent_role,
         cli_version=_cli_version("codex", env),
         definition_digest=definition_digest,
@@ -1469,21 +1548,23 @@ def _run_generated_child_probe(
         repository_policy_marker=repository_policy_marker,
         native_target_execution_isolation=(
             "failed-open"
-            if any(target_execution_marker in evidence for evidence in child_leak_evidence)
+            if any(
+                target_execution_marker in evidence for evidence in observation.child_leak_evidence
+            )
             else "enforced"
         ),
         native_credential_isolation=(
             "failed-open"
-            if any(credential_secret in evidence for evidence in child_leak_evidence)
+            if any(credential_secret in evidence for evidence in observation.child_leak_evidence)
             else "enforced"
         ),
         native_lsp_status=optional_statuses["lsp"],
         native_tree_sitter_status=optional_statuses["tree_sitter"],
         broker_audit=broker_audit,
         security_errors=tuple(security_errors),
-        child_tool_names=child_tool_names,
-        child_commands=child_commands,
-        child_tool_outputs=child_tool_outputs,
+        child_tool_names=observation.child_tool_names,
+        child_commands=observation.child_commands,
+        child_tool_outputs=observation.child_tool_outputs,
         attestation_root=Path(
             os.environ.get(
                 "AUTOSKILLIT_EXPLORER_ATTESTATION_DIR",
@@ -2947,6 +3028,146 @@ def _read_startup_trace(trace_path: Path) -> list[dict[str, object]]:
     return events
 
 
+def _claude_startup_probe_selection(
+    project_dir: Path,
+    *,
+    run_skill_probe: bool,
+) -> tuple[str, str, int]:
+    if run_skill_probe:
+        return (
+            "Call open_kitchen exactly once with no arguments. After it succeeds, call "
+            "run_skill exactly once with skill_command='/autoskillit:smoke-task Output "
+            "exactly installed_delivery_probe=READY', cwd='"
+            f"{project_dir}', and step_name='installed_delivery_probe'. After that call "
+            "finishes, output AUTOSKILLIT_INSTALLED_DELIVERY_READY and no question.",
+            "run_skill_result",
+            180,
+        )
+    return (
+        "Call open_kitchen exactly once with no arguments. During startup follow the "
+        "bounded silent retry contract. After a successful result output "
+        "AUTOSKILLIT_STARTUP_READY and no question.",
+        "open_kitchen_result",
+        90,
+    )
+
+
+def _serialize_claude_startup_probe(
+    output: bytes,
+    *,
+    trace_dir: Path,
+    trace_path: Path,
+    executable: Path,
+    plugin_identity: dict[str, object],
+    delay_ms: int,
+    connect_timeout_ms: int,
+    run_skill_probe: bool,
+    started_ns: int,
+) -> _ClaudeStartupProbeResult:
+    lowered = output.lower()
+    trace_events = _read_startup_trace(trace_path)
+    tool_list_observed = any(
+        event.get("event") == "tool_list_snapshot"
+        and "open_kitchen" in event.get("tool_names", [])
+        for event in trace_events
+    )
+    open_kitchen_result_observed = any(
+        event.get("event") == "open_kitchen_result" and event.get("outcome") == "success"
+        for event in trace_events
+    )
+    run_skill_result_observed = any(
+        event.get("event") == "run_skill_result" and event.get("outcome") == "success"
+        for event in trace_events
+    )
+    attempt_pids = [
+        int(event["server_pid"])
+        for event in trace_events
+        if event.get("event") == "server_delay_started"
+    ]
+    measurement_path = (
+        trace_dir / f"installed-claude-delivery-{time.time_ns()}.json" if run_skill_probe else None
+    )
+    elapsed_ns = time.monotonic_ns() - started_ns
+    result = _ClaudeStartupProbeResult(
+        ready=(
+            tool_list_observed
+            and open_kitchen_result_observed
+            and (run_skill_result_observed if run_skill_probe else True)
+        ),
+        tool_list_observed=tool_list_observed,
+        open_kitchen_result_observed=open_kitchen_result_observed,
+        run_skill_result_observed=run_skill_result_observed,
+        question_detected=(
+            b"askuserquestion" in lowered
+            or b"what would you like" in lowered
+            or b"would you like me to" in lowered
+        ),
+        output_bytes=len(output),
+        output_sha256=hashlib.sha256(output).hexdigest(),
+        trace_path=trace_path,
+        measurement_path=measurement_path,
+        plugin_identity=plugin_identity,
+        attempt_classifications=tuple(
+            classify_attempt(
+                trace_events,
+                server_pid=server_pid,
+                expected_identity=plugin_identity,
+            )
+            for server_pid in attempt_pids
+        ),
+    )
+    with trace_path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "event": "probe_terminal",
+                    "delay_ms": delay_ms,
+                    "connect_timeout_ms": connect_timeout_ms,
+                    "elapsed_ms": elapsed_ns // 1_000_000,
+                    "ready": result.ready,
+                    "tool_list_observed": result.tool_list_observed,
+                    "open_kitchen_result_observed": result.open_kitchen_result_observed,
+                    "run_skill_result_observed": result.run_skill_result_observed,
+                    "question_detected": result.question_detected,
+                    "output_bytes": result.output_bytes,
+                    "output_sha256": result.output_sha256,
+                    "executable": str(executable),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    if measurement_path is not None:
+        call_measurements = [
+            event
+            for event in trace_events
+            if event.get("event") in {"open_kitchen_result", "run_skill_result"}
+        ]
+        run_result = next(
+            (event for event in call_measurements if event.get("event") == "run_skill_result"),
+            None,
+        )
+        measurement_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "plugin_identity": plugin_identity,
+                    "calls": call_measurements,
+                    "retained_occupancy_bytes": result.output_bytes,
+                    "completed": result.ready,
+                    "elapsed_seconds": elapsed_ns / 1_000_000_000,
+                    "cost_usd": run_result.get("cost_usd") if run_result is not None else None,
+                    "trace_path": str(trace_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    return result
+
+
 def _run_claude_startup_probe(
     tmp_path: Path,
     *,
@@ -3034,19 +3255,10 @@ def _run_claude_startup_probe(
                 "PATH": os.pathsep.join((str(shim_dir), environment.get("PATH", ""))),
             }
         )
-        prompt = (
-            "Call open_kitchen exactly once with no arguments. During startup follow the "
-            "bounded silent retry contract. After a successful result output "
-            "AUTOSKILLIT_STARTUP_READY and no question."
+        prompt, terminal_event, deadline_duration_seconds = _claude_startup_probe_selection(
+            project_dir,
+            run_skill_probe=run_skill_probe,
         )
-        if run_skill_probe:
-            prompt = (
-                "Call open_kitchen exactly once with no arguments. After it succeeds, call "
-                "run_skill exactly once with skill_command='/autoskillit:smoke-task Output "
-                "exactly installed_delivery_probe=READY', cwd='"
-                f"{project_dir}', and step_name='installed_delivery_probe'. After that call "
-                "finishes, output AUTOSKILLIT_INSTALLED_DELIVERY_READY and no question."
-            )
         command = [
             str(executable),
             "--dangerously-skip-permissions",
@@ -3073,8 +3285,7 @@ def _run_claude_startup_probe(
         )
         os.close(slave_fd)
         retained = bytearray()
-        deadline = time.monotonic() + (180 if run_skill_probe else 90)
-        terminal_event = "run_skill_result" if run_skill_probe else "open_kitchen_result"
+        deadline = time.monotonic() + deadline_duration_seconds
         try:
             while time.monotonic() < deadline:
                 readable, _, _ = select.select([master_fd], [], [], 0.1)
@@ -3101,108 +3312,17 @@ def _run_claude_startup_probe(
             terminal_path.write_bytes(bytes(retained))
             os.close(master_fd)
     output = bytes(retained)
-    lowered = output.lower()
-    trace_events = _read_startup_trace(trace_path)
-    tool_list_observed = any(
-        event.get("event") == "tool_list_snapshot"
-        and "open_kitchen" in event.get("tool_names", [])
-        for event in trace_events
-    )
-    open_kitchen_result_observed = any(
-        event.get("event") == "open_kitchen_result" and event.get("outcome") == "success"
-        for event in trace_events
-    )
-    run_skill_result_observed = any(
-        event.get("event") == "run_skill_result" and event.get("outcome") == "success"
-        for event in trace_events
-    )
-    attempt_pids = [
-        int(event["server_pid"])
-        for event in trace_events
-        if event.get("event") == "server_delay_started"
-    ]
-    measurement_path = (
-        trace_dir / f"installed-claude-delivery-{time.time_ns()}.json" if run_skill_probe else None
-    )
-    elapsed_ns = time.monotonic_ns() - started_ns
-    result = _ClaudeStartupProbeResult(
-        ready=(
-            tool_list_observed
-            and open_kitchen_result_observed
-            and (run_skill_result_observed if run_skill_probe else True)
-        ),
-        tool_list_observed=tool_list_observed,
-        open_kitchen_result_observed=open_kitchen_result_observed,
-        run_skill_result_observed=run_skill_result_observed,
-        question_detected=(
-            b"askuserquestion" in lowered
-            or b"what would you like" in lowered
-            or b"would you like me to" in lowered
-        ),
-        output_bytes=len(output),
-        output_sha256=hashlib.sha256(output).hexdigest(),
+    return _serialize_claude_startup_probe(
+        output,
+        trace_dir=trace_dir,
         trace_path=trace_path,
-        measurement_path=measurement_path,
+        executable=executable,
         plugin_identity=plugin_identity,
-        attempt_classifications=tuple(
-            classify_attempt(
-                trace_events,
-                server_pid=server_pid,
-                expected_identity=plugin_identity,
-            )
-            for server_pid in attempt_pids
-        ),
+        delay_ms=delay_ms,
+        connect_timeout_ms=connect_timeout_ms,
+        run_skill_probe=run_skill_probe,
+        started_ns=started_ns,
     )
-    with trace_path.open("a", encoding="utf-8") as handle:
-        handle.write(
-            json.dumps(
-                {
-                    "event": "probe_terminal",
-                    "delay_ms": delay_ms,
-                    "connect_timeout_ms": connect_timeout_ms,
-                    "elapsed_ms": elapsed_ns // 1_000_000,
-                    "ready": result.ready,
-                    "tool_list_observed": result.tool_list_observed,
-                    "open_kitchen_result_observed": (result.open_kitchen_result_observed),
-                    "run_skill_result_observed": result.run_skill_result_observed,
-                    "question_detected": result.question_detected,
-                    "output_bytes": result.output_bytes,
-                    "output_sha256": result.output_sha256,
-                    "executable": str(executable),
-                },
-                sort_keys=True,
-            )
-            + "\n"
-        )
-    if measurement_path is not None:
-        call_measurements = [
-            event
-            for event in trace_events
-            if event.get("event") in {"open_kitchen_result", "run_skill_result"}
-        ]
-        run_result = next(
-            (event for event in call_measurements if event.get("event") == "run_skill_result"),
-            None,
-        )
-        measurement_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "plugin_identity": plugin_identity,
-                    "calls": call_measurements,
-                    "retained_occupancy_bytes": result.output_bytes,
-                    "completed": result.ready,
-                    "elapsed_seconds": elapsed_ns / 1_000_000_000,
-                    "cost_usd": run_result.get("cost_usd") if run_result is not None else None,
-                    "trace_path": str(trace_path),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-    return result
 
 
 @_skip_unless_claude_startup_smoke

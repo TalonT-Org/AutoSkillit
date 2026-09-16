@@ -87,4 +87,9 @@ def test_direct_versus_capture_decision_is_owned_by_capture_runner() -> None:
 
     assert capture_runner.run_capture.__module__ == "autoskillit.hooks._capture._runner"
     assert {"capture", "direct"} <= string_constants
-    assert {"_spawn_bash", "open_capture_root"} <= loaded_names
+    assert {"_run_direct_command", "open_capture_root"} <= loaded_names
+    direct_instructions = dis.get_instructions(capture_runner._run_direct_command)
+    direct_loaded_names = {
+        item.argval for item in direct_instructions if item.opname == "LOAD_GLOBAL"
+    }
+    assert "_spawn_bash" in direct_loaded_names

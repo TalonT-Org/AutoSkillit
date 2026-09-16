@@ -1,19 +1,16 @@
 """Framed-binary-codec facade for shell-capture lifecycle state.
 
-Lifecycle-record types, the canonical-JSON encoder/decoder, and the
-``LedgerCodecError`` / ``CaptureTransitionCommittedError`` exception classes
-live in the sibling module ``_lifecycle_record.py``. This facade owns the
+Lifecycle-record types and ``CaptureTransitionCommittedError`` live in the
+sibling module ``_lifecycle_record.py``. The canonical-JSON encoder/decoder and
+``LedgerCodecError`` live in ``_codec.py``. This facade owns the
 framed-binary codec (``encode_frame``, ``decode_ledger``, ``write_all``),
 its data classes (``LedgerFrame``, ``DecodedLedger``), the frame-format
 constants, and the ``UnsupportedLedgerVersionError`` exception class
 (which subclasses ``LedgerCodecError`` and surfaces from ``decode_ledger``
 when an intact frame requires a newer reader).
 
-The dependency direction is strictly ``_ledger -> _lifecycle_record``
-(one-way): every record-codec symbol this facade exposes is imported from
-the sibling. ``UnsupportedLedgerVersionError`` lives here because it is a
-framing concern, but its base class ``LedgerCodecError`` is imported from
-the sibling.
+``UnsupportedLedgerVersionError`` lives here because it is a framing concern,
+but its base class ``LedgerCodecError`` is imported from the shared codec.
 
 Stdlib-only at runtime -- sibling imports from ``_lifecycle_record`` are
 intra-``_capture/`` (no cross-``hooks/`` boundary), so the simple
@@ -28,6 +25,7 @@ import struct
 from dataclasses import dataclass
 from typing import cast
 
+from ._codec import LedgerCodecError, canonical_json, decode_json
 from ._lifecycle_policy import (
     is_delivery_successor,
     is_reference_successor,
@@ -43,10 +41,7 @@ from ._lifecycle_record import (
     CaptureState,
     CaptureStatus,
     CaptureTransitionCommittedError,
-    LedgerCodecError,
     adopted_orphan_record,
-    canonical_json,
-    decode_json,
     legacy_record_from_dict,
     record_from_dict,
     record_to_dict,
@@ -159,6 +154,41 @@ def encode_frame(
     )
 
 
+def _decode_frame_metadata(payload: bytes) -> tuple[int, int, dict[str, object]]:
+    decoded = decode_json(payload)
+    if set(decoded) == {"format_version", "generation", "record"}:
+        version = decoded["format_version"]
+        epoch = decoded["generation"]
+    elif set(decoded) == {
+        "compaction_epoch",
+        "format_version",
+        "record",
+    }:
+        version = decoded["format_version"]
+        epoch = decoded["compaction_epoch"]
+    else:
+        raise LedgerCodecError("lifecycle frame fields do not match a schema")
+    if (
+        isinstance(version, int)
+        and not isinstance(version, bool)
+        and version > CURRENT_FORMAT_VERSION
+    ):
+        raise UnsupportedLedgerVersionError(version)
+    if (
+        version not in (1, CURRENT_FORMAT_VERSION)
+        or not isinstance(epoch, int)
+        or isinstance(epoch, bool)
+        or epoch < 1
+        or not isinstance(decoded["record"], dict)
+    ):
+        raise LedgerCodecError("invalid lifecycle frame metadata")
+    if version == 1 and "generation" not in decoded:
+        raise LedgerCodecError("invalid legacy lifecycle frame")
+    if version == CURRENT_FORMAT_VERSION and "compaction_epoch" not in decoded:
+        raise LedgerCodecError("invalid current lifecycle frame")
+    return cast(int, version), epoch, cast(dict[str, object], decoded["record"])
+
+
 def decode_ledger(data: bytes) -> DecodedLedger:
     if not isinstance(data, bytes) or len(data) > MAX_LEDGER_BYTES:
         raise LedgerCodecError("lifecycle ledger exceeds bound")
@@ -181,42 +211,12 @@ def decode_ledger(data: bytes) -> DecodedLedger:
         checksum = data[payload_start + declared : frame_end]
         if not hashlib.sha256(payload).digest() == checksum:
             raise LedgerCodecError("lifecycle frame checksum mismatch")
-        decoded = decode_json(payload)
-        if set(decoded) == {"format_version", "generation", "record"}:
-            version = decoded["format_version"]
-            epoch = decoded["generation"]
-        elif set(decoded) == {
-            "compaction_epoch",
-            "format_version",
-            "record",
-        }:
-            version = decoded["format_version"]
-            epoch = decoded["compaction_epoch"]
-        else:
-            raise LedgerCodecError("lifecycle frame fields do not match a schema")
-        if (
-            isinstance(version, int)
-            and not isinstance(version, bool)
-            and version > CURRENT_FORMAT_VERSION
-        ):
-            raise UnsupportedLedgerVersionError(version)
-        if (
-            version not in (1, CURRENT_FORMAT_VERSION)
-            or not isinstance(epoch, int)
-            or isinstance(epoch, bool)
-            or epoch < 1
-            or not isinstance(decoded["record"], dict)
-        ):
-            raise LedgerCodecError("invalid lifecycle frame metadata")
-        if version == 1 and "generation" not in decoded:
-            raise LedgerCodecError("invalid legacy lifecycle frame")
-        if version == CURRENT_FORMAT_VERSION and "compaction_epoch" not in decoded:
-            raise LedgerCodecError("invalid current lifecycle frame")
+        version, epoch, record = _decode_frame_metadata(payload)
         frames.append(
             LedgerFrame(
-                format_version=cast(int, version),
+                format_version=version,
                 compaction_epoch=epoch,
-                record=decoded["record"],
+                record=record,
                 canonical_payload=payload,
                 exact_bytes=data[cursor:frame_end],
             )

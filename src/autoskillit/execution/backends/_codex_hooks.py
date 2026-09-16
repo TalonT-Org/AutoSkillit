@@ -127,6 +127,14 @@ def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
     return tuple(hooks)
 
 
+def _hook_script_path(parts: Sequence[str]) -> Path | None:
+    if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+        return Path(parts[-2])
+    if len(parts) >= 2:
+        return Path(parts[-1])
+    return None
+
+
 def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
     """Detect broken autoskillit hook commands in ``~/.codex/config.toml``.
 
@@ -157,13 +165,9 @@ def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str
         except ValueError:
             broken.append(cmd)
             continue
-        if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
-            if not Path(parts[-2]).is_file():
-                broken.append(cmd)
-        elif len(parts) >= 2:
-            script = parts[-1]
-            if not Path(script).is_file():
-                broken.append(cmd)
+        script_path = _hook_script_path(parts)
+        if script_path is not None and not script_path.is_file():
+            broken.append(cmd)
     return broken
 
 

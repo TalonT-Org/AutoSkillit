@@ -175,6 +175,114 @@ def _pump_child_stderr(child: subprocess.Popen[bytes]) -> None:
         sys.stderr.buffer.flush()
 
 
+def _record_tool_list_response(
+    payload: dict[str, object],
+    *,
+    request_id: object,
+    request: PendingRequest,
+    trace_path: Path,
+    write_lock: threading.Lock,
+    event_count: list[int],
+    list_page_count: list[int],
+    plugin_identity: dict[str, object],
+) -> None:
+    list_page_count[0] += 1
+    if list_page_count[0] > _MAX_LIST_PAGES:
+        raise RuntimeError(f"startup proxy tools/list exceeded {_MAX_LIST_PAGES} pages")
+    result = payload.get("result")
+    tools = result.get("tools", []) if isinstance(result, dict) else []
+    names = [tool.get("name") for tool in tools if isinstance(tool, dict)]
+    schema_bytes = len(json.dumps(tools, sort_keys=True).encode("utf-8"))
+    _record(
+        trace_path,
+        write_lock,
+        {
+            "event": "tool_list_snapshot",
+            "tool_names": names,
+            "schema_bytes": schema_bytes,
+            "request_id": request_id,
+            "request_id_type": type(request_id).__name__,
+            "request_cursor": request.list_cursor,
+            "next_cursor": result.get("nextCursor") if isinstance(result, dict) else None,
+            "child_pid": request.child_pid,
+        },
+        event_count=event_count,
+        plugin_identity=plugin_identity,
+    )
+
+
+def _record_tool_call_response(
+    line: bytes,
+    payload: dict[str, object],
+    *,
+    request_id: object,
+    request: PendingRequest,
+    trace_path: Path,
+    write_lock: threading.Lock,
+    event_count: list[int],
+    plugin_identity: dict[str, object],
+) -> None:
+    result = payload.get("result")
+    content = result.get("content", []) if isinstance(result, dict) else []
+    texts = [
+        item.get("text")
+        for item in content
+        if isinstance(item, dict) and isinstance(item.get("text"), str)
+    ]
+    recipe_segment_sha256: str | None = None
+    for text in texts:
+        try:
+            tool_payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(tool_payload, dict) and "recipe_segment" in tool_payload:
+            recipe_segment_sha256 = hashlib.sha256(
+                json.dumps(
+                    tool_payload["recipe_segment"],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            break
+    if "error" in payload:
+        outcome = "protocol_error"
+    elif isinstance(result, dict) and result.get("isError") is True:
+        outcome = "tool_error"
+    else:
+        outcome = "success"
+    response_monotonic_ns = time.monotonic_ns()
+    if isinstance(request.tool_name, str) and request.tool_name.endswith("open_kitchen"):
+        event_name = "open_kitchen_result"
+    elif isinstance(request.tool_name, str) and request.tool_name.endswith("run_skill"):
+        event_name = "run_skill_result"
+    else:
+        event_name = "tool_call_result"
+    _record(
+        trace_path,
+        write_lock,
+        {
+            "event": event_name,
+            "tool_name": request.tool_name,
+            "outcome": outcome,
+            "is_error": outcome != "success",
+            "has_jsonrpc_error": outcome == "protocol_error",
+            "request_id": request_id,
+            "request_id_type": type(request_id).__name__,
+            "child_pid": request.child_pid,
+            "response_line_sha256": hashlib.sha256(line).hexdigest(),
+            "result_text_sha256": hashlib.sha256("".join(texts).encode("utf-8")).hexdigest(),
+            "recipe_segment_sha256": recipe_segment_sha256,
+            "request_monotonic_ns": request.monotonic_ns,
+            "response_monotonic_ns": response_monotonic_ns,
+            "elapsed_ns": response_monotonic_ns - request.monotonic_ns,
+            **response_measurements(texts),
+        },
+        event_count=event_count,
+        plugin_identity=plugin_identity,
+    )
+
+
 def _proxy_child_stdout(
     child: subprocess.Popen[bytes],
     *,
@@ -196,88 +304,24 @@ def _proxy_child_stdout(
         with request_lock:
             request = requests.pop(request_id, None)
         if request is not None and request.method == "tools/list":
-            list_page_count[0] += 1
-            if list_page_count[0] > _MAX_LIST_PAGES:
-                raise RuntimeError(f"startup proxy tools/list exceeded {_MAX_LIST_PAGES} pages")
-            result = payload.get("result")
-            tools = result.get("tools", []) if isinstance(result, dict) else []
-            names = [tool.get("name") for tool in tools if isinstance(tool, dict)]
-            schema_bytes = len(json.dumps(tools, sort_keys=True).encode("utf-8"))
-            _record(
-                trace_path,
-                write_lock,
-                {
-                    "event": "tool_list_snapshot",
-                    "tool_names": names,
-                    "schema_bytes": schema_bytes,
-                    "request_id": request_id,
-                    "request_id_type": type(request_id).__name__,
-                    "request_cursor": request.list_cursor,
-                    "next_cursor": result.get("nextCursor") if isinstance(result, dict) else None,
-                    "child_pid": request.child_pid,
-                },
+            _record_tool_list_response(
+                payload,
+                request_id=request_id,
+                request=request,
+                trace_path=trace_path,
+                write_lock=write_lock,
                 event_count=event_count,
+                list_page_count=list_page_count,
                 plugin_identity=plugin_identity,
             )
         elif request is not None and request.method == "tools/call":
-            result = payload.get("result")
-            content = result.get("content", []) if isinstance(result, dict) else []
-            texts = [
-                item.get("text")
-                for item in content
-                if isinstance(item, dict) and isinstance(item.get("text"), str)
-            ]
-            recipe_segment_sha256: str | None = None
-            for text in texts:
-                try:
-                    tool_payload = json.loads(text)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(tool_payload, dict) and "recipe_segment" in tool_payload:
-                    recipe_segment_sha256 = hashlib.sha256(
-                        json.dumps(
-                            tool_payload["recipe_segment"],
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                            sort_keys=True,
-                        ).encode("utf-8")
-                    ).hexdigest()
-                    break
-            if "error" in payload:
-                outcome = "protocol_error"
-            elif isinstance(result, dict) and result.get("isError") is True:
-                outcome = "tool_error"
-            else:
-                outcome = "success"
-            response_monotonic_ns = time.monotonic_ns()
-            if isinstance(request.tool_name, str) and request.tool_name.endswith("open_kitchen"):
-                event_name = "open_kitchen_result"
-            elif isinstance(request.tool_name, str) and request.tool_name.endswith("run_skill"):
-                event_name = "run_skill_result"
-            else:
-                event_name = "tool_call_result"
-            _record(
-                trace_path,
-                write_lock,
-                {
-                    "event": event_name,
-                    "tool_name": request.tool_name,
-                    "outcome": outcome,
-                    "is_error": outcome != "success",
-                    "has_jsonrpc_error": outcome == "protocol_error",
-                    "request_id": request_id,
-                    "request_id_type": type(request_id).__name__,
-                    "child_pid": request.child_pid,
-                    "response_line_sha256": hashlib.sha256(line).hexdigest(),
-                    "result_text_sha256": hashlib.sha256(
-                        "".join(texts).encode("utf-8")
-                    ).hexdigest(),
-                    "recipe_segment_sha256": recipe_segment_sha256,
-                    "request_monotonic_ns": request.monotonic_ns,
-                    "response_monotonic_ns": response_monotonic_ns,
-                    "elapsed_ns": response_monotonic_ns - request.monotonic_ns,
-                    **response_measurements(texts),
-                },
+            _record_tool_call_response(
+                line,
+                payload,
+                request_id=request_id,
+                request=request,
+                trace_path=trace_path,
+                write_lock=write_lock,
                 event_count=event_count,
                 plugin_identity=plugin_identity,
             )

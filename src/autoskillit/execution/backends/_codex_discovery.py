@@ -13,7 +13,15 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import normalize_codex_cli_version, validate_managed_skill_entries
+from autoskillit.core import (
+    PluginLaunchBinding,
+    PluginLoadMode,
+    SkillDiscoveryMechanism,
+    SkillDiscoveryRouteDef,
+    UpstreamSupportStatus,
+    normalize_codex_cli_version,
+    validate_managed_skill_entries,
+)
 from autoskillit.execution.backends._codex_probes import (
     _probe_diagnostic,
     _run_bounded_codex_probe,
@@ -24,11 +32,8 @@ from autoskillit.execution.backends._codex_probes import (
 class CodexSkillDiscoveryContractDef:
     """Pinned upstream discovery behavior consumed by managed Codex launches."""
 
-    legacy_root_relpath: str = "skills"
-    catalog_relpath: str = "add-dir/skills"
     prompt_probe: tuple[str, ...] = ("debug", "prompt-input")
     upstream_revision: str = "646f7c0a91b8e327d263335da68ae8ef212895ce"
-    upstream_legacy_root_citation: str = "codex-rs/ext/skills/src/host_roots.rs:94-113"
     verified_binary: str = "codex-cli 0.153.4"
     # First release carrying `skills/extraRoots/set` — the app-server-driven
     # managed skill-session transport's supported floor. Must equal
@@ -41,8 +46,50 @@ class CodexSkillDiscoveryContractDef:
 # codex-rs/core-skills/src/render.rs:62-85 (rust-v0.130.0) and at
 # codex-rs/ext/skills/src/render.rs in the pinned revision above.
 CODEX_SKILL_DISCOVERY_CONTRACT = CodexSkillDiscoveryContractDef()
+_UPSTREAM = CODEX_SKILL_DISCOVERY_CONTRACT.upstream_revision
+CODEX_MANAGED_HOME_ROUTE = SkillDiscoveryRouteDef(
+    name="codex_managed_home_skills_alias",
+    mechanism=SkillDiscoveryMechanism.CODEX_HOME_SKILLS,
+    upstream_status=UpstreamSupportStatus.DEPRECATED,
+    tracking_issue=4717,
+    catalog_relpath="add-dir/skills",
+    discovery_root_relpath="skills",
+    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:95-100@{_UPSTREAM}",
+)
+CODEX_PROJECTED_HOME_ROUTE = SkillDiscoveryRouteDef(
+    name="codex_projected_home_skills",
+    mechanism=SkillDiscoveryMechanism.CODEX_HOME_SKILLS,
+    upstream_status=UpstreamSupportStatus.DEPRECATED,
+    tracking_issue=4717,
+    catalog_relpath="skills",
+    discovery_root_relpath="skills",
+    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:95-100@{_UPSTREAM}",
+)
+CODEX_APP_SERVER_ROUTE = SkillDiscoveryRouteDef(
+    name="codex_app_server_extra_roots",
+    mechanism=SkillDiscoveryMechanism.APP_SERVER_EXTRA_ROOTS,
+    upstream_status=UpstreamSupportStatus.SUPPORTED,
+    tracking_issue=None,
+    catalog_relpath="add-dir/skills",
+    discovery_root_relpath=None,
+    upstream_citation=(
+        f"codex-rs/app-server/src/request_processors/catalog_processor.rs:556-561@{_UPSTREAM}"
+    ),
+)
 CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS = 30.0
 _CODEX_DISCOVERY_STREAM_LIMIT = 1024 * 1024
+
+
+def select_interactive_discovery_route(
+    *,
+    generated_home: Path | None,
+    plugin_binding: PluginLaunchBinding | None,
+) -> SkillDiscoveryRouteDef | None:
+    if generated_home is not None:
+        return CODEX_MANAGED_HOME_ROUTE
+    if plugin_binding is not None and plugin_binding.load_mode is PluginLoadMode.PROJECTED_HOME:
+        return CODEX_PROJECTED_HOME_ROUTE
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +146,68 @@ def _expand_skill_path(token: str, aliases: Mapping[str, Path]) -> Path:
     return path
 
 
+def _parse_skill_roots(lines: Sequence[str]) -> tuple[tuple[Path, ...], dict[str, Path]]:
+    aliases: dict[str, Path] = {}
+    roots: list[Path] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _ROOT_RE.fullmatch(line)
+        if match is None:
+            raise ValueError(f"malformed Skill roots entry: {line!r}")
+        alias = match.group("alias")
+        if alias in aliases:
+            raise ValueError(f"duplicate skill-root alias: {alias}")
+        root = Path(match.group("path"))
+        if not root.is_absolute():
+            raise ValueError(f"skill root is not absolute: {root}")
+        aliases[alias] = root
+        roots.append(root)
+    return tuple(roots), aliases
+
+
+def _new_skill_name(raw_name: str, paths: Mapping[str, Path]) -> str:
+    name = raw_name.strip()
+    if name in paths:
+        raise ValueError(f"duplicate skill name: {name}")
+    return name
+
+
+def _parse_available_skills(
+    lines: Sequence[str],
+    aliases: Mapping[str, Path],
+) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    pending_name: str | None = None
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _SKILL_RE.fullmatch(line)
+        if match is not None:
+            if pending_name is not None:
+                raise ValueError(f"skill entry {pending_name!r} has no path")
+            name = _new_skill_name(match.group("name"), paths)
+            paths[name] = _expand_skill_path(match.group("path"), aliases)
+            continue
+        start_match = _SKILL_START_RE.match(line)
+        if start_match is not None:
+            if pending_name is not None:
+                raise ValueError(f"skill entry {pending_name!r} has no path")
+            pending_name = _new_skill_name(start_match.group("name"), paths)
+            continue
+        path_match = _PATH_ONLY_RE.fullmatch(line)
+        if path_match is not None and pending_name is not None:
+            paths[pending_name] = _expand_skill_path(path_match.group("path"), aliases)
+            pending_name = None
+            continue
+        raise ValueError(f"malformed Available skills entry: {line!r}")
+    if pending_name is not None:
+        raise ValueError(f"skill entry {pending_name!r} has no path")
+    return paths
+
+
 def parse_skills_instructions(prompt_input_json: str) -> DiscoveredSkills:
     """Parse the consumed Codex skills grammar from a prompt-input JSON envelope."""
     try:
@@ -127,58 +236,11 @@ def parse_skills_instructions(prompt_input_json: str) -> DiscoveredSkills:
     if any("(file:" in line for line in lines[: skills_index + 1]):
         raise ValueError("skill path line appears outside Available skills")
 
-    aliases: dict[str, Path] = {}
-    roots: list[Path] = []
-    for raw_line in lines[roots_index + 1 : skills_index]:
-        line = raw_line.strip()
-        if not line:
-            continue
-        match = _ROOT_RE.fullmatch(line)
-        if match is None:
-            raise ValueError(f"malformed Skill roots entry: {line!r}")
-        alias = match.group("alias")
-        if alias in aliases:
-            raise ValueError(f"duplicate skill-root alias: {alias}")
-        root = Path(match.group("path"))
-        if not root.is_absolute():
-            raise ValueError(f"skill root is not absolute: {root}")
-        aliases[alias] = root
-        roots.append(root)
-
-    paths: dict[str, Path] = {}
-    pending_name: str | None = None
-    for raw_line in lines[skills_index + 1 : -1]:
-        line = raw_line.strip()
-        if not line:
-            continue
-        match = _SKILL_RE.fullmatch(line)
-        if match is not None:
-            if pending_name is not None:
-                raise ValueError(f"skill entry {pending_name!r} has no path")
-            name = match.group("name").strip()
-            if name in paths:
-                raise ValueError(f"duplicate skill name: {name}")
-            paths[name] = _expand_skill_path(match.group("path"), aliases)
-            continue
-        start_match = _SKILL_START_RE.match(line)
-        if start_match is not None:
-            if pending_name is not None:
-                raise ValueError(f"skill entry {pending_name!r} has no path")
-            pending_name = start_match.group("name").strip()
-            if pending_name in paths:
-                raise ValueError(f"duplicate skill name: {pending_name}")
-            continue
-        path_match = _PATH_ONLY_RE.fullmatch(line)
-        if path_match is not None and pending_name is not None:
-            paths[pending_name] = _expand_skill_path(path_match.group("path"), aliases)
-            pending_name = None
-            continue
-        raise ValueError(f"malformed Available skills entry: {line!r}")
-    if pending_name is not None:
-        raise ValueError(f"skill entry {pending_name!r} has no path")
+    roots, aliases = _parse_skill_roots(lines[roots_index + 1 : skills_index])
+    paths = _parse_available_skills(lines[skills_index + 1 : -1], aliases)
     return DiscoveredSkills(
         names=frozenset(paths),
-        roots=tuple(roots),
+        roots=roots,
         paths=MappingProxyType(paths),
     )
 
@@ -189,11 +251,13 @@ def _contract_context(
     catalog_dir: Path | str,
     version: str,
     timeout_seconds: float,
+    route: SkillDiscoveryRouteDef | None = None,
 ) -> str:
     contract = CODEX_SKILL_DISCOVERY_CONTRACT
+    source = route.upstream_citation if route is not None else "unbound"
     return (
         f"contract_revision={contract.upstream_revision} "
-        f"contract_source={contract.upstream_legacy_root_citation} "
+        f"contract_source={source} "
         f"catalog={catalog_dir} executable={executable} version={version} "
         f"timeout_seconds={timeout_seconds}"
     )
@@ -243,6 +307,7 @@ def _validate_expected_discovery_root(
     expected_discovery_root: Path,
     catalog_dir: Path,
     context: str,
+    managed_root_scope: Path | None,
 ) -> list[str]:
     roots = [str(root) for root in discovered.roots]
     root_matches = [root for root in discovered.roots if root == expected_discovery_root]
@@ -265,7 +330,67 @@ def _validate_expected_discovery_root(
             "Codex skill discovery expected root does not resolve to the "
             f"catalog; roots={roots}; {context}"
         ]
+    if managed_root_scope is not None:
+        scope = managed_root_scope.resolve(strict=False)
+        for root in discovered.roots:
+            if root == expected_discovery_root:
+                continue
+            resolved = root.resolve(strict=False)
+            if resolved != scope and scope not in resolved.parents:
+                continue
+            if resolved == catalog_dir or catalog_dir in resolved.parents:
+                continue
+            return [
+                "Codex skill discovery exposes a foreign managed root "
+                f"{root}; roots={roots}; {context}"
+            ]
     return []
+
+
+def _catalog_discovery_errors(
+    discovered: DiscoveredSkills,
+    expected_paths: Mapping[str, Path],
+    *,
+    expected_discovery_root: Path,
+    catalog_dir: Path,
+    managed_root_scope: Path | None,
+    context: str,
+) -> list[str]:
+    missing = sorted(set(expected_paths) - discovered.names)
+    misplaced: list[str] = []
+    for name, expected_path in expected_paths.items():
+        actual_path = discovered.paths.get(name)
+        if actual_path is None:
+            continue
+        try:
+            actual_canonical = actual_path.resolve(strict=True)
+        except OSError as exc:
+            misplaced.append(f"{name}={actual_path} (unreadable: {type(exc).__name__}: {exc})")
+            continue
+        if actual_canonical != expected_path:
+            misplaced.append(f"{name}={actual_path}")
+
+    roots = [str(root) for root in discovered.roots]
+    errors: list[str] = []
+    if missing:
+        errors.append(
+            f"Codex skill discovery is missing expected names {missing}; roots={roots}; {context}"
+        )
+    if misplaced:
+        errors.append(
+            f"Codex skill discovery reported misplaced expected paths {misplaced}; "
+            f"roots={roots}; {context}"
+        )
+    errors.extend(
+        _validate_expected_discovery_root(
+            discovered,
+            expected_discovery_root=expected_discovery_root,
+            catalog_dir=catalog_dir,
+            managed_root_scope=managed_root_scope,
+            context=context,
+        )
+    )
+    return errors
 
 
 def probe_codex_version(
@@ -319,7 +444,9 @@ def attest_catalog_discovery(
     catalog_dir: Path,
     expected_discovery_root: Path,
     expected_entries: Sequence[tuple[str, str]],
+    route: SkillDiscoveryRouteDef,
     version: str,
+    managed_root_scope: Path | None = None,
     timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
 ) -> list[str]:
     """Require Codex's real prompt loader to expose the frozen managed catalog."""
@@ -329,6 +456,7 @@ def attest_catalog_discovery(
         catalog_dir=catalog_dir,
         version=version,
         timeout_seconds=timeout_seconds,
+        route=route,
     )
     if not expected_discovery_root.is_absolute():
         return [f"Codex skill discovery expected root must be absolute; {context}"]
@@ -362,37 +490,14 @@ def attest_catalog_discovery(
         except (UnicodeDecodeError, ValueError) as exc:
             errors.append(f"Codex skill discovery parse failed: {exc}; {context}")
         else:
-            missing = sorted(set(expected_paths) - discovered.names)
-            misplaced: list[str] = []
-            for name, expected_path in expected_paths.items():
-                actual_path = discovered.paths.get(name)
-                if actual_path is None:
-                    continue
-                try:
-                    actual_canonical = actual_path.resolve(strict=True)
-                except OSError as exc:
-                    misplaced.append(
-                        f"{name}={actual_path} (unreadable: {type(exc).__name__}: {exc})"
-                    )
-                    continue
-                if actual_canonical != expected_path:
-                    misplaced.append(f"{name}={actual_path}")
-            if missing:
-                errors.append(
-                    f"Codex skill discovery is missing expected names {missing}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            if misplaced:
-                errors.append(
-                    f"Codex skill discovery reported misplaced expected paths {misplaced}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
             errors.extend(
-                _validate_expected_discovery_root(
+                _catalog_discovery_errors(
                     discovered,
+                    expected_paths,
                     expected_discovery_root=expected_discovery_root,
                     catalog_dir=catalog_dir,
                     context=context,
+                    managed_root_scope=managed_root_scope,
                 )
             )
     try:
@@ -411,11 +516,15 @@ def attest_catalog_discovery(
 
 
 __all__ = [
+    "CODEX_APP_SERVER_ROUTE",
     "CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS",
+    "CODEX_MANAGED_HOME_ROUTE",
+    "CODEX_PROJECTED_HOME_ROUTE",
     "CODEX_SKILL_DISCOVERY_CONTRACT",
     "CodexSkillDiscoveryContractDef",
     "DiscoveredSkills",
     "attest_catalog_discovery",
     "parse_skills_instructions",
     "probe_codex_version",
+    "select_interactive_discovery_route",
 ]

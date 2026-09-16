@@ -428,6 +428,26 @@ def test_orchestration_states_18_retry_reasons() -> None:
     _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 18)
 
 
+def test_architecture_doc_names_declared_interactive_discovery_route() -> None:
+    from autoskillit.execution.backends._codex_discovery import (
+        CODEX_MANAGED_HOME_ROUTE,
+        CODEX_PROJECTED_HOME_ROUTE,
+        CODEX_SKILL_DISCOVERY_CONTRACT,
+    )
+
+    doc = DOCS_DIR / "execution" / "architecture.md"
+    text = _read(doc)
+
+    assert CODEX_MANAGED_HOME_ROUTE.name in text
+    assert CODEX_PROJECTED_HOME_ROUTE.name in text
+    assert "tests/arch/test_skill_discovery_routes.py" in text
+    assert CODEX_SKILL_DISCOVERY_CONTRACT.verified_binary in text
+
+    tracking_issue = CODEX_MANAGED_HOME_ROUTE.tracking_issue
+    assert tracking_issue is not None
+    _assert_doc_states_number(doc, "interactive discovery tracking issue", tracking_issue)
+
+
 def test_authoring_states_28_rule_families() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "authoring.md", "rule families", 24)
 

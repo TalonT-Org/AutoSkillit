@@ -321,18 +321,19 @@ def _merge_evidence_into_outcome(
 
     current_reason = outcome["terminal_reason"]
     if new_reason == REASON_UNKNOWN:
+        if current_reason != REASON_UNKNOWN:
+            return cast(ChildOutcomeWireDict, updated)
         # Still unknown, but the raw evidence (e.g. an unpinned SubagentStop
         # `reason` value) is preserved for diagnosis even though it does not
         # classify — "unknown" must not mean "evidence discarded".
-        if current_reason == REASON_UNKNOWN:
-            if evidence.get("evidence_source"):
-                updated["evidence_source"] = str(evidence["evidence_source"])
-            if new_raw_reason:
-                updated["raw_reason"] = new_raw_reason
-            if new_raw_subtype:
-                updated["raw_subtype"] = new_raw_subtype
-            if new_raw_code:
-                updated["raw_code"] = new_raw_code
+        if evidence.get("evidence_source"):
+            updated["evidence_source"] = str(evidence["evidence_source"])
+        if new_raw_reason:
+            updated["raw_reason"] = new_raw_reason
+        if new_raw_subtype:
+            updated["raw_subtype"] = new_raw_subtype
+        if new_raw_code:
+            updated["raw_code"] = new_raw_code
         return cast(ChildOutcomeWireDict, updated)
 
     if current_reason == REASON_UNKNOWN:
@@ -341,15 +342,15 @@ def _merge_evidence_into_outcome(
         updated["raw_subtype"] = new_raw_subtype
         updated["raw_code"] = new_raw_code
         updated["evidence_source"] = str(evidence.get("evidence_source", ""))
-    elif current_reason == new_reason:
-        pass
-    else:
-        updated["terminal_reason"] = REASON_UNKNOWN
-        updated["raw_reason"] = f"{outcome['raw_reason']} | conflict:{new_raw_reason}"
-        updated["raw_subtype"] = f"{outcome['raw_subtype']} | conflict:{new_raw_subtype}"
-        updated["evidence_source"] = (
-            f"{outcome['evidence_source']} | conflict:{evidence.get('evidence_source', '')}"
-        )
+        return cast(ChildOutcomeWireDict, updated)
+    if current_reason == new_reason:
+        return cast(ChildOutcomeWireDict, updated)
+    updated["terminal_reason"] = REASON_UNKNOWN
+    updated["raw_reason"] = f"{outcome['raw_reason']} | conflict:{new_raw_reason}"
+    updated["raw_subtype"] = f"{outcome['raw_subtype']} | conflict:{new_raw_subtype}"
+    updated["evidence_source"] = (
+        f"{outcome['evidence_source']} | conflict:{evidence.get('evidence_source', '')}"
+    )
     return cast(ChildOutcomeWireDict, updated)
 
 

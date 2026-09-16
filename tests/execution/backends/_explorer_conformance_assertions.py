@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from tests.execution.backends._conformance_assertions import _developer_instruction_text
+
 
 @dataclass(frozen=True, slots=True)
 class GeneratedChildEvidence:
@@ -25,21 +27,9 @@ class GeneratedChildEvidence:
     definition_digest: str
 
 
-def assert_generated_codex_child_delivery(
+def _strict_parent_call_evidence(
     parent_events: list[dict],
-    child_events: list[dict],
-    *,
-    parent_id: str,
-    agent_role: str,
-    output_discipline_digest: str,
-    expected_parent_model: str | None = None,
-    expected_parent_sandbox_mode: str,
-    expected_model: str | None = None,
-    expected_reasoning_effort: str | None = None,
-    expected_sandbox_mode: str | None = None,
-    expected_definition_digest: str | None = None,
-) -> GeneratedChildEvidence:
-    """Assert a generated Codex role reached one completed, linked child session."""
+) -> tuple[list[dict], dict[str, object]]:
     function_calls = [
         event.get("payload", {})
         for event in parent_events
@@ -52,7 +42,14 @@ def assert_generated_codex_child_delivery(
         if event.get("type") == "response_item"
         and (payload := event.get("payload", {})).get("type") == "function_call_output"
     }
+    return function_calls, call_outputs
 
+
+def _assert_parent_spawn_and_wait(
+    function_calls: list[dict],
+    call_outputs: dict[str, object],
+    agent_role: str,
+) -> tuple[dict, str]:
     spawn_calls = [call for call in function_calls if call.get("name") == "spawn_agent"]
     assert len(spawn_calls) == 1, f"expected one spawn_agent call, got {len(spawn_calls)}"
     spawn = spawn_calls[0]
@@ -77,21 +74,33 @@ def assert_generated_codex_child_delivery(
         isinstance((parsed := json.loads(output)), dict) and parsed.get("timed_out") is False
         for output in wait_outputs
     ), "wait_agent never returned successfully"
+    return spawn, canonical_task_name
 
+
+def _spawn_record(meta: dict) -> dict:
+    source = meta.get("source", {})
+    if not isinstance(source, dict):
+        return {}
+    subagent = source.get("subagent", {})
+    if not isinstance(subagent, dict):
+        return {}
+    record = subagent.get("thread_spawn", {})
+    return record if isinstance(record, dict) else {}
+
+
+def _assert_linked_child_evidence(
+    parent_events: list[dict],
+    child_events: list[dict],
+    parent_id: str,
+    agent_role: str,
+    output_discipline_digest: str,
+    expected_definition_digest: str | None,
+    spawn: dict,
+    canonical_task_name: str,
+) -> tuple[str, str, str, str]:
     child_session_metas = [
         event.get("payload", {}) for event in child_events if event.get("type") == "session_meta"
     ]
-
-    def _spawn_record(meta: dict) -> dict:
-        source = meta.get("source", {})
-        if not isinstance(source, dict):
-            return {}
-        subagent = source.get("subagent", {})
-        if not isinstance(subagent, dict):
-            return {}
-        record = subagent.get("thread_spawn", {})
-        return record if isinstance(record, dict) else {}
-
     linked_children = []
     for meta in child_session_metas:
         spawn_record = _spawn_record(meta)
@@ -146,23 +155,7 @@ def assert_generated_codex_child_delivery(
     assert isinstance(base_instructions, dict)
     base_text = base_instructions.get("text", "")
     assert isinstance(base_text, str)
-    developer_blocks = []
-    for event in child_events:
-        payload = event.get("payload", {})
-        if (
-            event.get("type") != "response_item"
-            or payload.get("type") != "message"
-            or payload.get("role") != "developer"
-        ):
-            continue
-        content = payload.get("content", [])
-        if isinstance(content, str):
-            developer_blocks.append(content)
-        elif isinstance(content, list):
-            developer_blocks.extend(
-                str(block.get("text", "")) for block in content if isinstance(block, dict)
-            )
-    developer_text = "\n".join(developer_blocks)
+    developer_text = _developer_instruction_text(child_events)
     assert output_discipline_digest in base_text or output_discipline_digest in developer_text, (
         "generated child instructions omitted output discipline digest"
     )
@@ -170,21 +163,32 @@ def assert_generated_codex_child_delivery(
         assert expected_definition_digest in base_text, (
             "child session_meta base_instructions omitted the canonical definition digest"
         )
+    return child_id, observed_role, observed_path, cli_version
 
-    parent_turn_contexts = [
+
+def _one(owner: str, field_name: str, values: list[object]) -> object:
+    unique = {json.dumps(value, sort_keys=True) for value in values}
+    assert len(unique) == 1, f"{owner} turn_context has conflicting {field_name}: {values!r}"
+    value = values[0]
+    assert value is not None and value != "", f"{owner} turn_context omitted {field_name}"
+    return value
+
+
+def _turn_contexts(events: list[dict]) -> list[dict]:
+    return [
         event.get("payload", {})
-        for event in parent_events
+        for event in events
         if event.get("type") == "turn_context" and isinstance(event.get("payload"), dict)
     ]
+
+
+def _assert_parent_turn_context(
+    parent_events: list[dict],
+    expected_parent_model: str | None,
+    expected_parent_sandbox_mode: str,
+) -> tuple[str, str]:
+    parent_turn_contexts = _turn_contexts(parent_events)
     assert parent_turn_contexts, "parent rollout omitted turn_context"
-
-    def _one(owner: str, field_name: str, values: list[object]) -> object:
-        unique = {json.dumps(value, sort_keys=True) for value in values}
-        assert len(unique) == 1, f"{owner} turn_context has conflicting {field_name}: {values!r}"
-        value = values[0]
-        assert value is not None and value != "", f"{owner} turn_context omitted {field_name}"
-        return value
-
     parent_sandbox_policy = _one(
         "parent",
         "sandbox_policy",
@@ -218,14 +222,17 @@ def assert_generated_codex_child_delivery(
         assert parent_model == expected_parent_model
     assert parent_approval_policy == "never"
     assert parent_network_policy == "restricted"
+    return parent_model, parent_sandbox_mode
 
-    turn_contexts = [
-        event.get("payload", {})
-        for event in child_events
-        if event.get("type") == "turn_context" and isinstance(event.get("payload"), dict)
-    ]
+
+def _assert_child_turn_context(
+    child_events: list[dict],
+    expected_model: str | None,
+    expected_reasoning_effort: str | None,
+    expected_sandbox_mode: str | None,
+) -> tuple[str, str, str, str, str]:
+    turn_contexts = _turn_contexts(child_events)
     assert turn_contexts, "child rollout omitted turn_context"
-
     model = _one("child", "model", [context.get("model") for context in turn_contexts])
     effort = _one("child", "effort", [context.get("effort") for context in turn_contexts])
     sandbox_policy = _one(
@@ -258,6 +265,54 @@ def assert_generated_codex_child_delivery(
         assert effort == expected_reasoning_effort
     if expected_sandbox_mode is not None:
         assert sandbox_mode == expected_sandbox_mode
+    return model, effort, sandbox_mode, approval_policy, network_policy
+
+
+def assert_generated_codex_child_delivery(
+    parent_events: list[dict],
+    child_events: list[dict],
+    *,
+    parent_id: str,
+    agent_role: str,
+    output_discipline_digest: str,
+    expected_parent_model: str | None = None,
+    expected_parent_sandbox_mode: str,
+    expected_model: str | None = None,
+    expected_reasoning_effort: str | None = None,
+    expected_sandbox_mode: str | None = None,
+    expected_definition_digest: str | None = None,
+) -> GeneratedChildEvidence:
+    """Assert a generated Codex role reached one completed, linked child session."""
+    function_calls, call_outputs = _strict_parent_call_evidence(parent_events)
+    spawn, canonical_task_name = _assert_parent_spawn_and_wait(
+        function_calls,
+        call_outputs,
+        agent_role,
+    )
+
+    child_id, observed_role, observed_path, cli_version = _assert_linked_child_evidence(
+        parent_events,
+        child_events,
+        parent_id,
+        agent_role,
+        output_discipline_digest,
+        expected_definition_digest,
+        spawn,
+        canonical_task_name,
+    )
+
+    parent_model, parent_sandbox_mode = _assert_parent_turn_context(
+        parent_events,
+        expected_parent_model,
+        expected_parent_sandbox_mode,
+    )
+
+    model, effort, sandbox_mode, approval_policy, network_policy = _assert_child_turn_context(
+        child_events,
+        expected_model,
+        expected_reasoning_effort,
+        expected_sandbox_mode,
+    )
     definition_digest = expected_definition_digest or ""
     return GeneratedChildEvidence(
         child_id=child_id,

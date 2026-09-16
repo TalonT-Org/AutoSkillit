@@ -37,6 +37,9 @@ Never rely on inverse method calls for cleanup.
   Use `tool_ctx_kitchen_open` or `build_ctx_open` for tests that need an open gate.
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on the fixture's teardown.
+- Git commands whose results depend on repository topology (which refs exist and in which
+  namespace) must use a real repository fixture. A queued `MockSubprocessRunner` result is
+  not sufficient evidence; see `tests/arch/test_git_ref_qualification.py`.
 
 ## Layer Markers
 

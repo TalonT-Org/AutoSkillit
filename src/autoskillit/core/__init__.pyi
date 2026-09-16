@@ -92,6 +92,10 @@ from .fs_observation import scan_observed as scan_observed
 from .git.bash_write_targets import contains_test_gate_command as contains_test_gate_command
 from .git.bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .git.branch_guard import is_protected_branch as is_protected_branch
+from .git.git_refs import ResolvedRef as ResolvedRef
+from .git.git_refs import local_branch_ref as local_branch_ref
+from .git.git_refs import remote_tracking_ref as remote_tracking_ref
+from .git.git_refs import verify_qualified_ref_sync as verify_qualified_ref_sync
 from .git.git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
 from .git.git_remote import GitHubRepositoryRef as GitHubRepositoryRef
 from .git.git_remote import RemoteIdentityProbe as RemoteIdentityProbe
@@ -1213,6 +1217,8 @@ from .types import SkillContractError as SkillContractError
 from .types import SkillContractRemediationDef as SkillContractRemediationDef
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillContractView as SkillContractView
+from .types import SkillDiscoveryMechanism as SkillDiscoveryMechanism
+from .types import SkillDiscoveryRouteDef as SkillDiscoveryRouteDef
 from .types import SkillExclusionAuthority as SkillExclusionAuthority
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
@@ -1276,6 +1282,7 @@ from .types import TurnTokenEntry as TurnTokenEntry
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )
+from .types import UpstreamSupportStatus as UpstreamSupportStatus
 from .types import Utf8ByteLimit as Utf8ByteLimit
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath

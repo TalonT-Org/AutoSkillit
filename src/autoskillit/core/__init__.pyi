@@ -101,6 +101,10 @@ from .git.git_remote import resolve_clone_remote_name_sync as resolve_clone_remo
 from .git.git_remote import (
     resolve_repository_remote_identity_sync as resolve_repository_remote_identity_sync,
 )
+from .git.git_refs import ResolvedRef as ResolvedRef
+from .git.git_refs import local_branch_ref as local_branch_ref
+from .git.git_refs import remote_tracking_ref as remote_tracking_ref
+from .git.git_refs import verify_qualified_ref_sync as verify_qualified_ref_sync
 from .git.github_url import _parse_issue_ref as _parse_issue_ref
 from .git.github_url import normalize_owner_repo as normalize_owner_repo
 from .git.github_url import parse_github_repo as parse_github_repo

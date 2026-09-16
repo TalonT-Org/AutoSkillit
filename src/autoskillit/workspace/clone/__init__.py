@@ -169,6 +169,7 @@ def clone_repo(
             "repository_identity_url": str,
             "clone_source_type": "remote" | "local",
             "clone_source_reason": str,
+            "tracking_remote": str,
         }
         On uncommitted changes (strategy=""): {
             "uncommitted_changes": "true",
@@ -232,6 +233,7 @@ def clone_repo(
         logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
         source_type: Literal["remote", "local"] = "local"
         source_reason = "strategy_clone_local"
+        tracking_remote = ""
     else:
         if resolution.reason != "ok":
             logger.warning(
@@ -245,7 +247,7 @@ def clone_repo(
                 f" source={source}; stderr={resolution.stderr};"
                 f' if a local-only clone is intended, pass strategy="clone_local".'
             )
-        cmd = ["git", "clone"]
+        cmd = ["git", "clone", "--origin", "origin"]
         if branch:
             cmd += ["--branch", branch]
         cmd += [resolution.url, str(clone_path)]
@@ -259,6 +261,7 @@ def clone_repo(
         logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
         source_type = "remote"
         source_reason = "ok"
+        tracking_remote = "origin"
 
     # Use caller-supplied override for clone push/fetch behavior only. Repository
     # identity remains bound to the configured source remote observed above.
@@ -326,6 +329,7 @@ def clone_repo(
         "repository_identity_url": resolution.url if resolution.reason == "ok" else "",
         "clone_source_type": source_type,
         "clone_source_reason": source_reason,
+        "tracking_remote": tracking_remote,
     }
 
 

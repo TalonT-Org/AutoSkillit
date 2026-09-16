@@ -212,6 +212,7 @@ _FMT_CLONE_REPO_RENDERED: frozenset[str] = frozenset(
         "repository_identity_url",
         "clone_source_type",
         "clone_source_reason",
+        "tracking_remote",
     }
 )
 _FMT_CLONE_REPO_SUPPRESSED: frozenset[str] = frozenset()

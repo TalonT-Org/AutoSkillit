@@ -196,6 +196,10 @@ def _filesystem_type(path: Path) -> str:
         raw = _read_bounded(Path("/proc/self/mountinfo"), 4 * 1024 * 1024)
     except (OSError, ValueError) as exc:
         raise RuntimeError("Unable to classify the Codex storage filesystem") from exc
+    return _filesystem_type_from_mountinfo(path, raw)
+
+
+def _filesystem_type_from_mountinfo(path: Path, raw: bytes) -> str:
     resolved = path.resolve(strict=True)
     selected: tuple[int, str] | None = None
     for raw_line in raw.decode("utf-8", errors="strict").splitlines():

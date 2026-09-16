@@ -79,7 +79,35 @@ def test_mcp_inventory_rejects_non_string_array_fields(
 
     errors = _validate_codex_mcp_inventory(stdout, _VALID_CONFIG_BYTES)
 
-    assert any(f"{field} are not an array of strings" in error for error in errors)
+    assert errors == [f"Codex MCP autoskillit {field} are not an array of strings"]
+
+
+def test_mcp_inventory_compares_args_in_order_and_env_vars_as_a_set() -> None:
+    from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
+
+    config_bytes = (
+        b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
+        b'args = ["first", "second"]\nenv_vars = ["TOKEN", "HOME"]\n'
+    )
+    stdout = json.dumps(
+        {
+            "servers": [
+                {
+                    "name": "autoskillit",
+                    "transport": {
+                        "type": "stdio",
+                        "command": "autoskillit",
+                        "args": ["second", "first"],
+                        "env_vars": ["HOME", "TOKEN"],
+                    },
+                }
+            ]
+        }
+    ).encode()
+
+    errors = _validate_codex_mcp_inventory(stdout, config_bytes)
+
+    assert errors == ["Codex MCP autoskillit args do not match final config"]
 
 
 def test_bounded_codex_probe_captures_success(tmp_path: Path) -> None:

@@ -1,6 +1,9 @@
 """Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates."""
 
 import json
+import re
+from collections.abc import Callable, Collection, Mapping
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -1710,12 +1713,67 @@ class TestContractNudge:
         assert result.needs_retry is True
 
 
+def _contract_pattern_inventory(
+    skills_data: Mapping[str, Any],
+) -> tuple[set[str], set[str], list[tuple[str, str]]]:
+    """Collect path types, non-path types, and token patterns in manifest order."""
+    path_token_names: set[str] = set()
+    non_path_token_names: set[str] = set()
+    pattern_token_map: list[tuple[str, str]] = []
+    for skill_data in skills_data.values():
+        if not isinstance(skill_data, dict):
+            continue
+        for output in skill_data.get("outputs", []):
+            if not isinstance(output, dict):
+                continue
+            output_type = output.get("type", "")
+            name = output.get("name", "")
+            if output_type.startswith("file_path") or output_type == "directory_path":
+                path_token_names.add(name)
+            elif output_type:
+                non_path_token_names.add(name)
+        for pattern in skill_data.get("expected_output_patterns", []):
+            match = re.match(r"^(\w+)", pattern)
+            if match and "=" in pattern[match.end() :]:
+                pattern_token_map.append((match.group(1), pattern))
+    return path_token_names, non_path_token_names, pattern_token_map
+
+
+def _path_pattern_classification_errors(
+    pattern_token_map: list[tuple[str, str]],
+    path_token_names: set[str],
+    non_path_token_names: set[str],
+    excluded_path_token_names: Collection[str],
+    classify: Callable[[str], str | None],
+) -> list[str]:
+    """Collect path errors before non-path errors with complete evidence."""
+    recoverable_path_token_names = path_token_names.difference(excluded_path_token_names)
+    errors: list[str] = []
+    for token_name, pattern in pattern_token_map:
+        if token_name in recoverable_path_token_names:
+            result = classify(pattern)
+            if result != token_name:
+                errors.append(
+                    f"Pattern {pattern!r} (token={token_name!r}) classified as {result!r}, "
+                    f"expected {token_name!r}"
+                )
+
+    for token_name, pattern in pattern_token_map:
+        # Cross-skill token name reuse across path and non-path types is intentional.
+        if token_name in non_path_token_names and token_name not in path_token_names:
+            result = classify(pattern)
+            if result is not None:
+                errors.append(
+                    f"Pattern {pattern!r} (token={token_name!r}) incorrectly classified as "
+                    f"path-capture (returned {result!r})"
+                )
+    return errors
+
+
 class TestPathCaptureCoversAllContractPatterns:
     """_is_path_capture_pattern must correctly classify all patterns in skill_contracts.yaml."""
 
     def test_classifies_all_path_output_patterns_as_path_capture(self) -> None:
-        import re
-
         from autoskillit.execution.headless import _is_path_capture_pattern
         from autoskillit.execution.headless._headless_path_tokens import (
             _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -1725,54 +1783,19 @@ class TestPathCaptureCoversAllContractPatterns:
         manifest = load_bundled_manifest()
         skills_data = manifest.get("skills", {})
 
-        path_token_names: set[str] = set()
-        non_path_token_names: set[str] = set()
-        pattern_token_map: list[tuple[str, str]] = []
-
-        for skill_data in skills_data.values():
-            if not isinstance(skill_data, dict):
-                continue
-            for out in skill_data.get("outputs", []):
-                if not isinstance(out, dict):
-                    continue
-                t = out.get("type", "")
-                name = out.get("name", "")
-                if t.startswith("file_path") or t == "directory_path":
-                    path_token_names.add(name)
-                elif t:
-                    non_path_token_names.add(name)
-            for pattern in skill_data.get("expected_output_patterns", []):
-                m = re.match(r"^(\w+)", pattern)
-                if m and "=" in pattern[m.end() :]:
-                    pattern_token_map.append((m.group(1), pattern))
+        path_token_names, non_path_token_names, pattern_token_map = _contract_pattern_inventory(
+            skills_data
+        )
 
         assert pattern_token_map, "No patterns found in skill_contracts.yaml — test is vacuous"
 
-        recoverable_path_token_names = path_token_names - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-
-        misclassified_path: list[str] = []
-        for token_name, pattern in pattern_token_map:
-            if token_name in recoverable_path_token_names:
-                result = _is_path_capture_pattern(pattern)
-                if result != token_name:
-                    misclassified_path.append(
-                        f"Pattern {pattern!r} (token={token_name!r}) classified as {result!r}, "
-                        f"expected {token_name!r}"
-                    )
-
-        misclassified_non_path: list[str] = []
-        for token_name, pattern in pattern_token_map:
-            # Skip tokens that appear as path-type in some skill and non-path-type in another;
-            # cross-skill token name reuse is intentional and not a classification error.
-            if token_name in non_path_token_names and token_name not in path_token_names:
-                result = _is_path_capture_pattern(pattern)
-                if result is not None:
-                    misclassified_non_path.append(
-                        f"Pattern {pattern!r} (token={token_name!r}) incorrectly classified as "
-                        f"path-capture (returned {result!r})"
-                    )
-
-        errors = misclassified_path + misclassified_non_path
+        errors = _path_pattern_classification_errors(
+            pattern_token_map,
+            path_token_names,
+            non_path_token_names,
+            _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
+            _is_path_capture_pattern,
+        )
         assert not errors, "Pattern classification errors:\n" + "\n".join(
             f"  - {e}" for e in errors
         )

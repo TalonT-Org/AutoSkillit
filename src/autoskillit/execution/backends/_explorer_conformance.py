@@ -372,35 +372,61 @@ def publish_explorer_attestation(
     return output_path
 
 
+def _require_explorer_readiness_values(
+    attestation: ExplorerConformanceAttestation,
+    checks: tuple[tuple[str, Any, str], ...],
+) -> None:
+    for field_name, expected_value, error in checks:
+        if getattr(attestation, field_name) != expected_value:
+            raise ValueError(error)
+
+
 def validate_explorer_release_readiness(
     attestation: ExplorerConformanceAttestation,
 ) -> None:
     """Require mandatory isolation while allowing either optional capability observation."""
-    fixed_expected: dict[str, Any] = {
-        "schema_version": EXPLORER_ATTESTATION_SCHEMA_VERSION,
-        "probe_contract": EXPLORER_PROBE_CONTRACT,
-        "cache_miss": True,
-        "parent_model": EXPLORER_PARENT_MODEL,
-        "child_model": EXPLORER_MODEL,
-        "child_reasoning_effort": EXPLORER_REASONING_EFFORT,
-        "parent_sandbox_mode": EXPLORER_SANDBOX_MODE,
-        "child_sandbox_mode": EXPLORER_SANDBOX_MODE,
-        "approval_policy": "never",
-        "network_policy": "restricted",
-        "tool_surface_digest": EXPLORER_TOOL_SURFACE_DIGEST,
-    }
-    for field_name, expected_value in fixed_expected.items():
-        if getattr(attestation, field_name) != expected_value:
-            raise ValueError(
-                f"explorer release readiness requires {field_name}={expected_value!r}"
+    fixed_expected = (
+        ("schema_version", EXPLORER_ATTESTATION_SCHEMA_VERSION),
+        ("probe_contract", EXPLORER_PROBE_CONTRACT),
+        ("cache_miss", True),
+        ("parent_model", EXPLORER_PARENT_MODEL),
+        ("child_model", EXPLORER_MODEL),
+        ("child_reasoning_effort", EXPLORER_REASONING_EFFORT),
+        ("parent_sandbox_mode", EXPLORER_SANDBOX_MODE),
+        ("child_sandbox_mode", EXPLORER_SANDBOX_MODE),
+        ("approval_policy", "never"),
+        ("network_policy", "restricted"),
+        ("tool_surface_digest", EXPLORER_TOOL_SURFACE_DIGEST),
+    )
+    _require_explorer_readiness_values(
+        attestation,
+        tuple(
+            (
+                field_name,
+                expected_value,
+                f"explorer release readiness requires {field_name}={expected_value!r}",
             )
+            for field_name, expected_value in fixed_expected
+        ),
+    )
     for field_name in ("cli_version", "parent_thread_id", "child_thread_id"):
         if not getattr(attestation, field_name):
             raise ValueError(f"explorer release readiness requires {field_name}")
-    if attestation.probe_policy_identity != PROBE_POLICY_IDENTITY:
-        raise ValueError("explorer release readiness requires the current probe policy")
-    if attestation.role != EXPLORER_PROBE_ROLE:
-        raise ValueError("explorer release readiness requires the generated probe role")
+    _require_explorer_readiness_values(
+        attestation,
+        (
+            (
+                "probe_policy_identity",
+                PROBE_POLICY_IDENTITY,
+                "explorer release readiness requires the current probe policy",
+            ),
+            (
+                "role",
+                EXPLORER_PROBE_ROLE,
+                "explorer release readiness requires the generated probe role",
+            ),
+        ),
+    )
     if attestation.agent_path not in {
         EXPLORER_PROBE_TASK_NAME,
         f"/{EXPLORER_PROBE_TASK_NAME}",
@@ -415,12 +441,20 @@ def validate_explorer_release_readiness(
     if attestation.parent_thread_id == attestation.child_thread_id:
         raise ValueError("explorer release readiness requires distinct parent and child")
     _validate_observed_at(attestation.observed_at)
-    for field_name in (
-        "native_target_execution_isolation",
-        "native_credential_isolation",
-    ):
-        if getattr(attestation, field_name) != "enforced":
-            raise ValueError(f"explorer release readiness requires {field_name} to be enforced")
+    _require_explorer_readiness_values(
+        attestation,
+        tuple(
+            (
+                field_name,
+                "enforced",
+                f"explorer release readiness requires {field_name} to be enforced",
+            )
+            for field_name in (
+                "native_target_execution_isolation",
+                "native_credential_isolation",
+            )
+        ),
+    )
     for field_name in ("native_lsp_status", "native_tree_sitter_status"):
         if getattr(attestation, field_name) not in {"supported", "unsupported"}:
             raise ValueError(

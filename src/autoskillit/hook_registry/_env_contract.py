@@ -29,7 +29,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_AGENT_BACKEND",
         "autoskillit",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
         "Backend builders identify the authoritative child backend for hook policy.",
     ),
@@ -37,21 +37,21 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder delivers the singular write-scope boundary.",
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder delivers the complete write-scope boundary list.",
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_APPLICABLE_GUARDS",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder selects the guards applicable to the child.",
     ),
     HookEnvVarDef(
@@ -73,7 +73,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_COMPLETION_MARKER",
         "autoskillit",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
         "Skill-session builders bind completion output to the expected marker.",
     ),
@@ -81,7 +81,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "AUTOSKILLIT_CWD",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder supplies the authoritative project working root.",
     ),
     HookEnvVarDef(
@@ -95,7 +95,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "AUTOSKILLIT_HEADLESS",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder marks automated child sessions for hook gates.",
     ),
     HookEnvVarDef(
@@ -192,7 +192,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_SKILL_NAME",
         "autoskillit",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
         "Skill-session builders identify the loaded skill to hook policy.",
     ),
@@ -214,7 +214,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
-        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",
+        "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin._skill_session_environment_inputs",
         "The shared backend builder selects tools governed by write-scope policy.",
     ),
     HookEnvVarDef(

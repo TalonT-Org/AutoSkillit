@@ -141,21 +141,23 @@ class CodexConfigLock:
             self._owner_pid = pid
             return self
         except BaseException:
-            if fd is not None:
-                try:
-                    if acquired:
-                        try:
-                            fcntl.flock(fd, fcntl.LOCK_UN)
-                        except OSError:
-                            pass
-                finally:
-                    try:
-                        os.close(fd)
-                    finally:
-                        self._release_process_ownership(pid)
-            else:
-                self._release_process_ownership(pid)
+            self._cleanup_failed_acquisition(fd, acquired, pid)
             raise
+
+    def _cleanup_failed_acquisition(self, fd: int | None, acquired: bool, pid: int) -> None:
+        try:
+            if fd is None:
+                return
+            try:
+                if acquired:
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+            finally:
+                os.close(fd)
+        finally:
+            self._release_process_ownership(pid)
 
     def release(self) -> None:
         """Release an acquired lock."""

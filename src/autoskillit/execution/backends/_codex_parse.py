@@ -221,6 +221,64 @@ def _utc_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _codex_turn_usage_entry(
+    record: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    info: Mapping[str, Any],
+    last_usage: Mapping[str, Any],
+    effective_model: str | None,
+    start: datetime,
+    end: datetime,
+) -> TurnTokenEntry | None:
+    timestamp = first_nonempty_string(record.get("timestamp"))
+    event_time = _utc_datetime(timestamp)
+    if event_time is None or event_time < start or event_time > end:
+        return None
+
+    input_tokens = first_valid_token_count(last_usage, "input_tokens")
+    output_tokens = first_valid_token_count(last_usage, "output_tokens")
+    cache_read_tokens = first_valid_token_count(last_usage, "cached_input_tokens")
+    cache_creation_tokens = first_valid_token_count(
+        last_usage,
+        "cache_write_input_tokens",
+        "cache_creation_input_tokens",
+        "cache_creation_tokens",
+    )
+    if all(
+        value is None
+        for value in (
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        )
+    ):
+        return None
+
+    return build_turn_token_entry(
+        backend=AGENT_BACKEND_CODEX,
+        message_id=first_nonempty_string(
+            info.get("message_id"),
+            payload.get("message_id"),
+            record.get("message_id"),
+        ),
+        request_id=first_nonempty_string(
+            info.get("request_id"),
+            payload.get("request_id"),
+            payload.get("requestId"),
+            record.get("request_id"),
+            record.get("requestId"),
+        ),
+        timestamp=timestamp,
+        model=effective_model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
+        context_window_tokens=valid_context_window(info.get("model_context_window")),
+    )
+
+
 def extract_codex_turn_usage(
     locator: SessionLocator,
     thread_id: str,
@@ -284,56 +342,17 @@ def extract_codex_turn_usage(
                 cumulative_high_water = cumulative_total
                 if compacting:
                     continue
-
-                timestamp = first_nonempty_string(record.get("timestamp"))
-                event_time = _utc_datetime(timestamp)
-                if event_time is None or event_time < start or event_time > end:
-                    continue
-                input_tokens = first_valid_token_count(last_usage, "input_tokens")
-                output_tokens = first_valid_token_count(last_usage, "output_tokens")
-                cache_read_tokens = first_valid_token_count(last_usage, "cached_input_tokens")
-                cache_creation_tokens = first_valid_token_count(
+                entry = _codex_turn_usage_entry(
+                    record,
+                    payload,
+                    info,
                     last_usage,
-                    "cache_write_input_tokens",
-                    "cache_creation_input_tokens",
-                    "cache_creation_tokens",
+                    current_model,
+                    start,
+                    end,
                 )
-                if all(
-                    value is None
-                    for value in (
-                        input_tokens,
-                        output_tokens,
-                        cache_read_tokens,
-                        cache_creation_tokens,
-                    )
-                ):
-                    continue
-                rows.append(
-                    build_turn_token_entry(
-                        backend=AGENT_BACKEND_CODEX,
-                        message_id=first_nonempty_string(
-                            info.get("message_id"),
-                            payload.get("message_id"),
-                            record.get("message_id"),
-                        ),
-                        request_id=first_nonempty_string(
-                            info.get("request_id"),
-                            payload.get("request_id"),
-                            payload.get("requestId"),
-                            record.get("request_id"),
-                            record.get("requestId"),
-                        ),
-                        timestamp=timestamp,
-                        model=current_model,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        cache_read_tokens=cache_read_tokens,
-                        cache_creation_tokens=cache_creation_tokens,
-                        context_window_tokens=valid_context_window(
-                            info.get("model_context_window")
-                        ),
-                    )
-                )
+                if entry is not None:
+                    rows.append(entry)
     except (OSError, RuntimeError, ValueError, zstandard.ZstdError):
         logger.debug("codex_turn_usage_read_failed", path=str(path), exc_info=True)
         return []
@@ -389,6 +408,104 @@ class _CodexParseAccumulator:
     ndjson_unknown_item_count: int = 0
 
 
+def _accumulate_codex_message_item(
+    acc: _CodexParseAccumulator,
+    item: dict[str, Any],
+    item_type: CodexItemType,
+) -> None:
+    if item_type == CodexItemType.AGENT_MESSAGE:
+        text = item.get("text", "")
+        if text:
+            acc.agent_messages.append(text)
+    elif item_type == CodexItemType.MESSAGE:
+        for block in item.get("content", []):
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    acc.agent_messages.append(text)
+
+
+def _accumulate_codex_file_changes(
+    acc: _CodexParseAccumulator,
+    item: dict[str, Any],
+) -> None:
+    changes = item.get("changes", [])
+    if changes and isinstance(changes, list):
+        for change in changes:
+            if isinstance(change, dict):
+                if path := change.get("path"):
+                    acc.file_changes.append(path)
+    else:
+        if path := item.get("path"):
+            acc.file_changes.append(path)
+
+
+def _accumulate_codex_completed_item(
+    acc: _CodexParseAccumulator,
+    obj: dict[str, Any],
+) -> None:
+    item = obj.get("item", {})
+    if not isinstance(item, dict):
+        return
+    item_type = CodexItemType.from_ndjson(item.get("type", ""))
+    if item_type in (CodexItemType.AGENT_MESSAGE, CodexItemType.MESSAGE):
+        _accumulate_codex_message_item(acc, item, item_type)
+    elif item_type in (CodexItemType.COMMAND_EXECUTION, CodexItemType.FUNCTION_CALL):
+        acc.command_executions.append(item)
+    elif item_type == CodexItemType.MCP_TOOL_CALL:
+        acc.mcp_tool_calls.append(item)
+    elif item_type == CodexItemType.FILE_CHANGE:
+        _accumulate_codex_file_changes(acc, item)
+    elif item_type in (CodexItemType.COLLAB_TOOL_CALL, CodexItemType.WEB_SEARCH):
+        acc.command_executions.append(item)
+    elif item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
+        logger.debug("codex_ndjson_informational_item", item_type=item_type.value)
+    elif item_type == CodexItemType.UNKNOWN:
+        logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
+        acc.ndjson_unknown_item_count += 1
+
+
+def _accumulate_codex_flat_error(
+    acc: _CodexParseAccumulator,
+    obj: dict[str, Any],
+) -> None:
+    error_message = obj.get("message")
+    error_code = obj.get("code")
+    this_event_code = ""
+    if isinstance(error_code, str):
+        this_event_code = error_code
+        acc.error_code = error_code
+    if isinstance(error_message, str):
+        if this_event_code and this_event_code not in error_message:
+            acc.error_message = f"{error_message} [{this_event_code}]"
+        else:
+            acc.error_message = error_message
+    elif this_event_code:
+        acc.error_message = this_event_code
+    if acc.error_message:
+        acc.saw_failure = True
+        acc.success = False
+
+
+def _accumulate_codex_turn_failure(
+    acc: _CodexParseAccumulator,
+    obj: dict[str, Any],
+) -> None:
+    error = obj.get("error", {})
+    if isinstance(error, dict):
+        error_msg = error.get("message", "")
+        error_code = error.get("code", "")
+        acc.error_code = error_code
+        if error_code and error_code not in error_msg:
+            acc.error_message = f"{error_msg} [{error_code}]" if error_msg else error_code
+        else:
+            acc.error_message = error_msg
+    else:
+        acc.error_message = str(error) if error else ""
+    acc.saw_failure = True
+    acc.success = False
+
+
 def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
     if not stdout.strip():
         return _CodexParseAccumulator()
@@ -426,43 +543,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
                 acc.cumulative_token_usage = cumulative_usage
             continue
         elif event_type == CodexEventType.ITEM_COMPLETED:
-            item = obj.get("item", {})
-            if not isinstance(item, dict):
-                continue
-            item_type = CodexItemType.from_ndjson(item.get("type", ""))
-            if item_type == CodexItemType.AGENT_MESSAGE:
-                text = item.get("text", "")
-                if text:
-                    acc.agent_messages.append(text)
-            elif item_type == CodexItemType.MESSAGE:
-                for block in item.get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "")
-                        if text:
-                            acc.agent_messages.append(text)
-            elif item_type in (CodexItemType.COMMAND_EXECUTION, CodexItemType.FUNCTION_CALL):
-                acc.command_executions.append(item)
-            elif item_type == CodexItemType.MCP_TOOL_CALL:
-                acc.mcp_tool_calls.append(item)
-            elif item_type == CodexItemType.FILE_CHANGE:
-                changes = item.get("changes", [])
-                if changes and isinstance(changes, list):
-                    for change in changes:
-                        if isinstance(change, dict):
-                            if path := change.get("path"):
-                                acc.file_changes.append(path)
-                else:
-                    if path := item.get("path"):
-                        acc.file_changes.append(path)
-            elif item_type in (CodexItemType.COLLAB_TOOL_CALL, CodexItemType.WEB_SEARCH):
-                acc.command_executions.append(item)
-            elif item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
-                logger.debug("codex_ndjson_informational_item", item_type=item_type.value)
-                continue
-            elif item_type == CodexItemType.UNKNOWN:
-                logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
-                acc.ndjson_unknown_item_count += 1
-                continue
+            _accumulate_codex_completed_item(acc, obj)
         elif event_type == CodexEventType.TURN_COMPLETED:
             usage = obj.get("usage")
             if isinstance(usage, dict):
@@ -470,41 +551,9 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             if not acc.saw_failure:
                 acc.success = True
         elif event_type == CodexEventType.ERROR:
-            error_message = obj.get("message")
-            error_code = obj.get("code")
-            # Snapshot this event's own code rather than reading ``acc.error_code``
-            # later: the latter would otherwise leak a previous ERROR event's code
-            # onto a later ERROR event that carries its own (different or absent)
-            # code, producing a mismatched annotation.
-            if isinstance(error_code, str):
-                this_event_code = error_code
-                acc.error_code = error_code
-            else:
-                this_event_code = ""
-            if isinstance(error_message, str):
-                if this_event_code and this_event_code not in error_message:
-                    acc.error_message = f"{error_message} [{this_event_code}]"
-                else:
-                    acc.error_message = error_message
-            elif this_event_code:
-                acc.error_message = this_event_code
-            if acc.error_message:
-                acc.saw_failure = True
-                acc.success = False
+            _accumulate_codex_flat_error(acc, obj)
         elif event_type == CodexEventType.TURN_FAILED:
-            error = obj.get("error", {})
-            if isinstance(error, dict):
-                error_msg = error.get("message", "")
-                error_code = error.get("code", "")
-                acc.error_code = error_code
-                if error_code and error_code not in error_msg:
-                    acc.error_message = f"{error_msg} [{error_code}]" if error_msg else error_code
-                else:
-                    acc.error_message = error_msg
-            else:
-                acc.error_message = str(error) if error else ""
-            acc.saw_failure = True
-            acc.success = False
+            _accumulate_codex_turn_failure(acc, obj)
     return acc
 
 

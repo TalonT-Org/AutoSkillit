@@ -145,6 +145,129 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             f'{{otlp-http={{endpoint={_format_toml_value(metrics_endpoint)},protocol="json"}}}}',
         )
 
+    def _prepare_skill_session_environment(
+        self,
+        *,
+        skill_command: str,
+        cwd: str,
+        completion_marker: str,
+        add_dirs: Sequence[ValidatedAddDir],
+        exit_after_stop_delay_ms: int,
+        stream_idle_timeout_ms: int,
+        scenario_step_name: str,
+        child_outcome_log_dir: str,
+        allowed_write_prefix: str,
+        allowed_write_prefixes: tuple[str, ...],
+        provider_extras: Mapping[str, str] | None,
+        profile_name: str,
+    ) -> tuple[dict[str, str], dict[str, str], ValidatedAddDir]:
+        extras = self._assemble_shared_env_extras(
+            session_type=SESSION_TYPE_SKILL,
+            applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
+            child_outcome_log_dir=child_outcome_log_dir,
+        )
+        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
+        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
+        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
+        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
+        _merge_caller_env_extras(
+            extras,
+            provider_extras,
+            denylist=_SKILL_SESSION_EXTRAS_DENYLIST,
+        )
+        if profile_name:
+            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
+            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+        if len(add_dirs) != 1 or not add_dirs[0].session_home or not add_dirs[0].skill_entries:
+            raise ValueError(
+                "Codex app-server skill sessions require exactly one add-dir bound to a "
+                "nonempty session_home with a frozen, nonempty skill catalog"
+            )
+        managed_catalog = add_dirs[0]
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            extras[reserved_key] = managed_catalog.session_home
+        if exit_after_stop_delay_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
+            )
+        if stream_idle_timeout_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
+            )
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        env = CodexEnvPolicy().build_env(
+            filtered_base,
+            extras=extras,
+            required=SKILL_SESSION_REQUIRED_ENV
+            | {MCP_CLIENT_BACKEND_ENV_VAR}
+            | CODEX_RESERVED_HOME_ENV_VARS,
+        )
+        return env, extras, managed_catalog
+
+    @staticmethod
+    def _emit_interactive_resume_mode(builder: CmdBuilder, resume_spec: ResumeSpec) -> None:
+        match resume_spec:
+            case NoResume():
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+            case NamedResume(session_id=sid):
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.positional(sid)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+            case BareResume():
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+
+    @staticmethod
+    def _prepare_interactive_environment(
+        *,
+        generated_home: Path | None,
+        plugin_binding: PluginLaunchBinding | None,
+        env_extras: Mapping[str, str] | None,
+        required_env: frozenset[str] | None,
+    ) -> tuple[dict[str, str], tuple[tuple[str, str], ...]]:
+        base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        merged_extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        merged_extras.update(
+            {
+                "AUTOSKILLIT_HEADLESS": "",
+                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "",
+                "AUTOSKILLIT_SESSION_TYPE": "",
+                AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+                FLEET_INSPECTOR_MODEL_ENV_VAR: "",
+                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+            }
+        )
+        merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
+        merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
+        _merge_caller_env_extras(merged_extras, env_extras)
+        projected_skill_entries = _configure_interactive_home(
+            generated_home=generated_home,
+            plugin_binding=plugin_binding,
+            base_env=base_env,
+            merged_extras=merged_extras,
+        )
+        effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
+        if generated_home is not None:
+            effective_required |= CODEX_RESERVED_HOME_ENV_VARS
+        env = CodexEnvPolicy().build_env(
+            base_env, extras=merged_extras, required=effective_required
+        )
+        # build_env strips this key, so inject it after the call like other builders.
+        env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
+        return env, projected_skill_entries
+
     def build_skill_session_cmd(
         self,
         skill_command: str,
@@ -242,58 +365,21 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             ),
         )
 
-        extras = self._assemble_shared_env_extras(
-            session_type=SESSION_TYPE_SKILL,
-            applicable_guards=self.capabilities.applicable_guards,
-            write_guard_tool_names=self.capabilities.write_guard_tool_names,
-            write_prefix=allowed_write_prefix,
-            write_prefixes=allowed_write_prefixes,
+        env, extras, managed_catalog = self._prepare_skill_session_environment(
+            skill_command=skill_command,
             cwd=cwd,
+            completion_marker=completion_marker,
+            add_dirs=add_dirs,
+            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=stream_idle_timeout_ms,
             scenario_step_name=scenario_step_name,
             child_outcome_log_dir=child_outcome_log_dir,
+            allowed_write_prefix=allowed_write_prefix,
+            allowed_write_prefixes=allowed_write_prefixes,
+            provider_extras=provider_extras,
+            profile_name=profile_name,
         )
-        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
-        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
-        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
-        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
-        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
-        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
-        _merge_caller_env_extras(
-            extras,
-            provider_extras,
-            denylist=_SKILL_SESSION_EXTRAS_DENYLIST,
-        )
-        if profile_name:
-            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
-            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-        if len(add_dirs) != 1 or not add_dirs[0].session_home or not add_dirs[0].skill_entries:
-            raise ValueError(
-                "Codex app-server skill sessions require exactly one add-dir bound to a "
-                "nonempty session_home with a frozen, nonempty skill catalog"
-            )
-        managed_catalog = add_dirs[0]
         session_home = managed_catalog.session_home
-        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-            extras[reserved_key] = session_home
-        if exit_after_stop_delay_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
-            )
-        if stream_idle_timeout_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
-            )
-        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(
-            filtered_base,
-            extras=extras,
-            required=SKILL_SESSION_REQUIRED_ENV
-            | {MCP_CLIENT_BACKEND_ENV_VAR}
-            | CODEX_RESERVED_HOME_ENV_VARS,
-        )
         env.update(
             _managed_native_shell_env(
                 decision=native_shell_capture_decision,
@@ -539,16 +625,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         selected_profile = (env_extras or {}).get(PROVIDER_PROFILE_ENV_VAR, "")
         if selected_profile:
             builder.kv_flag(CodexFlags.PROFILE, selected_profile)
-        match resume_spec:
-            case NoResume():
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
-            case NamedResume(session_id=sid):
-                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
-                builder.positional(sid)
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
-            case BareResume():
-                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+        self._emit_interactive_resume_mode(builder, resume_spec)
         if model:
             builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
             for override in self.model_config_overrides(model):
@@ -583,37 +660,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             builder.positional(initial_prompt)
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
-        base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        merged_extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
-        merged_extras.update(
-            {
-                "AUTOSKILLIT_HEADLESS": "",
-                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "",
-                "AUTOSKILLIT_SESSION_TYPE": "",
-                AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-                FLEET_INSPECTOR_MODEL_ENV_VAR: "",
-                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            }
-        )
-        merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
-        merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
-        _merge_caller_env_extras(merged_extras, env_extras)
-        projected_skill_entries = _configure_interactive_home(
+        env, projected_skill_entries = self._prepare_interactive_environment(
             generated_home=generated_home,
             plugin_binding=plugin_binding,
-            base_env=base_env,
-            merged_extras=merged_extras,
+            env_extras=env_extras,
+            required_env=required_env,
         )
-        effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
-        if generated_home is not None:
-            effective_required |= CODEX_RESERVED_HOME_ENV_VARS
-        env = CodexEnvPolicy().build_env(
-            base_env, extras=merged_extras, required=effective_required
-        )
-        # build_env strips this key, so inject it after the call like other builders.
-        env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()

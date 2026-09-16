@@ -259,6 +259,59 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
+    def _prepare_interactive_environment(
+        self,
+        *,
+        env_extras: Mapping[str, str] | None,
+        required_env: frozenset[str] | None,
+        force_inactive_agent_teams: bool,
+        project_root: Path | str | None,
+        mcp_tool_timeout_sec: float | None,
+    ) -> Mapping[str, str]:
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | _claude_host_attestation_env(None)
+        merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        if env_extras:
+            merged.update(env_extras)
+        merged["MCP_CONNECTION_NONBLOCKING"] = CLAUDE_MCP_CONNECTION_NONBLOCKING
+        merged[CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR] = str(CLAUDE_MCP_CONNECT_TIMEOUT_MS)
+        if (
+            mcp_tool_timeout_sec is not None
+            and isinstance(mcp_tool_timeout_sec, (int, float))
+            and mcp_tool_timeout_sec > 0
+        ):
+            merged[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
+        interactive_base = {
+            k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
+        }
+        effective_env = build_agent_env(
+            base=interactive_base,
+            extras=merged,
+            required=required_env,
+        )
+        if not force_inactive_agent_teams:
+            return effective_env
+
+        # ``build_agent_env`` returns a read-only ``MappingProxyType``;
+        # neutralize on a single mutable copy and re-derive both the
+        # assertion and the launch env from it.
+        neutralized_env = dict(effective_env)
+        _neutralize_agent_teams_env(neutralized_env)
+        settings_root = str(project_root) if project_root is not None else None
+        _resolve_project_root_for_inactive_check(settings_root)
+        # Settings entries are stripped before the confirmation, not after:
+        # asserting first refuses every repository whose settings enable
+        # teams, which is precisely the population this opt-in serves. A
+        # malformed file is refused rather than rewritten, so the assertion
+        # below still fails closed on one.
+        neutralize_repository_agent_teams_settings(settings_root)
+        assert_agent_teams_inactive(
+            neutralized_env,
+            settings_root,
+            force_inactive=True,
+        )
+        return neutralized_env
+
     def build_interactive_cmd(
         self,
         *,
@@ -343,47 +396,13 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(SHARED_BASELINE_ENV) | _claude_host_attestation_env(None)
-        merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
-        merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
-        if env_extras:
-            merged.update(env_extras)
-        merged["MCP_CONNECTION_NONBLOCKING"] = CLAUDE_MCP_CONNECTION_NONBLOCKING
-        merged[CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR] = str(CLAUDE_MCP_CONNECT_TIMEOUT_MS)
-        if (
-            mcp_tool_timeout_sec is not None
-            and isinstance(mcp_tool_timeout_sec, (int, float))
-            and mcp_tool_timeout_sec > 0
-        ):
-            merged[CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR] = str(mcp_tool_timeout_sec)
-        interactive_base = {
-            k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
-        }
-        effective_env = build_agent_env(
-            base=interactive_base,
-            extras=merged,
-            required=required_env,
+        effective_env = self._prepare_interactive_environment(
+            env_extras=env_extras,
+            required_env=required_env,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            project_root=project_root,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
         )
-        if force_inactive_agent_teams:
-            # ``build_agent_env`` returns a read-only ``MappingProxyType``;
-            # neutralize on a single mutable copy and re-derive both the
-            # assertion and the launch env from it.
-            neutralized_env = dict(effective_env)
-            _neutralize_agent_teams_env(neutralized_env)
-            settings_root = str(project_root) if project_root is not None else None
-            _resolve_project_root_for_inactive_check(settings_root)
-            # Settings entries are stripped before the confirmation, not after:
-            # asserting first refuses every repository whose settings enable
-            # teams, which is precisely the population this opt-in serves. A
-            # malformed file is refused rather than rewritten, so the assertion
-            # below still fails closed on one.
-            neutralize_repository_agent_teams_settings(settings_root)
-            assert_agent_teams_inactive(
-                neutralized_env,
-                settings_root,
-                force_inactive=True,
-            )
-            effective_env = neutralized_env
         # With an executable binding this equality is the proof that the
         # binding was resolved from the neutralized env rather than captured
         # before neutralization; a genuinely stale binding still fails here.

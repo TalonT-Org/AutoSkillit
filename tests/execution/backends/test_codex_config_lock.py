@@ -54,3 +54,26 @@ def test_codex_config_lock_fail_fast_timeout_reports_owner_diagnostics(tmp_path:
             holder.join(5)
 
     assert holder.exitcode == 0
+
+
+def test_codex_config_lock_diagnostic_failure_releases_acquired_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "codex" / "config.toml"
+    failed_lock = CodexConfigLock(config_path, timeout=0.0)
+    original_writer = CodexConfigLock._write_owner_diagnostics
+
+    def fail_owner_diagnostics(_self: CodexConfigLock, _fd: int, _pid: int) -> None:
+        raise RuntimeError("owner diagnostics failed")
+
+    monkeypatch.setattr(CodexConfigLock, "_write_owner_diagnostics", fail_owner_diagnostics)
+    with pytest.raises(RuntimeError, match="owner diagnostics failed"):
+        failed_lock.acquire()
+
+    monkeypatch.setattr(CodexConfigLock, "_write_owner_diagnostics", original_writer)
+    reacquired = CodexConfigLock(config_path, timeout=0.0)
+    try:
+        assert reacquired.acquire() is reacquired
+    finally:
+        reacquired.release()

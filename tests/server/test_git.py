@@ -1347,8 +1347,17 @@ async def test_verify_merge_target_returns_sha():
     from autoskillit.server.git import GitMergeTarget, _verify_merge_target
 
     runner = MockSubprocessRunner()
-    runner.push(_make_result(0, "dev\n", ""))  # branch --show-current
-    runner.push(_make_result(0, "abc123def456\n", ""))  # rev-parse local SHA
+    runner.push(_make_result(0, "dev\n", ""), expect=["git", "branch", "--show-current"])
+    runner.push(
+        _make_result(0, "abc123def456\n", ""),
+        expect=[
+            "git",
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            "refs/heads/dev^{commit}",
+        ],
+    )
 
     result = await _verify_merge_target("/some/repo", "dev", runner)
 

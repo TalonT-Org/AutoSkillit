@@ -14,11 +14,11 @@ the source.
 
 ## Origin re-pointing
 
-After the clone, `clone_repo` rewrites `origin` to the canonical GitHub
-remote (resolved by `execution/remote_resolver.resolve_remote_repo`,
-preferring `upstream` over `origin` and de-duplicating clone-local remotes).
-This guarantees that even if the orchestrator runs `git push origin`, it
-hits the upstream repository rather than the user's local clone path.
+After the clone, `clone_repo` rewrites `origin` to a `file://` self-reference
+so accidental pushes cannot reach the source repository. When a canonical
+remote URL was resolved, `upstream` holds that URL and pipeline pushes target
+`upstream`. Remote selection is implemented by
+`execution/github_ops/remote_resolver.py`.
 
 ## Clone registry
 
@@ -42,7 +42,8 @@ returns a `MergeFailedStep` value to the orchestrator and aborts the merge:
 4. **dirty tree check** — both the worktree and the target must be clean.
 5. **pre-merge test gate** — run the project's test command via `test_check`;
    abort on failure.
-6. **fetch** — `git fetch origin` to refresh remote refs.
+6. **fetch** — fetch the selected network remote (`upstream` before `origin`)
+   to refresh its remote-tracking refs.
 7. **pre-rebase check** — abort if the worktree is already in a half-merged
    state.
 8. **merge-commits-detected stop** — fail loudly if the worktree contains

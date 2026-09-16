@@ -198,6 +198,7 @@ class TestModuleCascadeCore:
             "_type_skill_contract",
             "_step_context",
             "_execution_marker",
+            "git_refs",
             "git_remote",
             "fs_observation",
             "pipeline_tracker",

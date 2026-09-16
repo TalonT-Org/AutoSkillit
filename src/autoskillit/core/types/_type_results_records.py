@@ -173,6 +173,7 @@ class CloneSuccessResult(TypedDict):
     repository_identity_url: str
     clone_source_type: Literal["remote", "local"]
     clone_source_reason: str
+    tracking_remote: str
 
 
 class CloneGateUncommitted(TypedDict):

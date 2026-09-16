@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 import structlog
@@ -18,9 +19,8 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CAMPAIGN_ID_ENV_VAR, get_logger
 from autoskillit.server import mcp
-from autoskillit.server._misc import clone_registry
+from autoskillit.server._misc import clone_registry, ensure_base_branch_local
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
@@ -657,21 +657,22 @@ async def bootstrap_clone(
 
             _revparse_start = time.monotonic()
             try:
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "rev-parse", base_branch],
-                    cwd=clone_path,
-                    timeout=30,
+                base_resolution = await asyncio.to_thread(
+                    ensure_base_branch_local,
+                    Path(clone_path),
+                    base_branch,
+                    success.get("tracking_remote", ""),
                 )
             finally:
                 rev_parse_ms = int((time.monotonic() - _revparse_start) * 1000)
 
-            if rc != 0:
+            if base_resolution.resolved is None:
                 await _notify(
                     ctx,
                     "error",
-                    "bootstrap_clone: rev-parse failed",
+                    "bootstrap_clone: base ref resolution failed",
                     "autoskillit.bootstrap_clone",
-                    extra={"stderr": stderr},
+                    extra={"reason": base_resolution.failure_reason},
                 )
                 try:
                     cleanup = await asyncio.to_thread(
@@ -691,13 +692,13 @@ async def bootstrap_clone(
                     )
                 return json.dumps(
                     attach_recipe_segment(
-                        {"error": f"rev-parse failed: {stderr.strip()}"},
+                        {"error": base_resolution.failure_reason},
                         prepared_segment,
                         success=False,
                     )
                 )
 
-            base_sha = stdout.strip()
+            base_sha = base_resolution.resolved.sha
 
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)

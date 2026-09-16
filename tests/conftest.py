@@ -3,6 +3,7 @@
 import functools
 import os
 import shutil
+import subprocess
 import sys
 import warnings
 from collections.abc import Mapping
@@ -184,6 +185,92 @@ def exploration_snapshot_service() -> MagicMock:
         collector_manifest_digest="test-manifest",
     )
     return service
+
+
+@pytest.fixture
+def remote_only_base_clone(tmp_path: _Path, monkeypatch: pytest.MonkeyPatch) -> tuple[_Path, str]:
+    """Create an isolated ``feat`` clone with only remote ``develop`` history."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+
+    def run_git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    upstream = tmp_path / "upstream.git"
+    source = tmp_path / "source"
+    clone_path = tmp_path / "clone"
+    upstream_url = str(upstream)
+
+    run_git("init", "--bare", upstream_url)
+    run_git("init", str(source))
+    run_git(
+        "-C",
+        str(source),
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "user.name=Test User",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "develop base",
+    )
+    run_git("-C", str(source), "branch", "-M", "develop")
+    run_git("-C", str(source), "remote", "add", "origin", upstream_url)
+    run_git("-C", str(source), "push", "-u", "origin", "develop")
+    run_git("-C", str(source), "checkout", "-b", "feat")
+    run_git(
+        "-C",
+        str(source),
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "user.name=Test User",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "feat head",
+    )
+    run_git("-C", str(source), "push", "-u", "origin", "feat")
+
+    run_git("clone", "--branch", "feat", upstream_url, str(clone_path))
+    run_git("-C", str(clone_path), "remote", "set-url", "origin", clone_path.resolve().as_uri())
+    run_git("-C", str(clone_path), "remote", "add", "upstream", upstream_url)
+
+    return clone_path, upstream_url
+
+
+@pytest.fixture
+def remote_only_base_clone_with_shadow_tag(
+    remote_only_base_clone: tuple[_Path, str],
+) -> tuple[_Path, str]:
+    """Add an annotated ``develop`` tag at the isolated clone's ``feat`` head."""
+    clone_path, upstream_url = remote_only_base_clone
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(clone_path),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test User",
+            "tag",
+            "-a",
+            "develop",
+            "-m",
+            "shadow develop tag",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return clone_path, upstream_url
 
 
 @pytest.fixture(autouse=True, scope="session")

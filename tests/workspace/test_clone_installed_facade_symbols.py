@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 _EXPECTED_CLONE_SYMBOLS: frozenset[str] = frozenset(
     {
         "CleanupResult",
+        "BaseBranchResolution",
         "CloneRegistry",
         "CloneSourceResolution",
         "CloneStatus",
@@ -36,6 +37,7 @@ _EXPECTED_CLONE_SYMBOLS: frozenset[str] = frozenset(
         "detect_source_dir",
         "detect_uncommitted_changes",
         "detect_unpublished_branch",
+        "ensure_base_branch_local",
         "list_git_worktrees",
         "push_to_remote",
         "read_registry",
@@ -161,6 +163,15 @@ def test_clone_remote_exports():
     from autoskillit.workspace.clone._remote import CloneSourceResolution
 
     assert CloneSourceResolution.__module__ == "autoskillit.workspace.clone._remote"
+
+
+def test_clone_refs_exports():
+    """Base-branch resolution symbols live in _refs."""
+    from autoskillit.workspace.clone._refs import BaseBranchResolution, ensure_base_branch_local
+
+    assert BaseBranchResolution.__module__ == "autoskillit.workspace.clone._refs"
+    assert callable(ensure_base_branch_local)
+    assert ensure_base_branch_local.__module__ == "autoskillit.workspace.clone._refs"
 
 
 def test_clone_worktree_exports():

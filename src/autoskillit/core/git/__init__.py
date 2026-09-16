@@ -17,6 +17,12 @@ from autoskillit.core.git.bash_write_targets import (
 from autoskillit.core.git.branch_guard import (
     is_protected_branch,
 )
+from autoskillit.core.git.git_refs import (
+    ResolvedRef,
+    local_branch_ref,
+    remote_tracking_ref,
+    verify_qualified_ref_sync,
+)
 from autoskillit.core.git.git_remote import (
     REMOTE_PRECEDENCE,
     GitHubRepositoryRef,
@@ -37,13 +43,17 @@ __all__ = [
     "REMOTE_PRECEDENCE",
     "RemoteIdentityProbe",
     "RemoteIdentityResolution",
+    "ResolvedRef",
     "_parse_issue_ref",
     "contains_test_gate_command",
     "extract_bash_write_targets",
     "is_protected_branch",
+    "local_branch_ref",
     "normalize_owner_repo",
     "parse_github_repo",
     "parse_github_remote_url",
     "resolve_clone_remote_name_sync",
     "resolve_repository_remote_identity_sync",
+    "remote_tracking_ref",
+    "verify_qualified_ref_sync",
 ]

@@ -267,15 +267,23 @@ def _under_hooks_dir(rel_path: str) -> bool:
 
 
 def _registered_hook_script_paths() -> frozenset[str]:
-    """Repo-root-relative source paths of every script registered in HOOK_REGISTRY."""
-    from autoskillit import hooks  # noqa: F401  (triggers HOOK_REGISTRY population)
-    from autoskillit.hook_registry import HOOK_REGISTRY
+    """Repo-root-relative source paths of every script registered in HOOK_REGISTRY.
 
-    return frozenset(
-        f"src/autoskillit/hooks/{script}"
-        for hook_def in HOOK_REGISTRY
-        for script in hook_def.scripts
-    )
+    Returns an empty frozenset on import / registry-access failures rather
+    than raising, so the audit tool can continue and emit its report even
+    when the package cannot be imported in the audit environment.
+    """
+    hooks_root = PROJECT_ROOT / "src" / "autoskillit" / "hooks"
+    try:
+        from autoskillit import hooks  # noqa: F401  (triggers HOOK_REGISTRY population)
+        from autoskillit.hook_registry import HOOK_REGISTRY
+    except ImportError:
+        return frozenset()
+    paths: set[str] = set()
+    for hook_def in HOOK_REGISTRY:
+        for script in getattr(hook_def, "scripts", ()):
+            paths.add(str((hooks_root / script).relative_to(PROJECT_ROOT)))
+    return frozenset(paths)
 
 
 def find_not_measured_unobservable_sources(

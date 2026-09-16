@@ -182,18 +182,14 @@ def query_coverage_db(
 def query_contexts_map(
     db_path: Path,
 ) -> tuple[dict[str, set[str]], list[dict[str, str]]]:
-    """Query .coverage DB and return ({source_file: {test_file_paths}}, fixture_only_entries).
+    """Query ``.coverage`` and return ``({source_file: {test_file_paths}}, fixture_only_entries)``.
 
-    Uses CoverageData.contexts_by_lineno() to build the inversion.
-    Only includes source files under src/ and test contexts from tests/.
-    Context names from --cov-context=test are test node IDs like
-    'tests/recipe/test_rules_dataflow.py::TestClass::test_method|run'.
-    Only |run phase contexts count toward the map, to exclude fixture-inflation
-    from |setup and |teardown phases. A source that coverage measured but whose
-    contexts are exclusively |setup/|teardown is not silently dropped: it is
-    returned as an ``attributed_only_by_fixture`` entry — the admission check
-    never sees it, but the artifact records that it ran and was unattributable,
-    rather than looking identical to a source coverage never saw at all.
+    Uses CoverageData.contexts_by_lineno() to build the inversion. Only
+    source files under src/ and |run-phase test contexts from tests/
+    contribute to the map; measured sources with exclusively |setup /
+    |teardown contexts are returned as ``REASON_ATTRIBUTED_ONLY_BY_FIXTURE``
+    entries so the artifact records that they ran without attribution
+    rather than looking identical to sources coverage never saw.
     """
     import coverage
 

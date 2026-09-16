@@ -2195,11 +2195,9 @@ def _expand_reexport_closure(
 class ScopeAccumulator:
     """Append-only test selection: directory/file targets plus direct test files.
 
-    A dynamic observation (the coverage oracle) may only ADD to a
-    statically-computed selection, never SUBTRACT from it: an unobserved
-    relationship means "unknown, run it", not "not needed". This type has
-    no subtractive method by construction — callers cannot narrow a
-    selection once it has been added to.
+    Exposes only additive mutators (``add_targets``, ``add_files``) and a
+    read-only ``resolve`` that materializes the selection into concrete paths.
+    No subtractive method exists by construction.
     """
 
     def __init__(self) -> None:

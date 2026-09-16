@@ -81,27 +81,12 @@ def _mentions_scope(node: ast.AST | None) -> bool:
 class _ScopeCollector(ast.NodeVisitor):
     """Classify every touch of `scope` within one function's body.
 
-    Anchored on `ast.Name` with `ctx=Store` (and `ctx=Del`) rather than an
-    enumeration of binding statement types. Assign, AnnAssign, AugAssign,
-    NamedExpr (walrus), For/AsyncFor targets, and With/AsyncWith targets all
-    surface uniformly as such a Name — a single `visit_Name` rule subsumes
-    what a statement-type allowlist would otherwise need to re-enumerate one
-    node kind at a time, and automatically covers any future grammar addition
-    with the same shape. `visit_Assign` is kept only to track the RHS value
-    for the single-construction-site check, not for detection.
-
-    Two binding shapes are NOT `ast.Name` at all — bare strings — and are
-    handled separately: `ast.ExceptHandler.name` and `ast.Global`/`ast.Nonlocal`
-    names.
-
-    Comprehension targets are deliberately excluded (own scope in Python 3, so
-    an inner `scope` binding there cannot reach the enclosing name) via
-    dedicated visitors that skip `generator.target` but still visit everything
-    else in the comprehension.
-
-    Not a general lexical-scope walker: none of the three functions this guard
-    audits currently define a nested function, so descending into every nested
-    block (but not tracking a nested def's own shadowing) is sufficient here.
+    Produces ``sites`` listing every observed site tagged with its kind
+    (construction, rebind, additive_call, subtractive_call, unresolvable_call,
+    string_rebind). Visit_Name subsumes all ``ctx=Store`` binding shapes
+    (Assign, AnnAssign, AugAssign, NamedExpr, for/with targets); bare-string
+    bindings (ExceptHandler.name, Global, Nonlocal) get dedicated visitors;
+    comprehension targets are skipped because they live in their own scope.
     """
 
     def __init__(self, function_name: str, *, allow_construction: bool) -> None:
@@ -263,7 +248,7 @@ def test_scope_carrying_function_inventory_is_complete() -> None:
 
 
 def test_subtractive_scope_method_is_caught() -> None:
-    """Canary: scope.discard(d) is the forbidden shape this guard exists for."""
+    """scope.discard(d) is reported as a non-additive call."""
     source = "def build_test_scope():\n    scope = ScopeAccumulator()\n    scope.discard(d)\n"
     sites = _scan_tree(ast.parse(source))
     assert [site.violation for site in sites] == [
@@ -326,7 +311,7 @@ def test_scope_rebind_shapes_are_caught(source: str) -> None:
 
 
 def test_except_as_scope_rebind_is_caught() -> None:
-    """Canary: `except ... as scope` is a bare-string binding, invisible to an ast.Name sweep."""
+    """`except ... as scope` is reported as a string-rebind."""
     source = (
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
@@ -341,7 +326,7 @@ def test_except_as_scope_rebind_is_caught() -> None:
 
 
 def test_unresolvable_scope_mutation_is_caught() -> None:
-    """Canary: dynamic dispatch against `scope` must fail closed, not pass silently."""
+    """Dynamic dispatch against `scope` is reported as an unresolvable call."""
     source = (
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
@@ -355,10 +340,7 @@ def test_unresolvable_scope_mutation_is_caught() -> None:
 
 
 def test_argument_level_set_difference_inside_additive_call_is_not_flagged() -> None:
-    """Canary: classification is by receiver/method identity, not by auditing arguments.
-
-    set.update(X) is monotone in X regardless of how X was computed.
-    """
+    """A set-difference passed to scope.add_targets is not audited at argument level."""
     source = (
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
@@ -369,11 +351,7 @@ def test_argument_level_set_difference_inside_additive_call_is_not_flagged() -> 
 
 
 def test_comprehension_target_named_scope_is_not_flagged() -> None:
-    """Canary: a comprehension's own iteration variable is not a rebind.
-
-    Comprehensions carry their own scope in Python 3, so `scope` as a
-    comprehension target cannot reach the enclosing name.
-    """
+    """A comprehension's own iteration variable named `scope` is not a rebind."""
     source = (
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
@@ -399,7 +377,7 @@ def test_annotated_construction_is_not_flagged_as_rebind() -> None:
 
 
 def test_same_named_local_in_a_different_function_is_out_of_scope() -> None:
-    """Canary: a `scope` local outside the guarded functions is not audited at all."""
+    """A `scope` local in a non-guarded function is not audited."""
     source = (
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"

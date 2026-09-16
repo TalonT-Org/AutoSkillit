@@ -460,7 +460,7 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         executable=None,
         plugin_dir=None,
     ):
-        if session_dir is None:
+        if session_dir is None or executable is not None:
             return PreLaunchReadiness((), {})
         return original_ensure_pre_launch(
             self,

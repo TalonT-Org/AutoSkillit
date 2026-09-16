@@ -2282,6 +2282,7 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         assert "boom" in readiness.errors[0]
 
     def test_destination_snapshot_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        (self.session_dir / "config.toml").unlink()
         monkeypatch.setattr(
             _patch_backends__codex_prelaunch,
             "atomic_write",
@@ -3328,6 +3329,7 @@ class TestCodexBackendSetupSessionDir:
             encoding="utf-8",
         )
         (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        (self.session_dir / "config.toml").unlink()
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "pre-test-backend")
         backend = CodexBackend()
 
@@ -3358,6 +3360,7 @@ class TestCodexBackendSetupSessionDir:
             encoding="utf-8",
         )
         (self.codex_home / "auth.json").write_text("{}", encoding="utf-8")
+        (self.session_dir / "config.toml").unlink()
         backend = CodexBackend()
 
         assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors

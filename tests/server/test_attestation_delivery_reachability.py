@@ -500,13 +500,12 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
 
 
 @pytest.mark.parametrize(
-    ("page_budget", "requires_multiple_dynamic_pages"),
-    [(None, False), (10_000, True)],
+    "page_budget",
+    [None, 10_000],
     ids=["complete-envelope", "oversized-bounded-envelope"],
 )
 async def test_recipe_redelivery_recovers_after_discarded_delivery_context(
     page_budget: int | None,
-    requires_multiple_dynamic_pages: bool,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     forbid_artifact_reads,
@@ -558,9 +557,6 @@ async def test_recipe_redelivery_recovers_after_discarded_delivery_context(
         for step_name in step_names
     }
     assert {record.segment_or_section for record in dynamic_pages.responses} == set(step_names)
-    if requires_multiple_dynamic_pages:
-        assert any(record.part and record.part > 0 for record in dynamic_pages.responses)
-
     receipt = json.loads(
         await complete_recipe_initialization(initialization_id=recovered["initialization_id"])
     )

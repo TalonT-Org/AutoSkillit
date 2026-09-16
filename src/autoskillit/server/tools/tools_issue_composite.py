@@ -104,8 +104,10 @@ async def claim_and_resolve_issue(
                     {"success": False, "error": title_result.get("error", "fetch_title failed")}
                 )
 
-            issue_title = title_result.get("title", "")
-            issue_slug = title_result.get("slug", "")
+            raw_title = title_result.get("title")
+            raw_slug = title_result.get("slug")
+            issue_title = raw_title if isinstance(raw_title, str) else ""
+            issue_slug = raw_slug if isinstance(raw_slug, str) else ""
 
             _claim_start = time.monotonic()
             fetch_result = await tool_ctx.github_client.fetch_issue(
@@ -139,13 +141,11 @@ async def claim_and_resolve_issue(
                 github_config=tool_ctx.config.github,
             )
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
-            claim_result.update(
-                issue_number=issue_number,
-                issue_title=issue_title,
-                issue_slug=issue_slug,
-                timings={"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-            )
-            return _render(claim_result)
+            claim_result["issue_number"] = issue_number
+            claim_result["issue_title"] = issue_title
+            claim_result["issue_slug"] = issue_slug
+            claim_result["timings"] = {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms}
+            return _render(dict(claim_result))
     except Exception as exc:
         logger.error("claim_and_resolve_issue unhandled exception", exc_info=True)
         return _render({"success": False, "error": f"{type(exc).__name__}: {exc}"})

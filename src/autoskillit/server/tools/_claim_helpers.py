@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Required, TypedDict
 
 from autoskillit.core import (
     INVESTIGATION_COMPLETE_MARKER,
@@ -29,6 +29,28 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
+
+
+class ClaimResult(TypedDict, total=False):
+    """Structured result shared by the issue-claim tool handlers."""
+
+    success: Required[bool]
+    claimed: bool
+    reason: str
+    reentry: bool
+    label: str
+    error: str
+    review_approach_recommended: bool
+    investigation_complete: bool
+    issue_number: int
+    issue_title: str
+    issue_slug: str
+    timings: dict[str, int]
+
+
+class _ClaimMarkers(TypedDict):
+    review_approach_recommended: bool
+    investigation_complete: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +161,10 @@ async def _claim_fetched_issue(
     github_client: GitHubFetcher,
     get_campaign_state_paths: Callable[[], list[Path]],
     github_config: GitHubConfig,
-) -> dict[str, Any]:
+) -> ClaimResult:
     """Claim an already-fetched issue and return its common result fragment."""
 
-    markers = {
+    markers: _ClaimMarkers = {
         "review_approach_recommended": detect_body_marker(issue_body, REVIEW_APPROACH_MARKER),
         "investigation_complete": detect_body_marker(issue_body, INVESTIGATION_COMPLETE_MARKER),
     }

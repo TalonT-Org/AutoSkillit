@@ -270,14 +270,16 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             or bool(_REPEATABLE_SHELL_RE.search(live_payload_text))
             or bool(process_occurrences)
         )
-        for _kind, _start, _end, body, balanced in process_occurrences:
-            if not balanced and _process_occurrence_may_execute_github(body):
-                reasons.append(
-                    (
-                        "shell_parse_unresolved",
-                        "mutation-bearing process substitution could not be parsed",
-                    )
+        if any(
+            not balanced and _process_occurrence_may_execute_github(body)
+            for _kind, _start, _end, body, balanced in process_occurrences
+        ):
+            reasons.append(
+                (
+                    "shell_parse_unresolved",
+                    "mutation-bearing process substitution could not be parsed",
                 )
+            )
         tokenized_segments = _tokenize_with_redirects(payload)
         segments = [segment.tokens for segment in tokenized_segments]
         if not tokenized_segments and payload.strip():
@@ -340,14 +342,15 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                 cd_argv_args = executable_argv_tokens[cd_start + 1 :]
                 if len(args) != 1 or _is_dynamic_shell_value(cd_argv_args[0]):
                     reasons.append(("cwd_unresolved", "shell cwd transition is unresolved"))
-                elif os.path.isabs(args[0]):
-                    current_cwd = os.path.normpath(args[0])
-                elif current_cwd:
-                    current_cwd = os.path.normpath(os.path.join(current_cwd, args[0]))
-                else:
+                elif not os.path.isabs(args[0]) and not current_cwd:
                     reasons.append(
                         ("cwd_unresolved", "relative shell cwd transition has no authority")
                     )
+                else:
+                    next_cwd = (
+                        args[0] if os.path.isabs(args[0]) else os.path.join(current_cwd, args[0])
+                    )
+                    current_cwd = os.path.normpath(next_cwd)
                 continue
             for start, end in _command_position_candidate_spans_call(executable_tokens):
                 candidate_tokens = executable_tokens[start:end]
@@ -380,15 +383,17 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             for spec in specs:
                 interpreter_cwd = segment_cwd
                 if spec.cwd is not None:
-                    if os.path.isabs(spec.cwd):
-                        interpreter_cwd = os.path.normpath(spec.cwd)
-                    elif current_cwd:
-                        interpreter_cwd = os.path.normpath(os.path.join(current_cwd, spec.cwd))
-                    else:
+                    if not os.path.isabs(spec.cwd) and not current_cwd:
                         reasons.append(
                             ("cwd_unresolved", "relative interpreter cwd has no authority")
                         )
                         continue
+                    next_cwd = (
+                        spec.cwd
+                        if os.path.isabs(spec.cwd)
+                        else os.path.join(current_cwd, spec.cwd)
+                    )
+                    interpreter_cwd = os.path.normpath(next_cwd)
                 if isinstance(spec.payload, str):
                     queue.append(
                         (
@@ -429,21 +434,33 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
         # pool. PYTHON payloads are handled structurally above via
         # `_extract_interpreter_segment_specs_call(..., stdin_literals=...)`;
         # TEXT is never queued as shell.
-        for evaluated in _evaluated_payloads_call(payload):
-            if evaluated.kind != "shell":
-                continue
-            index = evaluated.consumer_index
+        empty_nested_context: tuple[list[str], str, bool, tuple[str, ...], int, bool] = (
+            [],
+            payload_cwd,
+            inherited_input_safe,
+            outer_targets,
+            outer_count,
+            payload_repeatable,
+        )
+        nested_payloads = [
+            (evaluated.text, evaluated.consumer_index, False)
+            for evaluated in _evaluated_payloads_call(payload)
+            if evaluated.kind == "shell"
+        ]
+        nested_payloads.extend(
+            (
+                body,
+                _process_occurrence_owner_index(payload, start, len(nested_contexts)),
+                True,
+            )
+            for _kind, start, _end, body, balanced in process_occurrences
+            if balanced
+        )
+        for nested_payload, owner_index, absorb_payload_repeatable in nested_payloads:
             context = (
-                (
-                    [],
-                    payload_cwd,
-                    inherited_input_safe,
-                    outer_targets,
-                    outer_count,
-                    payload_repeatable,
-                )
-                if index is None or index >= len(nested_contexts)
-                else nested_contexts[index]
+                empty_nested_context
+                if owner_index is None or owner_index >= len(nested_contexts)
+                else nested_contexts[owner_index]
             )
             (
                 _raw,
@@ -455,49 +472,13 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             ) = context
             queue.append(
                 (
-                    evaluated.text,
+                    nested_payload,
                     nested_cwd,
                     depth + 1,
                     nested_input_safe,
                     nested_targets,
                     nested_count,
-                    nested_repeatable,
-                )
-            )
-        for _kind, start, _end, body, balanced in process_occurrences:
-            if not balanced:
-                continue
-            owner_index = _process_occurrence_owner_index(payload, start, len(nested_contexts))
-            context = (
-                (
-                    [],
-                    payload_cwd,
-                    inherited_input_safe,
-                    outer_targets,
-                    outer_count,
-                    payload_repeatable,
-                )
-                if owner_index is None
-                else nested_contexts[owner_index]
-            )
-            (
-                _raw,
-                process_cwd,
-                process_input_safe,
-                process_targets,
-                process_count,
-                process_repeatable,
-            ) = context
-            process_repeatable = process_repeatable or payload_repeatable
-            queue.append(
-                (
-                    body,
-                    process_cwd,
-                    depth + 1,
-                    process_input_safe,
-                    process_targets,
-                    process_count,
-                    process_repeatable,
+                    nested_repeatable or (absorb_payload_repeatable and payload_repeatable),
                 )
             )
         if payload_repeatable and payload_has_unproven_repeatable_executor:

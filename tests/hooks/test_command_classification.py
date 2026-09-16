@@ -2614,7 +2614,7 @@ class TestAnalyzeGitHubMutations:
         """Extends the gh-issue-edit 5-form precedent to gh api's value-taking
 
         flags. --method/-X, --field/-F, and --raw-field/-f already supported all
-        three forms via _flag_value (untested before this); --jq/-q, --template/-t,
+        three forms via _consume_argv_flag (untested before this); --jq/-q, --template/-t,
         and -p/--preview are newly recognized by this part's spec-driven engine.
         """
         analysis = analyze_github_mutations(command)
@@ -2772,7 +2772,7 @@ class TestAnalyzeGitHubMutations:
         """--method/-X provenance proof (not GraphQL content): a genuinely
 
         single-quoted method value must resolve -- proving the
-        _flag_value/_consume_argv_flag retyping is real provenance tracing, not
+        _consume_argv_flag retyping is real provenance tracing, not
         a fabricated ArgvToken(value, True) default, since none of the
         GraphQL-focused tests above exercise the --method/-X extraction path
         at all.

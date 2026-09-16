@@ -136,6 +136,7 @@ def _run_interactive_native_probes(
     catalog_dir: Path,
     managed_catalog: ValidatedAddDir,
     expected_discovery_root: Path,
+    managed_root_scope: Path,
     route: SkillDiscoveryRouteDef,
     config_bytes: bytes,
     before_fingerprint: tuple[tuple[str, str, int, int], ...],
@@ -174,6 +175,7 @@ def _run_interactive_native_probes(
         catalog_dir=catalog_dir,
         expected_discovery_root=expected_discovery_root,
         expected_entries=managed_catalog.skill_entries,
+        managed_root_scope=managed_root_scope,
         route=route,
         version=raw_version,
         timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
@@ -268,6 +270,7 @@ def _validate_projected_interactive_invocation(
         expected_entries=spec.projected_skill_entries,
         route=route,
         version=raw_version,
+        managed_root_scope=projected_home.parent,
         timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     )
 
@@ -353,7 +356,6 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             version_check_command="codex --version",
             process_name="codex",
             process_name_aliases=frozenset({"codex", "node"}),
-            skills_subdir="skills",
             hook_config_format="toml_nested",
             write_detection_strategy="file_changes",
             patch_format="codex_star_update",
@@ -394,7 +396,8 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
-            profile_skills_source=source_codex_home / "skills",
+            # Profile admission reads the same deprecated upstream user root.
+            profile_skills_source=CODEX_MANAGED_HOME_ROUTE.discovery_root(source_codex_home),
             persistent_session_root_subdir=Path(CODEX_SESSIONS_SUBDIR),
             skill_sigil=self.capabilities.skill_sigil,
             managed_skill_discovery=CODEX_MANAGED_HOME_ROUTE,
@@ -612,6 +615,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             catalog_dir=catalog_dir,
             managed_catalog=managed_catalog,
             expected_discovery_root=expected_discovery_root,
+            managed_root_scope=generated_home.parent,
             route=route,
             config_bytes=config_bytes,
             before_fingerprint=before_fingerprint,

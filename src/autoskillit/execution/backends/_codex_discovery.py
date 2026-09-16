@@ -307,6 +307,7 @@ def _validate_expected_discovery_root(
     expected_discovery_root: Path,
     catalog_dir: Path,
     context: str,
+    managed_root_scope: Path | None,
 ) -> list[str]:
     roots = [str(root) for root in discovered.roots]
     root_matches = [root for root in discovered.roots if root == expected_discovery_root]
@@ -329,6 +330,20 @@ def _validate_expected_discovery_root(
             "Codex skill discovery expected root does not resolve to the "
             f"catalog; roots={roots}; {context}"
         ]
+    if managed_root_scope is not None:
+        scope = managed_root_scope.resolve(strict=False)
+        for root in discovered.roots:
+            if root == expected_discovery_root:
+                continue
+            resolved = root.resolve(strict=False)
+            if resolved != scope and scope not in resolved.parents:
+                continue
+            if resolved == catalog_dir or catalog_dir in resolved.parents:
+                continue
+            return [
+                "Codex skill discovery exposes a foreign managed root "
+                f"{root}; roots={roots}; {context}"
+            ]
     return []
 
 
@@ -429,6 +444,7 @@ def attest_catalog_discovery(
     expected_entries: Sequence[tuple[str, str]],
     route: SkillDiscoveryRouteDef,
     version: str,
+    managed_root_scope: Path | None = None,
     timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
 ) -> list[str]:
     """Require Codex's real prompt loader to expose the frozen managed catalog."""
@@ -479,6 +495,7 @@ def attest_catalog_discovery(
                     expected_discovery_root=expected_discovery_root,
                     catalog_dir=catalog_dir,
                     context=context,
+                    managed_root_scope=managed_root_scope,
                 )
             )
     try:

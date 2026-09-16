@@ -230,8 +230,6 @@ class BackendCapabilities:
     # All process names the backend binary may appear as in /proc/comm
     # or ps output (e.g., interpreter names for shebang scripts)
     process_name_aliases: frozenset[str] = field(default_factory=frozenset)
-    # Relative path from session root to the skills directory
-    skills_subdir: str = ""
     # Hook config format identifier (e.g. settings.json vs config.toml)
     hook_config_format: str = ""
     # Write detection strategy (e.g. tool_names, file_change)
@@ -470,7 +468,6 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     version_check_command="claude --version",
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),
-    skills_subdir=".claude/skills",
     hook_config_format="",
     write_detection_strategy="tool_names",
     patch_format="unified_diff",

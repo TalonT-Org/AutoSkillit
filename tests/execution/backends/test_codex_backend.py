@@ -229,9 +229,6 @@ class TestCodexBackend:
     def test_capabilities_process_name(self) -> None:
         assert CodexBackend().capabilities.process_name == "codex"
 
-    def test_capabilities_skills_subdir(self) -> None:
-        assert CodexBackend().capabilities.skills_subdir == "skills"
-
     def test_capabilities_mcp_env_forward_vars(self) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
 

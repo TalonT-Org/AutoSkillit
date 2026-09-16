@@ -87,7 +87,6 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     session_record_types=frozenset({"item.completed"}),
     required_session_files=frozenset({"config.toml"}),
     session_dir_symlinks=frozenset({"sessions", "archived_sessions"}),
-    skills_subdir="skills",
     session_dir_persistent=True,
     supports_model_invocation_gating=False,
     hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,

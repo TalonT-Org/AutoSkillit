@@ -205,8 +205,8 @@ Three paths remain separate throughout the launch:
 - `add_dir` is the interactive `--add-dir`. Its managed catalog is
   `<generated_home>/add-dir/skills`.
 
-`<generated_home>/skills` is a legacy symlink alias to that catalog, not a
-fourth owned launch path.
+The managed discovery route exposes that catalog through the declared
+`<generated_home>/skills` entry point; it is not a fourth owned launch path.
 
 The backend builds one immutable `CmdSpec`, including profile, trust, root, and
 `sqlite_home` overrides. Cook replaces only its `cwd` with the canonical
@@ -217,13 +217,25 @@ override the generated home.
 
 ### Codex skill discovery contract
 
-Interactive Codex Cook still requires the legacy `<generated_home>/skills`
-alias because the embedded TUI app server cannot accept an extra skill root.
-Before launch, AutoSkillit runs the exact bound executable's
-`debug prompt-input` renderer and verifies its model-visible catalog against
-the immutable `CODEX_SKILL_DISCOVERY_CONTRACT`. Tracking issue #4717 retains
-the unsupported TUI migration; the alias remains required until a supported
-interactive server connection preserves local-workspace semantics.
+Every interactive launch declares a `SkillDiscoveryRouteDef`. The managed
+route `codex_managed_home_skills_alias` maps the
+`<generated_home>/add-dir/skills` catalog through `<generated_home>/skills`,
+while `codex_projected_home_skills` uses the same upstream-deprecated
+`$CODEX_HOME/skills` root directly in a projected home.
+
+Per-session worktrees are not adopted because the non-deprecated repository
+`.agents/skills` route requires changing cwd away from the user's checkout.
+A descendant cwd would also change the sandbox writable root and file-search
+root. A private `HOME` would relocate the user's environment, while upstream
+offers no TUI config key, CLI flag, or environment variable for registering a
+root and keeps `skills/extraRoots/set` process-local to the app server.
+
+These routes are accepted deferrals in
+`tests/arch/test_skill_discovery_routes.py` with a 180-day re-verification
+cadence. Tracking issue #4717 retains the migration obligation. Before launch,
+AutoSkillit runs the exact bound executable's `debug prompt-input` renderer
+against the immutable `CODEX_SKILL_DISCOVERY_CONTRACT` and rejects any foreign
+root inside the managed-home scope. The verified binary is `codex-cli 0.153.4`.
 
 Before an attempt is entered, `sessions` and `archived_sessions` are symlinks
 to private, empty inert directories within the generated home. Attempt entry

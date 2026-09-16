@@ -90,6 +90,13 @@ def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -
     )
 
 
+def _loader_output_with_extra_root(name: str, catalog_dir: Path, extra_root: Path) -> str:
+    return _loader_output(name, catalog_dir).replace(
+        "### Available skills",
+        f"- `r9` = `{extra_root}`\n### Available skills",
+    )
+
+
 def _install_prompt_stub(
     tmp_path: Path,
     output: str,
@@ -297,6 +304,112 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
 
     assert errors == []
     assert (catalog_dir / ".system" / "native" / "SKILL.md").is_file()
+
+
+def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    scope = catalog_dir.parents[2]
+    other_home = scope / "other-home"
+    other_catalog = other_home / "add-dir" / "skills"
+    other_catalog.mkdir(parents=True)
+    foreign_root = other_home / "skills"
+    foreign_root.symlink_to(other_catalog, target_is_directory=True)
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            foreign_root,
+        ),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=scope,
+    )
+
+    assert len(errors) == 1
+    assert "foreign managed root" in errors[0]
+
+
+def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    scope = catalog_dir.parents[2]
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root("discovery_prompt_input_v0153.json", catalog_dir, scope),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=scope,
+    )
+
+    assert len(errors) == 1
+    assert "foreign managed root" in errors[0]
+
+
+def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=catalog_dir.parents[2],
+    )
+
+    assert errors == []
+
+
+def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    outside_root = tmp_path.parent / "outside" / ".agents" / "skills"
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json",
+            catalog_dir,
+            outside_root,
+        ),
+    )
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=catalog_dir.parents[2],
+    )
+
+    assert errors == []
 
 
 def test_attest_catalog_discovery_reports_missing_expected_name_with_context(

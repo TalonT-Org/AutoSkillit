@@ -329,7 +329,7 @@ async def get_ci_status(
         return json.dumps({"runs": [], "error": f"{type(exc).__name__}: {exc}"})
 
 
-async def _auto_trigger_precondition_result(
+async def _auto_trigger_precondition_failure(
     *, branch: str, cwd: str, result: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return an auto-trigger precondition failure, if there is one."""
@@ -422,11 +422,11 @@ async def _auto_trigger_ci(
     no_runs result so the recipe routes to handle_no_ci_runs as fallback.
     """
     if (
-        precondition_result := await _auto_trigger_precondition_result(
+        precondition_failure := await _auto_trigger_precondition_failure(
             branch=branch, cwd=cwd, result=result
         )
     ) is not None:
-        return precondition_result
+        return precondition_failure
 
     rc_c, _, err_c = await _run_subprocess(
         ["git", "commit", "--allow-empty", "-m", "ci: trigger"],

@@ -227,12 +227,21 @@ def query_contexts_map(
     return result, sorted(fixture_only, key=lambda entry: entry["path"])
 
 
-def _has_main_guard(source_path: Path) -> bool:
-    """Return True if *source_path* contains an ``if __name__ == "__main__":`` guard."""
+def _has_main_guard(source_path: Path) -> bool | None:
+    """Return True if *source_path* contains an ``if __name__ == "__main__":`` guard.
+
+    Returns None when the source is unreadable or fails to parse so the caller can
+    distinguish "no main guard" from "could not determine" and avoid silently
+    misclassifying unreadable / syntactically-broken sources as testable.
+    """
     try:
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-    except (OSError, SyntaxError):
-        return False
+        source = source_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        tree = ast.parse(source, filename=str(source_path))
+    except SyntaxError:
+        return None
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.If)
@@ -286,7 +295,11 @@ def find_not_measured_unobservable_sources(
         rel = str(source_path.relative_to(PROJECT_ROOT))
         if rel in measured:
             continue
-        if rel in hook_script_paths or _under_hooks_dir(rel) or _has_main_guard(source_path):
+        has_main_guard = _has_main_guard(source_path)
+        if has_main_guard is None:
+            # Could not determine; skip rather than silently misclassify as testable.
+            continue
+        if rel in hook_script_paths or _under_hooks_dir(rel) or has_main_guard:
             entries.append({"path": rel, "reason": "not_measured"})
     return entries
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -36,20 +37,14 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
 logger = get_logger(__name__)
 
 
-def _close_kitchen_handler() -> None:
-    """Clear the tools-enabled flag. Extracted for testability."""
-    # `logger` is the shared `autoskillit.server` logger (not this module's own),
-    # matching the pattern in `_hook_config.py` — tests patch
-    # "autoskillit.server.logger" to assert on hook-config removal warnings.
-    from autoskillit.server import _get_ctx, logger  # circular-break
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
-    ctx = _get_ctx()
-    authority = ctx.run_skill_completion
-    if authority is not None and not authority.clear_if_idle():
-        raise RuntimeError("run_skill completion is still active")
-    if ctx.quota_refresh_task is not None:
-        ctx.quota_refresh_task.cancel()
-        ctx.quota_refresh_task = None
+
+def _restore_baseline_config(ctx: ToolContext) -> None:
+    """Remove kitchen configuration and restore the initial configuration."""
+    from autoskillit.server import logger  # circular-break: test-patched shared logger
+
     baseline_config = deepcopy(ctx._baseline_config)
     hook_cfg_path = _tk_pkg._hook_config_path(ctx.project_dir)
     with _tk_pkg.locked_overlay(ctx.project_dir) as (overlay_path, _):
@@ -72,6 +67,23 @@ def _close_kitchen_handler() -> None:
                 max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
                 timeout=baseline_config.fleet.acquire_timeout_sec,
             )
+
+
+def _close_kitchen_handler() -> None:
+    """Clear the tools-enabled flag. Extracted for testability."""
+    # `logger` is the shared `autoskillit.server` logger (not this module's own),
+    # matching the pattern in `_hook_config.py` — tests patch
+    # "autoskillit.server.logger" to assert on hook-config removal warnings.
+    from autoskillit.server import _get_ctx, logger  # circular-break
+
+    ctx = _get_ctx()
+    authority = ctx.run_skill_completion
+    if authority is not None and not authority.clear_if_idle():
+        raise RuntimeError("run_skill completion is still active")
+    if ctx.quota_refresh_task is not None:
+        ctx.quota_refresh_task.cancel()
+        ctx.quota_refresh_task = None
+    _restore_baseline_config(ctx)
     try:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:

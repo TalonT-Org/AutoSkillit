@@ -9,7 +9,12 @@ package facade.
 from __future__ import annotations
 
 from autoskillit.core import get_logger, sweep_stale_markers
-from autoskillit.pipeline import transition_ambiguous, transition_confirm, transition_degraded
+from autoskillit.pipeline import (
+    ToolContext,
+    transition_ambiguous,
+    transition_confirm,
+    transition_degraded,
+)
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
@@ -26,6 +31,105 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
 )
 
 logger = get_logger(__name__)
+
+
+async def _configure_runtime_and_own_quota(ctx: ToolContext) -> str | None:
+    """Configure runtime hooks and take ownership of quota refresh."""
+    supports_quota = _backend_supports_quota(ctx)
+    if _transition_start(ctx, "hook_configuration"):
+        try:
+            _tk_pkg._write_hook_config()
+        except Exception as exc:
+            ctx.gate.disable()
+            transition_ambiguous(ctx, "hook_configuration", exc)
+            logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="write_hook_config")
+        transition_confirm(ctx, "hook_configuration", receipt="hook_config:written")
+
+    if _transition_start(ctx, "quota_cache_prime"):
+        try:
+            await _tk_pkg._prime_quota_cache(supports_quota_check=supports_quota)
+        except Exception as exc:
+            ctx.gate.disable()
+            transition_ambiguous(ctx, "quota_cache_prime", exc)
+            logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
+        transition_confirm(ctx, "quota_cache_prime", receipt="quota_cache:primed")
+
+    if _transition_start(ctx, "quota_task_start"):
+        if ctx.quota_refresh_task is not None:
+            ctx.quota_refresh_task.cancel()
+            ctx.quota_refresh_task = None
+        if supports_quota:
+            try:
+                ctx.quota_refresh_task = _tk_pkg.create_background_task(
+                    _tk_pkg._quota_refresh_loop(
+                        ctx.config.quota_guard,
+                        diagnostic_log_root=_tk_pkg.resolve_log_dir(
+                            ctx.config.linux_tracing.log_dir
+                        ),
+                        supports_quota_check=True,
+                    ),
+                    label="quota_refresh_loop",
+                )
+            except Exception as exc:
+                ctx.gate.disable()
+                transition_ambiguous(ctx, "quota_task_start", exc)
+                logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
+        transition_confirm(
+            ctx,
+            "quota_task_start",
+            receipt="quota_task:owned" if supports_quota else "quota_task:not_applicable",
+            downstream_identity=str(id(ctx.quota_refresh_task)) if supports_quota else "",
+        )
+    return None
+
+
+async def _maintain_stale_kitchen_state(ctx: ToolContext) -> None:
+    """Perform non-fatal cleanup after the kitchen is enabled."""
+    if _transition_start(ctx, "marker_sweep"):
+        try:
+            sweep_stale_markers()
+        except Exception as exc:
+            transition_degraded(ctx, "marker_sweep", exc)
+            logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
+        else:
+            transition_confirm(ctx, "marker_sweep", receipt="markers:swept")
+
+    if _transition_start(ctx, "stale_dispatch_reap"):
+        try:
+            await _reap_discovered_stale_dispatches(ctx)
+        except Exception as exc:
+            transition_degraded(ctx, "stale_dispatch_reap", exc)
+            logger.warning("open_kitchen_reap_failed", exc_info=True)
+        else:
+            transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
+
+    if _transition_start(ctx, "tether_sweep"):
+        try:
+            from autoskillit.server.lifecycle._lifespan import (  # circular-break
+                _reap_self_excluded_codex_and_daemon_orphans,
+            )
+
+            await _tk_pkg.sweep_orphaned_tethers_async(_tk_pkg.default_tether_dir())
+            _reap_self_excluded_codex_and_daemon_orphans()
+        except Exception as exc:
+            transition_degraded(ctx, "tether_sweep", exc)
+            logger.warning("open_kitchen_tether_sweep_failed", exc_info=True)
+        else:
+            transition_confirm(ctx, "tether_sweep", receipt="tethers:swept")
+
+
+async def _reap_discovered_stale_dispatches(ctx: ToolContext) -> None:
+    """Reap stale dispatches when the project has campaign state."""
+    campaign_state_paths = _tk_pkg.discover_campaign_state_files(ctx.project_dir)
+    if campaign_state_paths:
+        await _tk_pkg.reap_stale_dispatches_async(
+            campaign_state_paths,
+            min_reap_age_seconds=60.0,
+            heartbeat_grace_seconds=90.0,
+        )
 
 
 async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:
@@ -54,55 +158,9 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         _tk_pkg.clear_recipe_execution(ctx)
         transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
-    _supports_quota = _backend_supports_quota(ctx)
-
-    if _transition_start(ctx, "hook_configuration"):
-        try:
-            _tk_pkg._write_hook_config()
-        except Exception as exc:
-            ctx.gate.disable()
-            transition_ambiguous(ctx, "hook_configuration", exc)
-            logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="write_hook_config")
-        transition_confirm(ctx, "hook_configuration", receipt="hook_config:written")
-
-    if _transition_start(ctx, "quota_cache_prime"):
-        try:
-            await _tk_pkg._prime_quota_cache(supports_quota_check=_supports_quota)
-        except Exception as exc:
-            ctx.gate.disable()
-            transition_ambiguous(ctx, "quota_cache_prime", exc)
-            logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
-        transition_confirm(ctx, "quota_cache_prime", receipt="quota_cache:primed")
-
-    if _transition_start(ctx, "quota_task_start"):
-        if ctx.quota_refresh_task is not None:
-            ctx.quota_refresh_task.cancel()
-            ctx.quota_refresh_task = None
-        if _supports_quota:
-            try:
-                ctx.quota_refresh_task = _tk_pkg.create_background_task(
-                    _tk_pkg._quota_refresh_loop(
-                        ctx.config.quota_guard,
-                        diagnostic_log_root=_tk_pkg.resolve_log_dir(
-                            ctx.config.linux_tracing.log_dir
-                        ),
-                        supports_quota_check=True,
-                    ),
-                    label="quota_refresh_loop",
-                )
-            except Exception as exc:
-                ctx.gate.disable()
-                transition_ambiguous(ctx, "quota_task_start", exc)
-                logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
-                return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
-        transition_confirm(
-            ctx,
-            "quota_task_start",
-            receipt="quota_task:owned" if _supports_quota else "quota_task:not_applicable",
-            downstream_identity=str(id(ctx.quota_refresh_task)) if _supports_quota else "",
-        )
+    runtime_err = await _configure_runtime_and_own_quota(ctx)
+    if runtime_err is not None:
+        return runtime_err
 
     if _transition_start(ctx, "registry_update"):
         try:
@@ -128,43 +186,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         else:
             transition_confirm(ctx, "tracker_prune", receipt="trackers:pruned")
 
-    if _transition_start(ctx, "marker_sweep"):
-        try:
-            sweep_stale_markers()
-        except Exception as exc:
-            transition_degraded(ctx, "marker_sweep", exc)
-            logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
-        else:
-            transition_confirm(ctx, "marker_sweep", receipt="markers:swept")
-
-    if _transition_start(ctx, "stale_dispatch_reap"):
-        try:
-            _campaign_state_paths = _tk_pkg.discover_campaign_state_files(ctx.project_dir)
-            if _campaign_state_paths:
-                await _tk_pkg.reap_stale_dispatches_async(
-                    _campaign_state_paths,
-                    min_reap_age_seconds=60.0,
-                    heartbeat_grace_seconds=90.0,
-                )
-        except Exception as exc:
-            transition_degraded(ctx, "stale_dispatch_reap", exc)
-            logger.warning("open_kitchen_reap_failed", exc_info=True)
-        else:
-            transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
-
-    if _transition_start(ctx, "tether_sweep"):
-        try:
-            from autoskillit.server.lifecycle._lifespan import (  # circular-break
-                _reap_self_excluded_codex_and_daemon_orphans,
-            )
-
-            await _tk_pkg.sweep_orphaned_tethers_async(_tk_pkg.default_tether_dir())
-            _reap_self_excluded_codex_and_daemon_orphans()
-        except Exception as exc:
-            transition_degraded(ctx, "tether_sweep", exc)
-            logger.warning("open_kitchen_tether_sweep_failed", exc_info=True)
-        else:
-            transition_confirm(ctx, "tether_sweep", receipt="tethers:swept")
+    await _maintain_stale_kitchen_state(ctx)
 
     ctx.gate_infrastructure_ready = True
     return None

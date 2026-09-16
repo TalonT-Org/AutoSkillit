@@ -65,13 +65,22 @@ def _references_symbol(node: ast.expr, symbol: str) -> bool:
 
 
 def _function_body_contains_symbol(tree: ast.Module, func_name: str, symbol: str) -> bool:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == func_name:
-            for child in ast.walk(node):
-                if isinstance(child, (ast.Name, ast.Attribute)) and _references_symbol(
-                    child, symbol
-                ):
-                    return True
+    """Follow async helper calls when checking a boot entry point's operations."""
+    functions = {
+        node.name: node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef)
+    }
+    pending = [func_name]
+    visited = set()
+    while pending:
+        name = pending.pop()
+        if name in visited or name not in functions:
+            continue
+        visited.add(name)
+        for child in ast.walk(functions[name]):
+            if isinstance(child, (ast.Name, ast.Attribute)) and _references_symbol(child, symbol):
+                return True
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                pending.append(child.func.id)
     return False
 
 

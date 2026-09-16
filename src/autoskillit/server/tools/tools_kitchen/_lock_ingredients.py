@@ -137,10 +137,11 @@ async def lock_ingredients(
             )
         effective_pipeline_id = pipeline_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
-        if locked:
-            server_auth_overlap = set(locked.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
-            if server_auth_overlap:
-                return json.dumps(build_authority_rejection_envelope(server_auth_overlap))
+        locked_keys = set(locked or {})
+        all_supplied_keys = locked_keys | set(unlock or ())
+        server_auth_overlap = locked_keys & SERVER_AUTHORITATIVE_INGREDIENTS
+        if server_auth_overlap:
+            return json.dumps(build_authority_rejection_envelope(server_auth_overlap))
 
         if not locked and not unlock:
             return json.dumps(
@@ -153,11 +154,6 @@ async def lock_ingredients(
         active_steps = getattr(ctx, "active_recipe_steps", None) or {}
         declared_ingredients = ctx.active_recipe_ingredients
         if declared_ingredients is not None:
-            all_supplied_keys: set[str] = set()
-            if locked:
-                all_supplied_keys |= set(locked.keys())
-            if unlock:
-                all_supplied_keys |= set(unlock)
             unknown = all_supplied_keys - declared_ingredients - SERVER_AUTHORITATIVE_INGREDIENTS
             if unknown:
                 return json.dumps(

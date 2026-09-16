@@ -19,6 +19,7 @@ at call time — patch the source module, not ``_orch``, for those.
 
 from __future__ import annotations
 
+from collections.abc import Sequence as _Sequence
 from typing import Any
 
 import autoskillit.recipe.api_orchestration._api_orchestration as _orch
@@ -48,9 +49,45 @@ from autoskillit.recipe.ingredients._recipe_composition import (
     _validate_route_consistency,
 )
 from autoskillit.recipe.ingredients._recipe_raw_repair import _resolve_skip_guards_in_content
+from autoskillit.recipe.registry import RuleFinding as _RuleFinding
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 __all__ = ["_record_pipeline_error", "_run_validation_pipeline"]
+
+
+def _reconcile_semantic_findings(
+    semantic_findings: list[_RuleFinding],
+    semantic_suggestions: list[dict[str, Any]],
+    *,
+    pre_prune_findings: list[_RuleFinding],
+    skip_resolutions: dict[str, bool | None],
+    recipe_name: str,
+    suppressed: _Sequence[str] | None,
+) -> tuple[list[_RuleFinding], list[dict[str, Any]]]:
+    """Reconcile pruning diagnostics and suppress displayed version findings."""
+    if skip_resolutions and any(value is not True for value in skip_resolutions.values()):
+        semantic_findings = filter_pruning_false_positives(semantic_findings, pre_prune_findings)
+        semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
+        graph_aware_rules = {"capture-inversion-detection", "dead-output"}
+        pre_prune_keys = {(finding.rule, finding.step_name) for finding in pre_prune_findings}
+        for finding in semantic_findings:
+            if (
+                finding.rule in graph_aware_rules
+                and (finding.rule, finding.step_name) not in pre_prune_keys
+            ):
+                _orch.logger.debug(
+                    "pruning_filter_new_finding",
+                    recipe=recipe_name,
+                    rule=finding.rule,
+                    step=finding.step_name,
+                    message=finding.message,
+                )
+
+    if recipe_name in (suppressed or ()):
+        from autoskillit.recipe.validator import filter_version_rule
+
+        semantic_suggestions = filter_version_rule(semantic_suggestions)
+    return semantic_findings, semantic_suggestions
 
 
 def _run_validation_pipeline(
@@ -141,7 +178,7 @@ def _run_validation_pipeline(
             # so the except clause records a structured suggestion.
             raise ValueError("_prune_skipped_steps returned None")
         _source_pre_prune_steps = dict(source_recipe.steps) if source_recipe else {}
-        _source_recipe, _source_skip_resolutions, _source_deferred_guard_state = (
+        _source_recipe, _source_skip_resolutions, _ = (
             _prune_skipped_steps(source_recipe, ingredient_overrides, defer_unresolved)
             if source_recipe
             else (None, {}, {})
@@ -252,32 +289,14 @@ def _run_validation_pipeline(
         semantic_findings = _orch.run_semantic_rules(val_ctx)
         semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
         t0 = _orch._t("semantic_rules", t0, name)
-
-        if _skip_resolutions and any(v is not True for v in _skip_resolutions.values()):
-            semantic_findings = filter_pruning_false_positives(
-                semantic_findings, _pre_prune_findings
-            )
-            semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
-            _graph_aware_rules = {"capture-inversion-detection", "dead-output"}
-            _pre_prune_keys = {(f.rule, f.step_name) for f in _pre_prune_findings}
-            for _f in semantic_findings:
-                if (
-                    _f.rule in _graph_aware_rules
-                    and (_f.rule, _f.step_name) not in _pre_prune_keys
-                ):
-                    _orch.logger.debug(
-                        "pruning_filter_new_finding",
-                        recipe=name,
-                        rule=_f.rule,
-                        step=_f.step_name,
-                        message=_f.message,
-                    )
-
-        _suppressed = suppressed or []
-        if name in _suppressed:
-            from autoskillit.recipe.validator import filter_version_rule
-
-            semantic_suggestions = filter_version_rule(semantic_suggestions)
+        semantic_findings, semantic_suggestions = _reconcile_semantic_findings(
+            semantic_findings,
+            semantic_suggestions,
+            pre_prune_findings=_pre_prune_findings,
+            skip_resolutions=_skip_resolutions,
+            recipe_name=name,
+            suppressed=suppressed,
+        )
         suggestions.extend(semantic_suggestions)
 
         # Stage: hidden ingredient interpolation

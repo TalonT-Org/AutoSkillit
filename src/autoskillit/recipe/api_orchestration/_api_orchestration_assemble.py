@@ -35,6 +35,38 @@ from autoskillit.recipe.schema import Recipe
 __all__ = ["_assemble_load_result", "_finalize_recipe_steps"]
 
 
+def _build_deferred_guards(
+    active_recipe: Recipe | None,
+    deferred_guard_state: dict[str, _DeferredGuardState],
+    skip_resolutions: dict[str, bool | None],
+) -> list[DeferredGuard]:
+    """Project unresolved deferred guards into their user-visible form."""
+    deferred_guards: list[DeferredGuard] = []
+    for step_name, (guard_reference, _guard_target) in deferred_guard_state.items():
+        if skip_resolutions.get(step_name) is not None:
+            continue
+        ingredient_name = (
+            guard_reference[len("inputs.") :]
+            if guard_reference and guard_reference.startswith("inputs.")
+            else guard_reference
+        )
+        ingredient = (
+            (active_recipe.ingredients or {}).get(ingredient_name)
+            if active_recipe and ingredient_name
+            else None
+        )
+        default = (
+            str(ingredient.default)
+            if ingredient is not None and getattr(ingredient, "default", None) is not None
+            else None
+        )
+        if ingredient_name is not None:
+            deferred_guards.append(
+                {"step": step_name, "ingredient": ingredient_name, "default": default}
+            )
+    return deferred_guards
+
+
 def _finalize_recipe_steps(
     recipe: Recipe,
     deferred_guard_state: dict[str, _DeferredGuardState],
@@ -143,26 +175,9 @@ def _assemble_load_result(
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None
 
-    _deferred_guard_list: list[DeferredGuard] = []
-    for _dg_step, (_dg_ref, _dg_target) in _deferred_guard_state.items():
-        if _skip_resolutions.get(_dg_step) is None:
-            _dg_ingredient = (
-                _dg_ref[len("inputs.") :] if _dg_ref and _dg_ref.startswith("inputs.") else _dg_ref
-            )
-            _dg_ing_obj = (
-                (active_recipe.ingredients or {}).get(_dg_ingredient)
-                if active_recipe and _dg_ingredient
-                else None
-            )
-            _dg_default = (
-                str(_dg_ing_obj.default)
-                if _dg_ing_obj is not None and getattr(_dg_ing_obj, "default", None) is not None
-                else None
-            )
-            if _dg_ingredient is not None:
-                _deferred_guard_list.append(
-                    {"step": _dg_step, "ingredient": _dg_ingredient, "default": _dg_default}
-                )
+    _deferred_guard_list = _build_deferred_guards(
+        active_recipe, _deferred_guard_state, _skip_resolutions
+    )
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:

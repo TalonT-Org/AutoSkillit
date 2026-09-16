@@ -39,7 +39,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import Recipe, RecipeKind
+from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
 
 logger = get_logger(__name__)
 
@@ -87,27 +87,8 @@ def _iter_string_leaves(value: object, path: str) -> list[tuple[str, str]]:
     return []
 
 
-def validate_recipe_structure(recipe: Recipe) -> list[str]:
-    """Return structural validation errors (empty if valid).
-
-    Does not run semantic rules or contract checks; use validate_from_path()
-    for complete validation.
-    """
+def _validate_delivery_declarations(recipe: Recipe, step_names: set[str]) -> list[str]:
     errors: list[str] = []
-
-    if not recipe.name:
-        errors.append("Recipe must have a 'name'." + _SKILL_HINT)
-
-    if recipe.kind == RecipeKind.CAMPAIGN:
-        if not recipe.dispatches:
-            errors.append("Campaign recipe must have at least one dispatch.")
-        return errors
-
-    if not recipe.steps:
-        errors.append("Recipe must have at least one step." + _SKILL_HINT)
-
-    step_names = set(recipe.steps.keys())
-
     if recipe.delivery_segments:
         segment_names = [segment.name.strip() for segment in recipe.delivery_segments]
         if any(not name for name in segment_names):
@@ -133,9 +114,105 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
                 "Delivery segments must contain every recipe step exactly once in "
                 "declaration order."
             )
+    return errors
 
-    ingredient_names = set(recipe.ingredients.keys())
 
+def _validate_step_operation(step_name: str, step: RecipeStep) -> list[str]:
+    errors: list[str] = []
+    discriminators = [
+        d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
+    ]
+    if len(discriminators) == 0:
+        errors.append(f"Step '{step_name}' must have 'tool', 'action', 'python', or 'constant'.")
+    if len(discriminators) > 1:
+        errors.append(
+            f"Step '{step_name}' has multiple discriminators "
+            f"({', '.join(discriminators)}); pick one."
+        )
+    if step.python is not None and "." not in step.python:
+        errors.append(
+            f"Step '{step_name}'.python must be a dotted path "
+            f"(module.function), got '{step.python}'."
+        )
+    if step.action == "stop" and not step.message:
+        errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
+    if step.action == "confirm":
+        if not step.message:
+            errors.append(f"Confirm step '{step_name}' (action: confirm) must have a 'message'.")
+        if not step.on_success:
+            errors.append(f"Confirm step '{step_name}' (action: confirm) must have 'on_success'.")
+        if not step.on_failure:
+            errors.append(f"Confirm step '{step_name}' (action: confirm) must have 'on_failure'.")
+    return errors
+
+
+def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str]) -> list[str]:
+    errors: list[str] = []
+    for goto_field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
+        target = getattr(step, goto_field)
+        if target and target not in step_names and target not in RECIPE_TERMINAL_TARGETS:
+            errors.append(f"Step '{step_name}'.{goto_field} references unknown step '{target}'.")
+
+    # on_exhausted: may be a step name OR one of the reserved terminal targets
+    if step.on_exhausted not in step_names and step.on_exhausted not in RECIPE_TERMINAL_TARGETS:
+        errors.append(
+            f"Step '{step_name}'.on_exhausted references unknown step '{step.on_exhausted}'."
+        )
+
+    if not isinstance(step.retries, int) or step.retries < 0:
+        errors.append(
+            f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
+        )
+
+    if step.stale_threshold is not None and (
+        not isinstance(step.stale_threshold, int) or step.stale_threshold <= 0
+    ):
+        errors.append(
+            f"Step {step_name!r}: 'stale_threshold' must be a positive integer "
+            f"when set, got {step.stale_threshold!r}"
+        )
+
+    if step.idle_output_timeout is not None and (
+        not isinstance(step.idle_output_timeout, int) or step.idle_output_timeout < 0
+    ):
+        errors.append(
+            f"Step {step_name!r}: 'idle_output_timeout' must be a non-negative integer "
+            f"when set (0 = disabled), got {step.idle_output_timeout!r}"
+        )
+
+    if step.on_result is not None:
+        if step.on_success is not None:
+            errors.append(
+                f"Step '{step_name}' has both 'on_result' and 'on_success'; "
+                f"they are mutually exclusive."
+            )
+        if step.on_result.conditions:
+            for i, cond in enumerate(step.on_result.conditions):
+                if not cond.route:
+                    errors.append(f"Step '{step_name}'.on_result[{i}].route must be non-empty.")
+                elif cond.route not in step_names and cond.route != "done":
+                    errors.append(
+                        f"Step '{step_name}'.on_result[{i}].route references "
+                        f"unknown step '{cond.route}'."
+                    )
+        else:
+            if not step.on_result.field:
+                errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
+            if not step.on_result.routes:
+                errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
+            for value, target in step.on_result.routes.items():
+                if target not in step_names and target != "done":
+                    errors.append(
+                        f"Step '{step_name}'.on_result.routes.{value} references "
+                        f"unknown step '{target}'."
+                    )
+    return errors
+
+
+def _validate_step_schemas(
+    recipe: Recipe, step_names: set[str], ingredient_names: set[str]
+) -> list[str]:
+    errors: list[str] = []
     for step_name, step in recipe.steps.items():
         if step.skip_when_true is not None:
             if not _SKIP_WHEN_TRUE_RE.fullmatch(step.skip_when_true):
@@ -186,109 +263,13 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
             # sub_recipe steps skip discriminator/with_args/capture/on_result validation below
             continue
 
-        discriminators = [
-            d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
-        ]
-        if len(discriminators) == 0:
-            errors.append(
-                f"Step '{step_name}' must have 'tool', 'action', 'python', or 'constant'."
-            )
-        if len(discriminators) > 1:
-            errors.append(
-                f"Step '{step_name}' has multiple discriminators "
-                f"({', '.join(discriminators)}); pick one."
-            )
-        if step.python is not None and "." not in step.python:
-            errors.append(
-                f"Step '{step_name}'.python must be a dotted path "
-                f"(module.function), got '{step.python}'."
-            )
-        if step.action == "stop" and not step.message:
-            errors.append(f"Terminal step '{step_name}' (action: stop) must have a 'message'.")
-        if step.action == "confirm":
-            if not step.message:
-                errors.append(
-                    f"Confirm step '{step_name}' (action: confirm) must have a 'message'."
-                )
-            if not step.on_success:
-                errors.append(
-                    f"Confirm step '{step_name}' (action: confirm) must have 'on_success'."
-                )
-            if not step.on_failure:
-                errors.append(
-                    f"Confirm step '{step_name}' (action: confirm) must have 'on_failure'."
-                )
+        errors.extend(_validate_step_operation(step_name, step))
+        errors.extend(_validate_step_routing(step_name, step, step_names))
+    return errors
 
-        # Routing target validation
-        for goto_field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
-            target = getattr(step, goto_field)
-            if target and target not in step_names and target not in RECIPE_TERMINAL_TARGETS:
-                errors.append(
-                    f"Step '{step_name}'.{goto_field} references unknown step '{target}'."
-                )
 
-        # on_exhausted: may be a step name OR one of the reserved terminal targets
-        if (
-            step.on_exhausted not in step_names
-            and step.on_exhausted not in RECIPE_TERMINAL_TARGETS
-        ):
-            errors.append(
-                f"Step '{step_name}'.on_exhausted references unknown step '{step.on_exhausted}'."
-            )
-
-        # retries must be a non-negative integer
-        if not isinstance(step.retries, int) or step.retries < 0:
-            errors.append(
-                f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
-            )
-
-        if step.stale_threshold is not None and (
-            not isinstance(step.stale_threshold, int) or step.stale_threshold <= 0
-        ):
-            errors.append(
-                f"Step {step_name!r}: 'stale_threshold' must be a positive integer "
-                f"when set, got {step.stale_threshold!r}"
-            )
-
-        if step.idle_output_timeout is not None and (
-            not isinstance(step.idle_output_timeout, int) or step.idle_output_timeout < 0
-        ):
-            errors.append(
-                f"Step {step_name!r}: 'idle_output_timeout' must be a non-negative integer "
-                f"when set (0 = disabled), got {step.idle_output_timeout!r}"
-            )
-
-        if step.on_result is not None:
-            if step.on_success is not None:
-                errors.append(
-                    f"Step '{step_name}' has both 'on_result' and 'on_success'; "
-                    f"they are mutually exclusive."
-                )
-            if step.on_result.conditions:
-                # Predicate format validation
-                for i, cond in enumerate(step.on_result.conditions):
-                    if not cond.route:
-                        errors.append(
-                            f"Step '{step_name}'.on_result[{i}].route must be non-empty."
-                        )
-                    elif cond.route not in step_names and cond.route != "done":
-                        errors.append(
-                            f"Step '{step_name}'.on_result[{i}].route references "
-                            f"unknown step '{cond.route}'."
-                        )
-            else:
-                # Legacy format validation
-                if not step.on_result.field:
-                    errors.append(f"Step '{step_name}'.on_result.field must be non-empty.")
-                if not step.on_result.routes:
-                    errors.append(f"Step '{step_name}'.on_result.routes must be non-empty.")
-                for value, target in step.on_result.routes.items():
-                    if target not in step_names and target != "done":
-                        errors.append(
-                            f"Step '{step_name}'.on_result.routes.{value} references "
-                            f"unknown step '{target}'."
-                        )
-
+def _validate_step_references(recipe: Recipe, ingredient_names: set[str]) -> list[str]:
+    errors: list[str] = []
     # Validate capture values: must contain ${{ result.* }} expressions
     # (constant steps use literal capture values — no template expression needed)
     # sub_recipe steps are placeholders — skip capture validation for them.
@@ -352,6 +333,34 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
                             f"context variable '{ref}' which has not been "
                             f"captured by a preceding step."
                         )
+    return errors
+
+
+def validate_recipe_structure(recipe: Recipe) -> list[str]:
+    """Return structural validation errors (empty if valid).
+
+    Does not run semantic rules or contract checks; use validate_from_path()
+    for complete validation.
+    """
+    errors: list[str] = []
+
+    if not recipe.name:
+        errors.append("Recipe must have a 'name'." + _SKILL_HINT)
+
+    if recipe.kind == RecipeKind.CAMPAIGN:
+        if not recipe.dispatches:
+            errors.append("Campaign recipe must have at least one dispatch.")
+        return errors
+
+    if not recipe.steps:
+        errors.append("Recipe must have at least one step." + _SKILL_HINT)
+
+    step_names = set(recipe.steps.keys())
+
+    errors.extend(_validate_delivery_declarations(recipe, step_names))
+    ingredient_names = set(recipe.ingredients.keys())
+    errors.extend(_validate_step_schemas(recipe, step_names, ingredient_names))
+    errors.extend(_validate_step_references(recipe, ingredient_names))
 
     if not recipe.kitchen_rules:
         errors.append(
@@ -362,32 +371,12 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
     return errors
 
 
-def _finalize_delivery_segments(
+def _validate_delivery_graph(
     recipe: Recipe,
+    normalized: list[tuple[str, tuple[str, ...]]],
     ordered_flow_edges: tuple[RecipeFlowEdge, ...],
-) -> tuple[tuple[FinalizedRecipeSegment, ...], list[str]]:
-    """Normalize declared segments against one post-prune recipe graph."""
-    if not recipe.delivery_segments:
-        return (), []
-
-    surviving_steps = set(recipe.steps)
-    normalized = [
-        (segment.name.strip(), tuple(step for step in segment.steps if step in surviving_steps))
-        for segment in recipe.delivery_segments
-    ]
-    normalized = [(name, steps) for name, steps in normalized if steps]
-    flattened = tuple(step for _name, steps in normalized for step in steps)
-    ordered_steps = tuple(recipe.steps)
+) -> tuple[list[list[str]], list[str]]:
     errors: list[str] = []
-    if flattened != ordered_steps:
-        errors.append(
-            "Finalized delivery segments must partition post-prune steps in declaration order."
-        )
-        return (), errors
-    if not normalized or ordered_steps[0] not in normalized[0][1]:
-        errors.append("The initial delivery segment must contain the finalized entrypoint.")
-        return (), errors
-
     segment_index = {
         step_name: index for index, (_name, steps) in enumerate(normalized) for step_name in steps
     }
@@ -463,6 +452,36 @@ def _finalize_delivery_segments(
         if edge.source not in checkpoint_sources[target_index]:
             checkpoint_sources[target_index].append(edge.source)
 
+    return checkpoint_sources, errors
+
+
+def _finalize_delivery_segments(
+    recipe: Recipe,
+    ordered_flow_edges: tuple[RecipeFlowEdge, ...],
+) -> tuple[tuple[FinalizedRecipeSegment, ...], list[str]]:
+    """Normalize declared segments against one post-prune recipe graph."""
+    if not recipe.delivery_segments:
+        return (), []
+
+    surviving_steps = set(recipe.steps)
+    normalized = [
+        (segment.name.strip(), tuple(step for step in segment.steps if step in surviving_steps))
+        for segment in recipe.delivery_segments
+    ]
+    normalized = [(name, steps) for name, steps in normalized if steps]
+    flattened = tuple(step for _name, steps in normalized for step in steps)
+    ordered_steps = tuple(recipe.steps)
+    errors: list[str] = []
+    if flattened != ordered_steps:
+        errors.append(
+            "Finalized delivery segments must partition post-prune steps in declaration order."
+        )
+        return (), errors
+    if not normalized or ordered_steps[0] not in normalized[0][1]:
+        errors.append("The initial delivery segment must contain the finalized entrypoint.")
+        return (), errors
+
+    checkpoint_sources, errors = _validate_delivery_graph(recipe, normalized, ordered_flow_edges)
     if errors:
         return (), errors
     return (

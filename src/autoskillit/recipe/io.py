@@ -425,6 +425,82 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
     return result
 
 
+def _parse_campaign_dispatches(dispatches_raw: Any) -> list[CampaignDispatch]:
+    dispatches: list[CampaignDispatch] = []
+    for dispatch_raw in dispatches_raw:
+        if not isinstance(dispatch_raw, dict):
+            continue
+        dispatch_name = dispatch_raw.get("name", "")
+        raw_gate = dispatch_raw.get("gate") or None
+        try:
+            dispatch_gate: DispatchGateType | None = (
+                DispatchGateType(raw_gate) if raw_gate else None
+            )
+        except ValueError:
+            dispatch_gate = raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe_structure
+        dispatch_recipe = dispatch_raw.get("recipe", "")
+        if not dispatch_name:
+            raise ValueError(
+                f"Campaign dispatch is missing required 'name' field: {dispatch_raw!r}"
+            )
+        if dispatch_gate and dispatch_recipe:
+            raise ValueError(
+                f"Campaign dispatch {dispatch_name!r} has both 'gate' and 'recipe' set. "
+                "A dispatch must be either a gate dispatch (gate only) or a recipe "
+                "dispatch (recipe only), not both."
+            )
+        if not dispatch_gate and not dispatch_recipe:
+            raise ValueError(
+                "Campaign dispatch is missing required 'recipe' field "
+                f"(required when 'gate' is not set): {dispatch_raw!r}"
+            )
+        dispatches.append(
+            CampaignDispatch(
+                name=dispatch_name,
+                recipe=dispatch_recipe,
+                task=dispatch_raw.get("task", ""),
+                ingredients=dispatch_raw.get("ingredients") or {},
+                depends_on=dispatch_raw.get("depends_on") or [],
+                capture=_parse_capture_spec(dispatch_raw.get("capture")),
+                gate=dispatch_gate,
+                message=dispatch_raw.get("message") or None,
+                skip_when=dispatch_raw.get("skip_when") or None,
+            )
+        )
+    return dispatches
+
+
+def _parse_delivery_segments(delivery_segments_raw: Any) -> tuple[RecipeDeliverySegment, ...]:
+    if delivery_segments_raw is None:
+        return ()
+    if not isinstance(delivery_segments_raw, list) or not delivery_segments_raw:
+        raise ValueError("'delivery_segments' must be a non-empty list when declared")
+
+    parsed_segments: list[RecipeDeliverySegment] = []
+    for index, segment_raw in enumerate(delivery_segments_raw):
+        if not isinstance(segment_raw, dict):
+            raise ValueError(
+                f"delivery_segments[{index}] must be a mapping, got {type(segment_raw).__name__!r}"
+            )
+        unknown_fields = set(segment_raw) - {"name", "steps"}
+        if unknown_fields:
+            raise ValueError(
+                f"delivery_segments[{index}] has unknown fields: {sorted(unknown_fields)!r}"
+            )
+        segment_name = segment_raw.get("name")
+        segment_steps = segment_raw.get("steps")
+        if not isinstance(segment_name, str):
+            raise ValueError(f"delivery_segments[{index}].name must be a string")
+        if not isinstance(segment_steps, list) or not all(
+            isinstance(step_name, str) for step_name in segment_steps
+        ):
+            raise ValueError(f"delivery_segments[{index}].steps must be a list of strings")
+        parsed_segments.append(
+            RecipeDeliverySegment(name=segment_name, steps=tuple(segment_steps))
+        )
+    return tuple(parsed_segments)
+
+
 def _parse_recipe(
     data: dict[str, Any],
     *,
@@ -489,45 +565,7 @@ def _parse_recipe(
     except ValueError:
         kind = RecipeKind.STANDARD
 
-    dispatches_raw = data.get("dispatches") or []
-    dispatches = []
-    for d in dispatches_raw:
-        if isinstance(d, dict):
-            d_name = d.get("name", "")
-            _raw_gate = d.get("gate") or None
-            try:
-                d_gate: DispatchGateType | None = (
-                    DispatchGateType(_raw_gate) if _raw_gate else None
-                )
-            except ValueError:
-                d_gate = _raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe_structure
-            d_recipe = d.get("recipe", "")
-            if not d_name:
-                raise ValueError(f"Campaign dispatch is missing required 'name' field: {d!r}")
-            if d_gate and d_recipe:
-                raise ValueError(
-                    f"Campaign dispatch {d_name!r} has both 'gate' and 'recipe' set. "
-                    "A dispatch must be either a gate dispatch (gate only) or a recipe "
-                    "dispatch (recipe only), not both."
-                )
-            if not d_gate and not d_recipe:
-                raise ValueError(
-                    f"Campaign dispatch is missing required 'recipe' field "
-                    f"(required when 'gate' is not set): {d!r}"
-                )
-            dispatches.append(
-                CampaignDispatch(
-                    name=d_name,
-                    recipe=d_recipe,
-                    task=d.get("task", ""),
-                    ingredients=d.get("ingredients") or {},
-                    depends_on=d.get("depends_on") or [],
-                    capture=_parse_capture_spec(d.get("capture")),
-                    gate=d_gate,
-                    message=d.get("message") or None,
-                    skip_when=d.get("skip_when") or None,
-                )
-            )
+    dispatches = _parse_campaign_dispatches(data.get("dispatches") or [])
 
     categories = data.get("categories") or []
     requires_recipe_packs = data.get("requires_recipe_packs") or []
@@ -543,35 +581,7 @@ def _parse_recipe(
         bad = [f for f in requires_features_raw if not isinstance(f, str)]
         raise ValueError(f"'requires_features' entries must be strings, got: {bad!r}")
 
-    delivery_segments_raw = data.get("delivery_segments")
-    delivery_segments: tuple[RecipeDeliverySegment, ...] = ()
-    if delivery_segments_raw is not None:
-        if not isinstance(delivery_segments_raw, list) or not delivery_segments_raw:
-            raise ValueError("'delivery_segments' must be a non-empty list when declared")
-        parsed_segments: list[RecipeDeliverySegment] = []
-        for index, segment_raw in enumerate(delivery_segments_raw):
-            if not isinstance(segment_raw, dict):
-                raise ValueError(
-                    f"delivery_segments[{index}] must be a mapping, "
-                    f"got {type(segment_raw).__name__!r}"
-                )
-            unknown_fields = set(segment_raw) - {"name", "steps"}
-            if unknown_fields:
-                raise ValueError(
-                    f"delivery_segments[{index}] has unknown fields: {sorted(unknown_fields)!r}"
-                )
-            segment_name = segment_raw.get("name")
-            segment_steps = segment_raw.get("steps")
-            if not isinstance(segment_name, str):
-                raise ValueError(f"delivery_segments[{index}].name must be a string")
-            if not isinstance(segment_steps, list) or not all(
-                isinstance(step_name, str) for step_name in segment_steps
-            ):
-                raise ValueError(f"delivery_segments[{index}].steps must be a list of strings")
-            parsed_segments.append(
-                RecipeDeliverySegment(name=segment_name, steps=tuple(segment_steps))
-            )
-        delivery_segments = tuple(parsed_segments)
+    delivery_segments = _parse_delivery_segments(data.get("delivery_segments"))
 
     # Recipe YAML uses the canonical key, while card-shaped metadata uses plain
     # ``version``. Preserve canonical-key precedence when both are present.

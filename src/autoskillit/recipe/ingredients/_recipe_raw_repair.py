@@ -9,20 +9,17 @@ from autoskillit.recipe.ingredients._recipe_composition import _resolve_skip_red
 from autoskillit.recipe.schema import RecipeStep
 
 
-def _resolve_skip_guards_in_content(
-    raw: str,
-    resolutions: dict[str, bool | None],
-    original_steps: dict[str, RecipeStep],
-) -> str:
-    """Apply skip_when_false resolution decisions to the raw YAML content string.
+def _line_start(raw: str, index: int) -> int:
+    return raw.rfind("\n", 0, index) + 1
 
-    For each resolved step:
-    - Truthy (step kept): strip skip_when_false and optional: true lines so the step
-      appears mandatory.
-    - Falsy (step pruned): strip the entire step block.
-    """
-    if not resolutions:
-        return raw
+
+def _line_end(raw: str, index: int) -> int:
+    newline = raw.find("\n", index)
+    return len(raw) if newline < 0 else newline + 1
+
+
+def _validate_guarded_yaml(raw: str) -> Any:
+    """Compose guarded YAML and return its validated block-style steps mapping."""
     root = compose_yaml(raw)
     if not is_yaml_mapping_node(root):
         raise ValueError("Guarded recipe must be a YAML mapping")
@@ -74,23 +71,30 @@ def _resolve_skip_guards_in_content(
 
     if any(counts.get(id(node), 0) > 1 for node in descendants(steps_node, set())):
         raise ValueError("Guarded recipe does not support aliases within steps")
+    return steps_node
 
-    def line_start(index: int) -> int:
-        return raw.rfind("\n", 0, index) + 1
 
-    def line_end(index: int) -> int:
-        newline = raw.find("\n", index)
-        return len(raw) if newline < 0 else newline + 1
+def _collect_step_source_edits(
+    raw: str,
+    step_name: str,
+    step_node: Any,
+    *,
+    resolution: bool | None,
+    redirects: dict[str, str],
+) -> list[tuple[int, int, str]]:
+    """Collect validated guard and route edits for one surviving step block."""
+    edits: list[tuple[int, int, str]] = []
+    for key_node, value_node in step_node.value:
+        key = str(key_node.value)
+        if key in {"skip_when_false", "on_skip"} or (key == "optional" and resolution is True):
+            edits.append(
+                (
+                    _line_start(raw, key_node.start_mark.index),
+                    _line_end(raw, value_node.end_mark.index),
+                    "",
+                )
+            )
 
-    redirects = _resolve_skip_redirects(original_steps, resolutions)
-    entries = list(steps_node.value)
-    mapping_end = (
-        len(raw)
-        if steps_node.end_mark.index >= len(raw)
-        else line_start(steps_node.end_mark.index)
-    )
-    blocks: dict[str, str] = {}
-    order: list[str] = []
     route_fields = {
         "on_success",
         "on_failure",
@@ -99,68 +103,87 @@ def _resolve_skip_guards_in_content(
         "on_exhausted",
         "route",
     }
+
+    def collect_route_edits(node: Any, parent_key: str | None = None) -> None:
+        value = getattr(node, "value", None)
+        if not isinstance(value, list):
+            return
+        for item in value:
+            if isinstance(item, tuple):
+                key_node, value_node = item
+                key = str(getattr(key_node, "value", ""))
+                scalar = getattr(value_node, "value", None)
+                is_legacy_route = parent_key == "routes"
+                if isinstance(scalar, str) and (key in route_fields or is_legacy_route):
+                    replacement = redirects.get(scalar)
+                    if replacement is not None:
+                        style = getattr(value_node, "style", None)
+                        rendered = replacement
+                        if style == "'":
+                            rendered = "'" + replacement.replace("'", "''") + "'"
+                        elif style == '"':
+                            rendered = (
+                                '"' + replacement.replace("\\", "\\\\").replace('"', '\\"') + '"'
+                            )
+                        edits.append(
+                            (value_node.start_mark.index, value_node.end_mark.index, rendered)
+                        )
+                collect_route_edits(value_node, key)
+            else:
+                collect_route_edits(item, parent_key)
+
+    collect_route_edits(step_node)
+    ordered_edits = sorted(edits)
+    for previous, current in zip(ordered_edits, ordered_edits[1:]):
+        if previous[1] > current[0]:
+            raise ValueError(f"Overlapping YAML edit spans in step '{step_name}'")
+    return ordered_edits
+
+
+def _resolve_skip_guards_in_content(
+    raw: str,
+    resolutions: dict[str, bool | None],
+    original_steps: dict[str, RecipeStep],
+) -> str:
+    """Apply skip_when_false resolution decisions to the raw YAML content string.
+
+    For each resolved step:
+    - Truthy (step kept): strip skip_when_false and optional: true lines so the step
+      appears mandatory.
+    - Falsy (step pruned): strip the entire step block.
+    """
+    if not resolutions:
+        return raw
+    steps_node = _validate_guarded_yaml(raw)
+    redirects = _resolve_skip_redirects(original_steps, resolutions)
+    entries = list(steps_node.value)
+    mapping_end = (
+        len(raw)
+        if steps_node.end_mark.index >= len(raw)
+        else _line_start(raw, steps_node.end_mark.index)
+    )
+    blocks: dict[str, str] = {}
+    order: list[str] = []
     for index, (name_node, step_node) in enumerate(entries):
         name = str(name_node.value)
         order.append(name)
-        start = line_start(name_node.start_mark.index)
+        start = _line_start(raw, name_node.start_mark.index)
         end = (
-            line_start(entries[index + 1][0].start_mark.index)
+            _line_start(raw, entries[index + 1][0].start_mark.index)
             if index + 1 < len(entries)
             else mapping_end
         )
         if resolutions.get(name) is False:
             continue
-        edits: list[tuple[int, int, str]] = []
-        for key_node, value_node in step_node.value:
-            key = str(key_node.value)
-            if key in {"skip_when_false", "on_skip"} or (
-                key == "optional" and resolutions.get(name) is True
-            ):
-                edits.append(
-                    (
-                        line_start(key_node.start_mark.index),
-                        line_end(value_node.end_mark.index),
-                        "",
-                    )
-                )
-
-        def collect_route_edits(node: Any, parent_key: str | None = None) -> None:
-            value = getattr(node, "value", None)
-            if not isinstance(value, list):
-                return
-            for item in value:
-                if isinstance(item, tuple):
-                    key_node, value_node = item
-                    key = str(getattr(key_node, "value", ""))
-                    scalar = getattr(value_node, "value", None)
-                    is_legacy_route = parent_key == "routes"
-                    if isinstance(scalar, str) and (key in route_fields or is_legacy_route):
-                        replacement = redirects.get(scalar)
-                        if replacement is not None:
-                            style = getattr(value_node, "style", None)
-                            rendered = replacement
-                            if style == "'":
-                                rendered = "'" + replacement.replace("'", "''") + "'"
-                            elif style == '"':
-                                rendered = (
-                                    '"'
-                                    + replacement.replace("\\", "\\\\").replace('"', '\\"')
-                                    + '"'
-                                )
-                            edits.append(
-                                (value_node.start_mark.index, value_node.end_mark.index, rendered)
-                            )
-                    collect_route_edits(value_node, key)
-                else:
-                    collect_route_edits(item, parent_key)
-
-        collect_route_edits(step_node)
-        ordered_edits = sorted(edits)
-        for previous, current in zip(ordered_edits, ordered_edits[1:]):
-            if previous[1] > current[0]:
-                raise ValueError(f"Overlapping YAML edit spans in step '{name}'")
+        edits = _collect_step_source_edits(
+            raw,
+            name,
+            step_node,
+            resolution=resolutions.get(name),
+            redirects=redirects,
+        )
         block = raw[start:end]
-        for edit_start, edit_end, replacement in sorted(edits, reverse=True):
+        for edit_start, edit_end, replacement in reversed(edits):
             block = block[: edit_start - start] + replacement + block[edit_end - start :]
         blocks[name] = block
 
@@ -168,6 +191,6 @@ def _resolve_skip_guards_in_content(
     if order and order[0] in redirects:
         entry = redirects[order[0]]
         surviving = [entry, *[name for name in surviving if name != entry]]
-    content_start = line_start(entries[0][0].start_mark.index)
+    content_start = _line_start(raw, entries[0][0].start_mark.index)
     content_end = mapping_end
     return raw[:content_start] + "".join(blocks[name] for name in surviving) + raw[content_end:]

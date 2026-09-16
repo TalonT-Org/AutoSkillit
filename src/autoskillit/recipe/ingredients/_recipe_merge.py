@@ -16,12 +16,17 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.recipe.schema import (
-    StepResultCondition,
-    StepResultRoute,
-)
-
 __all__ = ["_merge_sub_recipe"]
+
+
+def _append_unseen_strings(parent: list[str], additions: list[str]) -> list[str]:
+    merged = list(parent)
+    seen = set(merged)
+    for addition in additions:
+        if addition not in seen:
+            merged.append(addition)
+            seen.add(addition)
+    return merged
 
 
 def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
@@ -57,48 +62,14 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
         raw_prefix += "_"
     prefix = raw_prefix
 
-    sub_step_names = set(sub.steps.keys())
-
-    def _fix_route(target: str | None) -> str | None:
-        if target is None:
-            return None
-        if target == "done":
-            return on_success
-        if target == "escalate":
-            return on_failure
-        if target in sub_step_names:
-            return prefix + target
-        return target
-
-    def _fix_result_route(route: Any) -> Any:
-        if route is None:
-            return None
-        if route.conditions:
-            return StepResultRoute(
-                conditions=[
-                    StepResultCondition(when=c.when, route=_fix_route(c.route) or "")
-                    for c in route.conditions
-                ]
-            )
-        return StepResultRoute(
-            field=route.field,
-            routes={k: (_fix_route(v) or v) for k, v in route.routes.items()},
-        )
+    redirects = {name: prefix + name for name in sub.steps}
+    redirects["done"] = on_success
+    redirects["escalate"] = on_failure
 
     prefixed_steps: dict[str, Any] = {}
     for sub_step_name, sub_step in sub.steps.items():
         new_name = prefix + sub_step_name
-        new_step = dataclasses.replace(
-            sub_step,
-            on_success=_fix_route(sub_step.on_success),
-            on_failure=_fix_route(sub_step.on_failure),
-            on_context_limit=_fix_route(sub_step.on_context_limit),
-            on_rate_limit=_fix_route(sub_step.on_rate_limit),
-            on_exhausted=_fix_route(sub_step.on_exhausted),
-            on_skip=_fix_route(sub_step.on_skip),
-            on_result=_fix_result_route(sub_step.on_result),
-        )
-        prefixed_steps[new_name] = new_step
+        prefixed_steps[new_name] = _rewrite_step_routes(sub_step, redirects)
 
     # Assemble new steps dict: sub-recipe steps injected in place of placeholder
     new_steps: dict[str, Any] = {}
@@ -118,35 +89,11 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
         if ing_name not in merged_ingredients:
             merged_ingredients[ing_name] = ing
 
-    # Merge kitchen_rules: union (parent first, then sub-recipe additions)
-    seen_rules: set[str] = set(parent.kitchen_rules)
-    merged_rules = list(parent.kitchen_rules)
-    for rule in sub.kitchen_rules:
-        if rule not in seen_rules:
-            merged_rules.append(rule)
-            seen_rules.add(rule)
-
-    # Merge requires_packs: union (parent first, then sub-recipe additions)
-    seen_packs: set[str] = set(parent.requires_packs)
-    merged_packs = list(parent.requires_packs)
-    for pack in sub.requires_packs:
-        if pack not in seen_packs:
-            merged_packs.append(pack)
-            seen_packs.add(pack)
-
-    # Merge requires_features: union (parent first, then sub-recipe additions)
-    seen_features: set[str] = set(parent.requires_features)
-    merged_features = list(parent.requires_features)
-    for feat in sub.requires_features:
-        if feat not in seen_features:
-            merged_features.append(feat)
-            seen_features.add(feat)
-
     return dataclasses.replace(
         parent,
         steps=new_steps,
         ingredients=merged_ingredients,
-        kitchen_rules=merged_rules,
-        requires_packs=merged_packs,
-        requires_features=merged_features,
+        kitchen_rules=_append_unseen_strings(parent.kitchen_rules, sub.kitchen_rules),
+        requires_packs=_append_unseen_strings(parent.requires_packs, sub.requires_packs),
+        requires_features=_append_unseen_strings(parent.requires_features, sub.requires_features),
     )

@@ -48,6 +48,7 @@ from autoskillit.recipe.contracts._contracts_types import (
 from autoskillit.recipe.contracts._contracts_types import (
     INPUT_REF_RE as _INPUT_REF_RE,
 )
+from autoskillit.recipe.contracts._contracts_types import SkillContract as _SkillContract
 from autoskillit.recipe.schema import RecipeStep
 
 __all__ = [
@@ -162,33 +163,19 @@ def _wire_value_is_valid(value: object, param: ToolParamDef) -> bool:
             return isinstance(value, (list, tuple))
 
 
-def bind_step_invocation(
+def _compile_tool_parameters(
     step_name: str,
-    step: Any,
+    tool_name: str,
+    tool_def: ToolDef,
     *,
-    manifest: dict[str, Any] | None = None,
-    ingredient_values: Mapping[str, BoundScalar] | None = None,
-    hidden_inputs: frozenset[str] = frozenset(),
-    mode: BindingMode = BindingMode.RECIPE,
-) -> BoundStepInvocation:
-    """Compile one recipe step without mutating its source model."""
-
-    tool_name = step.tool or ""
-    effective_with: Mapping[str, object] = step.with_args or {}
-    declared_candidate: Mapping[str, object] | None = getattr(step, "declared_with_args", None)
-    declared_with = effective_with if declared_candidate is None else declared_candidate
-    tool_def = get_tool_def(tool_name)
-    if tool_def is None:
-        failure = _failure(
-            BindingFailureCode.UNKNOWN_TOOL,
-            step_name,
-            tool_name,
-            f"tool {tool_name!r} is not present in the canonical registry",
-        )
-        return BoundStepInvocation(step_name, tool_name, mode, None, (), (), (failure,))
-
+    active_manifest: dict[str, Any],
+    declared_with: Mapping[str, object],
+    effective_with: Mapping[str, object],
+    hidden_inputs: frozenset[str],
+    ingredient_values: Mapping[str, BoundScalar] | None,
+) -> tuple[list[BoundValue], list[BindingFailure]]:
+    """Compile declared tool parameters in canonical registry order."""
     failures: list[BindingFailure] = []
-    active_manifest = manifest if manifest is not None else load_bundled_manifest()
     undeclared_effective_params = frozenset(effective_with) - frozenset(declared_with)
     for name in sorted(undeclared_effective_params):
         failures.append(
@@ -308,18 +295,77 @@ def bind_step_invocation(
                     f"tool parameter {param.name!r} expects {param.wire_type.value!r}",
                 )
             )
+    return mcp_kwargs, failures
 
-    if tool_name != "run_skill":
-        return BoundStepInvocation(
+
+def _bind_run_skill_inputs(
+    step_name: str,
+    step: Any,
+    *,
+    declared_command: str,
+    effective_command: str,
+    declared_structured: object,
+    effective_structured: object,
+    contract: _SkillContract,
+    hidden_inputs: frozenset[str],
+    ingredients: Mapping[str, BoundScalar],
+) -> tuple[tuple[BoundValue, ...], tuple[BindingFailure, ...]]:
+    """Dispatch structured or inline run_skill inputs against one contract."""
+    try:
+        has_inline_args = bool(_tokenize_skill_command(declared_command)[1:])
+    except ValueError:
+        has_inline_args = True
+    if declared_structured is not None and has_inline_args:
+        failure = _failure(
+            BindingFailureCode.AMBIGUOUS_SKILL_INPUT,
             step_name,
-            tool_name,
-            mode,
-            None,
-            tuple(mcp_kwargs),
-            (),
-            tuple(failures),
+            "skill_inputs",
+            "run_skill may not mix inline arguments with structured skill_inputs",
         )
+        return tuple(BoundValue.absent(item.name) for item in contract.inputs), (failure,)
+    if declared_structured is not None:
+        if not isinstance(declared_structured, Mapping) or not isinstance(
+            effective_structured, Mapping
+        ):
+            failure = _failure(
+                BindingFailureCode.INVALID_SKILL_INPUT_TYPE,
+                step_name,
+                "skill_inputs",
+                "run_skill.skill_inputs must be a mapping",
+            )
+            return (), (failure,)
+        return _structured_skill_inputs(
+            step_name=step_name,
+            declared_values=declared_structured,
+            effective_values=effective_structured,
+            contract=contract,
+            hidden_inputs=hidden_inputs,
+            ingredient_values=ingredients,
+            optional_context_refs=frozenset(step.optional_context_refs),
+        )
+    return _inline_skill_inputs(
+        step_name=step_name,
+        declared_command=declared_command,
+        effective_command=effective_command,
+        contract=contract,
+    )
 
+
+def _bind_run_skill_invocation(
+    step_name: str,
+    step: Any,
+    *,
+    tool_name: str,
+    mode: BindingMode,
+    active_manifest: dict[str, Any],
+    declared_with: Mapping[str, object],
+    effective_with: Mapping[str, object],
+    mcp_kwargs: list[BoundValue],
+    failures: list[BindingFailure],
+    hidden_inputs: frozenset[str],
+    ingredient_values: Mapping[str, BoundScalar] | None,
+) -> BoundStepInvocation:
+    """Compile run_skill identity, contract, and input dispatch."""
     declared_command = declared_with.get("skill_command")
     effective_command = effective_with.get("skill_command", declared_command)
     if not isinstance(declared_command, str) or not isinstance(effective_command, str):
@@ -344,7 +390,6 @@ def bind_step_invocation(
     skill_name = resolve_skill_name(effective_command)
     declared_structured = declared_with.get("skill_inputs")
     effective_structured = effective_with.get("skill_inputs", declared_structured)
-
     contract = get_skill_contract(skill_name, active_manifest) if skill_name else None
     if skill_name is None or contract is None:
         if mode is BindingMode.RECIPE and not declared_command.lstrip().startswith("/"):
@@ -395,52 +440,19 @@ def bind_step_invocation(
             tuple(failures),
         )
 
-    try:
-        has_inline_args = bool(_tokenize_skill_command(declared_command)[1:])
-    except ValueError:
-        has_inline_args = True
-    if declared_structured is not None and has_inline_args:
-        failures.append(
-            _failure(
-                BindingFailureCode.AMBIGUOUS_SKILL_INPUT,
-                step_name,
-                "skill_inputs",
-                "run_skill may not mix inline arguments with structured skill_inputs",
-            )
-        )
-        skill_inputs = tuple(BoundValue.absent(item.name) for item in contract.inputs)
-    elif declared_structured is not None:
-        if not isinstance(declared_structured, Mapping) or not isinstance(
-            effective_structured, Mapping
-        ):
-            failures.append(
-                _failure(
-                    BindingFailureCode.INVALID_SKILL_INPUT_TYPE,
-                    step_name,
-                    "skill_inputs",
-                    "run_skill.skill_inputs must be a mapping",
-                )
-            )
-            skill_inputs = ()
-        else:
-            skill_inputs, skill_failures = _structured_skill_inputs(
-                step_name=step_name,
-                declared_values=declared_structured,
-                effective_values=effective_structured,
-                contract=contract,
-                hidden_inputs=hidden_inputs,
-                ingredient_values=ingredients,
-                optional_context_refs=frozenset(step.optional_context_refs),
-            )
-            failures.extend(skill_failures)
-    else:
-        skill_inputs, skill_failures = _inline_skill_inputs(
-            step_name=step_name,
-            declared_command=declared_command,
-            effective_command=effective_command,
-            contract=contract,
-        )
-        failures.extend(skill_failures)
+    ingredients = ingredient_values or {}
+    skill_inputs, skill_failures = _bind_run_skill_inputs(
+        step_name,
+        step,
+        declared_command=declared_command,
+        effective_command=effective_command,
+        declared_structured=declared_structured,
+        effective_structured=effective_structured,
+        contract=contract,
+        hidden_inputs=hidden_inputs,
+        ingredients=ingredients,
+    )
+    failures.extend(skill_failures)
 
     return BoundStepInvocation(
         step_name=step_name,
@@ -450,6 +462,69 @@ def bind_step_invocation(
         mcp_kwargs=tuple(mcp_kwargs),
         skill_inputs=skill_inputs,
         failures=tuple(failures),
+    )
+
+
+def bind_step_invocation(
+    step_name: str,
+    step: Any,
+    *,
+    manifest: dict[str, Any] | None = None,
+    ingredient_values: Mapping[str, BoundScalar] | None = None,
+    hidden_inputs: frozenset[str] = frozenset(),
+    mode: BindingMode = BindingMode.RECIPE,
+) -> BoundStepInvocation:
+    """Compile one recipe step without mutating its source model."""
+
+    tool_name = step.tool or ""
+    effective_with: Mapping[str, object] = step.with_args or {}
+    declared_candidate: Mapping[str, object] | None = getattr(step, "declared_with_args", None)
+    declared_with = effective_with if declared_candidate is None else declared_candidate
+    tool_def = get_tool_def(tool_name)
+    if tool_def is None:
+        failure = _failure(
+            BindingFailureCode.UNKNOWN_TOOL,
+            step_name,
+            tool_name,
+            f"tool {tool_name!r} is not present in the canonical registry",
+        )
+        return BoundStepInvocation(step_name, tool_name, mode, None, (), (), (failure,))
+
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
+    mcp_kwargs, failures = _compile_tool_parameters(
+        step_name,
+        tool_name,
+        tool_def,
+        active_manifest=active_manifest,
+        declared_with=declared_with,
+        effective_with=effective_with,
+        hidden_inputs=hidden_inputs,
+        ingredient_values=ingredient_values,
+    )
+
+    if tool_name != "run_skill":
+        return BoundStepInvocation(
+            step_name,
+            tool_name,
+            mode,
+            None,
+            tuple(mcp_kwargs),
+            (),
+            tuple(failures),
+        )
+
+    return _bind_run_skill_invocation(
+        step_name,
+        step,
+        tool_name=tool_name,
+        mode=mode,
+        active_manifest=active_manifest,
+        declared_with=declared_with,
+        effective_with=effective_with,
+        mcp_kwargs=mcp_kwargs,
+        failures=failures,
+        hidden_inputs=hidden_inputs,
+        ingredient_values=ingredient_values,
     )
 
 
@@ -526,28 +601,20 @@ def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[
     return message
 
 
-def bind_runtime_skill_invocation(
-    template: InvocationTemplate,
+def _admit_runtime_tool_shape(
+    invocation: BoundStepInvocation,
     *,
     execution_id: str,
     step_name: str,
-    skill_command: str,
-    skill_inputs: Mapping[str, BoundScalar] | None,
+    template_digest: str,
     actual_mcp_kwargs: Mapping[str, BoundScalar],
-) -> tuple[tuple[str, BoundScalar], ...]:
-    """Bind runtime values against one immutable compiled recipe template."""
-    invocation = template.invocation
-    if resolve_skill_name(skill_command) != invocation.skill_name:
-        raise RuntimeBindingError(
-            "recipe_execution_skill_mismatch",
-            "runtime skill identity differs from the compiled template",
-        )
+) -> None:
+    """Admit protocol attestations and the canonical runtime tool shape."""
     compiled_mcp_names = frozenset(value.name for value in invocation.mcp_kwargs)
-    # Bind the three protocol parameters against their expected attestation values.
     protocol_mcp_values = {
         "step_name": step_name,
         "recipe_execution_id": execution_id,
-        "invocation_template_digest": template.template_digest,
+        "invocation_template_digest": template_digest,
     }
     for name, expected in protocol_mcp_values.items():
         if name in actual_mcp_kwargs and actual_mcp_kwargs[name] != expected:
@@ -572,24 +639,18 @@ def bind_runtime_skill_invocation(
             "recipe_execution_tool_shape",
             _undeclared_runtime_param_message(bound_tool_def, undeclared_effective_names),
         )
-    manifest = load_bundled_manifest()
-    contract = get_skill_contract(invocation.skill_name or "", manifest)
-    if contract is None:
-        raise RuntimeBindingError(
-            "recipe_execution_contract_unavailable",
-            "the compiled skill contract is unavailable at runtime",
-        )
-    runtime_skill_identity = compute_skill_contract_identity(
-        invocation.skill_name or "",
-        manifest=manifest,
-    )
-    if runtime_skill_identity != template.skill_contract_identity:
-        raise RuntimeBindingError(
-            "recipe_execution_contract_mismatch",
-            "runtime skill contract differs from the compiled template",
-        )
-    contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
-    supplied = dict(skill_inputs or {})
+
+
+def _normalize_runtime_skill_inputs(
+    invocation: BoundStepInvocation,
+    *,
+    step_name: str,
+    skill_command: str,
+    skill_inputs: Mapping[str, BoundScalar] | None,
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+    manifest: dict[str, Any],
+) -> dict[str, BoundScalar]:
+    """Normalize supplied runtime skill inputs and admit their scalar/key shape."""
     if skill_inputs is None:
         runtime_with_args: dict[str, object] = {"skill_command": skill_command}
         runtime_cwd = actual_mcp_kwargs.get("cwd")
@@ -610,15 +671,14 @@ def bind_runtime_skill_invocation(
                 "recipe_execution_input_shape",
                 runtime_inline.failures[0].message,
             )
-        supplied = {
-            value.name: value.effective_value
-            for value in runtime_inline.skill_inputs
-            if value.state is BoundValueState.PRESENT
-            and isinstance(value.effective_value, (str, int, bool))
-        }
-    if any(
-        not isinstance(value, (str, int, bool)) or value is None for value in supplied.values()
-    ):
+        supplied: dict[str, BoundScalar] = {}
+        for value in runtime_inline.skill_inputs:
+            effective_value = value.effective_value
+            if value.state is BoundValueState.PRESENT and _is_scalar(effective_value):
+                supplied[value.name] = effective_value
+    else:
+        supplied = dict(skill_inputs)
+    if any(not _is_scalar(value) for value in supplied.values()):
         raise RuntimeBindingError(
             "recipe_execution_input_type",
             "skill_inputs values must be strict JSON scalars",
@@ -631,6 +691,16 @@ def bind_runtime_skill_invocation(
             "recipe_execution_input_shape",
             "skill_inputs keys do not exactly match the compiled template",
         )
+    return supplied
+
+
+def _bind_runtime_skill_values(
+    invocation: BoundStepInvocation,
+    supplied: Mapping[str, BoundScalar],
+    contract: _SkillContract,
+) -> tuple[tuple[str, BoundScalar], ...]:
+    """Bind admitted skill values in compiled order against the runtime contract."""
+    contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
     bound_inputs: list[tuple[str, BoundScalar]] = []
     for value in invocation.skill_inputs:
         if value.state is not BoundValueState.PRESENT:
@@ -653,6 +723,14 @@ def bind_runtime_skill_invocation(
                 f"static skill input {value.name!r} differs from the template",
             )
         bound_inputs.append((value.name, actual))
+    return tuple(bound_inputs)
+
+
+def _validate_runtime_mcp_values(
+    invocation: BoundStepInvocation,
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+) -> None:
+    """Validate required and static MCP values against the compiled template."""
     for value in invocation.mcp_kwargs:
         if value.name not in actual_mcp_kwargs:
             raise RuntimeBindingError(
@@ -665,4 +743,55 @@ def bind_runtime_skill_invocation(
                 "recipe_execution_static_tool_mismatch",
                 f"static tool parameter {value.name!r} differs from the template",
             )
-    return tuple(bound_inputs)
+
+
+def bind_runtime_skill_invocation(
+    template: InvocationTemplate,
+    *,
+    execution_id: str,
+    step_name: str,
+    skill_command: str,
+    skill_inputs: Mapping[str, BoundScalar] | None,
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+) -> tuple[tuple[str, BoundScalar], ...]:
+    """Bind runtime values against one immutable compiled recipe template."""
+    invocation = template.invocation
+    if resolve_skill_name(skill_command) != invocation.skill_name:
+        raise RuntimeBindingError(
+            "recipe_execution_skill_mismatch",
+            "runtime skill identity differs from the compiled template",
+        )
+    _admit_runtime_tool_shape(
+        invocation,
+        execution_id=execution_id,
+        step_name=step_name,
+        template_digest=template.template_digest,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+    )
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(invocation.skill_name or "", manifest)
+    if contract is None:
+        raise RuntimeBindingError(
+            "recipe_execution_contract_unavailable",
+            "the compiled skill contract is unavailable at runtime",
+        )
+    runtime_skill_identity = compute_skill_contract_identity(
+        invocation.skill_name or "",
+        manifest=manifest,
+    )
+    if runtime_skill_identity != template.skill_contract_identity:
+        raise RuntimeBindingError(
+            "recipe_execution_contract_mismatch",
+            "runtime skill contract differs from the compiled template",
+        )
+    supplied = _normalize_runtime_skill_inputs(
+        invocation,
+        step_name=step_name,
+        skill_command=skill_command,
+        skill_inputs=skill_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        manifest=manifest,
+    )
+    bound_inputs = _bind_runtime_skill_values(invocation, supplied, contract)
+    _validate_runtime_mcp_values(invocation, actual_mcp_kwargs)
+    return bound_inputs

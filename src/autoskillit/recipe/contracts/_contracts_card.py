@@ -8,6 +8,7 @@ from typing import Any
 
 from autoskillit.core import (
     SKILL_TOOLS,
+    BoundStepInvocation,
     Severity,
     atomic_write,
     dump_yaml_str,
@@ -28,7 +29,9 @@ from autoskillit.recipe.contracts._contracts_manifest import (
 from autoskillit.recipe.contracts._contracts_types import (
     BlockFingerprint,
     RecipeCard,
+    SkillContract,
 )
+from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
 
@@ -60,6 +63,70 @@ def _compute_block_fingerprint(block: Any) -> BlockFingerprint:
         entry_step=block.entry,
         exit_step=block.exit,
     )
+
+
+def _project_skill_contract(contract: SkillContract) -> dict[str, Any]:
+    skill_entry: dict[str, Any] = {
+        "inputs": [
+            {
+                "name": item.name,
+                "type": item.type,
+                "required": item.required,
+                "recommended": item.recommended,
+                **(
+                    {"absence_value": item.absence_value} if item.absence_value is not None else {}
+                ),
+            }
+            for item in contract.inputs
+        ],
+        "outputs": [{"name": output.name, "type": output.type} for output in contract.outputs],
+        "expected_output_patterns": contract.expected_output_patterns,
+        "pattern_examples": contract.pattern_examples,
+    }
+    if contract.write_behavior is not None:
+        skill_entry["write_behavior"] = contract.write_behavior
+    if contract.write_expected_when:
+        skill_entry["write_expected_when"] = contract.write_expected_when
+    if contract.external_effect != "none":
+        skill_entry["external_effect"] = contract.external_effect
+    if contract.read_only:
+        skill_entry["read_only"] = True
+    return skill_entry
+
+
+def _project_required_input_metadata(
+    step: RecipeStep,
+    invocation: BoundStepInvocation | None,
+    contract: SkillContract,
+) -> dict[str, Any]:
+    skill_cmd = step.with_args.get("skill_command", "")
+    structured = "skill_inputs" in step.with_args
+    all_input_names = {item.name for item in contract.inputs}
+    arg_style = classify_step_arg_style(skill_cmd, all_input_names)
+    if structured and invocation is not None:
+        return {
+            "structured_inputs": [name for name, _value in invocation.canonical_child_invocation],
+            "required": [
+                item.name
+                for item in contract.inputs
+                if item.required
+                and ((bound := invocation.skill_input(item.name)) is None or not bound.is_present)
+            ],
+        }
+    if arg_style == "positional_text":
+        return {
+            "required": [],
+            "positional_args": count_positional_args(skill_cmd),
+        }
+    if arg_style == "positional_template":
+        return {"required": [], "positional_mapping": True}
+
+    referenced = extract_context_refs(step) | extract_input_refs(step)
+    return {
+        "required": [
+            item.name for item in contract.inputs if item.required and item.name not in referenced
+        ]
+    }
 
 
 def _generate_recipe_card_for_recipe(recipe: Any) -> RecipeCard:
@@ -154,64 +221,8 @@ def generate_recipe_card(
             if skill_name:
                 contract = get_skill_contract(skill_name, manifest)
                 if contract:
-                    skill_entry: dict[str, Any] = {
-                        "inputs": [
-                            {
-                                "name": item.name,
-                                "type": item.type,
-                                "required": item.required,
-                                "recommended": item.recommended,
-                                **(
-                                    {"absence_value": item.absence_value}
-                                    if item.absence_value is not None
-                                    else {}
-                                ),
-                            }
-                            for item in contract.inputs
-                        ],
-                        "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
-                        "expected_output_patterns": contract.expected_output_patterns,
-                        "pattern_examples": contract.pattern_examples,
-                    }
-                    if contract.write_behavior is not None:
-                        skill_entry["write_behavior"] = contract.write_behavior
-                    if contract.write_expected_when:
-                        skill_entry["write_expected_when"] = contract.write_expected_when
-                    if contract.external_effect != "none":
-                        skill_entry["external_effect"] = contract.external_effect
-                    if contract.read_only:
-                        skill_entry["read_only"] = True
-                    skills[skill_name] = skill_entry
-                    all_input_names = {item.name for item in contract.inputs}
-                    arg_style = classify_step_arg_style(skill_cmd, all_input_names)
-                    if structured and invocation is not None:
-                        entry["structured_inputs"] = [
-                            name for name, _value in invocation.canonical_child_invocation
-                        ]
-                        entry["required"] = [
-                            item.name
-                            for item in contract.inputs
-                            if item.required
-                            and (
-                                (bound := invocation.skill_input(item.name)) is None
-                                or not bound.is_present
-                            )
-                        ]
-                    elif arg_style == "positional_text":
-                        entry["required"] = []
-                        entry["positional_args"] = count_positional_args(skill_cmd)
-                    elif arg_style == "positional_template":
-                        entry["required"] = []
-                        entry["positional_mapping"] = True
-                    else:
-                        ctx_refs = extract_context_refs(step)
-                        inp_refs = extract_input_refs(step)
-                        referenced = ctx_refs | inp_refs
-                        entry["required"] = [
-                            i.name
-                            for i in contract.inputs
-                            if i.required and i.name not in referenced
-                        ]
+                    skills[skill_name] = _project_skill_contract(contract)
+                    entry.update(_project_required_input_metadata(step, invocation, contract))
                     if skill_name not in skill_hashes and skills_dir is not None:
                         skill_hashes[skill_name] = compute_skill_hash(
                             skill_name, skills_dir=Path(skills_dir)

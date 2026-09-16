@@ -596,6 +596,10 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "reconcile_wp_files",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
+        "src/autoskillit/recipe/cmd_rpc/_cmd_rpc_guards.py",
+        "_remove_nested_worktrees",
+    ): _SEPARATE_LIFECYCLE_REASON,
+    (
         "src/autoskillit/server/tools/tools_fleet_reset.py",
         "_cleanup_resume_gate_state",
     ): _SEPARATE_LIFECYCLE_REASON,

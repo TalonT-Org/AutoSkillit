@@ -83,6 +83,136 @@ def _parse_skill_input(skill_name: str, raw: Mapping[str, Any]) -> SkillInput:
     )
 
 
+def _parse_outcome_rules(
+    skill_name: str,
+    skill_data: Mapping[str, Any],
+    outputs: list[SkillOutput],
+) -> tuple[list[OutcomeInvariantEntry], list[SuccessQualifierEntry]]:
+    """Parse outcome invariants and success qualifiers in declaration order."""
+    output_names = {output.name for output in outputs}
+    int_output_names = {output.name for output in outputs if output.type == "integer"}
+    outcome_invariants: list[OutcomeInvariantEntry] = []
+    for invariant in skill_data.get("outcome_invariants", []):
+        when = invariant.get("when", "")
+        require = invariant.get("require", "")
+        if not when or not require:
+            raise ValueError(
+                f"outcome_invariants entry for skill '{skill_name}' missing 'when' or 'require'"
+            )
+        for expression_label, expression in [("when", when), ("require", require)]:
+            field_name = expression.split()[0] if expression.split() else ""
+            if field_name not in output_names:
+                raise ValueError(
+                    f"outcome_invariants.{expression_label} references undeclared output "
+                    f"'{field_name}' in skill '{skill_name}'"
+                )
+            if field_name not in int_output_names:
+                raise ValueError(
+                    f"outcome_invariants.{expression_label} references non-integer output "
+                    f"'{field_name}' in skill '{skill_name}'"
+                )
+        outcome_invariants.append(OutcomeInvariantEntry(when=when, require=require))
+
+    success_qualifiers: list[SuccessQualifierEntry] = []
+    for qualifier in skill_data.get("success_qualifiers", []):
+        when = qualifier.get("when", "")
+        value = qualifier.get("qualifier", "")
+        if not when or not value:
+            raise ValueError(
+                f"success_qualifiers entry for skill '{skill_name}' missing 'when' or 'qualifier'"
+            )
+        success_qualifiers.append(SuccessQualifierEntry(when=when, qualifier=value))
+    return outcome_invariants, success_qualifiers
+
+
+def _parse_audit_contracts(
+    skill_name: str,
+    skill_data: Mapping[str, Any],
+    inputs: tuple[SkillInput, ...],
+    outputs: list[SkillOutput],
+) -> tuple[
+    dict[AuditOutputMode, AuditOutputContract],
+    AuditAuthorityPublicationSpec | None,
+]:
+    """Parse audit-mode outputs and the dependent authority publication."""
+    audit_output_contracts: dict[AuditOutputMode, AuditOutputContract] = {}
+    raw_mode_contracts = skill_data.get("audit_output_contracts", {})
+    if not isinstance(raw_mode_contracts, Mapping):
+        raise ValueError(f"audit_output_contracts for skill '{skill_name}' must be a mapping")
+    for raw_mode, raw_contract in raw_mode_contracts.items():
+        try:
+            mode = AuditOutputMode(raw_mode)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported audit output mode {raw_mode!r} for skill '{skill_name}'"
+            ) from exc
+        if not isinstance(raw_contract, Mapping):
+            raise ValueError(
+                f"audit_output_contracts.{mode.value} for skill '{skill_name}' must be a mapping"
+            )
+        mode_outputs = tuple(
+            SkillOutput(
+                name=output["name"],
+                type=output["type"],
+                allowed_values=output.get("allowed_values", []),
+            )
+            for output in raw_contract.get("outputs", [])
+        )
+        if not mode_outputs:
+            raise ValueError(
+                f"audit_output_contracts.{mode.value} for skill '{skill_name}' "
+                "must declare outputs"
+            )
+        audit_output_contracts[mode] = AuditOutputContract(
+            outputs=mode_outputs,
+            expected_output_patterns=tuple(raw_contract.get("expected_output_patterns", [])),
+            pattern_examples=tuple(raw_contract.get("pattern_examples", [])),
+        )
+
+    authority_data = skill_data.get("audit_authority_publication")
+    authority_publication = None
+    if authority_data is not None:
+        if not isinstance(authority_data, Mapping):
+            raise ValueError(
+                f"audit_authority_publication for skill '{skill_name}' must be a mapping"
+            )
+        required_modes = {AuditOutputMode.ATTESTED, AuditOutputMode.STANDALONE}
+        if set(audit_output_contracts) != required_modes:
+            declared = sorted(mode.value for mode in audit_output_contracts)
+            required_mode_values = [
+                mode.value for mode in sorted(required_modes, key=lambda item: item.value)
+            ]
+            raise ValueError(
+                f"audit publication skill '{skill_name}' must declare exact output "
+                f"modes {required_mode_values}; got {declared}"
+            )
+        output_field = authority_data.get("output_field", "")
+        prior_input_field = authority_data.get("prior_input_field", "")
+        input_names = {item.name for item in inputs}
+        output_names = {output.name for output in outputs}
+        attested_contract = audit_output_contracts.get(AuditOutputMode.ATTESTED)
+        attested_output_names = (
+            {output.name for output in attested_contract.outputs}
+            if attested_contract is not None
+            else set()
+        )
+        if output_field not in output_names | attested_output_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared output "
+                f"'{output_field}' in skill '{skill_name}'"
+            )
+        if prior_input_field not in input_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared input "
+                f"'{prior_input_field}' in skill '{skill_name}'"
+            )
+        authority_publication = AuditAuthorityPublicationSpec(
+            output_field=output_field,
+            prior_input_field=prior_input_field,
+        )
+    return audit_output_contracts, authority_publication
+
+
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
     """Look up a skill in the manifest and return a SkillContract."""
     skills = manifest.get("skills", {})
@@ -128,113 +258,10 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             f"Malformed result_fields entry for skill '{skill_name}': missing key {exc}"
         ) from exc
 
-    output_names = {o.name for o in outputs}
-    int_output_names = {o.name for o in outputs if o.type == "integer"}
-
-    outcome_invariants: list[OutcomeInvariantEntry] = []
-    for inv in skill_data.get("outcome_invariants", []):
-        w, r = inv.get("when", ""), inv.get("require", "")
-        if not w or not r:
-            raise ValueError(
-                f"outcome_invariants entry for skill '{skill_name}' missing 'when' or 'require'"
-            )
-        for expr_label, expr in [("when", w), ("require", r)]:
-            field_name = expr.split()[0] if expr.split() else ""
-            if field_name not in output_names:
-                raise ValueError(
-                    f"outcome_invariants.{expr_label} references undeclared output "
-                    f"'{field_name}' in skill '{skill_name}'"
-                )
-            if field_name not in int_output_names:
-                raise ValueError(
-                    f"outcome_invariants.{expr_label} references non-integer output "
-                    f"'{field_name}' in skill '{skill_name}'"
-                )
-        outcome_invariants.append(OutcomeInvariantEntry(when=w, require=r))
-
-    success_qualifiers: list[SuccessQualifierEntry] = []
-    for sq in skill_data.get("success_qualifiers", []):
-        w, q = sq.get("when", ""), sq.get("qualifier", "")
-        if not w or not q:
-            raise ValueError(
-                f"success_qualifiers entry for skill '{skill_name}' missing 'when' or 'qualifier'"
-            )
-        success_qualifiers.append(SuccessQualifierEntry(when=w, qualifier=q))
-
-    audit_output_contracts: dict[AuditOutputMode, AuditOutputContract] = {}
-    raw_mode_contracts = skill_data.get("audit_output_contracts", {})
-    if not isinstance(raw_mode_contracts, Mapping):
-        raise ValueError(f"audit_output_contracts for skill '{skill_name}' must be a mapping")
-    for raw_mode, raw_contract in raw_mode_contracts.items():
-        try:
-            mode = AuditOutputMode(raw_mode)
-        except ValueError as exc:
-            raise ValueError(
-                f"unsupported audit output mode {raw_mode!r} for skill '{skill_name}'"
-            ) from exc
-        if not isinstance(raw_contract, Mapping):
-            raise ValueError(
-                f"audit_output_contracts.{mode.value} for skill '{skill_name}' must be a mapping"
-            )
-        mode_outputs = tuple(
-            SkillOutput(
-                name=out["name"],
-                type=out["type"],
-                allowed_values=out.get("allowed_values", []),
-            )
-            for out in raw_contract.get("outputs", [])
-        )
-        if not mode_outputs:
-            raise ValueError(
-                f"audit_output_contracts.{mode.value} for skill '{skill_name}' "
-                "must declare outputs"
-            )
-        audit_output_contracts[mode] = AuditOutputContract(
-            outputs=mode_outputs,
-            expected_output_patterns=tuple(raw_contract.get("expected_output_patterns", [])),
-            pattern_examples=tuple(raw_contract.get("pattern_examples", [])),
-        )
-
-    authority_data = skill_data.get("audit_authority_publication")
-    authority_publication = None
-    if authority_data is not None:
-        if not isinstance(authority_data, Mapping):
-            raise ValueError(
-                f"audit_authority_publication for skill '{skill_name}' must be a mapping"
-            )
-        required_modes = {AuditOutputMode.ATTESTED, AuditOutputMode.STANDALONE}
-        if set(audit_output_contracts) != required_modes:
-            declared = sorted(mode.value for mode in audit_output_contracts)
-            required_mode_values = [
-                mode.value for mode in sorted(required_modes, key=lambda item: item.value)
-            ]
-            raise ValueError(
-                f"audit publication skill '{skill_name}' must declare exact output "
-                f"modes {required_mode_values}; got {declared}"
-            )
-        output_field = authority_data.get("output_field", "")
-        prior_input_field = authority_data.get("prior_input_field", "")
-        input_names = {item.name for item in inputs}
-        attested_contract = audit_output_contracts.get(AuditOutputMode.ATTESTED)
-        attested_output_names = (
-            {output.name for output in attested_contract.outputs}
-            if attested_contract is not None
-            else set()
-        )
-        if output_field not in output_names | attested_output_names:
-            raise ValueError(
-                f"audit_authority_publication references undeclared output "
-                f"'{output_field}' in skill '{skill_name}'"
-            )
-        if prior_input_field not in input_names:
-            raise ValueError(
-                f"audit_authority_publication references undeclared input "
-                f"'{prior_input_field}' in skill '{skill_name}'"
-            )
-        authority_publication = AuditAuthorityPublicationSpec(
-            output_field=output_field,
-            prior_input_field=prior_input_field,
-        )
+    outcome_invariants, success_qualifiers = _parse_outcome_rules(skill_name, skill_data, outputs)
+    audit_output_contracts, authority_publication = _parse_audit_contracts(
+        skill_name, skill_data, inputs, outputs
+    )
 
     return SkillContract(
         inputs=inputs,

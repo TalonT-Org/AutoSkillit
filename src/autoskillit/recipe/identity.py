@@ -16,6 +16,33 @@ from autoskillit.recipe.schema import Recipe
 logger = get_logger(__name__)
 
 
+def _compute_sub_recipe_fingerprint(
+    name: str,
+    *,
+    skills_dir: Path,
+    project_dir: Path,
+    seen: frozenset[Path],
+) -> str | None:
+    """Return one sub-recipe fingerprint, omitting missing and cyclic dependencies."""
+    sub_path = find_sub_recipe_by_name(name, project_dir)
+    if not sub_path or not sub_path.is_file():
+        return None
+    resolved = sub_path.resolve()
+    if resolved in seen:
+        logger.debug("cycle_detected_in_sub_recipe", path=str(sub_path))
+        return None
+    sub_recipe = _load_sub_recipe_for_hash(sub_path)
+    if sub_recipe is not None:
+        return compute_composite_hash(
+            sub_path,
+            sub_recipe,
+            skills_dir=skills_dir,
+            project_dir=project_dir,
+            _seen=seen | {resolved},
+        )
+    return compute_recipe_hash(sub_path)
+
+
 def compute_composite_hash(
     recipe_path: Path,
     recipe: Recipe,
@@ -56,23 +83,13 @@ def compute_composite_hash(
             sub_names.add(step.sub_recipe)
 
     for name in sorted(sub_names):
-        sub_path = find_sub_recipe_by_name(name, project_dir)
-        if sub_path and sub_path.is_file():
-            resolved = sub_path.resolve()
-            if resolved in _seen:
-                logger.debug("cycle_detected_in_sub_recipe", path=str(sub_path))
-                continue
-            sub_recipe = _load_sub_recipe_for_hash(sub_path)
-            if sub_recipe is not None:
-                sub_hash = compute_composite_hash(
-                    sub_path,
-                    sub_recipe,
-                    skills_dir=skills_dir,
-                    project_dir=project_dir,
-                    _seen=_seen | {resolved},
-                )
-            else:
-                sub_hash = compute_recipe_hash(sub_path)
+        sub_hash = _compute_sub_recipe_fingerprint(
+            name,
+            skills_dir=skills_dir,
+            project_dir=project_dir,
+            seen=_seen,
+        )
+        if sub_hash is not None:
             hasher.update(f"sub:{name}:{sub_hash}\n".encode())
 
     return "sha256:" + hasher.hexdigest()

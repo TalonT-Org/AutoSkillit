@@ -161,13 +161,11 @@ def _resolve_hidden_value(
 # === Command tokenization ===
 
 
-def _tokenize_skill_command(command: str) -> tuple[str, ...]:
-    """Tokenize without evaluating shell syntax and keep template refs atomic."""
-
-    tokens: list[str] = []
+def _scan_skill_argument(command: str, start: int) -> tuple[str, int]:
+    """Scan one argument, retaining quotes, escapes, and atomic template spans."""
     current: list[str] = []
     quote: str | None = None
-    index = 0
+    index = start
     while index < len(command):
         char = command[index]
         if quote is not None:
@@ -195,17 +193,24 @@ def _tokenize_skill_command(command: str) -> tuple[str, ...]:
                 index = end + 2
             continue
         if char.isspace():
-            if current:
-                tokens.append("".join(current))
-                current = []
-            index += 1
-            continue
+            break
         current.append(char)
         index += 1
     if quote is not None:
         raise ValueError("unterminated quoted skill argument")
-    if current:
-        tokens.append("".join(current))
+    return "".join(current), index
+
+
+def _tokenize_skill_command(command: str) -> tuple[str, ...]:
+    """Tokenize without evaluating shell syntax and keep template refs atomic."""
+    tokens: list[str] = []
+    index = 0
+    while index < len(command):
+        if command[index].isspace():
+            index += 1
+            continue
+        argument, index = _scan_skill_argument(command, index)
+        tokens.append(argument)
     return tuple(tokens)
 
 
@@ -227,38 +232,13 @@ def _split_named_token(token: str) -> tuple[str, str] | None:
 # === Skill-input parsers ===
 
 
-def _inline_skill_inputs(
+def _assign_inline_skill_arguments(
     *,
     step_name: str,
-    declared_command: str,
-    effective_command: str,
-    contract: SkillContract,
-) -> tuple[tuple[BoundValue, ...], tuple[BindingFailure, ...]]:
-    try:
-        declared_tokens = _tokenize_skill_command(declared_command)
-        effective_tokens = _tokenize_skill_command(effective_command)
-    except ValueError as exc:
-        return (), (
-            _failure(
-                BindingFailureCode.INVALID_SKILL_COMMAND,
-                step_name,
-                "skill_command",
-                str(exc),
-            ),
-        )
-    declared_args = declared_tokens[1:]
-    effective_args = effective_tokens[1:]
-    if len(declared_args) != len(effective_args):
-        return (), (
-            _failure(
-                BindingFailureCode.INVALID_SKILL_COMMAND,
-                step_name,
-                "skill_command",
-                "declared and effective skill arguments do not align",
-            ),
-        )
-
-    input_defs = contract.inputs
+    declared_args: tuple[str, ...],
+    effective_args: tuple[str, ...],
+    input_defs: tuple[SkillInput, ...],
+) -> tuple[dict[str, tuple[BoundScalar, BoundScalar]], list[BindingFailure]]:
     input_by_name = {input_def.name: input_def for input_def in input_defs}
     if (
         len(input_defs) == 1
@@ -330,6 +310,47 @@ def _inline_skill_inputs(
         if declared_value == "-":
             continue
         assigned[name] = (declared_value, effective_value)
+    return assigned, failures
+
+
+def _inline_skill_inputs(
+    *,
+    step_name: str,
+    declared_command: str,
+    effective_command: str,
+    contract: SkillContract,
+) -> tuple[tuple[BoundValue, ...], tuple[BindingFailure, ...]]:
+    try:
+        declared_tokens = _tokenize_skill_command(declared_command)
+        effective_tokens = _tokenize_skill_command(effective_command)
+    except ValueError as exc:
+        return (), (
+            _failure(
+                BindingFailureCode.INVALID_SKILL_COMMAND,
+                step_name,
+                "skill_command",
+                str(exc),
+            ),
+        )
+    declared_args = declared_tokens[1:]
+    effective_args = effective_tokens[1:]
+    if len(declared_args) != len(effective_args):
+        return (), (
+            _failure(
+                BindingFailureCode.INVALID_SKILL_COMMAND,
+                step_name,
+                "skill_command",
+                "declared and effective skill arguments do not align",
+            ),
+        )
+
+    input_defs = contract.inputs
+    assigned, failures = _assign_inline_skill_arguments(
+        step_name=step_name,
+        declared_args=declared_args,
+        effective_args=effective_args,
+        input_defs=input_defs,
+    )
 
     bound: list[BoundValue] = []
     for input_def in input_defs:
@@ -360,6 +381,40 @@ def _inline_skill_inputs(
                 )
             )
     return tuple(bound), tuple(failures)
+
+
+def _bind_structured_skill_value(
+    input_def: SkillInput,
+    declared: BoundScalar,
+    effective: BoundScalar,
+    *,
+    hidden_inputs: frozenset[str],
+    ingredient_values: Mapping[str, BoundScalar],
+    optional_context_refs: frozenset[str],
+) -> tuple[BoundValue, BoundScalar]:
+    resolved = _resolve_hidden_value(
+        declared,
+        effective,
+        hidden_inputs=hidden_inputs,
+        ingredient_values=ingredient_values,
+    )
+    exact_context = (
+        _EXACT_CONTEXT_REF_RE.fullmatch(declared) if isinstance(declared, str) else None
+    )
+    if (
+        exact_context is not None
+        and exact_context.group(1) in optional_context_refs
+        and effective == declared
+        and input_def.has_absence_value
+    ):
+        absence_value = input_def.absence_value
+        if not _is_scalar(absence_value):
+            raise TypeError(f"skill input {input_def.name!r} absence_value is not a strict scalar")
+        resolved = absence_value
+    value = _bound_value(input_def.name, declared, resolved)
+    if not input_def.required and frozenset(value.context_dependencies) & optional_context_refs:
+        value = replace(value, absence_value=input_def.absence_value)
+    return value, resolved
 
 
 def _structured_skill_inputs(
@@ -412,33 +467,14 @@ def _structured_skill_inputs(
             )
             bound.append(BoundValue.absent(input_def.name))
             continue
-        resolved = _resolve_hidden_value(
+        value, resolved = _bind_structured_skill_value(
+            input_def,
             declared,
             effective,
             hidden_inputs=hidden_inputs,
             ingredient_values=ingredient_values,
+            optional_context_refs=optional_context_refs,
         )
-        exact_context = (
-            _EXACT_CONTEXT_REF_RE.fullmatch(declared) if isinstance(declared, str) else None
-        )
-        if (
-            exact_context is not None
-            and exact_context.group(1) in optional_context_refs
-            and effective == declared
-            and input_def.has_absence_value
-        ):
-            absence_value = input_def.absence_value
-            if not _is_scalar(absence_value):
-                raise TypeError(
-                    f"skill input {input_def.name!r} absence_value is not a strict scalar"
-                )
-            resolved = absence_value
-        value = _bound_value(input_def.name, declared, resolved)
-        if (
-            not input_def.required
-            and frozenset(value.context_dependencies) & optional_context_refs
-        ):
-            value = replace(value, absence_value=input_def.absence_value)
         bound.append(value)
         unresolved = bool(value.context_dependencies or value.input_dependencies)
         if not unresolved and not _skill_value_is_valid(resolved, input_def):

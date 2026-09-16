@@ -71,66 +71,70 @@ def _has_keyword_match(text: str, keywords: tuple[str, ...] | list[str]) -> bool
 _ML_SUB_AREA_CACHE = YamlFileCache()
 
 
+def _parse_ml_sub_area_folding_entry(
+    item: object, index: int, yaml_path: Path
+) -> MLSubAreaFoldingDef:
+    if not isinstance(item, dict):
+        raise TypeError(
+            f"ml_sub_area_folding[{index}] must be a dict, got {type(item).__name__}: {yaml_path}"
+        )
+    for key in ("sub_area", "display_name", "primary_parent"):
+        if not isinstance(item.get(key), str) or not item[key]:
+            raise TypeError(
+                f"ml_sub_area_folding[{index}] '{key}' must be a non-empty string: {yaml_path}"
+            )
+    alternates_raw = item.get("alternate_parents", [])
+    if not isinstance(alternates_raw, list):
+        raise TypeError(
+            f"ml_sub_area_folding[{index}] 'alternate_parents' must be a list, "
+            f"got {type(alternates_raw).__name__}: {yaml_path}"
+        )
+    alternates: list[AlternateParentDef] = []
+    for alternate_index, alternate in enumerate(alternates_raw):
+        if not isinstance(alternate, dict):
+            raise TypeError(
+                f"ml_sub_area_folding[{index}] alternate_parents[{alternate_index}] "
+                f"must be a dict, got {type(alternate).__name__}: {yaml_path}"
+            )
+        if not isinstance(alternate.get("parent"), str) or not alternate["parent"]:
+            raise TypeError(
+                f"ml_sub_area_folding[{index}] alternate_parents[{alternate_index}] 'parent' "
+                f"must be a non-empty string: {yaml_path}"
+            )
+        if not isinstance(alternate.get("trigger_keywords"), list):
+            raise TypeError(
+                f"ml_sub_area_folding[{index}] alternate_parents[{alternate_index}] "
+                f"'trigger_keywords' must be a list: {yaml_path}"
+            )
+        constraint = alternate.get("constraint")
+        if constraint is not None and constraint not in _CONSTRAINT_EVALUATORS:
+            raise ValueError(
+                f"ml_sub_area_folding[{index}] alternate_parents[{alternate_index}] "
+                f"'constraint' '{constraint}' is not a recognised evaluator key: {yaml_path}"
+            )
+        alternates.append(
+            AlternateParentDef(
+                parent=alternate["parent"],
+                trigger_keywords=tuple(alternate["trigger_keywords"]),
+                constraint=constraint,
+            )
+        )
+    return MLSubAreaFoldingDef(
+        sub_area=item["sub_area"],
+        display_name=item["display_name"],
+        primary_parent=item["primary_parent"],
+        alternate_parents=tuple(alternates),
+    )
+
+
 def _load_and_parse_ml_sub_area(yaml_path: Path) -> tuple[MLSubAreaFoldingDef, ...]:
     data = load_yaml(yaml_path)
     if not isinstance(data, dict):
         raise TypeError(f"Expected dict from {yaml_path}, got {type(data).__name__}")
-    entries: list[MLSubAreaFoldingDef] = []
-    for i, item in enumerate(data.get("ml_sub_area_folding", [])):
-        if not isinstance(item, dict):
-            raise TypeError(
-                f"ml_sub_area_folding[{i}] must be a dict, got {type(item).__name__}: {yaml_path}"
-            )
-        for key in ("sub_area", "display_name", "primary_parent"):
-            if not isinstance(item.get(key), str) or not item[key]:
-                raise TypeError(
-                    f"ml_sub_area_folding[{i}] '{key}' must be a non-empty string: {yaml_path}"
-                )
-        alternates_raw = item.get("alternate_parents", [])
-        if not isinstance(alternates_raw, list):
-            raise TypeError(
-                f"ml_sub_area_folding[{i}] 'alternate_parents' must be a list, "
-                f"got {type(alternates_raw).__name__}: {yaml_path}"
-            )
-        alternates: list[AlternateParentDef] = []
-        for j, a in enumerate(alternates_raw):
-            if not isinstance(a, dict):
-                raise TypeError(
-                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] must be a dict, "
-                    f"got {type(a).__name__}: {yaml_path}"
-                )
-            if not isinstance(a.get("parent"), str) or not a["parent"]:
-                raise TypeError(
-                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'parent' "
-                    f"must be a non-empty string: {yaml_path}"
-                )
-            if not isinstance(a.get("trigger_keywords"), list):
-                raise TypeError(
-                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'trigger_keywords' "
-                    f"must be a list: {yaml_path}"
-                )
-            constraint = a.get("constraint")
-            if constraint is not None and constraint not in _CONSTRAINT_EVALUATORS:
-                raise ValueError(
-                    f"ml_sub_area_folding[{i}] alternate_parents[{j}] 'constraint' "
-                    f"'{constraint}' is not a recognised evaluator key: {yaml_path}"
-                )
-            alternates.append(
-                AlternateParentDef(
-                    parent=a["parent"],
-                    trigger_keywords=tuple(a["trigger_keywords"]),
-                    constraint=constraint,
-                )
-            )
-        entries.append(
-            MLSubAreaFoldingDef(
-                sub_area=item["sub_area"],
-                display_name=item["display_name"],
-                primary_parent=item["primary_parent"],
-                alternate_parents=tuple(alternates),
-            )
-        )
-    return tuple(entries)
+    return tuple(
+        _parse_ml_sub_area_folding_entry(item, index, yaml_path)
+        for index, item in enumerate(data.get("ml_sub_area_folding", []))
+    )
 
 
 def load_ml_sub_area_folding() -> tuple[MLSubAreaFoldingDef, ...]:

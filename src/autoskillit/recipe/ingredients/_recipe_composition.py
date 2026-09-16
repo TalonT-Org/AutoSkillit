@@ -321,6 +321,30 @@ def _is_ingredient_truthy(value: str) -> bool:
     return bool(value) and value.lower() not in FALSY_STRINGS
 
 
+def _resolve_guard_reference(
+    ref: str,
+    ingredients: dict[str, Any],
+    overrides: dict[str, str],
+    defer_unresolved: bool,
+) -> bool | None:
+    if not ref.startswith("inputs."):
+        return _is_ingredient_truthy(ref)
+
+    ingredient_name = ref[len("inputs.") :]
+    if ingredient_name in overrides:
+        value = str(overrides[ingredient_name])
+    elif defer_unresolved:
+        return None
+    else:
+        ingredient = ingredients.get(ingredient_name)
+        value = (
+            str(ingredient.default)
+            if ingredient is not None and ingredient.default is not None
+            else "false"
+        )
+    return _is_ingredient_truthy(value)
+
+
 def _rewrite_step_routes(step: RecipeStep, redirects: dict[str, str]) -> RecipeStep:
     def rewrite(target: str | None) -> str | None:
         return redirects.get(target, target) if target is not None else None
@@ -491,23 +515,12 @@ def _prune_skipped_steps(
         ref = step.skip_when_false
         if ref is None:
             continue
-        if ref.startswith("inputs."):
-            ingredient_name = ref[len("inputs.") :]
-            if ingredient_name in overrides:
-                value = str(overrides[ingredient_name])
-            elif defer_unresolved:
-                resolutions[step_name] = None
-                continue
-            else:
-                ingredient = recipe.ingredients.get(ingredient_name)
-                value = (
-                    str(ingredient.default)
-                    if ingredient is not None and ingredient.default is not None
-                    else "false"
-                )
-        else:
-            value = ref
-        resolutions[step_name] = _is_ingredient_truthy(value)
+        resolutions[step_name] = _resolve_guard_reference(
+            ref,
+            recipe.ingredients,
+            overrides,
+            defer_unresolved,
+        )
 
     redirects = _resolve_skip_redirects(recipe.steps, resolutions)
     steps: dict[str, RecipeStep] = {}

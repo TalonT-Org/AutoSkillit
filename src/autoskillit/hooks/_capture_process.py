@@ -390,7 +390,14 @@ def _drain_capture(
                 return result(truncated=False)
             consume(chunk)
 
-    descriptor = stream.fileno()
+    return result(truncated=_drain_owned_pipe(process, stream.fileno(), consume))
+
+
+def _drain_owned_pipe(
+    owner: OwnedProcessGroup,
+    descriptor: int,
+    consume: Callable[[bytes], None],
+) -> bool:
     os.set_blocking(descriptor, False)
     selector_factory = selectors.DefaultSelector
     selector = selector_factory()
@@ -407,22 +414,22 @@ def _drain_capture(
                         break
                     if not chunk:
                         selector.unregister(descriptor)
-                        return result(truncated=False)
+                        return False
                     consume(chunk)
 
-            if process.poll() is None:
+            if owner.poll() is None:
                 continue
             now = time.monotonic()
             if leader_exit_at is None:
                 leader_exit_at = now
-                process.signal_group(signal.SIGTERM)
+                owner.signal_group(signal.SIGTERM)
                 continue
             if kill_sent_at is None and now - leader_exit_at >= _POST_EXIT_TERM_SECONDS:
                 kill_sent_at = now
-                process.signal_group(signal.SIGKILL)
+                owner.signal_group(signal.SIGKILL)
                 continue
             if kill_sent_at is not None and now - kill_sent_at >= _POST_EXIT_KILL_SECONDS:
-                return result(truncated=True)
+                return True
     finally:
         selector.close()
 

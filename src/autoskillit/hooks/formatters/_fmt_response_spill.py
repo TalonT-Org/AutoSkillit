@@ -84,8 +84,8 @@ def _response_temp_root() -> Path:
     return default
 
 
-def _validate_response_spill_metadata(value: object) -> dict[str, Any] | None:
-    """Return trusted spill metadata only after verifying its published artifact."""
+def _validate_response_spill_values(value: object) -> dict[str, Any] | None:
+    """Validate the spill metadata schema and scalar values."""
     if not isinstance(value, dict) or set(value) != _RESPONSE_SPILL_METADATA_KEYS:
         return None
     if type(value["schema_version"]) is not int:
@@ -103,20 +103,33 @@ def _validate_response_spill_metadata(value: object) -> dict[str, Any] | None:
         return None
     if not isinstance(raw_path, str):
         return None
-    artifact = Path(raw_path)
+    return value
+
+
+def _response_spill_artifact_is_trusted(value: dict[str, Any]) -> bool:
+    """Verify the spill artifact path, size, and published digest."""
+    artifact = Path(value["artifact_path"])
     try:
         project_temp = _response_temp_root()
         if not artifact.is_absolute() or artifact.is_symlink() or not artifact.is_file():
-            return None
+            return False
         resolved = artifact.resolve(strict=True)
         if not resolved.is_relative_to(project_temp):
-            return None
+            return False
         if resolved.stat().st_size != value["original_utf8_bytes"]:
-            return None
+            return False
         hasher = hashlib.sha256()
         with resolved.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 hasher.update(chunk)
     except (OSError, RuntimeError, ValueError):
+        return False
+    return hasher.hexdigest() == value["sha256"]
+
+
+def _validate_response_spill_metadata(value: object) -> dict[str, Any] | None:
+    """Return trusted spill metadata only after verifying its published artifact."""
+    metadata = _validate_response_spill_values(value)
+    if metadata is None:
         return None
-    return value if hasher.hexdigest() == digest else None
+    return metadata if _response_spill_artifact_is_trusted(metadata) else None

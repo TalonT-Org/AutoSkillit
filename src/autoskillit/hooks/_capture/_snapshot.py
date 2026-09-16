@@ -6,9 +6,7 @@ import hashlib
 import hmac
 import json
 import math
-import os
 import re
-import stat
 from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
@@ -67,8 +65,6 @@ MANAGED_STREAM_DOMAIN = "combined_stdout_stderr_pipe_eof"
 MAX_MANIFEST_BYTES = 8 * 1024
 
 _AUTHORITY_FACTORY_TOKEN = object()
-_UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
-_READ_CHUNK_BYTES = 64 * 1024
 _MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -586,70 +582,12 @@ def verify_capture_snapshot(
     expected_identity = _identity(carrier_identity, "carrier identity")
     project = _identity(project_identity, "project identity")
     root = _identity(root_identity, "root identity")
-    try:
-        before = os.fstat(fd)
-    except OSError as exc:
-        raise _integrity_error("cannot inspect capture descriptor") from exc
-    actual_identity = (before.st_dev, before.st_ino)
-    if actual_identity != expected_identity:
-        raise _integrity_error("capture artifact identity changed")
-    if (
-        not stat.S_ISREG(before.st_mode)
-        or before.st_nlink != 1
-        or before.st_uid != os.geteuid()
-        or before.st_mode & _UNTRUSTED_MODE_BITS
-        or before.st_size != measurement.total_bytes
-    ):
-        raise _integrity_error("capture artifact metadata changed")
-    digest = hashlib.sha256()
-    head = bytearray()
-    inline = bytearray()
-    tail = bytearray()
-    offset = 0
-    while offset < measurement.total_bytes:
-        try:
-            chunk = os.pread(
-                fd,
-                min(_READ_CHUNK_BYTES, measurement.total_bytes - offset),
-                offset,
-            )
-        except OSError as exc:
-            raise _integrity_error("capture artifact readback failed") from exc
-        if not chunk:
-            raise _integrity_error("capture artifact readback ended early")
-        digest.update(chunk)
-        if len(head) < len(measurement.head):
-            head.extend(chunk[: len(measurement.head) - len(head)])
-        if len(inline) < len(measurement.inline):
-            inline.extend(chunk[: len(measurement.inline) - len(inline)])
-        if measurement.tail:
-            tail.extend(chunk)
-            if len(tail) > len(measurement.tail):
-                del tail[: -len(measurement.tail)]
-        offset += len(chunk)
-
-    if not hmac.compare_digest(digest.hexdigest(), measurement.sha256):
-        raise _integrity_error("capture artifact content changed")
-    if (
-        bytes(head) != measurement.head
-        or bytes(inline) != measurement.inline
-        or bytes(tail) != measurement.tail
-    ):
-        raise _integrity_error("capture artifact preview changed")
-    try:
-        after = os.fstat(fd)
-    except OSError as exc:
-        raise _integrity_error("cannot re-inspect capture descriptor") from exc
-    if (
-        (after.st_dev, after.st_ino) != expected_identity
-        or after.st_size != measurement.total_bytes
-        or after.st_nlink != 1
-    ):
-        raise _integrity_error("capture artifact metadata changed")
-    try:
-        os.fsync(fd)
-    except OSError as exc:
-        raise _integrity_error("cannot sync completed capture artifact") from exc
+    _descriptor.verify_capture_measurement(
+        fd,
+        measurement,
+        expected_identity,
+        error_factory=_integrity_error,
+    )
     manifest = _make_manifest(
         capture_id=capture_id,
         incarnation=incarnation,

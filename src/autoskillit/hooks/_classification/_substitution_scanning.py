@@ -9,6 +9,19 @@ command string, with no dependency on the rest of `_classification/`.
 from __future__ import annotations
 
 
+def _quoted_span_end(command: str, start: int) -> int:
+    """Return the cursor after an inert quoted span, past EOF when unclosed."""
+    quote = command[start]
+    index = start + 1
+    n = len(command)
+    while index < n and command[index] != quote:
+        if quote == '"' and command[index] == "\\" and index + 1 < n:
+            index += 2
+            continue
+        index += 1
+    return index + 1
+
+
 def _find_substitution_end(command: str, start: int) -> int:
     """Return the closing ``)`` index for a substitution body starting at *start*.
 
@@ -24,20 +37,8 @@ def _find_substitution_end(command: str, start: int) -> int:
         if ch == "\\" and k + 1 < n:
             k += 2
             continue
-        if ch == "'":
-            k += 1
-            while k < n and command[k] != "'":
-                k += 1
-            k += 1
-            continue
-        if ch == '"':
-            k += 1
-            while k < n and command[k] != '"':
-                if command[k] == "\\" and k + 1 < n:
-                    k += 2
-                    continue
-                k += 1
-            k += 1
+        if ch in {"'", '"'}:
+            k = _quoted_span_end(command, k)
             continue
         if ch == "(":
             depth += 1
@@ -114,11 +115,7 @@ def _iter_substitution_occurrences(command: str) -> list[tuple[int, str]]:
             i += 2
             continue
         if c == "'":
-            # Skip single-quoted span
-            j = i + 1
-            while j < n and command[j] != "'":
-                j += 1
-            i = j + 1
+            i = _quoted_span_end(command, i)
             continue
         if c == '"':
             # Walk inside double quotes; substitutions are still active here.

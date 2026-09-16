@@ -324,35 +324,50 @@ def claim_assignment(
             assignments = batch.get("assignments")
             if not isinstance(assignments, list):
                 raise JoinLedgerError("batch assignments are malformed")
+            available: dict[str, Any] | None = None
             for entry in assignments:
                 if isinstance(entry, dict) and entry.get("tool_use_id") == tool_use_id:
                     raise JoinLedgerError(
                         f"tool_use_id {tool_use_id!r} already claimed for this wave"
                     )
-            for entry in assignments:
-                if not isinstance(entry, dict) or entry.get("tool_use_id") is not None:
-                    continue
-                entry["tool_use_id"] = tool_use_id
-                # Direct Agent calls have no server admission phase, so the
-                # claim itself records their namespaced attempt and run identity.
-                _append_attempt(
-                    entry,
-                    attempt_id=tool_use_id,
-                    run_id=f"claim:{tool_use_id}",
-                    evidence={},
-                    ts=time.time(),
+                if (
+                    available is None
+                    and isinstance(entry, dict)
+                    and entry.get("tool_use_id") is None
+                ):
+                    available = entry
+            if available is None:
+                raise JoinLedgerError(
+                    f"no unclaimed assignment available for tool_use_id {tool_use_id!r}"
                 )
-                entry["lifecycle_state"] = "running"
-                batch["lifecycle_state"] = "running"
-                write_join_ledger(ledger_path, payload)
-                return {**entry, "join_batch_id": batch["join_batch_id"]}
-            raise JoinLedgerError(
-                f"no unclaimed assignment available for tool_use_id {tool_use_id!r}"
+            available["tool_use_id"] = tool_use_id
+            # Direct Agent calls have no server admission phase, so the
+            # claim itself records their namespaced attempt and run identity.
+            _append_attempt(
+                available,
+                attempt_id=tool_use_id,
+                run_id=f"claim:{tool_use_id}",
+                evidence={},
+                ts=time.time(),
             )
+            available["lifecycle_state"] = "running"
+            batch["lifecycle_state"] = "running"
+            write_join_ledger(ledger_path, payload)
+            return {**available, "join_batch_id": batch["join_batch_id"]}
     except _CorruptedLedger as exc:
         raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
     except OSError as exc:
         raise JoinLedgerError(f"join ledger IO error during claim: {exc}") from exc
+
+
+def _update_batch_after_assignment(
+    batch: dict[str, Any], assignments: list[object], ts: float
+) -> None:
+    aggregate = _aggregate_wave_outcome(assignments)
+    batch["wave_outcome"] = aggregate
+    if aggregate != WAVE_PENDING:
+        batch["lifecycle_state"] = "terminal"
+        batch["settled_at"] = ts
 
 
 def settle_assignment(
@@ -461,11 +476,7 @@ def settle_assignment(
                         "result_digest": result_digest,
                     }
                 )
-            aggregate = _aggregate_wave_outcome(assignments)
-            batch["wave_outcome"] = aggregate
-            if aggregate != WAVE_PENDING:
-                batch["lifecycle_state"] = "terminal"
-                batch["settled_at"] = ts
+            _update_batch_after_assignment(batch, assignments, ts)
             write_join_ledger(ledger_path, payload)
             return batch
     except _CorruptedLedger as exc:
@@ -522,22 +533,19 @@ def settle_unadmitted_assignment(
                 )
             if target.get("terminal_event_id") is not None:
                 if (
-                    target.get("terminal_event_id") == terminal_event_id
-                    and target.get("terminal_payload_digest") == payload_digest
+                    target.get("terminal_event_id") != terminal_event_id
+                    or target.get("terminal_payload_digest") != payload_digest
                 ):
-                    return batch
-                raise JoinLedgerError(
-                    "conflicting terminal event or payload for un-admitted assignment"
-                )
+                    raise JoinLedgerError(
+                        "conflicting terminal event or payload for un-admitted assignment"
+                    )
+                return batch
             target["outcome"] = OUTCOME_LAUNCH_FAILED
             target["terminal_event_id"] = terminal_event_id
             target["terminal_payload_digest"] = payload_digest
             target["lifecycle_state"] = "terminal"
             target["updated_at"] = ts
-            batch["wave_outcome"] = _aggregate_wave_outcome(assignments)
-            if batch["wave_outcome"] != WAVE_PENDING:
-                batch["lifecycle_state"] = "terminal"
-                batch["settled_at"] = ts
+            _update_batch_after_assignment(batch, assignments, ts)
             write_join_ledger(ledger_path, payload)
             return batch
     except _CorruptedLedger as exc:

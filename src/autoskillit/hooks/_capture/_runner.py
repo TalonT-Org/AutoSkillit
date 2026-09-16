@@ -134,6 +134,35 @@ def _resolve_bash() -> str:
     return _resolve_trusted_bash(_TRUSTED_BASH_CANDIDATES)
 
 
+def _run_direct_command(bash_path: str, command: str) -> int:
+    process: subprocess.Popen[bytes] | OwnedProcessGroup | None = None
+    try:
+        process = _spawn_bash(bash_path, command, capture_output=False)
+        return _normalized_returncode(process.wait())
+    except BaseException as exc:
+        logger.error("direct_shell_execution_failed", exc_info=True)
+        direct_settlement = _settle_failed_capture(process) if process is not None else None
+        if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
+            raise
+        return _capture_replay.capture_failure_return(
+            _capture_replay.failure_transport(
+                reason=_capture_failure_policy.runtime_failure_reason(exc),
+                stage="direct process",
+                detail="direct process failed",
+                shell_returncode=None
+                if direct_settlement is None
+                else direct_settlement.returncode,
+                settlement=direct_settlement,
+            )
+        )
+    finally:
+        if process is not None and process.stdout is not None:
+            try:
+                process.stdout.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
+
+
 def run_capture(
     command: str,
     cwd: str,
@@ -197,27 +226,7 @@ def run_capture(
             if not observation_recorded:
                 raise CaptureSetupError.unknown("runner observation recording failed")
         if effective_direct:
-            try:
-                process = _spawn_bash(bash_path, command, capture_output=False)
-                return _normalized_returncode(process.wait())
-            except BaseException as exc:
-                logger.error("direct_shell_execution_failed", exc_info=True)
-                direct_settlement = (
-                    _settle_failed_capture(process) if process is not None else None
-                )
-                if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
-                    raise
-                return _capture_replay.capture_failure_return(
-                    _capture_replay.failure_transport(
-                        reason=_capture_failure_policy.runtime_failure_reason(exc),
-                        stage="direct process",
-                        detail="direct process failed",
-                        shell_returncode=(
-                            None if direct_settlement is None else direct_settlement.returncode
-                        ),
-                        settlement=direct_settlement,
-                    )
-                )
+            return _run_direct_command(bash_path, command)
 
         failure_stage = "capture root open"
         try:

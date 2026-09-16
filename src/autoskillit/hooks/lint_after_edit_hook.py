@@ -29,6 +29,57 @@ def _file_sha256(path: str) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _run_ruff_pipeline(file_path: str) -> tuple[bool, str]:
+    try:
+        hash_before = _file_sha256(file_path)
+    except OSError:
+        return False, ""
+
+    ruff_cmd = _resolve_ruff()
+
+    try:
+        subprocess.run(
+            [ruff_cmd, "format", file_path],
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+    except (FileNotFoundError, OSError):
+        return False, ""
+
+    try:
+        subprocess.run(
+            [ruff_cmd, "check", "--fix", "--ignore", "F4", file_path],
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT_S,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False, ""
+
+    remaining_errors = ""
+    try:
+        result = subprocess.run(
+            [ruff_cmd, "check", file_path],
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT_S,
+        )
+        if result.returncode != 0 and result.stdout.strip():
+            remaining_errors = result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    try:
+        hash_after = _file_sha256(file_path)
+    except OSError:
+        return False, ""
+
+    return hash_before != hash_after, remaining_errors
+
+
 def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
@@ -53,54 +104,7 @@ def main() -> None:
     if not Path(file_path).is_file():
         sys.exit(0)
 
-    try:
-        hash_before = _file_sha256(file_path)
-    except OSError:
-        sys.exit(0)
-
-    ruff_cmd = _resolve_ruff()
-
-    try:
-        subprocess.run(
-            [ruff_cmd, "format", file_path],
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
-        pass
-    except (FileNotFoundError, OSError):
-        sys.exit(0)
-
-    try:
-        subprocess.run(
-            [ruff_cmd, "check", "--fix", "--ignore", "F4", file_path],
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT_S,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        sys.exit(0)
-
-    remaining_errors = ""
-    try:
-        result = subprocess.run(
-            [ruff_cmd, "check", file_path],
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT_S,
-        )
-        if result.returncode != 0 and result.stdout.strip():
-            remaining_errors = result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
-
-    try:
-        hash_after = _file_sha256(file_path)
-    except OSError:
-        sys.exit(0)
-
-    file_changed = hash_before != hash_after
+    file_changed, remaining_errors = _run_ruff_pipeline(file_path)
 
     messages: list[str] = []
 

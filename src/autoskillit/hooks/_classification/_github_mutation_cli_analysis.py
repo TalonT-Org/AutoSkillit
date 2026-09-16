@@ -13,7 +13,6 @@ if TYPE_CHECKING:
         GitHubMutationKind,
         GitHubMutationRecord,
         _analyze_gh_api,
-        _flag_value,
         _github_mutation_kind,
         _is_dynamic_shell_value,
     )
@@ -32,7 +31,6 @@ else:
         GitHubMutationKind,
         GitHubMutationRecord,
         _analyze_gh_api,
-        _flag_value,
         _github_mutation_kind,
         _is_dynamic_shell_value,
     )
@@ -105,7 +103,10 @@ def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, st
             i += 1
             continue
         if not options_ended:
-            if token.text in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS | _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS:
+            if (
+                token.text in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS
+                or token.text in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
+            ):
                 if i + 1 >= len(args):
                     return (
                         None,
@@ -114,13 +115,11 @@ def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, st
                     )
                 i += 2
                 continue
-            if any(token.text.startswith(f"{flag}=") for flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS):
+            long_flag, separator, _value = token.text.partition("=")
+            if separator and long_flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS:
                 i += 1
                 continue
-            if any(
-                token.text.startswith(flag) and token.text != flag
-                for flag in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
-            ):
+            if len(token.text) > 2 and token.text[:2] in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS:
                 i += 1
                 continue
             if token.text.startswith("-"):
@@ -194,16 +193,18 @@ def _analyze_gh_segment(
 ) -> tuple[GitHubMutationRecord | None, str, str, bool]:
     if not args or _gh_args_have_bare_help_flag(args):
         return (None, "", "", True)
-    if args[:2] == ["pr", "create"]:
+    noun = args[0]
+    verb = args[1] if len(args) >= 2 else None
+    if noun == "pr" and verb == "create":
         return (None, "", "", False)
-    if args[:2] == ["pr", "review"]:
+    if noun == "pr" and verb == "review":
         return (
             GitHubMutationRecord("POST", "/gh/pr/review", GitHubMutationKind.PULL_REVIEW, 1, None),
             "",
             "",
             False,
         )
-    if args[:2] == ["issue", "edit"]:
+    if noun == "issue" and verb == "edit":
         request_count, reason_code, reason = _issue_edit_request_count(argv_args[2:])
         if request_count is None:
             return (None, reason_code, reason, False)
@@ -215,12 +216,11 @@ def _analyze_gh_segment(
             "",
             False,
         )
-    noun = args[0]
     read_verbs = _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset())
-    if len(args) >= 2 and args[1] in read_verbs:
+    if verb in read_verbs:
         return (None, "", "", True)
     if noun == "search":
-        selector = args[1] if len(args) >= 2 else "<missing>"
+        selector = verb if verb is not None else "<missing>"
         return (
             None,
             "unsupported_grammar",
@@ -228,8 +228,7 @@ def _analyze_gh_segment(
             False,
         )
     mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
-    if mutation_verbs is not None and len(args) >= 2:
-        verb = args[1]
+    if mutation_verbs is not None and verb is not None:
         if verb not in mutation_verbs:
             return (
                 None,
@@ -330,65 +329,19 @@ def _analyze_curl_segment(
     has_data = force_get = saw_next = False
     urls: list[ArgvToken] = []
     i = 0
-    data_flags = (
-        ("--data", "-d"),
-        ("--data-raw", None),
-        ("--data-binary", None),
-        ("--data-urlencode", None),
-        ("--form", "-F"),
-        ("--upload-file", "-T"),
-    )
-    value_flags = (("--header", "-H"), ("--user", "-u"), ("--output", "-o"))
+    data_flags = {
+        "--data",
+        "-d",
+        "--data-raw",
+        "--data-binary",
+        "--data-urlencode",
+        "--form",
+        "-F",
+        "--upload-file",
+        "-T",
+    }
     while i < len(args):
         token = args[i]
-        value, next_i, matched = _flag_value(args, i, long_name="--request", short_name="-X")
-        if matched or token.text in {"--request", "-X"}:
-            if not matched or value is None:
-                return ([], "missing_required_value", "curl method is missing", False)
-            method, i = value, next_i
-            continue
-        value, next_i, matched = _flag_value(args, i, long_name="--url")
-        if matched or token.text == "--url":
-            if not matched or value is None:
-                return ([], "missing_required_value", "curl URL is missing", False)
-            urls.append(value)
-            i = next_i
-            continue
-        if token.text in {"-G", "--get"}:
-            force_get = True
-            i += 1
-            continue
-        if token.text == "--next":
-            saw_next = True
-            i += 1
-            continue
-        consumed = False
-        for long_name, short_name in data_flags:
-            value, next_i, matched = _flag_value(
-                args, i, long_name=long_name, short_name=short_name
-            )
-            if (
-                matched
-                or token.text == long_name
-                or (short_name is not None and token.text == short_name)
-            ):
-                if not matched or value is None:
-                    return ([], "missing_required_value", f"{token.text} value is missing", False)
-                has_data, i, consumed = True, next_i, True
-                break
-        if consumed:
-            continue
-        for long_name, short_name in value_flags:
-            value, next_i, matched = _flag_value(
-                args, i, long_name=long_name, short_name=short_name
-            )
-            if matched or token.text == long_name or token.text == short_name:
-                if not matched or value is None:
-                    return ([], "missing_required_value", f"{token.text} value is missing", False)
-                i, consumed = next_i, True
-                break
-        if consumed:
-            continue
         if token.text.startswith("-"):
             value, next_i, recognized = _consume_argv_flag(args, i, _CURL_FLAG_SPEC)
             if not recognized:
@@ -398,8 +351,26 @@ def _analyze_curl_segment(
                     f"unrecognized curl flag: {token.text!r}",
                     False,
                 )
-            if value is None and _CURL_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
+            flag = token.text
+            if flag not in _CURL_FLAG_SPEC:
+                flag = flag.partition("=")[0] if flag.startswith("--") else flag[:2]
+            if value is None and _CURL_FLAG_SPEC[flag] == _FlagArity.VALUE:
+                if flag in {"--request", "-X"}:
+                    return ([], "missing_required_value", "curl method is missing", False)
+                if flag == "--url":
+                    return ([], "missing_required_value", "curl URL is missing", False)
                 return ([], "missing_required_value", f"{token.text} value is missing", False)
+            if flag in {"--request", "-X"}:
+                method = value
+            elif flag == "--url":
+                assert value is not None
+                urls.append(value)
+            elif flag in data_flags:
+                has_data = True
+            elif flag in {"-G", "--get"}:
+                force_get = True
+            elif flag == "--next":
+                saw_next = True
             i = next_i
             continue
         urls.append(token)

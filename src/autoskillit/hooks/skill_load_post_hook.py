@@ -31,6 +31,7 @@ from _hook_settings import (  # noqa: E402
 )
 from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SESSION_BINDING_SCHEMA_VERSION,
+    LoadedSkillEntry,
     SessionBinding,
     SessionBindingError,
     binding_lock,
@@ -46,47 +47,9 @@ from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
 )
 
 
-def main() -> None:
-    try:
-        data = json.loads(sys.stdin.read())
-    except Exception:
-        sys.exit(0)
-
-    if data.get("agent_id"):
-        sys.exit(0)
-
-    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
-    if backend == "codex":
-        log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")
-        write_quota_log_event(
-            {
-                "ts": datetime.now(UTC).isoformat(),
-                "event": "skill_load_backend_bypass",
-                "backend": backend,
-            },
-            log_dir,
-            caller="skill_load_post_hook",
-        )
-        sys.exit(0)
-
-    if data.get("tool_name") != "Skill":
-        sys.exit(0)
-
-    tool_input_value = data.get("tool_input", {})
-    tool_input: dict[str, object] = tool_input_value if isinstance(tool_input_value, dict) else {}
-    skill_name_value = tool_input.get("skill", "")
-    skill_name: str = (
-        normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
-    )
-    session_id: str = data.get("session_id", "")
-
-    if not session_id:
-        sys.exit(0)
-
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    flag_path = resolve_binding_path(payload_cwd, session_id)
-
-    ts = datetime.now(UTC).isoformat()
+def _write_skill_binding(
+    flag_path: Path, *, skill_name: str, session_id: str, ts: str
+) -> tuple[LoadedSkillEntry, str | None, bool]:
     artifact_digest = ""
     binding_error: str | None = None
     try:
@@ -131,6 +94,49 @@ def main() -> None:
         sys.stderr.write(
             f"skill_load_post_hook: failed to write flag {flag_path}:\n{traceback.format_exc()}"
         )
+    return new_entry, binding_error, binding_written
+
+
+def main() -> None:
+    try:
+        data = json.loads(sys.stdin.read())
+    except Exception:
+        sys.exit(0)
+
+    if data.get("agent_id"):
+        sys.exit(0)
+
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
+    if backend == "codex":
+        log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")
+        write_quota_log_event(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "event": "skill_load_backend_bypass",
+                "backend": backend,
+            },
+            log_dir,
+            caller="skill_load_post_hook",
+        )
+        sys.exit(0)
+
+    session_id: str = data.get("session_id", "")
+    if data.get("tool_name") != "Skill" or not session_id:
+        sys.exit(0)
+
+    tool_input_value = data.get("tool_input", {})
+    tool_input: dict[str, object] = tool_input_value if isinstance(tool_input_value, dict) else {}
+    skill_name_value = tool_input.get("skill", "")
+    skill_name: str = (
+        normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
+    )
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    flag_path = resolve_binding_path(payload_cwd, session_id)
+
+    ts = datetime.now(UTC).isoformat()
+    new_entry, binding_error, binding_written = _write_skill_binding(
+        flag_path, skill_name=skill_name, session_id=session_id, ts=ts
+    )
 
     if binding_error is not None:
         log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")

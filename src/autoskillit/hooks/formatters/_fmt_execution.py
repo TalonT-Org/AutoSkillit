@@ -56,37 +56,14 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     if pipeline:
         header = f"run_skill: {'OK' if success else 'FAIL'} [{status}]"
         lines = [header]
-        if session_id := data.get("session_id", ""):
-            lines.append(f"session_id: {session_id}")
-        if data.get("receipt_id"):
-            lines.append(f"receipt_id: {data['receipt_id']}")
-        lines.append(_format_exit_code_line(data))
-        lines.append(f"needs_retry: {data.get('needs_retry', False)}")
-        if data.get("retry_reason") and data["retry_reason"] != "none":
-            lines.append(f"retry_reason: {data['retry_reason']}")
-        if data.get("needs_retry") and "has_progress_evidence" in data:
-            lines.append(f"has_progress_evidence: {data['has_progress_evidence']}")
-        worktree = data.get("worktree_path", "")
-        if worktree:
-            lines.append(f"worktree_path: {worktree}")
-        _maybe_audit_lines(data, lines)
-        _maybe_provider_line(data, lines)
-        _maybe_tracker_line(data, lines)
-        result = data.get("result", "")
-        if result:
-            lines.append(f"\nresult:\n{result}")
-        stderr = (data.get("stderr") or "").strip()
-        if stderr:
-            lines.extend(["", "### stderr", stderr])
-        return "\n".join(lines)
-
-    lines = [f"## run_skill {mark} {status}", ""]
-    lines.append(f"success: {success}")
+    else:
+        lines = [f"## run_skill {mark} {status}", "", f"success: {success}"]
     if session_id := data.get("session_id", ""):
         lines.append(f"session_id: {session_id}")
     if data.get("receipt_id"):
         lines.append(f"receipt_id: {data['receipt_id']}")
-    lines.append(f"subtype: {subtype}")
+    if not pipeline:
+        lines.append(f"subtype: {subtype}")
     lines.append(_format_exit_code_line(data))
     lines.append(f"needs_retry: {data.get('needs_retry', False)}")
     retry_reason = data.get("retry_reason", "none")
@@ -99,6 +76,17 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"worktree_path: {worktree}")
     _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
+
+    if pipeline:
+        _maybe_tracker_line(data, lines)
+        result = data.get("result", "")
+        if result:
+            lines.append(f"\nresult:\n{result}")
+        stderr = (data.get("stderr") or "").strip()
+        if stderr:
+            lines.extend(["", "### stderr", stderr])
+        return "\n".join(lines)
+
     token_usage = data.get("token_usage")
     if isinstance(token_usage, dict):
         lines.append("")

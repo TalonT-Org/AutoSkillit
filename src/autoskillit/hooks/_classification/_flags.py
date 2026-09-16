@@ -124,10 +124,9 @@ def _consume_argv_flag(
 ) -> tuple[ArgvToken | None, int, bool]:
     """Consume the flag at tokens[i] against *spec*.
 
-    Returns (value_or_None, next_index, recognized). Handles the same three
-    forms _flag_value already supports for a single named flag -- space
-    (`--flag value`), `=`-joined long form (`--flag=value`), and bundled
-    short form (`-Xvalue`) -- but spec-driven across every flag in *spec* at
+    Returns (value_or_None, next_index, recognized). Handles three forms:
+    space (`--flag value`), `=`-joined long form (`--flag=value`), and bundled
+    short form (`-Xvalue`) -- spec-driven across every flag in *spec* at
     once, and CLI-agnostic: any consumer with its own {flag: arity} spec
     table (gh api, curl, git's global flags, pip's global flags) shares this
     one engine rather than hand-rolling its own argv-walking loop. If the

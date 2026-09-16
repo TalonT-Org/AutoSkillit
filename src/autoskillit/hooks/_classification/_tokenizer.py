@@ -157,6 +157,36 @@ def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
     return (_HEREDOC_BODY_RE.sub(_replace, command), literals)
 
 
+def _output_redirect_end(command: str, start: int) -> int | None:
+    i = start
+    char = command[i]
+    if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
+        while i < len(command) and command[i].isdecimal():
+            i += 1
+        if i >= len(command) or command[i] != ">":
+            return None
+    elif char != ">":
+        return None
+
+    operator_end = i + 1
+    if operator_end < len(command) and command[operator_end] == ">":
+        operator_end += 1
+    if operator_end < len(command) and command[operator_end] == "(":
+        return None
+    if (
+        operator_end < len(command)
+        and command[operator_end] == "&"
+        and (not command[start:i] or command[start:i].isdecimal())
+    ):
+        fd_end = operator_end + 1
+        while fd_end < len(command) and command[fd_end].isdecimal():
+            fd_end += 1
+        if fd_end == operator_end + 1:
+            return None
+        operator_end = fd_end
+    return operator_end
+
+
 def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
     """Replace recognized redirect operators with shlex-stable placeholders."""
     rendered: list[str] = []
@@ -185,43 +215,14 @@ def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
             i += 1
             continue
 
-        start = i
-        if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
-            while i < len(command) and command[i].isdecimal():
-                i += 1
-            if i >= len(command) or command[i] != ">":
-                rendered.append(command[start])
-                i = start + 1
-                continue
-        elif char != ">":
+        operator_end = _output_redirect_end(command, i)
+        if operator_end is None:
             rendered.append(char)
             i += 1
             continue
 
-        operator_start = start
-        operator_end = i + 1
-        if operator_end < len(command) and command[operator_end] == ">":
-            operator_end += 1
-        if operator_end < len(command) and command[operator_end] == "(":
-            rendered.append(command[start])
-            i = start + 1
-            continue
-        if (
-            operator_end < len(command)
-            and command[operator_end] == "&"
-            and (not command[operator_start:i] or command[operator_start:i].isdecimal())
-        ):
-            fd_end = operator_end + 1
-            while fd_end < len(command) and command[fd_end].isdecimal():
-                fd_end += 1
-            if fd_end == operator_end + 1:
-                rendered.append(command[start])
-                i = start + 1
-                continue
-            operator_end = fd_end
-
         marker = f"__AUTOSKILLIT_REDIRECT_{len(redirects)}__"
-        redirects[marker] = command[operator_start:operator_end]
+        redirects[marker] = command[i:operator_end]
         rendered.extend((" ", marker, " "))
         i = operator_end
     return ("".join(rendered), redirects)

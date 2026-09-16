@@ -189,34 +189,26 @@ def _load_sessions(
         return {}
 
     aggregated: dict[str, dict[str, Any]] = {}
+    index_key = "order_id" if order_id else "kitchen_id"
+    index_identity = order_id or kitchen_id
 
     for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
         try:
             idx = json.loads(line)
         except json.JSONDecodeError:
             continue
 
-        if order_id:
-            # Per-issue filtering: match on order_id; sessions without order_id are skipped
-            if idx.get("order_id", "") != order_id:
-                continue
-        else:
-            # Fallback: filter by kitchen_id (backward compat)
-            entry_kitchen_id = idx.get("kitchen_id") or idx.get("pipeline_id", "")
-            if not kitchen_id or entry_kitchen_id != kitchen_id:
-                continue
+        entry_identity = idx.get(index_key, "")
+        if index_key == "kitchen_id":
+            entry_identity = entry_identity or idx.get("pipeline_id", "")
+        if not index_identity or entry_identity != index_identity:
+            continue
 
         dir_name = idx.get("dir_name", "")
         if not dir_name:
             continue
 
         tu_path = log_root / "sessions" / dir_name / "token_usage.json"
-        if not tu_path.exists():
-            continue
-
         try:
             data = json.loads(tu_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
@@ -227,8 +219,9 @@ def _load_sessions(
             continue
 
         key = _canonical(raw_step)
-        if key not in aggregated:
-            aggregated[key] = {
+        entry = aggregated.setdefault(
+            key,
+            {
                 "step_name": key,
                 "model": "",
                 "input_tokens": 0,
@@ -241,8 +234,8 @@ def _load_sessions(
                 "loc_deletions": 0,
                 "peak_context": 0,
                 "turn_count": 0,
-            }
-        entry = aggregated[key]
+            },
+        )
         _model = data.get("model_identifier", "") or data.get("configured_model", "")
         if _model and not entry["model"]:
             entry["model"] = _model
@@ -472,14 +465,12 @@ def main() -> None:
             sys.stderr.write("token_summary_hook: empty PR body from gh api — aborting update\n")
             sys.exit(0)
 
-        token_table = _format_table(aggregated)
-        efficiency_table = _format_efficiency_table(aggregated)
-        model_table = _format_model_table(aggregated)
-        new_body = current_body + "\n\n" + token_table
-        if efficiency_table:
-            new_body += "\n\n" + efficiency_table
-        if model_table:
-            new_body += "\n\n" + model_table
+        tables = [
+            _format_table(aggregated),
+            _format_efficiency_table(aggregated),
+            _format_model_table(aggregated),
+        ]
+        new_body = current_body + "\n\n" + "\n\n".join(filter(None, tables))
 
         try:
             subprocess.run(

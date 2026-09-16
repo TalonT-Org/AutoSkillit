@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import _authority, _migration, _orphan_scan, _sweep
+from . import _authority, _migration, _orphan_scan, _sweep_cursor
 from ._failure_policy import CaptureFailureReason, runtime_failure_reason
 from ._lifecycle_policy import CaptureRetentionPhase, CaptureState
 from ._module_identity import register_module_aliases
@@ -213,7 +213,7 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                     for record in records.values()
                     if record.retention_phase is not CaptureRetentionPhase.DELETED
                 ),
-                due_records=_sweep.count_due_records(
+                due_records=_sweep_cursor.count_due_records(
                     records.values(),
                     now,
                     {CaptureState.DELETED},

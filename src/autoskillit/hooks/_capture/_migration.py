@@ -391,7 +391,7 @@ def load_ledger(
     loaded = view.load(
         fd,
         max_ledger_bytes=max_ledger_bytes,
-        account_replay=lambda amount: _sweep.account_replay_bytes(store, amount),
+        account_replay=lambda amount: _sweep_cursor.account_replay_bytes(store, amount),
         compact_legacy=migrate,
     )
     records, epoch, _size = loaded
@@ -462,12 +462,29 @@ def _publish(
         if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
-        _sweep.write_cursor_accounted(
+        _sweep_cursor.write_cursor_accounted(
             store,
             compaction_epoch=txn.target_epoch,
             due_key=due[-1],
         )
     remove_transaction(store._root_fd)
+
+
+def _retire_and_publish(
+    store: _store_port.MigrationStorePort,
+    records: Mapping[str, Record],
+    txn: LegacyMigrationTxn,
+    entry: MigrationEntry,
+    spec: CaptureCapacitySpec,
+    sizer: _capacity.CompactedFrameSizer,
+) -> tuple[LegacyMigrationTxn, Records, bool]:
+    txn = txn.with_entry(replace(entry, phase=MigrationPhase.RETIRED))
+    write_transaction(store._root_fd, txn)
+    projected = _overlay(records, txn)
+    published = _fits(projected, txn.target_epoch, spec, sizer)
+    if published:
+        _publish(store, txn, projected, spec)
+    return txn, projected, published
 
 
 def migrate_legacy(
@@ -509,17 +526,18 @@ def migrate_legacy(
     attempts = 0
     for due_key in candidates:
         active_budget = store._sweep_budget is not None
+        blocker: CleanupBlocker | None = None
         if attempts >= budget.max_attempts:
+            blocker = CleanupBlocker.ATTEMPT_BUDGET
+        elif (
+            store._sweep_records_inspected if active_budget else attempts
+        ) >= budget.max_records_inspected:
+            blocker = CleanupBlocker.RECORD_BUDGET
+        elif attempts > 0 and store._monotonic() - started >= budget.max_duration_seconds:
+            blocker = CleanupBlocker.ELAPSED_DEADLINE
+        if blocker is not None:
             if active_budget:
-                raise SweepBudgetExceeded(CleanupBlocker.ATTEMPT_BUDGET)
-            break
-        if active_budget and store._sweep_records_inspected >= budget.max_records_inspected:
-            raise SweepBudgetExceeded(CleanupBlocker.RECORD_BUDGET)
-        if not active_budget and attempts >= budget.max_records_inspected:
-            break
-        if attempts > 0 and store._monotonic() - started >= budget.max_duration_seconds:
-            if active_budget:
-                raise SweepBudgetExceeded(CleanupBlocker.ELAPSED_DEADLINE)
+                raise SweepBudgetExceeded(blocker)
             break
         attempts += 1
         if active_budget:
@@ -545,11 +563,10 @@ def migrate_legacy(
             if entry.phase is MigrationPhase.PLANNED:
                 normalized, lease = store._normalize_abandoned(record)
                 if normalized.state is _ledger.CaptureState.DELETED:
-                    txn = txn.with_entry(replace(entry, phase=MigrationPhase.RETIRED))
-                    write_transaction(store._root_fd, txn)
-                    projected = _overlay(records, txn)
-                    if _fits(projected, txn.target_epoch, spec, sizer):
-                        _publish(store, txn, projected, spec)
+                    txn, projected, published = _retire_and_publish(
+                        store, records, txn, entry, spec, sizer
+                    )
+                    if published:
                         return
                     continue
             deleting = _sweep.deleting_record(normalized, nonce=entry.deletion_nonce)
@@ -569,11 +586,10 @@ def migrate_legacy(
                 lease_checked=lease is not None,
             )
             entry, txn = active_entry, active_txn
-            txn = txn.with_entry(replace(entry, phase=MigrationPhase.RETIRED))
-            write_transaction(store._root_fd, txn)
-            projected = _overlay(records, txn)
-            if _fits(projected, txn.target_epoch, spec, sizer):
-                _publish(store, txn, projected, spec)
+            txn, projected, published = _retire_and_publish(
+                store, records, txn, entry, spec, sizer
+            )
+            if published:
                 return
         except (_sweep.CarrierLeaseLive, _sweep.Tampered):
             continue
@@ -604,7 +620,7 @@ def finish_published(
         if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
-        _sweep.write_cursor_accounted(
+        _sweep_cursor.write_cursor_accounted(
             store,
             compaction_epoch=epoch,
             due_key=due[-1],

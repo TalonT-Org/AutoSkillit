@@ -847,42 +847,42 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "window would otherwise evict them.",
     ),
     # -- hooks._capture._sweep::sweep_one --
-    f"{_SW}::L608": RetentionDecision(
+    f"{_SW}::L458": RetentionDecision(
         Revocability.REVOCABLE,
         "The record is absent, already deleted, or its next_attempt_at is still in the "
         "future -- the schedule/age gate retains anything not yet eligible for its next "
         "sweep attempt.",
     ),
-    f"{_SW}::L619": RetentionDecision(
+    f"{_SW}::L469": RetentionDecision(
         Revocability.REVOCABLE,
         "An issued or published capture reference has not yet reached its recorded expiry; "
         "retained until the reference-expiry deadline passes.",
     ),
-    f"{_SW}::L644": RetentionDecision(
+    f"{_SW}::L494": RetentionDecision(
         Revocability.REVOCABLE,
         "Re-verified under the second lock: the record vanished, changed identity since "
         "the first check, or is still not due -- the same due-date gate re-applied after "
         "the lease acquisition race window.",
     ),
-    f"{_SW}::L667": _self_limiting(
+    f"{_SW}::L517": _self_limiting(
         "Abandoned-record normalization determined the record is already DELETED; this "
         "reports that terminal outcome, not a retention gate."
     ),
-    f"{_SW}::L707": _self_limiting(
+    f"{_SW}::L557": _self_limiting(
         "The successful-deletion completion path; not a retention skip, this line reports "
         "that reclamation succeeded."
     ),
-    f"{_SW}::L709": RetentionDecision(
+    f"{_SW}::L559": RetentionDecision(
         Revocability.REVOCABLE,
         "A CarrierLeaseLive exception means an active lease currently holds this capture; "
         "retained until the lease is released, a directly observed live reference.",
     ),
-    f"{_SW}::L731": RetentionDecision(
+    f"{_SW}::L581": RetentionDecision(
         Revocability.REVOCABLE,
         "A tampered record is retained for a fixed forensic hold window recorded via "
         "next_attempt_at, evidence preserved for investigation before re-eligibility.",
     ),
-    f"{_SW}::L745": _self_limiting(
+    f"{_SW}::L595": _self_limiting(
         "A lifecycle or OSError during the delete attempt is an execution failure, not "
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),

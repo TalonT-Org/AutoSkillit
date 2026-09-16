@@ -5,11 +5,11 @@ from __future__ import annotations
 import errno
 import os
 import stat
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-from . import _lifecycle_policy, _orphan_scan, _store_port, _sweep_cursor
+from . import _lifecycle_policy, _orphan_scan, _store_port
 from ._cleanup import close_preserving_primary
 from ._lifecycle_record import (
     CaptureLifecycleRecord,
@@ -37,158 +37,8 @@ from ._types import (
 register_module_aliases(__name__)
 
 
-class SweepRecord(Protocol):
-    @property
-    def capture_id(self) -> str: ...
-
-    @property
-    def state(self) -> object: ...
-
-    @property
-    def next_attempt_at(self) -> float: ...
-
-
 class NamePattern(Protocol):
     def fullmatch(self, value: str) -> object | None: ...
-
-
-def is_due_record(
-    record: SweepRecord,
-    now: float,
-    terminal_states: Collection[object],
-) -> bool:
-    """Return whether one non-terminal lifecycle record is due."""
-    return record.state not in terminal_states and record.next_attempt_at <= now
-
-
-def count_due_records(
-    records: Iterable[SweepRecord],
-    now: float,
-    terminal_states: Collection[object],
-) -> int:
-    """Count due records without sweep ordering or materialization."""
-    return sum(is_due_record(record, now, terminal_states) for record in records)
-
-
-def bounded_due_keys(
-    records: Iterable[SweepRecord],
-    now: float,
-    terminal_states: Collection[object],
-    max_records: int,
-) -> tuple[list[DueKey], bool, int, DueKey | None]:
-    due: list[DueKey] = []
-    inspected = 0
-    complete = True
-    rebuild_key: DueKey | None = None
-    for record in records:
-        if inspected >= max_records:
-            complete = False
-            break
-        inspected += 1
-        if record.state in terminal_states:
-            continue
-        key = DueKey(record.next_attempt_at, record.capture_id)
-        rebuild_key = key if rebuild_key is None else max(rebuild_key, key)
-        if is_due_record(record, now, terminal_states):
-            due.append(key)
-    due.sort()
-    return due, complete, inspected, rebuild_key
-
-
-def select_due_keys(
-    store: _store_port.SweepStorePort,
-    now: float,
-    max_records: int,
-    terminal_states: Collection[object],
-) -> tuple[list[DueKey], bool, bool]:
-    with store._locked():
-        records, compaction_epoch, _size = store._load_locked()
-        due, complete, inspected, rebuild_key = bounded_due_keys(
-            records.values(),
-            now,
-            terminal_states,
-            max_records,
-        )
-        cursor = _sweep_cursor.load_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
-            compaction_epoch=compaction_epoch,
-        )
-        repair_needed = cursor.status is not _sweep_cursor.CursorStatus.VALID
-        repaired = False
-        if repair_needed and complete and not due:
-            budget = store._sweep_budget
-            if budget is None:
-                raise RuntimeError("cursor repair requires an active sweep budget")
-            if store._sweep_cursor_writes >= budget.max_cursor_writes:
-                raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-            if rebuild_key is None:
-                repaired = _sweep_cursor.clear_cursor(store._root_fd)
-            else:
-                _sweep_cursor.write_cursor(
-                    store._root_fd,
-                    project_identity=store._project_identity,
-                    root_identity=store._root_identity,
-                    compaction_epoch=compaction_epoch,
-                    due_key=rebuild_key,
-                )
-                repaired = True
-            if repaired:
-                store._sweep_cursor_writes += 1
-    store._sweep_records_inspected += inspected
-    return (
-        _sweep_cursor.rotate_after(due, cursor.due_key),
-        complete,
-        repaired or (repair_needed and bool(due)),
-    )
-
-
-def advance_cursor(
-    store: _store_port.SweepStorePort,
-    due_key: DueKey,
-    budget: SweepBudgetSpec,
-) -> None:
-    if store._sweep_cursor_writes >= budget.max_cursor_writes:
-        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-    with store._locked():
-        _records, compaction_epoch, _size = store._load_locked()
-        _sweep_cursor.write_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
-            compaction_epoch=compaction_epoch,
-            due_key=due_key,
-        )
-    store._sweep_cursor_writes += 1
-
-
-def account_replay_bytes(store: _store_port.SweepStorePort, amount: int) -> None:
-    budget = store._sweep_budget
-    if budget is not None and store._sweep_replay_bytes + amount > budget.max_replay_bytes:
-        raise SweepBudgetExceeded(CleanupBlocker.REPLAY_BYTE_BUDGET)
-    if budget is not None:
-        store._sweep_replay_bytes += amount
-
-
-def write_cursor_accounted(
-    store: _store_port.SweepStorePort,
-    *,
-    compaction_epoch: int,
-    due_key: DueKey,
-) -> None:
-    budget = store._sweep_budget
-    if budget is not None and store._sweep_cursor_writes >= budget.max_cursor_writes:
-        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-    _sweep_cursor.write_cursor(
-        store._root_fd,
-        project_identity=store._project_identity,
-        root_identity=store._root_identity,
-        compaction_epoch=compaction_epoch,
-        due_key=due_key,
-    )
-    if budget is not None:
-        store._sweep_cursor_writes += 1
 
 
 def validate_store_root(

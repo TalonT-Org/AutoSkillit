@@ -30,7 +30,6 @@ import autoskillit.hooks._capture._ledger_view as capture_ledger_view
 import autoskillit.hooks._capture._lifecycle_policy as capture_lifecycle_policy
 import autoskillit.hooks._capture._orphan_scan as orphan_scan
 import autoskillit.hooks._capture._reconcile as capture_reconcile
-import autoskillit.hooks._capture._sweep as capture_sweep
 import autoskillit.hooks._capture._sweep_cursor as sweep_cursor
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._failure_policy import (
@@ -1906,7 +1905,11 @@ def test_carrier_fsync_precedes_final_ledger_append(
         events.append("ledger_append")
         real_write_all(fd, payload)
 
-    monkeypatch.setattr(capture_lifecycle._capture_snapshot.os, "fsync", recording_fsync)
+    monkeypatch.setattr(
+        capture_lifecycle._capture_snapshot._descriptor.os,
+        "fsync",
+        recording_fsync,
+    )
     monkeypatch.setattr(
         capture_lifecycle._capture_ledger,
         "write_all",
@@ -5250,7 +5253,7 @@ def test_concurrent_admission_never_succeeds_from_stall_level_debt(
     ):
         decision = real_admission_reason(records, candidate, compaction_epoch, now)
         due_records = sum(
-            capture_sweep.is_due_record(record, now, {CaptureState.DELETED})
+            sweep_cursor.is_due_record(record, now, {CaptureState.DELETED})
             for record in records.values()
         )
         observations[candidate.capture_id] = (due_records, decision.reason)

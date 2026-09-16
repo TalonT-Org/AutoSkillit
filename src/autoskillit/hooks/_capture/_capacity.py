@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from . import _ledger, _sweep
+from . import _ledger, _sweep_cursor
 from ._failure_policy import CAPACITY_FAILURE_REASONS, CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import DEBT_ASSIST_MAX_TRANSITIONS, CaptureCapacityReason, CaptureCapacitySpec
@@ -215,7 +215,7 @@ def admission_reason(
             is_operational and record.retention_phase is _ledger.CaptureRetentionPhase.ACTIVE
         )
         forensic += is_forensic
-        due += _sweep.is_due_record(record, now, terminal_states)
+        due += _sweep_cursor.is_due_record(record, now, terminal_states)
     if operational > active_limit:
         return AdmissionDecision(CaptureCapacityReason.ACTIVE_CAPACITY)
     if retained > spec.max_retained_records:

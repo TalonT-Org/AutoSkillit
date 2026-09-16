@@ -1,19 +1,9 @@
 """CaptureLifecycleStore and the structural constants it depends on.
 
-The four class methods ``_acquire_flock``, ``_admission_reason``,
-``_admit_new_record``, and ``_scan_and_adopt_orphans`` are reduced to
-1-line wrappers that delegate to module-level functions in ``_admission``.
-The wrappers preserve the public class-method API (signatures, ``self``
-binding, ``monkeypatch.setattr`` contract) so test fixtures like
-``tests/cli/test_capture_store.py:247`` (``real_admit =
-CaptureLifecycleStore._admit_new_record``) continue to resolve without
-modification.
-
-All other class methods, exception classes, ledger helpers, and module
-constants move verbatim from the deleted ``_capture_lifecycle.py``. The
-file ends with ``register_module_aliases(__name__)`` so both
-``autoskillit.hooks._capture_lifecycle._store`` and
-``_capture_lifecycle._store`` resolve to the same ``sys.modules`` entry.
+Admission helpers delegate to ``_admission`` and durable transaction methods
+delegate to ``_transactions`` while preserving their bound signatures and
+fault-injection seams. This module retains lock and ledger loading, finalization
+recovery, delivery wiring, and sweep orchestration.
 """
 
 from __future__ import annotations
@@ -31,7 +21,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 # Bootstrap block — mirrors ``_capture/_authority.py`` so that bare-name
 # ``_capture`` siblings resolve under ``python -I -S -B`` with only ``hooks/``
@@ -49,7 +39,6 @@ _module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _capacity as _capture_capacity
     from autoskillit.hooks._capture import _delivery as _capture_delivery
-    from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
     from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
@@ -57,17 +46,16 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _orphan_scan as _capture_orphan_scan
     from autoskillit.hooks._capture import _reader as _capture_reader
-    from autoskillit.hooks._capture import _reference as _capture_reference
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _sweep as _capture_sweep
+    from autoskillit.hooks._capture import _sweep_cursor as _capture_sweep_cursor
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
-    from autoskillit.hooks._capture_lifecycle import _admission
+    from autoskillit.hooks._capture_lifecycle import _admission, _transactions
 else:
     _capture_capacity = importlib.import_module("_capture._capacity")
     _capture_delivery = importlib.import_module("_capture._delivery")
-    _capture_failure_policy = importlib.import_module("_capture._failure_policy")
     _capture_ledger = importlib.import_module("_capture._ledger")
     _capture_ledger_view = importlib.import_module("_capture._ledger_view")
     _capture_lifecycle_policy = importlib.import_module("_capture._lifecycle_policy")
@@ -75,13 +63,14 @@ else:
     _capture_migration = importlib.import_module("_capture._migration")
     _capture_orphan_scan = importlib.import_module("_capture._orphan_scan")
     _capture_reader = importlib.import_module("_capture._reader")
-    _capture_reference = importlib.import_module("_capture._reference")
     _capture_resolver = importlib.import_module("_capture._resolver")
     _capture_snapshot = importlib.import_module("_capture._snapshot")
     _capture_sweep = importlib.import_module("_capture._sweep")
+    _capture_sweep_cursor = importlib.import_module("_capture._sweep_cursor")
     _capture_syntax = importlib.import_module("_capture._syntax")
     _capture_types = importlib.import_module("_capture._types")
     _admission = importlib.import_module("_capture_lifecycle._admission")
+    _transactions = importlib.import_module("_capture_lifecycle._transactions")
 
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 CaptureCapacityReason = _capture_types.CaptureCapacityReason
@@ -114,12 +103,6 @@ _REFERENCE_LIFETIME_SECONDS = 1800.0
 if _RETENTION_SECONDS < _REFERENCE_LIFETIME_SECONDS:
     raise AssertionError("capture retention must cover the replay-reference lifetime")
 _MAX_RETRY_SECONDS = 3600.0
-_BYTE_CAPACITY_REASONS = frozenset(
-    {
-        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
-        CaptureCapacityReason.HARD_LEDGER_CAPACITY,
-    }
-)
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
@@ -131,36 +114,9 @@ _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 _STORE_FACTORY_TOKEN = object()
 
 
-class CaptureLifecycleError(RuntimeError):
-    failure_reason = _capture_failure_policy.CaptureFailureReason.LEDGER_INTEGRITY
-
-    @classmethod
-    def from_os_error(
-        cls,
-        detail: str,
-        exc: OSError,
-    ) -> CaptureLifecycleError:
-        error = cls(detail)
-        error.failure_reason = _capture_failure_policy.os_failure_reason(exc)
-        return error
-
-
-class CaptureLedgerError(CaptureLifecycleError):
-    reason = "corrupt"
-    observed_version: int | None = None
-    current_version: int | None = None
-
-
-class CaptureCapacityError(CaptureLedgerError):
-    def __init__(
-        self,
-        reason: CaptureCapacityReason,
-        assist_transition_limit: int | None = None,
-    ) -> None:
-        self.reason = reason
-        self.assist_transition_limit = assist_transition_limit
-        self.failure_reason = _capture_capacity.failure_reason(reason)
-        super().__init__(_capture_capacity.reason_detail(reason))
+CaptureLifecycleError = _transactions.CaptureLifecycleError
+CaptureLedgerError = _transactions.CaptureLedgerError
+CaptureCapacityError = _transactions.CaptureCapacityError
 
 
 CaptureState = _capture_lifecycle_record.CaptureState
@@ -171,13 +127,10 @@ CaptureSnapshotStatus = _capture_lifecycle_record.CaptureSnapshotStatus
 CaptureStatus = _capture_lifecycle_record.CaptureStatus
 CaptureLifecycleRecord = _capture_lifecycle_record.CaptureLifecycleRecord
 CaptureTransitionCommittedError = _capture_lifecycle_record.CaptureTransitionCommittedError
+TERMINAL_STATES = frozenset({CaptureState.DELETED})
 
 
-def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
-    try:
-        return _capture_lifecycle_record.record_to_dict(record)
-    except _capture_lifecycle_record.LedgerCodecError as exc:
-        raise CaptureLedgerError(str(exc)) from exc
+_record_to_dict = _transactions._record_to_dict
 
 
 def _record_from_dict(value: object) -> CaptureLifecycleRecord:
@@ -187,14 +140,7 @@ def _record_from_dict(value: object) -> CaptureLifecycleRecord:
         raise CaptureLedgerError(str(exc)) from exc
 
 
-def _validate_successor(
-    previous: CaptureLifecycleRecord,
-    candidate: CaptureLifecycleRecord,
-) -> None:
-    try:
-        _capture_lifecycle_record.validate_successor(previous, candidate)
-    except _capture_lifecycle_record.LedgerCodecError as exc:
-        raise CaptureLedgerError(str(exc)) from exc
+_validate_successor = _transactions._validate_successor
 
 
 class CaptureLifecycleStore:
@@ -347,52 +293,14 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         size: int,
     ) -> None:
-        if record.capture_id in self._ledger_view.opaque_capture_ids:
-            raise CaptureLedgerError("capture lifecycle state is opaque")
-        previous = records.get(record.capture_id)
-        if previous is None:
-            if record.revision != 1:
-                raise CaptureLedgerError("new lifecycle record must start at revision one")
-        else:
-            _validate_successor(previous, record)
-        try:
-            frame = _capture_ledger.encode_frame(
-                _record_to_dict(record),
-                compaction_epoch=compaction_epoch,
-            )
-        except _capture_lifecycle_record.LedgerCodecError as exc:
-            raise CaptureLedgerError(str(exc)) from exc
-        if size + len(frame) > min(
-            _COMPACTION_THRESHOLD_BYTES,
-            self._capacity.compaction_high_bytes,
-        ):
-            latest = dict(records)
-            latest[record.capture_id] = record
-            self._compact_locked(latest, compaction_epoch + 1, candidate=record)
-            return
-        fd = self._open_ledger()
-        try:
-            _capture_ledger.write_all(fd, frame)
-            os.fsync(fd)
-            value = os.fstat(fd)
-        except BaseException as primary_error:
-            try:
-                os.close(fd)
-            except OSError as cleanup_error:
-                primary_error.add_note(
-                    "ledger descriptor cleanup also failed: "
-                    f"{type(cleanup_error).__name__}: {cleanup_error}"
-                )
-            if isinstance(primary_error, _capture_lifecycle_record.LedgerCodecError):
-                raise CaptureLedgerError(str(primary_error)) from primary_error
-            raise
-        try:
-            os.close(fd)
-        except OSError as exc:
-            raise CaptureTransitionCommittedError(
-                "lifecycle transition committed before descriptor cleanup failed"
-            ) from exc
-        self._ledger_view.note_append(records, record, compaction_epoch, value, frame)
+        _transactions._append_locked(
+            self,
+            record,
+            records,
+            compaction_epoch,
+            size,
+            compaction_threshold_bytes=_COMPACTION_THRESHOLD_BYTES,
+        )
 
     def _compact_locked(
         self,
@@ -400,63 +308,16 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         candidate: CaptureLifecycleRecord | None = None,
     ) -> None:
-        compacted = _capture_capacity.compacted_records(records, self._capacity)
-        try:
-            actionable_frames = {
-                record.capture_id: _capture_ledger.encode_frame(
-                    _record_to_dict(record),
-                    compaction_epoch=compaction_epoch,
-                )
-                for record in compacted
-            }
-        except _capture_lifecycle_record.LedgerCodecError as exc:
-            raise CaptureLedgerError(str(exc)) from exc
-        frames = [*self._ledger_view.opaque_frames, *actionable_frames.values()]
-        compacted_bound = min(
-            _MAX_COMPACTION_BYTES,
-            _capture_capacity.transition_compaction_bound(candidate, self._capacity),
-        )
-        if sum(map(len, frames)) > compacted_bound:
-            raise CaptureLedgerError("lifecycle compaction exceeds bound")
-        temp_name = f".capture-lifecycle-compact-{secrets.token_hex(8)}"
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
-        fd = os.open(temp_name, flags, 0o600, dir_fd=self._root_fd)
-        try:
-            _capture_ledger_view.validate_control_file(
-                fd, temp_name, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
-            )
-            for frame in frames:
-                _capture_ledger.write_all(fd, frame)
-            os.fsync(fd)
-        except BaseException:
-            os.close(fd)
-            try:
-                os.unlink(temp_name, dir_fd=self._root_fd)
-            except OSError:
-                pass
-            raise
-        else:
-            os.close(fd)
-        try:
-            os.replace(
-                temp_name,
-                LEDGER_NAME,
-                src_dir_fd=self._root_fd,
-                dst_dir_fd=self._root_fd,
-            )
-        except BaseException:
-            try:
-                os.unlink(temp_name, dir_fd=self._root_fd)
-            except OSError:
-                pass
-            raise
-        os.fsync(self._root_fd)
-        value = os.stat(LEDGER_NAME, dir_fd=self._root_fd, follow_symlinks=False)
-        self._ledger_view.note_compaction(
-            {record.capture_id: record for record in compacted},
+        _transactions._compact_locked(
+            self,
+            records,
             compaction_epoch,
-            value,
-            actionable_frames,
+            candidate,
+            max_compaction_bytes=_MAX_COMPACTION_BYTES,
+            ledger_name=LEDGER_NAME,
+            untrusted_write_bits=_UNTRUSTED_WRITE_BITS,
+            cloexec=_CLOEXEC,
+            nofollow=_NOFOLLOW,
         )
 
     @staticmethod
@@ -477,37 +338,15 @@ class CaptureLifecycleStore:
         allowed_states: set[CaptureState],
         transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
     ) -> CaptureLifecycleRecord:
-        if type(authority) is not CaptureWriteAuthority:
-            raise CaptureLifecycleError("transition requires capture write authority")
-        previous = records.get(authority.capture_id)
-        if (
-            previous is None
-            or previous.incarnation != authority.incarnation
-            or previous.revision != authority.expected_revision
-            or previous.state not in allowed_states
-        ):
-            raise CaptureLifecycleError("stale or invalid lifecycle transition")
-        candidate = transform(previous)
-        if (
-            type(candidate) is not CaptureLifecycleRecord
-            or candidate.capture_id != previous.capture_id
-            or candidate.incarnation != previous.incarnation
-            or candidate.revision != previous.revision + 1
-        ):
-            raise CaptureLifecycleError("transition did not produce one valid successor")
-        reason = _capture_capacity.transition_reason(
-            records,
-            candidate,
+        return _transactions._transition_locked(
+            self,
+            records=records,
             compaction_epoch=compaction_epoch,
-            spec=self._capacity,
-            sizer=self._ledger_view.sizer,
+            ledger_size=ledger_size,
+            authority=authority,
+            allowed_states=allowed_states,
+            transform=transform,
         )
-        if reason is not None:
-            raise CaptureCapacityError(reason)
-        self._append_locked(candidate, records, compaction_epoch, ledger_size)
-        if self._sweep_budget is not None:
-            self._sweep_transitions += 1
-        return candidate
 
     def _transition(
         self,
@@ -516,16 +355,12 @@ class CaptureLifecycleStore:
         allowed_states: set[CaptureState],
         transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
     ) -> CaptureLifecycleRecord:
-        with self._locked():
-            records, compaction_epoch, size = self._load_locked()
-            return self._transition_locked(
-                records=records,
-                compaction_epoch=compaction_epoch,
-                ledger_size=size,
-                authority=authority,
-                allowed_states=allowed_states,
-                transform=transform,
-            )
+        return _transactions._transition(
+            self,
+            authority,
+            allowed_states=allowed_states,
+            transform=transform,
+        )
 
     def _transition_current(
         self,
@@ -535,19 +370,13 @@ class CaptureLifecycleStore:
         allowed_states: set[CaptureState],
         transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
     ) -> CaptureLifecycleRecord:
-        with self._locked():
-            records, compaction_epoch, size = self._load_locked()
-            previous = records.get(capture_id)
-            if previous is None or previous.incarnation != incarnation:
-                raise CaptureLifecycleError("capture transition authority is unavailable")
-            return self._transition_locked(
-                records=records,
-                compaction_epoch=compaction_epoch,
-                ledger_size=size,
-                authority=self._authority_for(previous),
-                allowed_states=allowed_states,
-                transform=transform,
-            )
+        return _transactions._transition_current(
+            self,
+            capture_id,
+            incarnation,
+            allowed_states=allowed_states,
+            transform=transform,
+        )
 
     def _with_capacity_rescue(
         self,
@@ -555,232 +384,43 @@ class CaptureLifecycleStore:
         *,
         rescuable_reasons: frozenset[CaptureCapacityReason] | None = None,
     ) -> object:
-        """Attempt an operation; on a rescuable ceiling, sweep and retry once.
-
-        Each call of ``attempt`` must perform a complete fresh cycle: acquire
-        lock, reload the ledger, rebuild the candidate, run the transition.
-        Nothing loaded in a failed attempt may be reused by the retry.
-
-        ``rescuable_reasons`` controls which capacity reasons trigger the
-        rescue.  Default (``None``) rescues only the soft ceiling
-        (``PROJECTED_COMPACTED_BYTES``).  At the admission gate,
-        ``reserve_capture`` passes both byte reasons so that hard-ceiling
-        breaches with reclaimable bytes also get one rescue attempt.
-        Record-count ceilings are never rescued (they already have a
-        proven recovery story under the existing integration test).
-        """
-        _default_rescuable = frozenset({CaptureCapacityReason.PROJECTED_COMPACTED_BYTES})
-        effective = rescuable_reasons if rescuable_reasons is not None else _default_rescuable
-        try:
-            return attempt()
-        except CaptureCapacityError as exc:
-            if exc.reason in _BYTE_CAPACITY_REASONS:
-                self.byte_pressure_observed = True
-            if exc.reason not in effective:
-                raise
-            if exc.reason is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST:
-                limit = exc.assist_transition_limit
-                if (
-                    type(limit) is not int
-                    or limit <= 0
-                    or limit > _capture_types.DEBT_ASSIST_MAX_TRANSITIONS
-                ):
-                    raise CaptureLifecycleError(
-                        "debt assist requires a valid transition limit"
-                    ) from exc
-                budget = replace(
-                    _capture_types.DEBT_ASSIST_BUDGET,
-                    max_transitions=limit,
-                )
-            else:
-                budget = _capture_types.TRANSITION_RESCUE_BUDGET
-            # Run a bounded rescue sweep with the lock released (sweep
-            # acquires it itself — sequential, no re-entrancy).
-            self.sweep(budget)
-            # Retry exactly once.
-            return attempt()
+        return _transactions._with_capacity_rescue(
+            self,
+            attempt,
+            rescuable_reasons=rescuable_reasons,
+        )
 
     def reserve_capture(self, capture_id: str) -> CaptureLifecycleRecord:
-        if not _CAPTURE_ID_RE.fullmatch(capture_id):
-            raise CaptureLifecycleError("invalid capture id")
-
-        def _attempt() -> CaptureLifecycleRecord:
-            with self._locked():
-                now = self._wall_clock()
-                nonce = secrets.token_hex(8)
-                incarnation = secrets.token_hex(16)
-                record = CaptureLifecycleRecord(
-                    capture_id=capture_id,
-                    state=CaptureState.RESERVED,
-                    staging_name=f".capture-staging-{capture_id}-{nonce}",
-                    public_name=f"shell_{capture_id}.log",
-                    project_identity=self._project_identity,
-                    root_identity=self._root_identity,
-                    created_at=now,
-                    next_attempt_at=now + _RETENTION_SECONDS,
-                    incarnation=incarnation,
-                    revision=1,
-                )
-                records, compaction_epoch, size = self._load_locked()
-                previous = records.get(capture_id)
-                if previous is not None and previous.state is not CaptureState.DELETED:
-                    raise CaptureLifecycleError("capture id already reserved")
-                decision = self._admission_reason(records, record, compaction_epoch, now)
-                if decision.reason is not None:
-                    raise CaptureCapacityError(
-                        decision.reason,
-                        decision.assist_transition_limit,
-                    )
-                self._append_locked(record, records, compaction_epoch, size)
-            return record
-
-        # Admission gate: rescue on both byte reasons (soft + hard ceiling),
-        # not just soft.  Record-count ceilings keep existing behavior.
-        result = self._with_capacity_rescue(
-            _attempt,
-            rescuable_reasons=_BYTE_CAPACITY_REASONS
-            | frozenset({CaptureCapacityReason.RECLAMATION_DEBT_ASSIST}),
+        return _transactions.reserve_capture(
+            self,
+            capture_id,
+            capture_id_re=_CAPTURE_ID_RE,
+            retention_seconds=_RETENTION_SECONDS,
         )
-        if type(result) is not CaptureLifecycleRecord:
-            raise CaptureLifecycleError("reserve_capture rescue produced invalid result")
-        return result
 
     def mark_staged(
         self,
         authority: CaptureWriteAuthority,
         artifact_identity: tuple[int, int],
     ) -> CaptureLifecycleRecord:
-        if (
-            not isinstance(artifact_identity, tuple)
-            or len(artifact_identity) != 2
-            or any(
-                not isinstance(part, int) or isinstance(part, bool) or part < 0
-                for part in artifact_identity
-            )
-        ):
-            raise CaptureLifecycleError("invalid staged artifact identity")
-        return self._transition(
-            authority,
-            allowed_states={CaptureState.RESERVED},
-            transform=lambda record: replace(
-                record,
-                state=CaptureState.STAGED,
-                artifact_identity=artifact_identity,
-                revision=record.revision + 1,
-            ),
-        )
+        return _transactions.mark_staged(self, authority, artifact_identity)
 
     def mark_published(
         self,
         authority: CaptureWriteAuthority,
     ) -> CaptureLifecycleRecord:
-        return self._transition(
-            authority,
-            allowed_states={CaptureState.STAGED},
-            transform=lambda record: replace(
-                record,
-                state=CaptureState.PUBLISHED_WRITING,
-                revision=record.revision + 1,
-            ),
-        )
+        return _transactions.mark_published(self, authority)
 
     def create_artifact(
         self,
         capture_id: str,
     ) -> tuple[int, int, str, tuple[int, int], CaptureWriteAuthority]:
-        record = self.reserve_capture(capture_id)
-        authority = self._authority_for(record)
-        fd = -1
-        lease_fd = -1
-        committed_error = CaptureTransitionCommittedError
-        creation_errors = (CaptureLifecycleError, committed_error, OSError)
-        recovery_errors = (CaptureAuthorityError, *creation_errors)
-        try:
-            fd = os.open(record.staging_name, _ARTIFACT_FLAGS, 0o600, dir_fd=self._root_fd)
-            value = os.fstat(fd)
-            if (
-                not stat.S_ISREG(value.st_mode)
-                or value.st_nlink != 1
-                or value.st_uid != os.geteuid()
-                or value.st_mode & _UNTRUSTED_WRITE_BITS
-            ):
-                raise CaptureLifecycleError("unsafe staged capture artifact")
-            identity = _capture_ledger_view.identity(value)
-            lease_fd = self.acquire_writer_lease(fd)
-            staged = self.mark_staged(authority, identity)
-            authority = self._authority_for(staged)
-            os.fsync(fd)
-            os.link(
-                record.staging_name,
-                record.public_name,
-                src_dir_fd=self._root_fd,
-                dst_dir_fd=self._root_fd,
-                follow_symlinks=False,
-            )
-            staging_value = os.stat(
-                record.staging_name,
-                dir_fd=self._root_fd,
-                follow_symlinks=False,
-            )
-            public_value = os.stat(
-                record.public_name,
-                dir_fd=self._root_fd,
-                follow_symlinks=False,
-            )
-            if (
-                _capture_ledger_view.identity(staging_value) != identity
-                or _capture_ledger_view.identity(public_value) != identity
-                or staging_value.st_nlink != 2
-                or public_value.st_nlink != 2
-            ):
-                raise CaptureLifecycleError("capture publication identity changed")
-            os.unlink(record.staging_name, dir_fd=self._root_fd)
-            os.fsync(self._root_fd)
-            public_value = os.stat(
-                record.public_name,
-                dir_fd=self._root_fd,
-                follow_symlinks=False,
-            )
-            if (
-                _capture_ledger_view.identity(public_value) != identity
-                or public_value.st_nlink != 1
-            ):
-                raise CaptureLifecycleError("capture publication did not settle")
-            published = self.mark_published(authority)
-            authority = self._authority_for(published)
-            return fd, lease_fd, record.public_name, identity, authority
-        except creation_errors as primary_error:
-            try:
-                current = self.get_record(capture_id)
-                if current is not None and current.state in {
-                    CaptureState.RESERVED,
-                    CaptureState.STAGED,
-                    CaptureState.PUBLISHED_WRITING,
-                }:
-                    # Resolve the failure reason so capacity-caused
-                    # failures get zero sweep-grace.
-                    _create_failure_reason = _capture_failure_policy.runtime_failure_reason(
-                        primary_error
-                    )
-                    self.commit_capture_failure(
-                        self._authority_for(current),
-                        CaptureFailureEvidence(
-                            stage="artifact_publication",
-                            detail=f"{type(primary_error).__name__}: {primary_error}",
-                            failure_reason=_create_failure_reason.value,
-                        ),
-                        observed_size=os.fstat(fd).st_size if fd >= 0 else 0,
-                    )
-            except recovery_errors as recovery_error:
-                primary_error.add_note(
-                    "failed-state recovery also failed: "
-                    f"{type(recovery_error).__name__}: {recovery_error}"
-                )
-            if lease_fd >= 0:
-                os.close(lease_fd)
-            if fd >= 0:
-                os.close(fd)
-            raise
+        return _transactions.create_artifact(
+            self,
+            capture_id,
+            artifact_flags=_ARTIFACT_FLAGS,
+            untrusted_write_bits=_UNTRUSTED_WRITE_BITS,
+        )
 
     def commit_capture_failure(
         self,
@@ -789,38 +429,12 @@ class CaptureLifecycleStore:
         *,
         observed_size: int,
     ) -> CaptureLifecycleRecord:
-        if type(evidence) is not CaptureFailureEvidence:
-            raise CaptureLifecycleError("failure transition requires typed evidence")
-        if not _capture_lifecycle_record.validate_observed_size(observed_size):
-            raise CaptureLifecycleError("invalid observed capture size")
-        now = self._wall_clock()
-        # Capacity-caused failure records get zero grace — a record
-        # that failed *by* capacity must not *hold* capacity.
-        grace = _RETENTION_SECONDS
-        if (
-            evidence.failure_reason is not None
-            and evidence.failure_reason in _capture_types._CAPACITY_FAILURE_REASON_VALUES
-        ):
-            grace = 0.0
-        return self._transition(
+        return _transactions.commit_capture_failure(
+            self,
             authority,
-            allowed_states={
-                CaptureState.RESERVED,
-                CaptureState.STAGED,
-                CaptureState.PUBLISHED_WRITING,
-            },
-            transform=lambda record: replace(
-                record,
-                state=CaptureState.FAILED,
-                retention_at=now,
-                next_attempt_at=now + grace,
-                observed_size=observed_size,
-                failure=evidence,
-                capture_status=CaptureStatus.FAILED,
-                snapshot_status=CaptureSnapshotStatus.ABSENT,
-                retention_phase=CaptureRetentionPhase.ACTIVE,
-                revision=record.revision + 1,
-            ),
+            evidence,
+            observed_size=observed_size,
+            retention_seconds=_RETENTION_SECONDS,
         )
 
     def commit_verified_snapshot(
@@ -843,54 +457,11 @@ class CaptureLifecycleStore:
             with self._locked():
                 records, compaction_epoch, size = self._load_locked()
                 previous = records.get(base.capture_id)
-                if (
-                    previous is None
-                    or previous.state is not CaptureState.PUBLISHED_WRITING
-                    or previous.incarnation != base.incarnation
-                    or previous.revision + 1 != base.finalized_at_revision
-                    or previous.project_identity != base.project_identity
-                    or previous.root_identity != base.root_identity
-                    or previous.public_name != base.carrier_name
-                    or previous.artifact_identity != base.carrier_identity
-                ):
-                    raise CaptureLifecycleError("verified snapshot does not match write authority")
-                token: str | None = None
-                reference_hash: str | None = None
-                reference_expiry: float | None = None
-                if issue_reference:
-                    reference_expiry = min(
-                        base.finalized_at + _REFERENCE_LIFETIME_SECONDS,
-                        base.retention_deadline,
-                    )
-                    token, reference_hash = _capture_reference._issue_capture_reference(
-                        verified,
-                        expiry=reference_expiry,
-                    )
-                finalized = _capture_reference._bind_finalized_snapshot(
-                    verified,
-                    reference_token=token,
-                    reference_hash=reference_hash,
-                    reference_expiry=reference_expiry,
-                )
-                manifest = finalized.snapshot.manifest
-                candidate = replace(
+                candidate, finalized = _transactions.prepare_verified_finalization(
                     previous,
-                    state=CaptureState.FINALIZED,
-                    revision=previous.revision + 1,
-                    finalized_at_revision=manifest.finalized_at_revision,
-                    retention_at=manifest.finalized_at,
-                    next_attempt_at=manifest.retention_deadline,
-                    manifest=manifest,
-                    manifest_bytes=_capture_snapshot.encode_capture_final_manifest(manifest),
-                    capture_status=CaptureStatus.COMPLETE,
-                    snapshot_status=CaptureSnapshotStatus.VERIFIED,
-                    reference_status=(
-                        CaptureReferenceStatus.ISSUED
-                        if finalized.issuance is not None
-                        else CaptureReferenceStatus.NOT_REQUESTED
-                    ),
-                    delivery_status=CaptureDeliveryStatus.NOT_ATTEMPTED,
-                    retention_phase=CaptureRetentionPhase.ACTIVE,
+                    verified,
+                    issue_reference=issue_reference,
+                    reference_lifetime_seconds=_REFERENCE_LIFETIME_SECONDS,
                 )
                 candidate_holder[0] = candidate
                 finalized_holder[0] = finalized
@@ -898,7 +469,7 @@ class CaptureLifecycleStore:
                     records=records,
                     compaction_epoch=compaction_epoch,
                     ledger_size=size,
-                    authority=self._authority_for(previous),
+                    authority=self._authority_for(cast(CaptureLifecycleRecord, previous)),
                     allowed_states={CaptureState.PUBLISHED_WRITING},
                     transform=lambda _current: candidate,
                 )
@@ -1118,16 +689,16 @@ class CaptureLifecycleStore:
         now: float,
         max_records: int,
     ) -> tuple[list[DueKey], bool, bool]:
-        return _capture_sweep.select_due_keys(
+        return _capture_sweep_cursor.select_due_keys(
             self,
             now,
             max_records,
-            {CaptureState.DELETED},
+            TERMINAL_STATES,
         )
 
     def _advance_sweep_cursor(self, due_key: DueKey) -> None:
         assert self._sweep_budget is not None
-        _capture_sweep.advance_cursor(self, due_key, self._sweep_budget)
+        _capture_sweep_cursor.advance_cursor(self, due_key, self._sweep_budget)
 
     def _admission_reason(
         self,

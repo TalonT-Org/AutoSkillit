@@ -391,7 +391,7 @@ def load_ledger(
     loaded = view.load(
         fd,
         max_ledger_bytes=max_ledger_bytes,
-        account_replay=lambda amount: _sweep.account_replay_bytes(store, amount),
+        account_replay=lambda amount: _sweep_cursor.account_replay_bytes(store, amount),
         compact_legacy=migrate,
     )
     records, epoch, _size = loaded
@@ -462,7 +462,7 @@ def _publish(
         if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
-        _sweep.write_cursor_accounted(
+        _sweep_cursor.write_cursor_accounted(
             store,
             compaction_epoch=txn.target_epoch,
             due_key=due[-1],
@@ -604,7 +604,7 @@ def finish_published(
         if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
-        _sweep.write_cursor_accounted(
+        _sweep_cursor.write_cursor_accounted(
             store,
             compaction_epoch=epoch,
             due_key=due[-1],

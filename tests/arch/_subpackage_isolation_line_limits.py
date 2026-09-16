@@ -53,21 +53,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
         "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
     ),
-    "hooks/_capture_lifecycle/_store.py": LineLimitExemption(
-        1250,
-        "REQ-CNST-010-E28: post-split capture-lifecycle store (#4727) — the "
-        "4 admission helpers (_acquire_flock, _admission_reason, _admit_new_record, "
-        "_scan_and_adopt_orphans) are now thin wrappers around module-level "
-        "implementations in the sibling _admission.py, but the rest of the class "
-        "body (state-machine transitions, ledger-compaction, capacity-rescue, "
-        "delivery wiring, sweep orchestration) shares the same self-accounting "
-        "invariants the original E21 entry called out. The class body alone is "
-        "~960 lines after the wrappers extract; the limit stays at 1250 to match "
-        "the pre-split E21 ceiling. E21 was retired by issue #4853 (decomposing "
-        "hook_registry.py); this entry remains the load-bearing exemption for "
-        "_capture_lifecycle/_store.py until the class body is further decomposed "
-        "(issue #4727).",
-    ),
     "hooks/_capture_contract.py": LineLimitExemption(
         1100,
         "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "

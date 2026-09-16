@@ -1,19 +1,16 @@
 """Framed-binary-codec facade for shell-capture lifecycle state.
 
-Lifecycle-record types, the canonical-JSON encoder/decoder, and the
-``LedgerCodecError`` / ``CaptureTransitionCommittedError`` exception classes
-live in the sibling module ``_lifecycle_record.py``. This facade owns the
+Lifecycle-record types and ``CaptureTransitionCommittedError`` live in the
+sibling module ``_lifecycle_record.py``. The canonical-JSON encoder/decoder and
+``LedgerCodecError`` live in ``_codec.py``. This facade owns the
 framed-binary codec (``encode_frame``, ``decode_ledger``, ``write_all``),
 its data classes (``LedgerFrame``, ``DecodedLedger``), the frame-format
 constants, and the ``UnsupportedLedgerVersionError`` exception class
 (which subclasses ``LedgerCodecError`` and surfaces from ``decode_ledger``
 when an intact frame requires a newer reader).
 
-The dependency direction is strictly ``_ledger -> _lifecycle_record``
-(one-way): every record-codec symbol this facade exposes is imported from
-the sibling. ``UnsupportedLedgerVersionError`` lives here because it is a
-framing concern, but its base class ``LedgerCodecError`` is imported from
-the sibling.
+``UnsupportedLedgerVersionError`` lives here because it is a framing concern,
+but its base class ``LedgerCodecError`` is imported from the shared codec.
 
 Stdlib-only at runtime -- sibling imports from ``_lifecycle_record`` are
 intra-``_capture/`` (no cross-``hooks/`` boundary), so the simple
@@ -28,6 +25,7 @@ import struct
 from dataclasses import dataclass
 from typing import cast
 
+from ._codec import LedgerCodecError, canonical_json, decode_json
 from ._lifecycle_policy import (
     is_delivery_successor,
     is_reference_successor,
@@ -43,10 +41,7 @@ from ._lifecycle_record import (
     CaptureState,
     CaptureStatus,
     CaptureTransitionCommittedError,
-    LedgerCodecError,
     adopted_orphan_record,
-    canonical_json,
-    decode_json,
     legacy_record_from_dict,
     record_from_dict,
     record_to_dict,

@@ -372,6 +372,39 @@ class TestCommitFilesHookAutoFixRetry:
         assert len(tool_ctx.runner.call_args_list) == 5
 
     @pytest.mark.anyio
+    async def test_empty_hook_streams_still_name_failing_phase(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+        ledger = _RecordingLedger()
+        tool_ctx.workspace_outcome_ledger = ledger
+
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+        tool_ctx.runner.push(_make_result(1, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result["error"] == "pre-commit failed: pre-commit exited with status 1"
+        assert not result["error"].endswith(": ")
+        assert result["failure_class"] == CommitFailureClass.HOOK_REJECTED
+        assert len(ledger.records) == 1
+        record = ledger.records[0]
+        assert record.kind is WorkspaceOutcomeKind.COMMIT_ATTEMPT
+        assert record.succeeded is False
+        assert record.failure_class is CommitFailureClass.HOOK_REJECTED
+        assert record.commit_sha is None
+
+    @pytest.mark.anyio
     async def test_failed_write_tree_proof_does_not_skip_retry(
         self, tool_ctx, tmp_path, monkeypatch
     ):

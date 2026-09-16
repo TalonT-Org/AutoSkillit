@@ -216,3 +216,51 @@ def test_detector_rejects_new_compliant_unregistered_return() -> None:
         "_ReturnInventory(helpers=1, outer_finish=2, outer_unavailable=1, "
         "helper_returns=1, ledger_record_calls=1)"
     ]
+
+
+def _combined_output_fallback_violations(source: str) -> list[str]:
+    violations: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_combined_process_output"
+        ):
+            continue
+        fallback = node.args[2] if len(node.args) >= 3 else None
+        if fallback is None:
+            fallback = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "fallback"),
+                None,
+            )
+        has_text = (
+            isinstance(fallback, ast.Constant)
+            and isinstance(fallback.value, str)
+            and bool(fallback.value.strip())
+        ) or (
+            isinstance(fallback, ast.JoinedStr)
+            and any(
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+                and bool(value.value.strip())
+                for value in fallback.values
+            )
+        )
+        if not has_text:
+            violations.append(
+                f"combined process output call at line {node.lineno} "
+                "must supply a non-empty fallback"
+            )
+    return violations
+
+
+def test_combined_process_output_calls_have_nonempty_fallbacks() -> None:
+    assert not _combined_output_fallback_violations(TOOLS_PATH.read_text(encoding="utf-8"))
+
+
+def test_empty_stream_fallback_detector_canary() -> None:
+    source = 'def probe():\n    return _combined_process_output(stderr, stdout, "")\n'
+
+    assert _combined_output_fallback_violations(source) == [
+        "combined process output call at line 2 must supply a non-empty fallback"
+    ]

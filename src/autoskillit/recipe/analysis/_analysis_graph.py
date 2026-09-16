@@ -170,18 +170,18 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
     """
     edges: list[RouteEdge] = []
 
-    if step.on_success:
-        edges.append(
-            RouteEdge(edge_type="success", target=step.on_success, capture_available=True)
-        )
-    if step.on_failure:
-        edges.append(RouteEdge(edge_type="failure", target=step.on_failure))
-    if step.on_context_limit:
-        edges.append(RouteEdge(edge_type="context_limit", target=step.on_context_limit))
-    if step.on_rate_limit:
-        edges.append(RouteEdge(edge_type="rate_limit", target=step.on_rate_limit))
-    if step.on_exhausted:
-        edges.append(RouteEdge(edge_type="exhausted", target=step.on_exhausted))
+    scalar_routes = (
+        ("success", step.on_success, True),
+        ("failure", step.on_failure, False),
+        ("context_limit", step.on_context_limit, False),
+        ("rate_limit", step.on_rate_limit, False),
+        ("exhausted", step.on_exhausted, False),
+    )
+    for edge_type, target, capture_available in scalar_routes:
+        if target:
+            edges.append(
+                RouteEdge(edge_type=edge_type, target=target, capture_available=capture_available)
+            )
 
     if step.on_result:
         sr = step.on_result
@@ -214,6 +214,25 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
 # ---------------------------------------------------------------------------
 
 
+def _append_predecessor_bypasses(
+    edges_by_source: dict[str, list[RouteEdge]],
+    predecessors: list[tuple[str, RouteEdge]],
+    *,
+    target: str,
+    edge_type: str,
+) -> None:
+    for predecessor, predecessor_edge in sorted(
+        predecessors, key=lambda item: (item[0], item[1].edge_type)
+    ):
+        edges_by_source[predecessor].append(
+            RouteEdge(
+                edge_type=edge_type,
+                target=target,
+                capture_available=predecessor_edge.capture_available,
+            )
+        )
+
+
 def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
     """Build typed runtime and configuration-time edges for every recipe step."""
     step_names = set(recipe.steps)
@@ -242,16 +261,12 @@ def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
     for name, step in recipe.steps.items():
         if not step.skip_when_false or step.on_skip not in step_names:
             continue
-        for predecessor, predecessor_edge in sorted(
-            predecessors[name], key=lambda item: (item[0], item[1].edge_type)
-        ):
-            edges_by_source[predecessor].append(
-                RouteEdge(
-                    edge_type="configuration_skip_bypass",
-                    target=step.on_skip,
-                    capture_available=predecessor_edge.capture_available,
-                )
-            )
+        _append_predecessor_bypasses(
+            edges_by_source,
+            predecessors[name],
+            target=step.on_skip,
+            edge_type="configuration_skip_bypass",
+        )
 
     ordered_names = list(recipe.steps)
     for index, (name, step) in enumerate(recipe.steps.items()):
@@ -261,16 +276,12 @@ def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
         edges_by_source[name].append(
             RouteEdge(edge_type="configuration_sub_recipe", target=next_step)
         )
-        for predecessor, predecessor_edge in sorted(
-            predecessors[name], key=lambda item: (item[0], item[1].edge_type)
-        ):
-            edges_by_source[predecessor].append(
-                RouteEdge(
-                    edge_type="configuration_sub_recipe_bypass",
-                    target=next_step,
-                    capture_available=predecessor_edge.capture_available,
-                )
-            )
+        _append_predecessor_bypasses(
+            edges_by_source,
+            predecessors[name],
+            target=next_step,
+            edge_type="configuration_sub_recipe_bypass",
+        )
 
     return {source: tuple(edges) for source, edges in edges_by_source.items()}
 

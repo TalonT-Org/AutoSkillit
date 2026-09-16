@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+
 from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe.analysis._analysis_bfs import (
     _INVALIDATING_TOOLS,
@@ -34,6 +36,45 @@ def _context_refs_in_value(value: object) -> set[str]:
     return set()
 
 
+def _capture_step_index(recipe: Recipe) -> dict[str, set[str]]:
+    """Index every step that captures each context variable."""
+    capture_steps: dict[str, set[str]] = {}
+    for step_name, step in recipe.steps.items():
+        for variable in step.capture or {}:
+            capture_steps.setdefault(variable, set()).add(step_name)
+        for variable in step.capture_list or {}:
+            capture_steps.setdefault(variable, set()).add(step_name)
+    return capture_steps
+
+
+def _iter_stale_context_refs(
+    recipe: Recipe,
+    graph: dict[str, set[str]],
+    invalidator_name: str,
+    variables: Iterable[str],
+    capture_steps: dict[str, set[str]],
+) -> Iterator[tuple[str, str]]:
+    """Yield each stale top-level context reference after one invalidator succeeds."""
+    invalidator = recipe.steps[invalidator_name]
+    success_target = invalidator.on_success
+    if not success_target or success_target not in recipe.steps:
+        return
+    for variable in variables:
+        barriers = capture_steps.get(variable, set())
+        stale_reachable = _bfs_capped(graph, {success_target}, barriers)
+        stale_reachable.discard(invalidator_name)
+        for downstream_name in stale_reachable:
+            downstream = recipe.steps.get(downstream_name)
+            if downstream is None:
+                continue
+            for argument in (downstream.with_args or {}).values():
+                if not isinstance(argument, str):
+                    continue
+                for referenced_variable in _CONTEXT_REF_RE.findall(argument):
+                    if referenced_variable == variable:
+                        yield downstream_name, variable
+
+
 def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
     """Detect context variables consumed after the step that invalidated the
     underlying resource.
@@ -54,14 +95,7 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
     for var, result_key in origin.items():
         key_to_vars.setdefault(result_key, set()).add(var)
 
-    # Map: var_name → set of step names that re-capture (refresh) it
-    var_recapture_steps: dict[str, set[str]] = {}
-    for step_name, step in recipe.steps.items():
-        for cap_var in step.capture or {}:
-            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
-        for cap_var in step.capture_list or {}:
-            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
-
+    capture_steps = _capture_step_index(recipe)
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
@@ -77,44 +111,24 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
         if not invalidated_vars:
             continue
 
-        # Only check steps reachable via on_success (failure path = resource not destroyed)
-        on_success_target = step.on_success
-        if not on_success_target or on_success_target not in recipe.steps:
-            continue
-
-        for var in invalidated_vars:
-            # Steps that re-capture this var are barriers: they refresh the variable
-            # to a new resource, so their successors are NOT stale consumers.
-            barrier = var_recapture_steps.get(var, set())
-            stale_reachable = _bfs_capped(graph, {on_success_target}, barrier)
-            # A loop may route the invalidating step back into the reachable set
-            stale_reachable.discard(step_name)
-
-            for downstream_name in stale_reachable:
-                downstream = recipe.steps.get(downstream_name)
-                if downstream is None:
-                    continue
-
-                for arg_val in (downstream.with_args or {}).values():
-                    if not isinstance(arg_val, str):
-                        continue
-                    for ref_var in _CONTEXT_REF_RE.findall(arg_val):
-                        if ref_var == var:
-                            warnings.append(
-                                DataFlowWarning(
-                                    code="REF_INVALIDATED",
-                                    step_name=downstream_name,
-                                    field=var,
-                                    message=(
-                                        f"Step '{downstream_name}' references "
-                                        f"context.{var} after step '{step_name}' "
-                                        f"({step.tool}) has invalidated the underlying "
-                                        f"resource. Replace with a stable alternative "
-                                        f"(e.g., a commit SHA captured before any merge "
-                                        f"begins)."
-                                    ),
-                                )
-                            )
+        for downstream_name, variable in _iter_stale_context_refs(
+            recipe, graph, step_name, invalidated_vars, capture_steps
+        ):
+            warnings.append(
+                DataFlowWarning(
+                    code="REF_INVALIDATED",
+                    step_name=downstream_name,
+                    field=variable,
+                    message=(
+                        f"Step '{downstream_name}' references "
+                        f"context.{variable} after step '{step_name}' "
+                        f"({step.tool}) has invalidated the underlying "
+                        f"resource. Replace with a stable alternative "
+                        f"(e.g., a commit SHA captured before any merge "
+                        f"begins)."
+                    ),
+                )
+            )
 
     return warnings
 
@@ -145,55 +159,33 @@ def _detect_stale_captured_paths(
     if not worktree_cwd_steps:
         return warnings
 
-    # Map: var_name → set of step names that re-capture (refresh) it
-    var_recapture_steps: dict[str, set[str]] = {}
-    for step_name, step in recipe.steps.items():
-        for cap_var in step.capture or {}:
-            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
-        for cap_var in step.capture_list or {}:
-            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
+    capture_steps = _capture_step_index(recipe)
 
     for step_name, step in recipe.steps.items():
         if step.tool not in _INVALIDATING_TOOLS:
             continue
 
-        on_success_target = step.on_success
-        if not on_success_target or on_success_target not in recipe.steps:
-            continue
-
-        for var, origin_steps in worktree_cwd_steps.items():
-            barrier = var_recapture_steps.get(var, set())
-            stale_reachable = _bfs_capped(graph, {on_success_target}, barrier)
-            stale_reachable.discard(step_name)
-
-            for downstream_name in stale_reachable:
-                downstream = recipe.steps.get(downstream_name)
-                if downstream is None:
-                    continue
-
-                for arg_val in (downstream.with_args or {}).values():
-                    if not isinstance(arg_val, str):
-                        continue
-                    for ref_var in _CONTEXT_REF_RE.findall(arg_val):
-                        if ref_var == var:
-                            origin_step = origin_steps[0]
-                            warnings.append(
-                                DataFlowWarning(
-                                    code="CAPTURED_PATH_INVALIDATED",
-                                    step_name=downstream_name,
-                                    field=var,
-                                    message=(
-                                        f"Step '{downstream_name}' references "
-                                        f"context.{var} (captured from "
-                                        f"worktree-scoped step "
-                                        f"'{origin_step}') after step "
-                                        f"'{step_name}' ({step.tool}) has "
-                                        f"destroyed the worktree. Path tokens "
-                                        f"written to the worktree become "
-                                        f"unresolvable after merge."
-                                    ),
-                                )
-                            )
+        for downstream_name, variable in _iter_stale_context_refs(
+            recipe, graph, step_name, worktree_cwd_steps, capture_steps
+        ):
+            origin_step = worktree_cwd_steps[variable][0]
+            warnings.append(
+                DataFlowWarning(
+                    code="CAPTURED_PATH_INVALIDATED",
+                    step_name=downstream_name,
+                    field=variable,
+                    message=(
+                        f"Step '{downstream_name}' references "
+                        f"context.{variable} (captured from "
+                        f"worktree-scoped step "
+                        f"'{origin_step}') after step "
+                        f"'{step_name}' ({step.tool}) has "
+                        f"destroyed the worktree. Path tokens "
+                        f"written to the worktree become "
+                        f"unresolvable after merge."
+                    ),
+                )
+            )
 
     return warnings
 
@@ -260,12 +252,29 @@ def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) ->
     return False
 
 
+def _consumed_context_for_step(step: RecipeStep) -> set[str]:
+    """Collect context variables consumed by one reachable step."""
+    consumed: set[str] = set()
+    for argument in step.with_args.values():
+        consumed.update(_context_refs_in_value(argument))
+    if step.message and isinstance(step.message, str):
+        consumed.update(_CONTEXT_REF_RE.findall(step.message))
+    if step.on_result and step.on_result.conditions:
+        for condition in step.on_result.conditions:
+            if condition.when and isinstance(condition.when, str):
+                consumed.update(_CONTEXT_REF_RE.findall(condition.when))
+    if step.optional_context_refs:
+        consumed.update(step.optional_context_refs)
+    return consumed
+
+
 def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
     """Detect captured variables that are never consumed downstream."""
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
-        if not step.capture and not step.capture_list:
+        captured_names = list(step.capture or {}) + list(step.capture_list or {})
+        if not captured_names:
             continue
 
         # BFS: collect all steps reachable from this step
@@ -276,21 +285,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         consumed: set[str] = set()
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
-            for arg_val in reachable_step.with_args.values():
-                consumed.update(_context_refs_in_value(arg_val))
-            # message fields are not recipe args; scanner must handle them separately.
-            if reachable_step.message and isinstance(reachable_step.message, str):
-                consumed.update(_CONTEXT_REF_RE.findall(reachable_step.message))
-            if reachable_step.on_result and reachable_step.on_result.conditions:
-                for cond in reachable_step.on_result.conditions:
-                    if cond.when and isinstance(cond.when, str):
-                        consumed.update(_CONTEXT_REF_RE.findall(cond.when))
-            # optional_context_refs declares that a step may receive and use these
-            # context variables even when they are not expressed via ${{ context.X }}
-            # template syntax (e.g., phoropter steps that consume captures via engine
-            # template expansion like {slug} or {context_path}).
-            if reachable_step.optional_context_refs:
-                consumed.update(reachable_step.optional_context_refs)
+            consumed.update(_consumed_context_for_step(reachable_step))
 
         # on_result routing — both legacy field and predicate conditions count
         # as structural consumption of captured variables.
@@ -303,11 +298,10 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
             # Predicate condition routing — conditions gate on step result;
             # treat all captured vars as structurally consumed.
             if step.on_result.conditions:
-                consumed.update((step.capture or {}).keys())
-                consumed.update((step.capture_list or {}).keys())
+                consumed.update(captured_names)
 
         # Flag captured vars not consumed on any path
-        for cap_key in list(step.capture or {}) + list(step.capture_list or {}):
+        for cap_key in captured_names:
             if cap_key not in consumed:
                 if _is_observability_capture(cap_key, step_name, step):
                     continue

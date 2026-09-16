@@ -99,6 +99,38 @@ class ValidationContext:
     predecessor_edges: dict[str, tuple[tuple[str, RouteEdge], ...]] = field(default_factory=dict)
 
 
+def _reachable_steps(entry: str, raw_edges: dict[str, tuple[RouteEdge, ...]]) -> set[str]:
+    reachable = {entry}
+    reachability_queue: deque[str] = deque([entry])
+    while reachability_queue:
+        source = reachability_queue.popleft()
+        for edge in raw_edges[source]:
+            if edge.target not in reachable:
+                reachable.add(edge.target)
+                reachability_queue.append(edge.target)
+    return reachable
+
+
+def _incoming_must_definitions(
+    recipe: Recipe,
+    predecessors: list[tuple[str, RouteEdge]],
+    facts: dict[str, frozenset[str]],
+    reachable: set[str],
+) -> frozenset[str]:
+    incoming = [
+        (
+            facts[predecessor]
+            | frozenset(recipe.steps[predecessor].capture)
+            | frozenset(recipe.steps[predecessor].capture_list)
+            if predecessor_edge.capture_available
+            else facts[predecessor]
+        )
+        for predecessor, predecessor_edge in predecessors
+        if predecessor in reachable
+    ]
+    return frozenset.intersection(*incoming) if incoming else frozenset()
+
+
 def _must_definition_facts(
     recipe: Recipe,
     raw_edges: dict[str, tuple[RouteEdge, ...]],
@@ -115,14 +147,7 @@ def _must_definition_facts(
             predecessor_edges[edge.target].append((source, edge))
 
     entry = next(iter(recipe.steps))
-    reachable = {entry}
-    reachability_queue: deque[str] = deque([entry])
-    while reachability_queue:
-        source = reachability_queue.popleft()
-        for edge in raw_edges[source]:
-            if edge.target not in reachable:
-                reachable.add(edge.target)
-                reachability_queue.append(edge.target)
+    reachable = _reachable_steps(entry, raw_edges)
 
     capture_domain = frozenset(
         capture
@@ -140,18 +165,9 @@ def _must_definition_facts(
             target = edge.target
             if target == entry or target not in reachable:
                 continue
-            incoming = [
-                (
-                    facts[predecessor]
-                    | frozenset(recipe.steps[predecessor].capture)
-                    | frozenset(recipe.steps[predecessor].capture_list)
-                    if predecessor_edge.capture_available
-                    else facts[predecessor]
-                )
-                for predecessor, predecessor_edge in predecessor_edges[target]
-                if predecessor in reachable
-            ]
-            updated = frozenset.intersection(*incoming) if incoming else frozenset()
+            updated = _incoming_must_definitions(
+                recipe, predecessor_edges[target], facts, reachable
+            )
             if facts[target] != updated:
                 facts[target] = updated
                 if target not in queued:

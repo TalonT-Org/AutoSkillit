@@ -140,6 +140,14 @@ class _ScopeCollector(ast.NodeVisitor):
         self._assign_value = previous
         self.visit(node.value)
 
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        previous = self._assign_value
+        self._assign_value = node.value
+        self.visit(node.target)
+        self._assign_value = previous
+        if node.value is not None:
+            self.visit(node.value)
+
     def _skip_comprehension_targets(self, node: ast.expr) -> None:
         for generator in node.generators:  # type: ignore[attr-defined]
             self.visit(generator.iter)
@@ -302,6 +310,13 @@ def test_subtractive_scope_method_is_caught() -> None:
             "        pass\n",
             id="with-statement-target",
         ),
+        pytest.param(
+            "def build_test_scope():\n"
+            "    scope: ScopeAccumulator = ScopeAccumulator()\n"
+            "    scope.add_targets('arch')\n"
+            "    scope = ScopeAccumulator()\n",
+            id="annotated-construction-rebound",
+        ),
     ],
 )
 def test_scope_rebind_shapes_are_caught(source: str) -> None:
@@ -363,6 +378,21 @@ def test_comprehension_target_named_scope_is_not_flagged() -> None:
         "def build_test_scope():\n"
         "    scope = ScopeAccumulator()\n"
         "    scope.add_targets(*(name for scope in groups for name in scope))\n"
+    )
+    sites = _scan_tree(ast.parse(source))
+    assert [site.violation for site in sites] == [None, None]
+
+
+def test_annotated_construction_is_not_flagged_as_rebind() -> None:
+    """Annotated construction `scope: ScopeAccumulator = ScopeAccumulator()` is the same
+    single-construction site as a plain Assign, and must register as construction rather
+    than a rebind — visit_AnnAssign has to populate _assign_value before visiting the
+    target.
+    """
+    source = (
+        "def build_test_scope():\n"
+        "    scope: ScopeAccumulator = ScopeAccumulator()\n"
+        "    scope.add_targets('arch')\n"
     )
     sites = _scan_tree(ast.parse(source))
     assert [site.violation for site in sites] == [None, None]

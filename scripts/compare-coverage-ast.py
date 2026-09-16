@@ -120,7 +120,12 @@ def extract_functions(source_path: Path, filepath: str = "") -> list[FuncInfo]:
                   Defaults to str(source_path) when empty.
     """
     try:
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        source = source_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"WARNING: Skipping {source_path} ({type(exc).__name__})", file=sys.stderr)
+        return []
+    try:
+        tree = ast.parse(source, filename=str(source_path))
     except SyntaxError:
         print(f"WARNING: Skipping {source_path} (SyntaxError)", file=sys.stderr)
         return []

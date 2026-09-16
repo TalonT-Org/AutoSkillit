@@ -6,6 +6,7 @@ import os
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -39,6 +40,7 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
     PluginLaunchBinding,
+    PluginLoadMode,
     ResumeSpec,
     SessionCheckpoint,
     SkillDiscoveryRouteDef,

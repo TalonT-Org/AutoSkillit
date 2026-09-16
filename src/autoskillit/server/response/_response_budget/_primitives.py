@@ -83,8 +83,8 @@ def _serialized(value: Any) -> str:
     return _canonical_json(value)
 
 
-def _restore_projected_response_type(handler_result: Any, rendered: str) -> Any:
-    if isinstance(handler_result, str):
+def _restore_projected_response_type(result: Any, rendered: str) -> Any:
+    if isinstance(result, str):
         return rendered
     try:
         return json.loads(rendered)

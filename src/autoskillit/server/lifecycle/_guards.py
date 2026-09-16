@@ -487,14 +487,14 @@ def _resolved_provider_result(
     provider: str,
     config_providers: ProvidersConfig,
     warning_tier: str,
-    missing_result_name: str,
+    fallback_name: str,
 ) -> tuple[str, dict[str, str]]:
     if provider == "anthropic":
         return ("anthropic", {})
     profile = config_providers.resolved_profiles.get(provider)
     if profile is None:
         logger.warning("provider_profile_not_found", provider=provider, tier=warning_tier)
-        return (missing_result_name, {})
+        return (fallback_name, {})
     return (provider, _profile_to_env(profile))
 
 

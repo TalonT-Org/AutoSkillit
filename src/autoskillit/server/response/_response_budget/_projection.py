@@ -18,6 +18,7 @@ from autoskillit.server.response._response_budget._primitives import (
     _minimal_same_type,
     _preview_string,
     _ProjectionNonconvergentError,
+    _restore_projected_response_type,
 )
 from autoskillit.server.response._response_budget._spill import (
     _artifact_path,
@@ -316,20 +317,21 @@ def _tiered_projection(
             base_chars += chars
             base_items += items
 
-        if include_deprioritized and deprioritized_projector is not None:
+        if include_deprioritized:
             for k in present_deprioritized:
-                projected = deprioritized_projector(parsed[k])
+                projected = (
+                    parsed[k]
+                    if deprioritized_projector is None
+                    else deprioritized_projector(parsed[k])
+                )
                 env[k] = projected
-                if not (
+                if deprioritized_projector is not None and not (
                     isinstance(projected, (list, dict))
                     and RESPONSE_SPILL_METADATA_KEY in projected
                 ):
                     chars, items = _total_omissions(parsed[k])
                     base_chars += chars
                     base_items += items
-        elif include_deprioritized:
-            for k in present_deprioritized:
-                env[k] = parsed[k]
 
         if include_droppable:
             for k in present_droppable:
@@ -475,17 +477,6 @@ def _tiered_projection(
             if rendered is not None:
                 return rendered
             value_limit //= 2
-
-        # Fallback: deprioritized at minimum (still present, projected to floor).
-        rendered = _fits(
-            _build_with_lengths(
-                content_head=content_floor,
-                deprioritized_projector=lambda v: _minimal_same_type(v),
-                include_droppable=False,
-            )
-        )
-        if rendered is not None:
-            return rendered
 
     # Tier 3: drop droppable + deprioritized at floor; content already at floor.
     if present_deprioritized:
@@ -669,9 +660,4 @@ def _spill_for_delivery_bound(
         original_utf8_bytes=original_size,
         projected_utf8_bytes=len(rendered.encode("utf-8")),
     )
-    if isinstance(result, str):
-        return rendered
-    try:
-        return json.loads(rendered)
-    except (ValueError, RecursionError):
-        return {"success": False, "error": "response_budget_projection_invalid"}
+    return _restore_projected_response_type(result, rendered)

@@ -106,10 +106,7 @@ def generation_json_primitive(value: object) -> object:
     if isinstance(value, Mapping):
         if any(not isinstance(key, str) for key in value):
             raise TypeError("recipe generation mapping keys must be strings")
-        result: dict[str, object] = {}
-        for key in sorted(value):
-            result[key] = generation_json_primitive(value[key])
-        return result
+        return {key: generation_json_primitive(value[key]) for key in sorted(value)}
     if isinstance(value, (list, tuple)):
         return [generation_json_primitive(item) for item in value]
     if isinstance(value, (set, frozenset)):
@@ -149,9 +146,7 @@ class RecipeGenerationRecord:
     surface_bindings: Mapping[str, RecipeArtifactGeneration] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.kitchen_id, str) or not self.kitchen_id:
-            raise ValueError("RecipeGenerationRecord.kitchen_id must be a non-empty string")
-        for field_name in ("normalized_compile_key", "recipe_name", "execution_id"):
+        for field_name in ("kitchen_id", "normalized_compile_key", "recipe_name", "execution_id"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value:
                 raise ValueError(f"RecipeGenerationRecord.{field_name} must be a non-empty string")
@@ -246,6 +241,25 @@ def _same_compile_generation(
 
 _CompileIndexKey = tuple[str, str]
 _ArtifactIndexKey = tuple[str, RecipeArtifactGeneration]
+
+
+def _validate_and_extract_compile_key(
+    kitchen_id: str,
+    normalized_compile_key: str,
+    surface: str,
+    generation: RecipeArtifactGeneration,
+) -> tuple[str, str]:
+    if not isinstance(kitchen_id, str):
+        raise TypeError("kitchen_id must be a string")
+    for name, value in (
+        ("normalized_compile_key", normalized_compile_key),
+        ("surface", surface),
+    ):
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{name} must be a non-empty string")
+    if not isinstance(generation, RecipeArtifactGeneration):
+        raise TypeError("generation must be a RecipeArtifactGeneration")
+    return (kitchen_id, normalized_compile_key)
 
 
 class RecipeGenerationStore:
@@ -391,18 +405,9 @@ class RecipeGenerationStore:
         generation: RecipeArtifactGeneration,
     ) -> RecipeGenerationRecord:
         """Atomically bind one surface to an exact persisted generation."""
-        if not isinstance(kitchen_id, str):
-            raise TypeError("kitchen_id must be a string")
-        for name, value in (
-            ("normalized_compile_key", normalized_compile_key),
-            ("surface", surface),
-        ):
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"{name} must be a non-empty string")
-        if not isinstance(generation, RecipeArtifactGeneration):
-            raise TypeError("generation must be a RecipeArtifactGeneration")
-
-        key = (kitchen_id, normalized_compile_key)
+        key = _validate_and_extract_compile_key(
+            kitchen_id, normalized_compile_key, surface, generation
+        )
         with self._lock:
             self._require_active_locked(kitchen_id)
             existing = self._compile_index.get(key)

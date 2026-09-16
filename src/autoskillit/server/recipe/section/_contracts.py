@@ -48,6 +48,24 @@ def _is_sha256_digest(value: object) -> bool:
     )
 
 
+def _validate_descriptor_fields(
+    descriptor: RecipeSectionPageDescriptor,
+    expected_fields: frozenset[str],
+) -> dict[str, int]:
+    """Validate the selected descriptor fields and collect their numeric values."""
+    numeric_values: dict[str, int] = {}
+    for name in expected_fields:
+        value = getattr(descriptor, name)
+        if name.endswith("_sha256"):
+            if not _is_sha256_digest(value):
+                raise ValueError(f"recipe section {name} must be a lowercase sha256 digest")
+            continue
+        if type(value) is not int or value < 0:
+            raise ValueError(f"recipe section {name} must be a non-negative integer")
+        numeric_values[name] = value
+    return numeric_values
+
+
 class RecipeSectionPaginationError(RuntimeError):
     """A verified immutable page plan could not be established."""
 
@@ -130,16 +148,7 @@ class RecipeSectionPageDescriptor:
         if not _is_sha256_digest(self.page_content_sha256):
             raise ValueError("recipe section page content digest must be lowercase sha256")
 
-        numeric_values: dict[str, int] = {}
-        for name in expected_fields:
-            value = getattr(self, name)
-            if name.endswith("_sha256"):
-                if not _is_sha256_digest(value):
-                    raise ValueError(f"recipe section {name} must be a lowercase sha256 digest")
-                continue
-            if type(value) is not int or value < 0:
-                raise ValueError(f"recipe section {name} must be a non-negative integer")
-            numeric_values[name] = value
+        numeric_values = _validate_descriptor_fields(self, expected_fields)
 
         start_name, end_name, total_name = _RANGE_TRIPLE_BY_FORMAT[self.content_format]
         start = numeric_values[start_name]

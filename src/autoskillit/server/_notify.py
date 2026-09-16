@@ -142,24 +142,21 @@ def track_response_size(
                     }
                 )
                 logger.exception("track_response_size_handler_failed", tool_name=tool_name)
-            finalized = result if isinstance(result, FinalizedRecipeResponse) else None
-            finalized_section = (
-                result if isinstance(result, FinalizedRecipeSectionResponse) else None
-            )
-            finalized_initialization = (
-                result if isinstance(result, FinalizedRecipeInitializationResponse) else None
-            )
-            finalized_run_skill = (
-                result if isinstance(result, FinalizedRunSkillCompletionResponse) else None
+            finalized = (
+                result
+                if isinstance(
+                    result,
+                    (
+                        FinalizedRecipeResponse,
+                        FinalizedRecipeSectionResponse,
+                        FinalizedRecipeInitializationResponse,
+                        FinalizedRunSkillCompletionResponse,
+                    ),
+                )
+                else None
             )
             if finalized is not None:
                 response_value = finalized.rendered
-            elif finalized_section is not None:
-                response_value = finalized_section.rendered
-            elif finalized_initialization is not None:
-                response_value = finalized_initialization.rendered
-            elif finalized_run_skill is not None:
-                response_value = finalized_run_skill.rendered
             else:
                 response_value = result
             ctx = _get_ctx_or_none()
@@ -219,7 +216,7 @@ def track_response_size(
                 selected_result_token_limit = ASCII_YAML_POLICY.to_tokens(
                     Utf8ByteLimit(section_bound_bytes)
                 ).value
-            elif finalized is not None:
+            elif isinstance(finalized, FinalizedRecipeResponse):
                 selected_result_token_limit = finalized.decision.selected_result_token_limit
             elif backend_capabilities is not None:
                 selected_result_token_limit = resolve_general_output_token_limit(
@@ -228,7 +225,7 @@ def track_response_size(
             kitchen_response_success = False
             if tool_name == "open_kitchen" and ctx is not None:
                 attested_inline_response = (
-                    finalized is not None
+                    isinstance(finalized, FinalizedRecipeResponse)
                     and finalized.decision.mode is RecipeDeliveryMode.ATTESTED_INLINE
                 )
                 try:
@@ -293,12 +290,12 @@ def track_response_size(
                         "track_response_size_notification_failed",
                         tool_name=tool_name,
                     )
-            if finalized is not None:
+            if isinstance(finalized, FinalizedRecipeResponse):
                 result = complete_finalized_recipe_response(finalized, result)
-            elif finalized_section is not None:
-                result = complete_section_response(finalized_section, result)
-            elif finalized_initialization is not None:
-                result = complete_initialization_response(finalized_initialization, result)
+            elif isinstance(finalized, FinalizedRecipeSectionResponse):
+                result = complete_section_response(finalized, result)
+            elif isinstance(finalized, FinalizedRecipeInitializationResponse):
+                result = complete_initialization_response(finalized, result)
             if kitchen_response_success and ctx is not None and isinstance(result, str):
                 response_enforcement_succeeded = result == response_value
                 if not response_enforcement_succeeded:

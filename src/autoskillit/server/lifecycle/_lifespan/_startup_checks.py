@@ -37,6 +37,7 @@ from autoskillit.hook_registry import (
 # rather than imported by name into this submodule.
 from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
 from autoskillit.workspace import (
+    PluginHookRepairOutcome,
     PluginHookRepairStatus,
     read_obligation,
     repair_broken_projection_hooks,
@@ -91,6 +92,33 @@ def _activate_recipe_kitchen(kitchen_id: str) -> None:
     activate_kitchen(kitchen_id)
 
 
+def _log_hook_repair_outcome(outcome: PluginHookRepairOutcome, artifact_scope: str) -> None:
+    """Record one cache or projection hook repair result."""
+    if outcome.status is PluginHookRepairStatus.REPAIRED:
+        logger.info(
+            f"{artifact_scope}_hooks_repaired_at_startup",
+            incarnation=str(outcome.incarnation_dir),
+        )
+    elif outcome.status is PluginHookRepairStatus.CONTENDED:
+        logger.warning(
+            f"{artifact_scope}_hooks_repair_contended_at_startup",
+            incarnation=str(outcome.incarnation_dir),
+            reason=outcome.detail,
+        )
+    elif outcome.status is PluginHookRepairStatus.QUARANTINED:
+        logger.warning(
+            f"{artifact_scope}_hooks_quarantined_at_startup",
+            incarnation=str(outcome.incarnation_dir),
+            reason=outcome.detail,
+        )
+    else:
+        logger.error(
+            f"{artifact_scope}_hooks_repair_failed_at_startup",
+            incarnation=str(outcome.incarnation_dir),
+            reason=outcome.detail,
+        )
+
+
 def run_startup_hook_health_check() -> list[str]:
     """Detect broken hook scripts across all settings scopes on MCP startup.
 
@@ -133,29 +161,7 @@ def run_startup_hook_health_check() -> list[str]:
         cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
         try:
             for outcome in _lifespan_pkg.repair_broken_plugin_cache_hooks(cache_dir):
-                if outcome.status is PluginHookRepairStatus.REPAIRED:
-                    logger.info(
-                        "plugin_cache_hooks_repaired_at_startup",
-                        incarnation=str(outcome.incarnation_dir),
-                    )
-                elif outcome.status is PluginHookRepairStatus.CONTENDED:
-                    logger.warning(
-                        "plugin_cache_hooks_repair_contended_at_startup",
-                        incarnation=str(outcome.incarnation_dir),
-                        reason=outcome.detail,
-                    )
-                elif outcome.status is PluginHookRepairStatus.QUARANTINED:
-                    logger.warning(
-                        "plugin_cache_hooks_quarantined_at_startup",
-                        incarnation=str(outcome.incarnation_dir),
-                        reason=outcome.detail,
-                    )
-                else:
-                    logger.error(
-                        "plugin_cache_hooks_repair_failed_at_startup",
-                        incarnation=str(outcome.incarnation_dir),
-                        reason=outcome.detail,
-                    )
+                _log_hook_repair_outcome(outcome, "plugin_cache")
         except Exception:
             logger.exception("startup_hook_repair_failed")
 
@@ -164,29 +170,7 @@ def run_startup_hook_health_check() -> list[str]:
     # staleness).  NOT inside the cache_broken/pending_obligation gate above.
     try:
         for outcome in repair_broken_projection_hooks():
-            if outcome.status is PluginHookRepairStatus.REPAIRED:
-                logger.info(
-                    "projection_hooks_repaired_at_startup",
-                    incarnation=str(outcome.incarnation_dir),
-                )
-            elif outcome.status is PluginHookRepairStatus.CONTENDED:
-                logger.warning(
-                    "projection_hooks_repair_contended_at_startup",
-                    incarnation=str(outcome.incarnation_dir),
-                    reason=outcome.detail,
-                )
-            elif outcome.status is PluginHookRepairStatus.QUARANTINED:
-                logger.warning(
-                    "projection_hooks_quarantined_at_startup",
-                    incarnation=str(outcome.incarnation_dir),
-                    reason=outcome.detail,
-                )
-            else:
-                logger.error(
-                    "projection_hooks_repair_failed_at_startup",
-                    incarnation=str(outcome.incarnation_dir),
-                    reason=outcome.detail,
-                )
+            _log_hook_repair_outcome(outcome, "projection")
     except Exception:
         logger.exception("startup_projection_hook_repair_failed")
 

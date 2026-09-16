@@ -84,20 +84,10 @@ def _apply_session_type_visibility() -> None:
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
 
-    if _evidence_reader_binding_state() != "absent":
-        # Reader identity is classified again at lifespan. Complete candidates
-        # receive an exact tool-only projection there; malformed candidates
-        # abort startup. Environment variables never reveal broker tools here.
-        return
-
-    if _has_explorer_binding_env():
-        # Explorer bindings are a shared session principal.  They must
-        # never turn the child into a general AutoSkillit client: in particular
-        # free-range tools (such as open_kitchen), recipe resources, and
-        # resource templates are not part of the explorer contract.  FastMCP's
-        # Tag visibility is deferred until lifespan has reopened and verified
-        # the durable authority. Environment variables alone never reveal a
-        # broker capability.
+    if _evidence_reader_binding_state() != "absent" or _has_explorer_binding_env():
+        # Restricted bindings gain visibility only after lifespan verifies their
+        # authority. Environment variables alone never reveal tools or recipe resources
+        # to these sessions.
         return
 
     match _session:

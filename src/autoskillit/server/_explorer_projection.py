@@ -233,6 +233,67 @@ def _cleanup_explorer_launch(
             )
 
 
+def _verify_projected_native_packets(
+    projected_skill: str,
+    message_argument: str,
+    requested_children: tuple[ChildExecutionIdentity, ...],
+) -> None:
+    # Decode each native packet's JSON-embedded message argument once
+    # and verify identity fields against the decoded prompt text.
+    # The renderer embeds prompts via json.dumps(), so the projected
+    # SKILL.md contains escaped newlines — exact-line matching against
+    # the raw projected text cannot work for the Claude backend.
+    # Pattern: message_argument=<JSON string literal>
+    # Anchored to the dispatch conventions' message argument name.
+    message_pattern = re.compile(rf'{re.escape(message_argument)}=("(?:[^"\\]|\\.)*")')
+    decoded_prompts: list[str] = []
+    for match in message_pattern.finditer(projected_skill):
+        try:
+            decoded = json.loads(match.group(1))
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise SkillContractError(
+                "Projected native exploration packet message is not valid JSON"
+            ) from exc
+        if not isinstance(decoded, str):
+            raise SkillContractError("Projected native exploration packet message is not a string")
+        decoded_prompts.append(decoded)
+    if len(decoded_prompts) != len(requested_children):
+        raise SkillContractError(
+            f"Expected {len(requested_children)} native exploration packets "
+            f"but found {len(decoded_prompts)} message arguments"
+        )
+    # Packets are embedded in SKILL.md marker/document order, which does not
+    # generally match the task_id-sorted `requested_children` order, so pair
+    # them by their declared task_id rather than by position.
+    decoded_by_task_id: dict[str, str] = {}
+    for decoded_prompt in decoded_prompts:
+        packet_task_id = _extract_identity_field(decoded_prompt, "task_id")
+        if packet_task_id is None:
+            raise SkillContractError(
+                "Projected native exploration packet message is missing a task_id field"
+            )
+        if packet_task_id in decoded_by_task_id:
+            raise SkillContractError(
+                "Projected native exploration packet messages duplicate task_id "
+                f"{packet_task_id!r}"
+            )
+        decoded_by_task_id[packet_task_id] = decoded_prompt
+    if set(decoded_by_task_id) != {child.task_id for child in requested_children}:
+        raise SkillContractError(
+            "Projected native exploration packet task ids do not match requested children"
+        )
+    for child in requested_children:
+        decoded_prompt = decoded_by_task_id[child.task_id]
+        if not _has_exact_identity_field(
+            decoded_prompt, "router_plan_digest", child.plan_digest
+        ) or not _has_exact_identity_field(
+            decoded_prompt,
+            "role_definition_digest",
+            child.definition_digest,
+        ):
+            raise SkillContractError("Projected native exploration packet identity is incomplete")
+
+
 def _build_requested_execution_identity(
     *,
     projection_context: SkillProjectionContext | None,
@@ -265,9 +326,7 @@ def _build_requested_execution_identity(
                 definition.name: definition for definition in load_bundled_agent_definitions()
             }
             missing_roles = {
-                str(vector.role)
-                for vector in native_vectors
-                if vector.role is not None and vector.role not in definitions
+                str(vector.role) for vector in native_vectors if vector.role not in definitions
             }
             if missing_roles:
                 raise SkillContractError(
@@ -294,80 +353,21 @@ def _build_requested_execution_identity(
                     "Projected native exploration packets must bind one router-plan digest"
                 )
             router_plan_digest = next(iter(router_digests))
-            # Decode each native packet's JSON-embedded message argument once
-            # and verify identity fields against the decoded prompt text.
-            # The renderer embeds prompts via json.dumps(), so the projected
-            # SKILL.md contains escaped newlines — exact-line matching against
-            # the raw projected text cannot work for the Claude backend.
-            dispatch_conventions = effective_backend.exploration_dispatch_renderer.conventions
-            message_arg = dispatch_conventions.message_argument
-            # Pattern: message_argument=<JSON string literal>
-            # Anchored to the dispatch conventions' message argument name.
-            message_pattern = re.compile(rf'{re.escape(message_arg)}=("(?:[^"\\]|\\.)*")')
-            decoded_prompts: list[str] = []
-            for match in message_pattern.finditer(projected_skill):
-                try:
-                    decoded = json.loads(match.group(1))
-                except (json.JSONDecodeError, ValueError):
-                    raise SkillContractError(
-                        "Projected native exploration packet message is not valid JSON"
-                    )
-                if not isinstance(decoded, str):
-                    raise SkillContractError(
-                        "Projected native exploration packet message is not a string"
-                    )
-                decoded_prompts.append(decoded)
             requested_children = tuple(
                 ChildExecutionIdentity(
                     task_id=vector.task.task_id,
                     role=str(vector.role),
                     plan_digest=router_plan_digest,
                     definition_digest=agent_definition_digest(definitions[str(vector.role)]),
-                    requested_backend=(
-                        effective_backend.name if effective_backend is not None else ""
-                    ),
+                    requested_backend=effective_backend.name,
                     requested_model=definitions[str(vector.role)].codex.model or "",
                     requested_effort=(definitions[str(vector.role)].codex.reasoning_effort or ""),
                 )
                 for vector in native_vectors
             )
-            if len(decoded_prompts) != len(requested_children):
-                raise SkillContractError(
-                    f"Expected {len(requested_children)} native exploration packets "
-                    f"but found {len(decoded_prompts)} message arguments"
-                )
-            # Packets are embedded in SKILL.md marker/document order, which does not
-            # generally match the task_id-sorted `requested_children` order, so pair
-            # them by their declared task_id rather than by position.
-            decoded_by_task_id: dict[str, str] = {}
-            for decoded_prompt in decoded_prompts:
-                packet_task_id = _extract_identity_field(decoded_prompt, "task_id")
-                if packet_task_id is None:
-                    raise SkillContractError(
-                        "Projected native exploration packet message is missing a task_id field"
-                    )
-                if packet_task_id in decoded_by_task_id:
-                    raise SkillContractError(
-                        "Projected native exploration packet messages duplicate task_id "
-                        f"{packet_task_id!r}"
-                    )
-                decoded_by_task_id[packet_task_id] = decoded_prompt
-            if set(decoded_by_task_id) != {child.task_id for child in requested_children}:
-                raise SkillContractError(
-                    "Projected native exploration packet task ids do not match requested children"
-                )
-            for child in requested_children:
-                decoded_prompt = decoded_by_task_id[child.task_id]
-                if not _has_exact_identity_field(
-                    decoded_prompt, "router_plan_digest", child.plan_digest
-                ) or not _has_exact_identity_field(
-                    decoded_prompt,
-                    "role_definition_digest",
-                    child.definition_digest,
-                ):
-                    raise SkillContractError(
-                        "Projected native exploration packet identity is incomplete"
-                    )
+            dispatch_conventions = effective_backend.exploration_dispatch_renderer.conventions
+            message_arg = dispatch_conventions.message_argument
+            _verify_projected_native_packets(projected_skill, message_arg, requested_children)
     requested_parent_backend = effective_backend.name if effective_backend is not None else ""
     return ExecutionIdentity(
         requested_parent_backend=requested_parent_backend,

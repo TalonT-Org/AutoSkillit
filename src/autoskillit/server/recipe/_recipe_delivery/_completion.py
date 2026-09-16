@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     RecipeDeliveryMode,
@@ -37,75 +37,63 @@ if TYPE_CHECKING:
     from autoskillit.server.recipe._recipe_delivery._response import FinalizedRecipeResponse
 
 
-def complete_finalized_recipe_response(
+class _InitializationActivationResult(NamedTuple):
+    """Outcome of attempting to activate a recipe initialization.
+
+    Attributes:
+        previous_state: The recipe initialization state captured before the
+            activation attempt; restored if installation fails so the kitchen
+            can recover.
+        enforced_response: An enforced JSON string describing a failure mode
+            when activation did not proceed, or ``None`` when the activation
+            succeeded and the caller should commit the receipt normally.
+    """
+
+    previous_state: Any
+    enforced_response: str | None
+
+
+def _activate_recipe_initialization(
     finalized: FinalizedRecipeResponse,
-    enforced: Any,
-    *,
-    now_unix: int | None = None,
-) -> Any:
-    """Commit receipt and lifecycle state only for exact enforced response bytes."""
-    handle = finalized.receipt_handle
-    ledger = finalized.receipt_ledger
+) -> _InitializationActivationResult:
+    """Validate, stage, and install the prepared recipe initialization."""
     parsed: dict[str, Any] | None = None
     prepared_execution: Any = None
     previous_initialization_state: Any = None
-    transition_token = finalized.kitchen_transition_token
-    if enforced == finalized.rendered and transition_token is not None:
-        transition_owned = False
-        if (
-            finalized.tool_ctx is not None
-            and hasattr(finalized.tool_ctx, "kitchen_transition_lock")
-            and hasattr(finalized.tool_ctx, "kitchen_open_state")
-        ):
-            with finalized.tool_ctx.kitchen_transition_lock:
-                state = finalized.tool_ctx.kitchen_open_state
-                transition_owned = state.operation_id == transition_token.operation_id and any(
-                    effect.name == _RECIPE_SERVING
-                    and effect.effect_id == transition_token.effect_id
-                    for effect in state.effects
-                )
-        if not transition_owned:
-            enforced = json.dumps(
-                {
-                    "success": False,
-                    "error": "kitchen_transition_ownership_mismatch",
-                },
-                separators=(",", ":"),
-            )
-    if enforced == finalized.rendered and finalized.initialization_activating:
-        required_values = (
-            finalized.tool_ctx,
-            finalized.recipe_name,
-            finalized.artifact_generation,
-            finalized.flow_generation,
-            finalized.execution_snapshot,
-            finalized.normalized_compile_key,
-            finalized.initialization_id,
+    enforced = finalized.rendered
+    required_values = (
+        finalized.tool_ctx,
+        finalized.recipe_name,
+        finalized.artifact_generation,
+        finalized.flow_generation,
+        finalized.execution_snapshot,
+        finalized.normalized_compile_key,
+        finalized.initialization_id,
+    )
+    if any(value is None or value == "" for value in required_values):
+        enforced = json.dumps(
+            {"success": False, "error": "recipe_initialization_identity_missing"},
+            separators=(",", ":"),
         )
-        if any(value is None or value == "" for value in required_values):
+    else:
+        assert finalized.tool_ctx is not None
+        assert finalized.execution_snapshot is not None
+        try:
+            candidate = (
+                json.loads(finalized.rendered)
+                if finalized.decision.mode is not RecipeDeliveryMode.ATTESTED_INLINE
+                else {"success": True}
+            )
+        except json.JSONDecodeError:
+            candidate = {"success": False}
+        if not isinstance(candidate, dict) or candidate.get("success") is False:
             enforced = json.dumps(
-                {"success": False, "error": "recipe_initialization_identity_missing"},
+                {"success": False, "error": "recipe_initialization_failed"},
                 separators=(",", ":"),
             )
         else:
-            assert finalized.tool_ctx is not None
-            assert finalized.execution_snapshot is not None
-            try:
-                candidate = (
-                    json.loads(finalized.rendered)
-                    if finalized.decision.mode is not RecipeDeliveryMode.ATTESTED_INLINE
-                    else {"success": True}
-                )
-            except json.JSONDecodeError:
-                candidate = {"success": False}
-            if not isinstance(candidate, dict) or candidate.get("success") is False:
-                enforced = json.dumps(
-                    {"success": False, "error": "recipe_initialization_failed"},
-                    separators=(",", ":"),
-                )
-            else:
-                parsed = candidate
-    if enforced == finalized.rendered and finalized.initialization_activating:
+            parsed = candidate
+    if enforced == finalized.rendered:
         assert finalized.tool_ctx is not None
         assert finalized.recipe_name is not None
         assert finalized.artifact_generation is not None
@@ -184,6 +172,50 @@ def complete_finalized_recipe_response(
                 },
                 separators=(",", ":"),
             )
+    return _InitializationActivationResult(
+        previous_initialization_state,
+        enforced if enforced != finalized.rendered else None,
+    )
+
+
+def complete_finalized_recipe_response(
+    finalized: FinalizedRecipeResponse,
+    enforced: Any,
+    *,
+    now_unix: int | None = None,
+) -> Any:
+    """Commit receipt and lifecycle state only for exact enforced response bytes."""
+    handle = finalized.receipt_handle
+    ledger = finalized.receipt_ledger
+    previous_initialization_state: Any = None
+    transition_token = finalized.kitchen_transition_token
+    if enforced == finalized.rendered and transition_token is not None:
+        transition_owned = False
+        if (
+            finalized.tool_ctx is not None
+            and hasattr(finalized.tool_ctx, "kitchen_transition_lock")
+            and hasattr(finalized.tool_ctx, "kitchen_open_state")
+        ):
+            with finalized.tool_ctx.kitchen_transition_lock:
+                state = finalized.tool_ctx.kitchen_open_state
+                transition_owned = state.operation_id == transition_token.operation_id and any(
+                    effect.name == _RECIPE_SERVING
+                    and effect.effect_id == transition_token.effect_id
+                    for effect in state.effects
+                )
+        if not transition_owned:
+            enforced = json.dumps(
+                {
+                    "success": False,
+                    "error": "kitchen_transition_ownership_mismatch",
+                },
+                separators=(",", ":"),
+            )
+    if enforced == finalized.rendered and finalized.initialization_activating:
+        activation_result = _activate_recipe_initialization(finalized)
+        previous_initialization_state = activation_result.previous_state
+        if activation_result.enforced_response is not None:
+            enforced = activation_result.enforced_response
     if enforced == finalized.rendered and handle is not None:
         try:
             receipt_committed = ledger is not None and ledger.commit(

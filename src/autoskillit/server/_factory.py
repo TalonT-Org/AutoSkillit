@@ -490,20 +490,20 @@ def make_context(
     if runner is not None:
         ctx.tester = DefaultTestRunner(config=ctx.config, runner=runner)
 
-    def _resolve_output_patterns(skill_command: str) -> list[str]:
+    def _resolve_skill_contract(skill_command: str) -> SkillContract | None:
         name = resolve_skill_name(skill_command)
         if not name:
-            return []
-        contract = get_skill_contract(name, load_bundled_manifest())
+            return None
+        return get_skill_contract(name, load_bundled_manifest())
+
+    def _resolve_output_patterns(skill_command: str) -> list[str]:
+        contract = _resolve_skill_contract(skill_command)
         if not contract:
             return []
         return contract.expected_output_patterns
 
     def _resolve_write_behavior(skill_command: str) -> WriteBehaviorSpec:
-        name = resolve_skill_name(skill_command)
-        if not name:
-            return WriteBehaviorSpec()
-        contract = get_skill_contract(name, load_bundled_manifest())
+        contract = _resolve_skill_contract(skill_command)
         if contract is None or contract.write_behavior is None:
             return WriteBehaviorSpec()
         return WriteBehaviorSpec(
@@ -513,24 +513,12 @@ def make_context(
         )
 
     def _resolve_read_only(skill_command: str) -> bool:
-        name = resolve_skill_name(skill_command)
-        if not name:
-            return False
-        contract = get_skill_contract(name, load_bundled_manifest())
+        contract = _resolve_skill_contract(skill_command)
         return contract.read_only if contract else False
 
     def _resolve_completion_required(skill_command: str) -> bool:
-        name = resolve_skill_name(skill_command)
-        if not name:
-            return False
-        contract = get_skill_contract(name, load_bundled_manifest())
+        contract = _resolve_skill_contract(skill_command)
         return contract.completion_required if contract else False
-
-    def _resolve_skill_contract(skill_command: str) -> SkillContract | None:
-        name = resolve_skill_name(skill_command)
-        if not name:
-            return None
-        return get_skill_contract(name, load_bundled_manifest())
 
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior

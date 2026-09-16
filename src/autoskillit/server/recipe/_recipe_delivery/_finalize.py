@@ -72,7 +72,11 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import RecipeDeliveryEvidenceDef
+    from autoskillit.core import (
+        RecipeDeliveryBudgetDef,
+        RecipeDeliveryDecision,
+        RecipeDeliveryEvidenceDef,
+    )
     from autoskillit.pipeline import ToolContext
 
 
@@ -81,6 +85,56 @@ def document_recipe_delivery_contract(function: Any) -> Any:
     description = (function.__doc__ or "").replace("{INFRA_FAULT}", _FAULT_CLAUSE)
     function.__doc__ = f"{description.rstrip()}\n\n{codex_recipe_delivery_calling_contract()}\n"
     return function
+
+
+def _reserve_attested_receipt(
+    decision: RecipeDeliveryDecision,
+    *,
+    capabilities: BackendCapabilities,
+    delivery_budget: RecipeDeliveryBudgetDef | None,
+    receipt_ledger: RecipeDeliveryReceiptLedger | None,
+    request: RecipeDeliveryRequest | None,
+    attestation: RecipeDeliveryAttestation | None,
+    supported_evidence: RecipeDeliveryEvidenceDef | None,
+    producer: str,
+    payload_sha256: str,
+    required_tokens: int,
+    ordinary_limit: int,
+    now_unix: int | None,
+) -> tuple[RecipeDeliveryDecision, RecipeReceiptHandle | None]:
+    """Reserve the receipt required for an attested inline delivery."""
+    failure_reason = "protected_receipt_store_unavailable"
+    if (
+        delivery_budget is not None
+        and receipt_ledger is not None
+        and request is not None
+        and attestation is not None
+        and supported_evidence is not None
+    ):
+        reservation = receipt_ledger.reserve(
+            capabilities=capabilities,
+            required_serialized_tokens=required_tokens,
+            budget=delivery_budget,
+            request=request,
+            attestation=attestation,
+            supported_evidence=supported_evidence,
+            producer=producer,
+            payload_sha256=payload_sha256,
+            now_unix=int(time.time()) if now_unix is None else now_unix,
+        )
+        if reservation.handle is not None:
+            return replace(decision, receipt_status="pending"), reservation.handle
+        failure_reason = reservation.reason
+    return (
+        replace(
+            decision,
+            mode=RecipeDeliveryMode.ENVELOPE,
+            selected_result_token_limit=ordinary_limit,
+            reason=failure_reason,
+            receipt_status="not_reserved",
+        ),
+        None,
+    )
 
 
 def finalize_recipe_delivery(
@@ -301,45 +355,23 @@ def finalize_recipe_delivery(
             reason="server_response_budget_requires_envelope",
             receipt_status="not_reserved",
         )
-    receipt_handle: RecipeReceiptHandle | None = None
     if decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
-        if (
-            delivery_budget is None
-            or receipt_ledger is None
-            or candidate_request is None
-            or candidate_attestation is None
-            or candidate_evidence is None
-        ):
-            decision = replace(
-                decision,
-                mode=RecipeDeliveryMode.ENVELOPE,
-                selected_result_token_limit=ordinary_limit,
-                reason="protected_receipt_store_unavailable",
-                receipt_status="not_reserved",
-            )
-        else:
-            reservation = receipt_ledger.reserve(
-                capabilities=capabilities,
-                required_serialized_tokens=required_tokens,
-                budget=delivery_budget,
-                request=candidate_request,
-                attestation=candidate_attestation,
-                supported_evidence=candidate_evidence,
-                producer=surface_definition.producer_tool,
-                payload_sha256=generation.payload_sha256,
-                now_unix=int(time.time()) if now_unix is None else now_unix,
-            )
-            if reservation.handle is None:
-                decision = replace(
-                    decision,
-                    mode=RecipeDeliveryMode.ENVELOPE,
-                    selected_result_token_limit=ordinary_limit,
-                    reason=reservation.reason,
-                    receipt_status="not_reserved",
-                )
-            else:
-                receipt_handle = reservation.handle
-                decision = replace(decision, receipt_status="pending")
+        decision, receipt_handle = _reserve_attested_receipt(
+            decision,
+            capabilities=capabilities,
+            delivery_budget=delivery_budget,
+            receipt_ledger=receipt_ledger,
+            request=candidate_request,
+            attestation=candidate_attestation,
+            supported_evidence=candidate_evidence,
+            producer=surface_definition.producer_tool,
+            payload_sha256=generation.payload_sha256,
+            required_tokens=required_tokens,
+            ordinary_limit=ordinary_limit,
+            now_unix=now_unix,
+        )
+    else:
+        receipt_handle = None
 
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:

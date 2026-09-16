@@ -130,6 +130,38 @@ def _verify_string_descriptors(
     )
 
 
+def _verify_complete_array_page(
+    page: PlannedRecipeSectionPage,
+    *,
+    expected_element: int,
+    element_total: int,
+    allow_empty_page: bool,
+) -> int:
+    """Validate one independently decodable complete array page."""
+    descriptor = page.descriptor
+    decoded = _decode(page.content, "array page is not independently decodable")
+    if type(decoded) is not list:
+        raise _pagination_error("array page is not independently decodable")
+    element_end = descriptor.element_end
+    if (
+        descriptor.element_start != expected_element
+        or type(element_end) is not int
+        or element_end < expected_element
+    ):
+        raise _pagination_error("array element ranges are not contiguous")
+    _require(
+        element_end > expected_element or allow_empty_page,
+        "array page makes no progress",
+    )
+    _require(
+        descriptor.element_total == element_total
+        and element_end <= element_total
+        and element_end - expected_element == len(decoded),
+        "array range does not match its content",
+    )
+    return element_end
+
+
 def _verify_array_descriptors(
     selected: SelectedRecipeSection,
     pages: list[PlannedRecipeSectionPage],
@@ -150,27 +182,12 @@ def _verify_array_descriptors(
                 fragment_count is None,
                 "complete array page interrupts an element fragment",
             )
-            decoded = _decode(page.content, "array page is not independently decodable")
-            if type(decoded) is not list:
-                raise _pagination_error("array page is not independently decodable")
-            element_end = descriptor.element_end
-            if (
-                descriptor.element_start != expected_element
-                or type(element_end) is not int
-                or element_end < expected_element
-            ):
-                raise _pagination_error("array element ranges are not contiguous")
-            _require(
-                element_end > expected_element or (not values and len(pages) == 1),
-                "array page makes no progress",
+            expected_element = _verify_complete_array_page(
+                page,
+                expected_element=expected_element,
+                element_total=len(values),
+                allow_empty_page=not values and len(pages) == 1,
             )
-            _require(
-                descriptor.element_total == len(values)
-                and element_end <= len(values)
-                and element_end - expected_element == len(decoded),
-                "array range does not match its content",
-            )
-            expected_element = element_end
             continue
 
         _require(

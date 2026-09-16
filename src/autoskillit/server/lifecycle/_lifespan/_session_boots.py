@@ -117,6 +117,16 @@ async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
             logger.warning("cleanup_stale_tether_sweep_error", exc_info=True)
 
 
+def _suppress_disabled_feature_tags(ctx: Any, mcp: Any) -> None:
+    """Hide tags belonging only to disabled features for an auto-gated session."""
+    features = ctx.config.features if ctx.config is not None else {}
+    experimental_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
+    for tag in _lifespan_pkg._collect_disabled_feature_tags(
+        features, experimental_enabled=experimental_enabled
+    ):
+        mcp.disable(tags={tag})
+
+
 async def _fleet_auto_gate_boot(ctx: Any) -> None:
     """Auto-open the kitchen gate and prime quota/registry state for fleet sessions.
 
@@ -146,12 +156,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
             tools_kitchen as _tk_fleet,
         )
 
-        _features = ctx.config.features if ctx.config is not None else {}
-        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
-            _features, experimental_enabled=_exp_enabled
-        ):
-            _mcp.disable(tags={_tag})
+        _suppress_disabled_feature_tags(ctx, _mcp)
     except Exception:
         logger.warning("fleet_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
@@ -335,12 +340,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     try:
         from autoskillit.server import mcp as _mcp  # circular-break
 
-        _features = ctx.config.features if ctx.config is not None else {}
-        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
-            _features, experimental_enabled=_exp_enabled
-        ):
-            _mcp.disable(tags={_tag})
+        _suppress_disabled_feature_tags(ctx, _mcp)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
@@ -463,12 +463,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     try:
         from autoskillit.server import mcp as _mcp  # circular-break
 
-        _features = ctx.config.features if ctx.config is not None else {}
-        _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
-        for _tag in _lifespan_pkg._collect_disabled_feature_tags(
-            _features, experimental_enabled=_exp_enabled
-        ):
-            _mcp.disable(tags={_tag})
+        _suppress_disabled_feature_tags(ctx, _mcp)
     except Exception:
         logger.warning("skill_auto_gate_boot_feature_suppression_failed", exc_info=True)
 

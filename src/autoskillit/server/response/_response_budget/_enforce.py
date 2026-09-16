@@ -29,6 +29,7 @@ from autoskillit.server.response._response_budget._primitives import (
     _canonical_json,
     _estimated_tokens,
     _ProjectionNonconvergentError,
+    _restore_projected_response_type,
     _serialized,
 )
 from autoskillit.server.response._response_budget._projection import (
@@ -245,12 +246,7 @@ def enforce_response_budget(
         original_utf8_bytes=original_size,
         projected_utf8_bytes=len(rendered.encode("utf-8")),
     )
-    if isinstance(result, str):
-        return rendered
-    try:
-        return json.loads(rendered)
-    except (ValueError, RecursionError):
-        return {"success": False, "error": "response_budget_projection_invalid"}
+    return _restore_projected_response_type(result, rendered)
 
 
 def _checkpoint_segmented_mapping(

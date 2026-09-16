@@ -83,6 +83,20 @@ def _serialized(value: Any) -> str:
     return _canonical_json(value)
 
 
+def _restore_projected_response_type(result: Any, rendered: str) -> Any:
+    if isinstance(result, str):
+        return rendered
+    try:
+        return json.loads(rendered)
+    except (ValueError, RecursionError) as exc:
+        _response_budget_pkg.logger.warning(
+            "response_budget_projection_invalid",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return {"success": False, "error": "response_budget_projection_invalid"}
+
+
 def _bounded_tool_name(tool_name: str) -> str:
     return tool_name.encode("ascii", "replace").decode("ascii")[:64]
 

@@ -297,6 +297,28 @@ def _deny(reason: str) -> None:
     sys.stdout.flush()
 
 
+def _body_path_validation_error(
+    body_path_str: str | None, project_root: Path, skill_name: str
+) -> str | None:
+    if not body_path_str or body_path_str == "-":
+        return "every gh pr create must name a resolvable --body-file"
+    body_path = Path(body_path_str)
+    if not body_path.is_absolute():
+        body_path = project_root / body_path
+    pair = _read_bound_pair(body_path)
+    if pair is None:
+        return f"{body_path} and its sibling metadata must be readable and exact"
+    body, metadata = pair
+    valid = (
+        _valid_ordinary_pair(body, metadata)
+        if skill_name == "compose-pr"
+        else _valid_integration_pair(body, metadata)
+    )
+    if not valid:
+        return f"{body_path} does not match its required provenance schema"
+    return None
+
+
 def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
@@ -322,24 +344,9 @@ def main() -> None:
 
     project_root = resolve_state_root(parsed.payload_cwd)
     for body_path_str in body_path_strs:
-        if not body_path_str or body_path_str == "-":
-            _deny("every gh pr create must name a resolvable --body-file")
-            sys.exit(0)
-        body_path = Path(body_path_str)
-        if not body_path.is_absolute():
-            body_path = project_root / body_path
-        pair = _read_bound_pair(body_path)
-        if pair is None:
-            _deny(f"{body_path} and its sibling metadata must be readable and exact")
-            sys.exit(0)
-        body, metadata = pair
-        valid = (
-            _valid_ordinary_pair(body, metadata)
-            if skill_name == "compose-pr"
-            else _valid_integration_pair(body, metadata)
-        )
-        if not valid:
-            _deny(f"{body_path} does not match its required provenance schema")
+        error = _body_path_validation_error(body_path_str, project_root, skill_name)
+        if error is not None:
+            _deny(error)
             sys.exit(0)
     sys.exit(0)
 

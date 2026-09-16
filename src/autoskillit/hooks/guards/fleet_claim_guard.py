@@ -84,9 +84,7 @@ def main() -> None:
     ingredients = tool_input.get("ingredients") or {}
     if not isinstance(ingredients, dict):
         sys.exit(0)
-    issue_urls_raw = ingredients.get("issue_urls", "")
-    if not issue_urls_raw:
-        issue_urls_raw = ingredients.get("issue_url", "")
+    issue_urls_raw = ingredients.get("issue_urls") or ingredients.get("issue_url")
     if not issue_urls_raw:
         sys.exit(0)
 

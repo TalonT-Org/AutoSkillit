@@ -139,6 +139,20 @@ def _find_pip_install(
     return (args[: i + 1], args[i + 1 :])
 
 
+def _classify_pip_install(
+    kind: str,
+    args: list[str],
+) -> tuple[str, list[str], list[str]] | None:
+    """Map pip-install parsing to a classified invocation."""
+    match = _find_pip_install(args)
+    if match is None:
+        return None
+    if isinstance(match, str):
+        return (_PIP_INSTALL_UNRESOLVED, [], [])
+    install_args, post_install = match
+    return (kind, install_args, post_install)
+
+
 def _classify_install_invocation(
     segment: list[str],
 ) -> tuple[str, list[str], list[str]] | None:
@@ -159,33 +173,15 @@ def _classify_install_invocation(
     if not verb:
         return None
     if _is_pip_executable(verb):
-        match = _find_pip_install(args)
-        if match is None:
-            return None
-        if isinstance(match, str):
-            return (_PIP_INSTALL_UNRESOLVED, [], [])
-        install_args, post_install = match
-        return ("pip", install_args, post_install)
+        return _classify_pip_install("pip", args)
     if _is_uv_executable(verb):
         if len(args) < 2 or args[0] != "pip":
             return None
-        match = _find_pip_install(args[1:])
-        if match is None:
-            return None
-        if isinstance(match, str):
-            return (_PIP_INSTALL_UNRESOLVED, [], [])
-        install_args, post_install = match
-        return ("uv-pip", install_args, post_install)
+        return _classify_pip_install("uv-pip", args[1:])
     if _is_python_executable(verb):
         if len(args) < 3 or args[0] != "-m" or args[1] != "pip":
             return None
-        match = _find_pip_install(args[2:])
-        if match is None:
-            return None
-        if isinstance(match, str):
-            return (_PIP_INSTALL_UNRESOLVED, [], [])
-        install_args, post_install = match
-        return ("module-pip", install_args, post_install)
+        return _classify_pip_install("module-pip", args[2:])
     if _is_maturin_executable(verb):
         if not args or args[0] != "develop":
             return None

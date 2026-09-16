@@ -158,6 +158,26 @@ def _tokenize_text(text: str) -> frozenset[str]:
     return frozenset(t for t in _DELIMITERS_RE.split(text) if t)
 
 
+def _blocked_op_in_evaluated_segment(
+    segment: list[str], blocked_ops: frozenset[tuple[str, ...]]
+) -> tuple[str, ...] | None:
+    """Return the first blocked git operation in an evaluated segment."""
+    for start, end in _command_position_candidate_spans(segment):
+        verb, args = command_verb_and_args(segment[start:end])
+        if verb != "git" and not verb.endswith("/git"):
+            continue
+        result = extract_git_subcommand_and_flags([verb, *args])
+        if result is None:
+            continue
+        subcommand, remaining = result
+        if subcommand == "<unresolved>":
+            return (subcommand,)
+        for op_tuple in blocked_ops:
+            if subcommand == op_tuple[0] and all(flag in remaining for flag in op_tuple[1:]):
+                return op_tuple
+    return None
+
+
 def _contains_blocked_git_op(
     cmd: str, blocked_ops: frozenset[tuple[str, ...]]
 ) -> tuple[str, ...] | None:
@@ -183,27 +203,9 @@ def _contains_blocked_git_op(
         return None
 
     for segment in segments:
-        for start, end in _command_position_candidate_spans(segment):
-            verb, args = command_verb_and_args(segment[start:end])
-            if verb != "git" and not verb.endswith("/git"):
-                continue
-            result = extract_git_subcommand_and_flags([verb, *args])
-            if result is None:
-                continue
-            subcommand, remaining = result
-            if subcommand == "<unresolved>":
-                # An unrecognized global git flag means the real subcommand
-                # could not be found at all -- deny unconditionally rather
-                # than matching against blocked_ops's literal tuples,
-                # which "<unresolved>" can never equal (an unhandled case
-                # would silently fall through to "not blocked" here).
-                return (subcommand,)
-            for op_tuple in blocked_ops:
-                if subcommand != op_tuple[0]:
-                    continue
-                flags = op_tuple[1:]
-                if all(f in remaining for f in flags):
-                    return op_tuple
+        blocked_op = _blocked_op_in_evaluated_segment(segment, blocked_ops)
+        if blocked_op is not None:
+            return blocked_op
 
     # A Python payload whose subprocess/os call could not be resolved to a
     # literal argv or string (dynamic argument, unrecognized call shape)
@@ -291,7 +293,9 @@ def _consume_option_value(args: list[str], index: int, option: str) -> int:
     return index + 2 if args[index] == option and index + 1 < len(args) else index + 1
 
 
-def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
+def _parse_update_ref_args(
+    args: list[str],
+) -> tuple[bool, bool, str, str] | None:
     no_deref = False
     delete = False
     positional: list[str] = []
@@ -299,7 +303,7 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
     while index < len(args):
         token = args[index]
         if token == "--stdin":
-            return ("", "<unresolved>", True)
+            return (True, False, "", "")
         if token == "--no-deref":
             no_deref = True
         elif token in ("-d", "--delete"):
@@ -322,6 +326,16 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
     attempted = "<delete>" if delete else (positional[1] if len(positional) > 1 else "")
     if not attempted:
         return None
+    return (False, no_deref, target, attempted)
+
+
+def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
+    parsed = _parse_update_ref_args(args)
+    if parsed is None:
+        return None
+    unresolved, no_deref, target, attempted = parsed
+    if unresolved:
+        return ("", "<unresolved>", True)
     if _DYNAMIC_SHELL_TOKEN_RE.search(target) or _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
     if target == "HEAD" and no_deref:
@@ -412,16 +426,14 @@ def _refspec_targets(refspec: str, owned_refs: list[str]) -> list[str]:
     return [ref for ref in owned_refs if ref.startswith(prefix) and ref.endswith(suffix)]
 
 
-def _classify_fetch(
-    args: list[str], cwd: str, owned_refs: list[str]
-) -> list[tuple[str, str, bool]]:
-    if "--stdin" in args:
-        return [("", "<unresolved>", True)]
+def _parse_fetch_args(args: list[str]) -> tuple[list[str], list[str]] | None:
     refmaps: list[str] = []
     positional: list[str] = []
     index = 0
     while index < len(args):
         token = args[index]
+        if token == "--stdin":
+            return None
         if token == "--refmap" and index + 1 < len(args):
             refmaps.append(args[index + 1])
             index += 2
@@ -433,20 +445,17 @@ def _classify_fetch(
         if token.startswith("-"):
             _, next_index, recognized = _consume_str_flag(args, index, _GIT_FETCH_FLAG_SPEC)
             if not recognized:
-                # An unrecognized fetch flag's value would otherwise be
-                # misread as the remote/refspec positional -- fail closed
-                # into the same ambiguous-deny idiom this function already
-                # uses for --stdin and an unreadable refmap config, rather
-                # than silently misclassifying the fetch destination.
-                return [("", "<unresolved>", True)]
+                return None
             index = next_index
             continue
         positional.append(token)
         index += 1
-    if not positional:
-        return []
-    remote = positional[0]
-    command_refspecs = positional[1:]
+    return refmaps, positional
+
+
+def _fetch_mappings(
+    refmaps: list[str], command_refspecs: list[str], cwd: str, remote: str
+) -> list[str] | None:
     mappings: list[str] = []
     if refmaps:
         mappings.extend(mapping for mapping in refmaps if mapping)
@@ -459,10 +468,24 @@ def _classify_fetch(
                 line for line in configured.stdout.decode("utf-8", errors="strict").splitlines()
             )
         elif configured.returncode >= 2:
-            # Fail-closed: refmap unreadable (filesystem/permission) — return
-            # ambiguous so the caller routes through _all_threatened against
-            # every owned ref instead of silently allowing the fetch through.
-            return [("", "<unresolved>", True)]
+            return None
+    return mappings
+
+
+def _classify_fetch(
+    args: list[str], cwd: str, owned_refs: list[str]
+) -> list[tuple[str, str, bool]]:
+    parsed = _parse_fetch_args(args)
+    if parsed is None:
+        return [("", "<unresolved>", True)]
+    refmaps, positional = parsed
+    if not positional:
+        return []
+    remote = positional[0]
+    command_refspecs = positional[1:]
+    mappings = _fetch_mappings(refmaps, command_refspecs, cwd, remote)
+    if mappings is None:
+        return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
     for mapping in mappings:
         source = mapping.removeprefix("+").split(":", 1)[0]
@@ -568,6 +591,24 @@ def _classify_push(
     return result
 
 
+def _classify_symbolic_ref(args: list[str]) -> tuple[str, str, bool] | None:
+    positional: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "-m":
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        positional.append(token)
+        index += 1
+    if len(positional) >= 2 and positional[0] == "HEAD":
+        return (_normal_branch_ref(positional[1]), positional[1], False)
+    return None
+
+
 def _classify_git_segment(
     segment: list[str], context: dict[str, object]
 ) -> list[tuple[str, str, bool]]:
@@ -597,21 +638,5 @@ def _classify_git_segment(
     elif subcommand == "push":
         return _classify_push(args, context, owned_refs)
     elif subcommand == "symbolic-ref":
-        # -m <reason> can appear before OR after the positionals — its value
-        # looks positional, so we skip past it instead of naively filtering.
-        # `len >= 2` guards against IndexError on read forms like `symbolic-ref HEAD`.
-        positional: list[str] = []
-        index = 0
-        while index < len(args):
-            token = args[index]
-            if token == "-m":
-                index += 2
-                continue
-            if token.startswith("-"):
-                index += 1
-                continue
-            positional.append(token)
-            index += 1
-        if len(positional) >= 2 and positional[0] == "HEAD":
-            one = (_normal_branch_ref(positional[1]), positional[1], False)
+        one = _classify_symbolic_ref(args)
     return [one] if one is not None else []

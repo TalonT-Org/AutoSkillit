@@ -28,6 +28,19 @@ INGREDIENT_LOCK_DENY_TRIGGER: str = "INGREDIENT LOCK ENFORCED"
 DISPATCH_ID_ENV_VAR = "AUTOSKILLIT_DISPATCH_ID"
 
 
+def _locked_pipeline(
+    locked_steps: dict[str, dict[str, object]], order_id: str, step_name: str
+) -> str | None:
+    if order_id and order_id in locked_steps:
+        if locked_steps[order_id].get(step_name) is False:
+            return order_id
+    elif not order_id:
+        for pid, steps in locked_steps.items():
+            if steps.get(step_name) is False:
+                return pid
+    return None
+
+
 def main() -> None:
     try:
         raw = sys.stdin.read()
@@ -49,20 +62,8 @@ def main() -> None:
 
     order_id = tool_input.get("order_id", "") or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
-    denied = False
-    deny_pipeline = ""
-    if order_id and order_id in locked_steps:
-        if locked_steps[order_id].get(step_name) is False:
-            denied = True
-            deny_pipeline = order_id
-    elif not order_id:
-        for pid, steps in locked_steps.items():
-            if steps.get(step_name) is False:
-                denied = True
-                deny_pipeline = pid
-                break
-
-    if denied:
+    deny_pipeline = _locked_pipeline(locked_steps, order_id, step_name)
+    if deny_pipeline is not None:
         locked_ingredients = config.get("locked_ingredients", {}).get(deny_pipeline, {})
         reason = (
             f"{INGREDIENT_LOCK_DENY_TRIGGER}: Step '{step_name}' is locked out. "

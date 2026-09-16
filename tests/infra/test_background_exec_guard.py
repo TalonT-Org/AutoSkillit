@@ -19,6 +19,7 @@ def _run_guard(
     *,
     headless: bool = False,
     session_type: str | None = None,
+    agent_backend: str | None = None,
     raw_stdin: str | None = None,
 ) -> str:
     """Run main() with the given PreToolUse event envelope.
@@ -34,6 +35,8 @@ def _run_guard(
         env_snapshot["AUTOSKILLIT_HEADLESS"] = "1"
     if session_type is not None:
         env_snapshot["AUTOSKILLIT_SESSION_TYPE"] = session_type
+    if agent_backend is not None:
+        env_snapshot["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
     with (
         patch.dict(os.environ, env_snapshot, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
@@ -77,6 +80,40 @@ def test_denies_schedule_wakeup_skill_session():
         {"tool_name": "ScheduleWakeup", "tool_input": {"delay": "5m"}},
         session_type="skill",
     )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "ScheduleWakeup" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_denies_schedule_wakeup_skill_session_with_managed_codex_route(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import autoskillit.hooks.guards.background_exec_guard as guard
+
+    monkeypatch.setattr(
+        guard,
+        "payload_managed_codex_route",
+        lambda _cwd, _session_id: (
+            "parent",
+            frozenset({"background_exec_guard"}),
+            "digest",
+        ),
+    )
+    monkeypatch.setattr(guard, "session_join_required", lambda _cwd, _session_id: False)
+
+    response = json.loads(
+        _run_guard(
+            {
+                "tool_name": "ScheduleWakeup",
+                "tool_input": {"delay": "5m"},
+                "session_id": "child",
+                "cwd": "/repo",
+            },
+            headless=True,
+            session_type="skill",
+            agent_backend="codex",
+        )
+    )
+
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "ScheduleWakeup" in response["hookSpecificOutput"]["permissionDecisionReason"]
 

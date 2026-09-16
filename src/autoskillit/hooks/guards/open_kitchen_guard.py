@@ -182,49 +182,45 @@ def _check_recipe_reload_block(
     }
 
 
+def _deny(reason: str) -> None:
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+    )
+    sys.stdout.write(payload + "\n")
+    sys.exit(0)
+
+
+def _enforce_session_authorization() -> None:
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
+
+        if session_type in ("fleet",):
+            _deny(f"open_kitchen cannot be called from {session_type!r} sessions.")
+
+        if session_type not in ("orchestrator",):
+            # skill session, unset, or invalid — deny (fail-closed)
+            _deny(
+                "open_kitchen cannot be called from skill sessions. "
+                "Open the kitchen in your orchestrator session using "
+                "/autoskillit:open-kitchen."
+            )
+
+        # HEADLESS + orchestrator — fall through to permit path
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input or broken pipe
 
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
-
-        if session_type in ("fleet",):
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"open_kitchen cannot be called from {session_type!r} sessions."
-                        ),
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
-
-        if session_type not in ("orchestrator",):
-            # skill session, unset, or invalid — deny (fail-closed)
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            "open_kitchen cannot be called from skill sessions. "
-                            "Open the kitchen in your orchestrator session using "
-                            "/autoskillit:open-kitchen."
-                        ),
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
-
-        # HEADLESS + orchestrator — fall through to permit path
+    _enforce_session_authorization()
 
     # Permit path: write a kitchen-open session marker so ask_user_question_guard
     # can verify the kitchen is open before allowing AskUserQuestion.

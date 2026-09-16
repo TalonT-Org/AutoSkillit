@@ -95,6 +95,62 @@ def _deny(reason: str) -> None:
     )
 
 
+def _branch_arg_denial_reason(skill_name: str, args_str: str) -> str | None:
+    if args_str and args_str.split()[0].startswith("/"):
+        return (
+            f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
+            f"first argument looks like a filesystem path but '{skill_name}' "
+            "expects a git branch name. Branch names cannot start with '/'."
+        )
+    return None
+
+
+def _path_arg_denial_reason(skill_name: str, args_str: str) -> str | None:
+    if not args_str:
+        return None
+
+    tokens = args_str.split()
+    first = tokens[0]
+    if is_path_like_token(first):
+        plan_pos = _PLAN_PATH_POSITION.get(skill_name)
+        if plan_pos is not None:
+            path_tokens = [token for token in tokens if is_path_like_token(token)]
+            if plan_pos < len(path_tokens):
+                plan_token = path_tokens[plan_pos]
+                basename = plan_token.rsplit("/", 1)[-1]
+                if basename and "." not in basename:
+                    return (
+                        f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
+                        f"plan path argument '{plan_token}' has no file extension. "
+                        "This may indicate a mangled path (e.g. stripped .md extension). "
+                        "Verify the path is correct and includes the file extension."
+                    )
+        return None
+
+    path_token = next((token for token in tokens[1:] if is_path_like_token(token)), None)
+    if path_token is None:
+        return None
+
+    has_newlines = "\n" in args_str
+    path_tokens = [token for token in tokens if is_path_like_token(token)]
+    non_path_tokens = [token for token in tokens if not is_path_like_token(token)]
+    path_part = " ".join(path_tokens)
+    if has_newlines and non_path_tokens:
+        prose_block = " ".join(non_path_tokens)
+        correct_cmd = f"/{skill_name} {path_part}\n\n{prose_block}"
+    else:
+        tail = (" " + " ".join(non_path_tokens)) if non_path_tokens else ""
+        correct_cmd = f"/{skill_name} {path_part}{tail}"
+    return (
+        f"skill_command format error for '{skill_name}': "
+        f"found extra descriptive text '{first}...' before the path argument "
+        f"'{path_token}'. Path-argument skills require the path as the first "
+        f"argument after the skill name. Relocate any additional context or "
+        f"instructions to after all path arguments. "
+        f'Fix: set skill_command to "{correct_cmd}".'
+    )
+
+
 def main() -> None:
     try:
         raw = sys.stdin.read()
@@ -115,69 +171,13 @@ def main() -> None:
     if skill_name not in PATH_ARG_SKILLS and skill_name not in BRANCH_ARG_SKILLS:
         sys.exit(0)
 
-    if skill_name in BRANCH_ARG_SKILLS:
-        args_str = skill_command[m.end() :].strip()
-        if args_str and args_str.split()[0].startswith("/"):
-            _deny(
-                f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
-                f"first argument looks like a filesystem path but '{skill_name}' "
-                f"expects a git branch name. Branch names cannot start with '/'."
-            )
-        sys.exit(0)
-
     args_str = skill_command[m.end() :].strip()
-    if not args_str:
-        sys.exit(0)
-
-    tokens = args_str.split()
-    first = tokens[0]
-
-    # Correct format: first token is a path.
-    if is_path_like_token(first):
-        plan_pos = _PLAN_PATH_POSITION.get(skill_name)
-        if plan_pos is not None:
-            path_tokens = [t for t in tokens if is_path_like_token(t)]
-            if plan_pos < len(path_tokens):
-                plan_token = path_tokens[plan_pos]
-                basename = plan_token.rsplit("/", 1)[-1] if "/" in plan_token else plan_token
-                if basename and "." not in basename:
-                    _deny(
-                        f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
-                        f"plan path argument '{plan_token}' has no file extension. "
-                        f"This may indicate a mangled path (e.g. stripped .md extension). "
-                        f"Verify the path is correct and includes the file extension."
-                    )
-                    sys.exit(0)
-        sys.exit(0)
-
-    # First token is not a path. Check whether a path token appears later.
-    path_token = next((t for t in tokens[1:] if is_path_like_token(t)), None)
-    if path_token is None:
-        # No path-like token found at all — could be pasted plan content.
-        # Allow; the skill's Step 0 will handle it.
-        sys.exit(0)
-
-    # Anti-pattern: path exists but is not the first token.
-    # Reconstruct corrected command: all path tokens first, then non-path tokens.
-    # When args_str is multiline, separate prose from paths with a blank line.
-    has_newlines = "\n" in args_str
-    path_tokens = [t for t in tokens if is_path_like_token(t)]
-    non_path_tokens = [t for t in tokens if not is_path_like_token(t)]
-    path_part = " ".join(path_tokens)
-    if has_newlines and non_path_tokens:
-        prose_block = " ".join(non_path_tokens)
-        correct_cmd = f"/{skill_name} {path_part}\n\n{prose_block}"
+    if skill_name in BRANCH_ARG_SKILLS:
+        reason = _branch_arg_denial_reason(skill_name, args_str)
     else:
-        tail = (" " + " ".join(non_path_tokens)) if non_path_tokens else ""
-        correct_cmd = f"/{skill_name} {path_part}{tail}"
-    _deny(
-        f"skill_command format error for '{skill_name}': "
-        f"found extra descriptive text '{first}...' before the path argument "
-        f"'{path_token}'. Path-argument skills require the path as the first "
-        f"argument after the skill name. Relocate any additional context or "
-        f"instructions to after all path arguments. "
-        f'Fix: set skill_command to "{correct_cmd}".'
-    )
+        reason = _path_arg_denial_reason(skill_name, args_str)
+    if reason is not None:
+        _deny(reason)
     sys.exit(0)
 
 

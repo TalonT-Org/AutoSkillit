@@ -405,9 +405,7 @@ def _launch_fleet_session(
             resume_session_id = (
                 fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
             )
-            resume_dispatch_id = (
-                fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
-            )
+            resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
             resume_retry_reason = (
                 fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
             )

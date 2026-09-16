@@ -112,6 +112,7 @@ from autoskillit.pipeline.run_skill_completion import (
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry, canonical_step_name
+from autoskillit.pipeline.workspace_outcomes import DefaultWorkspaceOutcomeLedger
 
 __all__ = [
     # branch_guard
@@ -167,6 +168,7 @@ __all__ = [
     "resolve_exploration_store_failure_code",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",
+    "DefaultWorkspaceOutcomeLedger",
     # kitchen transition
     "KITCHEN_EFFECT_RECIPE_SERVING",
     "KITCHEN_EFFECT_RESPONSE_ENFORCEMENT",

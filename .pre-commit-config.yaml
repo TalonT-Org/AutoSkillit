@@ -36,7 +36,7 @@ repos:
         name: doc count accuracy
         entry: python scripts/check_doc_counts.py
         language: system
-        files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/recipes/|src/autoskillit/core/_type_constants\.py)
+        files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/skills_extended/|src/autoskillit/recipes/|src/autoskillit/core/types/_type_constants_registries\.py)
         pass_filenames: false
 
       - id: check-version-consistency

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
@@ -16,7 +17,14 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from ..audit.closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
-from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
+from ._type_enums import (
+    CommitFailureClass,
+    FaultDomain,
+    KillReason,
+    RetryReason,
+    SessionOutcome,
+    WorkspaceOutcomeKind,
+)
 from ._type_execution_identity import ExecutionIdentity
 from ._type_results_execution import ApiFailureOutcome, ExecutionSelection, RateLimitWindow
 from ._type_results_records import (
@@ -84,6 +92,7 @@ __all__ = [
     "EXTERNAL_EFFECT_CHOICES",
     "VALID_INPUT_SPEC_TYPES",
     "OutcomeInvariantSpec",
+    "WorkspaceOutcomeRecord",
     "WriteBehaviorSpec",
     "WriteEvidence",
     "FailureRecord",
@@ -114,6 +123,61 @@ __all__ = [
 VALID_INPUT_SPEC_TYPES = frozenset({"file_path", "directory_path", "file_path_list"})
 
 InputSpecType = Literal["file_path", "directory_path", "file_path_list"]
+
+
+def _require_aware_timestamp(value: str, *, field_name: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a UTC offset")
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceOutcomeRecord:
+    """One acknowledged commit attempt or test run for a workspace."""
+
+    workspace: str
+    recorded_at: str
+    kind: WorkspaceOutcomeKind
+    succeeded: bool
+    commit_sha: str | None = None
+    failure_class: CommitFailureClass | None = None
+    timed_out: bool = False
+    infrastructure_missing: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.workspace, str) or not self.workspace:
+            raise ValueError("WorkspaceOutcomeRecord.workspace must be non-empty")
+        _require_aware_timestamp(
+            self.recorded_at,
+            field_name="WorkspaceOutcomeRecord.recorded_at",
+        )
+        if not isinstance(self.kind, WorkspaceOutcomeKind):
+            raise TypeError("WorkspaceOutcomeRecord.kind must be a WorkspaceOutcomeKind")
+        for field_name in ("succeeded", "timed_out", "infrastructure_missing"):
+            if type(getattr(self, field_name)) is not bool:
+                raise TypeError(f"WorkspaceOutcomeRecord.{field_name} must be a bool")
+
+        if self.kind is WorkspaceOutcomeKind.COMMIT_ATTEMPT:
+            if self.succeeded:
+                if not isinstance(self.commit_sha, str) or not self.commit_sha:
+                    raise ValueError("a successful commit attempt requires commit_sha")
+                if self.failure_class is not None:
+                    raise ValueError("a successful commit attempt cannot have failure_class")
+            else:
+                if self.commit_sha is not None:
+                    raise ValueError("an unsuccessful commit attempt cannot have commit_sha")
+                if not isinstance(self.failure_class, CommitFailureClass):
+                    raise ValueError("an unsuccessful commit attempt requires failure_class")
+        else:
+            if self.commit_sha is not None:
+                raise ValueError("only a successful commit attempt can have commit_sha")
+            if self.failure_class is not None:
+                raise ValueError("test run records cannot have failure_class")
 
 
 @dataclass(frozen=True, slots=True)

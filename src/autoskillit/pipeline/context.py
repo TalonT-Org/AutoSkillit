@@ -72,6 +72,7 @@ from autoskillit.core import (
     TokenLog,
     TrackerParticipantKey,
     WorkspaceManager,
+    WorkspaceOutcomeLedger,
     WriteExpectedResolver,
     current_order_id,
     current_step_name,
@@ -186,6 +187,8 @@ class ToolContext:
     audit_admission_ledger: AuditAdmissionLedger — durable audit installation, attempt,
                             head, preflight, and disposition authority
                           context accounting and recovery service.
+    workspace_outcome_ledger: WorkspaceOutcomeLedger — durable shared authority for
+                          terminal workspace outcomes across parent and child sessions.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
     kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal
@@ -271,6 +274,7 @@ class ToolContext:
     )
     context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
     audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)
+    workspace_outcome_ledger: WorkspaceOutcomeLedger = field(default=_MISSING)
     audit_authority_materializer: AuditAuthorityMaterializer = field(default=_MISSING)
     committed_disposition_resolver: CommittedDispositionResolver = field(default=_MISSING)
     recipe_name: str = field(default="")
@@ -366,6 +370,11 @@ class ToolContext:
         if self.audit_admission_ledger is _MISSING:
             raise TypeError(
                 "audit_admission_ledger must be supplied explicitly. "
+                "Use make_context() or pass an isolated ledger directly."
+            )
+        if self.workspace_outcome_ledger is _MISSING:
+            raise TypeError(
+                "workspace_outcome_ledger must be supplied explicitly. "
                 "Use make_context() or pass an isolated ledger directly."
             )
         if self.audit_authority_materializer is _MISSING:

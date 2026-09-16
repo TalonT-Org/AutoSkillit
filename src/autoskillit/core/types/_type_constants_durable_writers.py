@@ -329,6 +329,15 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         machine_local=False,
         detection=None,
     ),
+    DurableArtifactWriterDef(
+        writer=("autoskillit.pipeline.workspace_outcomes:DefaultWorkspaceOutcomeLedger.record"),
+        artifact=(
+            "workspace-outcomes/<sha256(realpath)>.jsonl — bounded machine-local "
+            "commit-attempt and test-run outcome history"
+        ),
+        machine_local=True,
+        detection=("autoskillit.pipeline.workspace_outcomes:find_stale_workspace_outcome_shards"),
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)

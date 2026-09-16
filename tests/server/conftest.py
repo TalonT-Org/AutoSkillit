@@ -262,6 +262,7 @@ def build_ctx(tmp_path):
         ContextAdmissionStoreAuthority,
         SkillResolver,
     )
+    from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
@@ -335,6 +336,9 @@ def build_ctx(tmp_path):
                 )
             ),
             audit_admission_ledger=audit_admission_ledger,
+            workspace_outcome_ledger=DefaultWorkspaceOutcomeLedger(
+                tmp_path / ".autoskillit" / "temp" / "workspace-outcomes"
+            ),
             audit_authority_materializer=DefaultAuditAuthorityMaterializer(audit_admission_ledger),
             committed_disposition_resolver=DefaultCommittedDispositionResolver(
                 audit_admission_ledger

@@ -564,6 +564,7 @@ def minimal_ctx(tmp_path):
         ContextAdmissionStoreAuthority,
     )
     from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
+    from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
@@ -614,6 +615,9 @@ def minimal_ctx(tmp_path):
             )
         ),
         audit_admission_ledger=audit_admission_ledger,
+        workspace_outcome_ledger=DefaultWorkspaceOutcomeLedger(
+            tmp_path / ".autoskillit" / "temp" / "workspace-outcomes"
+        ),
         audit_authority_materializer=cast(AuditAuthorityMaterializer, object()),
         committed_disposition_resolver=cast(CommittedDispositionResolver, object()),
         run_skill_completion=DefaultRunSkillCompletionAuthority(),
@@ -659,6 +663,10 @@ def make_tool_ctx(monkeypatch, tmp_path):
     created_authorities: list[FakePluginArtifactAuthority] = []
     created_contexts = []
     real_which = _run_skill_prepare.shutil.which
+    monkeypatch.setenv(
+        "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        str(tmp_path / "session_logs"),
+    )
 
     def _test_which(binary, *args, **kwargs):
         if binary in {"claude", "codex"}:

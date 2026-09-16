@@ -889,6 +889,7 @@ from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodexRuntimeSpec as CodexRuntimeSpec
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import CommitFailureClass as CommitFailureClass
 from .types import CommittedDispositionResolver as CommittedDispositionResolver
 from .types import CompiledSessionSkillCatalogAuthority as CompiledSessionSkillCatalogAuthority
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
@@ -1293,6 +1294,9 @@ from .types import VerifiedInputPreflightResult as VerifiedInputPreflightResult
 from .types import WindowEpochId as WindowEpochId
 from .types import WitnessKind as WitnessKind
 from .types import WorkspaceManager as WorkspaceManager
+from .types import WorkspaceOutcomeKind as WorkspaceOutcomeKind
+from .types import WorkspaceOutcomeLedger as WorkspaceOutcomeLedger
+from .types import WorkspaceOutcomeRecord as WorkspaceOutcomeRecord
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver

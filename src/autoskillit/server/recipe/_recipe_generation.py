@@ -243,7 +243,7 @@ _CompileIndexKey = tuple[str, str]
 _ArtifactIndexKey = tuple[str, RecipeArtifactGeneration]
 
 
-def _validate_surface_binding(
+def _validate_and_extract_compile_key(
     kitchen_id: str,
     normalized_compile_key: str,
     surface: str,
@@ -405,7 +405,9 @@ class RecipeGenerationStore:
         generation: RecipeArtifactGeneration,
     ) -> RecipeGenerationRecord:
         """Atomically bind one surface to an exact persisted generation."""
-        key = _validate_surface_binding(kitchen_id, normalized_compile_key, surface, generation)
+        key = _validate_and_extract_compile_key(
+            kitchen_id, normalized_compile_key, surface, generation
+        )
         with self._lock:
             self._require_active_locked(kitchen_id)
             existing = self._compile_index.get(key)

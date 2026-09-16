@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     RecipeDeliveryMode,
@@ -37,9 +37,25 @@ if TYPE_CHECKING:
     from autoskillit.server.recipe._recipe_delivery._response import FinalizedRecipeResponse
 
 
+class _InitializationActivationResult(NamedTuple):
+    """Outcome of attempting to activate a recipe initialization.
+
+    Attributes:
+        previous_state: The recipe initialization state captured before the
+            activation attempt; restored if installation fails so the kitchen
+            can recover.
+        enforced_response: An enforced JSON string describing a failure mode
+            when activation did not proceed, or ``None`` when the activation
+            succeeded and the caller should commit the receipt normally.
+    """
+
+    previous_state: Any
+    enforced_response: str | None
+
+
 def _activate_recipe_initialization(
     finalized: FinalizedRecipeResponse,
-) -> tuple[Any, str | None]:
+) -> _InitializationActivationResult:
     """Validate, stage, and install the prepared recipe initialization."""
     parsed: dict[str, Any] | None = None
     prepared_execution: Any = None
@@ -156,7 +172,10 @@ def _activate_recipe_initialization(
                 },
                 separators=(",", ":"),
             )
-    return previous_initialization_state, (enforced if enforced != finalized.rendered else None)
+    return _InitializationActivationResult(
+        previous_initialization_state,
+        enforced if enforced != finalized.rendered else None,
+    )
 
 
 def complete_finalized_recipe_response(
@@ -193,11 +212,10 @@ def complete_finalized_recipe_response(
                 separators=(",", ":"),
             )
     if enforced == finalized.rendered and finalized.initialization_activating:
-        previous_initialization_state, initialization_error = _activate_recipe_initialization(
-            finalized
-        )
-        if initialization_error is not None:
-            enforced = initialization_error
+        activation_result = _activate_recipe_initialization(finalized)
+        previous_initialization_state = activation_result.previous_state
+        if activation_result.enforced_response is not None:
+            enforced = activation_result.enforced_response
     if enforced == finalized.rendered and handle is not None:
         try:
             receipt_committed = ledger is not None and ledger.commit(

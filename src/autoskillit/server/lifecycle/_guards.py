@@ -339,14 +339,14 @@ def _check_input_contracts(
 
         match spec.type:
             case "file_path":
-                resolved = _input_path(cwd, value)
+                resolved = _resolve_input_path(cwd, value)
                 if not resolved.is_file():
                     return gate_error_result(
                         f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
                         f"expected a file, path does not exist or is a directory: {resolved}"
                     )
             case "directory_path":
-                resolved = _input_path(cwd, value)
+                resolved = _resolve_input_path(cwd, value)
                 if not resolved.is_dir():
                     return gate_error_result(
                         f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
@@ -356,7 +356,7 @@ def _check_input_contracts(
                 members = parse_plan_paths(value)
                 missing: list[str] = []
                 for member in members:
-                    member_path = _input_path(cwd, member)
+                    member_path = _resolve_input_path(cwd, member)
                     if not member_path.is_file():
                         missing.append(str(member_path))
                 if missing:
@@ -371,9 +371,9 @@ def _check_input_contracts(
     return None
 
 
-def _input_path(cwd: str, token: str) -> Path:
-    path = Path(token)
-    return path if path.is_absolute() else Path(cwd) / token
+def _resolve_input_path(cwd: str, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else Path(cwd) / value
 
 
 def _provider_configuration_can_use_anthropic(config: Any) -> bool:

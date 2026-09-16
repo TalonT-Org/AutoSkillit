@@ -116,7 +116,7 @@ def test_all_builders_apply_native_otlp_overrides(builder) -> None:
 
 
 _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
-    "headless": set(),
+    "headless": {"CODEX_HOME"},
     "skill_session": {
         "AUTOSKILLIT_SESSION_TYPE",
         "MAX_MCP_OUTPUT_TOKENS",
@@ -133,7 +133,7 @@ _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
         "AUTOSKILLIT_COMPLETION_MARKER",
         "CODEX_HOME",
     },
-    "resume": {"MAX_MCP_OUTPUT_TOKENS"},
+    "resume": {"MAX_MCP_OUTPUT_TOKENS", "CODEX_HOME"},
 }
 
 

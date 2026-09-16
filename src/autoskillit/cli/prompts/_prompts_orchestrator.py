@@ -185,6 +185,8 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     (infra_exit_category="api_error"). Route them identically to context exhaustion.
   - "infra_exit_category" in the result is informational: "completed" | "context_exhausted" |
     "api_error" | "process_killed". Use it for diagnostics only, not for routing.
+  - The distinct retry_reason=context_exhausted is terminal and falls through to on_failure;
+    never resume it or follow on_context_limit.
   - When routing to on_context_limit, always start a fresh session (do not attempt to
     resume the exhausted session — it has no remaining context budget).
 - When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":

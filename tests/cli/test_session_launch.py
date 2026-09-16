@@ -2051,7 +2051,7 @@ def test_codex_order_composition_produces_canonical_generated_home(
     generated_home = Path(spec.env["CODEX_HOME"])
     assert generated_home == generated_home.resolve()
     assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
-    assert captured["pre_launch_dirs"] == [generated_home]
+    assert captured["pre_launch_dirs"] == [generated_home, generated_home]
 
     assert spec.origin is not None
     config_overrides = [

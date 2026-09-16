@@ -412,7 +412,6 @@ def cook(
                         initial_prompt=current_initial_prompt,
                         add_dirs=[managed_home.skills_dir],
                         generated_home=managed_home.generated_home,
-                        home_prepared=True,
                         force_inactive_agent_teams=force_inactive_agent_teams,
                         mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
                     )

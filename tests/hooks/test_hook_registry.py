@@ -67,6 +67,8 @@ def test_extract_script_basenames_different_prefix() -> None:
     )
     by_event: dict[str, list[dict]] = {}
     for hdef in HOOK_REGISTRY:
+        if hdef.runtime_only:
+            continue
         hook_commands = [
             {"type": "command", "command": f"python3 {foreign_dir}/{script}"}
             for script in hdef.scripts

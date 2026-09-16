@@ -40,7 +40,8 @@ def _is_own_hook(command: str) -> bool:
         return True
     if "_dispatch.py" in command:
         return True
-    known = canonical_script_basenames() | RETIRED_SCRIPT_BASENAMES
+    registered = frozenset(s for hook in HOOK_REGISTRY for s in hook.scripts)
+    known = registered | RETIRED_SCRIPT_BASENAMES
     bare = {Path(s).name for s in known}
     return any(command.endswith(script) or f"/{script}" in command for script in known | bare)
 
@@ -67,8 +68,10 @@ def _extract_script_basenames(hooks_dict: dict) -> set[str]:
                 else:
                     script_path = Path(parts[-1])
                     bare = script_path.name
-                    canonical = canonical_script_basenames()
-                    matched = next((c for c in canonical if Path(c).name == bare), bare)
+                    registered = frozenset(
+                        script for hook_def in HOOK_REGISTRY for script in hook_def.scripts
+                    )
+                    matched = next((c for c in registered if Path(c).name == bare), bare)
                     result.add(matched)
     return result
 
@@ -78,6 +81,10 @@ def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
     deployed_data = _load_settings_data(settings_path)
     canonical_basenames = canonical_script_basenames()
     deployed_basenames = _extract_script_basenames(deployed_data.get("hooks", {}))
+    runtime_only_basenames = frozenset(
+        script for hook in HOOK_REGISTRY if hook.runtime_only for script in hook.scripts
+    )
+    deployed_basenames -= runtime_only_basenames
     orphaned = deployed_basenames - canonical_basenames
     return HookDriftResult(
         missing=len(canonical_basenames - deployed_basenames),

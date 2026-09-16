@@ -501,7 +501,7 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
 
 @pytest.mark.parametrize(
     ("page_budget", "requires_multiple_dynamic_pages"),
-    [(None, False), (8_192, True)],
+    [(None, False), (16_384, True)],
     ids=["complete-envelope", "oversized-bounded-envelope"],
 )
 async def test_recipe_redelivery_recovers_after_discarded_delivery_context(

@@ -313,8 +313,10 @@ def _snapshot_codex_hooks(
     assert readiness.errors == ()
     assert set(readiness.attested_env.values()) == {str(generated_home)}
     source_bytes = source_config.read_bytes()
-    assert (generated_home / "config.toml").read_bytes() == source_bytes
-    config = tomllib.loads(source_bytes.decode("utf-8"))
+    generated_bytes = (generated_home / "config.toml").read_bytes()
+    assert source_config.read_bytes() == source_bytes
+    assert generated_bytes != source_bytes
+    config = tomllib.loads(generated_bytes.decode("utf-8"))
     assert config["foreign"] == {"owner": "user"}
     assert config["hooks"]
     assert not (ambient_home / "config.toml").exists()

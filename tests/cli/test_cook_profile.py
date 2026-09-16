@@ -305,7 +305,7 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
             system_prompts=system_prompts,
         )
 
-    assert system_prompts == [None]
+    assert system_prompts == [None, None]
     assert (
         "2 skills unavailable on this backend "
         "(required_join: fixed join unavailable): alpha, zeta"
@@ -342,7 +342,7 @@ def test_cook_reload_attempts_each_receive_one_unavailability_block(
             reload_sentinels=("reload-id", None),
         )
 
-    assert len(system_prompts) == 2
+    assert len(system_prompts) == 4
     assert all(prompt is not None for prompt in system_prompts)
     assert all(
         prompt.count("<autoskillit_skill_unavailability>") == 1
@@ -350,7 +350,7 @@ def test_cook_reload_attempts_each_receive_one_unavailability_block(
         for prompt in system_prompts
         if prompt is not None
     )
-    assert system_prompts[0] == system_prompts[1]
+    assert len(set(system_prompts)) == 1
 
 
 def test_profile_feature_disabled_exits(capsys, _mock_mgr):

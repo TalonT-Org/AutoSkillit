@@ -10,9 +10,9 @@ covers that remaining blind spot.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from hypothesis import example, given, settings
@@ -22,8 +22,6 @@ from tests import _test_filter as test_filter
 from tests._test_filter import FilterMode, FullRunReason, build_test_scope
 
 pytestmark = [pytest.mark.medium]
-
-SOURCE_COMMIT = "a" * 40
 
 _SOURCE_FILE_POOL: tuple[str, ...] = (
     "src/autoskillit/core/io.py",
@@ -98,17 +96,61 @@ def expand_to_files(paths: set[Path]) -> set[Path]:
     return expanded
 
 
-def _write_coverage_map(path: Path, source_map: dict[str, list[str]]) -> None:
+def _write_coverage_map(path: Path, source_map: dict[str, list[str]], source_commit: str) -> None:
     path.write_text(
         json.dumps(
             {
                 "schema_version": 1,
-                "provenance": {"pytest_exit_code": 0, "source_commit": SOURCE_COMMIT},
+                "provenance": {"pytest_exit_code": 0, "source_commit": source_commit},
                 "map": source_map,
             }
         ),
         encoding="utf-8",
     )
+
+
+def _init_git_repo(case_dir: Path) -> str:
+    """Initialize case_dir as a real git repo with one commit; return HEAD's SHA.
+
+    The monotonicity property test must exercise the same ``load_coverage_map``
+    lineage path the consumer uses, otherwise the test passes vacuously whenever
+    the lineage check ever consumes git output. Initializing case_dir as a real
+    git repo makes the additive-only assertion rest on the real code path, not
+    on a stub of subprocess.
+    """
+    env = {
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+        "PATH": os.environ.get("PATH", ""),
+    }
+    subprocess.run(
+        ["git", "init", "--initial-branch=main"],
+        cwd=str(case_dir),
+        check=True,
+        capture_output=True,
+        env=env,
+        timeout=30,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "initial"],
+        cwd=str(case_dir),
+        check=True,
+        capture_output=True,
+        env=env,
+        timeout=30,
+    )
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(case_dir),
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    return result.stdout.strip()
 
 
 _CHANGED_FILES = st.sets(st.sampled_from(_SOURCE_FILE_POOL), min_size=1, max_size=3)
@@ -138,8 +180,9 @@ def test_oracle_augmentation_is_monotonic(
     """The oracle-augmented file scope must always be a superset of the unaugmented scope."""
     case_dir = tmp_path_factory.mktemp("monotonicity-case")
     tests_root = _make_tests_root(case_dir)
+    source_commit = _init_git_repo(case_dir)
     map_file = case_dir / "test-source-map.json"
-    _write_coverage_map(map_file, coverage_map)
+    _write_coverage_map(map_file, coverage_map, source_commit)
 
     without_oracle = build_test_scope(
         changed_files=set(changed_files),
@@ -148,18 +191,13 @@ def test_oracle_augmentation_is_monotonic(
         coverage_map_path=None,
         cwd=case_dir,
     )
-    with mock.patch.object(
-        test_filter.subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0),
-    ):
-        with_oracle = build_test_scope(
-            changed_files=set(changed_files),
-            mode=mode,
-            tests_root=tests_root,
-            coverage_map_path=map_file,
-            cwd=case_dir,
-        )
+    with_oracle = build_test_scope(
+        changed_files=set(changed_files),
+        mode=mode,
+        tests_root=tests_root,
+        coverage_map_path=map_file,
+        cwd=case_dir,
+    )
 
     if isinstance(without_oracle, FullRunReason):
         assert with_oracle == without_oracle

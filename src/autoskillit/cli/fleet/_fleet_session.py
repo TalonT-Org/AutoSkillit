@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 from autoskillit.core import (
     FLEET_SESSION_REQUIRED_ENV,
@@ -212,13 +212,13 @@ def _launch_fleet_session(
                 current_initial_message = None
             continue
 
-        campaign_state_path = cast(Path, state_path)
-        active_campaign_id = cast(str, campaign_id)
-        update_orchestrator_session_id(campaign_state_path, resume_session_id)
+        assert state_path is not None
+        assert campaign_id is not None
+        update_orchestrator_session_id(state_path, resume_session_id)
         current_initial_message = None
 
         fresh_metadata = resume_campaign_from_state(
-            campaign_state_path, campaign_recipe.continue_on_failure
+            state_path, campaign_recipe.continue_on_failure
         )
         if fresh_metadata is None:
             logger.error("Campaign state corrupted during resume — exiting")
@@ -244,7 +244,7 @@ def _launch_fleet_session(
             manifest_yaml,
             completed_dispatches,
             mcp_prefix,
-            active_campaign_id,
+            campaign_id,
             resumable_dispatch_name=resumable_dispatch_name,
             resume_session_id=resume_session_id,
             resume_retry_reason=resume_retry_reason,

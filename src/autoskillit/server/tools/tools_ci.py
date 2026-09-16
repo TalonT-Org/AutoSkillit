@@ -26,6 +26,17 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 logger = get_logger(__name__)
 
 
+def _validate_commit_status_inputs(sha: str, context: str, description: str) -> str | None:
+    """Return the first commit-status input error, if any."""
+    if not sha:
+        return "sha must not be empty"
+    if not context:
+        return "context must not be empty"
+    if len(description) > 140:
+        return f"description exceeds 140 chars ({len(description)} chars)"
+    return None
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("set_commit_status")
@@ -58,17 +69,8 @@ async def set_commit_status(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    if not sha:
-        return json.dumps({"success": False, "error": "sha must not be empty"})
-    if not context:
-        return json.dumps({"success": False, "error": "context must not be empty"})
-    if len(description) > 140:
-        return json.dumps(
-            {
-                "success": False,
-                "error": f"description exceeds 140 chars ({len(description)} chars)",
-            }
-        )
+    if error := _validate_commit_status_inputs(sha, context, description):
+        return json.dumps({"success": False, "error": error})
 
     try:
         from autoskillit.server import (  # circular-break

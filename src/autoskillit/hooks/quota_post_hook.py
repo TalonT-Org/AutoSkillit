@@ -73,10 +73,10 @@ def main(*, cache_path_override: str | None = None) -> None:
     if isinstance(event.get("session_id"), str):
         event_session_id = event["session_id"]
     settings = resolve_quota_settings(cache_path_override=cache_path_override)
-    if settings.disabled:
-        sys.exit(0)  # quota guard disabled for this session
-    if event_session_id and is_quota_guard_disabled_for_session(event_session_id):
-        sys.exit(0)  # session-scoped disable marker present
+    if settings.disabled or (
+        event_session_id and is_quota_guard_disabled_for_session(event_session_id)
+    ):
+        sys.exit(0)
     cache_path_str = settings.cache_path
     log_dir = resolve_quota_log_dir(caller="quota_post_hook")
     ts = datetime.now(UTC).isoformat()

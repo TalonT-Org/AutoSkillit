@@ -30,20 +30,12 @@ from _hook_payload import (  # noqa: E402
 )
 
 
-def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        sys.exit(0)
-
-    try:
-        data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError, OSError):
-        sys.exit(0)  # fail-open on malformed input
-
+def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
     # Best-effort TTL sweep of stale kitchen markers. Fail-open — must not raise.
     _best_recipe_name: str | None = None
     _best_opened_at = None
     try:
-        _state_dir = resolve_kitchen_state_dir(normalize_payload_cwd(data.get("cwd")))
+        _state_dir = resolve_kitchen_state_dir(normalize_payload_cwd(payload_cwd))
         if _state_dir.is_dir():
             _ttl_hours = 24
             for _p in _state_dir.glob("*.json"):
@@ -68,6 +60,19 @@ def main() -> None:
                         pass
     except Exception:
         pass  # SessionStart hooks that raise break session start for the user
+    return _best_recipe_name
+
+
+def main() -> None:
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        sys.exit(0)
+
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError, OSError):
+        sys.exit(0)  # fail-open on malformed input
+
+    _best_recipe_name = _sweep_kitchen_markers(data.get("cwd"))
 
     transcript_path = data.get("transcript_path", "")
     if not transcript_path:

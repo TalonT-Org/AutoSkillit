@@ -50,6 +50,22 @@ def _extract_pr_number(skill_command: str) -> str:
     return m.group(1) if m else ""
 
 
+def _mark_check_review_loop_called(state_file: Path, tool_input: dict) -> None:
+    if not state_file.exists():
+        return
+    try:
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        if state.get("gate") == "LOOP_REQUIRED":
+            state["check_review_loop_called"] = True
+            # Update pr_number from args if available
+            args = tool_input.get("args") or {}
+            if isinstance(args, dict) and args.get("pr_number"):
+                state["pr_number"] = str(args["pr_number"])
+            _atomic_write(state_file, json.dumps(state))
+    except Exception as e:
+        print(f"review_gate_post_hook: failed to update gate state: {e}", file=sys.stderr)
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -92,20 +108,7 @@ def main() -> None:
     if "run_python" in tool_name:
         callable_name: str = tool_input.get("callable", "") or ""
         if "check_review_loop" in callable_name:
-            if state_file.exists():
-                try:
-                    state = json.loads(state_file.read_text(encoding="utf-8"))
-                    if state.get("gate") == "LOOP_REQUIRED":
-                        state["check_review_loop_called"] = True
-                        # Update pr_number from args if available
-                        args = tool_input.get("args") or {}
-                        if isinstance(args, dict) and args.get("pr_number"):
-                            state["pr_number"] = str(args["pr_number"])
-                        _atomic_write(state_file, json.dumps(state))
-                except Exception as e:
-                    print(
-                        f"review_gate_post_hook: failed to update gate state: {e}", file=sys.stderr
-                    )
+            _mark_check_review_loop_called(state_file, tool_input)
             sys.exit(0)
 
     sys.exit(0)

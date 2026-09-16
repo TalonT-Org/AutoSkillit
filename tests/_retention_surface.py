@@ -532,7 +532,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _COMMAND_BOUNDARY_REASON,
     (
         "src/autoskillit/hooks/session_start_hook.py",
-        "main",
+        "_sweep_kitchen_markers",
     ): _COMMAND_BOUNDARY_REASON,
     (
         "src/autoskillit/workspace/_installed/_state.py",

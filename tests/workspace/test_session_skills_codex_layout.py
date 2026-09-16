@@ -326,8 +326,12 @@ def test_entry_point_is_not_created_when_route_declares_none(
         backend=backend,
         names=frozenset({"make-arch-diag"}),
     )
-    generated_home = Path(str(add_dir)).parent
+    add_dir_path = Path(str(add_dir))
+    generated_home = add_dir_path.parent
+    catalog = route.catalog_dir(generated_home)
 
+    assert catalog == add_dir_path / backend.conventions.skills_subdir
+    assert (catalog / "make-arch-diag").is_dir()
     assert not (generated_home / Path(route.catalog_relpath).name).exists()
 
 

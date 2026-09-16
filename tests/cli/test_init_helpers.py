@@ -379,7 +379,7 @@ class TestRegisterAllCodexConfigTransaction:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
@@ -390,13 +390,9 @@ class TestRegisterAllCodexConfigTransaction:
         )
         _register_all("user", tmp_path)
         assert codex_calls == []
-        record = next(
-            record
-            for record in caplog.records
-            if record.message == "Codex native integration registration failed"
-        )
-        assert record.exc_info is not None
-        assert str(record.exc_info[1]) == "config transaction failed"
+        output = capsys.readouterr().out
+        assert "codex mcp" in output
+        assert "failed" in output
 
 
 class TestRegisterAllBackendBranching:

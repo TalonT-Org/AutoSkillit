@@ -53,7 +53,14 @@ from autoskillit.recipe import (
 from autoskillit.server._misc import clear_run_skill_state
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditAdmissionLedger, AuditAttemptId, InstallationVersion
+    from autoskillit.core import (
+        AuditAdmissionLedger,
+        AuditAttemptId,
+        AuditCycleAuthority,
+        AuditCycleHead,
+        AuditPreflightProjection,
+        InstallationVersion,
+    )
     from autoskillit.pipeline import ToolContext
 
 __all__ = [
@@ -121,6 +128,53 @@ class DefaultInputPreflightResolver:
             ),
         )
         return VerifiedInputPreflightResult(decision=decision, evidence=evidence)
+
+    def _evaluate_committed_disposition(
+        self,
+        *,
+        verifier: AuditCycleVerifier,
+        authority_path: str,
+        report_path: str | None,
+        authority: AuditCycleAuthority,
+        projection: AuditPreflightProjection,
+        head: AuditCycleHead | None,
+        request: VerifiedInputPreflightRequest,
+    ) -> InventoryAdmissionDecision:
+        """Load a committed report and evaluate the selected audit inputs."""
+        if report_path is not None:
+            try:
+                report = verifier.load_report(report_path)
+            except Exception as exc:
+                get_logger(__name__).error(
+                    "audit-cycle disposition verification failed",
+                    exc_info=True,
+                )
+                return InventoryAdmissionDecision.reject(
+                    AdmissionReason.DISPOSITION_MISMATCH,
+                    f"disposition report verification failed: {exc}",
+                )
+            committed_report_path = self._ledger.resolve_disposition(
+                authority_digest=authority.authority_digest,
+                plan_digest=report.current_plan_ref.content_digest,
+            )
+            if committed_report_path is None or committed_report_path != Path(report_path):
+                return InventoryAdmissionDecision.reject(
+                    AdmissionReason.DISPOSITION_MISMATCH,
+                    (
+                        "disposition report does not match the admission ledger's "
+                        "committed authority, plan digest, and report path"
+                    ),
+                )
+        return verifier.evaluate_paths(
+            authority_path=authority_path,
+            report_path=report_path,
+            trusted_head=head,
+            current_plan_path=request.plan_path,
+            expected_generation=request.execution_generation,
+            expected_plan_set_id=projection.plan_set_id,
+            expected_scope_id=projection.scope_id,
+            expected_part_id=projection.part_id,
+        )
 
     def resolve(
         self,
@@ -201,43 +255,14 @@ class DefaultInputPreflightResolver:
                     "a terminal GO cannot carry a plan disposition report",
                 )
             )
-        if report_path is not None:
-            try:
-                report = verifier.load_report(report_path)
-            except Exception as exc:
-                get_logger(__name__).error(
-                    "audit-cycle disposition verification failed",
-                    exc_info=True,
-                )
-                return self._result(
-                    InventoryAdmissionDecision.reject(
-                        AdmissionReason.DISPOSITION_MISMATCH,
-                        f"disposition report verification failed: {exc}",
-                    )
-                )
-            committed_report_path = self._ledger.resolve_disposition(
-                authority_digest=authority.authority_digest,
-                plan_digest=report.current_plan_ref.content_digest,
-            )
-            if committed_report_path is None or committed_report_path != Path(report_path):
-                return self._result(
-                    InventoryAdmissionDecision.reject(
-                        AdmissionReason.DISPOSITION_MISMATCH,
-                        (
-                            "disposition report does not match the admission ledger's "
-                            "committed authority, plan digest, and report path"
-                        ),
-                    )
-                )
-        decision = verifier.evaluate_paths(
+        decision = self._evaluate_committed_disposition(
+            verifier=verifier,
             authority_path=authority_path,
             report_path=report_path,
-            trusted_head=head,
-            current_plan_path=request.plan_path,
-            expected_generation=request.execution_generation,
-            expected_plan_set_id=projection.plan_set_id,
-            expected_scope_id=projection.scope_id,
-            expected_part_id=projection.part_id,
+            authority=authority,
+            projection=projection,
+            head=head,
+            request=request,
         )
         return self._result(decision)
 

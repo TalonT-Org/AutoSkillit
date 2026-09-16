@@ -204,6 +204,37 @@ def _fits(
     return True
 
 
+def _raw_or_scalar_page(
+    *,
+    selected: SelectedRecipeSection,
+    value: str,
+    offsets: list[int],
+    start: int,
+    end: int,
+    scalar: bool,
+) -> PlannedRecipeSectionPage:
+    """Build one raw or scalar page with its matching UTF-8 byte range."""
+    chunk = value[start:end]
+    content = canonical_recipe_section_json(chunk) if scalar else chunk
+    if scalar:
+        descriptor = RecipeSectionPageDescriptor(
+            content_format=selected.definition.ordinary_content_format,
+            page_content_sha256=_qualified_content_digest(content),
+            scalar_byte_start=offsets[start],
+            scalar_byte_end=offsets[end],
+            scalar_byte_total=offsets[-1],
+        )
+    else:
+        descriptor = RecipeSectionPageDescriptor(
+            content_format=selected.definition.ordinary_content_format,
+            page_content_sha256=_qualified_content_digest(content),
+            byte_start=offsets[start],
+            byte_end=offsets[end],
+            byte_total=offsets[-1],
+        )
+    return PlannedRecipeSectionPage(descriptor, content)
+
+
 def _raw_or_scalar_pages(
     *,
     selected: SelectedRecipeSection,
@@ -218,24 +249,14 @@ def _raw_or_scalar_pages(
     offsets = _utf8_prefix_offsets(value)
     pages: list[PlannedRecipeSectionPage] = []
     if not value:
-        content = canonical_recipe_section_json("") if scalar else ""
-        if scalar:
-            descriptor = RecipeSectionPageDescriptor(
-                content_format=selected.definition.ordinary_content_format,
-                page_content_sha256=_qualified_content_digest(content),
-                scalar_byte_start=0,
-                scalar_byte_end=0,
-                scalar_byte_total=0,
-            )
-        else:
-            descriptor = RecipeSectionPageDescriptor(
-                content_format=selected.definition.ordinary_content_format,
-                page_content_sha256=_qualified_content_digest(content),
-                byte_start=0,
-                byte_end=0,
-                byte_total=0,
-            )
-        page = PlannedRecipeSectionPage(descriptor, content)
+        page = _raw_or_scalar_page(
+            selected=selected,
+            value=value,
+            offsets=offsets,
+            start=0,
+            end=0,
+            scalar=scalar,
+        )
         if not _fits(
             selected=selected,
             generation=generation,
@@ -254,34 +275,20 @@ def _raw_or_scalar_pages(
     while start < len(value):
         part = len(pages)
 
-        def candidate_for(end: int) -> PlannedRecipeSectionPage:
-            chunk = value[start:end]
-            content = canonical_recipe_section_json(chunk) if scalar else chunk
-            if scalar:
-                descriptor = RecipeSectionPageDescriptor(
-                    content_format=selected.definition.ordinary_content_format,
-                    page_content_sha256=_qualified_content_digest(content),
-                    scalar_byte_start=offsets[start],
-                    scalar_byte_end=offsets[end],
-                    scalar_byte_total=offsets[-1],
-                )
-            else:
-                descriptor = RecipeSectionPageDescriptor(
-                    content_format=selected.definition.ordinary_content_format,
-                    page_content_sha256=_qualified_content_digest(content),
-                    byte_start=offsets[start],
-                    byte_end=offsets[end],
-                    byte_total=offsets[-1],
-                )
-            return PlannedRecipeSectionPage(descriptor, content)
-
         max_end = _max_utf8_prefix_end(
             offsets,
             start=start,
             bound_bytes=bound_bytes,
         )
         if max_end == len(value):
-            terminal_candidate = candidate_for(max_end)
+            terminal_candidate = _raw_or_scalar_page(
+                selected=selected,
+                value=value,
+                offsets=offsets,
+                start=start,
+                end=max_end,
+                scalar=scalar,
+            )
             if _fits(
                 selected=selected,
                 generation=generation,
@@ -302,7 +309,14 @@ def _raw_or_scalar_pages(
         accepted_end = start
         while low <= high:
             end = (low + high) // 2
-            candidate = candidate_for(end)
+            candidate = _raw_or_scalar_page(
+                selected=selected,
+                value=value,
+                offsets=offsets,
+                start=start,
+                end=end,
+                scalar=scalar,
+            )
             if _fits(
                 selected=selected,
                 generation=generation,

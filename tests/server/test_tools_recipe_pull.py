@@ -1600,6 +1600,7 @@ def test_failed_attested_install_retires_restores_then_aborts_receipt(
         raise RuntimeError("installation failed after staging")
 
     def _record_retirement(**_kwargs: Any) -> None:
+        assert isinstance(tool_ctx.recipe_initialization_state, InitializingRecipe)
         effects.append("retire")
 
     def _record_abort(receipt_ledger: Any, handle: Any) -> bool:

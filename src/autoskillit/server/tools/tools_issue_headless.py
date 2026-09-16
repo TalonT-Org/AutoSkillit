@@ -20,7 +20,7 @@ from autoskillit.server.tools._backend_compat import _prepare_direct_skill_dispa
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
-    from autoskillit.core import SkillResult, WriteBehaviorSpec
+    from autoskillit.core import GitHubFetcher, SkillResult, WriteBehaviorSpec
 
 logger = get_logger(__name__)
 
@@ -197,6 +197,31 @@ def _add_labels_result_error(
     return None
 
 
+async def _apply_additional_labels(
+    github_client: GitHubFetcher,
+    parsed: dict[str, Any],
+    additional_labels: list[str],
+) -> str | None:
+    """Apply caller-provided labels to the canonical issue returned by the skill."""
+    issue_url = parsed.get("issue_url")
+    issue_number = parsed.get("issue_number")
+    try:
+        if not isinstance(issue_url, str) or type(issue_number) is not int:
+            raise ValueError("result lacks a valid issue URL and integer number")
+        owner, issue_repo, url_number = _parse_issue_ref(issue_url)
+        canonical_url = f"https://github.com/{owner}/{issue_repo}/issues/{url_number}"
+        if issue_url.strip() != canonical_url or url_number != issue_number:
+            raise ValueError("result issue URL and issue number are inconsistent")
+    except ValueError as exc:
+        return str(exc)
+
+    await asyncio.sleep(1)
+    label_result = await github_client.add_labels(
+        owner, issue_repo, issue_number, additional_labels
+    )
+    return _add_labels_result_error(label_result, additional_labels)
+
+
 def _merge_applied_labels(existing: object, additions: list[str]) -> list[str]:
     ordered = (
         [label for label in existing if isinstance(label, str)]
@@ -343,33 +368,10 @@ async def prepare_issue(
                 )
 
             if additional_labels and not dry_run:
-                issue_url = parsed.get("issue_url")
-                issue_number = parsed.get("issue_number")
-                try:
-                    if not isinstance(issue_url, str) or type(issue_number) is not int:
-                        raise ValueError("result lacks a valid issue URL and integer number")
-                    owner, issue_repo, url_number = _parse_issue_ref(issue_url)
-                    canonical_url = f"https://github.com/{owner}/{issue_repo}/issues/{url_number}"
-                    if issue_url.strip() != canonical_url or url_number != issue_number:
-                        raise ValueError("result issue URL and issue number are inconsistent")
-                except ValueError as exc:
-                    return json.dumps(
-                        _build_headless_error_response(
-                            result,
-                            error=f"Additional labels were not applied: {exc}",
-                            extra_fields=_without_success_key(parsed),
-                        )
-                    )
-
-                await asyncio.sleep(1)
                 assert github_client is not None
-                label_result = await github_client.add_labels(
-                    owner,
-                    issue_repo,
-                    issue_number,
-                    additional_labels,
-                )
-                if error := _add_labels_result_error(label_result, additional_labels):
+                if error := await _apply_additional_labels(
+                    github_client, parsed, additional_labels
+                ):
                     return json.dumps(
                         _build_headless_error_response(
                             result,

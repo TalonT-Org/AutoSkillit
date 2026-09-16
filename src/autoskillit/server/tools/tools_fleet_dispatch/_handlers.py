@@ -7,7 +7,6 @@ import math
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import anyio
 from fastmcp import Context
@@ -41,6 +40,7 @@ from autoskillit.fleet import (
     record_gate_outcome,
     upsert_dispatch_record_by_name,
 )
+from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
@@ -81,6 +81,51 @@ def _finalized_recipe_steps(
     projection: FinalizedRecipeProjection,
 ) -> dict[str, FinalizedRecipeStep]:
     return {step.name: step for step in projection.ordered_steps}
+
+
+def _load_preflight_projection(
+    tool_ctx: ToolContext,
+    recipe: str,
+    ingredients: dict[str, str] | None,
+    override_backend: CodingAgentBackend | None,
+) -> tuple[dict[str, str] | None, FinalizedRecipeProjection | None]:
+    """Load the projection used by the dispatch feasibility check."""
+    effective_backend_map: dict[str, str] | None = None
+    finalized_projection: FinalizedRecipeProjection | None = None
+    if tool_ctx.recipes is None:
+        return effective_backend_map, finalized_projection
+
+    try:
+        recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
+        raw_steps = (
+            tool_ctx.recipes.load(recipe_info.path).steps if recipe_info is not None else None
+        )
+        effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
+            raw_steps,
+            override_backend.name if override_backend else None,
+            recipe,
+            config_backend=tool_ctx.config.agent_backend,
+        )
+        backend_capabilities_map = build_backend_capabilities_map(
+            effective_backend_map, override_backend
+        )
+        load_result = tool_ctx.recipes.load_and_validate(
+            recipe,
+            tool_ctx.project_dir,
+            suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
+            ingredient_overrides=ingredients,
+            temp_dir=tool_ctx.temp_dir,
+            backend_name=override_backend.name if override_backend else None,
+            effective_backend_map=effective_backend_map,
+            backend_capabilities_map=backend_capabilities_map,
+            include_finalized_projection=True,
+        )
+        if load_result.get("valid", False):
+            finalized_projection = pop_finalized_recipe_projection(load_result)
+    except Exception:
+        logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
+
+    return effective_backend_map, finalized_projection
 
 
 @mcp.tool(
@@ -218,23 +263,15 @@ async def dispatch_food_truck(
                         "continue_on_failure is false. "
                         "No further dispatches permitted.",
                     )
-                # Probe the global blocking-dispatch set to catch campaigns where
-                # the named dispatch isn't the one currently in the blocking state.
-                if has_blocking_dispatch(campaign_sp):
-                    return fleet_error(
-                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                        "Campaign halted: a prior dispatch failed and "
-                        "continue_on_failure is false. "
-                        "No further dispatches permitted.",
-                    )
-            else:
-                if has_blocking_dispatch(campaign_sp):
-                    return fleet_error(
-                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                        "Campaign halted: a prior dispatch failed and "
-                        "continue_on_failure is false. "
-                        "No further dispatches permitted.",
-                    )
+            # Probe the global blocking-dispatch set after preparing a named
+            # resume so a different blocking dispatch still prevents execution.
+            if has_blocking_dispatch(campaign_sp):
+                return fleet_error(
+                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    "Campaign halted: a prior dispatch failed and "
+                    "continue_on_failure is false. "
+                    "No further dispatches permitted.",
+                )
 
         from autoskillit.server import _get_ctx  # circular-break
         from autoskillit.server._misc import (  # circular-break
@@ -331,59 +368,18 @@ async def dispatch_food_truck(
 
         # Dispatch-feasibility preflight: verify the backend can enforce
         # all fix-required hooks for the recipe's run_skill steps before
-        # spawning a subprocess.
-        _fleet_load_result: dict[str, Any] = {}
-        _effective_backend_map: dict[str, str] | None = None
-        _fleet_finalized_projection: FinalizedRecipeProjection | None = None
-        if tool_ctx.recipes is not None:
-            try:
-                _preflight_recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
-                _preflight_raw_steps = (
-                    tool_ctx.recipes.load(_preflight_recipe_info.path).steps
-                    if _preflight_recipe_info is not None
-                    else None
-                )
-                _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
-                    _preflight_raw_steps,
-                    _override_backend.name if _override_backend else None,
-                    recipe,
-                    config_backend=tool_ctx.config.agent_backend,
-                )
-                _preflight_backend_capabilities_map = build_backend_capabilities_map(
-                    _effective_backend_map, _override_backend
-                )
-                _fleet_load_result = tool_ctx.recipes.load_and_validate(
-                    recipe,
-                    tool_ctx.project_dir,
-                    suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
-                    ingredient_overrides=ingredients,
-                    temp_dir=tool_ctx.temp_dir,
-                    backend_name=_override_backend.name if _override_backend else None,
-                    effective_backend_map=_effective_backend_map,
-                    backend_capabilities_map=_preflight_backend_capabilities_map,
-                    include_finalized_projection=True,
-                )
-                if _fleet_load_result.get("valid", False):
-                    _fleet_finalized_projection = pop_finalized_recipe_projection(
-                        _fleet_load_result
-                    )
-            except Exception:
-                logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
-
-        _active_recipe_steps = (
-            _finalized_recipe_steps(_fleet_finalized_projection)
-            if _fleet_finalized_projection is not None
-            else None
+        # handing execution to the fleet facade.
+        _effective_backend_map, _fleet_finalized_projection = _load_preflight_projection(
+            tool_ctx,
+            recipe,
+            ingredients,
+            _override_backend,
         )
 
-        if (
-            _override_backend is not None
-            and _active_recipe_steps is not None
-            and _fleet_finalized_projection is not None
-        ):
+        if _override_backend is not None and _fleet_finalized_projection is not None:
             _preflight_err = _check_dispatch_feasibility(
                 post_prune_step_names=list(_fleet_finalized_projection.ordered_step_names),
-                active_recipe_steps=_active_recipe_steps,
+                active_recipe_steps=_finalized_recipe_steps(_fleet_finalized_projection),
                 backend=_override_backend,
                 config_providers=tool_ctx.config.providers,
                 recipe_name=recipe,
@@ -509,41 +505,33 @@ async def dispatch_food_truck(
             else result.outcome
         )
 
-        # Post-dispatch halt: if continue_on_failure=false and the dispatch failed
-        # (logic failure, not infrastructure), return FLEET_CAMPAIGN_HALTED immediately.
-        # Infrastructure failures (fleet_l3_no_result_block, fleet_quota_exhausted) do
-        # not halt — they are retriable at the L3 level without campaign-level impact.
-        # Also skip halt if dispatch_name was provided — the pre-dispatch gate already
-        # handled the reset case, and a retry of the blocking dispatch should proceed.
-        if (
-            campaign_state_path_str
-            and not continue_on_failure
-            and isinstance(outcome, DispatchCompleted)
-            and outcome.dispatch_status == DispatchStatus.FAILURE
-            and outcome.reason not in _INFRASTRUCTURE_FAILURE_REASONS
-            and not dispatch_name
-        ):
-            return fleet_error(
-                FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                "Campaign halted: a prior dispatch failed and "
-                "continue_on_failure is false. "
-                "No further dispatches permitted.",
-            )
+        if campaign_state_path_str and isinstance(outcome, DispatchCompleted):
+            # Logic failures halt the campaign unless a named retry or its policy allows
+            # progression. Infrastructure failures remain retriable at L3.
+            if (
+                not continue_on_failure
+                and outcome.dispatch_status == DispatchStatus.FAILURE
+                and outcome.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+                and not dispatch_name
+            ):
+                return fleet_error(
+                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    "Campaign halted: a prior dispatch failed and "
+                    "continue_on_failure is false. "
+                    "No further dispatches permitted.",
+                )
 
-        if (
-            campaign_state_path_str
-            and isinstance(outcome, DispatchCompleted)
-            and outcome.dispatch_status != DispatchStatus.SUCCESS
-            and (continue_on_failure or dispatch_name)
-        ):
-            logger.warning(
-                "dispatch_non_success_allowed_past_halt_gate",
-                dispatch_name=effective_name,
-                dispatch_status=outcome.dispatch_status,
-                reason=outcome.reason,
-                continue_on_failure=continue_on_failure,
-                has_dispatch_name=bool(dispatch_name),
-            )
+            if outcome.dispatch_status != DispatchStatus.SUCCESS and (
+                continue_on_failure or dispatch_name
+            ):
+                logger.warning(
+                    "dispatch_non_success_allowed_past_halt_gate",
+                    dispatch_name=effective_name,
+                    dispatch_status=outcome.dispatch_status,
+                    reason=outcome.reason,
+                    continue_on_failure=continue_on_failure,
+                    has_dispatch_name=bool(dispatch_name),
+                )
 
         if isinstance(outcome, DispatchCompleted) and outcome.dispatch_id:
             diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)

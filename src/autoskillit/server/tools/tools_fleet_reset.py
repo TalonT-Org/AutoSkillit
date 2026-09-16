@@ -14,6 +14,7 @@ from autoskillit.core import FleetErrorCode, IssueLabelState, fleet_error, get_l
 from autoskillit.fleet import (
     _RESETTABLE_STATUSES,
     CampaignStateMutator,
+    DispatchRecord,
     DispatchStatus,
     ResetReport,
     cleanup_orphaned_labels,
@@ -70,6 +71,43 @@ def _cleanup_resume_gate_state(project_dir: Path, dispatch_id: str) -> None:
         logger.debug("resume_gate_state cleanup failed", dispatch_id=dispatch_id)
 
 
+def _locate_reset_dispatch(
+    dispatch_id: str,
+    project_dir: Path,
+) -> tuple[DispatchRecord, Path] | str:
+    campaign_state_paths = discover_campaign_state_files(project_dir)
+
+    result = find_dispatch_in_campaigns(dispatch_id, campaign_state_paths)
+    if result is None:
+        return fleet_error(
+            FleetErrorCode.FLEET_RESET_NOT_FOUND,
+            f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
+        )
+
+    dispatch, state_path = result
+
+    if dispatch.status == DispatchStatus.RUNNING:
+        with CampaignStateMutator(state_path) as m:
+            locked_dispatch = find_locked_dispatch(dispatch_id, m)
+            if locked_dispatch is None:
+                return fleet_error(
+                    FleetErrorCode.FLEET_RESET_NOT_FOUND,
+                    f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
+                )
+            if locked_dispatch.status != DispatchStatus.RUNNING:
+                dispatch = locked_dispatch
+            elif resolve_stale_running(locked_dispatch, m):
+                return fleet_error(
+                    FleetErrorCode.FLEET_RESET_STILL_RUNNING,
+                    f"Dispatch {dispatch_id!r} is still RUNNING "
+                    f"(process {locked_dispatch.dispatched_pid} is alive). "
+                    "Wait for it to finish.",
+                )
+            else:
+                dispatch = locked_dispatch
+    return dispatch, state_path
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
@@ -114,36 +152,10 @@ async def reset_dispatch(
 
         tool_ctx = _get_ctx()
         project_dir = tool_ctx.project_dir
-        campaign_state_paths = discover_campaign_state_files(project_dir)
-
-        result = find_dispatch_in_campaigns(dispatch_id, campaign_state_paths)
-        if result is None:
-            return fleet_error(
-                FleetErrorCode.FLEET_RESET_NOT_FOUND,
-                f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
-            )
-
-        dispatch, state_path = result
-
-        if dispatch.status == DispatchStatus.RUNNING:
-            with CampaignStateMutator(state_path) as m:
-                locked_dispatch = find_locked_dispatch(dispatch_id, m)
-                if locked_dispatch is None:
-                    return fleet_error(
-                        FleetErrorCode.FLEET_RESET_NOT_FOUND,
-                        f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
-                    )
-                if locked_dispatch.status != DispatchStatus.RUNNING:
-                    dispatch = locked_dispatch
-                elif resolve_stale_running(locked_dispatch, m):
-                    return fleet_error(
-                        FleetErrorCode.FLEET_RESET_STILL_RUNNING,
-                        f"Dispatch {dispatch_id!r} is still RUNNING "
-                        f"(process {locked_dispatch.dispatched_pid} is alive). "
-                        "Wait for it to finish.",
-                    )
-                else:
-                    dispatch = locked_dispatch
+        located = _locate_reset_dispatch(dispatch_id, project_dir)
+        if isinstance(located, str):
+            return located
+        dispatch, state_path = located
 
         if dispatch.status not in _RESETTABLE_STATUSES:
             return fleet_error(

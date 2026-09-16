@@ -14,7 +14,9 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_EXEMPT_FUNCTIONS: frozenset[str] = frozenset({"enable_exploration", "unlock_agent_pack"})
+_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
+    {"_activate_session_exploration", "unlock_agent_pack"}
+)
 
 # The guard variable names that signal a non-notification fallback.
 _SKIP_GUARD_NAMES: frozenset[str] = frozenset({"_use_global_enable"})

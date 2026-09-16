@@ -14,6 +14,8 @@ from autoskillit.execution import get_backend
 from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
 from autoskillit.hooks._runtime._hook_settings import validate_session_id, write_join_diagnostic
 from autoskillit.hooks._session_binding import (
+    LoadedSkillEntry,
+    SessionBinding,
     SessionBindingError,
     enumerate_binding_paths,
     normalize_skill_name,
@@ -27,25 +29,13 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 logger = get_logger(__name__)
 
 
-def _declare_join_batch_handler(
-    skill_name: str,
-    assignments: list[str],
+def _admit_join_binding(
+    binding_path: Path,
+    channel_dir: Path,
     session_id: str,
-    project_root: Path,
-    top_level_parent: str | None = None,
-) -> dict[str, object]:
-    """Core logic for the declare_join_batch tool — testable without FastMCP."""
-    # Imports are hoisted to module level (see top of file).
-
-    try:
-        validate_session_id(session_id)
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
-
-    normalized_skill_name = normalize_skill_name(skill_name)
-    binding_path = resolve_binding_path(str(project_root), session_id)
-    channel_dir = binding_path.parent
-    channel_dir.mkdir(parents=True, exist_ok=True)
+    normalized_skill_name: str,
+) -> tuple[SessionBinding, LoadedSkillEntry] | dict[str, object]:
+    """Validate a join-bearing loaded entry for the requested session."""
     binding_invalid = False
     try:
         binding = read_binding(binding_path)
@@ -53,9 +43,6 @@ def _declare_join_batch_handler(
         binding = None
         binding_invalid = True
 
-    # Fail-closed validation: a valid, join-bearing session binding, a loaded
-    # skill entry, and the backend's fixed-set-join capability must all line
-    # up before we open a wave.
     if binding is None:
         if not binding_invalid:
             wrong_session_error = _wrong_session_error(channel_dir, session_id)
@@ -103,6 +90,40 @@ def _declare_join_batch_handler(
             "success": False,
             "error": (f"declare_join_batch: skill {normalized_skill_name!r} is not join-bearing"),
         }
+    return binding, selected_entry
+
+
+def _declare_join_batch_handler(
+    skill_name: str,
+    assignments: list[str],
+    session_id: str,
+    project_root: Path,
+    top_level_parent: str | None = None,
+) -> dict[str, object]:
+    """Core logic for the declare_join_batch tool — testable without FastMCP."""
+    # Imports are hoisted to module level (see top of file).
+
+    try:
+        validate_session_id(session_id)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    normalized_skill_name = normalize_skill_name(skill_name)
+    binding_path = resolve_binding_path(str(project_root), session_id)
+    channel_dir = binding_path.parent
+    channel_dir.mkdir(parents=True, exist_ok=True)
+    # Fail-closed validation: a valid, join-bearing session binding, a loaded
+    # skill entry, and the backend's fixed-set-join capability must all line
+    # up before we open a wave.
+    admission = _admit_join_binding(
+        binding_path,
+        channel_dir,
+        session_id,
+        normalized_skill_name,
+    )
+    if isinstance(admission, dict):
+        return admission
+    binding, selected_entry = admission
     backend_name = (
         os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "claude-code").strip() or "claude-code"
     )
@@ -128,16 +149,17 @@ def _declare_join_batch_handler(
     declared_count: int | None = None
     has_static_count = all(isinstance(v, int) for v in manifest_cardinality.values())
     if has_static_count and manifest_cardinality:
-        declared_count = sum(manifest_cardinality.values())  # type: ignore[arg-type]
-    if declared_count is not None:
-        if len(assignments) != declared_count:
-            return {
-                "success": False,
-                "error": (
-                    f"declare_join_batch: skill {normalized_skill_name!r} declares "
-                    f"count={declared_count}; received {len(assignments)} assignments"
-                ),
-            }
+        declared_count = sum(
+            value for value in manifest_cardinality.values() if isinstance(value, int)
+        )
+    if declared_count is not None and len(assignments) != declared_count:
+        return {
+            "success": False,
+            "error": (
+                f"declare_join_batch: skill {normalized_skill_name!r} declares "
+                f"count={declared_count}; received {len(assignments)} assignments"
+            ),
+        }
 
     artifact_digest = binding.artifact_digest
     if not artifact_digest:

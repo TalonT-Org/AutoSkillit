@@ -128,29 +128,9 @@ class DefaultManagedFixedBatchSupervisor:
                     return False
                 del self._unadmitted_settlement_debt[assignment_id]
             self._write_debt()
-            recovered: dict[str, ManagedWorkerPermit] = {}
-            for permit_id, recovery_debt in self._debt.items():
-                try:
-                    recovered[permit_id] = self._capacity.restore_owner_debt(
-                        recovery_debt.owner, permit_id
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "managed_capacity_debt_restore_failed",
-                        permit_id=permit_id,
-                        exc_info=True,
-                    )
-                    for restored_permit in recovered.values():
-                        try:
-                            self._capacity.release(restored_permit)
-                        except ManagedWorkerCapacityError:
-                            logger.warning(
-                                "managed_capacity_permit_release_failed",
-                                exc_info=True,
-                            )
-                    self._recovery_ready = False
-                    self._recovery_diagnostic = f"managed capacity debt restore failed: {exc}"
-                    return False
+            recovered = self._restore_capacity_debt()
+            if recovered is None:
+                return False
             for permit_id, recovery_debt in tuple(self._debt.items()):
                 verified_absent = await self._verified_absent(recovery_debt)
                 if verified_absent is not True:
@@ -187,6 +167,32 @@ class DefaultManagedFixedBatchSupervisor:
             self._recovery_ready = True
             self._recovery_diagnostic = ""
             return True
+
+    def _restore_capacity_debt(self) -> dict[str, ManagedWorkerPermit] | None:
+        recovered: dict[str, ManagedWorkerPermit] = {}
+        for permit_id, recovery_debt in self._debt.items():
+            try:
+                recovered[permit_id] = self._capacity.restore_owner_debt(
+                    recovery_debt.owner, permit_id
+                )
+            except Exception as exc:
+                logger.warning(
+                    "managed_capacity_debt_restore_failed",
+                    permit_id=permit_id,
+                    exc_info=True,
+                )
+                for restored_permit in recovered.values():
+                    try:
+                        self._capacity.release(restored_permit)
+                    except ManagedWorkerCapacityError:
+                        logger.warning(
+                            "managed_capacity_permit_release_failed",
+                            exc_info=True,
+                        )
+                self._recovery_ready = False
+                self._recovery_diagnostic = f"managed capacity debt restore failed: {exc}"
+                return None
+        return recovered
 
     async def run(self, binding: ManagedFixedBatchLaunchBinding) -> ManagedFixedBatchResult:
         """Open/replay first, then supervise only the immutable declared members."""
@@ -439,24 +445,15 @@ class DefaultManagedFixedBatchSupervisor:
             )
         except asyncio.CancelledError:
             if admitted:
-                # _settle must not replace the original CancelledError. Wrap
-                # it so a JoinLedgerError / SkillContractError from the
-                # ledger path is logged but does not mask cancellation.
-                try:
-                    self._settle(
-                        binding,
-                        batch_id,
-                        ledger_assignment_id,
-                        attempt_id,
-                        identity.first_run_id,
-                        ManagedLeafLaunchResult(outcome=OUTCOME_CANCELLED),
-                    )
-                except (OSError, JoinLedgerError, SkillContractError):
-                    logger.warning(
-                        "managed_fixed_batch_cancellation_settle_failed",
-                        assignment_id=ledger_assignment_id,
-                        exc_info=True,
-                    )
+                self._settle_exception_outcome(
+                    binding,
+                    batch_id,
+                    ledger_assignment_id,
+                    attempt_id,
+                    identity.first_run_id,
+                    ManagedLeafLaunchResult(outcome=OUTCOME_CANCELLED),
+                    "managed_fixed_batch_cancellation_settle_failed",
+                )
             raise
         except Exception:
             logger.warning(
@@ -465,23 +462,17 @@ class DefaultManagedFixedBatchSupervisor:
                 exc_info=True,
             )
             if admitted:
-                try:
-                    self._settle(
-                        binding,
-                        batch_id,
-                        ledger_assignment_id,
-                        attempt_id,
-                        identity.first_run_id,
-                        ManagedLeafLaunchResult(
-                            outcome=OUTCOME_FAILURE if running else OUTCOME_LAUNCH_FAILED
-                        ),
-                    )
-                except (OSError, JoinLedgerError, SkillContractError):
-                    logger.warning(
-                        "managed_fixed_batch_failure_settle_failed",
-                        assignment_id=ledger_assignment_id,
-                        exc_info=True,
-                    )
+                self._settle_exception_outcome(
+                    binding,
+                    batch_id,
+                    ledger_assignment_id,
+                    attempt_id,
+                    identity.first_run_id,
+                    ManagedLeafLaunchResult(
+                        outcome=OUTCOME_FAILURE if running else OUTCOME_LAUNCH_FAILED
+                    ),
+                    "managed_fixed_batch_failure_settle_failed",
+                )
             else:
                 # Capacity acquisition, projection, or preparation failed before admission.
                 # Mark only this assignment as launch-failed so peer assignments in
@@ -527,21 +518,15 @@ class DefaultManagedFixedBatchSupervisor:
                     )
         except BaseException:
             if admitted:
-                try:
-                    self._settle(
-                        binding,
-                        batch_id,
-                        ledger_assignment_id,
-                        attempt_id,
-                        identity.first_run_id,
-                        ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTION),
-                    )
-                except (OSError, JoinLedgerError, SkillContractError):
-                    logger.warning(
-                        "managed_fixed_batch_interruption_settle_failed",
-                        assignment_id=ledger_assignment_id,
-                        exc_info=True,
-                    )
+                self._settle_exception_outcome(
+                    binding,
+                    batch_id,
+                    ledger_assignment_id,
+                    attempt_id,
+                    identity.first_run_id,
+                    ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTION),
+                    "managed_fixed_batch_interruption_settle_failed",
+                )
             raise
         finally:
             if permit is not None:
@@ -566,6 +551,21 @@ class DefaultManagedFixedBatchSupervisor:
                         permit_id=permit.permit_id,
                         exc_info=True,
                     )
+
+    def _settle_exception_outcome(
+        self,
+        binding: ManagedFixedBatchLaunchBinding,
+        batch_id: str,
+        assignment_id: str,
+        attempt_id: str,
+        run_id: str,
+        result: ManagedLeafLaunchResult,
+        log_event: str,
+    ) -> None:
+        try:
+            self._settle(binding, batch_id, assignment_id, attempt_id, run_id, result)
+        except (OSError, JoinLedgerError, SkillContractError):
+            logger.warning(log_event, assignment_id=assignment_id, exc_info=True)
 
     def _settle(
         self,

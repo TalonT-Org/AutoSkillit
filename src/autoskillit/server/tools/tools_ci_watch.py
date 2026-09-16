@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import KNOWN_CI_EVENTS, CIRunScope, get_logger
-from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
@@ -27,6 +26,9 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
+
 
 def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
     """Coerce the string literal 'None' to Python None, logging a warning when coercion occurs."""
@@ -34,6 +36,42 @@ def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
         logger.warning("event coerced from string 'None' to null", tool=tool)
         return None
     return value
+
+
+async def _infer_ci_head_sha(head_sha: str | None, *, branch: str, cwd: str) -> str | None:
+    """Infer the current HEAD SHA and warn if cwd is on another branch."""
+    if head_sha is not None or not cwd:
+        return head_sha
+
+    try:
+        rc, stdout, _ = await _run_subprocess(["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0)
+        if rc == 0:
+            head_sha = stdout.strip()
+    except Exception:
+        logger.warning("git rev-parse HEAD failed", exc_info=True)
+
+    if not head_sha:
+        return head_sha
+
+    try:
+        rc_b, branch_out, _ = await _run_subprocess(
+            ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
+        )
+        if rc_b == 0:
+            cwd_branch = branch_out.strip()
+            if cwd_branch and cwd_branch != branch:
+                logger.warning(
+                    "wait_for_ci: cwd branch does not match watched branch — "
+                    "head_sha may be from wrong branch",
+                    cwd_branch=cwd_branch,
+                    watched_branch=branch,
+                    inferred_sha=head_sha[:12],
+                    cwd=cwd,
+                )
+    except Exception:
+        logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
+
+    return head_sha
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
@@ -130,36 +168,7 @@ async def wait_for_ci(
                     )
                 )
 
-            # Infer head_sha from cwd if not provided
-            _sha_inferred = head_sha is None
-            if _sha_inferred and cwd:
-                try:
-                    rc, stdout, _ = await _run_subprocess(
-                        ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
-                    )
-                    if rc == 0:
-                        head_sha = stdout.strip()
-                except Exception:
-                    logger.warning("git rev-parse HEAD failed", exc_info=True)
-
-            if _sha_inferred and head_sha and cwd:
-                try:
-                    rc_b, branch_out, _ = await _run_subprocess(
-                        ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
-                    )
-                    if rc_b == 0:
-                        cwd_branch = branch_out.strip()
-                        if cwd_branch and cwd_branch != branch:
-                            logger.warning(
-                                "wait_for_ci: cwd branch does not match watched branch — "
-                                "head_sha may be from wrong branch",
-                                cwd_branch=cwd_branch,
-                                watched_branch=branch,
-                                inferred_sha=head_sha[:12],
-                                cwd=cwd,
-                            )
-                except Exception:
-                    logger.warning("wait_for_ci: failed to check cwd branch", exc_info=True)
+            head_sha = await _infer_ci_head_sha(head_sha, branch=branch, cwd=cwd)
 
             scope = CIRunScope(
                 workflow=workflow or tool_ctx.default_ci_scope.workflow,
@@ -320,24 +329,10 @@ async def get_ci_status(
         return json.dumps({"runs": [], "error": f"{type(exc).__name__}: {exc}"})
 
 
-async def _auto_trigger_ci(
-    *,
-    branch: str,
-    cwd: str,
-    result: dict[str, Any],
-    scope: CIRunScope,
-    resolved_repo: str | None,
-    tool_ctx: ToolContext,
-    timeout_seconds: int,
-    lookback_seconds: int = 3600,
-) -> dict[str, Any]:
-    """Active CI trigger recovery: empty commit + force-push + re-poll.
-
-    Called when wait_for_ci returns no_runs and auto_trigger=True.
-    Returns result dict augmented with "triggered" key.
-    On any failure (merge conflict, push rejected, etc.) returns original
-    no_runs result so the recipe routes to handle_no_ci_runs as fallback.
-    """
+async def _auto_trigger_precondition_failure(
+    *, branch: str, cwd: str, result: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Return an auto-trigger precondition failure, if there is one."""
     rc_bg, branch_out, _ = await _run_subprocess(
         ["git", "branch", "--show-current"], cwd=cwd, timeout=5.0
     )
@@ -404,6 +399,34 @@ async def _auto_trigger_ci(
         mergeable = "UNKNOWN"
     if mergeable == "CONFLICTING":
         return {**result, "conclusion": "merge_conflict", "triggered": False}
+
+    return None
+
+
+async def _auto_trigger_ci(
+    *,
+    branch: str,
+    cwd: str,
+    result: dict[str, Any],
+    scope: CIRunScope,
+    resolved_repo: str | None,
+    tool_ctx: ToolContext,
+    timeout_seconds: int,
+    lookback_seconds: int = 3600,
+) -> dict[str, Any]:
+    """Active CI trigger recovery: empty commit + force-push + re-poll.
+
+    Called when wait_for_ci returns no_runs and auto_trigger=True.
+    Returns result dict augmented with "triggered" key.
+    On any failure (merge conflict, push rejected, etc.) returns original
+    no_runs result so the recipe routes to handle_no_ci_runs as fallback.
+    """
+    if (
+        precondition_failure := await _auto_trigger_precondition_failure(
+            branch=branch, cwd=cwd, result=result
+        )
+    ) is not None:
+        return precondition_failure
 
     rc_c, _, err_c = await _run_subprocess(
         ["git", "commit", "--allow-empty", "-m", "ci: trigger"],

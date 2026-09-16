@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from autoskillit.core import (
-    INVESTIGATION_COMPLETE_MARKER,
-    REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
-    detect_body_marker,
     get_logger,
 )
 from autoskillit.server import mcp
@@ -24,9 +21,13 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._claim_helpers import (
+    _claim_fetched_issue,
     _get_campaign_state_paths,
-    _try_claim_with_liveness,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.config import GitHubConfig
+    from autoskillit.core import GitHubFetcher
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,69 @@ logger = get_logger(__name__)
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
     """Extract label name strings from a mixed list of dicts or strings."""
     return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels]
+
+
+async def _apply_release_label(
+    *,
+    github_client: GitHubFetcher,
+    github_config: GitHubConfig,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    effective_label: str,
+    replacement_label: str,
+    fallback_color: str,
+    fallback_description: str,
+    fallback_remove_labels: list[str],
+    ensure_error_prefix: str,
+    swap_error_prefix: str,
+) -> dict[str, Any] | None:
+    """Ensure and apply a release-state label, returning an error result when needed."""
+
+    if err := github_config.check_label_allowed(replacement_label):
+        return {
+            "success": False,
+            "issue_number": issue_number,
+            "label": replacement_label,
+            "error": err,
+        }
+    if github_config.state_for_label(replacement_label) is not None:
+        color, description, remove_labels = github_config.resolve_label_metadata(replacement_label)
+    else:
+        color = fallback_color
+        description = fallback_description
+        remove_labels = fallback_remove_labels
+
+    ensure_result = await github_client.ensure_label(
+        owner,
+        repo,
+        replacement_label,
+        color=color,
+        description=description,
+    )
+    if not ensure_result.get("success"):
+        return {
+            "success": False,
+            "issue_number": issue_number,
+            "label": effective_label,
+            "error": f"{ensure_error_prefix}: {ensure_result.get('error', '?')}",
+        }
+
+    swap_result = await github_client.swap_labels(
+        owner,
+        repo,
+        issue_number,
+        remove_labels=remove_labels,
+        add_labels=[replacement_label],
+    )
+    if not swap_result.get("success"):
+        return {
+            "success": False,
+            "issue_number": issue_number,
+            "label": effective_label,
+            "error": f"{swap_error_prefix}: {swap_result.get('error', '?')}",
+        }
+    return None
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -95,93 +159,23 @@ async def claim_issue(
             if not result.get("success"):
                 return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
-            _body = result.get("body") or ""
-            review_approach_recommended = detect_body_marker(_body, REVIEW_APPROACH_MARKER)
-            investigation_complete = detect_body_marker(_body, INVESTIGATION_COMPLETE_MARKER)
-            issue_state = result.get("state", "open").lower()
-            if issue_state == "closed":
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": False,
-                        "reason": "issue is closed",
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                    }
-                )
-
-            current_labels = _extract_label_names(result.get("labels", []))
-            decision = await _try_claim_with_liveness(
+            claim_result = await _claim_fetched_issue(
                 issue_url=issue_url,
+                owner=owner,
+                repo=repo,
                 issue_number=issue_number,
+                issue_body=result.get("body") or "",
+                issue_state=result.get("state", "open"),
+                get_current_labels=lambda: _extract_label_names(result.get("labels", [])),
                 effective_label=effective_label,
-                current_labels=current_labels,
                 allow_reentry=allow_reentry,
                 github_client=tool_ctx.github_client,
-                campaign_state_paths=_get_campaign_state_paths(tool_ctx),
+                get_campaign_state_paths=lambda: _get_campaign_state_paths(tool_ctx),
+                github_config=tool_ctx.config.github,
             )
-            if not decision.claimed:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": False,
-                        "reason": decision.reason,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                    }
-                )
-            if decision.reentry:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": True,
-                        "reentry": True,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                    }
-                )
-
-            ensure_color, ensure_description, remove_labels = (
-                tool_ctx.config.github.resolve_label_metadata(effective_label)
-            )
-
-            await tool_ctx.github_client.ensure_label(
-                owner,
-                repo,
-                effective_label,
-                color=ensure_color,
-                description=ensure_description,
-            )
-
-            swap_result = await tool_ctx.github_client.swap_labels(
-                owner,
-                repo,
-                issue_number,
-                remove_labels=remove_labels,
-                add_labels=[effective_label],
-            )
-            if not swap_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": swap_result.get("error", "swap_labels failed"),
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                    }
-                )
-
-            return json.dumps(
-                {
-                    "success": True,
-                    "claimed": True,
-                    "issue_number": issue_number,
-                    "label": effective_label,
-                    "review_approach_recommended": review_approach_recommended,
-                    "investigation_complete": investigation_complete,
-                }
-            )
+            if claim_result.get("claimed") is True:
+                claim_result["issue_number"] = issue_number
+            return json.dumps(claim_result)
     except Exception as exc:
         logger.error("claim_issue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -272,126 +266,49 @@ async def release_issue(
 
             # close_issue is intentionally not checked here — staging takes precedence over closing
             if should_stage:
-                if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": effective_staged_label,
-                            "error": err,
-                        }
-                    )
-
-                if tool_ctx.config.github.state_for_label(effective_staged_label) is not None:
-                    staged_color, staged_description, remove_labels = (
-                        tool_ctx.config.github.resolve_label_metadata(effective_staged_label)
-                    )
-                else:
-                    staged_color = "0075ca"
-                    staged_description = (
+                release_error = await _apply_release_label(
+                    github_client=tool_ctx.github_client,
+                    github_config=tool_ctx.config.github,
+                    owner=owner,
+                    repo=repo,
+                    issue_number=issue_number,
+                    effective_label=effective_label,
+                    replacement_label=effective_staged_label,
+                    fallback_color="0075ca",
+                    fallback_description=(
                         f"Implementation staged and waiting for promotion to {promotion_target}"
-                    )
-                    remove_labels = [
+                    ),
+                    fallback_remove_labels=[
                         effective_label,
                         config_fail_label,
                         tool_ctx.config.github.queued_label,
-                    ]
-
-                ensure_result = await tool_ctx.github_client.ensure_label(
-                    owner,
-                    repo,
-                    effective_staged_label,
-                    color=staged_color,
-                    description=staged_description,
+                    ],
+                    ensure_error_prefix="Failed to ensure staged label",
+                    swap_error_prefix="Failed to apply staged label",
                 )
-                if not ensure_result.get("success"):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": effective_label,
-                            "error": (
-                                f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
-                            ),
-                        }
-                    )
-
-                swap_result = await tool_ctx.github_client.swap_labels(
-                    owner,
-                    repo,
-                    issue_number,
-                    remove_labels=remove_labels,
-                    add_labels=[effective_staged_label],
-                )
-                if not swap_result.get("success"):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": effective_label,
-                            "error": (
-                                f"Failed to apply staged label: {swap_result.get('error', '?')}"
-                            ),
-                        }
-                    )
+                if release_error is not None:
+                    return _render(release_error)
                 staged = True
             elif fail_label is not None:
-                if err := tool_ctx.config.github.check_label_allowed(fail_label):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": fail_label,
-                            "error": err,
-                        }
-                    )
-
-                if tool_ctx.config.github.state_for_label(fail_label) is not None:
-                    fail_color, fail_description, remove_labels = (
-                        tool_ctx.config.github.resolve_label_metadata(fail_label)
-                    )
-                else:
-                    fail_color = "d73a4a"
-                    fail_description = "Recipe execution failed"
-                    remove_labels = [effective_label, tool_ctx.config.github.queued_label]
-
-                ensure_result = await tool_ctx.github_client.ensure_label(
-                    owner,
-                    repo,
-                    fail_label,
-                    color=fail_color,
-                    description=fail_description,
+                release_error = await _apply_release_label(
+                    github_client=tool_ctx.github_client,
+                    github_config=tool_ctx.config.github,
+                    owner=owner,
+                    repo=repo,
+                    issue_number=issue_number,
+                    effective_label=effective_label,
+                    replacement_label=fail_label,
+                    fallback_color="d73a4a",
+                    fallback_description="Recipe execution failed",
+                    fallback_remove_labels=[
+                        effective_label,
+                        tool_ctx.config.github.queued_label,
+                    ],
+                    ensure_error_prefix="Failed to ensure fail label",
+                    swap_error_prefix="Failed to apply fail label",
                 )
-                if not ensure_result.get("success"):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": effective_label,
-                            "error": (
-                                f"Failed to ensure fail label: {ensure_result.get('error', '?')}"
-                            ),
-                        }
-                    )
-
-                swap_result = await tool_ctx.github_client.swap_labels(
-                    owner,
-                    repo,
-                    issue_number,
-                    remove_labels=remove_labels,
-                    add_labels=[fail_label],
-                )
-                if not swap_result.get("success"):
-                    return _render(
-                        {
-                            "success": False,
-                            "issue_number": issue_number,
-                            "label": effective_label,
-                            "error": (
-                                f"Failed to apply fail label: {swap_result.get('error', '?')}"
-                            ),
-                        }
-                    )
+                if release_error is not None:
+                    return _render(release_error)
 
                 return _render(
                     {

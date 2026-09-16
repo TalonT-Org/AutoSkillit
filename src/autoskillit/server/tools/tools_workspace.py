@@ -7,6 +7,7 @@ import os
 import shutil
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 from fastmcp import Context
@@ -32,6 +33,10 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
+if TYPE_CHECKING:
+    from autoskillit.core import TestResult
+    from autoskillit.pipeline import ToolContext
+
 logger = get_logger(__name__)
 
 
@@ -42,6 +47,94 @@ def _bounded_test_stream(text: str, spec: SpillSpec, artifact_path: str | None) 
     tail = text[-spec.tail_chars :] if spec.tail_chars else ""
     marker = f"[raw test output spilled -> {artifact_path}]"
     return "\n".join(part for part in (head, marker, tail) if part)
+
+
+def _build_test_check_response(
+    tool_ctx: ToolContext,
+    test_result: TestResult,
+    resolved: str,
+    *,
+    timed_out: bool,
+    effective_passed: bool,
+) -> dict[str, object]:
+    raw_artifact_path: str | None = None
+    spec = SpillSpec(
+        inline_max_chars=tool_ctx.config.output_budget.inline_max_chars,
+        head_chars=tool_ctx.config.output_budget.head_chars,
+        tail_chars=tool_ctx.config.output_budget.tail_chars,
+    )
+    condensed_stdout, condensed_stderr = condense_test_output(test_result)
+    if not effective_passed:
+        raw_output = json.dumps({"stdout": test_result.stdout, "stderr": test_result.stderr})
+        spill_dir = (
+            resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir) / "test_check"
+        )
+        spill_spec = spec.with_forced_spill(timed_out)
+        raw_spill = spill_output(raw_output, spill_dir, "raw_output", spill_spec)
+        raw_artifact_path = raw_spill.artifact_path
+        if raw_artifact_path is None and (
+            len(condensed_stdout) > spec.inline_max_chars
+            or len(condensed_stderr) > spec.inline_max_chars
+        ):
+            raw_spill = spill_output(
+                raw_output,
+                spill_dir,
+                "raw_output",
+                spec.with_forced_spill(True),
+            )
+            raw_artifact_path = raw_spill.artifact_path
+    response = {
+        "passed": effective_passed,
+        "timed_out": timed_out,
+        "stdout": _bounded_test_stream(condensed_stdout, spec, raw_artifact_path),
+        "stderr": _bounded_test_stream(condensed_stderr, spec, raw_artifact_path),
+    }
+    if test_result.outer_timeout_seconds is not None:
+        response["outer_timeout_seconds"] = test_result.outer_timeout_seconds
+    if raw_artifact_path is not None:
+        response["raw_output_artifact_path"] = raw_artifact_path
+    if test_result.duration_seconds is not None:
+        response["duration_seconds"] = round(test_result.duration_seconds, 2)
+    if test_result.filter_mode is not None:
+        response["filter_mode"] = test_result.filter_mode
+    if test_result.tests_selected is not None:
+        response["tests_selected"] = test_result.tests_selected
+    if test_result.tests_deselected is not None:
+        response["tests_deselected"] = test_result.tests_deselected
+    if test_result.full_run_reason is not None:
+        response["full_run_reason"] = test_result.full_run_reason
+    return response
+
+
+async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> dict[str, object] | None:
+    pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
+    uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
+    hook_cmd: list[str] | None = None
+    if (Path(cwd) / ".pre-commit-config.yaml").exists():
+        if uv_bin and (Path(cwd) / "uv.lock").exists():
+            hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
+        elif pre_commit_bin:
+            hook_cmd = [pre_commit_bin, "run", "--files"] + paths
+        else:
+            return {
+                "success": False,
+                "error": "pre-commit config exists but no pre-commit binary found",
+            }
+
+    if hook_cmd is not None:
+        rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+        if rc != 0:
+            rc2, _, _ = await _run_subprocess(
+                ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
+            )
+            if rc2 != 0:
+                _err = f"pre-commit + re-add failed: {stderr.strip()}"
+                return {"success": False, "error": _err}
+            rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+            if rc3 != 0:
+                _err = f"pre-commit retry failed: {stderr3.strip()}"
+                return {"success": False, "error": _err}
+    return None
 
 
 @mcp.tool(
@@ -148,55 +241,13 @@ async def test_check(
                         extra={"worktree": worktree_path},
                     )
 
-                raw_artifact_path: str | None = None
-                spec = SpillSpec(
-                    inline_max_chars=tool_ctx.config.output_budget.inline_max_chars,
-                    head_chars=tool_ctx.config.output_budget.head_chars,
-                    tail_chars=tool_ctx.config.output_budget.tail_chars,
+                response = _build_test_check_response(
+                    tool_ctx,
+                    test_result,
+                    resolved,
+                    timed_out=timed_out,
+                    effective_passed=effective_passed,
                 )
-                condensed_stdout, condensed_stderr = condense_test_output(test_result)
-                if not effective_passed:
-                    raw_output = json.dumps(
-                        {"stdout": test_result.stdout, "stderr": test_result.stderr}
-                    )
-                    spill_dir = (
-                        resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir)
-                        / "test_check"
-                    )
-                    spill_spec = spec.with_forced_spill(timed_out)
-                    raw_spill = spill_output(raw_output, spill_dir, "raw_output", spill_spec)
-                    raw_artifact_path = raw_spill.artifact_path
-                    if raw_artifact_path is None and (
-                        len(condensed_stdout) > spec.inline_max_chars
-                        or len(condensed_stderr) > spec.inline_max_chars
-                    ):
-                        raw_spill = spill_output(
-                            raw_output,
-                            spill_dir,
-                            "raw_output",
-                            spec.with_forced_spill(True),
-                        )
-                        raw_artifact_path = raw_spill.artifact_path
-                response = {
-                    "passed": effective_passed,
-                    "timed_out": timed_out,
-                    "stdout": _bounded_test_stream(condensed_stdout, spec, raw_artifact_path),
-                    "stderr": _bounded_test_stream(condensed_stderr, spec, raw_artifact_path),
-                }
-                if test_result.outer_timeout_seconds is not None:
-                    response["outer_timeout_seconds"] = test_result.outer_timeout_seconds
-                if raw_artifact_path is not None:
-                    response["raw_output_artifact_path"] = raw_artifact_path
-                if test_result.duration_seconds is not None:
-                    response["duration_seconds"] = round(test_result.duration_seconds, 2)
-                if test_result.filter_mode is not None:
-                    response["filter_mode"] = test_result.filter_mode
-                if test_result.tests_selected is not None:
-                    response["tests_selected"] = test_result.tests_selected
-                if test_result.tests_deselected is not None:
-                    response["tests_deselected"] = test_result.tests_deselected
-                if test_result.full_run_reason is not None:
-                    response["full_run_reason"] = test_result.full_run_reason
                 return json.dumps(
                     attach_recipe_segment(
                         response,
@@ -283,35 +334,8 @@ async def commit_files(
                         {"success": False, "error": f"git add failed: {stderr.strip()}"}
                     )
 
-                pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
-                uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
-                hook_cmd: list[str] | None = None
-                if (Path(cwd) / ".pre-commit-config.yaml").exists():
-                    if uv_bin and (Path(cwd) / "uv.lock").exists():
-                        hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
-                    elif pre_commit_bin:
-                        hook_cmd = [pre_commit_bin, "run", "--files"] + paths
-                    else:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "error": "pre-commit config exists but no pre-commit binary found",
-                            }
-                        )
-
-                if hook_cmd is not None:
-                    rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
-                    if rc != 0:
-                        rc2, _, _ = await _run_subprocess(
-                            ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
-                        )
-                        if rc2 != 0:
-                            _err = f"pre-commit + re-add failed: {stderr.strip()}"
-                            return json.dumps({"success": False, "error": _err})
-                        rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
-                        if rc3 != 0:
-                            _err = f"pre-commit retry failed: {stderr3.strip()}"
-                            return json.dumps({"success": False, "error": _err})
+                if (hook_error := await _run_pre_commit_transaction(cwd, paths)) is not None:
+                    return json.dumps(hook_error)
 
                 rc, stdout, stderr = await _run_subprocess(
                     ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30

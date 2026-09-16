@@ -126,6 +126,39 @@ def _page_end(content: bytes, offset: int, byte_limit: int, line_limit: int) -> 
     return end
 
 
+def _consume_continuation(
+    continuation: str | None,
+    state: dict[str, Any],
+    *,
+    capability_hash: str,
+    scope_digest: str,
+    snapshot_digest: str,
+    page_size: int,
+) -> int:
+    """Consume one matching continuation and return its byte offset."""
+
+    if continuation is None:
+        return 0
+    if not isinstance(continuation, str) or not continuation:
+        raise EvidenceReaderError("continuation_invalid")
+    continuation_hash = _capability_hash(continuation)
+    cursor = state.get("continuations", {}).pop(continuation_hash, None)
+    expected = {
+        "capability_hash": capability_hash,
+        "scope_digest": scope_digest,
+        "snapshot_digest": snapshot_digest,
+        "page_size": page_size,
+    }
+    if not isinstance(cursor, dict) or any(
+        cursor.get(key) != value for key, value in expected.items()
+    ):
+        raise EvidenceReaderError("continuation_invalid")
+    raw_offset = cursor.get("offset")
+    if not isinstance(raw_offset, int) or isinstance(raw_offset, bool) or raw_offset < 0:
+        raise EvidenceReaderError("continuation_invalid")
+    return raw_offset
+
+
 def read_evidence_reader_page(
     tool_ctx: ToolContext,
     environment: Mapping[str, str],
@@ -169,27 +202,14 @@ def read_evidence_reader_page(
         if state.get("pages", limits.max_pages) >= limits.max_pages:
             raise EvidenceReaderError("page_budget_exhausted")
         scope_digest = _scope_digest(authority)
-        if continuation is None:
-            offset = 0
-        else:
-            if not isinstance(continuation, str) or not continuation:
-                raise EvidenceReaderError("continuation_invalid")
-            continuation_hash = _capability_hash(continuation)
-            cursor = state.get("continuations", {}).pop(continuation_hash, None)
-            expected = {
-                "capability_hash": opened.capability_hash,
-                "scope_digest": scope_digest,
-                "snapshot_digest": authority["snapshot_digest"],
-                "page_size": page_size,
-            }
-            if not isinstance(cursor, dict) or any(
-                cursor.get(key) != value for key, value in expected.items()
-            ):
-                raise EvidenceReaderError("continuation_invalid")
-            raw_offset = cursor.get("offset")
-            if not isinstance(raw_offset, int) or isinstance(raw_offset, bool) or raw_offset < 0:
-                raise EvidenceReaderError("continuation_invalid")
-            offset = raw_offset
+        offset = _consume_continuation(
+            continuation,
+            state,
+            capability_hash=opened.capability_hash,
+            scope_digest=scope_digest,
+            snapshot_digest=authority["snapshot_digest"],
+            page_size=page_size,
+        )
         content = _snapshot_content(opened.invocation_dir, authority)
         if offset > len(content):
             raise EvidenceReaderError("continuation_invalid")

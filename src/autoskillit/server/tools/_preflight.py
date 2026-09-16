@@ -21,7 +21,7 @@ from autoskillit.workspace import resolve_persistent_session_root
 
 if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import AgentBackendConfig
-    from autoskillit.core import SkillResolver
+    from autoskillit.core import BackendPinResolution, SkillResolver
 
 
 def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
@@ -54,6 +54,133 @@ def check_skill_semantic_feasibility(
     if unsupported_operation is not None:
         return adaptation.diagnostic
     adaptation.validate_for(plan, backend=backend.name)
+    return None
+
+
+def _check_pinned_step_feasibility(
+    step_name: str,
+    resolution: BackendPinResolution,
+    active_recipe_steps: Mapping[str, FinalizedRecipeStep],
+    *,
+    skill_resolver: SkillResolver | None,
+    project_root: Path | None,
+    temp_dir: Path | None,
+) -> str | None:
+    _explicit = resolution.backend
+    try:
+        _pinned_backend = get_backend(_explicit)
+    except (ValueError, KeyError):
+        return None
+    if _pinned_backend.capabilities.session_dir_persistent:
+        if temp_dir is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "kitchen": "preflight_failed",
+                    "user_visible_message": (
+                        f"Cannot verify persistent session root for "
+                        f"explicitly-pinned step '{step_name}' (backend "
+                        f"'{_explicit}'): temp_dir is not available."
+                    ),
+                    "error": "persistent_root_unverifiable_for_pinned_step",
+                    "stage": "dispatch_feasibility_preflight",
+                    "step": step_name,
+                    "backend": _explicit,
+                }
+            )
+        try:
+            resolve_persistent_session_root(temp_dir, _pinned_backend)
+        except RuntimeError as exc:
+            return json.dumps(
+                {
+                    "success": False,
+                    "kitchen": "preflight_failed",
+                    "user_visible_message": (
+                        f"Cannot dispatch step '{step_name}': explicitly "
+                        f"pinned to backend '{_explicit}', which requires "
+                        f"a persistent session root that cannot be "
+                        f"derived ({exc})."
+                    ),
+                    "error": "persistent_root_unresolvable_for_pinned_step",
+                    "stage": "dispatch_feasibility_preflight",
+                    "backend": _explicit,
+                    "step": step_name,
+                    "origin": resolution.key_path,
+                    "remedy": (
+                        f"Remove or change '{resolution.key_path}' in "
+                        "~/.autoskillit/config.yaml or "
+                        "<project>/.autoskillit/config.yaml, or pin a "
+                        "backend whose persistent generated-home "
+                        "convention is valid."
+                    ),
+                }
+            )
+    if skill_resolver is None:
+        return json.dumps(
+            {
+                "success": False,
+                "kitchen": "preflight_failed",
+                "user_visible_message": (
+                    f"Cannot verify semantic feasibility for explicitly-pinned "
+                    f"step '{step_name}': skill resolver is not available."
+                ),
+                "error": "skill_resolver_unavailable_for_pinned_step",
+                "stage": "dispatch_feasibility_preflight",
+                "step": step_name,
+            }
+        )
+    _step_obj = active_recipe_steps.get(step_name)
+    _skill_name = getattr(_step_obj, "skill_name", None) if _step_obj is not None else None
+    if _skill_name:
+        try:
+            _skill_invocation = skill_resolver.resolve_invocation(
+                _skill_name,
+                project_root,
+                SkillExecutionRole.SESSION,
+            )
+        except SkillContractError as exc:
+            return json.dumps(
+                {
+                    "success": False,
+                    "kitchen": "preflight_failed",
+                    "user_visible_message": (
+                        f"Cannot verify semantic feasibility for explicitly-pinned "
+                        f"step '{step_name}': skill '{_skill_name}' has no valid "
+                        f"effective invocation. {exc}"
+                    ),
+                    "error": "invalid_skill_invocation_for_pinned_step",
+                    "stage": "dispatch_feasibility_preflight",
+                    "step": step_name,
+                    "skill": _skill_name,
+                }
+            )
+        semantic_error = check_skill_semantic_feasibility(
+            _skill_invocation.root.semantic_plan,
+            _pinned_backend,
+        )
+        if semantic_error:
+            return json.dumps(
+                {
+                    "success": False,
+                    "kitchen": "preflight_failed",
+                    "user_visible_message": (
+                        f"Cannot dispatch step '{step_name}': explicitly "
+                        f"pinned to backend '{_explicit}' which cannot adapt "
+                        f"the skill semantics. {semantic_error}"
+                    ),
+                    "error": semantic_error,
+                    "stage": "dispatch_feasibility_preflight",
+                    "backend": _explicit,
+                    "step": step_name,
+                    "origin": resolution.key_path,
+                    "remedy": (
+                        f"Remove or change '{resolution.key_path}' in "
+                        "~/.autoskillit/config.yaml or "
+                        "<project>/.autoskillit/config.yaml, or pin a "
+                        "backend that supports the semantic operation."
+                    ),
+                }
+            )
     return None
 
 
@@ -112,123 +239,16 @@ def _check_dispatch_feasibility(
         if config_backend is not None:
             _resolution = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _resolution is not None:
-                _explicit = _resolution.backend
-                try:
-                    _pinned_backend = get_backend(_explicit)
-                except (ValueError, KeyError):
-                    continue
-                if _pinned_backend.capabilities.session_dir_persistent:
-                    if temp_dir is None:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "kitchen": "preflight_failed",
-                                "user_visible_message": (
-                                    f"Cannot verify persistent session root for "
-                                    f"explicitly-pinned step '{step_name}' (backend "
-                                    f"'{_explicit}'): temp_dir is not available."
-                                ),
-                                "error": "persistent_root_unverifiable_for_pinned_step",
-                                "stage": "dispatch_feasibility_preflight",
-                                "step": step_name,
-                                "backend": _explicit,
-                            }
-                        )
-                    try:
-                        resolve_persistent_session_root(temp_dir, _pinned_backend)
-                    except RuntimeError as exc:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "kitchen": "preflight_failed",
-                                "user_visible_message": (
-                                    f"Cannot dispatch step '{step_name}': explicitly "
-                                    f"pinned to backend '{_explicit}', which requires "
-                                    f"a persistent session root that cannot be "
-                                    f"derived ({exc})."
-                                ),
-                                "error": "persistent_root_unresolvable_for_pinned_step",
-                                "stage": "dispatch_feasibility_preflight",
-                                "backend": _explicit,
-                                "step": step_name,
-                                "origin": _resolution.key_path,
-                                "remedy": (
-                                    f"Remove or change '{_resolution.key_path}' in "
-                                    "~/.autoskillit/config.yaml or "
-                                    "<project>/.autoskillit/config.yaml, or pin a "
-                                    "backend whose persistent generated-home "
-                                    "convention is valid."
-                                ),
-                            }
-                        )
-                if skill_resolver is None:
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "kitchen": "preflight_failed",
-                            "user_visible_message": (
-                                f"Cannot verify semantic feasibility for explicitly-pinned "
-                                f"step '{step_name}': skill resolver is not available."
-                            ),
-                            "error": "skill_resolver_unavailable_for_pinned_step",
-                            "stage": "dispatch_feasibility_preflight",
-                            "step": step_name,
-                        }
-                    )
-                _step_obj = active_recipe_steps.get(step_name)
-                _skill_name = (
-                    getattr(_step_obj, "skill_name", None) if _step_obj is not None else None
+                diagnostic = _check_pinned_step_feasibility(
+                    step_name,
+                    _resolution,
+                    active_recipe_steps,
+                    skill_resolver=skill_resolver,
+                    project_root=project_root,
+                    temp_dir=temp_dir,
                 )
-                if _skill_name:
-                    try:
-                        _skill_invocation = skill_resolver.resolve_invocation(
-                            _skill_name,
-                            project_root,
-                            SkillExecutionRole.SESSION,
-                        )
-                    except SkillContractError as exc:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "kitchen": "preflight_failed",
-                                "user_visible_message": (
-                                    f"Cannot verify semantic feasibility for explicitly-pinned "
-                                    f"step '{step_name}': skill '{_skill_name}' has no valid "
-                                    f"effective invocation. {exc}"
-                                ),
-                                "error": "invalid_skill_invocation_for_pinned_step",
-                                "stage": "dispatch_feasibility_preflight",
-                                "step": step_name,
-                                "skill": _skill_name,
-                            }
-                        )
-                    semantic_error = check_skill_semantic_feasibility(
-                        _skill_invocation.root.semantic_plan,
-                        _pinned_backend,
-                    )
-                    if semantic_error:
-                        return json.dumps(
-                            {
-                                "success": False,
-                                "kitchen": "preflight_failed",
-                                "user_visible_message": (
-                                    f"Cannot dispatch step '{step_name}': explicitly "
-                                    f"pinned to backend '{_explicit}' which cannot adapt "
-                                    f"the skill semantics. {semantic_error}"
-                                ),
-                                "error": semantic_error,
-                                "stage": "dispatch_feasibility_preflight",
-                                "backend": _explicit,
-                                "step": step_name,
-                                "origin": _resolution.key_path,
-                                "remedy": (
-                                    f"Remove or change '{_resolution.key_path}' in "
-                                    "~/.autoskillit/config.yaml or "
-                                    "<project>/.autoskillit/config.yaml, or pin a "
-                                    "backend that supports the semantic operation."
-                                ),
-                            }
-                        )
+                if diagnostic is not None:
+                    return diagnostic
                 continue
 
         step = active_recipe_steps.get(step_name)

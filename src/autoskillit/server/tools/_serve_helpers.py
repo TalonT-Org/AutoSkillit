@@ -296,24 +296,25 @@ def serve_recipe(
         "ingredient_overrides": ingredient_overrides,
         "defer_unresolved": defer_unresolved,
     }
-    if resolved_defaults is not None:
-        kwargs["resolved_defaults"] = resolved_defaults
-    if effective_backend_map is not None:
-        kwargs["effective_backend_map"] = effective_backend_map
-    if backend_capabilities_map is not None:
-        kwargs["backend_capabilities_map"] = backend_capabilities_map
-    if backend_origin_map is not None:
-        kwargs["backend_origin_map"] = backend_origin_map
-    if suppressed is not None:
-        kwargs["suppressed"] = suppressed
-    if backend_name is not None:
-        kwargs["backend_name"] = backend_name
+    kwargs.update(
+        (key, value)
+        for key, value in (
+            ("resolved_defaults", resolved_defaults),
+            ("effective_backend_map", effective_backend_map),
+            ("backend_capabilities_map", backend_capabilities_map),
+            ("backend_origin_map", backend_origin_map),
+            ("suppressed", suppressed),
+            ("backend_name", backend_name),
+        )
+        if value is not None
+    )
     if ingredients_only:
         kwargs["ingredients_only"] = ingredients_only
-    if temp_dir is not None:
-        kwargs["temp_dir"] = temp_dir
-    if temp_dir_relpath is not None:
-        kwargs["temp_dir_relpath"] = temp_dir_relpath
+    kwargs.update(
+        (key, value)
+        for key, value in (("temp_dir", temp_dir), ("temp_dir_relpath", temp_dir_relpath))
+        if value is not None
+    )
     if ctx.recipes is None:  # narrowed by _admit_recipe_name
         raise RuntimeError("serve_recipe() called with ctx.recipes=None")
     return ctx.recipes.load_and_validate(

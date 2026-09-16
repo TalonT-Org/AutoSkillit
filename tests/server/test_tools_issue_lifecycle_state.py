@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -21,34 +21,44 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_claim_and_resolve_rejects_closed_issue(tool_ctx_kitchen_open) -> None:
+async def test_claim_and_resolve_rejects_closed_issue(tool_ctx_kitchen_open, monkeypatch) -> None:
     """State guard: claim_and_resolve_issue returns claimed=False for closed issues."""
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
         return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
     )
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-        return_value={"success": True, "state": "closed", "labels": [], "body": ""}
+        return_value={"success": True, "state": "closed", "labels": None, "body": ""}
+    )
+    campaign_paths = Mock(return_value=[])
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_issue_composite._get_campaign_state_paths", campaign_paths
     )
 
     result = json.loads(await claim_and_resolve_issue("https://github.com/owner/repo/issues/42"))
     assert result["success"] is True
     assert result["claimed"] is False
     assert result["reason"] == "issue is closed"
+    campaign_paths.assert_not_called()
 
 
 @pytest.mark.anyio
-async def test_claim_issue_rejects_closed_issue(tool_ctx_kitchen_open) -> None:
+async def test_claim_issue_rejects_closed_issue(tool_ctx_kitchen_open, monkeypatch) -> None:
     """State guard: claim_issue returns claimed=False for closed issues."""
     tool_ctx_kitchen_open.github_client = AsyncMock()
     tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
-        return_value={"success": True, "state": "closed", "labels": [], "body": ""}
+        return_value={"success": True, "state": "closed", "labels": None, "body": ""}
+    )
+    campaign_paths = Mock(return_value=[])
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_issue_labels._get_campaign_state_paths", campaign_paths
     )
 
     result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
     assert result["success"] is True
     assert result["claimed"] is False
     assert result["reason"] == "issue is closed"
+    campaign_paths.assert_not_called()
 
 
 @pytest.mark.anyio

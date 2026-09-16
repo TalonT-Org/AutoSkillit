@@ -9,10 +9,7 @@ from typing import Any
 import structlog
 
 from autoskillit.core import (
-    INVESTIGATION_COMPLETE_MARKER,
-    REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
-    detect_body_marker,
     get_logger,
 )
 from autoskillit.server import mcp
@@ -25,8 +22,8 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._claim_helpers import (
+    _claim_fetched_issue,
     _get_campaign_state_paths,
-    _try_claim_with_liveness,
 )
 
 logger = get_logger(__name__)
@@ -107,8 +104,10 @@ async def claim_and_resolve_issue(
                     {"success": False, "error": title_result.get("error", "fetch_title failed")}
                 )
 
-            issue_title = title_result.get("title", "")
-            issue_slug = title_result.get("slug", "")
+            raw_title = title_result.get("title")
+            raw_slug = title_result.get("slug")
+            issue_title = raw_title if isinstance(raw_title, str) else ""
+            issue_slug = raw_slug if isinstance(raw_slug, str) else ""
 
             _claim_start = time.monotonic()
             fetch_result = await tool_ctx.github_client.fetch_issue(
@@ -127,117 +126,26 @@ async def claim_and_resolve_issue(
                     }
                 )
 
-            issue_body = fetch_result.get("body") or ""
-            review_approach_recommended = detect_body_marker(issue_body, REVIEW_APPROACH_MARKER)
-            investigation_complete = detect_body_marker(issue_body, INVESTIGATION_COMPLETE_MARKER)
-
-            issue_state = fetch_result.get("state", "open").lower()
-            if issue_state == "closed":
-                claim_ms = int((time.monotonic() - _claim_start) * 1000)
-                return _render(
-                    {
-                        "success": True,
-                        "claimed": False,
-                        "reason": "issue is closed",
-                        "issue_number": issue_number,
-                        "issue_title": issue_title,
-                        "issue_slug": issue_slug,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                    }
-                )
-
-            current_labels = _extract_label_names(fetch_result.get("labels", []))
-            decision = await _try_claim_with_liveness(
+            claim_result = await _claim_fetched_issue(
                 issue_url=issue_url,
+                owner=owner,
+                repo=repo,
                 issue_number=issue_number,
+                issue_body=fetch_result.get("body") or "",
+                issue_state=fetch_result.get("state", "open"),
+                get_current_labels=lambda: _extract_label_names(fetch_result.get("labels", [])),
                 effective_label=effective_label,
-                current_labels=current_labels,
                 allow_reentry=allow_reentry,
                 github_client=tool_ctx.github_client,
-                campaign_state_paths=_get_campaign_state_paths(tool_ctx),
-            )
-            if not decision.claimed:
-                claim_ms = int((time.monotonic() - _claim_start) * 1000)
-                return _render(
-                    {
-                        "success": True,
-                        "claimed": False,
-                        "reason": decision.reason,
-                        "issue_number": issue_number,
-                        "issue_title": issue_title,
-                        "issue_slug": issue_slug,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                    }
-                )
-            if decision.reentry:
-                claim_ms = int((time.monotonic() - _claim_start) * 1000)
-                return _render(
-                    {
-                        "success": True,
-                        "claimed": True,
-                        "reentry": True,
-                        "issue_number": issue_number,
-                        "issue_title": issue_title,
-                        "issue_slug": issue_slug,
-                        "label": effective_label,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                    }
-                )
-
-            ensure_color, ensure_description, remove_labels = (
-                tool_ctx.config.github.resolve_label_metadata(effective_label)
-            )
-
-            await tool_ctx.github_client.ensure_label(
-                owner,
-                repo,
-                effective_label,
-                color=ensure_color,
-                description=ensure_description,
-            )
-
-            swap_result = await tool_ctx.github_client.swap_labels(
-                owner,
-                repo,
-                issue_number,
-                remove_labels=remove_labels,
-                add_labels=[effective_label],
+                get_campaign_state_paths=lambda: _get_campaign_state_paths(tool_ctx),
+                github_config=tool_ctx.config.github,
             )
             claim_ms = int((time.monotonic() - _claim_start) * 1000)
-
-            if not swap_result.get("success"):
-                return _render(
-                    {
-                        "success": False,
-                        "error": swap_result.get("error", "swap_labels failed"),
-                        "issue_number": issue_number,
-                        "issue_title": issue_title,
-                        "issue_slug": issue_slug,
-                        "review_approach_recommended": review_approach_recommended,
-                        "investigation_complete": investigation_complete,
-                        "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                    }
-                )
-
-            return _render(
-                {
-                    "success": True,
-                    "claimed": True,
-                    "issue_number": issue_number,
-                    "issue_title": issue_title,
-                    "issue_slug": issue_slug,
-                    "label": effective_label,
-                    "review_approach_recommended": review_approach_recommended,
-                    "investigation_complete": investigation_complete,
-                    "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
-                }
-            )
+            claim_result["issue_number"] = issue_number
+            claim_result["issue_title"] = issue_title
+            claim_result["issue_slug"] = issue_slug
+            claim_result["timings"] = {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms}
+            return _render(dict(claim_result))
     except Exception as exc:
         logger.error("claim_and_resolve_issue unhandled exception", exc_info=True)
         return _render({"success": False, "error": f"{type(exc).__name__}: {exc}"})

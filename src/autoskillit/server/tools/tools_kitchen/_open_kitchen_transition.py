@@ -153,6 +153,56 @@ def _open_kitchen_cancellation_response(
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
+def _record_open_kitchen_result(tool_ctx: ToolContext, result: str) -> str:
+    """Commit a successful response or enrich an application failure."""
+    parsed: dict[str, Any] | None
+    try:
+        candidate = json.loads(result)
+        parsed = candidate if isinstance(candidate, dict) else None
+    except (TypeError, json.JSONDecodeError):
+        parsed = None
+    if parsed is None:
+        return result
+    if parsed.get("success") is True:
+        initialization_id = parsed.get("initialization_id")
+        with tool_ctx.kitchen_transition_lock:
+            state = tool_ctx.kitchen_open_state
+            for effect in state.effects:
+                if effect.phase is KitchenEffectPhase.STARTED:
+                    state = confirm_kitchen_effect(
+                        state,
+                        effect.name,
+                        receipt=f"response:{effect.effect_id}",
+                    )
+            tool_ctx.kitchen_open_state = commit_kitchen_response(
+                state,
+                response=result,
+                initialization_id=(
+                    initialization_id if isinstance(initialization_id, str) else None
+                ),
+            )
+        return result
+    with tool_ctx.kitchen_transition_lock:
+        state = tool_ctx.kitchen_open_state
+        started = next(
+            (
+                effect
+                for effect in reversed(state.effects)
+                if effect.phase is KitchenEffectPhase.STARTED
+            ),
+            None,
+        )
+        if started is not None:
+            state = mark_kitchen_effect_ambiguous(
+                state,
+                started.name,
+                evidence=f"application failure after {started.name} dispatch",
+            )
+            tool_ctx.kitchen_open_state = state
+    parsed.update(_transition_fields(tool_ctx))
+    return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+
+
 def _bind_open_kitchen_transition(
     fn: Callable[..., Awaitable[str]],
 ) -> Callable[..., Awaitable[str]]:
@@ -243,53 +293,7 @@ def _bind_open_kitchen_transition(
                 result = await fn(*args, **kwargs)
             finally:
                 _OPEN_KITCHEN_REQUEST_CTX.reset(token)
-
-            parsed: dict[str, Any] | None
-            try:
-                candidate = json.loads(result)
-                parsed = candidate if isinstance(candidate, dict) else None
-            except (TypeError, json.JSONDecodeError):
-                parsed = None
-            if parsed is not None and parsed.get("success") is True:
-                initialization_id = parsed.get("initialization_id")
-                with tool_ctx.kitchen_transition_lock:
-                    state = tool_ctx.kitchen_open_state
-                    for effect in state.effects:
-                        if effect.phase is KitchenEffectPhase.STARTED:
-                            state = confirm_kitchen_effect(
-                                state,
-                                effect.name,
-                                receipt=f"response:{effect.effect_id}",
-                            )
-                    tool_ctx.kitchen_open_state = commit_kitchen_response(
-                        state,
-                        response=result,
-                        initialization_id=(
-                            initialization_id if isinstance(initialization_id, str) else None
-                        ),
-                    )
-                return result
-            if parsed is not None:
-                with tool_ctx.kitchen_transition_lock:
-                    state = tool_ctx.kitchen_open_state
-                    started = next(
-                        (
-                            effect
-                            for effect in reversed(state.effects)
-                            if effect.phase is KitchenEffectPhase.STARTED
-                        ),
-                        None,
-                    )
-                    if started is not None:
-                        state = mark_kitchen_effect_ambiguous(
-                            state,
-                            started.name,
-                            evidence=f"application failure after {started.name} dispatch",
-                        )
-                        tool_ctx.kitchen_open_state = state
-                parsed.update(_transition_fields(tool_ctx))
-                return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
-            return result
+            return _record_open_kitchen_result(tool_ctx, result)
         finally:
             with tool_ctx.kitchen_transition_lock:
                 tool_ctx.kitchen_open_state = _tk_pkg.release_kitchen_request(

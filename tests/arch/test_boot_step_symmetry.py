@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import _reachable_local_functions
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 LIFESPAN_PKG = (
@@ -65,11 +67,14 @@ def _references_symbol(node: ast.expr, symbol: str) -> bool:
 
 
 def _function_body_contains_symbol(tree: ast.Module, func_name: str, symbol: str) -> bool:
+    """Follow local helper calls when checking a boot entry point's operations."""
     for node in ast.walk(tree):
         if isinstance(node, ast.AsyncFunctionDef) and node.name == func_name:
-            for child in ast.walk(node):
-                if isinstance(child, (ast.Name, ast.Attribute)) and _references_symbol(
-                    child, symbol
+            for function in _reachable_local_functions(tree, node):
+                if any(
+                    isinstance(child, (ast.Name, ast.Attribute))
+                    and _references_symbol(child, symbol)
+                    for child in ast.walk(function)
                 ):
                     return True
     return False

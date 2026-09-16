@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import types
 import typing
@@ -110,61 +111,28 @@ def _coerce_scalar(val: object, annotation: object) -> object:
         return val
 
     actual = annotation
-
-    # Unwrap X | None (types.UnionType — bare union syntax, Python 3.10+)
-    if isinstance(annotation, types.UnionType):
-        non_none = [a for a in annotation.__args__ if a is not type(None)]
+    if typing.get_origin(annotation) in (types.UnionType, typing.Union):
+        non_none = [member for member in typing.get_args(annotation) if member is not type(None)]
         if len(non_none) == 1:
             actual = non_none[0]
-    # Unwrap Optional[X] / Union[X, None] (typing.Union with __origin__)
-    elif hasattr(annotation, "__origin__") and hasattr(annotation, "__args__"):
-        ann: typing.Any = annotation
-        origin = ann.__origin__
-        args = ann.__args__
-        if origin is typing.Union:
-            non_none = [a for a in args if a is not type(None)]
-            if len(non_none) == 1:
-                actual = non_none[0]
 
-    # str ← int/float
-    if actual is str and not isinstance(val, str):
-        if isinstance(val, (int, float)):
+    try:
+        if actual is str and isinstance(val, (int, float)):
             return str(val)
-        return val
-    # int ← str (try/except for unconvertible)
-    if actual is int and not isinstance(val, int):
-        if isinstance(val, str):
-            try:
-                return int(val)
-            except ValueError:
-                return val
-        return val
-    # float ← str/int (try/except for unconvertible)
-    if actual is float and not isinstance(val, float):
-        if isinstance(val, (str, int)):
-            try:
-                return float(val)
-            except ValueError:
-                return val
-        return val
+        if actual is int and isinstance(val, str):
+            return int(val)
+        if actual is float and isinstance(val, (str, int)):
+            return float(val)
+    except ValueError:
+        pass
     return val
 
 
-async def _import_and_call(
+def _assemble_trusted_args(
     dotted_path: str,
-    args: dict[str, object] | None = None,
-    timeout: float = 30,
-    *,
-    server_injected_args: dict[str, object] | None = None,
-) -> dict[str, object]:
-    """Import a Python callable by dotted path and invoke it.
-
-    Returns dict with 'success', 'result' (or 'error').
-    Handles sync and async callables, with timeout protection.
-    """
-    import importlib
-    import inspect
-
+    args: dict[str, object] | None,
+    server_injected_args: dict[str, object] | None,
+) -> tuple[dict[str, object], dict[str, object] | None]:
     if args is None:
         args = {}
     args = dict(args)
@@ -172,7 +140,7 @@ async def _import_and_call(
     caller_overrides = reserved_params & args.keys()
     if caller_overrides:
         names = ", ".join(sorted(caller_overrides))
-        return {
+        return args, {
             "success": False,
             "error": f"Caller cannot provide server-injected argument(s): {names}",
         }
@@ -180,35 +148,20 @@ async def _import_and_call(
     unexpected_injections = injected.keys() - reserved_params
     if unexpected_injections:
         names = ", ".join(sorted(unexpected_injections))
-        return {
+        return args, {
             "success": False,
             "error": f"Unexpected server-injected argument(s): {names}",
         }
     args.update(injected)
 
-    if "." not in dotted_path:
-        return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
+    return args, None
 
-    module_path, attr_name = dotted_path.rsplit(".", 1)
 
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        return {"success": False, "error": f"Import failed for {module_path!r}: {exc}"}
-
-    try:
-        func = getattr(module, attr_name)
-    except AttributeError:
-        return {
-            "success": False,
-            "error": f"Module {module_path!r} has no attribute {attr_name!r}",
-        }
-
-    if not callable(func):
-        return {"success": False, "error": f"{dotted_path!r} is not callable"}
-
-    sig = inspect.signature(func)
-
+def _strip_unsupported_args(
+    dotted_path: str,
+    args: dict[str, object],
+    sig: inspect.Signature,
+) -> None:
     valid_keys = set(sig.parameters.keys())
     for key in list(args.keys()):
         if key in RUN_PYTHON_SENTINEL_KEYS and key not in valid_keys:
@@ -233,6 +186,14 @@ async def _import_and_call(
                 )
                 del args[key]
 
+
+def _normalize_callable_args(
+    dotted_path: str,
+    func: typing.Callable[..., object],
+    args: dict[str, object],
+    sig: inspect.Signature,
+) -> dict[str, object]:
+    _strip_unsupported_args(dotted_path, args, sig)
     try:
         type_hints = typing.get_type_hints(func)
     except (NameError, TypeError, AttributeError):
@@ -267,7 +228,51 @@ async def _import_and_call(
                 coerced[key] = coerced_val
                 continue
         coerced[key] = val
-    args = coerced
+    return coerced
+
+
+async def _import_and_call(
+    dotted_path: str,
+    args: dict[str, object] | None = None,
+    timeout: float = 30,
+    *,
+    server_injected_args: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Import a Python callable by dotted path and invoke it.
+
+    Returns dict with 'success', 'result' (or 'error').
+    Handles sync and async callables, with timeout protection.
+    """
+    import importlib
+
+    args, argument_error = _assemble_trusted_args(dotted_path, args, server_injected_args)
+    if argument_error is not None:
+        return argument_error
+
+    if "." not in dotted_path:
+        return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
+
+    module_path, attr_name = dotted_path.rsplit(".", 1)
+
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        return {"success": False, "error": f"Import failed for {module_path!r}: {exc}"}
+
+    try:
+        func = getattr(module, attr_name)
+    except AttributeError:
+        return {
+            "success": False,
+            "error": f"Module {module_path!r} has no attribute {attr_name!r}",
+        }
+
+    if not callable(func):
+        return {"success": False, "error": f"{dotted_path!r} is not callable"}
+
+    sig = inspect.signature(func)
+
+    args = _normalize_callable_args(dotted_path, func, args, sig)
 
     try:
         if inspect.iscoroutinefunction(func):

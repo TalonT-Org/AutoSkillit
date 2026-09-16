@@ -52,7 +52,7 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     (
         "server/tools/tools_kitchen/_close_kitchen.py",
-        "_close_kitchen_handler",
+        "_restore_baseline_config",
         "hook_cfg_path.unlink",
     ): (
         1,
@@ -61,7 +61,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "server/tools/tools_kitchen/_close_kitchen.py",
-        "_close_kitchen_handler",
+        "_restore_baseline_config",
         "overlay_path.unlink",
     ): (
         1,

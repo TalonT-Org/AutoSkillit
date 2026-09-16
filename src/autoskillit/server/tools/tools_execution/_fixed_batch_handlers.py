@@ -85,6 +85,13 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.core import (
+        BackendConventions,
+        CodingAgentBackend,
+        HeadlessExecutor,
+        SubprocessRunner,
+        ValidatedAddDir,
+    )
     from autoskillit.pipeline import ToolContext
     from autoskillit.server._misc import SkillProjectionContext
 
@@ -145,6 +152,71 @@ class _ManagedLeafLaunchAdapter:
             elif existing != expected:
                 raise SkillContractError("managed leaf binding conflicts with an existing route")
 
+    async def _resolve_isolated_worktree_request(
+        self,
+        projection: ManagedLeafProjection,
+        runner: SubprocessRunner | None,
+        source_cwd: Path,
+        leaf_session_id: str,
+    ) -> _ChildWorktreeRequest | None:
+        if not projection.binding.workspace.requires_isolated_worktree:
+            return None
+        if runner is None:
+            raise SkillContractError("managed leaf worktree allocation requires a runner")
+        revision = await runner(["git", "rev-parse", "HEAD"], cwd=source_cwd, timeout=10)
+        if revision.returncode != 0 or not revision.stdout.strip():
+            raise SkillContractError("managed leaf source revision could not be resolved")
+        worktree_root = Path(self.tool_ctx.temp_dir) / "managed-leaf-worktrees"
+        return _ChildWorktreeRequest(
+            project_root=source_cwd,
+            worktree_root=worktree_root,
+            worktree_path=worktree_root / leaf_session_id,
+            revision=revision.stdout.strip(),
+            runner=runner,
+            create_worktree=_te_pkg.create_git_worktree,
+            remove_worktree=_te_pkg.remove_git_worktree,
+        )
+
+    async def _execute_leaf(
+        self,
+        executor: HeadlessExecutor,
+        backend: CodingAgentBackend,
+        child_cwd: Path,
+        leaf_projection: ManagedLeafProjection,
+        add_dir: ValidatedAddDir,
+        conventions: BackendConventions,
+    ) -> ManagedLeafLaunchResult:
+        root = self.invocation.root
+        source = getattr(root, "source_ref", None) or getattr(root, "source", None)
+        if source is None:
+            raise SkillContractError("managed leaf invocation lacks source authority")
+        # The executor owns spawning: its subprocess runner delegates to
+        # run_managed_async, which creates and settles the process group once.
+        result = await executor.run(
+            render_target_skill_command(f"/{self.source_name}", source, conventions),
+            str(child_cwd),
+            model=leaf_projection.binding.model,
+            add_dirs=(add_dir,),
+            write_behavior=self.write_behavior,
+            readonly_skill=self.read_only,
+            backend_authority=BackendAuthority(
+                backend=backend.name,
+                kind=BackendAuthorityKind.GLOBAL,
+                tier=BackendAuthorityTier.GLOBAL,
+                key_path="managed_fixed_batch",
+            ),
+            caller_session_id=self.launch.parent_session_id,
+            child_role=leaf_projection.binding.assignment.role,
+            child_attribution_skill=self.source_name,
+        )
+        if isinstance(result, CandidatePreSpawnRejection):
+            raise SkillContractError("Managed fixed-batch leaf rejected before its runner started")
+        return ManagedLeafLaunchResult(
+            outcome=OUTCOME_SUCCESS if result.success else OUTCOME_FAILURE,
+            backend_session_id=result.session_id,
+            result_payload=result.to_json(),
+        )
+
     @asynccontextmanager
     async def __call__(
         self,
@@ -163,23 +235,12 @@ class _ManagedLeafLaunchAdapter:
         leaf_session_id = projection.binding.assignment.generated_home_id
         materialized = False
         source_cwd = Path(self.tool_ctx.project_dir)
-        worktree = None
-        if projection.binding.workspace.requires_isolated_worktree:
-            if runner is None:
-                raise SkillContractError("managed leaf worktree allocation requires a runner")
-            revision = await runner(["git", "rev-parse", "HEAD"], cwd=source_cwd, timeout=10)
-            if revision.returncode != 0 or not revision.stdout.strip():
-                raise SkillContractError("managed leaf source revision could not be resolved")
-            worktree_root = Path(self.tool_ctx.temp_dir) / "managed-leaf-worktrees"
-            worktree = _ChildWorktreeRequest(
-                project_root=source_cwd,
-                worktree_root=worktree_root,
-                worktree_path=worktree_root / leaf_session_id,
-                revision=revision.stdout.strip(),
-                runner=runner,
-                create_worktree=_te_pkg.create_git_worktree,
-                remove_worktree=_te_pkg.remove_git_worktree,
-            )
+        worktree = await self._resolve_isolated_worktree_request(
+            projection,
+            runner,
+            source_cwd,
+            leaf_session_id,
+        )
 
         async def prepare(owned_cwd: Path):
             nonlocal materialized
@@ -248,37 +309,13 @@ class _ManagedLeafLaunchAdapter:
                 raise SkillContractError("managed leaf source document was not materialized")
 
             async def execute() -> ManagedLeafLaunchResult:
-                # The executor owns spawning: its subprocess runner delegates to
-                # run_managed_async, which creates and settles the process group once.
-                root = self.invocation.root
-                source = getattr(root, "source_ref", None) or getattr(root, "source", None)
-                if source is None:
-                    raise SkillContractError("managed leaf invocation lacks source authority")
-                result = await executor.run(
-                    render_target_skill_command(f"/{self.source_name}", source, conventions),
-                    str(child.owned_cwd),
-                    model=leaf_projection.binding.model,
-                    add_dirs=(add_dir,),
-                    write_behavior=self.write_behavior,
-                    readonly_skill=self.read_only,
-                    backend_authority=BackendAuthority(
-                        backend=backend.name,
-                        kind=BackendAuthorityKind.GLOBAL,
-                        tier=BackendAuthorityTier.GLOBAL,
-                        key_path="managed_fixed_batch",
-                    ),
-                    caller_session_id=self.launch.parent_session_id,
-                    child_role=leaf_projection.binding.assignment.role,
-                    child_attribution_skill=self.source_name,
-                )
-                if isinstance(result, CandidatePreSpawnRejection):
-                    raise SkillContractError(
-                        "Managed fixed-batch leaf rejected before its runner started"
-                    )
-                return ManagedLeafLaunchResult(
-                    outcome=OUTCOME_SUCCESS if result.success else OUTCOME_FAILURE,
-                    backend_session_id=result.session_id,
-                    result_payload=result.to_json(),
+                return await self._execute_leaf(
+                    executor,
+                    backend,
+                    child.owned_cwd,
+                    leaf_projection,
+                    add_dir,
+                    conventions,
                 )
 
             # finalize is None: the leaf binding has no durable state to

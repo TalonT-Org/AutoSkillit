@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 from fastmcp import Context
@@ -44,6 +45,9 @@ from autoskillit.server.tools._ordering_telemetry import (
     detect_ordering_violations,
     read_session_index_records,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.core import DatabaseReader
 
 logger = get_logger(__name__)
 
@@ -687,63 +691,81 @@ async def read_db(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
-            if tool_ctx.db_reader is None:
+            reader = tool_ctx.db_reader
+            if reader is None:
                 return json.dumps({"success": False, "error": "Database reader not configured"})
 
             # Resolve timeout
             effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
             max_rows = _get_config().read_db.max_rows
 
-            # Execute in thread (sqlite3 is blocking)
-            loop = asyncio.get_running_loop()
-            try:
-                result = await loop.run_in_executor(
-                    None,
-                    tool_ctx.db_reader.query,
-                    str(db),
-                    query,
-                    parsed_params,
-                    effective_timeout,
-                    max_rows,
-                )
-                return json.dumps(result)
-            except ValueError as exc:
-                # Non-SELECT SQL rejected by db_reader's defence-in-depth validation
-                await _notify(
-                    ctx,
-                    "error",
-                    "read_db: non-SELECT query rejected",
-                    "autoskillit.read_db",
-                    extra={"error": str(exc)},
-                )
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": str(exc),
-                        "hint": "Only SELECT queries are allowed",
-                    }
-                )
-            except TimeoutError:
-                await _notify(
-                    ctx,
-                    "error",
-                    "read_db: query timed out",
-                    "autoskillit.read_db",
-                    extra={"timeout": effective_timeout},
-                )
-                return json.dumps(
-                    {"success": False, "error": f"Query exceeded {effective_timeout}s timeout"}
-                )
-            except Exception as exc:
-                logger.warning("read_db query failed", error=type(exc).__name__)
-                await _notify(
-                    ctx,
-                    "error",
-                    "read_db: query failed",
-                    "autoskillit.read_db",
-                    extra={"error": type(exc).__name__},
-                )
-                return json.dumps({"success": False, "error": f"Query failed: {exc}"})
+            return await _execute_read_db_query(
+                ctx,
+                reader,
+                str(db),
+                query,
+                parsed_params,
+                effective_timeout,
+                max_rows,
+            )
         except Exception as exc:
             logger.error("read_db unhandled exception", exc_info=True)
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+async def _execute_read_db_query(
+    ctx: Context,
+    reader: DatabaseReader,
+    db_path: str,
+    query: str,
+    params: list[object] | dict[str, object],
+    timeout: int,
+    max_rows: int,
+) -> str:
+    """Execute the configured database reader and translate query errors."""
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            reader.query,
+            db_path,
+            query,
+            params,
+            timeout,
+            max_rows,
+        )
+        return json.dumps(result)
+    except ValueError as exc:
+        await _notify(
+            ctx,
+            "error",
+            "read_db: non-SELECT query rejected",
+            "autoskillit.read_db",
+            extra={"error": str(exc)},
+        )
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(exc),
+                "hint": "Only SELECT queries are allowed",
+            }
+        )
+    except TimeoutError:
+        await _notify(
+            ctx,
+            "error",
+            "read_db: query timed out",
+            "autoskillit.read_db",
+            extra={"timeout": timeout},
+        )
+        return json.dumps({"success": False, "error": f"Query exceeded {timeout}s timeout"})
+    except Exception as exc:
+        logger.warning("read_db query failed", error=type(exc).__name__)
+        await _notify(
+            ctx,
+            "error",
+            "read_db: query failed",
+            "autoskillit.read_db",
+            extra={"error": type(exc).__name__},
+        )
+        return json.dumps({"success": False, "error": f"Query failed: {exc}"})

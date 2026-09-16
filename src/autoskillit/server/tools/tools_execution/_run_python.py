@@ -29,9 +29,36 @@ from autoskillit.server.tools._execution_helpers import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
     from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
+
+
+def _finalize_run_python_response(
+    tool_ctx: ToolContext,
+    result: dict[str, object],
+    *,
+    work_dir: str,
+    prepared_segment: PreparedRecipeSegmentDelivery | None,
+) -> str:
+    """Shape an execution result and attach its prepared recipe segment."""
+    rendered = _te_pkg.shape_execution_response(
+        tool_ctx,
+        result,
+        tool_name="run_python",
+        work_dir=work_dir,
+    )
+    shaped = json.loads(rendered)
+    if not isinstance(shaped, dict):
+        raise TypeError("run_python response must be a JSON object")
+    return json.dumps(
+        attach_recipe_segment(
+            shaped,
+            prepared_segment,
+            success=shaped.get("success") is True,
+        )
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -131,21 +158,11 @@ async def run_python(
                     "autoskillit.run_python",
                     extra={"callable": callable},
                 )
-            rendered = _te_pkg.shape_execution_response(
+            return _finalize_run_python_response(
                 tool_ctx,
                 result,
-                tool_name="run_python",
                 work_dir=work_dir,
-            )
-            shaped = json.loads(rendered)
-            if not isinstance(shaped, dict):
-                raise TypeError("run_python response must be a JSON object")
-            return json.dumps(
-                attach_recipe_segment(
-                    shaped,
-                    prepared_segment,
-                    success=shaped.get("success") is True,
-                )
+                prepared_segment=prepared_segment,
             )
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)

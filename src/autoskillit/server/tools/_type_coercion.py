@@ -20,6 +20,25 @@ class OverrideCoercionError(ValueError):
     """Caller override cannot be coerced to the declared ingredient type."""
 
 
+def _validate_json_container(
+    value: str,
+    expected_type: type[list[Any]] | type[dict[str, Any]],
+    declared_type: str,
+    json_kind: str,
+) -> str:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise OverrideCoercionError(
+            f"{declared_type} value must be valid JSON {json_kind}, got {value!r}"
+        ) from exc
+    if not isinstance(parsed, expected_type):
+        raise OverrideCoercionError(
+            f"{declared_type} value must decode to a JSON {json_kind}, got {type(parsed).__name__}"
+        )
+    return value
+
+
 def coerce_override_value(value: object, declared_type: str | None) -> str:
     """Validate ``value`` can be coerced to ``declared_type``.
 
@@ -37,22 +56,12 @@ def coerce_override_value(value: object, declared_type: str | None) -> str:
     # Reject non-string inputs explicitly (do not coerce silently).
     if not isinstance(value, str):
         raise OverrideCoercionError(f"override value must be a string, got {type(value).__name__}")
-    if declared_type is None:
+    if declared_type in (None, "string", "optional_string", "worktree_relative_path"):
         return value
-    if declared_type == "string":
-        return value
-    if declared_type == "optional_string":
-        return value  # any string including empty is valid
-    if declared_type == "path":
+    if declared_type in ("path", "absolute_path"):
         if not value:
-            raise OverrideCoercionError(f"path value must be non-empty, got {value!r}")
+            raise OverrideCoercionError(f"{declared_type} value must be non-empty, got {value!r}")
         return value
-    if declared_type == "absolute_path":
-        if not value:
-            raise OverrideCoercionError(f"absolute_path value must be non-empty, got {value!r}")
-        return value
-    if declared_type == "worktree_relative_path":
-        return value  # empty allowed (worktree root may be project root)
     if declared_type == "integer":
         try:
             int(value)
@@ -67,29 +76,9 @@ def coerce_override_value(value: object, declared_type: str | None) -> str:
             )
         return value
     if declared_type == "list":
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise OverrideCoercionError(
-                f"list value must be valid JSON array, got {value!r}"
-            ) from e
-        if not isinstance(parsed, list):
-            raise OverrideCoercionError(
-                f"list value must decode to a JSON array, got {type(parsed).__name__}"
-            )
-        return value
+        return _validate_json_container(value, list, "list", "array")
     if declared_type == "dict":
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise OverrideCoercionError(
-                f"dict value must be valid JSON object, got {value!r}"
-            ) from e
-        if not isinstance(parsed, dict):
-            raise OverrideCoercionError(
-                f"dict value must decode to a JSON object, got {type(parsed).__name__}"
-            )
-        return value
+        return _validate_json_container(value, dict, "dict", "object")
     # Defense in depth — __post_init__ rejects unknown types at parse time.
     raise OverrideCoercionError(f"unknown declared type {declared_type!r}")
 

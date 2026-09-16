@@ -29,6 +29,7 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import (
     KitchenOpenPhase,
+    ToolContext,
     advance_kitchen_phase,
     exploration_auto_provision_eligible,
     transition_ambiguous,
@@ -60,6 +61,84 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
 )
 
 logger = get_logger(__name__)
+
+
+async def _restore_skipped_handler_quota_refresh(ctx: ToolContext) -> None:
+    """Restore quota refresh when an already-ready kitchen has no task."""
+    supports_quota = _backend_supports_quota(ctx)
+    if ctx.quota_refresh_task is None and supports_quota:
+        try:
+            ctx.quota_refresh_task = _tk_pkg.create_background_task(
+                _tk_pkg._quota_refresh_loop(
+                    ctx.config.quota_guard,
+                    diagnostic_log_root=_tk_pkg.resolve_log_dir(ctx.config.linux_tracing.log_dir),
+                    supports_quota_check=True,
+                ),
+                label="quota_refresh_loop",
+            )
+        except Exception:
+            logger.warning("open_kitchen_quota_refresh_deferred_start_failed", exc_info=True)
+
+
+def _build_anonymous_open_response(
+    ctx: ToolContext,
+    tool_ctx: ToolContext,
+    categories: str,
+    forbidden_list: str,
+) -> str:
+    """Build the response returned after opening without a named recipe."""
+    _transition_start(tool_ctx, "anonymous_response")
+    text = (
+        f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
+        f"Available Tools by Category:\n{categories}\n\n"
+        "IMPORTANT — Orchestrator Discipline:\n"
+        f"NEVER use native Claude Code tools ({forbidden_list}) "
+        "in this session. All code reading, searching, editing, and "
+        "investigation MUST be delegated through run_skill, which launches "
+        "headless sessions with full tool access. Do NOT use native tools to "
+        "investigate failures — route to on_failure "
+        "and let the downstream skill handle diagnosis."
+    )
+    try:
+        text += _tk_pkg.project_orchestrator_guidance(ctx)
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="project_sous_chef")
+
+    scripts_dir = ctx.project_dir / ".autoskillit" / "scripts"
+    recipes_dir = ctx.project_dir / ".autoskillit" / "recipes"
+    if scripts_dir.exists() and not recipes_dir.exists():
+        text += (
+            "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated"
+            " to the new recipe format.\n"
+            "`.autoskillit/scripts/` still exists."
+            " Run `autoskillit upgrade` in this directory\n"
+            "to migrate automatically, or ask me to do it for you."
+        )
+
+    try:
+        warning = (
+            _tk_pkg._build_hook_diagnostic_warning(
+                detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
+            )
+            if tool_ctx.backend is not None
+            else None
+        )
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
+    if warning:
+        text += warning
+
+    anonymous_result: dict[str, Any] = {
+        "success": True,
+        "kitchen": "open",
+        "content": text,
+        "ingredients_table": None,
+        "version": __version__,
+    }
+    _attach_transition_fields(anonymous_result, tool_ctx, committed=True)
+    return render_served_response(anonymous_result)
 
 
 @mcp.tool(
@@ -175,23 +254,7 @@ async def open_kitchen(
                 return handler_err
         else:
             _ctx_post = _get_ctx()
-            _supports_quota_post = _backend_supports_quota(_ctx_post)
-            if _ctx_post.quota_refresh_task is None and _supports_quota_post:
-                try:
-                    _ctx_post.quota_refresh_task = _tk_pkg.create_background_task(
-                        _tk_pkg._quota_refresh_loop(
-                            _ctx_post.config.quota_guard,
-                            diagnostic_log_root=_tk_pkg.resolve_log_dir(
-                                _ctx_post.config.linux_tracing.log_dir
-                            ),
-                            supports_quota_check=True,
-                        ),
-                        label="quota_refresh_loop",
-                    )
-                except Exception:
-                    logger.warning(
-                        "open_kitchen_quota_refresh_deferred_start_failed", exc_info=True
-                    )
+            await _restore_skipped_handler_quota_refresh(_ctx_post)
 
         if not _skip_handler:
             # Scope-placement invariant (REQ-#4399): this branch is gated on
@@ -330,62 +393,7 @@ async def open_kitchen(
                 _is_deferred_recall,
             )
 
-        _transition_start(tool_ctx, "anonymous_response")
-        text = (
-            f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
-            f"Available Tools by Category:\n{_categories}\n\n"
-            "IMPORTANT — Orchestrator Discipline:\n"
-            f"NEVER use native Claude Code tools ({_forbidden_list}) "
-            "in this session. All code reading, searching, editing, and "
-            "investigation MUST be delegated through run_skill, which launches "
-            "headless sessions with full tool access. Do NOT use native tools to "
-            "investigate failures — route to on_failure "
-            "and let the downstream skill handle diagnosis."
-        )
-
-        # Anonymous opens receive the projected orchestrator discipline. Named opens
-        # returned above and preserve their attested recipe-delivery bytes unchanged.
-        try:
-            text += _tk_pkg.project_orchestrator_guidance(_ctx)
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="project_sous_chef")
-
-        # Check if the project needs an upgrade
-        scripts_dir = _ctx.project_dir / ".autoskillit" / "scripts"
-        recipes_dir = _ctx.project_dir / ".autoskillit" / "recipes"
-        if scripts_dir.exists() and not recipes_dir.exists():
-            text += (
-                "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated"
-                " to the new recipe format.\n"
-                "`.autoskillit/scripts/` still exists."
-                " Run `autoskillit upgrade` in this directory\n"
-                "to migrate automatically, or ask me to do it for you."
-            )
-
-        try:
-            warning = (
-                _tk_pkg._build_hook_diagnostic_warning(
-                    detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
-                )
-                if tool_ctx.backend is not None
-                else None
-            )
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
-        if warning:
-            text += warning
-
-        anonymous_result: dict[str, Any] = {
-            "success": True,
-            "kitchen": "open",
-            "content": text,
-            "ingredients_table": None,
-            "version": __version__,
-        }
-        _attach_transition_fields(anonymous_result, tool_ctx, committed=True)
-        return render_served_response(anonymous_result)
+        return _build_anonymous_open_response(_ctx, tool_ctx, _categories, _forbidden_list)
     except Exception as exc:
         logger.error("open_kitchen unhandled exception", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="unhandled")

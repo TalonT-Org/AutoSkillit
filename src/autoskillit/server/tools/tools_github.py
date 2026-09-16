@@ -288,16 +288,20 @@ async def report_bug(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
-            if severity == "blocking":
-                dispatch, dispatch_error = _prepare_direct_skill_dispatch(
-                    skill_command,
-                    cwd,
-                    tool_ctx,
+            background = tool_ctx.background
+            if severity != "blocking" and background is None:
+                raise RuntimeError("ToolContext.background not initialized")
+            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
+                skill_command,
+                cwd,
+                tool_ctx,
+            )
+            if dispatch_error is not None or dispatch is None:
+                return dispatch_error or json.dumps(
+                    {"success": False, "error": "Direct skill dispatch preparation failed"}
                 )
-                if dispatch_error is not None or dispatch is None:
-                    return dispatch_error or json.dumps(
-                        {"success": False, "error": "Direct skill dispatch preparation failed"}
-                    )
+
+            if severity == "blocking":
                 result = await _run_report_session(
                     skill_command,
                     cwd,
@@ -329,17 +333,7 @@ async def report_bug(
 
             # Non-blocking: supervised background dispatch, return immediately.
             status_path = report_path.with_suffix(".status.json")
-            if tool_ctx.background is None:  # always set by ToolContext.__post_init__
-                raise RuntimeError("ToolContext.background not initialized")
-            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
-                skill_command,
-                cwd,
-                tool_ctx,
-            )
-            if dispatch_error is not None or dispatch is None:
-                return dispatch_error or json.dumps(
-                    {"success": False, "error": "Direct skill dispatch preparation failed"}
-                )
+            assert background is not None  # validated for all non-blocking severities above
             report_session = None
             try:
                 atomic_write(
@@ -369,7 +363,7 @@ async def report_bug(
                     direct_dispatch=dispatch,
                     tool_ctx=tool_ctx,
                 )
-                tool_ctx.background.submit(
+                background.submit(
                     report_session,
                     label=step_name or "report_bug",
                 )

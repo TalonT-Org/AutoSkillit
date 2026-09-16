@@ -59,6 +59,8 @@ _RE_EXPORTED_NAMES = (
     "_admit_recipe_execution",
     "_prepare_dispatch_backend",
     "_prepare_dispatch_session",
+    "_resolve_dispatch_paths",
+    "_resolve_fresh_invocation",
     "_execute_and_finalize_run_skill",
     "_record_explorer_launch_lease",
     "_mint_fresh_explorer_binding",

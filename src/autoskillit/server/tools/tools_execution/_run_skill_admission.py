@@ -184,6 +184,230 @@ def _build_actual_mcp_kwargs(
     return result
 
 
+def _prepare_audit_reservation(
+    state: _RunSkillDispatchState,
+    runtime_digest: str,
+    actual_mcp_kwargs: dict[str, BoundScalar],
+) -> None:
+    """Prepare and reserve the audit slot for an attested publication."""
+    assert state._audit_publication is not None
+    assert state._clone_allowed_root is not None
+    assert state._installed_execution is not None
+    state._slot_intent_digest = compute_audit_slot_intent_digest(
+        execution_id=state.recipe_execution_id,
+        step_name=state.step_name,
+        template_digest=state.invocation_template_digest,
+        bound_inputs=state._bound_recipe_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=state._preflight_result,
+        retry_after_audit_attempt_id=(state.retry_after_audit_attempt_id or None),
+    )
+    state._bound_input_map = dict(state._bound_recipe_inputs)
+    state._prior_input_field = state._audit_publication.prior_input_field
+    # _bound_input_map values are BoundScalar (str | int | bool); the
+    # isinstance check below is the real type guard, matching the flat
+    # code's untyped-local behavior before this became a state field.
+    state._prior_path = state._bound_input_map.get(  # type: ignore[assignment]
+        state._prior_input_field
+    )
+    state._recipe_execution_key = RecipeExecutionId(state.recipe_execution_id)
+    if isinstance(state._prior_path, str) and state._prior_path:
+        prior_authority = load_current_prior_authority(
+            state._prior_path,
+            allowed_root=state._clone_allowed_root,
+            ledger=state.tool_ctx.audit_admission_ledger,
+            recipe_execution_id=state._recipe_execution_key,
+        )
+        state._audited_plan_refs = (
+            normalize_audited_plan_refs(
+                str(state._bound_input_map.get("all_plan_paths") or ""),
+                allowed_root=state._clone_allowed_root,
+            )
+            if state._bound_input_map.get("all_plan_paths")
+            else prior_authority.audited_plan_refs
+        )
+        state._cycle_id = prior_authority.cycle_id
+        state._scope_id = prior_authority.scope_id
+        state._part_id = prior_authority.part_id
+        state._parent_digest = prior_authority.authority_digest
+    else:
+        state._audited_plan_refs = normalize_audited_plan_refs(
+            str(state._bound_input_map.get("all_plan_paths") or ""),
+            allowed_root=state._clone_allowed_root,
+        )
+        state._cycle_id, state._scope_id, state._part_id = derive_initial_lifecycle_ids(
+            recipe_execution_id=state._recipe_execution_key,
+            step_name=state.step_name,
+            slot_intent_digest=state._slot_intent_digest,
+        )
+        state._parent_digest = None
+    state._audit_preflight_steps = _audit_preflight_step_names(
+        state.tool_ctx,
+        state._installed_execution,
+    )
+    with state.tool_ctx.recipe_execution_lock:
+        if get_recipe_execution(state.tool_ctx) is not state._installed_execution:
+            raise RecipeExecutionAdmissionError(
+                "recipe_execution_replaced",
+                "active recipe execution changed before audit reservation",
+            )
+        state._reservation_outcome = state.tool_ctx.audit_admission_ledger.reserve(
+            AuditReservationRequest(
+                recipe_execution_id=state._recipe_execution_key,
+                installation_version=(state._installed_execution.installation_version),
+                step_name=state.step_name,
+                invocation_template_digest=(state.invocation_template_digest),
+                slot_intent_digest=state._slot_intent_digest,
+                runtime_binding_digest=runtime_digest,
+                audited_plan_refs=state._audited_plan_refs,
+                cycle_id=state._cycle_id,
+                scope_id=state._scope_id,
+                part_id=state._part_id,
+                allowed_root=state._clone_allowed_root,
+                parent_authority_digest=state._parent_digest,
+                retry_after_audit_attempt_id=(
+                    AuditAttemptId(state.retry_after_audit_attempt_id)
+                    if state.retry_after_audit_attempt_id
+                    else None
+                ),
+                tracker_target_order_id=(
+                    state._tracker_target.target_order_id
+                    if state._tracker_target is not None
+                    else None
+                ),
+                tracker_expected=(
+                    state._tracker_target.expected if state._tracker_target is not None else False
+                ),
+            )
+        )
+    if state._reservation_outcome.reservation is not None:
+        (
+            state._tracker_target,
+            state._tracker_authority,
+            state._tracker_key,
+            state._tracker_lease,
+        ) = _restore_reserved_tracker_authority(
+            state.tool_ctx,
+            state._reservation_outcome.reservation,
+            state._tracker_key,
+        )
+
+
+def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | None:
+    """Construct the dispatch prompt or return an audit reservation terminal result."""
+    assert state._reservation_outcome is not None
+    assert state._audited_plan_refs is not None
+    assert state._clone_allowed_root is not None
+    match state._reservation_outcome.decision:
+        case ReservationDecision.DISPATCH_NEW | ReservationDecision.REDISPATCH_OPEN:
+            assert state._reservation_outcome.reservation is not None
+            assert state._reservation_outcome.reservation_handle is not None
+            state._audit_reservation = state._reservation_outcome.reservation
+            state.child_skill_command = build_bound_child_prompt(
+                state.skill_command,
+                state._bound_recipe_inputs,
+                state._preflight_result,
+                audit_reservation_handle=state._reservation_outcome.reservation_handle,
+                audit_reserved_plan_refs=state._audited_plan_refs,
+                audit_output_mode=state._audit_output_mode,
+            )
+        case ReservationDecision.EXACT_REPLAY:
+            assert state._reservation_outcome.replay_outcome is not None
+            state._replay = state._reservation_outcome.replay_outcome
+            if state._replay.replay_response_json is not None:
+                replay_response = state._replay.replay_response_json
+            else:
+                replay_response = _te_pkg._audit_response(
+                    status=AuditOutcomeStatus.EXACT_REPLAY,
+                    attempt_id=state._replay.attempt_id,
+                    verdict=state._replay.verdict,
+                    path=state._replay.path,
+                    error=state._replay.error,
+                    kill_reason=state._replay.kill_reason,
+                )
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                _te_pkg._begin_run_skill_completion(
+                    state.tool_ctx,
+                    request_context=state.ctx,
+                    order_id=state.order_id,
+                    step_name=state.step_name,
+                    tracker_target=state._tracker_target,
+                ),
+                replay_response,
+            )
+        case ReservationDecision.RESUME_PREPARED:
+            assert state._reservation_outcome.reservation is not None
+            with state.tool_ctx.recipe_execution_lock:
+                if get_recipe_execution(state.tool_ctx) is not state._installed_execution:
+                    raise RecipeExecutionAdmissionError(
+                        "recipe_execution_replaced",
+                        "active recipe execution changed before audit recovery",
+                    )
+                state._resumed = state.tool_ctx.audit_authority_materializer.materialize(
+                    reservation=state._reservation_outcome.reservation,
+                    semantic_result_path=(
+                        state._reservation_outcome.reservation.semantic_result_path
+                    ),
+                    preflight_step_names=state._audit_preflight_steps,
+                )
+            resumed_response = _te_pkg._complete_resumed_audit(
+                state.tool_ctx,
+                result=state._resumed,
+                skill_command=state.skill_command,
+                tracker_target=state._tracker_target,
+            )
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                _te_pkg._begin_run_skill_completion(
+                    state.tool_ctx,
+                    request_context=state.ctx,
+                    order_id=state.order_id,
+                    step_name=state.step_name,
+                    tracker_target=state._tracker_target,
+                ),
+                resumed_response,
+            )
+        case ReservationDecision.PUBLISHED_PENDING_FINALIZATION:
+            assert state._reservation_outcome.reservation is not None
+            state._authority = AuditCycleVerifier(state._clone_allowed_root).load_authority(
+                state._reservation_outcome.reservation.authority_path
+            )
+            state._published = AuditMaterializationResult(
+                status=AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION,
+                attempt_id=state._reservation_outcome.attempt_id,
+                verdict=state._authority.verdict,
+                path=state._reservation_outcome.reservation.authority_path,
+                error=None,
+            )
+            published_response = _te_pkg._complete_resumed_audit(
+                state.tool_ctx,
+                result=state._published,
+                skill_command=state.skill_command,
+                tracker_target=state._tracker_target,
+            )
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                _te_pkg._begin_run_skill_completion(
+                    state.tool_ctx,
+                    request_context=state.ctx,
+                    order_id=state.order_id,
+                    step_name=state.step_name,
+                    tracker_target=state._tracker_target,
+                ),
+                published_response,
+            )
+        case ReservationDecision.CONFLICT:
+            return _te_pkg._audit_response(
+                status=AuditOutcomeStatus.CONFLICT,
+                attempt_id=state._reservation_outcome.attempt_id,
+                verdict=None,
+                path=None,
+                error=state._reservation_outcome.conflict_detail,
+            )
+    return None
+
+
 def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
     state._preflight_result = None
     state._bound_recipe_inputs = ()
@@ -342,222 +566,9 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             return terminal
         if state._audit_publication is not None:
             try:
-                state._slot_intent_digest = compute_audit_slot_intent_digest(
-                    execution_id=state.recipe_execution_id,
-                    step_name=state.step_name,
-                    template_digest=state.invocation_template_digest,
-                    bound_inputs=state._bound_recipe_inputs,
-                    actual_mcp_kwargs=_actual_mcp_kwargs,
-                    preflight=state._preflight_result,
-                    retry_after_audit_attempt_id=(state.retry_after_audit_attempt_id or None),
-                )
-                state._bound_input_map = dict(state._bound_recipe_inputs)
-                state._prior_input_field = state._audit_publication.prior_input_field
-                # _bound_input_map values are BoundScalar (str | int | bool); the
-                # isinstance check below is the real type guard, matching the flat
-                # code's untyped-local behavior before this became a state field.
-                state._prior_path = state._bound_input_map.get(  # type: ignore[assignment]
-                    state._prior_input_field
-                )
-                state._recipe_execution_key = RecipeExecutionId(state.recipe_execution_id)
-                if isinstance(state._prior_path, str) and state._prior_path:
-                    _prior_authority = load_current_prior_authority(
-                        state._prior_path,
-                        allowed_root=state._clone_allowed_root,
-                        ledger=state.tool_ctx.audit_admission_ledger,
-                        recipe_execution_id=state._recipe_execution_key,
-                    )
-                    state._audited_plan_refs = (
-                        normalize_audited_plan_refs(
-                            str(state._bound_input_map.get("all_plan_paths") or ""),
-                            allowed_root=state._clone_allowed_root,
-                        )
-                        if state._bound_input_map.get("all_plan_paths")
-                        else _prior_authority.audited_plan_refs
-                    )
-                    state._cycle_id = _prior_authority.cycle_id
-                    state._scope_id = _prior_authority.scope_id
-                    state._part_id = _prior_authority.part_id
-                    state._parent_digest = _prior_authority.authority_digest
-                else:
-                    state._audited_plan_refs = normalize_audited_plan_refs(
-                        str(state._bound_input_map.get("all_plan_paths") or ""),
-                        allowed_root=state._clone_allowed_root,
-                    )
-                    state._cycle_id, state._scope_id, state._part_id = (
-                        derive_initial_lifecycle_ids(
-                            recipe_execution_id=state._recipe_execution_key,
-                            step_name=state.step_name,
-                            slot_intent_digest=state._slot_intent_digest,
-                        )
-                    )
-                    state._parent_digest = None
-                state._audit_preflight_steps = _audit_preflight_step_names(
-                    state.tool_ctx,
-                    state._installed_execution,
-                )
-                with state.tool_ctx.recipe_execution_lock:
-                    if get_recipe_execution(state.tool_ctx) is not state._installed_execution:
-                        raise RecipeExecutionAdmissionError(
-                            "recipe_execution_replaced",
-                            "active recipe execution changed before audit reservation",
-                        )
-                    state._reservation_outcome = state.tool_ctx.audit_admission_ledger.reserve(
-                        AuditReservationRequest(
-                            recipe_execution_id=state._recipe_execution_key,
-                            installation_version=(state._installed_execution.installation_version),
-                            step_name=state.step_name,
-                            invocation_template_digest=(state.invocation_template_digest),
-                            slot_intent_digest=state._slot_intent_digest,
-                            runtime_binding_digest=_runtime_digest,
-                            audited_plan_refs=state._audited_plan_refs,
-                            cycle_id=state._cycle_id,
-                            scope_id=state._scope_id,
-                            part_id=state._part_id,
-                            allowed_root=state._clone_allowed_root,
-                            parent_authority_digest=state._parent_digest,
-                            retry_after_audit_attempt_id=(
-                                AuditAttemptId(state.retry_after_audit_attempt_id)
-                                if state.retry_after_audit_attempt_id
-                                else None
-                            ),
-                            tracker_target_order_id=(
-                                state._tracker_target.target_order_id
-                                if state._tracker_target is not None
-                                else None
-                            ),
-                            tracker_expected=(
-                                state._tracker_target.expected
-                                if state._tracker_target is not None
-                                else False
-                            ),
-                        )
-                    )
-                if state._reservation_outcome.reservation is not None:
-                    (
-                        state._tracker_target,
-                        state._tracker_authority,
-                        state._tracker_key,
-                        state._tracker_lease,
-                    ) = _restore_reserved_tracker_authority(
-                        state.tool_ctx,
-                        state._reservation_outcome.reservation,
-                        state._tracker_key,
-                    )
-                match state._reservation_outcome.decision:
-                    case ReservationDecision.DISPATCH_NEW | ReservationDecision.REDISPATCH_OPEN:
-                        assert state._reservation_outcome.reservation is not None
-                        assert state._reservation_outcome.reservation_handle is not None
-                        state._audit_reservation = state._reservation_outcome.reservation
-                        state.child_skill_command = build_bound_child_prompt(
-                            state.skill_command,
-                            state._bound_recipe_inputs,
-                            state._preflight_result,
-                            audit_reservation_handle=(
-                                state._reservation_outcome.reservation_handle
-                            ),
-                            audit_reserved_plan_refs=state._audited_plan_refs,
-                            audit_output_mode=state._audit_output_mode,
-                        )
-                    case ReservationDecision.EXACT_REPLAY:
-                        assert state._reservation_outcome.replay_outcome is not None
-                        state._replay = state._reservation_outcome.replay_outcome
-                        if state._replay.replay_response_json is not None:
-                            _replay_response = state._replay.replay_response_json
-                        else:
-                            _replay_response = _te_pkg._audit_response(
-                                status=AuditOutcomeStatus.EXACT_REPLAY,
-                                attempt_id=state._replay.attempt_id,
-                                verdict=state._replay.verdict,
-                                path=state._replay.path,
-                                error=state._replay.error,
-                                kill_reason=state._replay.kill_reason,
-                            )
-                        return _te_pkg._finalize_run_skill_completion(
-                            state.tool_ctx,
-                            _te_pkg._begin_run_skill_completion(
-                                state.tool_ctx,
-                                request_context=state.ctx,
-                                order_id=state.order_id,
-                                step_name=state.step_name,
-                                tracker_target=state._tracker_target,
-                            ),
-                            _replay_response,
-                        )
-                    case ReservationDecision.RESUME_PREPARED:
-                        assert state._reservation_outcome.reservation is not None
-                        with state.tool_ctx.recipe_execution_lock:
-                            if (
-                                get_recipe_execution(state.tool_ctx)
-                                is not state._installed_execution
-                            ):
-                                raise RecipeExecutionAdmissionError(
-                                    "recipe_execution_replaced",
-                                    "active recipe execution changed before audit recovery",
-                                )
-                            state._resumed = (
-                                state.tool_ctx.audit_authority_materializer.materialize(
-                                    reservation=state._reservation_outcome.reservation,
-                                    semantic_result_path=(
-                                        state._reservation_outcome.reservation.semantic_result_path
-                                    ),
-                                    preflight_step_names=state._audit_preflight_steps,
-                                )
-                            )
-                        _resumed_response = _te_pkg._complete_resumed_audit(
-                            state.tool_ctx,
-                            result=state._resumed,
-                            skill_command=state.skill_command,
-                            tracker_target=state._tracker_target,
-                        )
-                        return _te_pkg._finalize_run_skill_completion(
-                            state.tool_ctx,
-                            _te_pkg._begin_run_skill_completion(
-                                state.tool_ctx,
-                                request_context=state.ctx,
-                                order_id=state.order_id,
-                                step_name=state.step_name,
-                                tracker_target=state._tracker_target,
-                            ),
-                            _resumed_response,
-                        )
-                    case ReservationDecision.PUBLISHED_PENDING_FINALIZATION:
-                        assert state._reservation_outcome.reservation is not None
-                        state._authority = AuditCycleVerifier(
-                            state._clone_allowed_root
-                        ).load_authority(state._reservation_outcome.reservation.authority_path)
-                        state._published = AuditMaterializationResult(
-                            status=(AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION),
-                            attempt_id=state._reservation_outcome.attempt_id,
-                            verdict=state._authority.verdict,
-                            path=state._reservation_outcome.reservation.authority_path,
-                            error=None,
-                        )
-                        _published_response = _te_pkg._complete_resumed_audit(
-                            state.tool_ctx,
-                            result=state._published,
-                            skill_command=state.skill_command,
-                            tracker_target=state._tracker_target,
-                        )
-                        return _te_pkg._finalize_run_skill_completion(
-                            state.tool_ctx,
-                            _te_pkg._begin_run_skill_completion(
-                                state.tool_ctx,
-                                request_context=state.ctx,
-                                order_id=state.order_id,
-                                step_name=state.step_name,
-                                tracker_target=state._tracker_target,
-                            ),
-                            _published_response,
-                        )
-                    case ReservationDecision.CONFLICT:
-                        return _te_pkg._audit_response(
-                            status=AuditOutcomeStatus.CONFLICT,
-                            attempt_id=state._reservation_outcome.attempt_id,
-                            verdict=None,
-                            path=None,
-                            error=state._reservation_outcome.conflict_detail,
-                        )
+                _prepare_audit_reservation(state, _runtime_digest, _actual_mcp_kwargs)
+                if (terminal := _handle_audit_reservation_decision(state)) is not None:
+                    return terminal
             except (
                 AuditCycleVerificationError,
                 OSError,

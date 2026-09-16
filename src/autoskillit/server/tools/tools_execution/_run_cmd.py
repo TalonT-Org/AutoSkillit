@@ -64,6 +64,62 @@ def _trusted_smoke_gate_provenance(
     )
 
 
+async def _execute_captured_command(
+    tool_ctx: ToolContext,
+    *,
+    cmd: str,
+    cwd: str,
+    timeout: int,
+    step_name: str,
+) -> tuple[dict[str, object], int]:
+    """Capture, interpret, summarize, and spill one command execution."""
+    env = build_sanitized_env()
+    if step_name:
+        env[SCENARIO_STEP_NAME_ENV] = step_name
+    artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
+    timeout_f = float(timeout)
+    sub_result = await _te_pkg._run_subprocess_captured(
+        ["bash", "-c", cmd],
+        cwd=cwd,
+        timeout=timeout_f,
+        env=env,
+        capture_dir=artifact_root,
+    )
+
+    spec = _spill_spec(tool_ctx)
+    returncode = sub_result.returncode
+    execution_error: str | None = None
+    complete = True
+
+    term = sub_result.termination
+    if term == TerminationReason.NATURAL_EXIT:
+        returncode = sub_result.returncode
+    elif term == TerminationReason.TIMED_OUT:
+        returncode = -1
+        execution_error = f"Process timed out after {timeout_f}s"
+        complete = False
+    elif term == TerminationReason.SIGNAL_DEATH:
+        execution_error = f"Process died to signal (returncode={sub_result.returncode})"
+        complete = False
+    else:
+        execution_error = f"Unexpected termination: {term.value}"
+        complete = False
+
+    stdout_capture, stderr_capture, capture_error = _summarize_streams(sub_result, spec, complete)
+    result = spill_run_cmd_result(
+        tool_ctx,
+        cwd=cwd,
+        returncode=returncode,
+        stdout="",
+        stderr="",
+        stdout_capture=stdout_capture,
+        stderr_capture=stderr_capture,
+        capture_error=capture_error,
+        execution_error=execution_error,
+    )
+    return result, returncode
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield(result_type="run_cmd")
 @track_response_size("run_cmd")
@@ -126,18 +182,13 @@ async def run_cmd(
                     return json.dumps(
                         {"success": True, "exit_code": 0, "stdout": "", "stderr": ""}
                     )
-                _env = build_sanitized_env()
-                if step_name:
-                    _env[SCENARIO_STEP_NAME_ENV] = step_name
-                artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
-                _timeout_f = float(timeout)
                 try:
-                    sub_result = await _te_pkg._run_subprocess_captured(
-                        ["bash", "-c", cmd],
+                    result, returncode = await _execute_captured_command(
+                        tool_ctx,
+                        cmd=cmd,
                         cwd=cwd,
-                        timeout=_timeout_f,
-                        env=_env,
-                        capture_dir=artifact_root,
+                        timeout=timeout,
+                        step_name=step_name,
                     )
                 except CaptureSetupError as exc:
                     result = spill_run_cmd_result(
@@ -156,42 +207,6 @@ async def run_cmd(
                         )
                     )
 
-                spec = _spill_spec(tool_ctx)
-                returncode = sub_result.returncode
-                execution_error: str | None = None
-                complete = True
-
-                term = sub_result.termination
-                if term == TerminationReason.NATURAL_EXIT:
-                    returncode = sub_result.returncode
-                elif term == TerminationReason.TIMED_OUT:
-                    returncode = -1
-                    execution_error = f"Process timed out after {_timeout_f}s"
-                    complete = False
-                elif term == TerminationReason.SIGNAL_DEATH:
-                    execution_error = (
-                        f"Process died to signal (returncode={sub_result.returncode})"
-                    )
-                    complete = False
-                else:
-                    execution_error = f"Unexpected termination: {term.value}"
-                    complete = False
-
-                stdout_capture, stderr_capture, capture_error = _summarize_streams(
-                    sub_result, spec, complete
-                )
-
-                result = spill_run_cmd_result(
-                    tool_ctx,
-                    cwd=cwd,
-                    returncode=returncode,
-                    stdout="",
-                    stderr="",
-                    stdout_capture=stdout_capture,
-                    stderr_capture=stderr_capture,
-                    capture_error=capture_error,
-                    execution_error=execution_error,
-                )
                 if not result.get("success"):
                     await _te_pkg._notify(
                         ctx,

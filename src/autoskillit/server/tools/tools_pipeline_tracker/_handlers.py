@@ -44,7 +44,8 @@ from autoskillit.server.tools.tools_pipeline_tracker._status import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.pipeline import ToolContext
+    from autoskillit.core import RunSkillCompletionAuthority
+    from autoskillit.pipeline import RunSkillCompletionReceipt, ToolContext
 
 logger = get_logger(__name__)
 
@@ -110,35 +111,27 @@ async def record_pipeline_step(
             owner_id=effective_pipeline_id,
         )
 
-        if op == "init":
-            try:
-                result = tools_pipeline_tracker._handle_init(ctx, target, lease, dependencies)
-            except Exception:
-                _release_context_tracker(ctx, key)
-                raise
-            if not json.loads(result).get("success"):
-                _release_context_tracker(ctx, key)
-            return result
-
-        if op == "status":
-            try:
-                result = tools_pipeline_tracker._handle_status(target, lease)
-            except Exception:
-                _release_context_tracker(ctx, key)
-                raise
-            if not json.loads(result).get("success"):
-                _release_context_tracker(ctx, key)
-            return result
-
-        _release_context_tracker(ctx, key)
-
-        return json.dumps(
-            deny_envelope(
-                f"record_pipeline_step: unknown op '{op}'. Use 'init', 'status', or 'complete'.",
-                stage="preflight:pipeline_tracker",
-                retriable=False,
+        if op not in {"init", "status"}:
+            _release_context_tracker(ctx, key)
+            return json.dumps(
+                deny_envelope(
+                    f"record_pipeline_step: unknown op '{op}'. "
+                    "Use 'init', 'status', or 'complete'.",
+                    stage="preflight:pipeline_tracker",
+                    retriable=False,
+                )
             )
-        )
+        try:
+            if op == "init":
+                result = tools_pipeline_tracker._handle_init(ctx, target, lease, dependencies)
+            else:
+                result = tools_pipeline_tracker._handle_status(target, lease)
+        except Exception:
+            _release_context_tracker(ctx, key)
+            raise
+        if not json.loads(result).get("success"):
+            _release_context_tracker(ctx, key)
+        return result
     except Exception as exc:
         logger.exception("record_pipeline_step_unexpected_error")
         return json.dumps(
@@ -546,6 +539,58 @@ async def recover_run_skill_result(
         )
 
 
+def _apply_receipt_tracker_outcome(
+    tool_ctx: ToolContext,
+    authority: RunSkillCompletionAuthority,
+    receipt: RunSkillCompletionReceipt,
+) -> Mapping[str, object]:
+    """Apply one receipt's tracker credit when its idempotence authority permits it."""
+    if not receipt.tracker_incarnation_id:
+        return {"success": True, "status": "not_applicable"}
+    if not receipt.success:
+        return {"success": True, "status": "not_applied"}
+    try:
+        target = TrackerAuthorityTarget.for_project(
+            tool_ctx.project_dir,
+            receipt.tracker_order_id,
+            expected=True,
+        )
+        if Path(receipt.tracker_path).resolve() != target.path.resolve():
+            raise ValueError("receipt tracker path is outside the project tracker authority")
+        key, lease = _retain_context_tracker(
+            tool_ctx,
+            target,
+            owner_kind="manual",
+            owner_id=f"receipt:{receipt.receipt_id}",
+        )
+        try:
+            return authority.apply_tracker_credit(
+                tracker_order_id=receipt.tracker_order_id,
+                tracker_path=receipt.tracker_path,
+                tracker_kitchen_id=receipt.tracker_kitchen_id,
+                tracker_incarnation_id=receipt.tracker_incarnation_id,
+                step_name=receipt.step_name,
+                receipt_id=receipt.receipt_id,
+                effect=lambda: tools_pipeline_tracker.mark_step_complete(
+                    target,
+                    lease,
+                    receipt.step_name,
+                    expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
+                    expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
+                ),
+            )
+        finally:
+            _release_context_tracker(tool_ctx, key)
+    except Exception:
+        logger.exception("complete_run_skill_result_tracker_credit_deferred")
+        return deny_envelope(
+            "complete_run_skill_result: tracker credit was not applied; use "
+            "record_pipeline_step(op='complete') to repair it.",
+            stage="tracker_credit",
+            retriable=True,
+        )
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("complete_run_skill_result")
@@ -566,68 +611,23 @@ async def complete_run_skill_result(
         if authority is None:
             raise RuntimeError("run_skill completion authority is unavailable")
         request_session_id = _request_session_identity(ctx)
-        receipt = authority.acknowledge(
-            receipt_id,
-            kitchen_id=tool_ctx.kitchen_id,
-            request_session_id=request_session_id,
+        receipt = cast(
+            "RunSkillCompletionReceipt",
+            authority.acknowledge(
+                receipt_id,
+                kitchen_id=tool_ctx.kitchen_id,
+                request_session_id=request_session_id,
+            ),
         )
         prepared_segment = tools_pipeline_tracker.prepare_recipe_segment_delivery(
             tool_ctx, receipt.step_name
         )
 
-        def _apply_tracker_outcome() -> Mapping[str, object]:
-            if not receipt.tracker_incarnation_id:
-                return {"success": True, "status": "not_applicable"}
-            if not receipt.success:
-                return {"success": True, "status": "not_applied"}
-            try:
-                target = TrackerAuthorityTarget.for_project(
-                    tool_ctx.project_dir,
-                    receipt.tracker_order_id,
-                    expected=True,
-                )
-                if Path(receipt.tracker_path).resolve() != target.path.resolve():
-                    raise ValueError(
-                        "receipt tracker path is outside the project tracker authority"
-                    )
-                key, lease = _retain_context_tracker(
-                    tool_ctx,
-                    target,
-                    owner_kind="manual",
-                    owner_id=f"receipt:{receipt.receipt_id}",
-                )
-                try:
-                    return authority.apply_tracker_credit(
-                        tracker_order_id=receipt.tracker_order_id,
-                        tracker_path=receipt.tracker_path,
-                        tracker_kitchen_id=receipt.tracker_kitchen_id,
-                        tracker_incarnation_id=receipt.tracker_incarnation_id,
-                        step_name=receipt.step_name,
-                        receipt_id=receipt.receipt_id,
-                        effect=lambda: tools_pipeline_tracker.mark_step_complete(
-                            target,
-                            lease,
-                            receipt.step_name,
-                            expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
-                            expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
-                        ),
-                    )
-                finally:
-                    _release_context_tracker(tool_ctx, key)
-            except Exception:
-                logger.exception("complete_run_skill_result_tracker_credit_deferred")
-                return deny_envelope(
-                    "complete_run_skill_result: tracker credit was not applied; use "
-                    "record_pipeline_step(op='complete') to repair it.",
-                    stage="tracker_credit",
-                    retriable=True,
-                )
-
         tracker_result = authority.apply_acknowledged_tracker_outcome(
             receipt.receipt_id,
             kitchen_id=tool_ctx.kitchen_id,
             request_session_id=request_session_id,
-            effect=_apply_tracker_outcome,
+            effect=lambda: _apply_receipt_tracker_outcome(tool_ctx, authority, receipt),
         )
         response = attach_recipe_segment(
             {

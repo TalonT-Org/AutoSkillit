@@ -20,8 +20,10 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     SkillContractError,
+    SkillExecutionRole,
     SkillResult,
     WriteBehaviorSpec,
+    extract_skill_name,
     get_logger,
 )
 from autoskillit.core import current_order_id as _current_order_id
@@ -32,6 +34,7 @@ from autoskillit.core import (
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
+from autoskillit.server.lifecycle._guards import _validate_skill_command
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._execution_helpers import (
     bind_projection_backend,
@@ -45,6 +48,9 @@ from autoskillit.server.tools._execution_helpers import (
 )
 from autoskillit.server.tools._execution_helpers import (
     compute_write_prefixes as _compute_write_prefixes,
+)
+from autoskillit.server.tools._execution_helpers import (
+    make_project_skill_resolver as _make_project_skill_resolver,
 )
 from autoskillit.server.tools._execution_helpers import (
     scope_covers_cwd as _scope_covers_cwd,
@@ -92,6 +98,79 @@ def _prepare_dispatch_session(state: _RunSkillDispatchState) -> None:
     state._copied_snapshot_dir = None
 
 
+def _resolve_fresh_invocation(state: _RunSkillDispatchState) -> str | None:
+    """Resolve the fresh skill invocation and projection context."""
+    if (cmd_error := _validate_skill_command(state.skill_command)) is not None:
+        return cmd_error
+    state._effective_skill_resolver = state.tool_ctx.skill_resolver
+    if state._effective_skill_resolver is None:
+        state._effective_skill_resolver = _make_project_skill_resolver()
+    state.target_name = extract_skill_name(state.skill_command)
+    if state.target_name is None:
+        return SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot resolve a logical skill target from {state.skill_command!r}"
+            ),
+            skill_command=state.skill_command,
+            order_id=state.order_id,
+        ).to_json()
+    try:
+        state.invocation = state._effective_skill_resolver.resolve_invocation(
+            state.target_name,
+            state.tool_ctx.project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=state.tool_ctx.config.skill_visibility_spec(),
+            recipe_packs=state.tool_ctx.active_recipe_packs,
+            recipe_features=state.tool_ctx.active_recipe_features,
+        )
+        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+    except SkillContractError as exc:
+        return SkillResult.crashed(
+            exception=exc,
+            skill_command=state.skill_command,
+            order_id=state.order_id,
+        ).to_json()
+    return None
+
+
+def _resolve_dispatch_paths(
+    state: _RunSkillDispatchState,
+    *,
+    base_cwd: Path,
+) -> str | None:
+    """Resolve closure and write paths relative to the current dispatch cwd."""
+    state.closure_report_root = None
+    if state.output_dir and state.closure_spec:
+        state._closure_root = Path(state.output_dir)
+        if not state._closure_root.is_absolute():
+            state._closure_root = base_cwd / state.output_dir
+        state.closure_report_root = state._closure_root
+    elif state.closure_spec and not state.output_dir:
+        return json.dumps(
+            ToolFailureEnvelope(
+                success=False,
+                error=(
+                    "closure_spec requires output_dir to locate the closure report, "
+                    "but output_dir is empty"
+                ),
+                stage="validate_args:run_skill",
+                retriable=False,
+            )
+        )
+
+    state.write_watch_dirs = []
+    if state.output_dir:
+        resolved_dir = Path(state.output_dir)
+        if not resolved_dir.is_absolute():
+            resolved_dir = base_cwd / state.output_dir
+        state.write_watch_dirs.append(resolved_dir)
+    if not state.write_watch_dirs:
+        state._default_temp = _resolve_skill_temp_dir(str(base_cwd), state.skill_command)
+        if state._default_temp:
+            state.write_watch_dirs.append(state._default_temp)
+    return None
+
+
 def _rebuild_owned_dispatch_context(
     state: _RunSkillDispatchState,
     owned_cwd: Path,
@@ -117,54 +196,13 @@ def _rebuild_owned_dispatch_context(
             active_exploration_applicabilities=state._active_exploration_applicabilities,
         )
 
-    state.closure_report_root = None
-    if state.output_dir and state.closure_spec:
-        state._closure_root = Path(state.output_dir)
-        if not state._closure_root.is_absolute():
-            state._closure_root = owned_cwd / state.output_dir
-        state.closure_report_root = state._closure_root
-    elif state.closure_spec and not state.output_dir:
-        return json.dumps(
-            ToolFailureEnvelope(
-                success=False,
-                error=(
-                    "closure_spec requires output_dir to locate the closure report, "
-                    "but output_dir is empty"
-                ),
-                stage="validate_args:run_skill",
-                retriable=False,
-            )
-        )
-
-    state.write_watch_dirs = []
-    if state.output_dir:
-        resolved_dir = Path(state.output_dir)
-        if not resolved_dir.is_absolute():
-            resolved_dir = owned_cwd / state.output_dir
-        state.write_watch_dirs.append(resolved_dir)
-    if not state.write_watch_dirs:
-        state._default_temp = _resolve_skill_temp_dir(state.cwd, state.skill_command)
-        if state._default_temp:
-            state.write_watch_dirs.append(state._default_temp)
-    return None
+    return _resolve_dispatch_paths(state, base_cwd=owned_cwd)
 
 
-async def _prepare_owned_dispatch_session(
-    state: _RunSkillDispatchState,
-    owned_cwd: Path,
-) -> str | None:
+def _restore_or_replay_snapshot(state: _RunSkillDispatchState) -> str | None:
+    """Restore a direct snapshot or replay the runner snapshot when available."""
     assert state.resolved_command is not None
-    assert state._contract_store is not None
-    assert state._cfg is not None
-    assert state.expected_output_patterns is not None
-    if (terminal := _rebuild_owned_dispatch_context(state, owned_cwd)) is not None:
-        return terminal
-    assert state.write_watch_dirs is not None
-    state.skill_add_dirs = []
-    state.replay_snapshot_used = False
-    state._runner = state.tool_ctx.runner
-    state._ephemeral_root = None
-    state._restored = None
+    assert state.skill_add_dirs is not None
     if state._stored_contract_entry is not None:
         manager = state.tool_ctx.session_skill_manager
         if manager is None:
@@ -237,6 +275,65 @@ async def _prepare_owned_dispatch_session(
                 step=state.step_name,
                 session_id=session_id,
             )
+    return None
+
+
+def _resolve_caller_session(state: _RunSkillDispatchState) -> str | None:
+    """Resolve the current launch's exact caller session before dispatching."""
+    state._launch_id = os.environ.get(LAUNCH_ID_ENV_VAR, "")
+    if state._launch_id:
+        state._session_registry = _te_pkg.read_registry(state.tool_ctx.project_dir)
+        state._registry_row = (
+            state._session_registry.get(state._launch_id)
+            if isinstance(state._session_registry, Mapping)
+            else None
+        )
+        state._registered_session_id = (
+            state._registry_row.get("claude_session_id")
+            if isinstance(state._registry_row, Mapping)
+            else None
+        )
+        if not (
+            isinstance(state._registered_session_id, str)
+            and bool(state._registered_session_id.strip())
+        ):
+            return json.dumps(
+                ToolFailureEnvelope(
+                    success=False,
+                    error=(
+                        "run_skill: current launch has no exact caller session binding: "
+                        f"{state._launch_id!r}"
+                    ),
+                    stage="preflight:caller_session",
+                    retriable=False,
+                )
+            )
+        state._caller_hook_session_id = state._registered_session_id
+    else:
+        state._caller_hook_session_id = _te_pkg.find_caller_session_id(
+            project_dir=state.tool_ctx.project_dir
+        )
+    return None
+
+
+async def _prepare_owned_dispatch_session(
+    state: _RunSkillDispatchState,
+    owned_cwd: Path,
+) -> str | None:
+    assert state.resolved_command is not None
+    assert state._contract_store is not None
+    assert state._cfg is not None
+    assert state.expected_output_patterns is not None
+    if (terminal := _rebuild_owned_dispatch_context(state, owned_cwd)) is not None:
+        return terminal
+    assert state.write_watch_dirs is not None
+    state.skill_add_dirs = []
+    state.replay_snapshot_used = False
+    state._runner = state.tool_ctx.runner
+    state._ephemeral_root = None
+    state._restored = None
+    if (terminal := _restore_or_replay_snapshot(state)) is not None:
+        return terminal
 
     if (
         state._stored_contract_entry is None
@@ -429,39 +526,8 @@ async def _prepare_owned_dispatch_session(
         if state.tool_ctx.backend is not None
         else None
     )
-    state._launch_id = os.environ.get(LAUNCH_ID_ENV_VAR, "")
-    if state._launch_id:
-        state._session_registry = _te_pkg.read_registry(state.tool_ctx.project_dir)
-        state._registry_row = (
-            state._session_registry.get(state._launch_id)
-            if isinstance(state._session_registry, Mapping)
-            else None
-        )
-        state._registered_session_id = (
-            state._registry_row.get("claude_session_id")
-            if isinstance(state._registry_row, Mapping)
-            else None
-        )
-        if not (
-            isinstance(state._registered_session_id, str)
-            and bool(state._registered_session_id.strip())
-        ):
-            return json.dumps(
-                ToolFailureEnvelope(
-                    success=False,
-                    error=(
-                        "run_skill: current launch has no exact caller session binding: "
-                        f"{state._launch_id!r}"
-                    ),
-                    stage="preflight:caller_session",
-                    retriable=False,
-                )
-            )
-        state._caller_hook_session_id = state._registered_session_id
-    else:
-        state._caller_hook_session_id = _te_pkg.find_caller_session_id(
-            project_dir=state.tool_ctx.project_dir
-        )
+    if (terminal := _resolve_caller_session(state)) is not None:
+        return terminal
 
     # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
     state.provider_extras = propagate_session_deadline(

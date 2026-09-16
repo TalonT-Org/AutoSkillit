@@ -56,7 +56,7 @@ def _select_only_authorizer(
     return sqlite3.SQLITE_DENY
 
 
-def _row_to_dict(columns: list[str], row: tuple) -> dict:  # type: ignore[type-arg]
+def _row_to_dict(columns: list[str], row: tuple[object, ...]) -> dict[str, object]:
     """Convert a SQLite row tuple to a dict, base64-encoding bytes values."""
     result: dict[str, object] = {}
     for col, val in zip(columns, row):
@@ -70,10 +70,10 @@ def _row_to_dict(columns: list[str], row: tuple) -> dict:  # type: ignore[type-a
 def _execute_readonly_query(
     db_path: str,
     query: str,
-    params: list | dict,  # type: ignore[type-arg]
+    params: list[object] | dict[str, object],
     timeout_sec: int,
     max_rows: int,
-) -> dict:  # type: ignore[type-arg]
+) -> dict[str, object]:
     """Execute a read-only query against a SQLite database (synchronous)."""
     uri = f"file:{db_path}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, cached_statements=0)
@@ -87,7 +87,7 @@ def _execute_readonly_query(
             cursor.execute(query, params)
 
             column_names = [desc[0] for desc in cursor.description] if cursor.description else []
-            rows: list[dict] = []  # type: ignore[type-arg]
+            rows: list[dict[str, object]] = []
             truncated = False
             for i, row in enumerate(cursor):
                 if i >= max_rows:
@@ -118,8 +118,8 @@ class DefaultDatabaseReader:
         self,
         db_path: str,
         sql: str,
-        params: list | dict,  # type: ignore[type-arg]
+        params: list[object] | dict[str, object],
         timeout_sec: int,
         max_rows: int,
-    ) -> dict:  # type: ignore[type-arg]
+    ) -> dict[str, object]:
         return _execute_readonly_query(db_path, sql, params, timeout_sec, max_rows)

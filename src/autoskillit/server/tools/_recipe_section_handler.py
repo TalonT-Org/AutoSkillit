@@ -22,7 +22,7 @@ from autoskillit.core import (
     get_logger,
     resolve_general_output_token_limit,
 )
-from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
+from autoskillit.pipeline import InitializingRecipe, ReadyRecipe, ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
@@ -54,6 +54,7 @@ from autoskillit.server.recipe._recipe_initialization import (
 from autoskillit.server.recipe._recipe_section_pagination import (
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
+    RecipeSectionPagePlan,
     RecipeSectionPaginationError,
     RecipeSectionRequestState,
     get_or_build_recipe_section_page_plan,
@@ -87,6 +88,80 @@ def _inject_initialization_counters(
         raise TypeError("rendered recipe section page must be a JSON object")
     page.update(replacements)
     return json.dumps(page, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _render_initialized_recipe_section_page(
+    *,
+    tool_ctx: ToolContext,
+    request_state: RecipeSectionRequestState,
+    identity: RecipeArtifactGeneration,
+    section: str,
+    page_plan: RecipeSectionPagePlan,
+    part: int,
+    active_initialization: InitializingRecipe | ReadyRecipe | None,
+) -> str:
+    """Render an admitted page and finalize its initialization lifecycle response."""
+    rendered = render_recipe_section_page(page_plan, part)
+    if isinstance(active_initialization, InitializingRecipe):
+        completed_parts, total_parts, remaining_section_pulls = (
+            recipe_initialization_progress_counts(
+                active_initialization,
+                section=section,
+                page_plan_sha256=page_plan.page_plan_sha256,
+                part=part,
+            )
+        )
+        rendered = _inject_initialization_counters(
+            rendered,
+            completed_parts=completed_parts,
+            total_parts=total_parts,
+            remaining_section_pulls=remaining_section_pulls,
+        )
+        if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
+            return _recipe_section_failure("recipe_section_bound_too_small")
+        if (
+            request_state.recipe_section_bound_chars is not None
+            and client_serialized_char_len(rendered).value
+            > request_state.recipe_section_bound_chars
+        ):
+            return _recipe_section_failure("recipe_section_bound_too_small")
+    terminal = part + 1 == page_plan.total_parts
+    page_descriptor = page_plan.manifest.pages[part]
+    content_sha256: str | None = page_descriptor.page_content_sha256 if terminal else None
+    if isinstance(active_initialization, ReadyRecipe):
+        if isinstance(content_sha256, str):
+            replayed = replay_terminal_section_response(
+                tool_ctx,
+                initialization_id=active_initialization.initialization_id,
+                section=section,
+                part=part,
+                content_sha256=content_sha256,
+            )
+            if replayed is not None:
+                return replayed
+        return rendered
+    if active_initialization is None:
+        return rendered
+    completion_receipt: str | None = None
+    if terminal:
+        rendered_payload = json.loads(rendered)
+        completion_receipt = rendered_payload.get("completion_receipt")
+    return cast(
+        str,
+        FinalizedRecipeSectionResponse(
+            rendered=rendered,
+            tool_ctx=tool_ctx,
+            initialization_id=active_initialization.initialization_id,
+            artifact_generation=identity,
+            section=section,
+            page_plan_sha256=page_plan.page_plan_sha256,
+            part=part,
+            content_sha256=(content_sha256 if isinstance(content_sha256, str) else ""),
+            completion_receipt=(
+                completion_receipt if isinstance(completion_receipt, str) else None
+            ),
+        ),
+    )
 
 
 _RECIPE_SECTION_REQUEST_STATE: ContextVar[RecipeSectionRequestState] = ContextVar(
@@ -421,71 +496,14 @@ async def get_recipe_section(
             )
             if continuation != expected_continuation:
                 return _recipe_section_failure("invalid_recipe_section_continuation")
-            rendered = render_recipe_section_page(page_plan, part)
-            if isinstance(active_initialization, InitializingRecipe):
-                completed_parts, total_parts, remaining_section_pulls = (
-                    recipe_initialization_progress_counts(
-                        active_initialization,
-                        section=section,
-                        page_plan_sha256=page_plan.page_plan_sha256,
-                        part=part,
-                    )
-                )
-                rendered = _inject_initialization_counters(
-                    rendered,
-                    completed_parts=completed_parts,
-                    total_parts=total_parts,
-                    remaining_section_pulls=remaining_section_pulls,
-                )
-                if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
-                    return _recipe_section_failure("recipe_section_bound_too_small")
-                # Final-form character validation: the post-mutation rendered
-                # string is the actual delivered form; check it against the
-                # independent serialized-character ceiling.
-                if (
-                    request_state.recipe_section_bound_chars is not None
-                    and client_serialized_char_len(rendered).value
-                    > request_state.recipe_section_bound_chars
-                ):
-                    return _recipe_section_failure("recipe_section_bound_too_small")
-            # Extract terminal-page metadata from the page plan descriptor
-            # (no content parsing needed — these are plan-level values).
-            terminal = part + 1 == page_plan.total_parts
-            page_descriptor = page_plan.manifest.pages[part]
-            content_sha256: str | None = page_descriptor.page_content_sha256 if terminal else None
-            if isinstance(active_initialization, ReadyRecipe):
-                if isinstance(content_sha256, str):
-                    replayed = replay_terminal_section_response(
-                        tool_ctx,
-                        initialization_id=active_initialization.initialization_id,
-                        section=section,
-                        part=part,
-                        content_sha256=content_sha256,
-                    )
-                    if replayed is not None:
-                        return replayed
-                return rendered
-            if active_initialization is None:
-                return rendered
-            completion_receipt: str | None = None
-            if terminal:
-                rendered_payload = json.loads(rendered)
-                completion_receipt = rendered_payload.get("completion_receipt")
-            return cast(
-                str,
-                FinalizedRecipeSectionResponse(
-                    rendered=rendered,
-                    tool_ctx=tool_ctx,
-                    initialization_id=active_initialization.initialization_id,
-                    artifact_generation=identity,
-                    section=section,
-                    page_plan_sha256=page_plan.page_plan_sha256,
-                    part=part,
-                    content_sha256=(content_sha256 if isinstance(content_sha256, str) else ""),
-                    completion_receipt=(
-                        completion_receipt if isinstance(completion_receipt, str) else None
-                    ),
-                ),
+            return _render_initialized_recipe_section_page(
+                tool_ctx=tool_ctx,
+                request_state=request_state,
+                identity=identity,
+                section=section,
+                page_plan=page_plan,
+                part=part,
+                active_initialization=active_initialization,
             )
     except Exception:
         logger.error("get_recipe_section unhandled exception", exc_info=True)

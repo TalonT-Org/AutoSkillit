@@ -11,7 +11,7 @@ import secrets
 import stat
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import regex as re
 
@@ -346,6 +346,71 @@ def _complete_lines(
     return lines, incomplete
 
 
+class _ScanPageResult(NamedTuple):
+    content: list[str]
+    matches: list[dict[str, Any]]
+    consumed_bytes: int
+    returned_bytes: int
+    end_line: int
+    next_line: int
+
+
+def _scan_page(
+    *,
+    operation: str,
+    lines: list[bytes],
+    query: str,
+    page_limit: int,
+    session_id: str,
+    artifact: str,
+    next_line: int,
+) -> _ScanPageResult:
+    consumed_bytes = 0
+    returned_bytes = 0
+    end_line = next_line - 1
+    content: list[str] = []
+    matches: list[dict[str, Any]] = []
+    query_bytes = query.encode()
+    for raw_line in lines:
+        try:
+            decoded = raw_line.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise _InspectionError("invalid_utf8") from exc
+        if operation == "read":
+            if returned_bytes + len(raw_line) > page_limit:
+                if not content:
+                    raise _InspectionError("record_too_large")
+                break
+            content.append(decoded)
+            returned_bytes += len(raw_line)
+        elif query_bytes in raw_line:
+            excerpt = decoded.rstrip("\r\n")[:_MAX_EXCERPT_CHARS]
+            excerpt_bytes = len(excerpt.encode())
+            if len(matches) >= _MAX_MATCHES or returned_bytes + excerpt_bytes > page_limit:
+                if not matches:
+                    raise _InspectionError("record_too_large")
+                break
+            matches.append(
+                {
+                    "line": next_line,
+                    "citation": f"{session_id}/{artifact}:{next_line}",
+                    "excerpt": excerpt,
+                }
+            )
+            returned_bytes += excerpt_bytes
+        consumed_bytes += len(raw_line)
+        end_line = next_line
+        next_line += 1
+    return _ScanPageResult(
+        content,
+        matches,
+        consumed_bytes,
+        returned_bytes,
+        end_line,
+        next_line,
+    )
+
+
 def _read_or_search(
     *,
     operation: str,
@@ -391,44 +456,17 @@ def _read_or_search(
     if not lines and data and offset + len(data) < opened.st_size:
         raise _InspectionError("record_too_large")
     start_line = line_number
-    consumed = 0
-    returned_bytes = 0
-    end_line = line_number - 1
-    content: list[str] = []
-    matches: list[dict[str, Any]] = []
-    query_bytes = query.encode()
-    for raw_line in lines:
-        try:
-            decoded = raw_line.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise _InspectionError("invalid_utf8") from exc
-        if operation == "read":
-            if returned_bytes + len(raw_line) > page_limit:
-                if not content:
-                    raise _InspectionError("record_too_large")
-                break
-            content.append(decoded)
-            returned_bytes += len(raw_line)
-        elif query_bytes in raw_line:
-            excerpt = decoded.rstrip("\r\n")[:_MAX_EXCERPT_CHARS]
-            excerpt_bytes = len(excerpt.encode())
-            if len(matches) >= _MAX_MATCHES or returned_bytes + excerpt_bytes > page_limit:
-                if not matches:
-                    raise _InspectionError("record_too_large")
-                break
-            matches.append(
-                {
-                    "line": line_number,
-                    "citation": f"{session_id}/{artifact}:{line_number}",
-                    "excerpt": excerpt,
-                }
-            )
-            returned_bytes += excerpt_bytes
-        consumed += len(raw_line)
-        end_line = line_number
-        line_number += 1
+    page = _scan_page(
+        operation=operation,
+        lines=lines,
+        query=query,
+        page_limit=page_limit,
+        session_id=session_id,
+        artifact=artifact,
+        next_line=line_number,
+    )
 
-    next_offset = offset + consumed
+    next_offset = offset + page.consumed_bytes
     more = next_offset < opened.st_size and not incomplete_final_line
     next_continuation = ""
     if more:
@@ -441,7 +479,7 @@ def _read_or_search(
                 path=resolved,
                 opened=opened,
                 offset=next_offset,
-                line=line_number,
+                line=page.next_line,
             )
         )
     status = "partial" if incomplete_final_line else "answered"
@@ -451,25 +489,25 @@ def _read_or_search(
         "reason": "incomplete_final_line" if incomplete_final_line else "",
         "session_id": session_id,
         "artifact": artifact,
-        "citation": f"{session_id}/{artifact}:{start_line}-{end_line}",
-        "line_range": {"start": start_line, "end": end_line},
-        "exact_bytes": returned_bytes,
-        "bytes_scanned": consumed,
+        "citation": f"{session_id}/{artifact}:{start_line}-{page.end_line}",
+        "line_range": {"start": start_line, "end": page.end_line},
+        "exact_bytes": page.returned_bytes,
+        "bytes_scanned": page.consumed_bytes,
         "searched_scope": {
             "start_byte": offset,
             "end_byte": next_offset,
             "start_line": start_line,
-            "end_line": end_line,
+            "end_line": page.end_line,
         },
         "truncated": more,
         "incomplete_final_line": incomplete_final_line,
         "next_continuation": next_continuation,
     }
     if operation == "read":
-        response["content"] = "".join(content)
+        response["content"] = "".join(page.content)
     else:
         response["query"] = query
-        response["matches"] = matches
+        response["matches"] = page.matches
     return _json(response)
 
 
@@ -486,20 +524,21 @@ def _validate_arguments(
     if operation == "index":
         if session_id or artifact or query or continuation:
             raise _InspectionError("arguments_invalid")
-        if not session_ids or len(session_ids) > _MAX_SESSION_IDS:
-            raise _InspectionError("session_batch_invalid")
-        if len(set(session_ids)) != len(session_ids):
-            raise _InspectionError("session_batch_invalid")
-        if any(not value or len(value) > _MAX_SESSION_ID_CHARS for value in session_ids):
+        if (
+            not session_ids
+            or len(session_ids) > _MAX_SESSION_IDS
+            or len(set(session_ids)) != len(session_ids)
+            or any(not value or len(value) > _MAX_SESSION_ID_CHARS for value in session_ids)
+        ):
             raise _InspectionError("session_batch_invalid")
         return
     if session_ids:
         raise _InspectionError("arguments_invalid")
     if not session_id or len(session_id) > _MAX_SESSION_ID_CHARS or artifact not in _HANDLES:
         raise _InspectionError("arguments_invalid")
-    if operation == "read" and query:
-        raise _InspectionError("arguments_invalid")
-    if operation == "search" and (not query or len(query) > _MAX_QUERY_CHARS):
+    if (operation == "read" and query) or (
+        operation == "search" and (not query or len(query) > _MAX_QUERY_CHARS)
+    ):
         raise _InspectionError("arguments_invalid")
 
 

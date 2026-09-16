@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from fastmcp import Context
@@ -18,11 +18,13 @@ from autoskillit.config import (
 )
 from autoskillit.core import (
     STEP_SKIP_SEMANTICS_CLAUSE,
+    FinalizedRecipeProjection,
     RecipeDeliveryRequest,
     RecipeLoadError,
     get_logger,
     temp_dir_display_str,
 )
+from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._misc import (
     _apply_triage_gate,
@@ -54,6 +56,9 @@ from autoskillit.server.tools._serve_helpers import (
 from autoskillit.server.tools._type_coercion import _validate_override_types
 from autoskillit.server.tools._types import _validate_result
 
+if TYPE_CHECKING:
+    from autoskillit.recipe import RecipeInfo
+
 logger = get_logger(__name__)
 
 __all__ = [
@@ -72,6 +77,66 @@ def _document_step_skip_semantics(function: Any) -> Any:
         "{STEP_SKIP_SEMANTICS}", STEP_SKIP_SEMANTICS_CLAUSE
     )
     return function
+
+
+async def _finalize_load_recipe_result(
+    result: dict[str, Any],
+    *,
+    name: str,
+    _recipe_info_pre: RecipeInfo,
+    ingredients_only: bool,
+    tool_ctx: ToolContext,
+    _finalized_projection: FinalizedRecipeProjection | None,
+    delivery_request: RecipeDeliveryRequest | None,
+) -> str:
+    """Apply post-serve validation and return the selected recipe response."""
+    result = await _apply_triage_gate(result, name, recipe_info=_recipe_info_pre)
+    if not result.get("valid", False):
+        result["validation_failed"] = True
+    if ingredients_only:
+        result = strip_ingredients_only_keys(result)
+    _required_keys: frozenset[str] = frozenset()
+    if not ingredients_only and result.get("valid", False):
+        _required_keys = frozenset({"content"})
+    _validation_err = _validate_result(
+        result, required_keys=_required_keys, tool_name="load_recipe"
+    )
+    if _validation_err is not None:
+        logger.warning(
+            "load_recipe_fail_closed",
+            tool="load_recipe",
+            stage="validate_result",
+        )
+        return _validation_err
+    if not ingredients_only and result.get("valid", False):
+        if _finalized_projection is None:
+            raise RuntimeError("valid recipe is missing its finalized projection")
+        from autoskillit.server.recipe._recipe_delivery import (  # circular-break
+            prepare_recipe_delivery_generation,
+        )
+
+        _prepared_generation = prepare_recipe_delivery_generation(
+            result,
+            recipe_name=name,
+            tool_ctx=tool_ctx,
+            finalized_projection=_finalized_projection,
+        )
+        return cast(
+            str,
+            finalize_recipe_delivery(
+                result,
+                surface="load_recipe",
+                recipe_name=name,
+                tool_ctx=tool_ctx,
+                finalized_projection=_finalized_projection,
+                flow_generation=_prepared_generation.flow_generation,
+                canonical_artifact_payload=(_prepared_generation.canonical_artifact_payload),
+                execution_snapshot=_prepared_generation.execution_snapshot,
+                normalized_compile_key=(_prepared_generation.normalized_compile_key),
+                delivery_request=delivery_request,
+            ),
+        )
+    return render_served_response(result)
 
 
 @mcp.tool(
@@ -339,56 +404,15 @@ async def load_recipe(
             _finalized_projection = (
                 pop_finalized_recipe_projection(result) if result.get("valid", False) else None
             )
-            recipe_info = _recipe_info_pre
-            result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
-            if not result.get("valid", False):
-                result["validation_failed"] = True
-            if ingredients_only:
-                result = strip_ingredients_only_keys(result)
-            _required_keys: frozenset[str] = frozenset()
-            if not ingredients_only and result.get("valid", False):
-                _required_keys = frozenset({"content"})
-            _validation_err = _validate_result(
-                result, required_keys=_required_keys, tool_name="load_recipe"
+            return await _finalize_load_recipe_result(
+                result,
+                name=name,
+                _recipe_info_pre=_recipe_info_pre,
+                ingredients_only=ingredients_only,
+                tool_ctx=tool_ctx,
+                _finalized_projection=_finalized_projection,
+                delivery_request=delivery_request,
             )
-            if _validation_err is not None:
-                logger.warning(
-                    "load_recipe_fail_closed",
-                    tool="load_recipe",
-                    stage="validate_result",
-                )
-                return _validation_err
-            if not ingredients_only and result.get("valid", False):
-                if _finalized_projection is None:
-                    raise RuntimeError("valid recipe is missing its finalized projection")
-                from autoskillit.server.recipe._recipe_delivery import (  # circular-break
-                    prepare_recipe_delivery_generation,
-                )
-
-                _prepared_generation = prepare_recipe_delivery_generation(
-                    result,
-                    recipe_name=name,
-                    tool_ctx=tool_ctx,
-                    finalized_projection=_finalized_projection,
-                )
-                return cast(
-                    str,
-                    finalize_recipe_delivery(
-                        result,
-                        surface="load_recipe",
-                        recipe_name=name,
-                        tool_ctx=tool_ctx,
-                        finalized_projection=_finalized_projection,
-                        flow_generation=_prepared_generation.flow_generation,
-                        canonical_artifact_payload=(
-                            _prepared_generation.canonical_artifact_payload
-                        ),
-                        execution_snapshot=_prepared_generation.execution_snapshot,
-                        normalized_compile_key=(_prepared_generation.normalized_compile_key),
-                        delivery_request=delivery_request,
-                    ),
-                )
-            return render_served_response(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

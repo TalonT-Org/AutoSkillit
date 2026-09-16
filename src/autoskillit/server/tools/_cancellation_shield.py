@@ -31,6 +31,29 @@ _RESULT_TYPE_UNSET = object()
 _TYPED_ARGUMENT_UNSET = object()
 
 
+async def _run_typed_cancellation_lifecycle(
+    fn: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    state_factory: Callable[[], StateT],
+    state_context_var: ContextVar[StateT],
+    response_factory: Callable[[StateT, asyncio.CancelledError], str],
+) -> Any:
+    """Invoke a typed handler while preserving its cancellation state."""
+    state = state_factory()
+    token = state_context_var.set(state)
+    try:
+        try:
+            return await fn(*args, **kwargs)
+        except asyncio.CancelledError as exc:
+            with anyio.CancelScope(shield=True):
+                logger.warning("mcp_tool_cancelled", tool=fn.__name__)
+                return response_factory(state, exc)
+    finally:
+        state_context_var.reset(token)
+
+
 @overload
 def _cancellation_shield() -> Callable[[F], F]: ...
 
@@ -96,17 +119,14 @@ def _cancellation_shield(
                     Callable[[Any, asyncio.CancelledError], str],
                     response_factory,
                 )
-                state = typed_state_factory()
-                token = typed_context_var.set(state)
-                try:
-                    try:
-                        return await fn(*args, **kwargs)
-                    except asyncio.CancelledError as exc:
-                        with anyio.CancelScope(shield=True):
-                            logger.warning("mcp_tool_cancelled", tool=fn.__name__)
-                            return typed_response_factory(state, exc)
-                finally:
-                    typed_context_var.reset(token)
+                return await _run_typed_cancellation_lifecycle(
+                    fn,
+                    args,
+                    kwargs,
+                    state_factory=typed_state_factory,
+                    state_context_var=typed_context_var,
+                    response_factory=typed_response_factory,
+                )
             try:
                 return await fn(*args, **kwargs)
             except asyncio.CancelledError:

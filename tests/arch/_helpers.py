@@ -122,6 +122,31 @@ def _has_named_call(body: list[ast.stmt], function_name: str) -> bool:
     return False
 
 
+def _reachable_local_functions(
+    tree: ast.Module,
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Yield an entry point and the same-module functions it calls by name."""
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    pending = [function]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current.name in visited:
+            continue
+        visited.add(current.name)
+        yield current
+        for node in ast.walk(current):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                callee = functions.get(node.func.id)
+                if callee is not None:
+                    pending.append(callee)
+
+
 class ArchitectureViolationVisitor(ast.NodeVisitor):
     def __init__(self, filepath: Path) -> None:
         self.filepath = filepath

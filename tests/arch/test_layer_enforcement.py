@@ -23,6 +23,7 @@ from tests.arch._helpers import (
     SRC_ROOT,
     _extract_module_level_internal_imports,
     _is_mcp_tool_decorator,
+    _reachable_local_functions,
     _rel,
     _runtime_import_froms,
     _tool_module_paths,
@@ -2119,7 +2120,10 @@ def test_tools_with_path_params_validate_existence():
             if not param_names & _PATH_PARAM_NAMES:
                 continue
 
-            body_source = ast.get_source_segment(source, node) or ""
+            body_source = "\n".join(
+                ast.get_source_segment(source, function) or ""
+                for function in _reachable_local_functions(tree, node)
+            )
             has_guard = any(
                 pat in body_source
                 for pat in (

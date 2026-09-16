@@ -138,6 +138,10 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
     {
         ("scripts/pytest_tmp_lifecycle.py", "_reap"),
         ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates"),
+        (
+            "src/autoskillit/server/tools/tools_execution/_managed_leaf.py",
+            "_cleanup_owned_child_resources",
+        ),
         ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches"),
         (
             "src/autoskillit/workspace/session_skills/_manager.py",
@@ -247,6 +251,15 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
     ),
     ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates"): _convergence_adapters(
         ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates")
+    ),
+    (
+        "src/autoskillit/server/tools/tools_execution/_managed_leaf.py",
+        "_cleanup_owned_child_resources",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/server/tools/tools_execution/_managed_leaf.py",
+            "_cleanup_owned_child_resources",
+        )
     ),
     (
         "src/autoskillit/fleet/_dispatch_reaper.py",

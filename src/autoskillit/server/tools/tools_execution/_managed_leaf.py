@@ -450,6 +450,84 @@ def _record_cleanup_failure(session_id: str, path: str | None, exc: BaseExceptio
         logger.warning("cleanup_failure_record_write_failed", session_id=session_id, exc_info=True)
 
 
+def _record_worktree_cleanup_failures(
+    session_id: str,
+    cleanup: CleanupResult,
+) -> list[BaseException]:
+    """Record worktree removal reports and preserve their errors for the owner."""
+    cleanup_errors: list[BaseException] = []
+    for path, detail in cleanup.failed:
+        failure = RuntimeError(f"Child worktree cleanup failed for {path}: {detail}")
+        _record_cleanup_failure(session_id, path, failure)
+        cleanup_errors.append(failure)
+    return cleanup_errors
+
+
+async def _cleanup_owned_child_resources(
+    request: _ChildResourceOwnerRequest[_PreparedValue],
+    owned_worktree: Path | None,
+) -> list[BaseException]:
+    """Release generated child resources in the order their owner requires."""
+    cleanup_errors: list[BaseException] = []
+    session_id = request.generated_home_id or "unknown-child-session"
+    if request.generated_home_materialized():
+        if request.session_manager is None or request.generated_home_id is None:
+            cleanup_errors.append(
+                SkillContractError("Generated home has no session-manager cleanup authority")
+            )
+        else:
+            try:
+                request.session_manager.cleanup_session(request.generated_home_id)
+            except BaseException as exc:
+                logger.warning(
+                    "session_skill_cleanup_failed",
+                    session_id=request.generated_home_id,
+                    exc_info=True,
+                )
+                _record_cleanup_failure(request.generated_home_id, None, exc)
+                cleanup_errors.append(exc)
+
+    copied_snapshot = request.copied_snapshot_path()
+    if copied_snapshot is not None and copied_snapshot.is_dir():
+        try:
+            shutil.rmtree(copied_snapshot)
+        except BaseException as exc:
+            logger.warning(
+                "snapshot_session_cleanup_failed",
+                path=str(copied_snapshot),
+                exc_info=True,
+            )
+            _record_cleanup_failure(session_id, str(copied_snapshot), exc)
+            cleanup_errors.append(exc)
+
+    if owned_worktree is not None:
+        cleanup_worktree = request.worktree
+        assert cleanup_worktree is not None
+        try:
+            destination = destination_location(owned_worktree)
+            trusted_root = destination_location(cleanup_worktree.worktree_root)
+            if not destination.is_relative_to(trusted_root):
+                raise SkillContractError(
+                    f"Child worktree cleanup escapes trusted root: {destination}"
+                )
+            cleanup = await cleanup_worktree.remove_worktree(
+                destination,
+                cleanup_worktree.project_root,
+                cleanup_worktree.runner,
+            )
+        except BaseException as exc:
+            logger.warning(
+                "child_worktree_cleanup_failed",
+                path=str(owned_worktree),
+                exc_info=True,
+            )
+            _record_cleanup_failure(session_id, str(owned_worktree), exc)
+            cleanup_errors.append(exc)
+        else:
+            cleanup_errors.extend(_record_worktree_cleanup_failures(session_id, cleanup))
+    return cleanup_errors
+
+
 @contextlib.asynccontextmanager
 async def scoped_child_resource_owner(
     request: _ChildResourceOwnerRequest[_PreparedValue],
@@ -478,70 +556,7 @@ async def scoped_child_resource_owner(
         body_error = exc
         raise
     finally:
-        cleanup_errors: list[BaseException] = []
-        session_id = request.generated_home_id or "unknown-child-session"
         with anyio.CancelScope(shield=True):
-            if request.generated_home_materialized():
-                if request.session_manager is None or request.generated_home_id is None:
-                    cleanup_errors.append(
-                        SkillContractError(
-                            "Generated home has no session-manager cleanup authority"
-                        )
-                    )
-                else:
-                    try:
-                        request.session_manager.cleanup_session(request.generated_home_id)
-                    except BaseException as exc:
-                        logger.warning(
-                            "session_skill_cleanup_failed",
-                            session_id=request.generated_home_id,
-                            exc_info=True,
-                        )
-                        _record_cleanup_failure(request.generated_home_id, None, exc)
-                        cleanup_errors.append(exc)
-
-            copied_snapshot = request.copied_snapshot_path()
-            if copied_snapshot is not None and copied_snapshot.is_dir():
-                try:
-                    shutil.rmtree(copied_snapshot)
-                except BaseException as exc:
-                    logger.warning(
-                        "snapshot_session_cleanup_failed",
-                        path=str(copied_snapshot),
-                        exc_info=True,
-                    )
-                    _record_cleanup_failure(session_id, str(copied_snapshot), exc)
-                    cleanup_errors.append(exc)
-
-            if owned_worktree is not None:
-                cleanup_worktree = request.worktree
-                assert cleanup_worktree is not None
-                try:
-                    destination = destination_location(owned_worktree)
-                    trusted_root = destination_location(cleanup_worktree.worktree_root)
-                    if not destination.is_relative_to(trusted_root):
-                        raise SkillContractError(
-                            f"Child worktree cleanup escapes trusted root: {destination}"
-                        )
-                    cleanup = await cleanup_worktree.remove_worktree(
-                        destination,
-                        cleanup_worktree.project_root,
-                        cleanup_worktree.runner,
-                    )
-                except BaseException as exc:
-                    logger.warning(
-                        "child_worktree_cleanup_failed",
-                        path=str(owned_worktree),
-                        exc_info=True,
-                    )
-                    _record_cleanup_failure(session_id, str(owned_worktree), exc)
-                    cleanup_errors.append(exc)
-                else:
-                    for path, detail in cleanup.failed:
-                        failure = RuntimeError(
-                            f"Child worktree cleanup failed for {path}: {detail}"
-                        )
-                        _record_cleanup_failure(session_id, path, failure)
-                        cleanup_errors.append(failure)
+            cleanup_errors = await _cleanup_owned_child_resources(request, owned_worktree)
         if body_error is None and cleanup_errors and request.cleanup_errors_are_terminal:
             raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)

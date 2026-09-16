@@ -622,7 +622,7 @@ def _launch_cook_session(
             if managed_home is not None:
                 attempt += 1
             session_signal = _run_interactive_session(
-                launch,
+                launch=launch,
                 extra_env=extra_env,
                 project_dir=launch_project_dir,
                 required_env=required_env,

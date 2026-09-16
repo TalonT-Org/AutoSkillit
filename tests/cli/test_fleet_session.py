@@ -673,7 +673,7 @@ class TestCrossInvocationResume:
         monkeypatch.setattr(
             _patch_cli_prompts,
             "_build_fleet_campaign_prompt",
-            lambda *a, **kw: "fake-prompt",
+            lambda *a, **kw: "fake-prompt for dispatch-1",
         )
 
         fresh_meta = MagicMock(spec=ResumeDecision)

@@ -831,7 +831,6 @@ from .types import BackendEventKind as BackendEventKind
 from .types import BackendPinResolution as BackendPinResolution
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
-from .types import FreshLaunch as FreshLaunch
 from .types import BindingFailure as BindingFailure
 from .types import BindingFailureCode as BindingFailureCode
 from .types import BindingMode as BindingMode
@@ -960,6 +959,7 @@ from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetSessionEnv as FleetSessionEnv
 from .types import ForkOccurrenceId as ForkOccurrenceId
+from .types import FreshLaunch as FreshLaunch
 from .types import GateState as GateState
 from .types import GenerationReconciledEffect as GenerationReconciledEffect
 from .types import GenerationReservationId as GenerationReservationId
@@ -998,6 +998,7 @@ from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import InstallMode as InstallMode
 from .types import InstructionExtractionMode as InstructionExtractionMode
 from .types import IntakeRuleDef as IntakeRuleDef
+from .types import InteractiveLaunch as InteractiveLaunch
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import InvocationTemplate as InvocationTemplate
@@ -1055,7 +1056,6 @@ from .types import ModelPinResolution as ModelPinResolution
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
-from .types import InteractiveLaunch as InteractiveLaunch
 from .types import NativeShellCaptureDecision as NativeShellCaptureDecision
 from .types import NativeShellCaptureDiagnostic as NativeShellCaptureDiagnostic
 from .types import NativeShellCaptureMode as NativeShellCaptureMode
@@ -1064,7 +1064,6 @@ from .types import NativeShellCaptureReason as NativeShellCaptureReason
 from .types import NativeShellCaptureStatus as NativeShellCaptureStatus
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
-from .types import PositionalRole as PositionalRole
 from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
@@ -1089,6 +1088,7 @@ from .types import PluginArtifactValidationError as PluginArtifactValidationErro
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
+from .types import PositionalRole as PositionalRole
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PreLaunchReadiness as PreLaunchReadiness
@@ -1177,9 +1177,9 @@ from .types import (
 )
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
+from .types import RestoreSession as RestoreSession
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
-from .types import RestoreSession as RestoreSession
 from .types import ResumeWithBriefing as ResumeWithBriefing
 from .types import RetiredArtifactShape as RetiredArtifactShape
 from .types import RetirementBackstopDef as RetirementBackstopDef

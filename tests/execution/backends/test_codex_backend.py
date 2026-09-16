@@ -1451,9 +1451,12 @@ class TestCodexBuildInteractiveCmd:
 
         assert spec.skill_discovery_route is CODEX_PROJECTED_HOME_ROUTE
 
-    def test_initial_prompt_is_final_element(self) -> None:
+    def test_initial_prompt_precedes_config_overrides(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch(initial_prompt="hello"))
-        assert spec.cmd[-1] == "hello"
+        prompt_idx = list(spec.cmd).index("hello")
+        config_override_idx = list(spec.cmd).index(CodexFlags.CONFIG_OVERRIDE)
+        assert prompt_idx < config_override_idx
+        assert spec.cmd[-1] != "hello"
 
     def test_plugin_binding_does_not_replace_generated_home(self) -> None:
         from pathlib import Path

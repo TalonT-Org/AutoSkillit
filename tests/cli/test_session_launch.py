@@ -2308,6 +2308,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         NamedResume,
         NoResume,
         PluginLoadMode,
+        RestoreSession,
         SkillExecutionRole,
         SkillUnavailabilityPayload,
         ValidatedAddDir,
@@ -2333,7 +2334,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             },
         ),
     }
-    built_prompts: list[str | None] = []
+    built_launches: list[object] = []
     lifecycle = RecordingLifecycle(
         generated_home=generated_home,
         skills_dir=skills_dir,
@@ -2353,9 +2354,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
 
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
             launch = kwargs["launch"]
-            built_prompts.append(
-                getattr(launch, "system_prompt", None) or getattr(launch, "briefing", None)
-            )
+            built_launches.append(launch)
             managed_skill_catalog = next(
                 (entry for entry in kwargs["add_dirs"] if isinstance(entry, ValidatedAddDir)),
                 None,
@@ -2459,8 +2458,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     assert [spec.env["INITIAL"] for spec in run_specs] == ["greeting", "", ""]
     assert [spec.env["RESUME"] for spec in run_specs] == [
         "FreshLaunch",
-        "ResumeWithBriefing",
-        "ResumeWithBriefing",
+        "RestoreSession",
+        "RestoreSession",
     ]
     assert [event[3] for event in run_events] == [(3, 7, 5, 11)] * 3
     assert [spec.managed_skill_catalog for spec in run_specs] == [
@@ -2486,13 +2485,23 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         < events.index(("render", profile_payload))
         < events.index(("run", *run_events[0][1:]))
     )
-    assert all(prompt is not None for prompt in built_prompts)
+    assert len(built_launches) == 3
+    assert isinstance(built_launches[0], FreshLaunch)
+    assert built_launches[1:] == [
+        RestoreSession(session_id="reload-id"),
+        RestoreSession(session_id="infra-id"),
+    ]
     assert all(
-        prompt.count("<autoskillit_skill_unavailability>") == 1
-        for prompt in built_prompts
-        if prompt is not None
+        not hasattr(launch, "briefing")
+        and not hasattr(launch, "system_prompt")
+        and not hasattr(launch, "initial_prompt")
+        for launch in built_launches[1:]
     )
-    assert all("profile-required-join" in prompt for prompt in built_prompts if prompt is not None)
+    fresh_launch = built_launches[0]
+    assert isinstance(fresh_launch, FreshLaunch)
+    assert fresh_launch.system_prompt is not None
+    assert fresh_launch.system_prompt.count("<autoskillit_skill_unavailability>") == 1
+    assert "profile-required-join" in fresh_launch.system_prompt
     assert events.index(("managed-exit", launch_id)) > events.index(
         lifecycle.event_for("attempt-exit", 3)
     )

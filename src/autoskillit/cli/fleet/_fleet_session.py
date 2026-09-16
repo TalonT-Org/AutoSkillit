@@ -67,7 +67,7 @@ def _fleet_session_launcher(
         extra_env: dict[str, str],
     ) -> Any:
         return _run_interactive_session(
-            launch,
+            launch=launch,
             extra_env=extra_env,
             project_dir=project_dir,
             required_env=FLEET_SESSION_REQUIRED_ENV,
@@ -158,7 +158,7 @@ def _fleet_session_launcher(
                 attempt += 1
                 launch_env = {**extra_env, LAUNCH_ID_ENV_VAR: launch_id}
                 return _run_interactive_session(
-                    launch,
+                    launch=launch,
                     extra_env=launch_env,
                     project_dir=project_dir,
                     required_env=FLEET_SESSION_REQUIRED_ENV,

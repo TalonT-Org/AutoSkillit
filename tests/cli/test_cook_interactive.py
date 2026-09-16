@@ -629,12 +629,18 @@ def test_cook_bare_resume_without_selection_starts_fresh(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     backend = _Backend()
-    _install_harness(monkeypatch, tmp_path)
+    captured = _install_harness(
+        monkeypatch,
+        tmp_path,
+        first_run=True,
+        onboarding_prompt="start here",
+    )
 
     cli.cook(backend=backend, resume=True)
 
     assert backend.recover_count == 1
-    assert backend.build_calls[0]["launch"] == FreshLaunch()
+    assert backend.build_calls[0]["launch"] == FreshLaunch(initial_prompt="start here")
+    assert any(event[0] == "onboarded" for event in captured["events"])
 
 
 def test_cook_explicit_resume_does_not_run_recovery(
@@ -678,7 +684,9 @@ def test_cook_does_not_mark_onboarded_without_prompt(
     assert not any(event[0] == "onboarded" for event in captured["events"])
 
 
-def test_cook_resume_skips_onboarding(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cook_explicit_resume_skips_onboarding(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     backend = _Backend()
     captured = _install_harness(
         monkeypatch,
@@ -687,10 +695,10 @@ def test_cook_resume_skips_onboarding(monkeypatch: pytest.MonkeyPatch, tmp_path:
         onboarding_prompt="start here",
     )
 
-    cli.cook(backend=backend, resume=True)
+    cli.cook(backend=backend, session_id="thread-explicit")
 
     assert not any(event[0] == "onboarded" for event in captured["events"])
-    assert backend.build_calls[0]["launch"] == FreshLaunch()
+    assert backend.build_calls[0]["launch"] == RestoreSession("thread-explicit")
 
 
 def test_cook_nonzero_exit_propagates_after_managed_cleanup(

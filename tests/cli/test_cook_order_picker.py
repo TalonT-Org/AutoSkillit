@@ -614,7 +614,7 @@ class TestOrderResumeParsing:
         assert captured, "fake_launch was never called"
         assert isinstance(captured["launch"], FreshLaunch)
         assert "MCP STARTUP RECOVERY" in (captured["launch"].system_prompt or "")
-        assert captured["launch"].initial_prompt is None
+        assert captured["launch"].initial_prompt is not None
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
 

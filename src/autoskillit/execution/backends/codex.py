@@ -104,7 +104,10 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
     command: list[str] = [origin.binary]
     for flag, value in origin.kv_flags:
-        if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
+        if flag == CodexFlags.PROFILE:
+            command.extend((flag, value))
+    for flag, value in origin.variadic_pairs:
+        if flag == CodexFlags.CONFIG_OVERRIDE:
             command.extend((flag, value))
     return tuple(command)
 
@@ -604,7 +607,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
 
         sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
         config_overrides = [
-            value for flag, value in origin.kv_flags if flag == CodexFlags.CONFIG_OVERRIDE
+            value for flag, value in origin.variadic_pairs if flag == CodexFlags.CONFIG_OVERRIDE
         ]
         if not config_overrides or config_overrides[-1] != sqlite_override:
             return [

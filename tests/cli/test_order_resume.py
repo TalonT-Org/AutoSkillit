@@ -11,7 +11,7 @@ from autoskillit.cli.session._session_launch import (
     _InfraExitSignal,
     _launch_cook_session,
 )
-from autoskillit.core import FreshLaunch, ResumeWithBriefing
+from autoskillit.core import FreshLaunch, RestoreSession
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -63,7 +63,7 @@ class TestLaunchCookSessionInfraResume:
                 **launch_kwargs,
             )
 
-        assert launches[1] == ResumeWithBriefing(session_id="sess-42", briefing="prompt")
+        assert launches[1] == RestoreSession(session_id="sess-42")
 
     def test_max_infra_resumes_exceeded(self, launch_kwargs: dict[str, object]) -> None:
         def mock_run_interactive(*, launch, **kwargs):

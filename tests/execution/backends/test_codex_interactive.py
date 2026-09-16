@@ -73,7 +73,7 @@ class TestCodexInteractiveCmdBaseStructure:
         assert (
             CodexFlags.CONFIG_OVERRIDE,
             f'sqlite_home="{generated_home}"',
-        ) in spec.origin.kv_flags
+        ) in spec.origin.variadic_pairs
 
     def test_fresh_base_command(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
@@ -117,12 +117,12 @@ class TestCodexInteractiveCmdResumeVariants:
             "test-profile",
             CodexFlags.MODEL,
             "gpt-5.6-sol",
+            "abc123",
+            "continue",
             CodexFlags.CONFIG_OVERRIDE,
             "features.image_generation=false",
             CodexFlags.CONFIG_OVERRIDE,
             'sqlite_home="/session/home"',
-            "abc123",
-            "continue",
             CodexFlags.ADD_DIR,
             "/first",
             CodexFlags.ADD_DIR,
@@ -155,7 +155,10 @@ class TestCodexInteractiveCmdResumeVariants:
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         idx = list(spec.cmd).index(CodexFlags.RESUME_SUBCOMMAND)
         assert spec.cmd[idx + 1] == CodexFlags.DANGEROUSLY_BYPASS
-        assert spec.cmd[-1] == "abc123"
+        resume_target_idx = list(spec.cmd).index("abc123")
+        config_override_idx = list(spec.cmd).index(CodexFlags.CONFIG_OVERRIDE)
+        assert resume_target_idx < config_override_idx
+        assert spec.cmd[-1] != "abc123"
         assert spec.origin is not None
         assert spec.origin.positional == ((PositionalRole.RESUME_TARGET, "abc123"),)
 

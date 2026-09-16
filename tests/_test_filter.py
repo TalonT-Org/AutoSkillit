@@ -2564,18 +2564,16 @@ def _add_always_run_paths(
         scope.add_targets(*always_run)
 
 
-def _refine_with_coverage(
+def _augment_with_coverage(
     changed_src_py: set[str],
     coverage_map_path: str | Path | None,
     cwd: str | Path | None,
     tests_root: Path,
 ) -> set[str]:
-    """Use a valid coverage map to add file-level test targets (additive only).
+    """Return concrete test-file paths a valid coverage map adds for *changed_src_py*.
 
-    The oracle records observed source->test relationships. Observation proves a
-    relationship exists; it can never prove one absent, because subprocess-invoked,
-    fixture-mediated and shallow-import execution are invisible to coverage contexts.
-    It may therefore only ADD tests to the structurally-selected scope, never remove any.
+    Returns an empty set when no coverage map is requested or the map fails
+    admission; otherwise the resolved additions only.
     """
     if coverage_map_path is None or cwd is None:
         return set()
@@ -2660,7 +2658,7 @@ def build_test_scope(
         always_run,
     )
     scope.add_files(
-        *_refine_with_coverage(
+        *_augment_with_coverage(
             changed_src_py,
             coverage_map_path,
             cwd,

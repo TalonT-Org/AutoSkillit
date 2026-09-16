@@ -7,8 +7,12 @@ import json
 import os
 import sqlite3
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.core import ObserverStatus
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -413,11 +417,11 @@ def test_observer_matching_window_and_retained_output_are_hard_capped() -> None:
 
 
 class _ScriptedProbe:
-    def __init__(self, statuses) -> None:
+    def __init__(self, statuses: tuple[ObserverStatus, ...]) -> None:
         self.statuses = iter(statuses)
         self.calls = 0
 
-    def check(self):
+    def check(self) -> ObserverStatus:
         self.calls += 1
         return next(self.statuses)
 

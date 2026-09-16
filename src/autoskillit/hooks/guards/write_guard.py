@@ -94,94 +94,103 @@ _GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
 )
 
 
-def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
-    """Extract write target paths from a single command segment.
+def _resolve_real_targets(operands: list[str], cwd: str) -> list[str]:
+    targets: list[str] = []
+    for operand in operands:
+        resolved = resolve_write_target(operand, cwd)
+        if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+            targets.append(resolved)
+    return targets
 
-    Returns None if segment is not a write command, [] if write detected
-    but all targets are pseudo-devices, or [paths] otherwise.
-    """
+
+def _git_subcommand_index(segment: list[str]) -> int:
+    idx = 1
+    while idx < len(segment):
+        tok = segment[idx]
+        if tok in _GIT_FLAG_WITH_VALUE:
+            idx += 2
+            if idx >= len(segment):
+                break
+        elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
+            idx += 1
+        else:
+            break
+    return idx
+
+
+def _extract_git_write_targets(segment: list[str], cwd: str) -> list[str] | None:
+    idx = _git_subcommand_index(segment)
+    if idx >= len(segment):
+        return None
+    subcmd = segment[idx]
+    if subcmd == "checkout" and "--" in segment[idx + 1 :]:
+        double_dash = segment.index("--", idx + 1)
+        return _resolve_real_targets(segment[double_dash + 1 :], cwd)
+    if subcmd == "reset" and "--hard" in segment[idx + 1 :]:
+        return []
+    return None
+
+
+def _non_flag_operands(args: list[str]) -> list[str]:
+    operands: list[str] = []
+    skip_next = False
+    for token in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if token.startswith("-") or token.startswith("&") or _FD_REDIRECT_RE.match(token):
+            continue
+        if _REDIRECT_OP_ONLY_RE.match(token):
+            skip_next = True
+            continue
+        if _REDIRECT_TOKEN_RE.match(token):
+            continue
+        operands.append(token)
+    return operands
+
+
+def _extract_write_verb_targets(verb: str, segment: list[str], cwd: str) -> list[str]:
+    operands = _non_flag_operands(segment[1:])
+    if verb == "sed":
+        has_inplace = any(t.startswith("-i") or t == "--in-place" for t in segment[1:])
+        if not has_inplace:
+            return []
+        operands = operands[-1:]
+    elif verb in ("mv", "cp"):
+        if len(operands) < 2:
+            return []
+        operands = operands[-1:]
+    elif verb == "patch":
+        for operand in operands:
+            resolved = resolve_write_target(operand, cwd)
+            if resolved is not None:
+                # A pseudo-device still consumes patch's first resolvable operand.
+                if resolved in _PSEUDO_DEVICE_PATHS:
+                    return []
+                return [resolved]
+        return []
+    return _resolve_real_targets(operands, cwd)
+
+
+def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
+    """Return None for non-writes, [] for writes without real paths, or target paths."""
     if is_gh_command(segment):
         return None
-
     verb = command_verb(segment)
-    targets: list[str] = []
-    found_write = False
-
     if verb == "git" and len(segment) >= 2:
-        idx = 1
-        while idx < len(segment):
-            tok = segment[idx]
-            if tok in _GIT_FLAG_WITH_VALUE:
-                idx += 2
-                if idx >= len(segment):
-                    break
-            elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
-                idx += 1
-            else:
-                break
-        if idx < len(segment):
-            subcmd = segment[idx]
-            if subcmd == "checkout" and "--" in segment[idx + 1 :]:
-                found_write = True
-                double_dash = segment.index("--", idx + 1)
-                for t in segment[double_dash + 1 :]:
-                    resolved = resolve_write_target(t, cwd)
-                    if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(resolved)
-            elif subcmd == "reset" and "--hard" in segment[idx + 1 :]:
-                found_write = True
-    elif verb in _WRITE_VERBS:
-        found_write = True
-        non_flag: list[str] = []
-        skip_next = False
-        for t in segment[1:]:
-            if skip_next:
-                skip_next = False
-                continue
-            if t.startswith("-") or t.startswith("&") or _FD_REDIRECT_RE.match(t):
-                continue
-            if _REDIRECT_OP_ONLY_RE.match(t):
-                skip_next = True
-                continue
-            if _REDIRECT_TOKEN_RE.match(t):
-                continue
-            non_flag.append(t)
-        if verb == "sed":
-            # -i flag must be present; last non-flag arg is the target
-            flags = [t for t in segment[1:] if t.startswith("-")]
-            has_inplace = any(t.startswith("-i") or t == "--in-place" for t in flags)
-            if has_inplace and non_flag:
-                path = non_flag[-1]
-                resolved = resolve_write_target(path, cwd)
-                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(resolved)
-        elif verb == "tee":
-            for t in non_flag:
-                resolved = resolve_write_target(t, cwd)
-                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(resolved)
-        elif verb in ("mv", "cp"):
-            if len(non_flag) >= 2:
-                path = non_flag[-1]
-                resolved = resolve_write_target(path, cwd)
-                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(resolved)
-        elif verb == "patch":
-            for t in non_flag:
-                resolved = resolve_write_target(t, cwd)
-                if resolved is not None:
-                    if resolved not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(resolved)
-                    break
-        elif verb in ("rm", "unlink"):
-            for t in non_flag:
-                resolved = resolve_write_target(t, cwd)
-                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(resolved)
-
-    if found_write:
-        return targets
+        return _extract_git_write_targets(segment, cwd)
+    if verb in _WRITE_VERBS:
+        return _extract_write_verb_targets(verb, segment, cwd)
     return None
+
+
+def _effective_execution_cwd(execution_cwd: str) -> str:
+    if execution_cwd:
+        return execution_cwd
+    cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+    if cwd and not os.path.isabs(cwd):
+        return ""
+    return cwd
 
 
 def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[str] | None:
@@ -209,11 +218,7 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
     if segments is None:
         return None
 
-    cwd = execution_cwd
-    if not cwd:
-        cwd = os.environ.get("AUTOSKILLIT_CWD", "")
-        if cwd and not os.path.isabs(cwd):
-            cwd = ""
+    cwd = _effective_execution_cwd(execution_cwd)
 
     all_targets: list[str] = []
     found_any_write = False
@@ -279,13 +284,7 @@ def _deny(reason: str) -> None:
     sys.exit(0)
 
 
-def main() -> None:
-    if not os.environ.get("AUTOSKILLIT_HEADLESS"):
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
-        sys.exit(0)
-
+def _write_prefix_policy() -> tuple[list[str], str]:
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
     if prefixes_str:
         raw_prefixes = [p for p in prefixes_str.split(":") if p]
@@ -293,11 +292,86 @@ def main() -> None:
         singular = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
         raw_prefixes = [singular] if singular else []
 
-    if not raw_prefixes:
+    norm_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in raw_prefixes]
+    return norm_prefixes, ", ".join(raw_prefixes)
+
+
+def _paths_validation_error(
+    paths: list[str], norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    for path in paths:
+        resolved = os.path.realpath(path)
+        if not any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes):
+            return (
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                f"Only writes to {display_prefix} are permitted."
+            )
+    return None
+
+
+def _direct_path_validation_error(
+    file_path: str, norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    if not file_path:
+        return f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path)."
+    return _paths_validation_error([file_path], norm_prefixes, display_prefix)
+
+
+def _patch_validation_error(
+    command: str, norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    paths = _extract_paths_from_patch(command)
+    if not paths:
+        return (
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+            f"(no target paths found in patch)."
+        )
+    return _paths_validation_error(paths, norm_prefixes, display_prefix)
+
+
+def _bash_validation_error(
+    command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    targets = _extract_bash_write_targets(command, execution_cwd)
+    if not targets:
+        return None
+    return _paths_validation_error(targets, norm_prefixes, display_prefix)
+
+
+def _interpreter_validation_error(
+    command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    interp_paths = extract_interpreter_write_paths(command)
+    if interp_paths is None:
+        return None
+    unresolved_reason = (
+        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+        f"Interpreter-mediated file writes are not permitted."
+    )
+    if not interp_paths:
+        return unresolved_reason
+    cwd = _effective_execution_cwd(execution_cwd)
+    resolved: list[str] = []
+    for path in interp_paths:
+        if os.path.isabs(path):
+            resolved.append(path)
+        elif cwd:
+            resolved.append(os.path.join(cwd, path))
+        else:
+            return unresolved_reason
+    return _paths_validation_error(resolved, norm_prefixes, display_prefix)
+
+
+def main() -> None:
+    if not os.environ.get("AUTOSKILLIT_HEADLESS"):
         sys.exit(0)
 
-    norm_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in raw_prefixes]
-    display_prefix = ", ".join(raw_prefixes)
+    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
+        sys.exit(0)
+
+    norm_prefixes, display_prefix = _write_prefix_policy()
+    if not norm_prefixes:
+        sys.exit(0)
 
     try:
         data = json.loads(sys.stdin.read())
@@ -324,95 +398,38 @@ def main() -> None:
 
     tool_input = data.get("tool_input", {})
 
-    def _within_any_prefix(path: str) -> bool:
-        resolved = os.path.realpath(path)
-        return any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes)
-
     if tool_name == "Bash" or "run_cmd" in tool_name:
         parsed = parse_hook_command(data)
         command = parsed.command or ""
-
-        interp_paths = extract_interpreter_write_paths(command)
-        if interp_paths is not None:
-            if not interp_paths:
-                _deny(
-                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Interpreter-mediated file writes are not permitted."
-                )
-                return
-
-            cwd = parsed.execution_cwd
-            if not cwd:
-                cwd = os.environ.get("AUTOSKILLIT_CWD", "")
-                if cwd and not os.path.isabs(cwd):
-                    cwd = ""
-
-            resolved: list[str] = []
-            for p in interp_paths:
-                if os.path.isabs(p):
-                    resolved.append(p)
-                elif cwd:
-                    resolved.append(os.path.join(cwd, p))
-                else:
-                    _deny(
-                        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                        f"Interpreter-mediated file writes are not permitted."
-                    )
-                    return
-
-            for rp in resolved:
-                if not _within_any_prefix(rp):
-                    _deny(
-                        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                        f"Only writes to {display_prefix} are permitted."
-                    )
-                    return
-
-        targets = _extract_bash_write_targets(command, parsed.execution_cwd)
-        if targets is None:
-            sys.exit(0)
-        if not targets:
-            sys.exit(0)
-        for target in targets:
-            if not _within_any_prefix(target):
-                _deny(
-                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Only writes to {display_prefix} are permitted."
-                )
-                return
+        reason = _interpreter_validation_error(
+            command, parsed.execution_cwd, norm_prefixes, display_prefix
+        )
+        if reason is not None:
+            _deny(reason)
+            return
+        reason = _bash_validation_error(
+            command, parsed.execution_cwd, norm_prefixes, display_prefix
+        )
+        if reason is not None:
+            _deny(reason)
+            return
         sys.exit(0)
 
     if tool_name == "apply_patch":
         command = extract_apply_patch_text(data) or ""
-        paths = _extract_paths_from_patch(command)
-        if not paths:
-            _deny(
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-                f"(no target paths found in patch)."
-            )
+        reason = _patch_validation_error(command, norm_prefixes, display_prefix)
+        if reason is not None:
+            _deny(reason)
             return
-        for p in paths:
-            if not _within_any_prefix(p):
-                _deny(
-                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Only writes to {display_prefix} are permitted."
-                )
-                return
         sys.exit(0)
 
     # Write or Edit
     file_path = tool_input.get("file_path", "")
-    if not file_path:
-        _deny(f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path).")
+    reason = _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
+    if reason is not None:
+        _deny(reason)
         return
-
-    if _within_any_prefix(file_path):
-        sys.exit(0)
-
-    _deny(
-        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-        f"Only writes to {display_prefix} are permitted."
-    )
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -125,30 +125,34 @@ _DENY_MESSAGE: str = (
 )
 
 
+def _is_bypassed(data: dict[str, object]) -> bool:
+    if data.get("agent_id"):
+        return True
+    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
+        return True
+    guard_name = Path(__file__).stem
+    return guard_name not in os.environ.get("AUTOSKILLIT_APPLICABLE_GUARDS", "").split(",")
+
+
+def _is_guarded_non_anthropic_skill_session() -> bool:
+    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
+    if not profile or profile.casefold() == "anthropic":
+        return False
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        return False
+    return os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "skill"
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except Exception:
         sys.exit(0)
 
-    if data.get("agent_id"):
+    if _is_bypassed(data):
         sys.exit(0)
 
-    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
-        sys.exit(0)
-
-    guard_name = Path(__file__).stem
-    if guard_name not in os.environ.get("AUTOSKILLIT_APPLICABLE_GUARDS", "").split(","):
-        sys.exit(0)
-
-    profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
-    if not profile or profile.casefold() == "anthropic":
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_SESSION_TYPE") != "skill":
+    if not _is_guarded_non_anthropic_skill_session():
         sys.exit(0)
 
     session_id: str = data.get("session_id", "")

@@ -73,6 +73,54 @@ def _is_read_only_prefix(token: str) -> bool:
     return any(basename == prefix for prefix in _READ_ONLY_PREFIXES)
 
 
+def _is_read_only_invocation(tokens: list[str]) -> bool:
+    """Return True if tokens begin with a known read-only invocation."""
+    token = tokens[0]
+    if _is_read_only_prefix(token):
+        return True
+    return any(
+        os.path.basename(token) == parts[0] and len(tokens) > 1 and tokens[1] == parts[1]
+        for parts in _READ_ONLY_MULTIWORD_PREFIXES
+        if len(parts) >= 2
+    )
+
+
+def _is_uv_run_pytest(args: list[str]) -> bool:
+    """Return True if uv run arguments execute pytest."""
+    if not args or args[0] != "run":
+        return False
+    for idx, run_tok in enumerate(args[1:]):
+        if run_tok.startswith("-"):
+            continue
+        run_basename = os.path.basename(run_tok)
+        if run_basename in _PYTEST_NAMES:
+            return True
+        if re.match(r"python3?$", run_basename):
+            remaining = args[idx + 2 :]
+            return len(remaining) >= 2 and remaining[0] == "-m" and remaining[1] in _PYTEST_NAMES
+        # Non-flag, non-pytest, non-python3 token: not a pytest invocation
+        # itself but keep scanning — pytest (or another match) may appear
+        # later in the arg list (e.g. `uv run helper.py pytest`).
+        continue
+    return False
+
+
+def _is_pytest_invocation(verb: str, args: list[str]) -> bool:
+    """Return True if a parsed command invocation directly executes pytest."""
+    tokens = [verb, *args]
+    if _is_read_only_invocation(tokens):
+        return False
+
+    basename = os.path.basename(verb)
+    if basename in _PYTEST_NAMES:
+        return True
+    if re.match(r"python3?$", basename):
+        return len(args) >= 2 and args[0] == "-m" and args[1] in _PYTEST_NAMES
+    if basename == "uv":
+        return _is_uv_run_pytest(args)
+    return False
+
+
 def _is_direct_pytest(cmd: str) -> bool:
     """Return True if cmd contains a direct pytest invocation in command position.
 
@@ -91,55 +139,8 @@ def _is_direct_pytest(cmd: str) -> bool:
         verb, rest = command_verb_and_args(segment)
         if not verb:
             continue
-        tokens = [verb, *rest]
-
-        token = tokens[0]
-
-        # Read-only single-word prefixes: never a pytest invocation.
-        if _is_read_only_prefix(token):
-            continue
-
-        # Read-only multi-word prefixes (e.g. "uv pip").
-        multiword_matched = False
-        for parts in _READ_ONLY_MULTIWORD_PREFIXES:
-            if len(parts) < 2:
-                continue
-            head, tail = parts[0], parts[1]
-            if os.path.basename(token) == head and len(tokens) > 1 and tokens[1] == tail:
-                multiword_matched = True
-                break
-        if multiword_matched:
-            continue
-
-        # Bare pytest or path/to/pytest or py.test.
-        basename = os.path.basename(token)
-        if basename in _PYTEST_NAMES:
+        if _is_pytest_invocation(verb, rest):
             return True
-
-        # python -m pytest / python3 -m py.test.
-        if re.match(r"python3?$", basename):
-            if len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] in _PYTEST_NAMES:
-                return True
-
-        # uv run pytest / uv run path/to/pytest (flags between run and command are skipped).
-        if os.path.basename(token) == "uv" and len(tokens) >= 2 and tokens[1] == "run":
-            run_tokens = tokens[2:]
-            for idx, run_tok in enumerate(run_tokens):
-                if run_tok.startswith("-"):
-                    continue
-                run_basename = os.path.basename(run_tok)
-                if run_basename in _PYTEST_NAMES:
-                    return True
-                # uv run python -m pytest / uv run python3 -m py.test
-                if re.match(r"python3?$", run_basename):
-                    remaining = run_tokens[idx + 1 :]
-                    if (
-                        len(remaining) >= 2
-                        and remaining[0] == "-m"
-                        and remaining[1] in _PYTEST_NAMES
-                    ):
-                        return True
-                break
 
     return False
 

@@ -100,7 +100,7 @@ def _claude_turn_key(
     return True, None
 
 
-def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | None:
+def _load_transcript_records(path: Path) -> list[dict[str, Any]] | None:
     tail = _bounded_tail(path)
     if tail is None:
         return None
@@ -113,6 +113,13 @@ def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | No
         if not isinstance(record, dict):
             return None
         records.append(record)
+    return records
+
+
+def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | None:
+    records = _load_transcript_records(path)
+    if not records:
+        return None
 
     candidate_found = False
     candidate_key: tuple[str, ...] | None = None

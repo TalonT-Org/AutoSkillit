@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)  # hooks/
 if _HOOKS_DIR not in sys.path:
@@ -227,45 +228,41 @@ def _raw_target_mutations(
         return [("", "<unresolved>", True)]
     common = Path(str(context["common_git_dir"])).resolve()
     worktree_git = Path(str(context["worktree_git_dir"])).resolve()
-    worktrees_dir = common / "worktrees"
     result: list[tuple[str, str, bool]] = []
     for raw_target in targets:
         target = Path(raw_target)
         if not target.is_absolute():
             target = Path(str(context["execution_cwd"])) / target
         target = target.resolve()
-        if target == worktree_git / "HEAD":
-            result.append(("HEAD", "<unresolved>", False))
-        elif target == common / "HEAD":
-            result.append(("HEAD", "<unresolved>", False))
-        elif target == common / "packed-refs":
-            result.append(("", "<unresolved>", True))
-        else:
-            try:
-                relative = target.relative_to(worktrees_dir)
-            except ValueError:
-                pass
-            else:
-                # <common>/worktrees/<name>/HEAD writes the HEAD of another
-                # worktree (the per-worktree HEAD symref). Fail closed by
-                # routing it through _all_threatened against every owned ref
-                # — we can't cheaply resolve which branch that worktree
-                # checked out, so we deny any owner to be safe.
-                if relative.parts and len(relative.parts) == 2 and relative.parts[1] == "HEAD":
-                    result.append(("", "<unresolved>", True))
-                    continue
-                # <common>/worktrees/<name>/refs/... is a per-worktree
-                # ref store; any write to it must deny against every
-                # owned ref (ambiguous which branch it lands in).
-                if len(relative.parts) >= 2 and relative.parts[1] == "refs":
-                    result.append(("", "<unresolved>", True))
-                    continue
-            try:
-                relative = target.relative_to(common / "refs" / "heads")
-            except ValueError:
-                continue
-            result.append((f"refs/heads/{relative.as_posix()}", "<unresolved>", False))
+        mutation = _classify_raw_write_target(target, common, worktree_git)
+        if mutation is not None:
+            result.append(mutation)
     return result
+
+
+def _classify_raw_write_target(
+    target: Path, common: Path, worktree_git: Path
+) -> tuple[str, str, bool] | None:
+    def _relative_to(root: Path) -> Path | None:
+        try:
+            return target.relative_to(root)
+        except ValueError:
+            return None
+
+    if target == worktree_git / "HEAD" or target == common / "HEAD":
+        return ("HEAD", "<unresolved>", False)
+    if target == common / "packed-refs":
+        return ("", "<unresolved>", True)
+    relative = _relative_to(common / "worktrees")
+    if relative is not None:
+        if relative.parts and len(relative.parts) == 2 and relative.parts[1] == "HEAD":
+            return ("", "<unresolved>", True)
+        if len(relative.parts) >= 2 and relative.parts[1] == "refs":
+            return ("", "<unresolved>", True)
+    relative = _relative_to(common / "refs" / "heads")
+    if relative is None:
+        return None
+    return (f"refs/heads/{relative.as_posix()}", "<unresolved>", False)
 
 
 def _git_segment_cwd(segment: list[str], cwd: str) -> str:
@@ -292,9 +289,7 @@ def _git_segment_cwd(segment: list[str], cwd: str) -> str:
     return str(current.resolve())
 
 
-def _preflight_checked_out_ref_mutation(
-    data: dict[str, object], command: str, execution_cwd: str
-) -> None:
+def _preflight_segments(command: str) -> tuple[list[list[str]], list[list[str]], bool]:
     outer_segments = tokenize_command_segments(command)
     nested_segments = tokenize_shell_payload_segments(command)
     interpreter_payloads, interpreter_unresolved = extract_interpreter_command_payloads(command)
@@ -306,17 +301,13 @@ def _preflight_checked_out_ref_mutation(
             additional_segments.append(payload)
         else:
             additional_segments.extend(tokenize_command_segments(payload))
-    # The live-text projection (rectify #4941 Part A): a heredoc body whose
-    # consumer executes it is blanked at its source position and appended
-    # once; an inert heredoc body is blanked and never appended. A herestring
-    # body is left at its single natural position either way (see
-    # live_command_text's docstring). Both the structural-mutation regex and
-    # _raw_target_mutations' write-path scan read this projection instead of
-    # the raw command, so an inert `cat <<'EOF'` body mentioning
-    # "git push --force" as prose no longer matches, while a heredoc/pipe-fed
-    # shell that actually runs it still does.
-    live_text = live_command_text(command)
-    structural_mutation = bool(
+    return outer_segments, additional_segments, interpreter_unresolved
+
+
+def _is_structural_mutation(
+    live_text: str, outer: list[list[str]], additional: list[list[str]]
+) -> bool:
+    return bool(
         re.search(
             r"\bgit\b[^\n;&|]*(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
             r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
@@ -324,89 +315,42 @@ def _preflight_checked_out_ref_mutation(
         )
         or any(
             os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
-            for segment in [*outer_segments, *additional_segments]
+            for segment in [*outer, *additional]
         )
     )
-    if not execution_cwd:
-        if structural_mutation:
-            _deny_checked_out_ref(
-                data=data,
-                context=None,
-                attempted_value="<unresolved>",
-                threatened_refs=[],
-            )
-        return
-    current_cwd = execution_cwd
-    for segment in outer_segments:
-        verb, args = command_verb_and_args(segment)
-        if verb == "cd":
-            # Accept `cd <dir>`, `cd -P <dir>` (-P resolves physical path),
-            # and `cd -- <dir>` (-- ends option parsing). Reject dynamic
-            # dirs (`cd $foo`, `cd $(cmd)`) and `cd -` (which swaps to
-            # OLDPWD — unresolvable without $OLDPWD state) by bailing to
-            # an empty cwd so subsequent git segments are skipped rather
-            # than classified against a stale or invalid cwd.
-            if any(arg == "-" for arg in args):
-                current_cwd = ""
-                continue
-            target_args = [arg for arg in args if arg not in ("-P", "--")]
-            if len(target_args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(target_args[0]):
-                candidate = Path(target_args[0])
-                current_cwd = str(
+
+
+def _advance_shell_cwd(current_cwd: str, verb: str, args: list[str]) -> tuple[str, bool]:
+    if verb == "cd":
+        if any(arg == "-" for arg in args):
+            return "", True
+        target_args = [arg for arg in args if arg not in ("-P", "--")]
+        if len(target_args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(target_args[0]):
+            candidate = Path(target_args[0])
+            return (
+                str(
                     (
                         candidate if candidate.is_absolute() else Path(current_cwd) / candidate
                     ).resolve()
-                )
-                continue
-            if len(args) != 1:
-                # Anything else (cd with no args, nested-expansion)
-                # cannot be resolved safely; bail out rather than letting
-                # later git segments classify against a stale cwd.
-                current_cwd = ""
-                continue
-        elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(args[0]):
-            # pushd swaps cwd into the new dir; track it like cd.
-            candidate = Path(args[0])
-            current_cwd = str(
+                ),
+                True,
+            )
+        if len(args) != 1:
+            return "", True
+    elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(args[0]):
+        candidate = Path(args[0])
+        return (
+            str(
                 (candidate if candidate.is_absolute() else Path(current_cwd) / candidate).resolve()
-            )
-            continue
-        if not current_cwd:
-            # cwd resolution failed earlier in this command — refuse to
-            # classify subsequent git segments rather than silently routing
-            # them against the wrong repo.
-            continue
-        segment_context = _repository_context(_git_segment_cwd(segment, current_cwd))
-        if segment_context is None:
-            continue
-        for target_ref, attempted_value, ambiguous in _classify_git_segment(
-            segment, segment_context
-        ):
-            threatened = (
-                _all_threatened(segment_context)
-                if ambiguous
-                else _threatened_for_target(segment_context, target_ref)
-            )
-            if threatened:
-                _deny_checked_out_ref(
-                    data=data,
-                    context=segment_context,
-                    attempted_value=attempted_value,
-                    threatened_refs=threatened,
-                )
+            ),
+            True,
+        )
+    return current_cwd, False
 
-    context = _repository_context(current_cwd)
-    if context is None:
-        return
-    mutations: list[tuple[str, str, bool]] = []
-    for segment in additional_segments:
-        mutations.extend(_classify_git_segment(segment, context))
-    mutations.extend(
-        _raw_target_mutations(live_text, [*outer_segments, *additional_segments], context)
-    )
-    if interpreter_unresolved and structural_mutation:
-        mutations.append(("", "<unresolved>", True))
 
+def _deny_for_mutations(
+    data: dict[str, object], context: dict[str, object], mutations: list[tuple[str, str, bool]]
+) -> None:
     for target_ref, attempted_value, ambiguous in mutations:
         threatened = (
             _all_threatened(context) if ambiguous else _threatened_for_target(context, target_ref)
@@ -420,14 +364,86 @@ def _preflight_checked_out_ref_mutation(
             )
 
 
-def main() -> None:
+def _preflight_checked_out_ref_mutation(
+    data: dict[str, object], command: str, execution_cwd: str
+) -> None:
+    outer_segments, additional_segments, interpreter_unresolved = _preflight_segments(command)
+    # The live-text projection (rectify #4941 Part A): a heredoc body whose
+    # consumer executes it is blanked at its source position and appended
+    # once; an inert heredoc body is blanked and never appended. A herestring
+    # body is left at its single natural position either way (see
+    # live_command_text's docstring). Both the structural-mutation regex and
+    # _raw_target_mutations' write-path scan read this projection instead of
+    # the raw command, so an inert `cat <<'EOF'` body mentioning
+    # "git push --force" as prose no longer matches, while a heredoc/pipe-fed
+    # shell that actually runs it still does.
+    live_text = live_command_text(command)
+    structural_mutation = _is_structural_mutation(live_text, outer_segments, additional_segments)
+    if not execution_cwd:
+        if structural_mutation:
+            _deny_checked_out_ref(
+                data=data,
+                context=None,
+                attempted_value="<unresolved>",
+                threatened_refs=[],
+            )
+        return
+    current_cwd = execution_cwd
+    for segment in outer_segments:
+        verb, args = command_verb_and_args(segment)
+        current_cwd, skip_segment = _advance_shell_cwd(current_cwd, verb, args)
+        if skip_segment:
+            continue
+        if not current_cwd:
+            # cwd resolution failed earlier in this command — refuse to
+            # classify subsequent git segments rather than silently routing
+            # them against the wrong repo.
+            continue
+        segment_context = _repository_context(_git_segment_cwd(segment, current_cwd))
+        if segment_context is None:
+            continue
+        _deny_for_mutations(data, segment_context, _classify_git_segment(segment, segment_context))
+
+    context = _repository_context(current_cwd)
+    if context is None:
+        return
+    mutations: list[tuple[str, str, bool]] = []
+    for segment in additional_segments:
+        mutations.extend(_classify_git_segment(segment, context))
+    mutations.extend(
+        _raw_target_mutations(live_text, [*outer_segments, *additional_segments], context)
+    )
+    if interpreter_unresolved and structural_mutation:
+        mutations.append(("", "<unresolved>", True))
+
+    _deny_for_mutations(data, context, mutations)
+
+
+def _parse_hook_event() -> tuple[dict[str, object], Any] | None:
     try:
         data = json.loads(sys.stdin.read())
         if not isinstance(data, dict):
-            sys.exit(0)
-        parsed = parse_hook_command(data)
+            return None
+        return data, parse_hook_command(data)
     except (json.JSONDecodeError, AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
+def _git_op_policy_allows(project_root: Path, blocked: tuple[str, ...]) -> bool:
+    try:
+        hook_data = read_merged_hook_config(root=project_root)
+        git_ops_policy = hook_data.get("git_ops_policy", {})
+        return bool(git_ops_policy.get(f"allow_{blocked[0]}"))
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
+        sys.stderr.write(f"git_ops_guard: config read error: {exc}\n")
+        return False
+
+
+def main() -> None:
+    hook_event = _parse_hook_event()
+    if hook_event is None:
         sys.exit(0)
+    data, parsed = hook_event
 
     cmd = parsed.command or ""
 
@@ -477,14 +493,8 @@ def main() -> None:
     if not kitchen_open:
         sys.exit(0)
 
-    # Recipe-level authorization: check git_ops_policy for per-subcommand allow.
-    try:
-        hook_data = read_merged_hook_config(root=project_root)
-        git_ops_policy = hook_data.get("git_ops_policy", {})
-        if git_ops_policy.get(f"allow_{blocked[0]}"):
-            sys.exit(0)
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
-        sys.stderr.write(f"git_ops_guard: config read error: {exc}\n")
+    if _git_op_policy_allows(project_root, blocked):
+        sys.exit(0)
 
     op_str = " ".join(("git",) + blocked)
     deny_reason = _DENY_REASON_TEMPLATE.format(op=op_str)

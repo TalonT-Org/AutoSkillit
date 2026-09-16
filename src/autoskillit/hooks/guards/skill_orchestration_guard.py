@@ -50,6 +50,20 @@ def _deny(reason: str) -> None:
     sys.exit(0)
 
 
+def _enforce_managed_codex_route(tool: str, payload_cwd: str | None, session_id: object) -> None:
+    managed_route = payload_managed_codex_route(payload_cwd, session_id)
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        if "skill_orchestration_guard" not in guards:
+            _deny("managed Codex binding omits skill_orchestration_guard")
+        if route == "parent" and tool in MANAGED_PARENT_ALLOWED_TOOL_SET:
+            sys.exit(0)
+        _deny(
+            f"{tool} is unavailable to the managed Codex {route}; "
+            "only the route's explicit direct-tool surface may be used"
+        )
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -67,17 +81,7 @@ def main() -> None:
     tool = tool_name.split("__")[-1]
     session_id = data.get("session_id")
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    managed_route = payload_managed_codex_route(payload_cwd, session_id)
-    if managed_route is not None:
-        route, guards, _config_digest = managed_route
-        if "skill_orchestration_guard" not in guards:
-            _deny("managed Codex binding omits skill_orchestration_guard")
-        if route == "parent" and tool in MANAGED_PARENT_ALLOWED_TOOL_SET:
-            sys.exit(0)
-        _deny(
-            f"{tool} is unavailable to the managed Codex {route}; "
-            "only the route's explicit direct-tool surface may be used"
-        )
+    _enforce_managed_codex_route(tool, payload_cwd, session_id)
     if tool not in _ORCHESTRATION_TOOLS:
         sys.exit(0)
 

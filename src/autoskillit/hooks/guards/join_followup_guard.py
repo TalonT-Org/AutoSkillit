@@ -81,25 +81,19 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
-    if not isinstance(data, dict):
-        sys.exit(0)
-    if data.get("agent_id"):
+    if not isinstance(data, dict) or data.get("agent_id"):
         sys.exit(0)
 
     session_id = _resolve_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if not session_id or not payload_cwd:
-        sys.exit(0)
-    if not session_join_required(payload_cwd, session_id):
+    if not session_id or not payload_cwd or not session_join_required(payload_cwd, session_id):
         sys.exit(0)
 
     tool_name = data.get("tool_name")
     managed_route = session_managed_codex_route(payload_cwd, session_id)
     if managed_route is not None:
         route, guards, _config_digest = managed_route
-        if route == "leaf":
-            sys.exit(0)
-        if "join_followup_guard" not in guards:
+        if route != "leaf" and "join_followup_guard" not in guards:
             sys.stdout.write(
                 json.dumps(
                     {
@@ -110,7 +104,7 @@ def main() -> None:
                 + "\n"
             )
             sys.exit(2)
-        if (
+        if route == "leaf" or (
             isinstance(tool_name, str)
             and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
         ):

@@ -135,6 +135,42 @@ class TestDenyPatterns:
         output = _run_hook(event, monkeypatch, headless=True)
         assert _is_denied(output)
 
+    def test_blocks_uv_run_pytest_after_helper_script(self, monkeypatch):
+        # `_is_uv_run_pytest` must continue scanning past a non-flag,
+        # non-pytest, non-python3 token; otherwise inputs like
+        # `uv run helper.py pytest` would be misclassified as not-a-pytest
+        # invocation. The narrowness predates this PR (the prior code
+        # used a `break` with the same short-circuit effect), but the
+        # current refactor surfaced it for review.
+        event = _build_event("uv run helper.py pytest")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_blocks_uv_run_pytest_after_global_flag(self, monkeypatch):
+        # Same scanning behavior: a non-pytest positional token following
+        # a global flag (e.g. `uv run --foo bar pytest`) must not suppress
+        # a later pytest match.
+        event = _build_event("uv run --foo bar pytest")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_blocks_uv_run_pytest_after_my_script_token(self, monkeypatch):
+        # The third reviewer-named case: a token with `.py` extension that
+        # is not a python3? basename match (the basename regex is exact,
+        # so `my-script.py` does not match) followed by pytest.
+        event = _build_event("uv run my-script.py pytest")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_allows_uv_run_python_c_import_pytest(self, monkeypatch):
+        # Negative case: ensure the python3? branch did not regress into
+        # matching too eagerly. `uv run python -c "import pytest"` is NOT
+        # a pytest invocation — pytest is only an imported module, not the
+        # executed script.
+        event = _build_event('uv run python -c "import pytest"')
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
     def test_blocks_pytest_after_cd(self, monkeypatch):
         event = _build_event("cd /some/path && pytest")
         output = _run_hook(event, monkeypatch, headless=True)

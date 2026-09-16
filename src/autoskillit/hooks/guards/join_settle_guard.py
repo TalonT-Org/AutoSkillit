@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
@@ -88,12 +87,10 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
-    if not isinstance(data, dict):
-        sys.exit(0)
     # Subagent contexts are exempt: the claimed child owns its own
     # settlement surface; re-evaluating the gate here would self-lock
     # every join. Mirrors the agent_id exemption in claim/followup guards.
-    if data.get("agent_id"):
+    if not isinstance(data, dict) or data.get("agent_id"):
         sys.exit(0)
 
     event_type = data.get("hook_event_name")
@@ -133,31 +130,17 @@ def main() -> None:
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     top_level_parent, _managed_leaf_id = scope
     batch = None
-    # Retry transient OSError up to 3 attempts with brief backoff. The
-    # ledger acquires an exclusive fcntl.flock; contention surfaces as
-    # OSError and is normally resolved on a follow-up attempt. A contract
-    # error (JoinLedgerError) is NOT retried — the ledger is the authority
-    # for wave state and retrying would only re-surface the same refusal.
-    last_exc: Exception | None = None
-    for attempt in range(3):
-        try:
-            batch = settle_assignment(
-                flag_dir,
-                session_id=sid,
-                top_level_parent=top_level_parent,
-                tool_use_id=tool_use_id,
-                outcome=outcome,
-            )
-            last_exc = None
-            break
-        except JoinLedgerError as exc:
-            last_exc = exc
-            break
-        except OSError as exc:
-            last_exc = exc
-            if attempt < 2:
-                time.sleep(0.05 * (attempt + 1))
-                continue
+    last_exc: JoinLedgerError | None = None
+    try:
+        batch = settle_assignment(
+            flag_dir,
+            session_id=sid,
+            top_level_parent=top_level_parent,
+            tool_use_id=tool_use_id,
+            outcome=outcome,
+        )
+    except JoinLedgerError as exc:
+        last_exc = exc
     if batch is None:
         write_join_diagnostic(
             {
@@ -171,7 +154,7 @@ def main() -> None:
             caller="join_settle_guard",
         )
         sys.stderr.write(f"join_settle_guard: settlement refused: {last_exc}\n")
-        # Fail closed: after retries the ledger write still failed. PostToolUse
+        # Fail closed: the ledger write failed. PostToolUse
         # exit 2 does NOT replay (per Claude Code hooks contract), so the
         # wave remains pending. The diagnostic record makes the failure
         # observable to operators via join_diagnostics.jsonl.

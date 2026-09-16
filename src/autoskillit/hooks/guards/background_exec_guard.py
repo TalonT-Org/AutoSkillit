@@ -69,6 +69,102 @@ def _governed_skill_session() -> bool:
     return True
 
 
+def _emit_deny(reason: str) -> None:
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+    )
+    sys.stdout.write(payload + "\n")
+
+
+def _managed_route_denial(
+    payload_cwd: str | None,
+    session_id: object,
+    tool_name: object,
+    tool_input: dict[str, object],
+) -> str | None:
+    managed_route = payload_managed_codex_route(payload_cwd, session_id)
+    if managed_route is None:
+        return None
+    route, guards, _config_digest = managed_route
+    if "background_exec_guard" not in guards:
+        return f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} binding omits background_exec_guard)."
+    blocked_names = {"Agent", "spawn_agent", "code_mode", "background"}
+    if tool_name in blocked_names or tool_input.get("run_in_background"):
+        return f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} route)."
+    return None
+
+
+def _join_bound_denial(
+    is_governed: bool,
+    in_subagent_context: bool,
+    payload_cwd: str | None,
+    session_id: object,
+    tool_name: object,
+    tool_input: dict[str, object],
+) -> str | None:
+    join_required = (
+        is_governed
+        and not in_subagent_context
+        and isinstance(session_id, str)
+        and bool(session_id)
+        and bool(payload_cwd)
+        and session_join_required(payload_cwd, session_id)
+    )
+    if not join_required:
+        return None
+    if tool_name == "Agent":
+        selector = [
+            name for name in ("name", "team_name", "run_in_background") if tool_input.get(name)
+        ]
+        if selector:
+            return (
+                f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
+                "background execution and teammate routing are prohibited in a "
+                "join-bound session — declare a wave via declare_join_batch and "
+                "issue every member as one ordinary unnamed foreground Agent call)."
+            )
+    if tool_name == "ScheduleWakeup":
+        return (
+            f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
+            "prohibited in a join-bound session because deferral cannot "
+            "produce the declared-batch evidence the join contract requires."
+        )
+    return None
+
+
+def _headless_background_denial(
+    raw_session_type: str,
+    session_type: str,
+    tool_name: object,
+    tool_input: dict[str, object],
+) -> str | None:
+    if tool_name != "ScheduleWakeup" and not tool_input.get("run_in_background"):
+        return None
+    deny_trigger = (
+        SCHEDULE_WAKEUP_DENY_TRIGGER
+        if tool_name == "ScheduleWakeup"
+        else BACKGROUND_EXEC_DENY_TRIGGER
+    )
+    denial_reason = (
+        f"{deny_trigger} (ADR-0001). "
+        "Background execution causes race conditions and lost results. "
+        "Use foreground execution — multiple tool calls in a single message "
+        "execute concurrently."
+    )
+    if session_type and session_type != "skill":
+        denial_reason += (
+            f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+            " expected: orchestrator, fleet, or skill)"
+        )
+    return denial_reason
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -94,100 +190,24 @@ def main() -> None:
     tool_name = data.get("tool_name")
     session_id = data.get("session_id")
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    managed_route = payload_managed_codex_route(payload_cwd, session_id)
-    if managed_route is not None:
-        route, guards, _config_digest = managed_route
-        if "background_exec_guard" not in guards:
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} binding omits "
-                            "background_exec_guard)."
-                        ),
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
-        blocked_names = {"Agent", "spawn_agent", "code_mode", "background"}
-        if tool_name in blocked_names or tool_input.get("run_in_background"):
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} route)."
-                        ),
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
+    denial_reason = _managed_route_denial(payload_cwd, session_id, tool_name, tool_input)
+    if denial_reason is not None:
+        _emit_deny(denial_reason)
+        sys.exit(0)
 
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
-    join_required = (
-        is_governed
-        and not in_subagent_context
-        and isinstance(session_id, str)
-        and bool(session_id)
-        and bool(payload_cwd)
-        and session_join_required(payload_cwd, session_id)
+    denial_reason = _join_bound_denial(
+        is_governed,
+        in_subagent_context,
+        payload_cwd,
+        session_id,
+        tool_name,
+        tool_input,
     )
-
-    if join_required and tool_name == "Agent":
-        selector = []
-        if tool_input.get("name"):
-            selector.append("name")
-        if tool_input.get("team_name"):
-            selector.append("team_name")
-        if tool_input.get("run_in_background"):
-            selector.append("run_in_background")
-        if selector:
-            denial_reason = (
-                f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
-                "background execution and teammate routing are prohibited in a "
-                "join-bound session — declare a wave via declare_join_batch and "
-                "issue every member as one ordinary unnamed foreground Agent call)."
-            )
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": denial_reason,
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
-
-    # --- Join-bound ScheduleWakeup rejection (independent of headless state) ---
-    # Deferral/stall is an escape hatch that could let a wave close with an
-    # empty child set. Reject ScheduleWakeup whenever the session reports a
-    # join-bearing skill load, even in interactive Claude sessions that have
-    # not entered the headless tier.
-    if is_governed and join_required and tool_name == "ScheduleWakeup":
-        denial_reason = (
-            f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
-            "prohibited in a join-bound session because deferral cannot "
-            "produce the declared-batch evidence the join contract requires."
-        )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
+    if denial_reason is not None:
+        _emit_deny(denial_reason)
         sys.exit(0)
 
     if not headless:
@@ -195,34 +215,11 @@ def main() -> None:
         sys.exit(0)
 
     # --- ADR-0001 background/SessionWakeup gate (headless only) ---
-    if tool_name == "ScheduleWakeup" or tool_input.get("run_in_background"):
-        deny_trigger = (
-            SCHEDULE_WAKEUP_DENY_TRIGGER
-            if tool_name == "ScheduleWakeup"
-            else BACKGROUND_EXEC_DENY_TRIGGER
-        )
-        _unrecognized_tier = bool(session_type) and session_type != "skill"
-        denial_reason = (
-            f"{deny_trigger} (ADR-0001). "
-            "Background execution causes race conditions and lost results. "
-            "Use foreground execution — multiple tool calls in a single message "
-            "execute concurrently."
-        )
-        if _unrecognized_tier:
-            denial_reason += (
-                f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
-                " expected: orchestrator, fleet, or skill)"
-            )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
+    denial_reason = _headless_background_denial(
+        raw_session_type, session_type, tool_name, tool_input
+    )
+    if denial_reason is not None:
+        _emit_deny(denial_reason)
 
     sys.exit(0)
 

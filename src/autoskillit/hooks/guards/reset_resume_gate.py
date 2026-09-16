@@ -78,6 +78,41 @@ def _is_refused(dispatch_id: str, project_root: Path) -> bool:
     return False
 
 
+def _reset_dispatch_id(data: dict) -> str | None:
+    """Return an actionable non-forced reset dispatch ID, if any."""
+    tool_name: str = data.get("tool_name", "")
+    if "reset_dispatch" not in tool_name:
+        return None
+
+    tool_input: dict = data.get("tool_input", {}) or {}
+    if not isinstance(tool_input, dict) or tool_input.get("force"):
+        return None
+
+    return tool_input.get("dispatch_id", "") or None
+
+
+def _reset_is_allowed(dispatch_id: str, project_root: Path) -> bool:
+    """Return whether reset has a prior resume attempt or a REFUSED exemption."""
+    if _is_refused(dispatch_id, project_root):
+        return True
+
+    state_file = project_root.joinpath(*_STATE_FILE_RELPATH)
+    if not state_file.is_file():
+        return True
+
+    try:
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return True
+
+    resume_attempted = state.get("resume_attempted", {})
+    if resume_attempted.get(dispatch_id):
+        return True
+
+    resolved_uuid = _resolve_dispatch_uuid(dispatch_id, project_root)
+    return bool(resolved_uuid and resume_attempted.get(resolved_uuid))
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -86,18 +121,7 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    tool_name: str = data.get("tool_name", "")
-    if "reset_dispatch" not in tool_name:
-        sys.exit(0)
-
-    tool_input: dict = data.get("tool_input", {}) or {}
-    if not isinstance(tool_input, dict):
-        sys.exit(0)
-
-    if tool_input.get("force"):
-        sys.exit(0)
-
-    dispatch_id = tool_input.get("dispatch_id", "")
+    dispatch_id = _reset_dispatch_id(data)
     if not dispatch_id:
         sys.exit(0)
 
@@ -107,25 +131,7 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    if _is_refused(dispatch_id, project_root):
-        sys.exit(0)
-
-    state_file = project_root.joinpath(*_STATE_FILE_RELPATH)
-    if not state_file.is_file():
-        sys.exit(0)
-
-    try:
-        state = json.loads(state_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        sys.exit(0)
-
-    resume_attempted = state.get("resume_attempted", {})
-
-    if resume_attempted.get(dispatch_id):
-        sys.exit(0)
-
-    resolved_uuid = _resolve_dispatch_uuid(dispatch_id, project_root)
-    if resolved_uuid and resume_attempted.get(resolved_uuid):
+    if _reset_is_allowed(dispatch_id, project_root):
         sys.exit(0)
 
     print(

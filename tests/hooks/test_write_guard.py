@@ -756,6 +756,22 @@ class TestWriteGuardInterpreterBypass:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_python3_in_prefix_write_with_outside_redirect_denied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"open('/clone/.autoskillit/temp/planner/in-prefix.py','w').write('x')\" "
+            "&& echo x > /clone/src/outside.txt"
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            f"Only writes to {self.PREFIX} are permitted."
+            in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
     def test_python3_heredoc_write_denied(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
         cmd = (

@@ -76,6 +76,32 @@ def _check_live_worktrees(clone_path: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _check_untracked_branch_sync(clone_path: str, branch: str) -> tuple[bool, str]:
+    """Check whether an untracked branch has been pushed to its remote."""
+    resolved_remote = _resolve_push_remote(clone_path)
+    ls_rc, ls_out = _git(
+        clone_path,
+        "ls-remote",
+        "--exit-code",
+        resolved_remote,
+        f"refs/heads/{branch}",
+        timeout=15,
+    )
+    if ls_rc == 0:
+        parts = ls_out.strip().split()
+        if not parts:
+            return True, ""
+        head_rc, local_sha = _git(clone_path, "rev-parse", "HEAD")
+        if head_rc == 0 and local_sha.strip() == parts[0]:
+            return True, ""
+
+    return False, (
+        f"Clone at {clone_path!r} (branch: {branch!r}) has no remote "
+        "tracking branch. Push the branch first before removing the clone:\n"
+        f"  git -C {clone_path} push -u {resolved_remote} {branch}"
+    )
+
+
 def _check_sync(clone_path: str) -> tuple[bool, str]:
     """Return (approved, deny_reason).
 
@@ -108,31 +134,7 @@ def _check_sync(clone_path: str) -> tuple[bool, str]:
     # Count commits ahead of upstream tracking branch
     rc, count_str = _git(clone_path, "rev-list", "--count", "@{upstream}..HEAD")
     if rc != 0:
-        # No tracking branch — try ls-remote fallback to check if branch exists on remote
-        resolved_remote = _resolve_push_remote(clone_path)
-        ls_rc, ls_out = _git(
-            clone_path,
-            "ls-remote",
-            "--exit-code",
-            resolved_remote,
-            f"refs/heads/{branch}",
-            timeout=15,
-        )
-        if ls_rc == 0:
-            # Branch is on remote — compare SHA to verify fully pushed
-            parts = ls_out.strip().split()
-            if not parts:
-                return True, ""  # fail-open: ls-remote returned empty output
-            remote_sha = parts[0]
-            head_rc, local_sha = _git(clone_path, "rev-parse", "HEAD")
-            if head_rc == 0 and local_sha.strip() == remote_sha:
-                return True, ""  # synced via ls-remote
-        # No tracking branch and ls-remote confirms not pushed (rc=2) or error
-        return False, (
-            f"Clone at {clone_path!r} (branch: {branch!r}) has no remote "
-            "tracking branch. Push the branch first before removing the clone:\n"
-            f"  git -C {clone_path} push -u {resolved_remote} {branch}"
-        )
+        return _check_untracked_branch_sync(clone_path, branch)
 
     try:
         ahead = int(count_str)

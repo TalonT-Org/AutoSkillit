@@ -46,6 +46,60 @@ def _build_deny(corrector: str) -> str:
     )
 
 
+def _invalid_planner_result_reason(file_path: str) -> str | None:
+    path_parts = file_path.replace("\\", "/").split("/")
+    if ".autoskillit" not in path_parts:
+        return None
+    try:
+        dir_idx = next(i for i, part in enumerate(path_parts) if part in _TIER_DIRS)
+    except StopIteration:
+        return None
+
+    tier_dir = path_parts[dir_idx]
+    filename = path_parts[-1]
+    if not filename.endswith("_result.json"):
+        return None
+
+    subdir_parts = path_parts[dir_idx + 1 : -1]
+    # `path_parts` comes from `file_path.replace("\\", "/").split("/")`,
+    # so consecutive separators (e.g. `.autoskillit//phases/`) produce
+    # empty-string segments. `any()` already uses truthiness, so empty
+    # strings naturally do not count — we forbid result files that
+    # would land in any subdirectory of the tier dir, not directly
+    # under it.
+    if any(subdir_parts):
+        return None
+
+    if tier_dir == "phases":
+        pattern = _PHASE_RE
+        reason = (
+            f"{PLANNER_NAMING_DENY_TRIGGER} (phase): {filename!r}. "
+            "Phase result files must match P<N>_result.json "
+            "(e.g. P1_result.json, P12_result.json). "
+            "The phase ID inside the file must be numeric only (e.g. P1, P2)."
+        )
+    elif tier_dir == "assignments":
+        pattern = _ASSIGN_RE
+        reason = (
+            f"{PLANNER_NAMING_DENY_TRIGGER} (assignment): {filename!r}. "
+            "Assignment result files must match P<N>-A<N>_result.json "
+            "(e.g. P1-A1_result.json, P3-A12_result.json). "
+            "The assignment ID inside the file must be numeric only (e.g. P1-A1, P2-A3)."
+        )
+    else:
+        pattern = _WP_RE
+        reason = (
+            f"{PLANNER_NAMING_DENY_TRIGGER} (work package): {filename!r}. "
+            r"Work package result files must match pattern P\d+-A\d+-WP\d+_result.json "
+            "(e.g. P1-A1-WP1_result.json, P3-A2-WP12_result.json). "
+            "The work package ID inside the file must be numeric only "
+            "(e.g. P1-A1-WP1, P2-A3-WP4)."
+        )
+    if pattern.match(filename):
+        return None
+    return reason
+
+
 def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)  # only enforce in headless planner sessions
@@ -64,72 +118,12 @@ def main() -> None:
     if not file_path:
         sys.exit(0)
 
-    # Check if the path is inside a planner result directory anchored under .autoskillit/
-    path_parts = file_path.replace("\\", "/").split("/")
-    if ".autoskillit" not in path_parts:
-        sys.exit(0)  # not under the autoskillit working directory
-    try:
-        dir_idx = next(i for i, p in enumerate(path_parts) if p in _TIER_DIRS)
-    except StopIteration:
-        sys.exit(0)  # not a planner result directory
-
-    tier_dir = path_parts[dir_idx]
-    filename = path_parts[-1]
-
-    # Skip non-result files (e.g. wp_index.json, context_*.json, manifests)
-    if not filename.endswith("_result.json"):
+    reason = _invalid_planner_result_reason(file_path)
+    if reason is None:
         sys.exit(0)
-
-    # Skip files in subdirectories (e.g. wp_sentinels/P1_result.json)
-    # Filter empty strings to guard against double-slash paths (e.g. //file) where
-    # splitting produces [''] — any(['']) is False, bypassing this check incorrectly.
-    subdir_parts = path_parts[dir_idx + 1 : -1]
-    if any(p for p in subdir_parts if p):
-        sys.exit(0)
-
-    # Validate against the appropriate tier regex
-    if tier_dir == "phases":
-        if _PHASE_RE.match(filename):
-            sys.exit(0)
-        sys.stdout.write(
-            _build_deny(
-                f"{PLANNER_NAMING_DENY_TRIGGER} (phase): {filename!r}. "
-                "Phase result files must match P<N>_result.json "
-                "(e.g. P1_result.json, P12_result.json). "
-                "The phase ID inside the file must be numeric only (e.g. P1, P2)."
-            )
-        )
-        sys.stdout.flush()
-        sys.exit(0)
-
-    if tier_dir == "assignments":
-        if _ASSIGN_RE.match(filename):
-            sys.exit(0)
-        sys.stdout.write(
-            _build_deny(
-                f"{PLANNER_NAMING_DENY_TRIGGER} (assignment): {filename!r}. "
-                "Assignment result files must match P<N>-A<N>_result.json "
-                "(e.g. P1-A1_result.json, P3-A12_result.json). "
-                "The assignment ID inside the file must be numeric only (e.g. P1-A1, P2-A3)."
-            )
-        )
-        sys.stdout.flush()
-        sys.exit(0)
-
-    if tier_dir == "work_packages":
-        if _WP_RE.match(filename):
-            sys.exit(0)
-        sys.stdout.write(
-            _build_deny(
-                f"{PLANNER_NAMING_DENY_TRIGGER} (work package): {filename!r}. "
-                r"Work package result files must match pattern P\d+-A\d+-WP\d+_result.json "
-                "(e.g. P1-A1-WP1_result.json, P3-A2-WP12_result.json). "
-                "The work package ID inside the file must be numeric only "
-                "(e.g. P1-A1-WP1, P2-A3-WP4)."
-            )
-        )
-        sys.stdout.flush()
-        sys.exit(0)
+    sys.stdout.write(_build_deny(reason))
+    sys.stdout.flush()
+    sys.exit(0)
 
 
 if __name__ == "__main__":

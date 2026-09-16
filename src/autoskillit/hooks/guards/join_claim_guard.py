@@ -61,6 +61,20 @@ def _resolve_session_id(data: dict[str, object]) -> str:
     return sid if isinstance(sid, str) else ""
 
 
+def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] | None:
+    if data.get("agent_id"):
+        # Inside a claimed child's own subagent context — exempt.
+        return None
+
+    session_id = _resolve_session_id(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not session_id or not payload_cwd:
+        return None
+    if not session_join_required(payload_cwd, session_id):
+        return None
+    return session_id, payload_cwd
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -69,16 +83,10 @@ def main() -> None:
 
     if not isinstance(data, dict):
         sys.exit(0)
-    if data.get("agent_id"):
-        # Inside a claimed child's own subagent context — exempt.
+    required_session = _resolve_required_join_session(data)
+    if required_session is None:
         sys.exit(0)
-
-    session_id = _resolve_session_id(data)
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if not session_id or not payload_cwd:
-        sys.exit(0)
-    if not session_join_required(payload_cwd, session_id):
-        sys.exit(0)
+    session_id, payload_cwd = required_session
     scope = session_managed_scope(payload_cwd, session_id)
     if scope is None:
         denial_reason = f"{JOIN_CLAIM_DENY_TRIGGER}: binding has no valid managed scope."

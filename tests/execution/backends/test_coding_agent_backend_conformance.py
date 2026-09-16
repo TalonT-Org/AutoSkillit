@@ -90,7 +90,6 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "session_resume_capable": "OPTIONAL",
     "skill_injection_capable": "REQUIRED",
     "skill_sigil": "REQUIRED",
-    "skills_subdir": "REQUIRED",
     "supports_claude_format_stdout": "REQUIRED",
     "supports_context_exhaustion_detection": "OPTIONAL",
     "supports_context_window_suffix": "OPTIONAL",
@@ -297,7 +296,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert callable(self.backend.session_attempt_context)
 
     def test_validate_skill_content_returns_list(self) -> None:
-        """BackendCapabilities.hook_config_format and skills_subdir — skill content validation."""
+        """BackendCapabilities.hook_config_format — skill content validation."""
         result = self.backend.validate_skill_content("")
         assert isinstance(result, list)
 

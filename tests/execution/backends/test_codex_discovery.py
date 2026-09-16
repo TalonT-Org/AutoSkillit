@@ -91,9 +91,14 @@ def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -
 
 
 def _loader_output_with_extra_root(name: str, catalog_dir: Path, extra_root: Path) -> str:
-    return _loader_output(name, catalog_dir).replace(
-        "### Available skills",
-        f"- `r9` = `{extra_root}`\n### Available skills",
+    document = json.loads(_loader_output(name, catalog_dir))
+    assert isinstance(document, list)
+    return _with_skills_text(
+        document,
+        _skills_text(document).replace(
+            "### Available skills",
+            f"- `r9` = `{extra_root}`\n### Available skills",
+        ),
     )
 
 

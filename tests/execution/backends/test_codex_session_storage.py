@@ -263,7 +263,7 @@ def test_resume_staging_preserves_primary_error_when_thread_lease_release_fails(
     def release_then_fail(lease: storage._FileLease) -> None:
         original_release(lease)
         if lease.path.name.startswith("thread-"):
-            raise RuntimeError("release failed")
+            raise OSError("release failed")
 
     monkeypatch.setattr(storage._FileLease, "release", release_then_fail)
 
@@ -277,7 +277,7 @@ def test_resume_staging_preserves_primary_error_when_thread_lease_release_fails(
         )
 
     assert exc_info.value.__notes__ == [
-        "Codex resume thread lease release also failed: RuntimeError('release failed')"
+        "Codex resume thread lease release also failed: OSError('release failed')"
     ]
 
 

@@ -252,7 +252,7 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
             except BaseException as exc:
                 try:
                     thread_lease.release()
-                except BaseException as release_exc:
+                except OSError as release_exc:
                     exc.add_note(f"Codex resume thread lease release also failed: {release_exc!r}")
                 raise
         if isinstance(current_resume_spec, BareResume):

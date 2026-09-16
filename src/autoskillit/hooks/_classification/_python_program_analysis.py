@@ -121,26 +121,18 @@ def _python_program_command_specs(
                     continue
         first = args[0]
         shell_arg = next((kw.value for kw in call.keywords if kw.arg == "shell"), None)
-        is_shell_true = bool(
-            shell_arg is not None
-            and isinstance(shell_arg, ast.Constant)
-            and shell_arg.value is True
+        invokes_shell = dotted in _ALWAYS_SHELL_FUNCS or (
+            isinstance(shell_arg, ast.Constant) and shell_arg.value is True
         )
-        always_shell = dotted in _ALWAYS_SHELL_FUNCS
-        if is_shell_true or always_shell:
-            cmd_str = _literal_to_string(first)
-            if cmd_str is not None:
-                specs.append(_InterpreterCommandSpec(cmd_str, cwd, True))
-                continue
+        payload: str | list[str] | None
+        if invokes_shell:
+            payload = _literal_to_string(first)
+        else:
+            payload = _literal_to_argv(first)
+            if payload is None:
+                payload = _literal_to_string(first)
+        if payload is None:
             has_unresolved = True
-            continue
-        argv = _literal_to_argv(first)
-        if argv is not None:
-            specs.append(_InterpreterCommandSpec(argv, cwd, False))
-            continue
-        cmd_str = _literal_to_string(first)
-        if cmd_str is not None:
-            specs.append(_InterpreterCommandSpec(cmd_str, cwd, False))
-            continue
-        has_unresolved = True
+        else:
+            specs.append(_InterpreterCommandSpec(payload, cwd, invokes_shell))
     return (specs, has_unresolved)

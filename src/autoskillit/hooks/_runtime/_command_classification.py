@@ -212,6 +212,32 @@ def resolve_write_target(path: str, cwd: str = "") -> str | None:
     return None
 
 
+def _consume_output_redirect(
+    tokens: Sequence[str], syntax: Sequence[bool], index: int
+) -> tuple[int, str | None, int] | None:
+    """Consume one active output redirect, returning its next index, target, and count."""
+    token = tokens[index]
+    if not syntax[index]:
+        return None
+    if _FD_DUPLICATION_RE.fullmatch(token):
+        return (index + 1, None, 0)
+    if _REDIRECT_OP_ONLY_RE.fullmatch(token):
+        next_index = index + 1
+        if next_index < len(tokens) and not (
+            syntax[next_index]
+            and (
+                _REDIRECT_OP_ONLY_RE.fullmatch(tokens[next_index])
+                or _FD_DUPLICATION_RE.fullmatch(tokens[next_index])
+            )
+        ):
+            return (next_index + 1, tokens[next_index], 1)
+        return (next_index, None, 1)
+    match = _REDIRECT_TOKEN_RE.fullmatch(token)
+    if match is None:
+        return None
+    return (index + 1, match.group(2), 1)
+
+
 def _partition_output_redirect_indices(
     tokens: Sequence[str],
     *,
@@ -251,37 +277,17 @@ def _partition_output_redirect_indices(
             executable_indices.append(i)
             i += 1
             continue
-        if depth > 0 or not syntax[i]:
+        if depth > 0:
             executable_indices.append(i)
             i += 1
             continue
-        if _FD_DUPLICATION_RE.fullmatch(token):
+        redirect = _consume_output_redirect(tokens, syntax, i)
+        if redirect is None:
+            executable_indices.append(i)
             i += 1
             continue
-
-        target: str | None = None
-        if _REDIRECT_OP_ONLY_RE.fullmatch(token):
-            file_redirect_count += 1
-            if i + 1 < len(tokens) and not (
-                syntax[i + 1]
-                and (
-                    _REDIRECT_OP_ONLY_RE.fullmatch(tokens[i + 1])
-                    or _FD_DUPLICATION_RE.fullmatch(tokens[i + 1])
-                )
-            ):
-                target = tokens[i + 1]
-                i += 2
-            else:
-                i += 1
-        else:
-            match = _REDIRECT_TOKEN_RE.fullmatch(token)
-            if match is None:
-                executable_indices.append(i)
-                i += 1
-                continue
-            file_redirect_count += 1
-            target = match.group(2)
-            i += 1
+        i, target, file_redirect_delta = redirect
+        file_redirect_count += file_redirect_delta
 
         if target is not None:
             while target and target[-1] in _TRAILING_SHELL_CLOSERS:
@@ -454,29 +460,18 @@ def _verb_start_index(segment: list[str]) -> int | None:
     start = 0
     while start < len(segment):
         token = segment[start]
-        if token in {"while", "until", "if", "do", "then", "elif", "else"}:
-            start += 1
-            continue
-        if token == "!":  # POSIX pipeline negation: `! git push` resolves to `git`.
+        if token in {"while", "until", "if", "do", "then", "elif", "else", "!"}:
             start += 1
             continue
         if _is_posix_assignment(token):
             start += 1
             continue
         if token == "env":
-            new_start = _consume_env(start + 1, segment)
-            if new_start <= start:
-                return None
-            start = new_start
+            start = _consume_env(start + 1, segment)
             continue
         if token in _COMMAND_WRAPPERS:
             # Wrappers (sudo, nice, etc.) may consume attached/detached value options.
-            new_start = _consume_wrapper_options(start + 1, segment)
-            if new_start <= start + 1:
-                # No options consumed; check for missing required value.
-                start += 1
-                continue
-            start = new_start
+            start = _consume_wrapper_options(start + 1, segment)
             continue
         if token in _WRAPPERS_WITH_DURATION:
             if start + 1 >= len(segment):

@@ -28,6 +28,7 @@ from autoskillit.core import (
     AuditReservationRequest,
     AuditVerdict,
     InstallationVersion,
+    InventoryAdmissionDecision,
     RecipeExecutionId,
     VerifiedInputPreflightRequest,
     canonical_json_bytes,
@@ -614,4 +615,104 @@ def test_preflight_rejects_prepared_disposition_without_matching_committed_proje
             "authority_digest": authority_digest,
             "plan_digest": plan_digest,
         }
+    ]
+
+
+def test_preflight_report_admission_uses_per_call_allowed_root_verifier(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    default_root = tmp_path / "default-root"
+    selected_root = tmp_path / "selected-root"
+    authority_path = tmp_path / "authority.json"
+    report_path = tmp_path / "disposition-report.json"
+    plan_path = tmp_path / "plan.md"
+    authority_digest = compute_bytes_hash(b"authority")
+    plan_digest = compute_bytes_hash(b"plan")
+    projection = AuditPreflightProjection(
+        plan_set_id="plan-set-1",
+        scope_id="scope-1",
+        part_id="part-1",
+    )
+    trusted_head = object()
+    constructed: list[object] = []
+    authority_calls: list[tuple[object, str]] = []
+    report_calls: list[tuple[object, str]] = []
+    evaluation_calls: list[tuple[object, dict[str, Any]]] = []
+
+    class _Ledger:
+        def preflight_projection(self, **_kwargs: Any) -> AuditPreflightProjection:
+            return projection
+
+        def current_head(self, **_kwargs: Any) -> object:
+            return trusted_head
+
+        def resolve_disposition(self, **_kwargs: Any) -> Path:
+            return report_path
+
+    resolver = DefaultInputPreflightResolver(
+        allowed_root=default_root,
+        ledger=_Ledger(),  # type: ignore[arg-type]
+        recipe_execution_id=RecipeExecutionId("execution-1"),
+        installation_version=InstallationVersion("installation-1"),
+    )
+
+    class _SelectedRootVerifier:
+        def __init__(self, allowed_root: Path) -> None:
+            constructed.append(self)
+            assert allowed_root == selected_root
+
+        def load_authority(self, path: str) -> Any:
+            authority_calls.append((self, path))
+            return SimpleNamespace(
+                execution_generation="execution-1",
+                cycle_id="cycle-1",
+                plan_set_id=projection.plan_set_id,
+                scope_id=projection.scope_id,
+                part_id=projection.part_id,
+                verdict=AuditVerdict.NO_GO,
+                authority_digest=authority_digest,
+            )
+
+        def load_report(self, path: str) -> Any:
+            report_calls.append((self, path))
+            return SimpleNamespace(current_plan_ref=SimpleNamespace(content_digest=plan_digest))
+
+        def evaluate_paths(self, **kwargs: Any) -> InventoryAdmissionDecision:
+            evaluation_calls.append((self, kwargs))
+            return InventoryAdmissionDecision.admitted(())
+
+    monkeypatch.setattr(_recipe_execution, "AuditCycleVerifier", _SelectedRootVerifier)
+
+    result = resolver.resolve(
+        VerifiedInputPreflightRequest(
+            execution_generation="execution-1",
+            step_name="implement",
+            skill_name="implement-worktree",
+            plan_path=str(plan_path),
+            audit_cycle_path=str(authority_path),
+            plan_disposition_path=str(report_path),
+        ),
+        allowed_root=selected_root,
+    )
+
+    assert result.decision == InventoryAdmissionDecision.admitted(())
+    assert len(constructed) == 1
+    verifier = constructed[0]
+    assert authority_calls == [(verifier, str(authority_path))]
+    assert report_calls == [(verifier, str(report_path))]
+    assert evaluation_calls == [
+        (
+            verifier,
+            {
+                "authority_path": str(authority_path),
+                "report_path": str(report_path),
+                "trusted_head": trusted_head,
+                "current_plan_path": str(plan_path),
+                "expected_generation": "execution-1",
+                "expected_plan_set_id": projection.plan_set_id,
+                "expected_scope_id": projection.scope_id,
+                "expected_part_id": projection.part_id,
+            },
+        )
     ]

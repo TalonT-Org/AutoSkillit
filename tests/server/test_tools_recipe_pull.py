@@ -48,6 +48,7 @@ from autoskillit.pipeline import (
     InitializingRecipe,
     KitchenEffectPhase,
     KitchenRetryDisposition,
+    ReadyRecipe,
     RecipeInitializationRequirement,
     new_kitchen_open_state,
     start_kitchen_effect,
@@ -68,6 +69,7 @@ from autoskillit.server.recipe._recipe_delivery import (
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactSchemaError,
+    _completion,
     build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -1513,6 +1515,116 @@ def test_attested_finalization_commits_only_after_exact_enforcement(
         == finalized.rendered
     )
     assert ledger.receipt_status("thread-finalizer") == "committed"
+
+
+def test_failed_attested_receipt_commit_restores_prior_state_without_retirement(
+    tmp_path: Path,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ctx.backend = _protected_codex_backend()
+    tool_ctx.kitchen_id = "codex-commit-failure"
+    ledger = _ledger(tmp_path)
+    finalized = _finalize_recipe_delivery(
+        _payload("x" * 50_000),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        delivery_request=_request(),
+        attestation=_attestation("thread-commit-failure"),
+        supported_evidence=_evidence(),
+        receipt_ledger=ledger,
+        now_unix=_NOW,
+    )
+    previous_state = tool_ctx.recipe_initialization_state
+    retirements: list[dict[str, Any]] = []
+
+    def _record_retirement(**kwargs: Any) -> None:
+        retirements.append(kwargs)
+
+    def _fail_commit(_ledger: Any, _handle: Any, *, now_unix: int) -> bool:
+        assert isinstance(tool_ctx.recipe_initialization_state, ReadyRecipe)
+        assert now_unix == _NOW
+        return False
+
+    monkeypatch.setattr(
+        tool_ctx.audit_admission_ledger,
+        "retire_installation",
+        _record_retirement,
+    )
+    monkeypatch.setattr(RecipeDeliveryReceiptLedger, "commit", _fail_commit)
+
+    completed = complete_finalized_recipe_response(
+        finalized,
+        finalized.rendered,
+        now_unix=_NOW,
+    )
+
+    assert json.loads(completed) == {
+        "success": False,
+        "error": "recipe_delivery_receipt_commit_failed",
+    }
+    assert tool_ctx.recipe_initialization_state is previous_state
+    assert retirements == []
+    assert ledger.receipt_status("thread-commit-failure") is None
+
+
+def test_failed_attested_install_retires_restores_then_aborts_receipt(
+    tmp_path: Path,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ctx.backend = _protected_codex_backend()
+    tool_ctx.kitchen_id = "codex-install-failure"
+    ledger = _ledger(tmp_path)
+    finalized = _finalize_recipe_delivery(
+        _payload("x" * 50_000),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+        delivery_request=_request(),
+        attestation=_attestation("thread-install-failure"),
+        supported_evidence=_evidence(),
+        receipt_ledger=ledger,
+        now_unix=_NOW,
+    )
+    previous_state = tool_ctx.recipe_initialization_state
+    effects: list[str] = []
+    original_abort = RecipeDeliveryReceiptLedger.abort
+
+    def _fail_install(*_args: Any, **_kwargs: Any) -> Any:
+        assert isinstance(tool_ctx.recipe_initialization_state, InitializingRecipe)
+        effects.append("install")
+        raise RuntimeError("installation failed after staging")
+
+    def _record_retirement(**_kwargs: Any) -> None:
+        effects.append("retire")
+
+    def _record_abort(receipt_ledger: Any, handle: Any) -> bool:
+        assert effects == ["install", "retire"]
+        assert tool_ctx.recipe_initialization_state is previous_state
+        effects.append("abort")
+        return original_abort(receipt_ledger, handle)
+
+    monkeypatch.setattr(_completion, "install_recipe_execution", _fail_install)
+    monkeypatch.setattr(
+        tool_ctx.audit_admission_ledger,
+        "retire_installation",
+        _record_retirement,
+    )
+    monkeypatch.setattr(RecipeDeliveryReceiptLedger, "abort", _record_abort)
+
+    completed = complete_finalized_recipe_response(finalized, finalized.rendered)
+
+    assert json.loads(completed) == {
+        "success": False,
+        "error": "recipe_execution_install_failed",
+    }
+    assert effects == ["install", "retire", "abort"]
+    assert tool_ctx.recipe_initialization_state is previous_state
+    assert ledger.receipt_status("thread-install-failure") is None
 
 
 def test_transformed_attested_response_aborts_pending_receipt(tmp_path: Path, tool_ctx) -> None:

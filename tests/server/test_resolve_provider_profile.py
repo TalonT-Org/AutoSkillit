@@ -72,7 +72,10 @@ def test_anthropic_profile_returns_empty_env_regardless():
 
     cfg = _make_config(
         default_provider="anthropic",
-        profiles={"anthropic": {"SHOULD_IGNORE": "this"}},
+        profiles={
+            "anthropic": {"SHOULD_IGNORE": "this"},
+            "unrelated": {"timeout_seconds": "not-a-timeout"},
+        },
     )
     result = _resolve_provider_profile("", "", cfg)
     assert result == ("anthropic", {})
@@ -108,6 +111,7 @@ def test_recipe_override_wins_over_global_step_override():
     cfg = _make_config(
         recipe_overrides={"remediation": {"implement": "anthropic"}},
         step_overrides={"implement": "minimax"},
+        profiles={"unrelated": {"timeout_seconds": "not-a-timeout"}},
     )
     result = _resolve_provider_profile("implement", "remediation", cfg)
     assert result == ("anthropic", {})
@@ -242,9 +246,15 @@ def test_tier3_only_fires_for_explicit_provider_declaration():
     """Tier 3 should only use step_provider (the YAML provider: field), not step_name."""
     from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
-    cfg = _make_config(profiles={"bedrock": {"AWS_REGION": "us-east-1"}})
+    cfg = _make_config(
+        default_provider="vertex",
+        profiles={
+            "bedrock": {"AWS_REGION": "us-east-1"},
+            "vertex": {"GOOGLE_CLOUD_PROJECT": "proj"},
+        },
+    )
     result = _resolve_provider_profile("implement", "", cfg, step_provider="")
-    assert result == ("anthropic", {}), (
+    assert result == ("vertex", {"GOOGLE_CLOUD_PROJECT": "proj"}), (
         "Without an explicit provider: field, Tier 3 should not fire"
     )
 

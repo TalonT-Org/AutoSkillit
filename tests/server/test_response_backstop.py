@@ -91,6 +91,29 @@ def test_oversized_json_preserves_routing_shape_and_full_artifact(tmp_path):
     assert metadata["projected_utf8_bytes"] == len(shaped.encode("utf-8"))
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "config", "token_limit"),
+    [("run_skill", _config(), None), ("open_kitchen", OutputBudgetConfig(), 10_000)],
+)
+def test_oversized_dictionary_preserves_handler_type(tmp_path, tool_name, config, token_limit):
+    payload = {"success": True, "data": "x" * 80_000}
+    result = enforce_response_budget(
+        payload,
+        tool_name=tool_name,
+        artifact_dir=tmp_path,
+        config=config,
+        selected_result_token_limit=token_limit,
+    )
+
+    assert isinstance(result, dict)
+    assert result["success"] is True
+    metadata = result[RESPONSE_SPILL_METADATA_KEY]
+    assert json.loads(Path(metadata["artifact_path"]).read_text()) == payload
+    if token_limit is not None:
+        assert result["delivery_bound_spill"] is True
+        assert metadata["reason"] == "delivery_bound"
+
+
 def test_plain_text_response_uses_same_type_envelope(tmp_path):
     original = "head" + ("x" * 10_000) + "tail"
     shaped = enforce_response_budget(

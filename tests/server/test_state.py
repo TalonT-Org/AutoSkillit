@@ -317,14 +317,15 @@ async def test_deferred_initialize_runs_recovery_operations(tmp_path):
 async def test_deferred_initialize_logs_only_bounded_accounting_failure(
     tmp_path,
 ) -> None:
-    import autoskillit.execution as execution
     from autoskillit.core import (
         ContextAdmissionRecoveryResult,
         ContextAdmissionStorageFailureReason,
         ContextAdmissionStorageHealthStatus,
         ContextAdmissionStoreHealth,
+        ContextAdmissionStreamHealth,
     )
     from autoskillit.server.lifecycle import _state
+    from tests.fixtures.context_admission import stream_key
 
     mock_ctx = _make_mock_ctx(tmp_path)
     mock_ctx.session_skill_manager = None
@@ -334,17 +335,23 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
         failure_reason=ContextAdmissionStorageFailureReason.INTEGRITY,
         reason_code="sqlite-integrity-failed",
     )
+    failed_stream = ContextAdmissionStreamHealth(
+        stream_key(),
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+        reason_code="stream-private-detail-must-not-be-logged",
+    )
     mock_ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
         status=ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
         store_health=failed_health,
-        stream_healths=(),
+        stream_healths=(failed_stream,),
         recovered_streams=(),
         unresolved_streams=(),
     )
     event = asyncio.Event()
 
     with (
-        patch.object(execution, "recover_crashed_sessions", return_value=0),
+        patch.object(_state, "recover_crashed_sessions", return_value=0),
         patch.object(_state, "logger") as logger,
     ):
         await _state.deferred_initialize(mock_ctx, ready_event=event)
@@ -359,7 +366,12 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
         },
     )
     assert all(
-        "sqlite-integrity-failed" not in repr(call) for call in logger.warning.call_args_list
+        private_reason not in repr(call)
+        for call in logger.warning.call_args_list
+        for private_reason in (
+            "sqlite-integrity-failed",
+            "stream-private-detail-must-not-be-logged",
+        )
     )
 
 
@@ -367,7 +379,6 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
 async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_store(
     tmp_path: Path,
 ) -> None:
-    import autoskillit.execution as execution
     from autoskillit.core import (
         ContextAdmissionRecoveryResult,
         ContextAdmissionStorageFailureReason,
@@ -384,23 +395,29 @@ async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_sto
     store_health = ContextAdmissionStoreHealth(
         ContextAdmissionStorageHealthStatus.HEALTHY,
     )
-    failed_stream = ContextAdmissionStreamHealth(
+    first_failed_stream = ContextAdmissionStreamHealth(
         stream_key(),
         ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
         failure_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
         reason_code="private-detail-must-not-be-logged",
     )
+    second_failed_stream = ContextAdmissionStreamHealth(
+        stream_key(current_session="session-second"),
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+        reason_code="second-private-detail-must-not-be-logged",
+    )
     mock_ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
         status=ContextAdmissionStorageHealthStatus.HEALTHY,
         store_health=store_health,
-        stream_healths=(failed_stream,),
+        stream_healths=(first_failed_stream, second_failed_stream),
         recovered_streams=(),
         unresolved_streams=(),
     )
     event = asyncio.Event()
 
     with (
-        patch.object(execution, "recover_crashed_sessions", return_value=0),
+        patch.object(_state, "recover_crashed_sessions", return_value=0),
         patch.object(_state, "logger") as logger,
     ):
         await _state.deferred_initialize(mock_ctx, ready_event=event)
@@ -415,6 +432,10 @@ async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_sto
         },
     )
     assert all(
-        "private-detail-must-not-be-logged" not in repr(call)
+        private_reason not in repr(call)
         for call in logger.warning.call_args_list
+        for private_reason in (
+            "private-detail-must-not-be-logged",
+            "second-private-detail-must-not-be-logged",
+        )
     )

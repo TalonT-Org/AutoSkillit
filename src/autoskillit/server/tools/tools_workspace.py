@@ -403,6 +403,7 @@ async def commit_files(
 
     Never raises.
     """
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         resolved = os.path.realpath(cwd)
         with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=resolved):
@@ -411,6 +412,7 @@ async def commit_files(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
 
             def _finish(
                 response: dict[str, object],
@@ -424,6 +426,11 @@ async def commit_files(
                     envelope["failure_class"] = failure_class.value
                 commit_sha = envelope.get("commit_sha")
                 succeeded = envelope.get("success") is True
+                wire_envelope = attach_recipe_segment(
+                    envelope,
+                    prepared_segment,
+                    success=succeeded,
+                )
                 try:
                     tool_ctx.workspace_outcome_ledger.record(
                         WorkspaceOutcomeRecord(
@@ -446,8 +453,14 @@ async def commit_files(
                     }
                     if isinstance(commit_sha, str) and commit_sha:
                         ledger_failure["commit_sha"] = commit_sha
-                    return json.dumps(ledger_failure)
-                return json.dumps(envelope)
+                    return json.dumps(
+                        attach_recipe_segment(
+                            ledger_failure,
+                            prepared_segment,
+                            success=False,
+                        )
+                    )
+                return json.dumps(wire_envelope)
 
             if not cwd or not os.path.isdir(resolved):
                 return _finish(
@@ -560,11 +573,15 @@ async def commit_files(
     except Exception as exc:
         logger.error("commit_files unhandled exception", exc_info=True)
         return json.dumps(
-            {
-                "success": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "failure_class": CommitFailureClass.UNHANDLED.value,
-            }
+            attach_recipe_segment(
+                {
+                    "success": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "failure_class": CommitFailureClass.UNHANDLED.value,
+                },
+                prepared_segment,
+                success=False,
+            )
         )
 
 

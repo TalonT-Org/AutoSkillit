@@ -57,7 +57,7 @@ _ALLOWED_RAW_RECIPE_READS: frozenset[tuple[str, str, str]] = frozenset(
         ),  # Parse local files for the doctor validity report.
         (
             "cli/fleet/__init__.py",
-            "fleet_campaign",
+            "_load_campaign_recipe",
             "load_recipe(match.path)",
         ),  # Validate the selected campaign before dispatching its fleet.
     }

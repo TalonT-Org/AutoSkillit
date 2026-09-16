@@ -16,7 +16,7 @@ from autoskillit.pipeline import TelemetryFormatter
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.fleet import CampaignState, DispatchRecord
+    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 
 _STATUS_COLUMNS = (
     TerminalColumn("NAME", 30, "<"),
@@ -198,9 +198,46 @@ def _render_status_display(state: CampaignState) -> int:
     return 1 + table_str.rstrip("\n").count("\n") + 1
 
 
+def _poll_watch_loop(state_path: Path, in_progress: frozenset[DispatchStatus]) -> int:
+    """Render campaign states and process quit input until a terminal outcome."""
+    import select
+
+    from autoskillit.fleet import read_state
+
+    prev_lines = 0
+    while True:
+        state = read_state(state_path)
+        if state is None:
+            sys.stdout.flush()
+            sys.stderr.write("ERROR: state file disappeared or corrupted\n")
+            return 3
+        if state.opaque_dispatches:
+            prev_lines = _render_status_display(state)
+            print("\nCampaign contains unsupported dispatch state.")
+            return 2
+
+        if prev_lines > 0:
+            sys.stdout.write(f"\033[{prev_lines}A")
+            for _ in range(prev_lines):
+                sys.stdout.write("\033[2K\033[1B")
+            sys.stdout.write(f"\033[{prev_lines}A")
+        sys.stdout.flush()
+
+        prev_lines = _render_status_display(state)
+
+        if all(d.status not in in_progress for d in state.dispatches):
+            print("\nAll dispatches complete.")
+            return _compute_exit_code(state)
+
+        rlist, _, _ = select.select([sys.stdin], [], [], 1.0)
+        if rlist:
+            ch = sys.stdin.read(1)
+            if ch.lower() == "q":
+                return _compute_exit_code(state)
+
+
 def _watch_loop(state_path: Path) -> int:
     """1 Hz polling loop for fleet status. Returns exit code."""
-    import select
     import termios
     import tty
 
@@ -232,38 +269,9 @@ def _watch_loop(state_path: Path) -> int:
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
-    prev_lines = 0
     try:
         tty.setcbreak(fd)
-        while True:
-            state = read_state(state_path)
-            if state is None:
-                sys.stdout.flush()
-                sys.stderr.write("ERROR: state file disappeared or corrupted\n")
-                return 3
-            if state.opaque_dispatches:
-                prev_lines = _render_status_display(state)
-                print("\nCampaign contains unsupported dispatch state.")
-                return 2
-
-            if prev_lines > 0:
-                sys.stdout.write(f"\033[{prev_lines}A")
-                for _ in range(prev_lines):
-                    sys.stdout.write("\033[2K\033[1B")
-                sys.stdout.write(f"\033[{prev_lines}A")
-            sys.stdout.flush()
-
-            prev_lines = _render_status_display(state)
-
-            if all(d.status not in _in_progress for d in state.dispatches):
-                print("\nAll dispatches complete.")
-                return _compute_exit_code(state)
-
-            rlist, _, _ = select.select([sys.stdin], [], [], 1.0)
-            if rlist:
-                ch = sys.stdin.read(1)
-                if ch.lower() == "q":
-                    return _compute_exit_code(state)
+        return _poll_watch_loop(state_path, _in_progress)
     except KeyboardInterrupt:
         state = read_state(state_path)
         return _compute_exit_code(state) if state else 3

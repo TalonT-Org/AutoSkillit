@@ -154,6 +154,73 @@ async def _execute_fleet_run(
     )
 
 
+def _fleet_run_preflight(
+    ingredient: tuple[str, ...],
+    backend: str | None,
+) -> tuple[AutomationConfig, dict[str, str] | None, CodingAgentBackend | None]:
+    """Validate fleet-run admission and resolve its dispatch inputs."""
+    if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
+        _fleet_run_error(
+            "FLEET_SESSION_TYPE_BLOCKED",
+            "'fleet run' cannot run inside a skill or leaf session.",
+        )
+    # NOTE: CLAUDECODE guard intentionally NOT applied — REQ-HFD-006
+
+    from autoskillit.config import load_config
+
+    try:
+        cfg = load_config(Path.cwd())
+    except Exception as exc:
+        logger.error("fleet run: failed to load config", exc_info=True)
+        _fleet_run_error("FLEET_CONFIG_ERROR", f"Failed to load config: {exc}")
+
+    if not is_feature_enabled(
+        "fleet", cfg.features, experimental_enabled=cfg.experimental_enabled
+    ):
+        _fleet_run_error(
+            "FLEET_FEATURE_DISABLED",
+            "The 'fleet' feature is not enabled.\n"
+            "Enable with: features.experimental_enabled: true in your config\n"
+            "Or set: AUTOSKILLIT_FEATURES__FLEET=true",
+        )
+
+    if not is_feature_enabled(
+        "fleet_headless_run",
+        cfg.features,
+        experimental_enabled=cfg.experimental_enabled,
+    ):
+        _fleet_run_error(
+            "FLEET_FEATURE_DISABLED",
+            "The 'fleet_headless_run' feature is not enabled.\n"
+            "Enable with: features.experimental_enabled: true\n"
+            "Or: features.fleet_headless_run: true\n"
+            "Or: AUTOSKILLIT_FEATURES__FLEET_HEADLESS_RUN=true",
+        )
+
+    ingredients: dict[str, str] | None = None
+    if ingredient:
+        ingredients = {}
+        for item in ingredient:
+            if "=" not in item:
+                _fleet_run_error(
+                    "FLEET_INVALID_ARGUMENT",
+                    f"Ingredient must be key=value, got: {item!r}",
+                )
+            key, value = item.split("=", 1)
+            ingredients[key] = value
+
+    dispatch_backend = None
+    if backend is not None:
+        from autoskillit.server import resolve_backend_override
+
+        try:
+            dispatch_backend = resolve_backend_override(backend)
+        except ValueError as exc:
+            _fleet_run_error("FLEET_INVALID_BACKEND", str(exc))
+
+    return cfg, ingredients, dispatch_backend
+
+
 def fleet_run(
     recipe: str,
     *,
@@ -184,70 +251,7 @@ def fleet_run(
             lineage_status=native_shell_capture_decision.lineage_status.value,
         )
 
-    # --- Session-type guard (retained for headless — prevents recursive dispatch) ---
-    if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
-        _fleet_run_error(
-            "FLEET_SESSION_TYPE_BLOCKED",
-            "'fleet run' cannot run inside a skill or leaf session.",
-        )
-    # NOTE: CLAUDECODE guard intentionally NOT applied — REQ-HFD-006
-
-    # --- Config + feature gates ---
-    from autoskillit.config import load_config
-
-    try:
-        cfg = load_config(Path.cwd())
-    except Exception as exc:
-        logger.error("fleet run: failed to load config", exc_info=True)
-        _fleet_run_error("FLEET_CONFIG_ERROR", f"Failed to load config: {exc}")
-
-    # Fleet base feature check (equivalent to _require_fleet but with JSON output)
-    if not is_feature_enabled(
-        "fleet", cfg.features, experimental_enabled=cfg.experimental_enabled
-    ):
-        _fleet_run_error(
-            "FLEET_FEATURE_DISABLED",
-            "The 'fleet' feature is not enabled.\n"
-            "Enable with: features.experimental_enabled: true in your config\n"
-            "Or set: AUTOSKILLIT_FEATURES__FLEET=true",
-        )
-
-    # Headless run feature check
-    if not is_feature_enabled(
-        "fleet_headless_run",
-        cfg.features,
-        experimental_enabled=cfg.experimental_enabled,
-    ):
-        _fleet_run_error(
-            "FLEET_FEATURE_DISABLED",
-            "The 'fleet_headless_run' feature is not enabled.\n"
-            "Enable with: features.experimental_enabled: true\n"
-            "Or: features.fleet_headless_run: true\n"
-            "Or: AUTOSKILLIT_FEATURES__FLEET_HEADLESS_RUN=true",
-        )
-
-    # --- Parse ingredients ---
-    ingredients: dict[str, str] | None = None
-    if ingredient:
-        ingredients = {}
-        for item in ingredient:
-            if "=" not in item:
-                _fleet_run_error(
-                    "FLEET_INVALID_ARGUMENT",
-                    f"Ingredient must be key=value, got: {item!r}",
-                )
-            k, v = item.split("=", 1)
-            ingredients[k] = v
-
-    # --- Resolve backend ---
-    dispatch_backend = None
-    if backend is not None:
-        from autoskillit.server import resolve_backend_override
-
-        try:
-            dispatch_backend = resolve_backend_override(backend)
-        except ValueError as exc:
-            _fleet_run_error("FLEET_INVALID_BACKEND", str(exc))
+    cfg, ingredients, dispatch_backend = _fleet_run_preflight(ingredient, backend)
 
     # --- Run dispatch ---
     import asyncio

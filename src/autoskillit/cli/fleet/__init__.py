@@ -54,7 +54,8 @@ def _require_fleet(cfg: AutomationConfig) -> None:
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.fleet import ResumeDecision
+    from autoskillit.fleet import CampaignState, ResumeDecision
+    from autoskillit.recipe import Recipe, RecipeInfo
 
 
 fleet_app = App(name="fleet", help="Campaign fleet management.")
@@ -128,64 +129,15 @@ def fleet_campaign(
 
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
-    from autoskillit.cli.ui._menu import run_selection_menu
+    campaign_name, resume_campaign = _select_campaign(campaign_name, resume_campaign)
+    parsed, match = _load_campaign_recipe(campaign_name)
 
-    if campaign_name is None and resume_campaign is None:
-        from autoskillit.recipe import list_campaign_recipes
-
-        result = list_campaign_recipes(Path.cwd())
-        if not result.items:
-            print("No campaigns found. Place campaign recipes in .autoskillit/recipes/campaigns/")
-            sys.exit(1)
-
-        selected = run_selection_menu(
-            result.items,
-            header="Available campaigns:",
-            display_fn=lambda r: f"{r.name}  {r.description[:60]}" if r.description else r.name,
-            name_key=lambda r: r.name,
-            timeout=120,
-            label="autoskillit fleet campaign",
-        )
-        if selected is None or isinstance(selected, str):
-            print("No campaign selected.")
-            sys.exit(1)
-        campaign_name = selected.name
-
-    elif campaign_name is None and resume_campaign is not None:
-        campaign_name, resume_campaign = _pick_resume_campaign(Path.cwd())
-
-    if campaign_name is None:
-        raise RuntimeError("campaign_name must be set before launching fleet session")
-
-    from autoskillit.core import YAMLError
     from autoskillit.fleet import (
         FLEET_HALTED_SENTINEL,
         DispatchRecord,
         resume_campaign_from_state,
         write_initial_state,
     )
-    from autoskillit.recipe import find_campaign_by_name, load_recipe, validate_recipe_structure
-
-    match = find_campaign_by_name(campaign_name, Path.cwd())
-    if match is None:
-        print(f"Campaign not found: '{campaign_name}'")
-        sys.exit(1)
-
-    try:
-        parsed = load_recipe(match.path)
-    except YAMLError as exc:
-        print(f"Campaign YAML parse error: {exc}")
-        sys.exit(1)
-    except ValueError as exc:
-        print(f"Campaign structure error: {exc}")
-        sys.exit(1)
-
-    errors = validate_recipe_structure(parsed)
-    if errors:
-        print(f"Campaign '{campaign_name}' failed validation:")
-        for err in errors:
-            print(f"  - {err}")
-        sys.exit(1)
 
     resume_metadata: ResumeDecision | None = None
     campaign_id: str
@@ -236,6 +188,67 @@ def fleet_campaign(
     )
 
 
+def _select_campaign(
+    campaign_name: str | None, resume_campaign: str | None
+) -> tuple[str, str | None]:
+    """Resolve campaign selection and optional resume-state selection."""
+    if campaign_name is None and resume_campaign is None:
+        from autoskillit.cli.ui._menu import run_selection_menu
+        from autoskillit.recipe import list_campaign_recipes
+
+        result = list_campaign_recipes(Path.cwd())
+        if not result.items:
+            print("No campaigns found. Place campaign recipes in .autoskillit/recipes/campaigns/")
+            sys.exit(1)
+
+        selected = run_selection_menu(
+            result.items,
+            header="Available campaigns:",
+            display_fn=lambda r: f"{r.name}  {r.description[:60]}" if r.description else r.name,
+            name_key=lambda r: r.name,
+            timeout=120,
+            label="autoskillit fleet campaign",
+        )
+        if selected is None or isinstance(selected, str):
+            print("No campaign selected.")
+            sys.exit(1)
+        campaign_name = selected.name
+    elif campaign_name is None:
+        campaign_name, resume_campaign = _pick_resume_campaign(Path.cwd())
+
+    if campaign_name is None:
+        raise RuntimeError("campaign_name must be set before launching fleet session")
+    return campaign_name, resume_campaign
+
+
+def _load_campaign_recipe(campaign_name: str) -> tuple[Recipe, RecipeInfo]:
+    """Find, load, and validate a campaign recipe."""
+    from autoskillit.core import YAMLError
+    from autoskillit.recipe import find_campaign_by_name, load_recipe, validate_recipe_structure
+
+    match = find_campaign_by_name(campaign_name, Path.cwd())
+    if match is None:
+        print(f"Campaign not found: '{campaign_name}'")
+        sys.exit(1)
+
+    try:
+        parsed = load_recipe(match.path)
+    except YAMLError as exc:
+        print(f"Campaign YAML parse error: {exc}")
+        sys.exit(1)
+    except ValueError as exc:
+        print(f"Campaign structure error: {exc}")
+        sys.exit(1)
+
+    errors = validate_recipe_structure(parsed)
+    if errors:
+        print(f"Campaign '{campaign_name}' failed validation:")
+        for err in errors:
+            print(f"  - {err}")
+        sys.exit(1)
+    return parsed, match
+
+
 @fleet_app.command(name="list")
 def fleet_list() -> None:
     """List available campaign recipes."""
@@ -276,138 +289,168 @@ def fleet_status(
 
     cfg = load_config(Path.cwd())
     _require_fleet(cfg)
-    from autoskillit.fleet import read_state  # noqa: PLC0415
 
     fleet_dir = Path.cwd() / ".autoskillit" / "temp" / "fleet"
 
     if campaign_id is not None:
-        state_path = fleet_dir / campaign_id / "state.json"
-        state = read_state(state_path)
-        if state is None:
-            print(f"ERROR: Campaign '{campaign_id}' not found or state corrupted.")
-            sys.exit(3)
+        _show_named_campaign_status(
+            fleet_dir / campaign_id / "state.json",
+            campaign_id,
+            cleanup=cleanup,
+            reap=reap,
+            dry_run=dry_run,
+            watch=watch,
+            json_output=json_output,
+        )
+        return
+    _list_campaign_statuses(fleet_dir, json_output=json_output)
 
-        if json_output:
-            totals = _aggregate_totals(state)
-            data = {
-                "campaign_id": state.campaign_id,
-                "campaign_name": state.campaign_name,
-                "started_at": state.started_at,
-                "dispatches": [d.to_dict() for d in state.dispatches],
-                "totals": totals,
-            }
-            print(json.dumps(data))
-            _cross_check_tokens(state, totals)
-            sys.exit(_compute_exit_code(state))
 
-        if watch and cleanup:
-            print("ERROR: --watch and --cleanup are mutually exclusive.")
-            sys.exit(3)
+def _show_named_campaign_status(
+    state_path: Path,
+    campaign_id: str,
+    *,
+    cleanup: bool,
+    reap: bool,
+    dry_run: bool,
+    watch: bool,
+    json_output: bool,
+) -> None:
+    """Render and optionally maintain one named campaign."""
+    from autoskillit.fleet import read_state
 
-        if watch:
-            sys.exit(_watch_loop(state_path))
-        _render_status_display(state)
-        if cleanup:
-            from autoskillit.core import resolve_temp_dir, run_git, sweep_stale_markers
-            from autoskillit.execution import all_backends, delete_skill_session_contracts
-            from autoskillit.workspace import (
-                DefaultSessionSkillManager,
-                SkillsDirectoryProvider,
-                batch_delete,
-                resolve_ephemeral_root,
-                resolve_persistent_session_roots,
-            )
+    state = read_state(state_path)
+    if state is None:
+        print(f"ERROR: Campaign '{campaign_id}' not found or state corrupted.")
+        sys.exit(3)
 
-            batch_delete("", _remove_clone_fn, owner=campaign_id)
-            try:
-                _git_result = run_git(["rev-parse", "--show-toplevel"], cwd=Path.cwd(), timeout=5)
-                _project_root = (
-                    Path(_git_result.stdout.strip())
-                    if _git_result.returncode == 0 and _git_result.stdout.strip()
-                    else Path.cwd()
-                )
-                skill_mgr = DefaultSessionSkillManager(
-                    provider=SkillsDirectoryProvider(),
-                    ephemeral_root=resolve_ephemeral_root(),
-                    persistent_roots=resolve_persistent_session_roots(
-                        resolve_temp_dir(_project_root), all_backends()
-                    ),
-                )
-                for d in state.dispatches:
-                    if d.dispatched_session_id:
-                        skill_mgr.cleanup_session(d.dispatched_session_id)
-                contract_session_ids = (d.dispatched_session_id for d in state.dispatches)
-                delete_skill_session_contracts(contract_session_ids)
-                skill_mgr.cleanup_session(campaign_id)
-            except Exception:
-                logger.warning(
-                    "Session skill cleanup failed for campaign %s", campaign_id, exc_info=True
-                )
-            sweep_stale_markers()
-            kitchen_state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id  # fmt: skip  # noqa: E501
-            if kitchen_state_dir.is_dir():
-                shutil.rmtree(kitchen_state_dir, ignore_errors=True)
-            print(f"Cleanup complete for campaign '{campaign_id}'.")
-
-        if reap or dry_run:
-            _reap_stale_dispatches(state_path, dry_run=dry_run)
-
+    if json_output:
         totals = _aggregate_totals(state)
+        data = {
+            "campaign_id": state.campaign_id,
+            "campaign_name": state.campaign_name,
+            "started_at": state.started_at,
+            "dispatches": [d.to_dict() for d in state.dispatches],
+            "totals": totals,
+        }
+        print(json.dumps(data))
         _cross_check_tokens(state, totals)
         sys.exit(_compute_exit_code(state))
 
-    else:
-        from autoskillit.core import _render_terminal_table
+    if watch and cleanup:
+        print("ERROR: --watch and --cleanup are mutually exclusive.")
+        sys.exit(3)
+    if watch:
+        sys.exit(_watch_loop(state_path))
 
-        if not fleet_dir.exists():
-            print("No campaigns found.")
-            return
+    _render_status_display(state)
+    if cleanup:
+        _cleanup_campaign_artifacts(campaign_id, state)
+    if reap or dry_run:
+        _reap_stale_dispatches(state_path, dry_run=dry_run)
 
-        subdirs = [d for d in fleet_dir.iterdir() if d.is_dir()]
-        if not subdirs:
-            print("No campaigns found.")
-            return
+    totals = _aggregate_totals(state)
+    _cross_check_tokens(state, totals)
+    sys.exit(_compute_exit_code(state))
 
-        if json_output:
-            summaries = []
-            for subdir in sorted(subdirs):
-                s = read_state(subdir / "state.json")
-                if s is None:
-                    continue
-                status_counts: dict[str, int] = {}
-                for d in s.dispatches:
-                    status_counts[d.status] = status_counts.get(d.status, 0) + 1
-                summaries.append(
-                    {
-                        "campaign_id": s.campaign_id,
-                        "campaign_name": s.campaign_name,
-                        "started_at": s.started_at,
-                        "dispatch_count": len(s.dispatches),
-                        "status_counts": status_counts,
-                    }
-                )
-            print(json.dumps(summaries))
-            return
 
-        columns = [
-            TerminalColumn("CAMPAIGN_NAME", 30, "<"),
-            TerminalColumn("ID", 18, "<"),
-            TerminalColumn("DISPATCHES", 10, "<"),
-            TerminalColumn("STARTED", 24, "<"),
-        ]
-        rows_list = []
-        for subdir in sorted(subdirs):
-            s = read_state(subdir / "state.json")
-            if s is None:
-                continue
-            started = datetime.fromtimestamp(s.started_at, tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
-            rows_list.append((s.campaign_name, s.campaign_id, str(len(s.dispatches)), started))
+def _cleanup_campaign_artifacts(campaign_id: str, state: CampaignState) -> None:
+    """Remove all clone, session, marker, and kitchen artifacts for a campaign."""
+    from autoskillit.core import resolve_temp_dir, run_git, sweep_stale_markers
+    from autoskillit.execution import all_backends, delete_skill_session_contracts
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+        batch_delete,
+        resolve_ephemeral_root,
+        resolve_persistent_session_roots,
+    )
 
-        if not rows_list:
-            print("No campaigns found.")
-            return
+    batch_delete("", _remove_clone_fn, owner=campaign_id)
+    try:
+        git_result = run_git(["rev-parse", "--show-toplevel"], cwd=Path.cwd(), timeout=5)
+        project_root = (
+            Path(git_result.stdout.strip())
+            if git_result.returncode == 0 and git_result.stdout.strip()
+            else Path.cwd()
+        )
+        skill_mgr = DefaultSessionSkillManager(
+            provider=SkillsDirectoryProvider(),
+            ephemeral_root=resolve_ephemeral_root(),
+            persistent_roots=resolve_persistent_session_roots(
+                resolve_temp_dir(project_root), all_backends()
+            ),
+        )
+        for dispatch in state.dispatches:
+            if dispatch.dispatched_session_id:
+                skill_mgr.cleanup_session(dispatch.dispatched_session_id)
+        contract_session_ids = (dispatch.dispatched_session_id for dispatch in state.dispatches)
+        delete_skill_session_contracts(contract_session_ids)
+        skill_mgr.cleanup_session(campaign_id)
+    except Exception:
+        logger.warning("Session skill cleanup failed for campaign %s", campaign_id, exc_info=True)
+    sweep_stale_markers()
+    kitchen_state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id
+    if kitchen_state_dir.is_dir():
+        shutil.rmtree(kitchen_state_dir, ignore_errors=True)
+    print(f"Cleanup complete for campaign '{campaign_id}'.")
 
-        print(_render_terminal_table(columns, rows_list))
+
+def _list_campaign_statuses(fleet_dir: Path, *, json_output: bool) -> None:
+    """Render all valid campaign states in deterministic directory order."""
+    from autoskillit.core import _render_terminal_table
+    from autoskillit.fleet import read_state
+
+    if not fleet_dir.exists():
+        print("No campaigns found.")
+        return
+
+    subdirs = sorted(d for d in fleet_dir.iterdir() if d.is_dir())
+    if not subdirs:
+        print("No campaigns found.")
+        return
+
+    states = [
+        state for subdir in subdirs if (state := read_state(subdir / "state.json")) is not None
+    ]
+    if json_output:
+        summaries = []
+        for state in states:
+            status_counts: dict[str, int] = {}
+            for dispatch in state.dispatches:
+                status_counts[dispatch.status] = status_counts.get(dispatch.status, 0) + 1
+            summaries.append(
+                {
+                    "campaign_id": state.campaign_id,
+                    "campaign_name": state.campaign_name,
+                    "started_at": state.started_at,
+                    "dispatch_count": len(state.dispatches),
+                    "status_counts": status_counts,
+                }
+            )
+        print(json.dumps(summaries))
+        return
+
+    if not states:
+        print("No campaigns found.")
+        return
+
+    columns = [
+        TerminalColumn("CAMPAIGN_NAME", 30, "<"),
+        TerminalColumn("ID", 18, "<"),
+        TerminalColumn("DISPATCHES", 10, "<"),
+        TerminalColumn("STARTED", 24, "<"),
+    ]
+    rows = [
+        (
+            state.campaign_name,
+            state.campaign_id,
+            str(len(state.dispatches)),
+            datetime.fromtimestamp(state.started_at, tz=UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        )
+        for state in states
+    ]
+    print(_render_terminal_table(columns, rows))
 
 
 fleet_run = fleet_app.command(name="run")(fleet_run)

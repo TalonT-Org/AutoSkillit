@@ -520,7 +520,10 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _DELEGATED_MUTATION_REASON,
     # Commands and composition boundaries.
     ("src/autoskillit/cli/_workspace.py", "run_workspace_clean"): _COMMAND_BOUNDARY_REASON,
-    ("src/autoskillit/cli/fleet/__init__.py", "fleet_status"): _COMMAND_BOUNDARY_REASON,
+    (
+        "src/autoskillit/cli/fleet/__init__.py",
+        "_cleanup_campaign_artifacts",
+    ): _COMMAND_BOUNDARY_REASON,
     ("src/autoskillit/cli/install/_marketplace.py", "upgrade"): _COMMAND_BOUNDARY_REASON,
     (
         "src/autoskillit/cli/update/_obligation_repair.py",

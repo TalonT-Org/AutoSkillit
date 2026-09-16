@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import BufferedReader
 from pathlib import Path
-from typing import Any, BinaryIO, cast
+from typing import Any, BinaryIO
 
 import zstandard
 
@@ -224,12 +224,12 @@ def _utc_datetime(value: Any) -> datetime | None:
 def _codex_turn_usage_entry(
     record: Mapping[str, Any],
     payload: Mapping[str, Any],
+    info: Mapping[str, Any],
     last_usage: Mapping[str, Any],
     effective_model: str | None,
     start: datetime,
     end: datetime,
 ) -> TurnTokenEntry | None:
-    info = cast(Mapping[str, Any], payload["info"])
     timestamp = first_nonempty_string(record.get("timestamp"))
     event_time = _utc_datetime(timestamp)
     if event_time is None or event_time < start or event_time > end:
@@ -345,6 +345,7 @@ def extract_codex_turn_usage(
                 entry = _codex_turn_usage_entry(
                     record,
                     payload,
+                    info,
                     last_usage,
                     current_model,
                     start,

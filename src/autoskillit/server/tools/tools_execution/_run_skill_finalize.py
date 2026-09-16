@@ -7,7 +7,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -49,6 +51,200 @@ if TYPE_CHECKING:
     from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
 logger = get_logger(__name__)
+
+
+def _quota_authority_rejection(
+    state: _RunSkillDispatchState,
+    contract: ResolvedLaunchContract,
+) -> CandidatePreSpawnRejection | None:
+    assert state._cfg is not None
+    identity = contract.quota_identity
+    scope = identity.get("credential_scope", "")
+    mode = identity.get("mode", "")
+    if state._cfg.quota_guard.enabled and mode == "api-key":
+        key = (state.provider_extras or {}).get("ANTHROPIC_API_KEY") or os.environ.get(
+            "ANTHROPIC_API_KEY"
+        )
+        if not key or f"api-key:{sha256(key.encode()).hexdigest()}" != scope:
+            return CandidatePreSpawnRejection(
+                reason="quota_authority_changed",
+                attempted_contract=contract,
+            )
+    if state._cfg.quota_guard.enabled and mode.startswith("anthropic-oauth") and not scope:
+        return CandidatePreSpawnRejection(
+            reason="quota_authority_unknown",
+            attempted_contract=contract,
+        )
+    if state._quota_lease is not None:
+        if scope != state._quota_scope:
+            return CandidatePreSpawnRejection(
+                reason="quota_authority_changed",
+                attempted_contract=contract,
+            )
+        try:
+            current_scope = quota_scope(
+                "anthropic", Path(state._cfg.quota_guard.credentials_path).expanduser()
+            )
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            current_scope = ""
+        if current_scope != scope:
+            return CandidatePreSpawnRejection(
+                reason="quota_authority_changed",
+                attempted_contract=contract,
+            )
+    return None
+
+
+async def _admit_finalized_launch(
+    state: _RunSkillDispatchState,
+    replace_current_attempt: Callable[[ExecutionCandidateAttempt], None],
+    contract: ResolvedLaunchContract,
+) -> CandidatePreSpawnRejection | None:
+    assert state._cfg is not None
+    rejection = _quota_authority_rejection(state, contract)
+    if rejection is not None:
+        return rejection
+    identity = contract.quota_identity
+    scope = identity.get("credential_scope", "")
+    mode = identity.get("mode", "")
+    if state._quota_lease is not None:
+        return None
+    decision = await admit_quota(
+        config=state._cfg.quota_guard,
+        credential_scope=scope or None,
+        diagnostic_log_root=resolve_log_dir(state._cfg.linux_tracing.log_dir),
+        deadline_monotonic=state._invocation_deadline_monotonic,
+        provider=identity.get("provider", "anthropic"),
+        binding_scope=scope or None,
+        nested_worker="run_skill" in state._skill_caps,
+    )
+    if not decision.admitted:
+        return CandidatePreSpawnRejection(
+            reason=decision.reason,
+            attempted_contract=contract,
+            rate_limit=decision.rate_limit,
+        )
+    if mode == "anthropic-oauth":
+        try:
+            _ensure_quota_refresh_started(state.tool_ctx)
+        except Exception:
+            logger.warning("run_skill_quota_refresh_start_failed", exc_info=True)
+    state._quota_lease = decision.lease
+    state._quota_scope = scope
+    selection = state.execution_selection
+    if selection is not None and selection.attempts:
+        replace_current_attempt(
+            replace(
+                selection.attempts[-1],
+                admission_status="admitted",
+                admission_at_epoch=int(time.time()),
+                admission_cache_status=decision.reason,
+            )
+        )
+    return None
+
+
+def _materialize_audit_result(state: _RunSkillDispatchState) -> str | None:
+    if state._audit_reservation is None:
+        return None
+    assert state.skill_result is not None
+    assert not isinstance(state.skill_result, CandidatePreSpawnRejection)
+    assert state._completion_invocation_id is not None
+    # outcome_fields values are BoundScalar-ish (str | int | ...); the
+    # isinstance check below is the real type guard, matching the flat
+    # code's untyped-local behavior before this became a state field.
+    state._semantic_path = (state.skill_result.outcome_fields or {}).get(
+        "audit_semantic_result_path"
+    )  # type: ignore[assignment]
+    if not isinstance(state._semantic_path, str) or not state._semantic_path:
+        state._materialized = _te_pkg._reject_missing_semantic_result(
+            state.tool_ctx,
+            state._audit_reservation,
+        )
+    else:
+        with state.tool_ctx.recipe_execution_lock:
+            if get_recipe_execution(state.tool_ctx) is not state._installed_execution:
+                state._materialized = AuditMaterializationResult(
+                    status=AuditMaterializationStatus.CONFLICT,
+                    attempt_id=state._audit_reservation.current_attempt_id,
+                    verdict=None,
+                    path=None,
+                    error="active recipe execution changed before audit materialization",
+                )
+            else:
+                state._materialized = state.tool_ctx.audit_authority_materializer.materialize(
+                    reservation=state._audit_reservation,
+                    semantic_result_path=Path(state._semantic_path),
+                    preflight_step_names=state._audit_preflight_steps,
+                )
+    state._materialized_status = _te_pkg._materialization_outcome_status(state._materialized)
+    match state._materialized_status:
+        case AuditOutcomeStatus.PUBLISHED:
+            assert state._materialized.verdict is not None
+            assert state._materialized.path is not None
+            state.skill_result.result = (
+                f"Server-authored audit outcome: {AuditOutcomeStatus.PUBLISHED.value}"
+            )
+            state.skill_result.outcome_fields = None
+            state.skill_result.audit = _te_pkg.AuditResultOutcome(
+                status=AuditOutcomeStatus.PUBLISHED,
+                verdict=state._materialized.verdict,
+                cycle_path=str(state._materialized.path),
+                attempt_id=state._materialized.attempt_id,
+            )
+            state._audit_outcome_to_finalize = AuditOutcome(
+                status=AuditOutcomeStatus.PUBLISHED,
+                attempt_id=state._materialized.attempt_id,
+                verdict=state._materialized.verdict,
+                path=state._materialized.path,
+                error=None,
+                kill_reason=state.skill_result.kill_reason,
+                tracker_target_order_id=(
+                    state._tracker_target.target_order_id
+                    if state._tracker_target is not None
+                    else None
+                ),
+                tracker_expected=(
+                    state._tracker_target.expected if state._tracker_target is not None else False
+                ),
+            )
+        case AuditOutcomeStatus.EXACT_REPLAY:
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                state._completion_invocation_id,
+                _te_pkg._audit_response(
+                    status=state._materialized_status,
+                    attempt_id=state._materialized.attempt_id,
+                    verdict=state._materialized.verdict,
+                    path=state._materialized.path,
+                    error=state._materialized.error,
+                    kill_reason=state.skill_result.kill_reason,
+                ),
+                child_session_id=state.skill_result.session_id,
+            )
+        case (
+            AuditOutcomeStatus.SEMANTIC_REJECTED
+            | AuditOutcomeStatus.CONFLICT
+            | AuditOutcomeStatus.STORAGE_FAILURE
+            | AuditOutcomeStatus.QUARANTINED
+            | AuditOutcomeStatus.NON_PUBLISHED_STANDALONE
+        ):
+            state.skill_result.result = ""
+            state.skill_result.outcome_fields = None
+            return _te_pkg._finalize_run_skill_completion(
+                state.tool_ctx,
+                state._completion_invocation_id,
+                _te_pkg._audit_response(
+                    status=state._materialized_status,
+                    attempt_id=state._materialized.attempt_id,
+                    verdict=None,
+                    path=None,
+                    error=state._materialized.error,
+                    kill_reason=state.skill_result.kill_reason,
+                ),
+                child_session_id=state.skill_result.session_id,
+            )
+    return None
 
 
 async def _execute_and_finalize_run_skill(
@@ -123,79 +319,6 @@ async def _execute_and_finalize_run_skill(
             )
         state.contract_lifecycle.execution_started = True
 
-    async def _admit_finalized_launch(
-        contract: ResolvedLaunchContract,
-    ) -> CandidatePreSpawnRejection | None:
-        assert state._cfg is not None
-        identity = contract.quota_identity
-        scope = identity.get("credential_scope", "")
-        mode = identity.get("mode", "")
-        if state._cfg.quota_guard.enabled and mode == "api-key":
-            key = (state.provider_extras or {}).get("ANTHROPIC_API_KEY") or os.environ.get(
-                "ANTHROPIC_API_KEY"
-            )
-            if not key or f"api-key:{sha256(key.encode()).hexdigest()}" != scope:
-                return CandidatePreSpawnRejection(
-                    reason="quota_authority_changed",
-                    attempted_contract=contract,
-                )
-        if state._cfg.quota_guard.enabled and mode.startswith("anthropic-oauth") and not scope:
-            return CandidatePreSpawnRejection(
-                reason="quota_authority_unknown",
-                attempted_contract=contract,
-            )
-        if state._quota_lease is not None:
-            if scope != state._quota_scope:
-                return CandidatePreSpawnRejection(
-                    reason="quota_authority_changed",
-                    attempted_contract=contract,
-                )
-            try:
-                current_scope = quota_scope(
-                    "anthropic", Path(state._cfg.quota_guard.credentials_path).expanduser()
-                )
-            except (OSError, ValueError, KeyError, TypeError, AttributeError):
-                current_scope = ""
-            if current_scope != scope:
-                return CandidatePreSpawnRejection(
-                    reason="quota_authority_changed",
-                    attempted_contract=contract,
-                )
-            return None
-        decision = await admit_quota(
-            config=state._cfg.quota_guard,
-            credential_scope=scope or None,
-            diagnostic_log_root=resolve_log_dir(state._cfg.linux_tracing.log_dir),
-            deadline_monotonic=state._invocation_deadline_monotonic,
-            provider=identity.get("provider", "anthropic"),
-            binding_scope=scope or None,
-            nested_worker="run_skill" in state._skill_caps,
-        )
-        if not decision.admitted:
-            return CandidatePreSpawnRejection(
-                reason=decision.reason,
-                attempted_contract=contract,
-                rate_limit=decision.rate_limit,
-            )
-        if mode == "anthropic-oauth":
-            try:
-                _ensure_quota_refresh_started(state.tool_ctx)
-            except Exception:
-                logger.warning("run_skill_quota_refresh_start_failed", exc_info=True)
-        state._quota_lease = decision.lease
-        state._quota_scope = scope
-        selection = state.execution_selection
-        if selection is not None and selection.attempts:
-            _replace_current_attempt(
-                replace(
-                    selection.attempts[-1],
-                    admission_status="admitted",
-                    admission_at_epoch=int(time.time()),
-                    admission_cache_status=decision.reason,
-                )
-            )
-        return None
-
     state._start = time.monotonic()
     assert state._cfg is not None
     assert state.tool_ctx.executor is not None
@@ -267,7 +390,11 @@ async def _execute_and_finalize_run_skill(
                             provider_binding=state.provider_binding,
                             model_pin=state.model_pin,
                             mark_execution_started=_mark_execution_started,
-                            pre_spawn_admission=_admit_finalized_launch,
+                            pre_spawn_admission=partial(
+                                _admit_finalized_launch,
+                                state,
+                                _replace_current_attempt,
+                            ),
                             execution_selection=state.execution_selection,
                             execution_selection_provider=lambda: state.execution_selection,
                             backend_authority=state._backend_authority,
@@ -334,109 +461,8 @@ async def _execute_and_finalize_run_skill(
 
         state._audit_outcome_to_finalize = None
         if state.skill_result.success:
-            if state._audit_reservation is not None:
-                # outcome_fields values are BoundScalar-ish (str | int | ...); the
-                # isinstance check below is the real type guard, matching the flat
-                # code's untyped-local behavior before this became a state field.
-                state._semantic_path = (state.skill_result.outcome_fields or {}).get(
-                    "audit_semantic_result_path"
-                )  # type: ignore[assignment]
-                if not isinstance(state._semantic_path, str) or not state._semantic_path:
-                    state._materialized = _te_pkg._reject_missing_semantic_result(
-                        state.tool_ctx,
-                        state._audit_reservation,
-                    )
-                else:
-                    with state.tool_ctx.recipe_execution_lock:
-                        if get_recipe_execution(state.tool_ctx) is not state._installed_execution:
-                            state._materialized = AuditMaterializationResult(
-                                status=AuditMaterializationStatus.CONFLICT,
-                                attempt_id=state._audit_reservation.current_attempt_id,
-                                verdict=None,
-                                path=None,
-                                error=(
-                                    "active recipe execution changed before audit materialization"
-                                ),
-                            )
-                        else:
-                            state._materialized = (
-                                state.tool_ctx.audit_authority_materializer.materialize(
-                                    reservation=state._audit_reservation,
-                                    semantic_result_path=Path(state._semantic_path),
-                                    preflight_step_names=state._audit_preflight_steps,
-                                )
-                            )
-                state._materialized_status = _te_pkg._materialization_outcome_status(
-                    state._materialized
-                )
-                match state._materialized_status:
-                    case AuditOutcomeStatus.PUBLISHED:
-                        assert state._materialized.verdict is not None
-                        assert state._materialized.path is not None
-                        state.skill_result.result = (
-                            f"Server-authored audit outcome: {AuditOutcomeStatus.PUBLISHED.value}"
-                        )
-                        state.skill_result.outcome_fields = None
-                        state.skill_result.audit = _te_pkg.AuditResultOutcome(
-                            status=AuditOutcomeStatus.PUBLISHED,
-                            verdict=state._materialized.verdict,
-                            cycle_path=str(state._materialized.path),
-                            attempt_id=state._materialized.attempt_id,
-                        )
-                        state._audit_outcome_to_finalize = AuditOutcome(
-                            status=AuditOutcomeStatus.PUBLISHED,
-                            attempt_id=state._materialized.attempt_id,
-                            verdict=state._materialized.verdict,
-                            path=state._materialized.path,
-                            error=None,
-                            kill_reason=state.skill_result.kill_reason,
-                            tracker_target_order_id=(
-                                state._tracker_target.target_order_id
-                                if state._tracker_target is not None
-                                else None
-                            ),
-                            tracker_expected=(
-                                state._tracker_target.expected
-                                if state._tracker_target is not None
-                                else False
-                            ),
-                        )
-                    case AuditOutcomeStatus.EXACT_REPLAY:
-                        return _te_pkg._finalize_run_skill_completion(
-                            state.tool_ctx,
-                            state._completion_invocation_id,
-                            _te_pkg._audit_response(
-                                status=state._materialized_status,
-                                attempt_id=state._materialized.attempt_id,
-                                verdict=state._materialized.verdict,
-                                path=state._materialized.path,
-                                error=state._materialized.error,
-                                kill_reason=state.skill_result.kill_reason,
-                            ),
-                            child_session_id=state.skill_result.session_id,
-                        )
-                    case (
-                        AuditOutcomeStatus.SEMANTIC_REJECTED
-                        | AuditOutcomeStatus.CONFLICT
-                        | AuditOutcomeStatus.STORAGE_FAILURE
-                        | AuditOutcomeStatus.QUARANTINED
-                        | AuditOutcomeStatus.NON_PUBLISHED_STANDALONE
-                    ):
-                        state.skill_result.result = ""
-                        state.skill_result.outcome_fields = None
-                        return _te_pkg._finalize_run_skill_completion(
-                            state.tool_ctx,
-                            state._completion_invocation_id,
-                            _te_pkg._audit_response(
-                                status=state._materialized_status,
-                                attempt_id=state._materialized.attempt_id,
-                                verdict=None,
-                                path=None,
-                                error=state._materialized.error,
-                                kill_reason=state.skill_result.kill_reason,
-                            ),
-                            child_session_id=state.skill_result.session_id,
-                        )
+            if (audit_response := _materialize_audit_result(state)) is not None:
+                return audit_response
             if state._audit_outcome_to_finalize is not None:
                 _te_pkg._complete_audit_finalization_effects(
                     state.tool_ctx,

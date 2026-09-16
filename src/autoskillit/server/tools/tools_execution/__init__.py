@@ -130,6 +130,8 @@ from ._run_skill_prepare import (  # noqa: F401
 from ._run_skill_session import (  # noqa: F401
     _mint_fresh_explorer_binding,
     _prepare_dispatch_session,
+    _resolve_dispatch_paths,
+    _resolve_fresh_invocation,
 )
 from ._state import _RunSkillDispatchState  # noqa: F401
 
@@ -170,6 +172,8 @@ __all__ = [
     "_notify",
     "_prepare_dispatch_backend",
     "_prepare_dispatch_session",
+    "_resolve_dispatch_paths",
+    "_resolve_fresh_invocation",
     "_recipe_execution_deny",
     "_record_explorer_launch_lease",
     "_reject_missing_semantic_result",

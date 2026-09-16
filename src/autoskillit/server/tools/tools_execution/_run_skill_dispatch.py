@@ -23,9 +23,7 @@ from autoskillit.core import (
     RateLimitWindow,
     RetryReason,
     SkillContractError,
-    SkillExecutionRole,
     SkillResult,
-    extract_skill_name,
     get_logger,
     read_tracker_authority,
 )
@@ -42,15 +40,10 @@ from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import (
     _require_enabled,
     _require_orchestrator_exact,
-    _validate_skill_command,
 )
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._execution_helpers import build_fresh_projection_context
-from autoskillit.server.tools._execution_helpers import (
-    make_project_skill_resolver as _make_project_skill_resolver,
-)
 from autoskillit.server.tools._execution_helpers import (
     rehydrate_skill_invocation as _rehydrate_skill_invocation,
 )
@@ -74,6 +67,160 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
 )
 
 logger = get_logger(__name__)
+
+
+def _restore_resume_dispatch(state: _RunSkillDispatchState) -> str | None:
+    """Restore the invocation and backend binding for a resumed session."""
+    assert state._contract_store is not None
+    try:
+        state._stored_contract_entry = state._contract_store.load(state.resume_session_id)
+        state._resume_launch_contract = state._stored_contract_entry.contract.launch_contract
+        if state._resume_launch_contract is None:
+            raise SkillContractError("Resume contract has no resolved launch contract")
+        log_root = resolve_log_dir(state.tool_ctx.config.linux_tracing.log_dir)
+        index_rows = read_session_index_rows(
+            log_root / "sessions.jsonl",
+            max_bytes=max(
+                2_000_000,
+                state.tool_ctx.config.linux_tracing.max_sessions * 4096,
+            ),
+        )
+        selection_payload = next(
+            (
+                row.get("execution_selection")
+                for row in reversed(index_rows)
+                if row.get("session_id") == state.resume_session_id
+            ),
+            None,
+        )
+        if not isinstance(selection_payload, dict):
+            raise SkillContractError("Resume selection evidence is unavailable")
+        selection = ExecutionSelection.from_payload(selection_payload)
+        expected_ref = f"execution-candidates/{selection.selection_id}.json"
+        if selection.manifest_ref != expected_ref:
+            raise SkillContractError("Resume selection manifest reference is invalid")
+        with (log_root / selection.manifest_ref).open("rb") as manifest_file:
+            manifest_bytes = manifest_file.read(1_000_001)
+        if len(manifest_bytes) > 1_000_000:
+            raise SkillContractError("Resume selection manifest is too large")
+        if json.loads(manifest_bytes) != selection.to_payload():
+            raise SkillContractError("Resume selection manifest does not match session")
+        terminal_attempt = selection.terminal_attempt
+        if (
+            not selection.completed
+            or terminal_attempt is None
+            or not terminal_attempt.execution_started
+            or terminal_attempt.child_session_id != state.resume_session_id
+            or terminal_attempt.effective_backend
+            != state._resume_launch_contract.effective_backend
+            or terminal_attempt.effective_provider != state._resume_launch_contract.provider
+        ):
+            raise SkillContractError("Resume selection binding is invalid")
+        state.execution_selection = selection
+        state._resume_backend_authority = state._resume_launch_contract.backend_authority
+        state._resume_backend_obj = state.tool_ctx.launch_resolver.backend_for_authority(
+            state._resume_backend_authority
+        )
+        _validate_resumed_skill_contract(
+            state._stored_contract_entry.contract,
+            cwd=state.cwd,
+            project_root=state.tool_ctx.project_dir,
+            backend=state._resume_backend_obj,
+        )
+        if state._resume_backend_obj is None:
+            raise SkillContractError("Resume contract backend is unavailable")
+        state.invocation, state.projection_context = _rehydrate_skill_invocation(
+            state._stored_contract_entry.contract,
+            state._resume_backend_obj,
+        )
+    except (OSError, ValueError, SkillContractError) as exc:
+        return SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot resume session {state.resume_session_id!r}: {exc}"
+            ),
+            skill_command=state.skill_command,
+            order_id=state.order_id,
+        ).to_json()
+    state.contract_lifecycle.bound_session_id = state.resume_session_id
+    state.target_name = state._stored_contract_entry.contract.root_name
+    return None
+
+
+def _resolve_fresh_recipe_step(state: _RunSkillDispatchState) -> str | None:
+    """Resolve and verify an omitted step name for a fresh recipe invocation."""
+    if (
+        state._installed_execution is not None
+        or state.step_name
+        or not state.tool_ctx.active_recipe_steps
+    ):
+        return None
+    resolved, ambiguous = _te_pkg._resolve_step_name_from_recipe(
+        state.skill_command, state.tool_ctx.active_recipe_steps
+    )
+    if state._tracker_target is not None and state._tracker_lease is not None:
+        state._tracker_authority = read_tracker_authority(
+            state._tracker_target, state._tracker_lease
+        )
+    if resolved:
+        state.step_name = resolved
+        logger.warning(
+            "step_name_resolved_from_recipe",
+            step=state.step_name,
+            command=state.skill_command[:80],
+        )
+        if (
+            lock_denial := _te_pkg._check_ingredient_locks(state.step_name, state.order_id)
+        ) is not None:
+            return lock_denial
+        if (
+            dep_denial := _te_pkg._check_pipeline_deps(state.step_name, state._tracker_authority)
+        ) is not None:
+            return dep_denial
+        if (
+            plan_path_denial := _te_pkg._check_review_approach_plan_path(
+                state.step_name, state.skill_command
+            )
+        ) is not None:
+            return plan_path_denial
+    elif ambiguous and _authority_blocks_dependency_check(state._tracker_authority):
+        return json.dumps(
+            deny_envelope(
+                (
+                    f"{_te_pkg.DEPENDENCY_DENY_PREFIX}: step_name is empty and "
+                    "matched multiple recipe steps by skill_command prefix "
+                    "(ambiguous). Cannot verify dependency status. Pass "
+                    "step_name explicitly."
+                ),
+                stage="preflight:ambiguous_step",
+                retriable=False,
+            )
+        )
+    elif not ambiguous and _te_pkg._has_active_locks(state.order_id):
+        return json.dumps(
+            deny_envelope(
+                (
+                    f"{_te_pkg.INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and "
+                    "could not be resolved from the recipe. Cannot verify lock "
+                    "status. Pass step_name explicitly or call "
+                    "lock_ingredients(unlock=[...]) to release all locks."
+                ),
+                stage="preflight:ingredient_locks",
+                retriable=False,
+            )
+        )
+    elif not ambiguous and _authority_blocks_dependency_check(state._tracker_authority):
+        return json.dumps(
+            deny_envelope(
+                (
+                    f"{_te_pkg.DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
+                    "not be resolved from the recipe. Cannot verify dependency "
+                    "status. Pass step_name explicitly."
+                ),
+                stage="preflight:unresolved_step",
+                retriable=False,
+            )
+        )
+    return None
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -246,186 +393,13 @@ async def run_skill(
         state.projection_context = None
         state.target_name = None
         if resume_session_id:
-            try:
-                state._stored_contract_entry = state._contract_store.load(resume_session_id)
-                state._resume_launch_contract = (
-                    state._stored_contract_entry.contract.launch_contract
-                )
-                if state._resume_launch_contract is None:
-                    raise SkillContractError("Resume contract has no resolved launch contract")
-                log_root = resolve_log_dir(state.tool_ctx.config.linux_tracing.log_dir)
-                index_rows = read_session_index_rows(
-                    log_root / "sessions.jsonl",
-                    max_bytes=max(
-                        2_000_000,
-                        state.tool_ctx.config.linux_tracing.max_sessions * 4096,
-                    ),
-                )
-                selection_payload = next(
-                    (
-                        row.get("execution_selection")
-                        for row in reversed(index_rows)
-                        if row.get("session_id") == resume_session_id
-                    ),
-                    None,
-                )
-                if not isinstance(selection_payload, dict):
-                    raise SkillContractError("Resume selection evidence is unavailable")
-                selection = ExecutionSelection.from_payload(selection_payload)
-                expected_ref = f"execution-candidates/{selection.selection_id}.json"
-                if selection.manifest_ref != expected_ref:
-                    raise SkillContractError("Resume selection manifest reference is invalid")
-                with (log_root / selection.manifest_ref).open("rb") as manifest_file:
-                    manifest_bytes = manifest_file.read(1_000_001)
-                if len(manifest_bytes) > 1_000_000:
-                    raise SkillContractError("Resume selection manifest is too large")
-                if json.loads(manifest_bytes) != selection.to_payload():
-                    raise SkillContractError("Resume selection manifest does not match session")
-                terminal_attempt = selection.terminal_attempt
-                if (
-                    not selection.completed
-                    or terminal_attempt is None
-                    or not terminal_attempt.execution_started
-                    or terminal_attempt.child_session_id != resume_session_id
-                    or terminal_attempt.effective_backend
-                    != state._resume_launch_contract.effective_backend
-                    or terminal_attempt.effective_provider
-                    != state._resume_launch_contract.provider
-                ):
-                    raise SkillContractError("Resume selection binding is invalid")
-                state.execution_selection = selection
-                state._resume_backend_authority = state._resume_launch_contract.backend_authority
-                state._resume_backend_obj = state.tool_ctx.launch_resolver.backend_for_authority(
-                    state._resume_backend_authority
-                )
-                _validate_resumed_skill_contract(
-                    state._stored_contract_entry.contract,
-                    cwd=cwd,
-                    project_root=state.tool_ctx.project_dir,
-                    backend=state._resume_backend_obj,
-                )
-                if state._resume_backend_obj is None:
-                    raise SkillContractError("Resume contract backend is unavailable")
-                state.invocation, state.projection_context = _rehydrate_skill_invocation(
-                    state._stored_contract_entry.contract,
-                    state._resume_backend_obj,
-                )
-            except (OSError, ValueError, SkillContractError) as exc:
-                return SkillResult.crashed(
-                    exception=SkillContractError(
-                        f"Cannot resume session {resume_session_id!r}: {exc}"
-                    ),
-                    skill_command=skill_command,
-                    order_id=order_id,
-                ).to_json()
-            state.contract_lifecycle.bound_session_id = resume_session_id
-            state.target_name = state._stored_contract_entry.contract.root_name
+            if (terminal := _restore_resume_dispatch(state)) is not None:
+                return terminal
         else:
-            if (cmd_error := _validate_skill_command(skill_command)) is not None:
-                return cmd_error
-            state._effective_skill_resolver = state.tool_ctx.skill_resolver
-            if state._effective_skill_resolver is None:
-                state._effective_skill_resolver = _make_project_skill_resolver()
-            state.target_name = extract_skill_name(skill_command)
-            if state.target_name is None:
-                return SkillResult.crashed(
-                    exception=SkillContractError(
-                        f"Cannot resolve a logical skill target from {skill_command!r}"
-                    ),
-                    skill_command=skill_command,
-                    order_id=order_id,
-                ).to_json()
-            try:
-                state.invocation = state._effective_skill_resolver.resolve_invocation(
-                    state.target_name,
-                    state.tool_ctx.project_dir,
-                    SkillExecutionRole.SESSION,
-                    visibility=state.tool_ctx.config.skill_visibility_spec(),
-                    recipe_packs=state.tool_ctx.active_recipe_packs,
-                    recipe_features=state.tool_ctx.active_recipe_features,
-                )
-                state.projection_context = build_fresh_projection_context(cwd, state.invocation)
-            except SkillContractError as exc:
-                return SkillResult.crashed(
-                    exception=exc,
-                    skill_command=skill_command,
-                    order_id=order_id,
-                ).to_json()
-            if (
-                state._installed_execution is None
-                and not step_name
-                and state.tool_ctx.active_recipe_steps
-            ):
-                _resolved, _ambiguous = _te_pkg._resolve_step_name_from_recipe(
-                    skill_command, state.tool_ctx.active_recipe_steps
-                )
-                if state._tracker_target is not None and state._tracker_lease is not None:
-                    state._tracker_authority = read_tracker_authority(
-                        state._tracker_target, state._tracker_lease
-                    )
-                if _resolved:
-                    step_name = _resolved
-                    state.step_name = _resolved
-                    logger.warning(
-                        "step_name_resolved_from_recipe",
-                        step=step_name,
-                        command=skill_command[:80],
-                    )
-                    if (
-                        _lock_denial := _te_pkg._check_ingredient_locks(step_name, order_id)
-                    ) is not None:
-                        return _lock_denial
-                    if (
-                        _dep_denial := _te_pkg._check_pipeline_deps(
-                            step_name, state._tracker_authority
-                        )
-                    ) is not None:
-                        return _dep_denial
-                    if (
-                        _plan_path_denial := _te_pkg._check_review_approach_plan_path(
-                            step_name, skill_command
-                        )
-                    ) is not None:
-                        return _plan_path_denial
-                elif _ambiguous:
-                    if _authority_blocks_dependency_check(state._tracker_authority):
-                        return json.dumps(
-                            deny_envelope(
-                                (
-                                    f"{_te_pkg.DEPENDENCY_DENY_PREFIX}: step_name is empty and "
-                                    "matched multiple recipe steps by skill_command prefix "
-                                    "(ambiguous). Cannot verify dependency status. Pass "
-                                    "step_name explicitly."
-                                ),
-                                stage="preflight:ambiguous_step",
-                                retriable=False,
-                            )
-                        )
-                elif _te_pkg._has_active_locks(order_id):
-                    return json.dumps(
-                        deny_envelope(
-                            (
-                                f"{_te_pkg.INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and "
-                                "could not be resolved from the recipe. Cannot verify lock "
-                                "status. Pass step_name explicitly or call "
-                                "lock_ingredients(unlock=[...]) to release all locks."
-                            ),
-                            stage="preflight:ingredient_locks",
-                            retriable=False,
-                        )
-                    )
-                elif _authority_blocks_dependency_check(state._tracker_authority):
-                    return json.dumps(
-                        deny_envelope(
-                            (
-                                f"{_te_pkg.DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
-                                "not be resolved from the recipe. Cannot verify dependency "
-                                "status. Pass step_name explicitly."
-                            ),
-                            stage="preflight:unresolved_step",
-                            retriable=False,
-                        )
-                    )
+            if (terminal := _te_pkg._resolve_fresh_invocation(state)) is not None:
+                return terminal
+            if (terminal := _resolve_fresh_recipe_step(state)) is not None:
+                return terminal
         if state.invocation is None or state.projection_context is None:
             raise SkillContractError("Skill dispatch branches did not produce a bound contract")
 

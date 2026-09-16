@@ -29,7 +29,6 @@ from autoskillit.core import (
     parse_plan_paths,
     render_target_skill_command,
 )
-from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
@@ -49,7 +48,6 @@ from autoskillit.server.tools._execution_helpers import (
     build_fresh_projection_context,
     resolve_skill_dispatch_metadata,
 )
-from autoskillit.server.tools._types import ToolFailureEnvelope
 from autoskillit.server.tools.tools_execution._candidate_policy import (
     candidate_authority,
     resolve_candidate_policy,
@@ -89,6 +87,86 @@ def _record_explorer_launch_lease(
     if backend is None:
         raise SkillContractError(f"Explorer {operation} requires the bound Codex backend")
     return backend
+
+
+def _resolve_provider_binding(
+    state: _RunSkillDispatchState,
+    candidate: ExecutionCandidateSpec | None,
+    ordinal: int,
+    step_model: str,
+) -> bool:
+    """Bind the stored provider contract or resolve one for a fresh candidate."""
+    assert state._cfg is not None
+    assert state._backend_authority is not None
+    if state._stored_contract is not None:
+        contract = state._resume_launch_contract
+        if contract is None or contract.backend_authority != state._backend_authority:
+            raise SkillContractError("Resume launch authority changed")
+        state._env_dict = {}
+        if contract.profile and contract.profile != "default":
+            definition = state._cfg.providers.resolved_profiles.get(contract.profile)
+            if definition is None:
+                raise SkillContractError("Resume provider profile is unavailable")
+            if definition.api_key_env and not os.environ.get(definition.api_key_env):
+                raise SkillContractError("Resume provider credential is unavailable")
+            state._env_dict = _profile_to_env(definition)
+            if (definition.base_url or "") != contract.normalized_endpoint:
+                raise SkillContractError("Resume provider endpoint changed")
+        secret_keys = tuple(
+            key
+            for key in state._env_dict
+            if any(token in key.upper() for token in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+        )
+        state.provider_binding = (
+            ProviderBinding(
+                provider=contract.provider,
+                profile=contract.profile,
+                required_backend=contract.backend_authority.backend,
+                normalized_endpoint=contract.normalized_endpoint,
+                key_path=contract.provider_source.key_path,
+                provider_source=contract.provider_source,
+                profile_source=contract.profile_source,
+                endpoint_source=contract.endpoint_source,
+                environment={
+                    key: value for key, value in state._env_dict.items() if key not in secret_keys
+                },
+                secret_environment_keys=secret_keys,
+            )
+            if contract.provider and contract.profile
+            else None
+        )
+        state.model_pin = ModelPinResolution(
+            contract.configured_model or "", contract.configured_model_source
+        )
+    else:
+        try:
+            state.provider_binding, state.model_pin, state._env_dict = resolve_candidate_policy(
+                state._cfg,
+                authority=state._backend_authority,
+                candidate=candidate,
+                ordinal=ordinal,
+                step_name=state.step_name or "",
+                recipe_name=state.tool_ctx.recipe_name or "",
+                step_provider=state.step_provider or "",
+                requested_model=step_model,
+                providers_enabled=_te_pkg.is_feature_enabled(
+                    "providers",
+                    state._cfg.features,
+                    experimental_enabled=state._cfg.experimental_enabled,
+                ),
+            )
+        except SkillContractError as exc:
+            state._candidate_rejection_reason = str(exc)
+            return False
+    state.effective_model = state.model_pin.model
+    state._profile = state.provider_binding.provider if state.provider_binding is not None else ""
+    state.profile_name_out = (
+        state.provider_binding.profile
+        if state.provider_binding is not None and state.provider_binding.profile != "default"
+        else ""
+    )
+    state.provider_extras = state._env_dict or None
+    return True
 
 
 async def _prepare_dispatch_backend(
@@ -263,74 +341,8 @@ async def _prepare_dispatch_backend(
             state._backend_authority
         )
 
-    if state._stored_contract is not None:
-        contract = state._resume_launch_contract
-        if contract is None or contract.backend_authority != state._backend_authority:
-            raise SkillContractError("Resume launch authority changed")
-        state._env_dict = {}
-        if contract.profile and contract.profile != "default":
-            definition = state._cfg.providers.resolved_profiles.get(contract.profile)
-            if definition is None:
-                raise SkillContractError("Resume provider profile is unavailable")
-            if definition.api_key_env and not os.environ.get(definition.api_key_env):
-                raise SkillContractError("Resume provider credential is unavailable")
-            state._env_dict = _profile_to_env(definition)
-            if (definition.base_url or "") != contract.normalized_endpoint:
-                raise SkillContractError("Resume provider endpoint changed")
-        secret_keys = tuple(
-            key
-            for key in state._env_dict
-            if any(token in key.upper() for token in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
-        )
-        state.provider_binding = (
-            ProviderBinding(
-                provider=contract.provider,
-                profile=contract.profile,
-                required_backend=contract.backend_authority.backend,
-                normalized_endpoint=contract.normalized_endpoint,
-                key_path=contract.provider_source.key_path,
-                provider_source=contract.provider_source,
-                profile_source=contract.profile_source,
-                endpoint_source=contract.endpoint_source,
-                environment={
-                    key: value for key, value in state._env_dict.items() if key not in secret_keys
-                },
-                secret_environment_keys=secret_keys,
-            )
-            if contract.provider and contract.profile
-            else None
-        )
-        state.model_pin = ModelPinResolution(
-            contract.configured_model or "", contract.configured_model_source
-        )
-    else:
-        try:
-            state.provider_binding, state.model_pin, state._env_dict = resolve_candidate_policy(
-                state._cfg,
-                authority=state._backend_authority,
-                candidate=candidate,
-                ordinal=ordinal,
-                step_name=state.step_name or "",
-                recipe_name=state.tool_ctx.recipe_name or "",
-                step_provider=state.step_provider or "",
-                requested_model=step_model,
-                providers_enabled=_te_pkg.is_feature_enabled(
-                    "providers",
-                    state._cfg.features,
-                    experimental_enabled=state._cfg.experimental_enabled,
-                ),
-            )
-        except SkillContractError as exc:
-            state._candidate_rejection_reason = str(exc)
-            return None
-    state.effective_model = state.model_pin.model
-    state._profile = state.provider_binding.provider if state.provider_binding is not None else ""
-    state.profile_name_out = (
-        state.provider_binding.profile
-        if state.provider_binding is not None and state.provider_binding.profile != "default"
-        else ""
-    )
-    state.provider_extras = state._env_dict or None
+    if not _resolve_provider_binding(state, candidate, ordinal, step_model):
+        return None
 
     state.expected_output_patterns, state.write_spec, state._skill_contract = (
         resolve_skill_dispatch_metadata(
@@ -474,36 +486,8 @@ async def _prepare_dispatch_backend(
                     value=state.idle_output_timeout,
                 )
 
-    state.closure_report_root = None
-    if state.output_dir and state.closure_spec:
-        state._closure_root = Path(state.output_dir)
-        if not state._closure_root.is_absolute():
-            state._closure_root = Path(state.cwd) / state.output_dir
-        state.closure_report_root = state._closure_root
-    elif state.closure_spec and not state.output_dir:
-        return json.dumps(
-            ToolFailureEnvelope(
-                success=False,
-                error=(
-                    "closure_spec requires output_dir to locate"
-                    " the closure report, but output_dir is empty"
-                ),
-                stage="validate_args:run_skill",
-                retriable=False,
-            )
-        )
-
-    state.write_watch_dirs = []
-    if state.output_dir:
-        resolved_dir = Path(state.output_dir)
-        if not resolved_dir.is_absolute():
-            resolved_dir = Path(state.cwd) / state.output_dir
-        state.write_watch_dirs.append(resolved_dir)
-
-    if not state.write_watch_dirs:
-        state._default_temp = _resolve_skill_temp_dir(state.cwd, state.skill_command)
-        if state._default_temp:
-            state.write_watch_dirs.append(state._default_temp)
+    if (terminal := _te_pkg._resolve_dispatch_paths(state, base_cwd=Path(state.cwd))) is not None:
+        return terminal
 
     if state._stored_contract is not None:
         state.is_read_only = state._stored_contract.read_only

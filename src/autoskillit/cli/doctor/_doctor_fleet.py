@@ -163,6 +163,26 @@ def _check_campaign_onboarding_hint(project_dir: Path | None = None) -> DoctorRe
     )
 
 
+def _manifest_clone_destinations(data: object, fallback_name: str) -> list[tuple[str, str]]:
+    if not isinstance(data, dict):
+        return []
+    dispatches = data.get("dispatches", [])
+    if not isinstance(dispatches, list):
+        return []
+    recipe_name = data.get("name", fallback_name)
+    destinations: list[tuple[str, str]] = []
+    for dispatch in dispatches:
+        if not isinstance(dispatch, dict):
+            continue
+        ingredients = dispatch.get("ingredients", {})
+        if not isinstance(ingredients, dict):
+            continue
+        clone_path = ingredients.get("clone_path", "")
+        if clone_path:
+            destinations.append((str(clone_path), f"{recipe_name}:{dispatch.get('name', '?')}"))
+    return destinations
+
+
 def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> DoctorResult:
     """Check that dispatches within campaign recipes use unique clone destinations."""
     from autoskillit.core import YAMLError, load_yaml
@@ -183,23 +203,8 @@ def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> Doc
             data = load_yaml(yaml_file)
         except (YAMLError, OSError):
             continue
-        if not isinstance(data, dict):
-            continue
-        dispatches = data.get("dispatches", [])
-        if not isinstance(dispatches, list):
-            continue
-        recipe_name = data.get("name", yaml_file.stem)
-        for dispatch in dispatches:
-            if not isinstance(dispatch, dict):
-                continue
-            ingredients = dispatch.get("ingredients", {})
-            if not isinstance(ingredients, dict):
-                continue
-            clone_path = ingredients.get("clone_path", "")
-            if clone_path:
-                key = str(clone_path)
-                label = f"{recipe_name}:{dispatch.get('name', '?')}"
-                seen_paths.setdefault(key, []).append(label)
+        for key, label in _manifest_clone_destinations(data, yaml_file.stem):
+            seen_paths.setdefault(key, []).append(label)
     duplicates = {path: users for path, users in seen_paths.items() if len(users) > 1}
     if duplicates:
         dup_details = "; ".join(

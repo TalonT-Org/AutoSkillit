@@ -67,55 +67,59 @@ def _check_stale_mcp_servers(
     return [DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")]
 
 
+def _check_codex_mcp_server_registered() -> DoctorResult:
+    from autoskillit.execution import (
+        _is_autoskillit_registered,
+        _read_codex_config,
+    )
+
+    read_result = _read_codex_config(Path.home() / ".codex" / "config.toml")
+    if read_result.is_corrupt:
+        raw_text = (
+            read_result.raw_bytes.decode("utf-8", errors="replace")
+            if read_result.raw_bytes
+            else ""
+        )
+        if "[mcp_servers.autoskillit]" in raw_text:
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message=(
+                    "autoskillit registered in codex config.toml "
+                    "(TOML parse error on other sections — run 'codex config' to inspect)"
+                ),
+            )
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="mcp_server_registered",
+            message=(
+                "autoskillit not registered in codex config.toml AND file has "
+                "TOML parse errors. Manual inspection recommended."
+            ),
+        )
+    else:
+        if _is_autoskillit_registered(read_result.data, headless_auto_gate=False):
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message="autoskillit registered in codex config.toml",
+            )
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="mcp_server_registered",
+            message=(
+                "autoskillit not registered in codex config.toml. "
+                "Run 'autoskillit init' to register."
+            ),
+        )
+
+
 def _check_mcp_server_registered(
     claude_json_path: Path | None = None, *, backend: CodingAgentBackend | None = None
 ) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
     if backend is not None and backend.capabilities.mcp_config_capable:
-        from autoskillit.execution import (
-            _is_autoskillit_registered,
-            _read_codex_config,
-        )
-
-        read_result = _read_codex_config(Path.home() / ".codex" / "config.toml")
-        if read_result.is_corrupt:
-            raw_text = (
-                read_result.raw_bytes.decode("utf-8", errors="replace")
-                if read_result.raw_bytes
-                else ""
-            )
-            if "[mcp_servers.autoskillit]" in raw_text:
-                return DoctorResult(
-                    severity=Severity.OK,
-                    check="mcp_server_registered",
-                    message=(
-                        "autoskillit registered in codex config.toml "
-                        "(TOML parse error on other sections — run 'codex config' to inspect)"
-                    ),
-                )
-            return DoctorResult(
-                severity=Severity.WARNING,
-                check="mcp_server_registered",
-                message=(
-                    "autoskillit not registered in codex config.toml AND file has "
-                    "TOML parse errors. Manual inspection recommended."
-                ),
-            )
-        else:
-            if _is_autoskillit_registered(read_result.data, headless_auto_gate=False):
-                return DoctorResult(
-                    severity=Severity.OK,
-                    check="mcp_server_registered",
-                    message="autoskillit registered in codex config.toml",
-                )
-            return DoctorResult(
-                severity=Severity.WARNING,
-                check="mcp_server_registered",
-                message=(
-                    "autoskillit not registered in codex config.toml. "
-                    "Run 'autoskillit init' to register."
-                ),
-            )
+        return _check_codex_mcp_server_registered()
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 

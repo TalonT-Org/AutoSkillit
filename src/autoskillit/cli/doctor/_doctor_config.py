@@ -11,6 +11,8 @@ from ._doctor_types import DoctorResult
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
+    from autoskillit.core import CodingAgentBackend, SkillResolver
+    from autoskillit.recipe import RecipeStep
 
 logger = get_logger(__name__)
 
@@ -102,21 +104,12 @@ def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorR
     )
 
 
-def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
-    """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
+def _collect_uncovered_gitignore_entries(
+    autoskillit_dir: Path,
+    gitignore_content: str,
+) -> list[str]:
     from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
 
-    autoskillit_dir = project_dir / ".autoskillit"
-    gitignore_path = autoskillit_dir / ".gitignore"
-    if not autoskillit_dir.is_dir():
-        return DoctorResult(Severity.OK, "gitignore_completeness", "No .autoskillit/ directory.")
-    if not gitignore_path.exists():
-        return DoctorResult(
-            Severity.WARNING,
-            "gitignore_completeness",
-            ".autoskillit/.gitignore missing. Run 'autoskillit init'.",
-        )
-    gitignore_content = gitignore_path.read_text(encoding="utf-8")
     uncovered: list[str] = []
     for item in sorted(autoskillit_dir.iterdir()):
         if item.name == ".gitignore":
@@ -131,6 +124,23 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
             entry_name = entry.rstrip("/")
             if entry_name not in uncovered:
                 uncovered.append(entry_name)
+    return uncovered
+
+
+def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
+    """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
+    autoskillit_dir = project_dir / ".autoskillit"
+    gitignore_path = autoskillit_dir / ".gitignore"
+    if not autoskillit_dir.is_dir():
+        return DoctorResult(Severity.OK, "gitignore_completeness", "No .autoskillit/ directory.")
+    if not gitignore_path.exists():
+        return DoctorResult(
+            Severity.WARNING,
+            "gitignore_completeness",
+            ".autoskillit/.gitignore missing. Run 'autoskillit init'.",
+        )
+    gitignore_content = gitignore_path.read_text(encoding="utf-8")
+    uncovered = _collect_uncovered_gitignore_entries(autoskillit_dir, gitignore_content)
     if uncovered:
         return DoctorResult(
             Severity.WARNING,
@@ -193,6 +203,180 @@ def _iter_backend_pins(data: dict[str, Any]) -> list[tuple[str, str, str]]:
     return pins
 
 
+def _check_target_step_semantics(
+    target_step: RecipeStep,
+    *,
+    backend: CodingAgentBackend,
+    backend_name: str,
+    config_path: Path,
+    dotted_key: str,
+    root: Path,
+    resolver: SkillResolver,
+    adaptation_context: SemanticAdaptationContext | None,
+) -> list[DoctorResult]:
+    from autoskillit.workspace import render_skill_invalidities
+
+    skill_name = target_step.skill_name
+    if not skill_name:
+        return []
+    skill_info = resolver.resolve_effective(skill_name, root)
+    if skill_info is None:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} references skill "
+                f"{skill_name!r} (step {target_step.name!r}) which could "
+                "not be resolved.",
+            )
+        ]
+    if skill_info.invalidities:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} references skill "
+                f"{skill_name!r} (step {target_step.name!r}) whose contract "
+                f"is invalid, so its semantic-plan feasibility could not be "
+                f"checked: {render_skill_invalidities(skill_info.invalidities)}",
+            )
+        ]
+    if skill_info.semantic_plan is None:
+        return []
+
+    adaptation = backend.adapt_skill_semantics(
+        skill_info.semantic_plan,
+        adaptation_context,
+    )
+    unsupported_operation = adaptation.validate_refusal_for(
+        skill_info.semantic_plan,
+        backend=backend_name,
+    )
+    if unsupported_operation is not None:
+        assert adaptation.diagnostic is not None
+        return [
+            DoctorResult(
+                Severity.ERROR,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} pins backend {backend_name!r} "
+                f"for step {target_step.name!r}, but {adaptation.diagnostic}. "
+                "Remove or update this pin, or choose a backend that "
+                "supports the skill's semantic requirements.",
+            )
+        ]
+    adaptation.validate_for(skill_info.semantic_plan, backend=backend_name)
+    return []
+
+
+def _check_backend_pin_feasibility(
+    config_path: Path,
+    data: dict[str, Any],
+    recipe_name: str,
+    step_name: str,
+    backend_name: str,
+    *,
+    root: Path,
+    resolver: SkillResolver,
+    adaptation_context: SemanticAdaptationContext | None,
+) -> list[DoctorResult]:
+    from autoskillit.core import YAMLError, resolve_temp_dir
+    from autoskillit.execution import get_backend
+    from autoskillit.recipe import find_recipe_by_name, load_recipe
+    from autoskillit.workspace import resolve_persistent_session_root
+
+    is_recipe_pin = bool(recipe_name)
+    dotted_key = (
+        f"agent_backend.recipe_overrides.{recipe_name}.{step_name}"
+        if is_recipe_pin
+        else f"agent_backend.step_overrides.{step_name}"
+    )
+
+    try:
+        backend = get_backend(backend_name)
+    except ValueError:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} references unknown backend {backend_name!r}.",
+            )
+        ]
+
+    if backend.capabilities.session_dir_persistent:
+        workspace_cfg = data.get("workspace")
+        temp_override = workspace_cfg.get("temp_dir") if isinstance(workspace_cfg, dict) else None
+        base_root = resolve_temp_dir(
+            root, temp_override if isinstance(temp_override, str) else None
+        )
+        try:
+            resolve_persistent_session_root(base_root, backend)
+        except RuntimeError as exc:
+            return [
+                DoctorResult(
+                    Severity.ERROR,
+                    "standing_backend_pins_feasibility",
+                    f"{config_path}: {dotted_key} pins persistent backend "
+                    f"{backend_name!r}, but no persistent session root can be "
+                    f"derived: {exc}. Remove or change this pin, or fix the "
+                    "backend's generated-home convention.",
+                )
+            ]
+
+    if not is_recipe_pin:
+        # Global step_overrides pins are not tied to a single recipe's step
+        # definition, so there is no skill to resolve capabilities from.
+        return []
+
+    recipe_info = find_recipe_by_name(recipe_name, root)
+    if recipe_info is None:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} references unknown recipe {recipe_name!r}.",
+            )
+        ]
+
+    try:
+        recipe = load_recipe(recipe_info.path)
+    except (OSError, ValueError, YAMLError) as exc:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} could not load recipe {recipe_name!r}: {exc}",
+            )
+        ]
+
+    step = recipe.steps.get(step_name)
+    if step_name != "*" and step is None:
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                "standing_backend_pins_feasibility",
+                f"{config_path}: {dotted_key} references unknown step "
+                f"{step_name!r} in recipe {recipe_name!r}.",
+            )
+        ]
+
+    results: list[DoctorResult] = []
+    steps_to_check = [step] if step is not None else list(recipe.steps.values())
+    for target_step in steps_to_check:
+        results.extend(
+            _check_target_step_semantics(
+                target_step,
+                backend=backend,
+                backend_name=backend_name,
+                config_path=config_path,
+                dotted_key=dotted_key,
+                root=root,
+                resolver=resolver,
+                adaptation_context=adaptation_context,
+            )
+        )
+    return results
+
+
 def _check_standing_backend_pins_feasibility(
     project_dir: Path | None = None,
     *,
@@ -210,18 +394,8 @@ def _check_standing_backend_pins_feasibility(
     config key — this runs for both recipe and global `step_overrides` pins,
     before the recipe-specific semantic-adaptation check below.
     """
-    from autoskillit.core import (
-        YAMLError,
-        load_yaml,
-        resolve_temp_dir,
-    )
-    from autoskillit.execution import get_backend
-    from autoskillit.recipe import find_recipe_by_name, load_recipe
-    from autoskillit.workspace import (
-        DefaultSkillResolver,
-        render_skill_invalidities,
-        resolve_persistent_session_root,
-    )
+    from autoskillit.core import YAMLError, load_yaml
+    from autoskillit.workspace import DefaultSkillResolver
 
     root = project_dir or Path.cwd()
     config_paths = [
@@ -249,145 +423,18 @@ def _check_standing_backend_pins_feasibility(
             continue
 
         for recipe_name, step_name, backend_name in _iter_backend_pins(data):
-            is_recipe_pin = bool(recipe_name)
-            dotted_key = (
-                f"agent_backend.recipe_overrides.{recipe_name}.{step_name}"
-                if is_recipe_pin
-                else f"agent_backend.step_overrides.{step_name}"
+            results.extend(
+                _check_backend_pin_feasibility(
+                    config_path,
+                    data,
+                    recipe_name,
+                    step_name,
+                    backend_name,
+                    root=root,
+                    resolver=resolver,
+                    adaptation_context=adaptation_context,
+                )
             )
-
-            try:
-                backend = get_backend(backend_name)
-            except ValueError:
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "standing_backend_pins_feasibility",
-                        f"{config_path}: {dotted_key} references unknown backend "
-                        f"{backend_name!r}.",
-                    )
-                )
-                continue
-
-            if backend.capabilities.session_dir_persistent:
-                workspace_cfg = data.get("workspace")
-                temp_override = (
-                    workspace_cfg.get("temp_dir") if isinstance(workspace_cfg, dict) else None
-                )
-                base_root = resolve_temp_dir(
-                    root, temp_override if isinstance(temp_override, str) else None
-                )
-                try:
-                    resolve_persistent_session_root(base_root, backend)
-                except RuntimeError as exc:
-                    results.append(
-                        DoctorResult(
-                            Severity.ERROR,
-                            "standing_backend_pins_feasibility",
-                            f"{config_path}: {dotted_key} pins persistent backend "
-                            f"{backend_name!r}, but no persistent session root can be "
-                            f"derived: {exc}. Remove or change this pin, or fix the "
-                            "backend's generated-home convention.",
-                        )
-                    )
-                    continue
-
-            if not is_recipe_pin:
-                # Global step_overrides pins are not tied to a single recipe's step
-                # definition, so there is no skill to resolve capabilities from.
-                continue
-
-            recipe_info = find_recipe_by_name(recipe_name, root)
-            if recipe_info is None:
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "standing_backend_pins_feasibility",
-                        f"{config_path}: {dotted_key} references unknown recipe {recipe_name!r}.",
-                    )
-                )
-                continue
-
-            try:
-                recipe = load_recipe(recipe_info.path)
-            except (OSError, ValueError, YAMLError) as exc:
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "standing_backend_pins_feasibility",
-                        f"{config_path}: {dotted_key} could not load recipe "
-                        f"{recipe_name!r}: {exc}",
-                    )
-                )
-                continue
-
-            step = recipe.steps.get(step_name)
-            if step_name != "*" and step is None:
-                results.append(
-                    DoctorResult(
-                        Severity.WARNING,
-                        "standing_backend_pins_feasibility",
-                        f"{config_path}: {dotted_key} references unknown step "
-                        f"{step_name!r} in recipe {recipe_name!r}.",
-                    )
-                )
-                continue
-
-            steps_to_check = [step] if step is not None else list(recipe.steps.values())
-            for target_step in steps_to_check:
-                skill_name = target_step.skill_name
-                if not skill_name:
-                    continue
-                skill_info = resolver.resolve_effective(skill_name, root)
-                if skill_info is None:
-                    results.append(
-                        DoctorResult(
-                            Severity.WARNING,
-                            "standing_backend_pins_feasibility",
-                            f"{config_path}: {dotted_key} references skill "
-                            f"{skill_name!r} (step {target_step.name!r}) which could "
-                            "not be resolved.",
-                        )
-                    )
-                    continue
-                if skill_info.invalidities:
-                    results.append(
-                        DoctorResult(
-                            Severity.WARNING,
-                            "standing_backend_pins_feasibility",
-                            f"{config_path}: {dotted_key} references skill "
-                            f"{skill_name!r} (step {target_step.name!r}) whose contract "
-                            f"is invalid, so its semantic-plan feasibility could not be "
-                            f"checked: {render_skill_invalidities(skill_info.invalidities)}",
-                        )
-                    )
-                    continue
-
-                if skill_info.semantic_plan is None:
-                    continue
-                adaptation = backend.adapt_skill_semantics(
-                    skill_info.semantic_plan,
-                    adaptation_context,
-                )
-                unsupported_operation = adaptation.validate_refusal_for(
-                    skill_info.semantic_plan,
-                    backend=backend_name,
-                )
-                if unsupported_operation is not None:
-                    assert adaptation.diagnostic is not None
-                    results.append(
-                        DoctorResult(
-                            Severity.ERROR,
-                            "standing_backend_pins_feasibility",
-                            f"{config_path}: {dotted_key} pins backend {backend_name!r} "
-                            f"for step {target_step.name!r}, but "
-                            f"{adaptation.diagnostic}. "
-                            "Remove or update this pin, or choose a backend that "
-                            "supports the skill's semantic requirements.",
-                        )
-                    )
-                    continue
-                adaptation.validate_for(skill_info.semantic_plan, backend=backend_name)
 
     if not results:
         results.append(

@@ -47,9 +47,9 @@ _ALLOWED_RAW_RECIPE_READS: frozenset[tuple[str, str, str]] = frozenset(
         ),  # Validate the selected recipe before launching its session.
         (
             "cli/doctor/_doctor_config.py",
-            "_check_standing_backend_pins_feasibility",
+            "_check_backend_pin_feasibility",
             "load_recipe(recipe_info.path)",
-        ),  # Inspect a configured recipe while reporting invalid backend pins.
+        ),  # Per-pin validation loads the configured recipe before inspecting its steps.
         (
             "cli/doctor/_doctor_config.py",
             "_check_local_recipe_validity",

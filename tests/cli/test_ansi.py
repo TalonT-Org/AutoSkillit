@@ -145,3 +145,24 @@ def test_diagram_to_terminal_suppresses_mermaid(monkeypatch: pytest.MonkeyPatch)
     assert "flowchart TD" not in result
     assert "S0[clone]" not in result
     assert "S0 --> S1" not in result
+
+
+@pytest.mark.parametrize(
+    ("md", "expected"),
+    [
+        (
+            "## one\n<!-- metadata -->\nDescription\n\nbody",
+            "ONE RECIPE\n\nbody",
+        ),
+        (
+            "## one\n## two\nDescription\n\nbody",
+            "ONE RECIPE\nTWO RECIPE\n\nbody",
+        ),
+    ],
+    ids=["metadata-before-description", "consecutive-titles"],
+)
+def test_diagram_to_terminal_preserves_title_and_description_order(
+    monkeypatch: pytest.MonkeyPatch, md: str, expected: str
+) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert diagram_to_terminal(md) == expected

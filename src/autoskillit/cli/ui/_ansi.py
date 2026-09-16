@@ -110,6 +110,31 @@ def permissions_warning() -> str:
     )
 
 
+def _filter_diagram_lines(lines: Sequence[str]) -> list[str]:
+    """Remove markdown syntax that is not part of the terminal diagram."""
+    metadata_prefixes = ("<!--", "Agent-managed:")
+    filtered: list[str] = []
+    in_fenced_block = False
+    suppress_fenced = False
+
+    for line in lines:
+        if line.startswith("```"):
+            if not in_fenced_block:
+                in_fenced_block = True
+                suppress_fenced = len(line) > 3 and not line[3:].isspace()
+            else:
+                in_fenced_block = False
+                suppress_fenced = False
+            continue
+        if in_fenced_block and suppress_fenced:
+            continue
+        if line.startswith(metadata_prefixes):
+            continue
+        filtered.append(line)
+
+    return filtered
+
+
 def diagram_to_terminal(md: str) -> str:
     """Convert a markdown diagram file to clean terminal output.
 
@@ -121,25 +146,10 @@ def diagram_to_terminal(md: str) -> str:
     _C = "\x1b[96m" if color else ""
     _R = "\x1b[0m" if color else ""
 
-    _skip = {"<!--", "Agent-managed:"}
     out: list[str] = []
     in_table_section = False
-    in_fenced_block = False
-    suppress_fenced = False
     saw_title = False
-    for ln in md.splitlines():
-        if ln.startswith("```"):
-            if not in_fenced_block:
-                in_fenced_block = True
-                suppress_fenced = len(ln) > 3 and not ln[3:].isspace()
-            else:
-                in_fenced_block = False
-                suppress_fenced = False
-            continue
-        if in_fenced_block and suppress_fenced:
-            continue
-        if any(ln.startswith(s) for s in _skip):
-            continue
+    for ln in _filter_diagram_lines(md.splitlines()):
         if ln.startswith("## "):
             out.append(f"{_B}{_C}{ln[3:].upper()} RECIPE{_R}")
             saw_title = True
@@ -155,17 +165,13 @@ def diagram_to_terminal(md: str) -> str:
             if ln.startswith("### "):
                 in_table_section = False
                 continue
-            if ln.strip() == "" and not ln.startswith("|"):
+            if ln.strip() == "":
                 in_table_section = False
             else:
                 continue
         if ln.startswith("### "):
             continue
-        out.append(ln)
+        if ln.strip() or not out or out[-1].strip():
+            out.append(ln)
 
-    cleaned: list[str] = []
-    for ln in out:
-        if not ln.strip() and cleaned and not cleaned[-1].strip():
-            continue
-        cleaned.append(ln)
-    return "\n".join(cleaned)
+    return "\n".join(out)

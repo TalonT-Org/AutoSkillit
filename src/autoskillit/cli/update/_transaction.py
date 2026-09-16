@@ -9,8 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
-from enum import IntEnum, StrEnum
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, assert_never
@@ -28,12 +27,23 @@ from autoskillit.cli.install._install_contract import (
 )
 from autoskillit.cli.install._install_info import (
     InstallInfo,
+    UpgradeCommand,
     detect_install,
     release_identity,
     resolve_autoskillit_entrypoint,
     upgrade_command,
 )
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
+from autoskillit.cli.update._transaction_result import (
+    IRREVERSIBLE_PIVOT_PHASE,
+    UPDATE_TRANSACTION_PHASES,
+    UpdateProcessStatus,
+    UpdateTransactionOutcome,
+    UpdateTransactionPhase,
+    UpdateTransactionResult,
+    _TransactionProgress,
+    process_status_for_update_outcome,
+)
 from autoskillit.cli.update._update_checks_source import resolve_target_identity
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
@@ -89,137 +99,6 @@ def _install_root_entrypoint(root: Path) -> Path:
     if sys.platform == "win32":
         return root / "autoskillit" / "Scripts" / "autoskillit.exe"
     return root / "autoskillit" / "bin" / "autoskillit"
-
-
-class UpdateTransactionPhase(StrEnum):
-    """Ordered coordinator phases, independent of caller presentation policy."""
-
-    CALLER_ENV_CAPTURE = "caller-env-capture"
-    PRE_UPDATE_EVIDENCE_CAPTURE = "pre-update-evidence-capture"
-    PLUGIN_OBLIGATION_DERIVATION = "plugin-obligation-derivation"
-    SAFETY_CAPABILITY_PREFLIGHT = "safety-capability-preflight"
-    MAINTENANCE_CONTEXT_CONSTRUCTION = "maintenance-context-construction"
-    UPGRADE_SUBPROCESS_GATE = "upgrade-subprocess-gate"
-    IRREVERSIBLE_PIVOT = "irreversible-pivot"
-    FRESH_VERSION_METADATA_GATE = "fresh-version-metadata-gate"
-    INSTALL_ROOT_GENERATION_PUBLICATION = "install-root-generation-publication"
-    INSTALL_CHILD_INVOCATION = "install-child-invocation"
-    INSTALL_STATUS_RECONSTRUCTION = "install-status-reconstruction"
-    POST_UPDATE_ARTIFACT_VERIFICATION = "post-update-artifact-verification"
-    RESULT_FINALIZATION = "result-finalization"
-
-
-UPDATE_TRANSACTION_PHASES: tuple[UpdateTransactionPhase, ...] = tuple(UpdateTransactionPhase)
-IRREVERSIBLE_PIVOT_PHASE = UpdateTransactionPhase.IRREVERSIBLE_PIVOT
-
-
-class UpdateTransactionOutcome(StrEnum):
-    """Public semantic outcomes of the complete update saga."""
-
-    COMPLETED = "completed"
-    FAILED_UPGRADE = "failed-upgrade"
-    FAILED_INSTALL = "failed-install"
-    FAILED_POSTCONDITION = "failed-postcondition"
-    DECLINED = "declined"
-    DEFERRED = "deferred"
-    RECOVERY_REQUIRED = "recovery-required"
-    INDETERMINATE = "indeterminate"
-
-
-class UpdateProcessStatus(IntEnum):
-    """Stable public statuses for the explicit update process boundary."""
-
-    SUCCESS = int(InstallProcessStatus.SUCCESS)
-    DECLINED = int(InstallProcessStatus.DECLINED)
-    DEFERRED = int(InstallProcessStatus.DEFERRED)
-    FAILED_UPGRADE = int(InstallProcessStatus.FAILED_PREFLIGHT)
-    FAILED_INSTALL = int(InstallProcessStatus.FAILED_CHILD)
-    FAILED_POSTCONDITION = int(InstallProcessStatus.FAILED_POSTCONDITION)
-    RECOVERY_REQUIRED = int(InstallProcessStatus.RECOVERY_REQUIRED)
-    INDETERMINATE = int(InstallProcessStatus.INDETERMINATE)
-
-
-_PROCESS_STATUS_BY_OUTCOME: Mapping[UpdateTransactionOutcome, UpdateProcessStatus] = (
-    MappingProxyType(
-        {
-            UpdateTransactionOutcome.COMPLETED: UpdateProcessStatus.SUCCESS,
-            UpdateTransactionOutcome.DECLINED: UpdateProcessStatus.DECLINED,
-            UpdateTransactionOutcome.DEFERRED: UpdateProcessStatus.DEFERRED,
-            UpdateTransactionOutcome.FAILED_UPGRADE: UpdateProcessStatus.FAILED_UPGRADE,
-            UpdateTransactionOutcome.FAILED_INSTALL: UpdateProcessStatus.FAILED_INSTALL,
-            UpdateTransactionOutcome.FAILED_POSTCONDITION: (
-                UpdateProcessStatus.FAILED_POSTCONDITION
-            ),
-            UpdateTransactionOutcome.RECOVERY_REQUIRED: (UpdateProcessStatus.RECOVERY_REQUIRED),
-            UpdateTransactionOutcome.INDETERMINATE: UpdateProcessStatus.INDETERMINATE,
-        }
-    )
-)
-
-
-def process_status_for_update_outcome(
-    outcome: UpdateTransactionOutcome,
-) -> UpdateProcessStatus:
-    """Return the stable explicit-update process status for ``outcome``."""
-
-    return _PROCESS_STATUS_BY_OUTCOME[outcome]
-
-
-@dataclass(frozen=True, slots=True)
-class UpdateTransactionResult:
-    """Immutable update result and the evidence needed to present it."""
-
-    outcome: UpdateTransactionOutcome
-    expected_version: str | None = None
-    install_result: InstallResult | None = None
-    verified_identity: str | None = None
-    findings: tuple[str, ...] = ()
-    phase_history: tuple[UpdateTransactionPhase, ...] = ()
-    irreversible_pivot_crossed: bool = False
-
-
-class _TransactionProgress:
-    """Enforce the phase prefix and the single terminal finalization transition."""
-
-    __slots__ = ("_history", "_pivot_crossed")
-
-    def __init__(self) -> None:
-        self._history: list[UpdateTransactionPhase] = []
-        self._pivot_crossed = False
-
-    def enter(self, phase: UpdateTransactionPhase) -> None:
-        if phase is UpdateTransactionPhase.RESULT_FINALIZATION:
-            if self._history and self._history[-1] is phase:
-                raise RuntimeError("Update transaction was finalized more than once")
-        else:
-            expected = UPDATE_TRANSACTION_PHASES[len(self._history)]
-            if phase is not expected:
-                raise RuntimeError(
-                    f"Invalid update phase transition: expected {expected}, observed {phase}"
-                )
-        self._history.append(phase)
-        if phase is IRREVERSIBLE_PIVOT_PHASE:
-            self._pivot_crossed = True
-
-    def finish(
-        self,
-        outcome: UpdateTransactionOutcome,
-        *,
-        expected_version: str | None = None,
-        install_result: InstallResult | None = None,
-        verified_identity: str | None = None,
-        findings: tuple[str, ...] = (),
-    ) -> UpdateTransactionResult:
-        self.enter(UpdateTransactionPhase.RESULT_FINALIZATION)
-        return UpdateTransactionResult(
-            outcome=outcome,
-            expected_version=expected_version,
-            install_result=install_result,
-            verified_identity=verified_identity,
-            findings=findings,
-            phase_history=tuple(self._history),
-            irreversible_pivot_crossed=self._pivot_crossed,
-        )
 
 
 def _upgrade_failure(
@@ -327,6 +206,126 @@ def _resolve_fresh_version(
     if fresh_version_prober is not None:
         return fresh_version_prober(info, maintenance_env, runner)
     return _default_fresh_version_prober(info, maintenance_env, runner, cwd=cwd)
+
+
+def _verify_fresh_version_advance(
+    *,
+    progress: _TransactionProgress,
+    info: InstallInfo,
+    command: UpgradeCommand,
+    install_root_staging: Path,
+    maintenance_env: Mapping[str, str],
+    runner: _ProcessRunner,
+    fresh_version_prober: _VersionProber | None,
+    working_dir: Path,
+    previous: ReleaseIdentity,
+    target: ReleaseIdentity | None,
+    staged_identity_reader: _StagedIdentityReader | None,
+) -> tuple[str, ReleaseIdentity] | UpdateTransactionResult:
+    """Verify the fresh distribution identity and channel-specific advance."""
+    try:
+        # A retargeted install landed at install_root_staging, not at any
+        # path the ambient PATH or the pre-pivot entrypoint resolves to —
+        # probe that binary directly rather than the default ambient
+        # resolution _default_fresh_version_prober would otherwise use.
+        probe_info = (
+            replace(
+                info,
+                entrypoint=_install_root_entrypoint(install_root_staging),
+            )
+            if command.env
+            else info
+        )
+        expected_version = _resolve_fresh_version(
+            info=probe_info,
+            maintenance_env=maintenance_env,
+            runner=runner,
+            fresh_version_prober=fresh_version_prober,
+            cwd=working_dir,
+        )
+        if previous.channel is ReleaseChannel.BRANCH:
+            read_staged_identity = staged_identity_reader or parse_direct_url
+            staged_identity = read_staged_identity(install_root_staging)
+            staged_commit = staged_identity["commit_id"] if staged_identity is not None else None
+            if staged_commit is None:
+                return _upgrade_failure(
+                    progress,
+                    "Could not read the staged branch commit identity after upgrade.",
+                )
+            observed = ReleaseIdentity(
+                ReleaseChannel.BRANCH,
+                version=expected_version,
+                commit=staged_commit,
+                ref=info.requested_revision,
+            )
+        else:
+            observed = ReleaseIdentity(previous.channel, version=expected_version)
+        verdict = advance_verdict(
+            previous=previous,
+            observed=observed,
+            target=target,
+        )
+        if verdict not in (
+            AdvanceVerdict.ADVANCED,
+            AdvanceVerdict.NOT_APPLICABLE,
+        ):
+            return _upgrade_failure(
+                progress,
+                _advance_failure_message(verdict, previous, observed, target),
+            )
+    except Exception as exc:
+        _report_post_pivot_failure("update_post_upgrade_metadata_failed")
+        return _upgrade_failure(
+            progress,
+            f"Could not verify post-upgrade autoskillit metadata: {exc}",
+        )
+    return expected_version, observed
+
+
+def _verify_required_plugin_artifact(
+    *,
+    progress: _TransactionProgress,
+    home: Path,
+    expected_version: str,
+    install_result: InstallResult,
+) -> tuple[str | None, tuple[str, ...]] | UpdateTransactionResult:
+    """Read and validate the required plugin generation's exact identity."""
+    try:
+        from autoskillit.core import (
+            installed_plugin_artifact_manifest_path,
+            read_installed_plugin_artifact_identity,
+            resolve_current_generation,
+        )
+
+        gen_root = resolve_current_generation(
+            home,
+            _AUTOSKILLIT_PLUGIN_KEY,
+            expected_version,
+        )
+        verification_findings: tuple[str, ...]
+        if gen_root is None:
+            verified_identity = None
+            verification_findings = ("No current generation found after install",)
+        else:
+            gen_identity = read_installed_plugin_artifact_identity(
+                gen_root,
+                expected_semantic_key=installed_plugin_semantic_key(
+                    _AUTOSKILLIT_PLUGIN_KEY,
+                    expected_version,
+                ),
+                manifest_path=installed_plugin_artifact_manifest_path(gen_root),
+            )
+            verified_identity = gen_identity.semantic_key
+            verification_findings = ()
+    except Exception as exc:
+        _report_post_pivot_failure("update_artifact_verification_failed")
+        return progress.finish(
+            UpdateTransactionOutcome.FAILED_POSTCONDITION,
+            expected_version=expected_version,
+            install_result=install_result,
+            findings=(f"Installed plugin verification failed: {exc}",),
+        )
+    return verified_identity, verification_findings
 
 
 def _map_install_result(
@@ -541,65 +540,22 @@ def run_update_transaction(
 
         progress.enter(UpdateTransactionPhase.IRREVERSIBLE_PIVOT)
         progress.enter(UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
-        try:
-            # A retargeted install landed at install_root_staging, not at any
-            # path the ambient PATH or the pre-pivot entrypoint resolves to —
-            # probe that binary directly rather than the default ambient
-            # resolution _default_fresh_version_prober would otherwise use.
-            probe_info = (
-                replace(
-                    info,
-                    entrypoint=_install_root_entrypoint(install_root_staging),
-                )
-                if command.env
-                else info
-            )
-            expected_version = _resolve_fresh_version(
-                info=probe_info,
-                maintenance_env=maintenance_env,
-                runner=runner,
-                fresh_version_prober=fresh_version_prober,
-                cwd=working_dir,
-            )
-            if previous.channel is ReleaseChannel.BRANCH:
-                read_staged_identity = staged_identity_reader or parse_direct_url
-                staged_identity = read_staged_identity(install_root_staging)
-                staged_commit = (
-                    staged_identity["commit_id"] if staged_identity is not None else None
-                )
-                if staged_commit is None:
-                    return _upgrade_failure(
-                        progress,
-                        "Could not read the staged branch commit identity after upgrade.",
-                    )
-                assert info.requested_revision is not None
-                observed = ReleaseIdentity(
-                    ReleaseChannel.BRANCH,
-                    version=expected_version,
-                    commit=staged_commit,
-                    ref=info.requested_revision,
-                )
-            else:
-                observed = ReleaseIdentity(previous.channel, version=expected_version)
-            verdict = advance_verdict(
-                previous=previous,
-                observed=observed,
-                target=target,
-            )
-            if verdict not in (
-                AdvanceVerdict.ADVANCED,
-                AdvanceVerdict.NOT_APPLICABLE,
-            ):
-                return _upgrade_failure(
-                    progress,
-                    _advance_failure_message(verdict, previous, observed, target),
-                )
-        except Exception as exc:
-            _report_post_pivot_failure("update_post_upgrade_metadata_failed")
-            return _upgrade_failure(
-                progress,
-                f"Could not verify post-upgrade autoskillit metadata: {exc}",
-            )
+        fresh_verification = _verify_fresh_version_advance(
+            progress=progress,
+            info=info,
+            command=command,
+            install_root_staging=install_root_staging,
+            maintenance_env=maintenance_env,
+            runner=runner,
+            fresh_version_prober=fresh_version_prober,
+            working_dir=working_dir,
+            previous=previous,
+            target=target,
+            staged_identity_reader=staged_identity_reader,
+        )
+        if isinstance(fresh_verification, UpdateTransactionResult):
+            return fresh_verification
+        expected_version, observed = fresh_verification
 
         progress.enter(UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION)
         if command.env:
@@ -756,42 +712,15 @@ def run_update_transaction(
                 install_result=install_result,
             )
 
-        try:
-            from autoskillit.core import (
-                installed_plugin_artifact_manifest_path,
-                read_installed_plugin_artifact_identity,
-                resolve_current_generation,
-            )
-
-            gen_root = resolve_current_generation(
-                resolved_home,
-                _AUTOSKILLIT_PLUGIN_KEY,
-                expected_version,
-            )
-            verified_identity: str | None
-            verification_findings: tuple[str, ...]
-            if gen_root is None:
-                verified_identity = None
-                verification_findings = ("No current generation found after install",)
-            else:
-                gen_identity = read_installed_plugin_artifact_identity(
-                    gen_root,
-                    expected_semantic_key=installed_plugin_semantic_key(
-                        _AUTOSKILLIT_PLUGIN_KEY,
-                        expected_version,
-                    ),
-                    manifest_path=installed_plugin_artifact_manifest_path(gen_root),
-                )
-                verified_identity = gen_identity.semantic_key
-                verification_findings = ()
-        except Exception as exc:
-            _report_post_pivot_failure("update_artifact_verification_failed")
-            return progress.finish(
-                UpdateTransactionOutcome.FAILED_POSTCONDITION,
-                expected_version=expected_version,
-                install_result=install_result,
-                findings=(f"Installed plugin verification failed: {exc}",),
-            )
+        artifact_verification = _verify_required_plugin_artifact(
+            progress=progress,
+            home=resolved_home,
+            expected_version=expected_version,
+            install_result=install_result,
+        )
+        if isinstance(artifact_verification, UpdateTransactionResult):
+            return artifact_verification
+        verified_identity, verification_findings = artifact_verification
 
         has_error = bool(verification_findings)
         if has_error or verified_identity is None:

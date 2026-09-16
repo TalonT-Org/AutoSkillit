@@ -262,8 +262,8 @@ def test_session_skill_manager_managed_catalog_is_context_manager_boundary():
     ("test_file", "class_name"),
     [
         pytest.param(
-            "tests/cli/test_session_launch.py",
-            "_LifecycleManager",
+            "tests/cli/_cook_launch_helpers.py",
+            "RecordingLifecycle",
             id="session-launch-lifecycle-manager",
         ),
         pytest.param(

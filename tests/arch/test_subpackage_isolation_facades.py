@@ -180,6 +180,7 @@ def test_update_decomposition_has_expected_siblings() -> None:
         "__init__",
         "_obligation_repair",
         "_transaction",
+        "_transaction_result",
         "_update",
         "_update_checks",
         "_update_checks_fetch",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
 
 from autoskillit.config import load_config
@@ -32,36 +33,38 @@ def _format_age(seconds: float) -> str:
     return f"{int(seconds // 86400)}d ago"
 
 
-async def run_workspace_clean(
-    *,
-    dir: str | None = None,
-    force: bool = False,
-    project_root: Path | None = None,
-) -> None:
-    """Core logic for ``workspace clean`` — partitions, displays, confirms, deletes."""
-    project_root = project_root or Path.cwd()
-    cfg = load_config(project_root)
-    base = Path(dir).resolve() if dir else project_root.parent
-    now = time.time()
-    threshold = _STALE_THRESHOLD_SECONDS
+def _partition_cleanup_paths(
+    paths: Iterable[Path], *, now: float, threshold: float
+) -> tuple[list[tuple[Path, float]], list[tuple[Path, float]]]:
+    """Partition ordered paths into stale and recent entries, retaining their ages."""
+    stale: list[tuple[Path, float]] = []
+    recent: list[tuple[Path, float]] = []
+    for path in paths:
+        mtime = safe_mtime(path)
+        if mtime is None:
+            continue
+        age = now - mtime
+        if age >= threshold:
+            stale.append((path, age))
+        else:
+            recent.append((path, age))
+    return stale, recent
 
-    # --- Clone runs ---
-    runs_dir = Path(cfg.workspace.runs_root) if cfg.workspace.runs_root else base / RUNS_DIR
+
+def _clean_run_directories(
+    *,
+    runs_dir: Path,
+    base: Path,
+    force: bool,
+    now: float,
+    threshold: float,
+) -> bool:
+    """Return whether a declined run-directory prompt aborts the command."""
     if not runs_dir.is_dir():
         print(f"No {RUNS_DIR}/ directory found under: {base}")
     else:
-        stale: list[tuple[Path, float]] = []
-        recent: list[tuple[Path, float]] = []
-        for entry in sorted(runs_dir.iterdir()):
-            if entry.is_dir():
-                mtime = safe_mtime(entry)
-                if mtime is None:
-                    continue
-                age = now - mtime
-                if age >= threshold:
-                    stale.append((entry, age))
-                else:
-                    recent.append((entry, age))
+        paths = (entry for entry in sorted(runs_dir.iterdir()) if entry.is_dir())
+        stale, recent = _partition_cleanup_paths(paths, now=now, threshold=threshold)
 
         if recent:
             print("Skipped (modified < 5h ago):")
@@ -89,7 +92,7 @@ async def run_workspace_clean(
                 )
                 if answer.lower() != "y":
                     print("Aborted.")
-                    return
+                    return True
 
             count = 0
             errors = 0
@@ -105,48 +108,29 @@ async def run_workspace_clean(
             suffix = "ies" if count != 1 else "y"
             err_note = f" ({errors} error(s))" if errors else ""
             print(f"\nCleaned {count} director{suffix}{err_note}")
+    return False
 
-    # --- Git worktrees ---
-    worktrees_dir = (
-        Path(cfg.workspace.worktree_root) if cfg.workspace.worktree_root else base / WORKTREES_DIR
-    )
-    if not worktrees_dir.exists():
-        print(f"No {WORKTREES_DIR}/ directory found under: {base}")
-        return
 
-    runner = DefaultSubprocessRunner()
-    git_worktrees = set(await list_git_worktrees(project_root, worktrees_dir, runner))
-    try:
-        fs_worktrees = {entry.path for entry in scan_observed(worktrees_dir) if entry.is_dir}
-    except VANISHED_ERRORS:
-        fs_worktrees = set()
-    all_worktrees = git_worktrees | fs_worktrees
-
-    # Filter out stale git-registered paths that no longer exist on disk.
-    stale_wts: list[tuple[Path, float]] = []
-    recent_wts: list[tuple[Path, float]] = []
-    for p in sorted(all_worktrees):
-        mtime = safe_mtime(p)
-        if mtime is None:
-            continue
-        if now - mtime >= threshold:
-            stale_wts.append((p, mtime))
-        else:
-            recent_wts.append((p, mtime))
-
+def _confirm_worktree_cleanup(
+    *,
+    worktrees_dir: Path,
+    stale_wts: list[tuple[Path, float]],
+    recent_wts: list[tuple[Path, float]],
+    force: bool,
+) -> bool:
     if recent_wts:
         print("Skipped worktrees (modified < 5h ago):")
-        for wt, wt_mtime in recent_wts:
-            print(f"  {wt.name}  ({_format_age(now - wt_mtime)})")
+        for wt, age in recent_wts:
+            print(f"  {wt.name}  ({_format_age(age)})")
         print()
 
     if not stale_wts:
         print(f"Nothing to clean in {worktrees_dir}")
-        return
+        return False
 
     print("Will remove worktrees:")
-    for wt, wt_mtime in stale_wts:
-        print(f"  {wt.name}  ({_format_age(now - wt_mtime)})")
+    for wt, age in stale_wts:
+        print(f"  {wt.name}  ({_format_age(age)})")
     print()
 
     if not force:
@@ -161,7 +145,43 @@ async def run_workspace_clean(
         )
         if answer.lower() != "y":
             print("Aborted.")
-            return
+            return False
+    return True
+
+
+async def _clean_worktrees(
+    *,
+    project_root: Path,
+    worktrees_dir: Path,
+    base: Path,
+    force: bool,
+    now: float,
+    threshold: float,
+) -> None:
+    if not worktrees_dir.exists():
+        print(f"No {WORKTREES_DIR}/ directory found under: {base}")
+        return
+
+    runner = DefaultSubprocessRunner()
+    git_worktrees = set(await list_git_worktrees(project_root, worktrees_dir, runner))
+    try:
+        fs_worktrees = {entry.path for entry in scan_observed(worktrees_dir) if entry.is_dir}
+    except VANISHED_ERRORS:
+        fs_worktrees = set()
+    all_worktrees = git_worktrees | fs_worktrees
+
+    # Filter out stale git-registered paths that no longer exist on disk.
+    stale_wts, recent_wts = _partition_cleanup_paths(
+        sorted(all_worktrees), now=now, threshold=threshold
+    )
+
+    if not _confirm_worktree_cleanup(
+        worktrees_dir=worktrees_dir,
+        stale_wts=stale_wts,
+        recent_wts=recent_wts,
+        force=force,
+    ):
+        return
 
     for wt, _ in stale_wts:
         wt_result = await remove_git_worktree(wt, project_root, runner)
@@ -174,3 +194,38 @@ async def run_workspace_clean(
                 print(f"Failed to remove sidecar {fail_path}: {fail_err}", file=sys.stderr)
         if wt_result.success and sidecar_result.success:
             print(f"Removed worktree: {wt.name}")
+
+
+async def run_workspace_clean(
+    *,
+    dir: str | None = None,
+    force: bool = False,
+    project_root: Path | None = None,
+) -> None:
+    """Core logic for ``workspace clean`` — partitions, displays, confirms, deletes."""
+    project_root = project_root or Path.cwd()
+    cfg = load_config(project_root)
+    base = Path(dir).resolve() if dir else project_root.parent
+    now = time.time()
+    threshold = _STALE_THRESHOLD_SECONDS
+
+    # --- Clone runs ---
+    runs_dir = Path(cfg.workspace.runs_root) if cfg.workspace.runs_root else base / RUNS_DIR
+    prompt_aborted = _clean_run_directories(
+        runs_dir=runs_dir, base=base, force=force, now=now, threshold=threshold
+    )
+    if prompt_aborted:
+        return
+
+    # --- Git worktrees ---
+    worktrees_dir = (
+        Path(cfg.workspace.worktree_root) if cfg.workspace.worktree_root else base / WORKTREES_DIR
+    )
+    await _clean_worktrees(
+        project_root=project_root,
+        worktrees_dir=worktrees_dir,
+        base=base,
+        force=force,
+        now=now,
+        threshold=threshold,
+    )

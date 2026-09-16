@@ -92,12 +92,13 @@ def _drain_pty(
             diagnostics.extend(chunk)
             del diagnostics[:-8192]
             accumulated = bytes(diagnostics).lower()
-            if b"\x1b[6n" in chunk:
-                os.write(master_fd, b"\x1b[1;1R")
-            if b"\x1b]10;?\x1b\\" in chunk:
-                os.write(master_fd, b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\")
-            if b"\x1b]11;?\x1b\\" in chunk:
-                os.write(master_fd, b"\x1b]11;rgb:0000/0000/0000\x1b\\")
+            for query, response in (
+                (b"\x1b[6n", b"\x1b[1;1R"),
+                (b"\x1b]10;?\x1b\\", b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\"),
+                (b"\x1b]11;?\x1b\\", b"\x1b]11;rgb:0000/0000/0000\x1b\\"),
+            ):
+                if query in chunk:
+                    os.write(master_fd, response)
             if b"Choose" in chunk and b"text" in chunk and "theme" not in responded:
                 responded.add("theme")
                 os.write(master_fd, b"\r")
@@ -216,6 +217,37 @@ def _codex_backend_enabled() -> bool:
         return is_feature_enabled("codex_backend", {}, experimental_enabled=False)
     except Exception:
         return False
+
+
+def _cleanup_backend_lifecycle(
+    *,
+    stop_drain: threading.Event,
+    drain: threading.Thread,
+    slave_fd: int,
+    master_fd: int,
+    client: subprocess.Popen[bytes] | None,
+    daemon: psutil.Process | None,
+    client_tree: list[psutil.Process],
+    launch_id: str,
+) -> None:
+    stop_drain.set()
+    if drain.is_alive():
+        drain.join(timeout=1)
+    if slave_fd >= 0:
+        with contextlib.suppress(OSError):
+            os.close(slave_fd)
+    if master_fd >= 0:
+        with contextlib.suppress(OSError):
+            os.close(master_fd)
+    if client is not None and client.poll() is None:
+        client.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            client.wait(timeout=3)
+    _terminate(daemon)
+    for process in reversed(client_tree):
+        _terminate(process)
+    for process in _matching_launch_processes(launch_id):
+        _terminate(process)
 
 
 @pytest.mark.parametrize(
@@ -375,21 +407,13 @@ def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
 
         assert _wait_dead(daemon, timeout=10), diagnostics.decode(errors="replace")
     finally:
-        stop_drain.set()
-        if drain.is_alive():
-            drain.join(timeout=1)
-        if slave_fd >= 0:
-            with contextlib.suppress(OSError):
-                os.close(slave_fd)
-        if master_fd >= 0:
-            with contextlib.suppress(OSError):
-                os.close(master_fd)
-        if client is not None and client.poll() is None:
-            client.kill()
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                client.wait(timeout=3)
-        _terminate(daemon)
-        for process in reversed(client_tree):
-            _terminate(process)
-        for process in _matching_launch_processes(launch_id):
-            _terminate(process)
+        _cleanup_backend_lifecycle(
+            stop_drain=stop_drain,
+            drain=drain,
+            slave_fd=slave_fd,
+            master_fd=master_fd,
+            client=client,
+            daemon=daemon,
+            client_tree=client_tree,
+            launch_id=launch_id,
+        )

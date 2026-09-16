@@ -200,7 +200,7 @@ def test_cook_attempt_uses_only_the_shared_spawn_bound_owner() -> None:
     run_attempt = _function(process_tree, "run_cook_attempt")
     assert _calls_in(run_attempt, owner="subprocess", attr="Popen") == []
     spawn_calls = _named_calls_in(run_attempt, name="spawn_owned_process")
-    assert len(spawn_calls) == 2
+    assert len(spawn_calls) == 1
     terminal_guard = _with_context_calls(run_attempt, name="terminal_guard")[0]
     assert terminal_guard.end_lineno is not None
     assert all(
@@ -281,7 +281,7 @@ def test_terminal_and_lease_ownership_are_not_duplicated_across_pty_layers() -> 
 
     assert len(_with_context_calls(run_attempt, name="terminal_guard")) == 1
     assert _calls_in(run_attempt, owner="subprocess", attr="Popen") == []
-    assert len(_named_calls_in(run_attempt, name="spawn_owned_process")) == 2
+    assert len(_named_calls_in(run_attempt, name="spawn_owned_process")) == 1
     assert _calls_in(process_tree, owner="os", attr="tcsetpgrp")
     assert _attributes_in(process_tree, owner="fcntl", attr="LOCK_UN") == []
     assert not any(

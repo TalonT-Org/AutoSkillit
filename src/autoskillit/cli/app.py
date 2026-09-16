@@ -40,6 +40,8 @@ from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
     from autoskillit.core import ManagedWorkerCapacity, SkillResult
+    from autoskillit.migration import MigrationEngine, MigrationFile
+    from autoskillit.workspace import SkillInfo
 
 logger = get_logger(__name__)
 
@@ -458,25 +460,14 @@ def migrate(*, check: bool = False, fix: bool = False):
         raise SystemExit(1)
 
 
-def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
-    """Report — and, with fix=True, apply — pending project-local skill migrations."""
-    from autoskillit.core import SKILL_CONTRACT_REMEDIATIONS, RemediationAction
-    from autoskillit.migration import default_migration_engine
+def _report_pending_skill_migrations(
+    project_dir: Path,
+    pending_skills: list[MigrationFile],
+) -> dict[str, SkillInfo | None]:
     from autoskillit.workspace import (
         DefaultSkillResolver,
-        SkillInfo,
-        SkillInvalidity,
         invalidity_hints,
     )
-
-    engine = default_migration_engine()
-    skill_adapter = engine.get_adapter("skill")
-    if skill_adapter is None:
-        return False
-    skill_files = skill_adapter.discover(project_dir)
-    pending_skills = [f for f in skill_files if skill_adapter.needs_migration(f)]
-    if not pending_skills:
-        return False
 
     resolver = DefaultSkillResolver()
     print(f"\n{len(pending_skills)} project-local skill(s) need migration:\n")
@@ -489,63 +480,91 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
         print(f"  {skill_file.name} ({skill_file.path}): {', '.join(kinds)}")
         for hint in hints:
             print(f"    - {hint}")
+    return pending_info
+
+
+def _migrate_skill_file(
+    engine: MigrationEngine,
+    skill_file: MigrationFile,
+    *,
+    temp_dir: Path,
+    info: SkillInfo | None,
+) -> bool:
+    import asyncio
+
+    from autoskillit.core import SKILL_CONTRACT_REMEDIATIONS, RemediationAction
+    from autoskillit.workspace import SkillInvalidity, invalidity_hints
+
+    async def _no_headless_runner(*_args: object, **_kwargs: object) -> SkillResult:
+        raise RuntimeError("skill migrations never require a headless runner")
+
+    try:
+        result = asyncio.run(
+            engine.migrate_file(
+                skill_file,
+                run_headless=_no_headless_runner,
+                temp_dir=temp_dir,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
+        logger.error(
+            "skill_migration_failed",
+            skill=skill_file.name,
+            path=str(skill_file.path),
+            exc_info=True,
+        )
+        print(f"  FAILED: {skill_file.name}: {exc}")
+        return True
+    if not result.success:
+        print(f"  FAILED: {skill_file.name}: {result.error}")
+        return True
+
+    fixed_kinds: set[str] = set()
+    remaining_advisory: list[SkillInvalidity] = []
+    if info is not None:
+        for item in info.invalidities:
+            if SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC:
+                fixed_kinds.add(item.kind.value)
+            else:
+                remaining_advisory.append(item)
+    suffix = f" ({', '.join(sorted(fixed_kinds))})" if fixed_kinds else ""
+    print(f"  fixed: {skill_file.name}{suffix}")
+    for hint in invalidity_hints(remaining_advisory):
+        print(f"    - {hint}")
+    return False
+
+
+def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
+    """Report — and, with fix=True, apply — pending project-local skill migrations."""
+    from autoskillit.migration import default_migration_engine
+
+    engine = default_migration_engine()
+    skill_adapter = engine.get_adapter("skill")
+    if skill_adapter is None:
+        return False
+    skill_files = skill_adapter.discover(project_dir)
+    pending_skills = [f for f in skill_files if skill_adapter.needs_migration(f)]
+    if not pending_skills:
+        return False
+
+    pending_info = _report_pending_skill_migrations(project_dir, pending_skills)
 
     if not fix:
         print("\nRun `autoskillit migrate --fix` to apply deterministic fixes.")
         return False
 
-    import asyncio
-
     from autoskillit.core import resolve_temp_dir
-
-    async def _no_headless_runner(*_args: object, **_kwargs: object) -> SkillResult:
-        raise RuntimeError("skill migrations never require a headless runner")
 
     temp_dir = resolve_temp_dir(project_dir, None)
     print()
     had_failures = False
     for skill_file in pending_skills:
-        try:
-            result = asyncio.run(
-                engine.migrate_file(
-                    skill_file,
-                    run_headless=_no_headless_runner,
-                    temp_dir=temp_dir,
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
-            had_failures = True
-            logger.error(
-                "skill_migration_failed",
-                skill=skill_file.name,
-                path=str(skill_file.path),
-                exc_info=True,
-            )
-            print(f"  FAILED: {skill_file.name}: {exc}")
-            continue
-        if result.success:
-            # Per-file results: which kinds this deterministic fix addressed,
-            # plus hints for any ADVISORY kinds left on the same file (a
-            # DETERMINISTIC fix never touches co-occurring ADVISORY defects).
-            info = pending_info.get(skill_file.name)
-            fixed_kinds: set[str] = set()
-            remaining_advisory: list[SkillInvalidity] = []
-            if info is not None:
-                for item in info.invalidities:
-                    if (
-                        SKILL_CONTRACT_REMEDIATIONS[item.kind].action
-                        is RemediationAction.DETERMINISTIC
-                    ):
-                        fixed_kinds.add(item.kind.value)
-                    else:
-                        remaining_advisory.append(item)
-            suffix = f" ({', '.join(sorted(fixed_kinds))})" if fixed_kinds else ""
-            print(f"  fixed: {skill_file.name}{suffix}")
-            for hint in invalidity_hints(remaining_advisory):
-                print(f"    - {hint}")
-        else:
-            had_failures = True
-            print(f"  FAILED: {skill_file.name}: {result.error}")
+        had_failures |= _migrate_skill_file(
+            engine,
+            skill_file,
+            temp_dir=temp_dir,
+            info=pending_info.get(skill_file.name),
+        )
     return had_failures
 
 

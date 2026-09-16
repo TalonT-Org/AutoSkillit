@@ -626,10 +626,10 @@ def _launch_cook_session_calls() -> list:
     ]
 
 
-def test_session_order_has_exactly_three_launch_cook_session_call_sites() -> None:
+def test_session_order_has_exactly_one_launch_cook_session_call_site() -> None:
     calls = _launch_cook_session_calls()
-    assert len(calls) == 3, (
-        f"Expected exactly 3 _launch_cook_session() call sites in _session_order.py, "
+    assert len(calls) == 1, (
+        f"Expected exactly 1 _launch_cook_session() call site in _session_order.py, "
         f"found {len(calls)}"
     )
 

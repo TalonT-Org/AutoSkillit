@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from cyclopts import App
 
@@ -49,10 +50,9 @@ def _get_valid_lens_slugs() -> set[str]:
     return {d.name for d in skills_extended.iterdir() if d.is_dir() and "-lens-" in d.name}
 
 
-def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> ValidationResult:
-    errors: list[str] = []
-    warnings: list[str] = []
-
+def _load_registry_mapping(
+    path: Path,
+) -> tuple[str, dict[str, Any]] | ValidationResult:
     try:
         raw_content = path.read_text(encoding="utf-8")
     except OSError as e:
@@ -82,6 +82,18 @@ def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> Valida
             warnings=[],
             raw_content=raw_content,
         )
+
+    return raw_content, data
+
+
+def _validate_experiment_type_file(path: Path, valid_lenses: set[str]) -> ValidationResult:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    loaded = _load_registry_mapping(path)
+    if isinstance(loaded, ValidationResult):
+        return loaded
+    raw_content, data = loaded
 
     if data.get("classification_triggers") is None:
         data["classification_triggers"] = []
@@ -134,35 +146,10 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
 
-    try:
-        raw_content = path.read_text(encoding="utf-8")
-    except OSError as e:
-        return ValidationResult(
-            filename=path.name,
-            path=path,
-            errors=[f"Cannot read file: {e}"],
-            warnings=[],
-        )
-
-    try:
-        data = load_yaml(path)
-    except YAMLError as e:
-        return ValidationResult(
-            filename=path.name,
-            path=path,
-            errors=[f"YAML parse error: {e}"],
-            warnings=[],
-            raw_content=raw_content,
-        )
-
-    if not isinstance(data, dict):
-        return ValidationResult(
-            filename=path.name,
-            path=path,
-            errors=[f"YAML root must be a mapping, got {type(data).__name__}"],
-            warnings=[],
-            raw_content=raw_content,
-        )
+    loaded = _load_registry_mapping(path)
+    if isinstance(loaded, ValidationResult):
+        return loaded
+    raw_content, data = loaded
 
     if data.get("detection_keywords") is None:
         data["detection_keywords"] = []
@@ -201,6 +188,24 @@ def _validate_methodology_tradition_file(path: Path) -> ValidationResult:
     )
 
 
+def _collect_registry_results(
+    et_dir: Path,
+    mt_dir: Path,
+    valid_lenses: set[str],
+) -> tuple[list[ValidationResult], list[ValidationResult]]:
+    et_results: list[ValidationResult] = []
+    if et_dir.exists():
+        for path in sorted(et_dir.glob("*.yaml")):
+            et_results.append(_validate_experiment_type_file(path, valid_lenses))
+
+    mt_results: list[ValidationResult] = []
+    if mt_dir.exists():
+        for path in sorted(mt_dir.glob("*.yaml")):
+            mt_results.append(_validate_methodology_tradition_file(path))
+
+    return et_results, mt_results
+
+
 def _check_fallback_uniqueness(
     user_results: list[ValidationResult], bundled_types: dict[str, ExperimentTypeSpec]
 ) -> list[str]:
@@ -232,6 +237,17 @@ def _check_fallback_uniqueness(
             )
 
     return fallback_errors
+
+
+def _attach_fallback_errors(
+    et_results: list[ValidationResult], bundled_types: dict[str, ExperimentTypeSpec]
+) -> None:
+    fallback_errors = _check_fallback_uniqueness(et_results, bundled_types)
+    for result in et_results:
+        if result.spec_name:
+            for error in fallback_errors:
+                if f"'{result.spec_name}'" in error:
+                    result.errors.append(error)
 
 
 def _write_error_report(
@@ -368,27 +384,10 @@ def validate_registries() -> None:
 
     valid_lenses = _get_valid_lens_slugs()
 
-    et_results: list[ValidationResult] = []
-    if et_dir.exists():
-        for path in sorted(et_dir.glob("*.yaml")):
-            result = _validate_experiment_type_file(path, valid_lenses)
-            et_results.append(result)
-
-    mt_results: list[ValidationResult] = []
-    if mt_dir.exists():
-        for path in sorted(mt_dir.glob("*.yaml")):
-            result = _validate_methodology_tradition_file(path)
-            mt_results.append(result)
+    et_results, mt_results = _collect_registry_results(et_dir, mt_dir, valid_lenses)
 
     bundled_types = load_types_from_dir(BUNDLED_EXPERIMENT_TYPES_DIR)
-    fallback_errors = _check_fallback_uniqueness(et_results, bundled_types)
-
-    if fallback_errors:
-        for result in et_results:
-            if result.spec_name:
-                for error in fallback_errors:
-                    if f"'{result.spec_name}'" in error:
-                        result.errors.append(error)
+    _attach_fallback_errors(et_results, bundled_types)
 
     print(_format_stdout_report(et_results, mt_results))
 

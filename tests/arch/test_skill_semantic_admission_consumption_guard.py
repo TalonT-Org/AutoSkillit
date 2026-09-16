@@ -46,7 +46,7 @@ _EXPECTED_CALLERS = Counter(
         ): 1,
         (_COMPILE, "cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         (_COMPILE, "cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,
-        (_ADAPT, "cli/doctor/_doctor_config.py", "_check_standing_backend_pins_feasibility"): 1,
+        (_ADAPT, "cli/doctor/_doctor_config.py", "_check_target_step_semantics"): 1,
         (_ADAPT, "server/tools/_preflight.py", "check_skill_semantic_feasibility"): 1,
         (_ADAPT, "workspace/_projected_artifact/authority.py", "_plan"): 1,
         (

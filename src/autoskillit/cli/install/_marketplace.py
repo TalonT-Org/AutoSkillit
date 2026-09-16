@@ -247,6 +247,107 @@ def _verify_cleanup(settings_path: Path, fetch_cache_path: Path) -> None:
     )
 
 
+def _publish_install_generation(
+    *,
+    install_request: InstallRequest,
+    effective_scope: str,
+    operation_cwd: Path,
+    expected_version: str,
+    plugin_ref: str,
+) -> InstallResult:
+    from autoskillit.cli.install._plugin_artifact import installed_plugin_semantic_key
+    from autoskillit.core import _InstallLock
+    from autoskillit.workspace import publish_generation, reconcile_install_artifacts
+
+    settings_path = _hooks_mod._claude_settings_path(
+        effective_scope,
+        cwd=operation_cwd,
+    )
+    home = managed_home()
+    try:
+        with _InstallLock(home):
+            try:
+                for repaired in reconcile_install_artifacts(home=home):
+                    print(f"Repaired legacy install artifact: ~/{repaired}")
+
+                # Stage and publish the marketplace projection for metadata
+                _ensure_marketplace(
+                    cwd=operation_cwd,
+                    version=expected_version,
+                    home=home,
+                )
+                if install_request.mode is InstallMode.DIRECT:
+                    _ensure_workspace_ready(cwd=operation_cwd)
+
+                # Build the source root for the generation
+                marketplace_plugin_root = (
+                    home.autoskillit_dir / "marketplace" / "plugins" / "autoskillit"
+                )
+
+                semantic_key = installed_plugin_semantic_key(
+                    plugin_ref,
+                    expected_version,
+                )
+
+                try:
+                    identity = publish_generation(
+                        home=home,
+                        plugin_ref=plugin_ref,
+                        version=expected_version,
+                        semantic_key=semantic_key,
+                        source_root=marketplace_plugin_root,
+                    )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise _InstallFailed(
+                        InstallFailureKind.POSTCONDITION,
+                        f"Failed to publish plugin generation: {exc}",
+                    ) from exc
+
+                verified_identity = identity.semantic_key
+
+                # Clean up stale registrations
+                if evict_direct_mcp_entry(_user_claude_json_path()):
+                    print("Removed stale direct MCP entry from ~/.claude.json")
+                _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
+                from autoskillit.cli.update._update_checks import invalidate_fetch_cache
+
+                invalidate_fetch_cache(home.root)
+                _verify_cleanup(settings_path, _fetch_cache_path(home.root))
+
+            except _InstallFailed as exc:
+                return _typed_result(
+                    InstallOutcome.FAILED,
+                    failure_kind=exc.kind,
+                    findings=(f"{exc.kind.value} failure: {exc}",),
+                )
+            except BaseException as exc:
+                logger.warning(
+                    "install_transaction_unexpected_failure",
+                    failure=str(exc),
+                    exc_info=True,
+                )
+                if not isinstance(exc, Exception):
+                    raise
+                return _typed_result(
+                    InstallOutcome.FAILED,
+                    failure_kind=InstallFailureKind.POSTCONDITION,
+                    findings=(f"Install transaction failed: {exc}",),
+                )
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _typed_result(
+            InstallOutcome.FAILED,
+            failure_kind=InstallFailureKind.PREFLIGHT,
+            findings=(f"install lock failure: {exc}",),
+        )
+
+    success_message = f"Plugin published: {plugin_ref} (scope: {effective_scope})"
+    return _typed_result(
+        InstallOutcome.COMPLETED,
+        verified_identity=verified_identity,
+        findings=(success_message,),
+    )
+
+
 def install(
     *,
     request: InstallRequest,
@@ -339,96 +440,12 @@ def install(
             findings=(f"preflight failure: {exc}",),
         )
 
-    from autoskillit.cli.install._plugin_artifact import installed_plugin_semantic_key
-    from autoskillit.core import _InstallLock
-    from autoskillit.workspace import publish_generation, reconcile_install_artifacts
-
-    settings_path = _hooks_mod._claude_settings_path(
-        effective_scope,
-        cwd=operation_cwd,
-    )
-    home = managed_home()
-    try:
-        with _InstallLock(home):
-            try:
-                for repaired in reconcile_install_artifacts(home=home):
-                    print(f"Repaired legacy install artifact: ~/{repaired}")
-
-                # Stage and publish the marketplace projection for metadata
-                _ensure_marketplace(
-                    cwd=operation_cwd,
-                    version=expected_version,
-                    home=home,
-                )
-                if install_request.mode is InstallMode.DIRECT:
-                    _ensure_workspace_ready(cwd=operation_cwd)
-
-                # Build the source root for the generation
-                marketplace_plugin_root = (
-                    home.autoskillit_dir / "marketplace" / "plugins" / "autoskillit"
-                )
-
-                semantic_key = installed_plugin_semantic_key(
-                    plugin_ref,
-                    expected_version,
-                )
-
-                try:
-                    identity = publish_generation(
-                        home=home,
-                        plugin_ref=plugin_ref,
-                        version=expected_version,
-                        semantic_key=semantic_key,
-                        source_root=marketplace_plugin_root,
-                    )
-                except (OSError, RuntimeError, ValueError) as exc:
-                    raise _InstallFailed(
-                        InstallFailureKind.POSTCONDITION,
-                        f"Failed to publish plugin generation: {exc}",
-                    ) from exc
-
-                verified_identity = identity.semantic_key
-
-                # Clean up stale registrations
-                if evict_direct_mcp_entry(_user_claude_json_path()):
-                    print("Removed stale direct MCP entry from ~/.claude.json")
-                _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
-                from autoskillit.cli.update._update_checks import invalidate_fetch_cache
-
-                invalidate_fetch_cache(home.root)
-                _verify_cleanup(settings_path, _fetch_cache_path(home.root))
-
-            except _InstallFailed as exc:
-                return _typed_result(
-                    InstallOutcome.FAILED,
-                    failure_kind=exc.kind,
-                    findings=(f"{exc.kind.value} failure: {exc}",),
-                )
-            except BaseException as exc:
-                logger.warning(
-                    "install_transaction_unexpected_failure",
-                    failure=str(exc),
-                    exc_info=True,
-                )
-                if not isinstance(exc, Exception):
-                    raise
-                return _typed_result(
-                    InstallOutcome.FAILED,
-                    failure_kind=InstallFailureKind.POSTCONDITION,
-                    findings=(f"Install transaction failed: {exc}",),
-                )
-    except (OSError, RuntimeError, ValueError) as exc:
-        return _typed_result(
-            InstallOutcome.FAILED,
-            failure_kind=InstallFailureKind.PREFLIGHT,
-            findings=(f"install lock failure: {exc}",),
-        )
-
-    success_message = f"Plugin published: {plugin_ref} (scope: {effective_scope})"
-    return _typed_result(
-        InstallOutcome.COMPLETED,
-        verified_identity=verified_identity,
-        findings=(success_message,),
+    return _publish_install_generation(
+        install_request=install_request,
+        effective_scope=effective_scope,
+        operation_cwd=operation_cwd,
+        expected_version=expected_version,
+        plugin_ref=plugin_ref,
     )
 
 

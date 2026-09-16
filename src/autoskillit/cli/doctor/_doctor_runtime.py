@@ -186,6 +186,22 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     )
 
 
+def _parse_process_rows(output: str, comm_aliases: frozenset[str]) -> list[tuple[int, str, float]]:
+    rows: list[tuple[int, str, float]] = []
+    for line in output.splitlines()[1:]:
+        parts = line.split(maxsplit=3)
+        if len(parts) < 4:
+            continue
+        comm = parts[3]
+        if comm not in comm_aliases:
+            continue
+        try:
+            rows.append((int(parts[0]), parts[1], float(parts[2])))
+        except ValueError:
+            continue
+    return rows
+
+
 def _check_claude_process_state_breakdown(
     *, backend: CodingAgentBackend | None = None
 ) -> DoctorResult:
@@ -218,18 +234,7 @@ def _check_claude_process_state_breakdown(
             f"ps exited {result.returncode}; skipping {process_label} process check",
         )
 
-    rows: list[tuple[int, str, float]] = []
-    for line in result.stdout.splitlines()[1:]:
-        parts = line.split(maxsplit=3)
-        if len(parts) < 4:
-            continue
-        comm = parts[3]
-        if comm not in comm_aliases:
-            continue
-        try:
-            rows.append((int(parts[0]), parts[1], float(parts[2])))
-        except ValueError:
-            continue
+    rows = _parse_process_rows(result.stdout, comm_aliases)
 
     if not rows:
         return DoctorResult(Severity.OK, check_name, f"No {process_label} processes running")
@@ -304,6 +309,25 @@ def _check_claude_binary() -> DoctorResult:
     )
 
 
+def _latest_backend_smoke_status(sessions_path: Path, backend_name: str) -> str:
+    try:
+        lines = sessions_path.read_text().splitlines()
+    except OSError:
+        return "not-found"
+
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if entry.get("backend") == backend_name:
+            return "pass" if entry.get("success") else "fail"
+    return "not-found"
+
+
 def _check_codex_graduation(
     *,
     backend: CodingAgentBackend | None = None,
@@ -348,21 +372,7 @@ def _check_codex_graduation(
 
     # Criterion 4: sessions.jsonl smoke
     sessions_path = log_root / "sessions.jsonl"
-    smoke_status = "not-found"
-    try:
-        for line in reversed(sessions_path.read_text().splitlines()):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if entry.get("backend") == backend_name:
-                smoke_status = "pass" if entry.get("success") else "fail"
-                break
-    except OSError:
-        pass
+    smoke_status = _latest_backend_smoke_status(sessions_path, backend_name)
 
     statuses = [version_status, probe_status, matrix_status, smoke_status]
     summary = (

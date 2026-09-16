@@ -27,15 +27,6 @@ _MAX_RELOADS = 10
 _MAX_INFRA_RESUMES = 3
 
 
-def _check_reload_guard(reload_id: str, seen_reload_ids: set[str]) -> None:
-    """Enforce max-reload cap and duplicate-ID detection, then register the ID."""
-    if len(seen_reload_ids) >= _MAX_RELOADS:
-        raise SystemExit(f"Too many reloads ({_MAX_RELOADS} max). Check for infinite loop.")
-    if reload_id in seen_reload_ids:
-        raise SystemExit(f"Repeated reload_id {reload_id!r} — aborting.")
-    seen_reload_ids.add(reload_id)
-
-
 def _launch_fleet_session(
     campaign_recipe: Recipe | None,
     campaign_id: str | None,
@@ -53,6 +44,7 @@ def _launch_fleet_session(
         _run_interactive_session,
         render_skill_unavailability,
     )
+    from autoskillit.cli.session._session_reload import admit_reload
 
     project_dir = Path.cwd()
 
@@ -95,39 +87,7 @@ def _launch_fleet_session(
             project_dir=str(project_dir),
         )
         extra_env: dict[str, str] = env_spec.to_dict()
-        seen_reload_ids: set[str] = set()
         current_resume_spec: ResumeSpec = NoResume()
-        current_initial_message = initial_message
-        infra_resume_count = 0
-        while True:
-            session_signal = _run_interactive_session(
-                prompt,
-                initial_message=current_initial_message,
-                extra_env=extra_env,
-                resume_spec=current_resume_spec,
-                project_dir=project_dir,
-                required_env=FLEET_SESSION_REQUIRED_ENV,
-                backend=_backend,
-                skill_compilation=skill_compilation,
-                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
-                mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
-                cook_ceiling_seconds=cfg.process_tether.cook_ceiling_seconds,
-                systemd_scope_enabled=cfg.process_tether.systemd_scope_enabled,
-            )
-            if session_signal is None:
-                break
-            if not isinstance(session_signal, str):
-                infra_resume_count += 1
-                if infra_resume_count >= _MAX_INFRA_RESUMES:
-                    raise SystemExit(
-                        f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
-                        f"Last exit: {session_signal.category}"
-                    )
-                current_resume_spec = NamedResume(session_id=session_signal.session_id)
-                continue
-            _check_reload_guard(session_signal, seen_reload_ids)
-            current_resume_spec = NamedResume(session_id=session_signal)
-            current_initial_message = None  # greeting only on first launch
     else:
         # Campaign-driven mode: full orchestrator prompt with manifest and state
         if campaign_id is None:
@@ -201,7 +161,6 @@ def _launch_fleet_session(
         )
         extra_env = env_spec.to_dict()
 
-        seen_reload_ids = set[str]()
         if resume_metadata is not None:
             state = read_state(state_path)
             current_resume_spec = (
@@ -211,78 +170,87 @@ def _launch_fleet_session(
             )
         else:
             current_resume_spec = NoResume()
-        infra_resume_count = 0
-        current_initial_message = initial_message
 
-        while True:
-            session_signal = _run_interactive_session(
-                prompt,
-                initial_message=current_initial_message,
-                extra_env=extra_env,
-                resume_spec=current_resume_spec,
-                project_dir=project_dir,
-                required_env=FLEET_SESSION_REQUIRED_ENV,
-                backend=_backend,
-                skill_compilation=skill_compilation,
-                force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
-                mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
-                cook_ceiling_seconds=cfg.process_tether.cook_ceiling_seconds,
-                systemd_scope_enabled=cfg.process_tether.systemd_scope_enabled,
-            )
-            if session_signal is None:
-                break
-            if not isinstance(session_signal, str):
-                infra_resume_count += 1
-                if infra_resume_count >= _MAX_INFRA_RESUMES:
-                    raise SystemExit(
-                        f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
-                        f"Last exit: {session_signal.category}"
-                    )
-                current_resume_spec = NamedResume(session_id=session_signal.session_id)
-                update_orchestrator_session_id(state_path, session_signal.session_id)
-            else:
-                _check_reload_guard(session_signal, seen_reload_ids)
-                current_resume_spec = NamedResume(session_id=session_signal)
-                update_orchestrator_session_id(state_path, session_signal)
+    seen_reload_ids: set[str] = set()
+    infra_resume_count = 0
+    current_initial_message = initial_message
 
-            current_initial_message = None
+    while True:
+        session_signal = _run_interactive_session(
+            prompt,
+            initial_message=current_initial_message,
+            extra_env=extra_env,
+            resume_spec=current_resume_spec,
+            project_dir=project_dir,
+            required_env=FLEET_SESSION_REQUIRED_ENV,
+            backend=_backend,
+            skill_compilation=skill_compilation,
+            force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
+            mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
+            cook_ceiling_seconds=cfg.process_tether.cook_ceiling_seconds,
+            systemd_scope_enabled=cfg.process_tether.systemd_scope_enabled,
+        )
+        if session_signal is None:
+            break
+        if isinstance(session_signal, str):
+            current_resume_spec = admit_reload(session_signal, seen_reload_ids, _MAX_RELOADS)
+            resume_session_id = session_signal
+            is_reload = True
+        else:
+            infra_resume_count += 1
+            if infra_resume_count >= _MAX_INFRA_RESUMES:
+                raise SystemExit(
+                    f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
+                    f"Last exit: {session_signal.category}"
+                )
+            resume_session_id = session_signal.session_id
+            current_resume_spec = NamedResume(session_id=resume_session_id)
+            is_reload = False
 
-            fresh_metadata = resume_campaign_from_state(
-                state_path, campaign_recipe.continue_on_failure
-            )
-            if fresh_metadata is None:
-                logger.error("Campaign state corrupted during resume — exiting")
-                break
-            if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
-                logger.info("Campaign halted on failure during resume — exiting")
-                break
+        if campaign_recipe is None:
+            if is_reload:
+                current_initial_message = None
+            continue
 
-            completed_dispatches = fresh_metadata.completed_dispatches_block
-            resumable_dispatch_name = (
-                fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
-            )
-            resume_session_id = (
-                fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
-            )
-            resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
-            resume_retry_reason = (
-                fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
-            )
-            resume_checkpoint = (
-                fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
-            )
-            prompt = _build_fleet_campaign_prompt(
-                campaign_recipe,
-                manifest_yaml,
-                completed_dispatches,
-                mcp_prefix,
-                campaign_id,
-                resumable_dispatch_name=resumable_dispatch_name,
-                resume_session_id=resume_session_id,
-                resume_retry_reason=resume_retry_reason,
-                ingredients_table=ingredients_table,
-                prior_dispatch_id=resume_dispatch_id,
-                resume_checkpoint=resume_checkpoint,
-                max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
-                has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
-            )
+        assert state_path is not None
+        assert campaign_id is not None
+        update_orchestrator_session_id(state_path, resume_session_id)
+        current_initial_message = None
+
+        fresh_metadata = resume_campaign_from_state(
+            state_path, campaign_recipe.continue_on_failure
+        )
+        if fresh_metadata is None:
+            logger.error("Campaign state corrupted during resume — exiting")
+            break
+        if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
+            logger.info("Campaign halted on failure during resume — exiting")
+            break
+
+        completed_dispatches = fresh_metadata.completed_dispatches_block
+        resumable_dispatch_name = (
+            fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
+        )
+        resume_session_id = (
+            fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
+        )
+        resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
+        resume_retry_reason = fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
+        resume_checkpoint = (
+            fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
+        )
+        prompt = _build_fleet_campaign_prompt(
+            campaign_recipe,
+            manifest_yaml,
+            completed_dispatches,
+            mcp_prefix,
+            campaign_id,
+            resumable_dispatch_name=resumable_dispatch_name,
+            resume_session_id=resume_session_id,
+            resume_retry_reason=resume_retry_reason,
+            ingredients_table=ingredients_table,
+            prior_dispatch_id=resume_dispatch_id,
+            resume_checkpoint=resume_checkpoint,
+            max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+        )

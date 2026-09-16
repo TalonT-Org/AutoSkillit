@@ -132,26 +132,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "
         "authority/liveness reads guard deletion of exactly one tracker JSON.",
     ),
-    ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
-        1,
-        "Transaction restoration removes the failed replacement before restoring its staged copy.",
-    ),
-    ("cli/_install_snapshot/_snapshot.py", "_remove", "shutil.rmtree"): (
-        1,
-        "Transaction restoration removes a failed replacement directory under install ownership.",
-    ),
-    ("cli/_install_snapshot/_snapshot.py", "commit", "shutil.rmtree"): (
-        1,
-        "The transaction-owned backup is removed only after the installed replacement commits.",
-    ),
-    ("cli/_install_snapshot/_snapshot.py", "rollback", "shutil.rmtree"): (
-        1,
-        "Rollback removes its private staging directory after restoring every covered surface.",
-    ),
-    ("cli/_install_snapshot/_snapshot.py", "stage", "shutil.rmtree"): (
-        1,
-        "A failed snapshot construction removes only its private transaction staging directory.",
-    ),
     (
         "workspace/_projected_artifact/_generation_publication.py",
         "_sweep_orphaned_staging",
@@ -442,13 +422,10 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Managed order forwards the deduplicated command, home, projection, and attempt leases.",
     ),
-    ("cli/session/_session_process.py", "run_cook_attempt", "inherited_fds"): (
+    ("cli/session/_session_process.py", "run_cook_attempt", "spawn_fds"): (
         1,
-        "Direct PTY-free cook launch forwards the normalized owned descriptor tuple.",
-    ),
-    ("cli/session/_session_process.py", "run_cook_attempt", "launcher_fds"): (
-        1,
-        "PTY launch adds only the slave descriptor to the owned descriptor tuple.",
+        "The common cook spawn forwards caller leases directly, while PTY mode adds only "
+        "its slave descriptor.",
     ),
     (
         "execution/backends/_codex/session_attempt_lease.py",
@@ -539,7 +516,6 @@ _PLUGIN_LIFECYCLE_SYMBOLS = frozenset(
     {
         "ArtifactLease",
         "InstalledPluginArtifactRetirementOwner",
-        "_InstallSnapshot",
         "PluginArtifactIdentity",
         "PluginArtifactKind",
         "PluginArtifactRetirementOwner",

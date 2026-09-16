@@ -7,8 +7,12 @@ import json
 import os
 import sqlite3
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.core import ObserverStatus
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -412,18 +416,20 @@ def test_observer_matching_window_and_retained_output_are_hard_capped() -> None:
     assert len(observer.normalized_window.encode("utf-8")) <= _WINDOW_LIMIT
 
 
+class _ScriptedProbe:
+    def __init__(self, statuses: tuple[ObserverStatus, ...]) -> None:
+        self.statuses = iter(statuses)
+        self.calls = 0
+
+    def check(self) -> ObserverStatus:
+        self.calls += 1
+        return next(self.statuses)
+
+
 def test_observer_latches_ready_status() -> None:
     _, ObserverStatus, PtyObserver = _observer_api()
 
-    class Probe:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def check(self):
-            self.calls += 1
-            return ObserverStatus.READY if self.calls == 1 else ObserverStatus.INCOMPLETE
-
-    probe = Probe()
+    probe = _ScriptedProbe((ObserverStatus.READY, ObserverStatus.INCOMPLETE))
     observer = PtyObserver(readiness_probe=probe)  # type: ignore[arg-type]
 
     assert observer.check_readiness() is ObserverStatus.READY
@@ -447,20 +453,6 @@ def test_relay_copies_both_directions_and_restores_terminal_state(
     closed_fds: list[int] = []
     selector_closed: list[bool] = []
     read_counts = {master_fd: 0, stdin_fd: 0}
-
-    class Probe:
-        def __init__(self) -> None:
-            self.statuses = iter(
-                (
-                    ObserverStatus.ABSENT,
-                    ObserverStatus.INCOMPLETE,
-                    ObserverStatus.SCHEMA_CHANGED,
-                    ObserverStatus.READY,
-                )
-            )
-
-        def check(self):
-            return next(self.statuses)
 
     class Key:
         def __init__(self, fd: int, data: str) -> None:
@@ -529,7 +521,16 @@ def test_relay_copies_both_directions_and_restores_terminal_state(
         lambda signum, handler: signal_calls.append((signum, handler)),
     )
 
-    observer = PtyObserver(readiness_probe=Probe())  # type: ignore[arg-type]
+    observer = PtyObserver(
+        readiness_probe=_ScriptedProbe(
+            (
+                ObserverStatus.ABSENT,
+                ObserverStatus.INCOMPLETE,
+                ObserverStatus.SCHEMA_CHANGED,
+                ObserverStatus.READY,
+            )
+        )
+    )  # type: ignore[arg-type]
     observer.relay(master_fd, stdin_fd=stdin_fd, stdout_fd=stdout_fd)
 
     assert writes == [(master_fd, b"to-child"), (stdout_fd, b"to-user")]

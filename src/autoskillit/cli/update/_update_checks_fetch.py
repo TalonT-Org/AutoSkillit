@@ -111,14 +111,18 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
     effective_ttl = ttl if ttl is not None else _resolve_fetch_ttl()
     cache = _read_fetch_cache(home)
     entry = cache.get(url) if isinstance(cache.get(url), dict) else None
+    cached_at = entry.get("cached_at") if entry is not None else None
+    raw_cached_body = entry.get("body") if entry is not None else None
+    cached_body = raw_cached_body if isinstance(raw_cached_body, dict) else None
     now = time.time()
-    if entry is not None:
-        cached_at = entry.get("cached_at")
-        body = entry.get("body")
-        if isinstance(cached_at, (int, float)) and isinstance(body, dict):
-            if now - cached_at < effective_ttl:
-                if entry.get("installed_version") == AUTOSKILLIT_INSTALLED_VERSION:
-                    return body
+    if (
+        entry is not None
+        and isinstance(cached_at, (int, float))
+        and cached_body is not None
+        and now - cached_at < effective_ttl
+        and entry.get("installed_version") == AUTOSKILLIT_INSTALLED_VERSION
+    ):
+        return cached_body
 
     headers: dict[str, str] = {
         "Accept": "application/vnd.github+json",
@@ -140,32 +144,26 @@ def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[s
 
     try:
         if response.status_code == 304 and entry is not None:
-            body = entry.get("body")
-            if isinstance(body, dict):
-                cache[url] = {
-                    "body": body,
-                    "etag": entry.get("etag"),
-                    "cached_at": now,
-                    "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
-                }
-                _write_fetch_cache(home, cache)
-                return body
-            return None
-        if response.status_code == 200:
+            if cached_body is None:
+                return None
+            body = cached_body
+            etag = entry.get("etag")
+        elif response.status_code == 200:
             body = response.json()
             if not isinstance(body, dict):
                 return None
             etag = response.headers.get("ETag")
-            cache[url] = {
-                "body": body,
-                "etag": etag,
-                "cached_at": now,
-                "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
-            }
-            _write_fetch_cache(home, cache)
-            return body
-        logger.debug("fetch %s returned status %d", url, response.status_code)
-        return None
+        else:
+            logger.debug("fetch %s returned status %d", url, response.status_code)
+            return None
+        cache[url] = {
+            "body": body,
+            "etag": etag,
+            "cached_at": now,
+            "installed_version": AUTOSKILLIT_INSTALLED_VERSION,
+        }
+        _write_fetch_cache(home, cache)
+        return body
     except Exception as exc:
         logger.debug("fetch parse failed for %s: %s", url, _scrub_auth(str(exc)))
         return None

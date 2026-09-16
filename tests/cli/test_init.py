@@ -504,9 +504,10 @@ def test_init_prompts_for_github_default_repo() -> None:
     """autoskillit init must prompt the user for github.default_repo."""
     import inspect
 
-    from autoskillit.cli._init_helpers import _register_all
+    from autoskillit.cli._init_helpers import _configure_github_repo, _register_all
 
-    source = inspect.getsource(_register_all)
+    assert "_configure_github_repo(" in inspect.getsource(_register_all)
+    source = inspect.getsource(_configure_github_repo)
     assert "github" in source.lower() and (
         "default_repo" in source or "_prompt_github_repo" in source
     ), "init flow must prompt for github.default_repo (REQ-CFG-002)"

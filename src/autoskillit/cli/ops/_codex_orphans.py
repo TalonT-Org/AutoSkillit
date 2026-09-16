@@ -9,7 +9,58 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import assert_never
+from typing import TYPE_CHECKING, assert_never
+
+if TYPE_CHECKING:
+    from autoskillit.execution import CodexOrphanReapResult, OrphanedCodexProcess
+
+
+def _codex_orphans_json_document(
+    orphans: list[OrphanedCodexProcess],
+    results: list[CodexOrphanReapResult],
+) -> dict[str, object]:
+    return {
+        "orphans": [
+            {
+                "pid": orphan.pid,
+                "fd0_target": orphan.fd0_target,
+                "exe_target": orphan.exe_target,
+                "started_at": datetime.fromtimestamp(orphan.started_at, tz=UTC).isoformat(),
+            }
+            for orphan in orphans
+        ],
+        "reaped": [
+            {
+                "pid": result.pid,
+                "action": result.action,
+                "observation_complete": result.observation_complete,
+                "survivor_pids": list(result.survivor_pids),
+                "access_denied_pids": list(result.access_denied_pids),
+            }
+            for result in results
+        ],
+    }
+
+
+def _render_codex_reap_results(results: list[CodexOrphanReapResult]) -> None:
+    for result in results:
+        if result.action == "terminated":
+            print(f"terminated pid {result.pid}")
+        elif result.action == "skipped":
+            print(f"skipped pid {result.pid} (no longer matches the orphan signature)")
+        elif result.action == "incomplete":
+            parts: list[str] = []
+            if result.survivor_pids:
+                parts.append(f"survivors: {', '.join(str(p) for p in result.survivor_pids)}")
+            if result.access_denied_pids:
+                parts.append(
+                    f"access denied: {', '.join(str(p) for p in result.access_denied_pids)}"
+                )
+            if not result.observation_complete:
+                parts.append("observation incomplete")
+            print(f"incomplete pid {result.pid} ({'; '.join(parts)})")
+        else:
+            assert_never(result.action)
 
 
 def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
@@ -23,28 +74,7 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
 
     if output_json:
         results = reap_orphaned_codex_processes(orphans) if reap else []
-        doc = {
-            "orphans": [
-                {
-                    "pid": o.pid,
-                    "fd0_target": o.fd0_target,
-                    "exe_target": o.exe_target,
-                    "started_at": datetime.fromtimestamp(o.started_at, tz=UTC).isoformat(),
-                }
-                for o in orphans
-            ],
-            "reaped": [
-                {
-                    "pid": r.pid,
-                    "action": r.action,
-                    "observation_complete": r.observation_complete,
-                    "survivor_pids": list(r.survivor_pids),
-                    "access_denied_pids": list(r.access_denied_pids),
-                }
-                for r in results
-            ],
-        }
-        print(json.dumps(doc, indent=2))
+        print(json.dumps(_codex_orphans_json_document(orphans, results), indent=2))
         return
 
     if not orphans:
@@ -68,19 +98,4 @@ def run_codex_orphans(*, reap: bool = False, output_json: bool = False) -> None:
         return
 
     results = reap_orphaned_codex_processes(orphans)
-    for r in results:
-        if r.action == "terminated":
-            print(f"terminated pid {r.pid}")
-        elif r.action == "skipped":
-            print(f"skipped pid {r.pid} (no longer matches the orphan signature)")
-        elif r.action == "incomplete":
-            parts: list[str] = []
-            if r.survivor_pids:
-                parts.append(f"survivors: {', '.join(str(p) for p in r.survivor_pids)}")
-            if r.access_denied_pids:
-                parts.append(f"access denied: {', '.join(str(p) for p in r.access_denied_pids)}")
-            if not r.observation_complete:
-                parts.append("observation incomplete")
-            print(f"incomplete pid {r.pid} ({'; '.join(parts)})")
-        else:
-            assert_never(r.action)
+    _render_codex_reap_results(results)

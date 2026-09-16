@@ -985,12 +985,12 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
 }
 
 FORWARDING_SITES: dict[str, str] = {
-    "cli/install/_marketplace.py:264": (
+    "cli/install/_marketplace.py:365": (
         "Unfiltered dict(os.environ) snapshot (`ambient_env`) used as the base for an"
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:309": (
+    "cli/app.py:311": (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
@@ -998,7 +998,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:400": (
+    "cli/update/_transaction.py:399": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),

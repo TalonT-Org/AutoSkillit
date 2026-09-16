@@ -1,17 +1,5 @@
-"""Private facade for plugin-install transaction snapshots."""
+"""Private facade for the shared GitHub fetch-cache path."""
 
-from autoskillit.cli._install_snapshot._snapshot import (
-    _fetch_cache_path,
-    _installed_plugin_root,
-    _installed_plugins_json_path,
-    _InstallSnapshot,
-    _plugin_cache_dir,
-)
+from autoskillit.cli._install_snapshot._snapshot import _fetch_cache_path
 
-__all__ = [
-    "_InstallSnapshot",
-    "_fetch_cache_path",
-    "_installed_plugin_root",
-    "_installed_plugins_json_path",
-    "_plugin_cache_dir",
-]
+__all__ = ["_fetch_cache_path"]

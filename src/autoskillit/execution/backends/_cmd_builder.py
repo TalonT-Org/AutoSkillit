@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from autoskillit.core import CmdOrigin, CmdSpec
+from autoskillit.core import CmdOrigin, CmdSpec, PositionalRole
 
 __all__ = ["CmdBuilder", "CmdOrderingError"]
 
@@ -29,7 +29,7 @@ class CmdBuilder:
         self._binary = binary
         self._mode_flags: list[str] = []
         self._kv_flags: list[tuple[str, str]] = []
-        self._positional: list[str] = []
+        self._positional: list[tuple[PositionalRole, str]] = []
         self._variadic_pairs: list[tuple[str, str]] = []
         self._has_variadic = False
 
@@ -41,13 +41,13 @@ class CmdBuilder:
         self._kv_flags.append((flag, value))
         return self
 
-    def positional(self, value: str) -> CmdBuilder:
+    def positional(self, value: str, *, role: PositionalRole) -> CmdBuilder:
         if self._has_variadic:
             raise CmdOrderingError(
                 f"Cannot add positional arg {value!r} after variadic pairs have been added. "
                 "Positional args must precede all variadic flag pairs."
             )
-        self._positional.append(value)
+        self._positional.append((role, value))
         return self
 
     def variadic_pair(self, flag: str, value: str) -> CmdBuilder:
@@ -65,7 +65,7 @@ class CmdBuilder:
         cmd.extend(self._mode_flags)
         for flag, value in self._kv_flags:
             cmd.extend([flag, value])
-        cmd.extend(self._positional)
+        cmd.extend(value for _role, value in self._positional)
         for flag, value in self._variadic_pairs:
             cmd.extend([flag, value])
         origin = CmdOrigin(

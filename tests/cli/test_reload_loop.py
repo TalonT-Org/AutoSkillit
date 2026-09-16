@@ -8,7 +8,6 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -102,9 +101,11 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
+        FreshLaunch,
         HookTrustPolicy,
         NamedResume,
         NoResume,
+        ResumeWithBriefing,
         SkillUnavailabilityPayload,
     )
 
@@ -153,9 +154,9 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             events.append(("recover",))
 
         def build_interactive_cmd(self, **kwargs):
-            resume_spec = kwargs["resume_spec"]
+            launch = kwargs["launch"]
             plugin_binding = kwargs["plugin_binding"]
-            events.append(("build", resume_spec, kwargs["system_prompt"]))
+            events.append(("build", launch))
             return CmdSpec(
                 cmd=("claude",),
                 env={"ATTEMPT": str(len(events))},
@@ -248,21 +249,28 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     first_exit = events.index(lifecycle.event_for("attempt-exit", 1))
     second_build = events.index(
         next(
-            event for event in events if event[0] == "build" and isinstance(event[1], NamedResume)
+            event
+            for event in events
+            if event[0] == "build" and isinstance(event[1], ResumeWithBriefing)
         )
     )
     assert first_reaped < first_sentinel < first_exit < second_build
 
     run_events = lifecycle.events_of_type("run")
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
-    build_prompts = [cast(str, event[2]) for event in events if event[0] == "build"]
+    build_prompts = [
+        launch.system_prompt if isinstance(launch, FreshLaunch) else launch.briefing
+        for event in events
+        if event[0] == "build"
+        for launch in (event[1],)
+    ]
     assert len(build_prompts) == 4
     assert all(prompt.count("<autoskillit_skill_unavailability>") == 1 for prompt in build_prompts)
     assert all("profile-required-join" in prompt for prompt in build_prompts)
     assert len(lifecycle.projection_bindings) == 1
     assert lifecycle.projection_bindings[0].closed
     assert events.index(managed_exits[0]) > events.index(lifecycle.event_for("attempt-exit", 2))
-    assert onboarded == []
+    assert onboarded == [tmp_path]
     assert ("recover",) not in events
 
 
@@ -397,6 +405,8 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
 def test_interactive_session_reload_uses_named_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from autoskillit.core import FreshLaunch
+
     _write_sentinel(tmp_path, "isess-001")
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -409,7 +419,9 @@ def test_interactive_session_reload_uses_named_resume(
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
-    result = _run_interactive_session(system_prompt="test", project_dir=tmp_path)
+    result = _run_interactive_session(
+        launch=FreshLaunch(system_prompt="test"), project_dir=tmp_path
+    )
     assert result == "isess-001"
 
 

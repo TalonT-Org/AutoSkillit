@@ -51,7 +51,7 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `build_cmd` | `session/new` (headless one-shot) | Builds `CmdSpec` invoking the `claude` binary | Builds `CmdSpec` invoking the `codex` binary | — |
 | `build_skill_session_cmd` | `session/new` (skill session; optional resume via `config.resume_session_id`) | Builds `CmdSpec` for skill execution with optional resume | Builds `CmdSpec`; a projected binding supplies `CODEX_HOME` and `inherited_fds`; output-mode coercion is logged and idle-stop policy becomes `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT` | Codex consumes projection-as-home rather than `--plugin-dir`, but it does not discard artifact ownership. |
 | `build_resume_cmd` | `session/resume` | Uses `--resume <session_id>` flag | Builds an app-server `CmdSpec` (`CodexAppServerPlan`) whose driver issues JSON-RPC `thread/resume` with `threadId` in `params` — no CLI flag or subcommand appears in `argv`; validates non-empty `resume_session_id` (raises `ValueError`) | JSON-RPC method vs. CLI flag; input validation retained. See §4.3. |
-| `build_interactive_cmd` | `session/new` or `session/resume` (via `ResumeSpec`: `NoResume | BareResume | NamedResume`) | System prompt as `--append-system-prompt <value>` (only applied on `NoResume`) | System prompt as `-c developer_instructions=<value>` (line 931; same `NoResume` restriction); **`tools` arg silently discarded with `logger.warning("codex_tools_ignored")`** at lines 909–913 | `CodexFlags.CONFIG_OVERRIDE = "-c"`; `tools` arg discarded with warning rather than error. |
+| `build_interactive_cmd` | `session/new` or `session/resume` (via `InteractiveLaunch`: `FreshLaunch | RestoreSession | ResumeWithBriefing`) | Accepts the launch value; a fresh launch maps its system prompt to `--append-system-prompt <value>` | Accepts the launch value; a fresh launch maps its system prompt to `-c developer_instructions=<value>`; **`tools` arg silently discarded with `logger.warning("codex_tools_ignored")`** | `CodexFlags.CONFIG_OVERRIDE = "-c"`; `tools` arg is discarded with a warning rather than an error. |
 | `build_food_truck_cmd` | `session/new` (orchestrator-level session, L2) | Builds `CmdSpec` for food-truck orchestrator | Builds `CmdSpec`; projected-home path and inherited descriptors come from `PluginLaunchBinding`; sandbox is `read-only` and there is no `--tools AskUserQuestion` | Load-path syntax and sandbox policy differ; artifact lifetime does not. |
 | `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Raises `CapabilityNotSupportedError` (`inspector_capable=False` in `CLAUDE_CODE_CAPABILITIES`; unreachable `AssertionError` stub at line 875 is dead code) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | — (both backends gate via `inspector_capable=False`) |
 | `setup_session_dir` | ACP pre-session initialization | No-op | Substantial setup: copies `config.toml`, symlinks `auth.json` + `.env` + `sessions/`, and generates agent TOMLs | Workspace admission safely projects the declared profile-skill source after setup, using the finalized native-role set. |
@@ -71,6 +71,27 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `session_attempt_context` | ACP attempt ownership | Null context | Acquires the per-attempt view/thread ownership contract and returns `SessionAttemptHandle` | Context exit requires durable spawn/reap proof before promotion. |
 | `translate_model` | (model alias resolution) | Translates canonical model name to backend-specific name | Translates canonical model name to backend-specific name | — |
 | `model_config_overrides` | (model-specific CLI overrides) | Returns CLI overrides tuple for a given model | Returns CLI overrides tuple for a given model | — |
+
+### Interactive launch intent and resume purity
+
+Interactive builders receive launch intent as a value rather than accepting
+independent prompt and resume arguments:
+
+```python
+build_interactive_cmd(*, launch: InteractiveLaunch = FreshLaunch(), ...) -> CmdSpec
+```
+
+`FreshLaunch(system_prompt, initial_prompt)` creates a new session and may
+emit both values. `RestoreSession(session_id)` restores a session without
+emitting a prompt or system instructions. `ResumeWithBriefing(session_id,
+briefing)` requires a nonempty briefing and emits exactly that briefing for
+the resumed turn.
+
+This is the interactive resume-purity invariant: a restore cannot inherit,
+replay, or synthesize fresh-launch prompt material, while a briefing resume
+cannot emit any user prompt besides its explicit briefing. Backends consume
+the same `InteractiveLaunch` value, so each backend's resume syntax may differ
+without changing those prompt guarantees.
 
 ### Headless OTLP builder contract
 
@@ -369,8 +390,8 @@ builders.
 
 | Backend | Mechanism | Restriction |
 |---|---|---|
-| Claude Code | `--append-system-prompt <value>` flag in `build_interactive_cmd` | Incompatible with `--resume` (only applied on `NoResume`) |
-| Codex | `-c developer_instructions=<value>` config override (`builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, ...)` at line 931 of `codex.py`) | Same `NoResume` restriction; guarded by `isinstance(resume_spec, NoResume)` at line 930 |
+| Claude Code | `--append-system-prompt <value>` flag in `build_interactive_cmd` | Fresh launches only; restores and briefing resumes emit no system instructions. |
+| Codex | `-c developer_instructions=<value>` config override | Fresh launches only; restores and briefing resumes emit no system instructions. |
 
 The `-c key=value` form is Codex's config override mechanism; it sets the
 `developer_instructions` field in Codex's TOML config rather than passing a
@@ -381,7 +402,7 @@ flag.
 | Backend / builder | Mechanism |
 |---|---|
 | Claude Code | `--resume <session_id>` as a flag (named argument) |
-| Codex `build_interactive_cmd` (TUI, `codex exec`-based) | `resume <session_id>` as a positional subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, `_codex_cmd_builders.py` line 62) |
+| Codex `build_interactive_cmd` (TUI, `codex exec`-based) | `RestoreSession` or `ResumeWithBriefing` emits `resume <session_id>` as a positional subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, `_codex_cmd_builders.py` line 62) |
 | Codex `build_resume_cmd` (headless resume / contract nudge) | JSON-RPC `thread/resume` with `threadId` carried in `params` (`_codex/session_commands.py`, `build_resume_cmd`) — no CLI subcommand appears in `argv` at all |
 
 `build_interactive_cmd` is the only Codex builder that still speaks `codex

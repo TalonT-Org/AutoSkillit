@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-from ._type_backend import CmdOrigin, CmdSpec
+from ._type_backend import CmdOrigin, CmdSpec, PositionalRole
 from ._type_execution_identity import BackendAuthorityKind
 from ._type_launch_authority import (
     BackendAuthority,
@@ -555,10 +555,12 @@ class ResolvedLaunchContract:
                         if len(pair) == 2
                     ),
                     positional=tuple(
-                        str(item)
+                        (PositionalRole(str(pair[0])), str(pair[1]))
                         for item in require_sequence(
                             origin_mapping["positional"], "command origin positional arguments"
                         )
+                        for pair in (require_sequence(item, "command origin positional argument"),)
+                        if len(pair) == 2
                     ),
                     variadic_pairs=tuple(
                         (str(pair[0]), str(pair[1]))

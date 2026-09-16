@@ -25,6 +25,7 @@ from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
+    FreshLaunch,
     ManagedSessionHome,
     PreLaunchReadiness,
     SessionAttemptHandle,
@@ -127,7 +128,7 @@ def test_non_probe_fork_threads_true_intent_into_both_build_calls(
     )
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=backend,
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
@@ -158,7 +159,7 @@ def test_non_probe_fork_defaults_to_false_across_both_build_calls(
     )
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=backend,
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
@@ -201,7 +202,7 @@ def test_launch_cook_session_forwards_force_inactive_agent_teams(
     )
 
     _launch_cook_session(
-        "system prompt",
+        launch=FreshLaunch(system_prompt="system prompt"),
         project_dir=tmp_path,
         required_env=frozenset(),
         force_inactive_agent_teams=force_inactive,

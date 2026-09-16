@@ -21,7 +21,7 @@ import autoskillit.cli.session._session_onboarding as _patch_session__session_on
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
-from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
+from autoskillit.core import CmdSpec, FreshLaunch, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from tests.cli._interactive_process import InteractiveProcessStub
 
@@ -53,8 +53,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
         ) as mock_run,
     ):
         _launch_cook_session(
-            "system prompt",
-            initial_message="hello",
+            launch=FreshLaunch(system_prompt="system prompt", initial_prompt="hello"),
             required_env=frozenset(),
             **launch_kwargs,
         )
@@ -86,7 +85,7 @@ def test_launch_cook_session_extra_env_still_applied(
         ) as mock_run,
     ):
         _launch_cook_session(
-            "system prompt",
+            launch=FreshLaunch(system_prompt="system prompt"),
             extra_env={"AUTOSKILLIT_SUBSETS__DISABLED": "@json []"},
             required_env=frozenset(),
             **launch_kwargs,
@@ -113,8 +112,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
         ) as mock_run,
     ):
         _launch_cook_session(
-            "system prompt",
-            initial_message="hello",
+            launch=FreshLaunch(system_prompt="system prompt", initial_prompt="hello"),
             required_env=frozenset(),
             **launch_kwargs,
         )
@@ -139,8 +137,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
         ) as mock_run,
     ):
         _launch_cook_session(
-            "system prompt",
-            initial_message="hello",
+            launch=FreshLaunch(system_prompt="system prompt", initial_prompt="hello"),
             required_env=frozenset(),
             **launch_kwargs,
         )

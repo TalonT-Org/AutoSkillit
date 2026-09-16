@@ -204,6 +204,17 @@ __all__ = [
 
 logger = get_logger(__name__)
 
+_CODEX_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.MODEL,
+        CodexFlags.MODEL_SHORT,
+        CodexFlags.ADD_DIR,
+        CodexFlags.SANDBOX,
+        CodexFlags.CONFIG_OVERRIDE,
+        CodexFlags.PROFILE,
+    }
+)
+
 
 def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list[str]]:
     origin = spec.origin
@@ -212,7 +223,7 @@ def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list
     reconstructed: list[str] = [origin.binary, *origin.mode_flags]
     for flag, value in origin.kv_flags:
         reconstructed.extend((flag, value))
-    reconstructed.extend(origin.positional)
+    reconstructed.extend(value for _role, value in origin.positional)
     for flag, value in origin.variadic_pairs:
         reconstructed.extend((flag, value))
     if tuple(reconstructed) != spec.cmd:
@@ -459,6 +470,9 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
 
     def binary_name(self) -> str:
         return "codex"
+
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        return VARIADIC_CODEX_FLAGS, _CODEX_INTERACTIVE_VALUE_BEARING_FLAGS
 
     def translate_model(self, model: str) -> str:
         from autoskillit.core import (

@@ -29,6 +29,7 @@ from autoskillit.cli.session._session_launch import (
 from autoskillit.core import (
     BackendConventions,
     ClaudeFlags,
+    FreshLaunch,
     HookTrustPolicy,
     PluginLoadMode,
     PreLaunchReadiness,
@@ -249,7 +250,7 @@ def test_run_interactive_session_passes_plugin_flags(monkeypatch: pytest.MonkeyP
     """_run_interactive_session adds --plugin-dir when plugin not installed."""
     _stub_plugin_installed(monkeypatch, installed=False)
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]
 
 
@@ -262,7 +263,7 @@ def test_run_interactive_session_restricts_tools(monkeypatch: pytest.MonkeyPatch
     """_run_interactive_session passes --tools AskUserQuestion."""
     _stub_plugin_installed(monkeypatch, installed=True)
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     idx = captured["cmd"].index(ClaudeFlags.TOOLS)
     assert captured["cmd"][idx + 1] == "AskUserQuestion"
 
@@ -276,9 +277,12 @@ def test_run_interactive_session_appends_system_prompt(monkeypatch: pytest.Monke
     """_run_interactive_session forwards system_prompt kwarg to build_interactive_cmd."""
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="my-unique-prompt", backend=backend)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="my-unique-prompt"), backend=backend)
     assert len(captured_kwargs) == 2
-    assert all(kwargs["system_prompt"] == "my-unique-prompt" for kwargs in captured_kwargs)
+    assert all(
+        kwargs["launch"] == FreshLaunch(system_prompt="my-unique-prompt")
+        for kwargs in captured_kwargs
+    )
     assert captured_kwargs[0].get("executable") is None
     assert captured_kwargs[1]["executable"].path.is_absolute()
 
@@ -308,7 +312,7 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
         return type("Result", (), {"returncode": 0})()
 
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(run))
-    _run_interactive_session(system_prompt="test", backend=backend)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
 
     assert captured_kwargs[0]["plugin_binding"] is binding
     assert events == ["reaped"]
@@ -347,7 +351,7 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
         monkeypatch.setattr(subprocess, "Popen", fail_spawn)
 
     with pytest.raises(RuntimeError) as caught:
-        _run_interactive_session(system_prompt="test", backend=backend)
+        _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
 
     assert caught.value is expected
     assert binding.closed
@@ -382,7 +386,7 @@ def test_run_interactive_session_preserves_failure_when_binding_close_fails(
     monkeypatch.setattr(backend, "build_interactive_cmd", fail_build)
 
     with pytest.raises(RuntimeError) as caught:
-        _run_interactive_session(system_prompt="test", backend=backend)
+        _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
 
     assert caught.value is expected
     assert binding.closed
@@ -398,7 +402,9 @@ def test_run_interactive_session_extra_env_merged(monkeypatch: pytest.MonkeyPatc
     """extra_env values appear in the subprocess env."""
     _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test", extra_env={"MY_UNIQUE_KEY": "MY_VAL"})
+    _run_interactive_session(
+        launch=FreshLaunch(system_prompt="test"), extra_env={"MY_UNIQUE_KEY": "MY_VAL"}
+    )
     assert captured["env"].get("MY_UNIQUE_KEY") == "MY_VAL"
 
 
@@ -413,7 +419,7 @@ def test_run_interactive_session_injects_state_root_from_project_dir(
 
     _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test", project_dir=tmp_path)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), project_dir=tmp_path)
     assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
 
 
@@ -426,7 +432,7 @@ def test_run_interactive_session_state_root_survives_alongside_extra_env(
     _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         extra_env={"MY_UNIQUE_KEY": "MY_VAL"},
         project_dir=tmp_path,
     )
@@ -466,7 +472,7 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
     backend, _captured_kwargs = _make_capturing_backend()
 
     _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
         project_dir=tmp_path,
         backend=backend,
@@ -492,7 +498,7 @@ def test_run_interactive_session_continues_when_real_owner_binding_refuses_corru
     backend, _captured_kwargs = _make_capturing_backend()
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
         project_dir=tmp_path,
         backend=backend,
@@ -520,7 +526,7 @@ def test_run_interactive_session_exits_when_claude_missing(
     """_run_interactive_session exits 1 when claude is not on PATH."""
     monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: None)
     with pytest.raises(SystemExit, match="1"):
-        _run_interactive_session(system_prompt="test")
+        _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +542,7 @@ def test_run_interactive_session_includes_plugin_dir_when_installed(
     detection, governs the flag (IMPLICIT_INSTALLED was retired in #4480)."""
     _stub_plugin_installed(monkeypatch, installed=True)
     captured = _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]
 
 
@@ -545,38 +551,35 @@ def test_run_interactive_session_includes_plugin_dir_when_installed(
 # ---------------------------------------------------------------------------
 
 
-def test_run_interactive_session_forwards_system_prompt_with_named_resume(
+def test_run_interactive_session_forwards_restore_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session forwards system_prompt and NamedResume to build_interactive_cmd."""
-    from autoskillit.core import NamedResume
+    """_run_interactive_session forwards RestoreSession without a greeting."""
+    from autoskillit.core import RestoreSession
 
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
     _run_interactive_session(
-        system_prompt="should-not-appear",
-        resume_spec=NamedResume(session_id="4b581974-1f19-4aec-8405-78c5ede5e233"),
+        launch=RestoreSession(session_id="4b581974-1f19-4aec-8405-78c5ede5e233"),
         backend=backend,
     )
-    assert captured_kwargs[0]["system_prompt"] == "should-not-appear"
-    assert isinstance(captured_kwargs[0]["resume_spec"], NamedResume)
+    assert captured_kwargs[0]["launch"] == RestoreSession(
+        session_id="4b581974-1f19-4aec-8405-78c5ede5e233"
+    )
 
 
-def test_run_interactive_session_forwards_system_prompt_with_bare_resume(
+def test_run_interactive_session_forwards_fresh_launch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session forwards system_prompt and BareResume to build_interactive_cmd."""
-    from autoskillit.core import BareResume
+    """_run_interactive_session forwards FreshLaunch to build_interactive_cmd."""
 
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
     _run_interactive_session(
-        system_prompt="should-not-appear",
-        resume_spec=BareResume(),
+        launch=FreshLaunch(system_prompt="fresh prompt"),
         backend=backend,
     )
-    assert captured_kwargs[0]["system_prompt"] == "should-not-appear"
-    assert isinstance(captured_kwargs[0]["resume_spec"], BareResume)
+    assert captured_kwargs[0]["launch"] == FreshLaunch(system_prompt="fresh prompt")
 
 
 def test_session_type_cook_order_in_cli_session() -> None:
@@ -586,21 +589,20 @@ def test_session_type_cook_order_in_cli_session() -> None:
     assert SESSION_TYPE_ORDER == "order"
 
 
-def test_run_interactive_session_forwards_system_prompt_on_fresh_session(
+def test_run_interactive_session_forwards_initial_prompt_on_fresh_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session forwards system_prompt with NoResume to build_interactive_cmd."""
-    from autoskillit.core import NoResume
+    """_run_interactive_session forwards an initial prompt only through FreshLaunch."""
 
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
     _run_interactive_session(
-        system_prompt="my-prompt",
-        resume_spec=NoResume(),
+        launch=FreshLaunch(system_prompt="my-prompt", initial_prompt="hello"),
         backend=backend,
     )
-    assert captured_kwargs[0]["system_prompt"] == "my-prompt"
-    assert isinstance(captured_kwargs[0]["resume_spec"], NoResume)
+    assert captured_kwargs[0]["launch"] == FreshLaunch(
+        system_prompt="my-prompt", initial_prompt="hello"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -651,10 +653,10 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _run_interactive_session(system_prompt="test", backend=_NoInjectBackend())
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=_NoInjectBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
-    assert build_kwargs[0]["system_prompt"] == "test"
+    assert build_kwargs[0]["launch"] == FreshLaunch(system_prompt="test")
 
 
 def test_skill_injection_enabled_passes_tools_to_backend(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -662,9 +664,9 @@ def test_skill_injection_enabled_passes_tools_to_backend(monkeypatch: pytest.Mon
     build_interactive_cmd and system_prompt is forwarded."""
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test", backend=backend)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
     assert captured_kwargs[0]["tools"] == ("AskUserQuestion",)
-    assert captured_kwargs[0]["system_prompt"] == "test"
+    assert captured_kwargs[0]["launch"] == FreshLaunch(system_prompt="test")
 
 
 def test_binary_name_from_backend_used_in_which(
@@ -722,7 +724,9 @@ def test_binary_name_from_backend_used_in_which(
     )
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
-    _run_interactive_session(system_prompt="test", backend=_CustomBinaryBackend())
+    _run_interactive_session(
+        launch=FreshLaunch(system_prompt="test"), backend=_CustomBinaryBackend()
+    )
     assert "test-agent-binary" in captured_which_arg
 
 
@@ -759,7 +763,7 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
 
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test", backend=_InjectedBackend())
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=_InjectedBackend())
     assert build_called, "Injected backend must be used"
 
 
@@ -802,7 +806,7 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
         "resolve_global_backend",
         fake_get_backend,
     )
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert get_backend_called, "typed resolver must be called when backend is not injected"
     assert get_backend_called[0] == "claude-code"
 
@@ -853,7 +857,7 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert build_calls, "Stub backend's build_interactive_cmd must be invoked via resolver DI"
 
 
@@ -906,7 +910,7 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert build_calls
     assert build_calls[-1]["mcp_tool_timeout_sec"] == 7777.0
 
@@ -961,8 +965,8 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _run_interactive_session(system_prompt="sentinel")
-    assert build_kwargs[0]["system_prompt"] == "sentinel"
+    _run_interactive_session(launch=FreshLaunch(system_prompt="sentinel"))
+    assert build_kwargs[0]["launch"] == FreshLaunch(system_prompt="sentinel")
 
 
 # ---------------------------------------------------------------------------
@@ -1011,7 +1015,7 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
         return type("Result", (), {"returncode": 0})()
 
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _run_interactive_session(system_prompt="test", backend=_CodexLikeBackend())
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=_CodexLikeBackend())
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
     assert "AskUserQuestion" not in captured["cmd"]
@@ -1098,7 +1102,7 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
         "Popen",
         _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert backends_used == ["codex", "codex"], (
         f"Expected configured Codex authority, got: {backends_used}"
     )
@@ -1158,7 +1162,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
         "Popen",
         _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
-    _run_interactive_session(system_prompt="test")
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert backends_used == ["codex", "codex"], (
         f"Expected codex backend when feature enabled, got: {backends_used}"
     )
@@ -1230,7 +1234,7 @@ def test_launch_cook_session_accepts_backend_param(
         ),
     )
     _launch_cook_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=_CapturingBackend(),
         required_env=frozenset(),
         skill_compilation=compilation,
@@ -1241,10 +1245,12 @@ def test_launch_cook_session_accepts_backend_param(
     assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
     assert rendered_payloads == [compilation.unavailability_payload]
     assert all(
-        call["system_prompt"].count("<autoskillit_skill_unavailability>") == 1
+        (call["launch"].system_prompt or "").count("<autoskillit_skill_unavailability>") == 1
         for call in build_calls
     )
-    assert all("precompiled-refusal" in call["system_prompt"] for call in build_calls)
+    assert all(
+        "precompiled-refusal" in (call["launch"].system_prompt or "") for call in build_calls
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1314,7 +1320,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
         backend = GeneratedHomeCodexBackend() if backend_name == "codex" else backend_cls()
         captured.clear()
-        _run_interactive_session(system_prompt="test", backend=backend)
+        _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
         cmd = captured.get("cmd", [])
         expected = Path(real_which(backend.binary_name()) or "").resolve()
         assert Path(cmd[0]) == expected
@@ -1363,7 +1369,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
         if backend_name == "codex"
         else BACKEND_REGISTRY[backend_name]()
     )
-    _run_interactive_session(system_prompt="test", backend=backend)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
     cmd = captured.get("cmd", [])
 
     expected = Path(real_which(backend.binary_name()) or "").resolve()
@@ -1416,7 +1422,7 @@ def test_cross_validation_contract_all_flags_known(
         if backend_name == "codex"
         else BACKEND_REGISTRY[backend_name]()
     )
-    _run_interactive_session(system_prompt="test", backend=backend)
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=backend)
     cmd = captured.get("cmd", [])
 
     expected = Path(real_which(backend.binary_name()) or "").resolve()
@@ -1498,7 +1504,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         return type("Result", (), {"returncode": 0})()
 
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _run_interactive_session(system_prompt="test", backend=_CodexBackendStub())
+    _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=_CodexBackendStub())
     assert call_sequence == ["pre_launch", "subprocess"], (
         f"ensure_pre_launch() must be called before subprocess.run, got: {call_sequence}"
     )
@@ -1547,7 +1553,9 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
 
     monkeypatch.setattr(subprocess, "Popen", _must_not_call)
     with pytest.raises(SystemExit, match="1"):
-        _run_interactive_session(system_prompt="test", backend=_FailingCodexBackend())
+        _run_interactive_session(
+            launch=FreshLaunch(system_prompt="test"), backend=_FailingCodexBackend()
+        )
 
 
 def test_managed_interactive_session_validates_before_shared_process_owner(
@@ -1604,7 +1612,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     trace = MagicMock()
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=_ManagedBackend(),
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
@@ -1667,7 +1675,7 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
 
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(
-            system_prompt="test",
+            launch=FreshLaunch(system_prompt="test"),
             backend=_ManagedBackend(),
             project_dir=tmp_path,
             skill_compilation=launch_kwargs["skill_compilation"],
@@ -1734,7 +1742,7 @@ def test_interactive_session_rejects_invalid_managed_inputs(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         _run_interactive_session(
-            system_prompt="test",
+            launch=FreshLaunch(system_prompt="test"),
             backend=_BackendLifecycleStub(),
             **managed_kwargs,
         )
@@ -1820,14 +1828,14 @@ print(json.dumps([entry]))
 
 
 @pytest.mark.parametrize("resume_kind", ("fresh", "named", "bare"))
-def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_specs(
+def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     resume_kind: str,
 ) -> None:
     """The finalized exact-bound command must retain the catalog for every resume form."""
     from autoskillit.cli.session._session_launch import prepare_interactive_launch
-    from autoskillit.core import BareResume, NamedResume, NoResume, ValidatedAddDir
+    from autoskillit.core import FreshLaunch, RestoreSession, ValidatedAddDir
     from autoskillit.execution.backends.codex import CodexBackend
 
     source_home = tmp_path / "source-codex"
@@ -1851,10 +1859,10 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
     )
     backend = CodexBackend(source_codex_home=source_home)
 
-    resume_spec = {
-        "fresh": NoResume(),
-        "named": NamedResume("resume-id"),
-        "bare": BareResume(),
+    launch = {
+        "fresh": FreshLaunch(system_prompt="test"),
+        "named": RestoreSession("resume-id"),
+        "bare": FreshLaunch(system_prompt="test"),
     }[resume_kind]
     prepared = prepare_interactive_launch(
         backend,
@@ -1862,9 +1870,7 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
         extra_env=None,
         required_env=None,
         plugin_binding=None,
-        resume_spec=resume_spec,
-        system_prompt="test",
-        initial_prompt=None,
+        launch=launch,
         add_dirs=(catalog,),
         generated_home=generated_home,
     )
@@ -2012,7 +2018,7 @@ def _prepare_codex_order_composition(
 
     def launch_raw() -> None:
         _run_interactive_session(
-            "composition contract",
+            launch=FreshLaunch(system_prompt="composition contract"),
             project_dir=project_dir,
             required_env=frozenset(),
             backend=backend,
@@ -2022,7 +2028,7 @@ def _prepare_codex_order_composition(
 
     def launch_managed() -> None:
         _launch_cook_session(
-            "composition contract",
+            launch=FreshLaunch(system_prompt="composition contract"),
             project_dir=project_dir,
             required_env=frozenset(),
             backend=backend,
@@ -2228,6 +2234,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
 ) -> None:
     from autoskillit.core import (
         CmdSpec,
+        FreshLaunch,
         InfraExitCategory,
         NamedResume,
         NoResume,
@@ -2276,7 +2283,10 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
-            built_prompts.append(kwargs["system_prompt"])
+            launch = kwargs["launch"]
+            built_prompts.append(
+                getattr(launch, "system_prompt", None) or getattr(launch, "briefing", None)
+            )
             managed_skill_catalog = next(
                 (entry for entry in kwargs["add_dirs"] if isinstance(entry, ValidatedAddDir)),
                 None,
@@ -2284,8 +2294,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             return CmdSpec(
                 cmd=("true",),
                 env={
-                    "INITIAL": kwargs.get("initial_prompt") or "",
-                    "RESUME": type(kwargs["resume_spec"]).__name__,
+                    "INITIAL": getattr(launch, "initial_prompt", None) or "",
+                    "RESUME": type(launch).__name__,
                 },
                 inherited_fds=(3,),
                 managed_skill_catalog=managed_skill_catalog,
@@ -2354,8 +2364,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     monkeypatch.setattr("autoskillit.execution.read_session_state", read_state)
 
     _launch_cook_session(
-        "lifecycle contract",
-        initial_message="greeting",
+        launch=FreshLaunch(system_prompt="lifecycle contract", initial_prompt="greeting"),
         project_dir=tmp_path,
         required_env=frozenset(),
         backend=backend,
@@ -2379,9 +2388,9 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     run_specs = [cast(CmdSpec, event[2]) for event in run_events]
     assert [spec.env["INITIAL"] for spec in run_specs] == ["greeting", "", ""]
     assert [spec.env["RESUME"] for spec in run_specs] == [
-        "NoResume",
-        "NamedResume",
-        "NamedResume",
+        "FreshLaunch",
+        "ResumeWithBriefing",
+        "ResumeWithBriefing",
     ]
     assert [event[3] for event in run_events] == [(3, 7, 5, 11)] * 3
     assert [spec.managed_skill_catalog for spec in run_specs] == [

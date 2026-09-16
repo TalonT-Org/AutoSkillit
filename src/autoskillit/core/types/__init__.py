@@ -80,6 +80,8 @@ from ._type_launch import *  # noqa: F401, F403
 from ._type_launch import __all__ as _launch_all
 from ._type_launch_authority import *  # noqa: F401, F403
 from ._type_launch_authority import __all__ as _launch_authority_all
+from ._type_launch_intent import *  # noqa: F401, F403
+from ._type_launch_intent import __all__ as _launch_intent_all
 from ._type_managed_home import *  # noqa: F401, F403
 from ._type_managed_home import __all__ as _managed_home_all
 from ._type_native_shell_capture import *  # noqa: F401, F403
@@ -173,6 +175,7 @@ __all__ = (
     + _install_all
     + _invariant_registry_all
     + _launch_all
+    + _launch_intent_all
     + _launch_authority_all
     + _managed_home_all
     + _native_shell_capture_all

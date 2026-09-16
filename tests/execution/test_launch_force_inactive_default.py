@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import FreshLaunch
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -106,7 +107,7 @@ def test_force_inactive_interactive_without_project_root_refuses() -> None:
     backend = ClaudeCodeBackend()
     with pytest.raises(RuntimeError, match="project_root"):
         backend.build_interactive_cmd(
-            initial_prompt="hello",
+            launch=FreshLaunch(initial_prompt="hello"),
             force_inactive_agent_teams=True,
             env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         )
@@ -149,7 +150,7 @@ def test_force_inactive_interactive_accepts_binding_from_neutralized_env(
     backend, project = _neutralized_launch_fixture(tmp_path, monkeypatch)
 
     env_spec = backend.build_interactive_cmd(
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         force_inactive_agent_teams=True,
         project_root=str(project),
     )
@@ -161,7 +162,7 @@ def test_force_inactive_interactive_accepts_binding_from_neutralized_env(
         cwd=project,
     )
     spec = backend.build_interactive_cmd(
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         executable=binding,
         force_inactive_agent_teams=True,
         project_root=str(project),
@@ -192,7 +193,7 @@ def test_force_inactive_interactive_rejects_stale_binding(
 
     with pytest.raises(ValueError, match="environment changed after executable binding"):
         backend.build_interactive_cmd(
-            initial_prompt="hello",
+            launch=FreshLaunch(initial_prompt="hello"),
             executable=stale,
             force_inactive_agent_teams=True,
             project_root=str(project),

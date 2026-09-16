@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import VARIADIC_CLAUDE_FLAGS
+from autoskillit.core import VARIADIC_CLAUDE_FLAGS, PositionalRole
 from autoskillit.execution.backends._cmd_builder import CmdBuilder, CmdOrderingError
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_positional_always_precedes_variadic_pairs():
     builder = CmdBuilder("claude")
     builder.mode_flag("--dangerously-skip-permissions")
-    builder.positional("my prompt")
+    builder.positional("my prompt", role=PositionalRole.PROMPT)
     builder.variadic_pair("--add-dir", "/path/a")
     builder.variadic_pair("--tools", "AskUserQuestion")
     spec = builder.build()
@@ -27,15 +27,15 @@ def test_variadic_pair_before_positional_raises():
     builder = CmdBuilder("claude")
     builder.variadic_pair("--add-dir", "/path/a")
     with pytest.raises(CmdOrderingError):
-        builder.positional("my prompt")
+        builder.positional("my prompt", role=PositionalRole.PROMPT)
 
 
 def test_build_produces_cmdspec_with_origin():
     builder = CmdBuilder("claude")
-    builder.positional("hello")
+    builder.positional("hello", role=PositionalRole.PROMPT)
     spec = builder.build()
     assert spec.origin is not None
-    assert spec.origin.positional == ("hello",)
+    assert spec.origin.positional == ((PositionalRole.PROMPT, "hello"),)
 
 
 def test_build_preserves_inherited_fds():
@@ -46,7 +46,7 @@ def test_build_preserves_inherited_fds():
 def test_mode_flag_appears_before_positional():
     builder = CmdBuilder("claude")
     builder.mode_flag("--dangerously-skip-permissions")
-    builder.positional("my prompt")
+    builder.positional("my prompt", role=PositionalRole.PROMPT)
     spec = builder.build()
     assert spec.cmd.index("--dangerously-skip-permissions") < spec.cmd.index("my prompt")
 
@@ -54,7 +54,7 @@ def test_mode_flag_appears_before_positional():
 def test_kv_flag_appears_before_positional():
     builder = CmdBuilder("claude")
     builder.kv_flag("--model", "claude-sonnet-4-6")
-    builder.positional("my prompt")
+    builder.positional("my prompt", role=PositionalRole.PROMPT)
     spec = builder.build()
     assert spec.cmd.index("--model") < spec.cmd.index("my prompt")
 
@@ -63,7 +63,7 @@ def test_build_assembles_correct_order():
     builder = CmdBuilder("claude")
     builder.mode_flag("--dangerously-skip-permissions")
     builder.kv_flag("--model", "claude-sonnet-4-6")
-    builder.positional("hello world")
+    builder.positional("hello world", role=PositionalRole.PROMPT)
     builder.variadic_pair("--add-dir", "/a")
     builder.variadic_pair("--add-dir", "/b")
     spec = builder.build()
@@ -80,14 +80,14 @@ def test_origin_fields_populated():
     builder = CmdBuilder("claude")
     builder.mode_flag("--mode-flag")
     builder.kv_flag("--model", "m")
-    builder.positional("prompt text")
+    builder.positional("prompt text", role=PositionalRole.PROMPT)
     builder.variadic_pair("--add-dir", "/p")
     spec = builder.build()
     assert spec.origin is not None
     assert spec.origin.binary == "claude"
     assert "--mode-flag" in spec.origin.mode_flags
     assert ("--model", "m") in spec.origin.kv_flags
-    assert "prompt text" in spec.origin.positional
+    assert (PositionalRole.PROMPT, "prompt text") in spec.origin.positional
     assert ("--add-dir", "/p") in spec.origin.variadic_pairs
 
 

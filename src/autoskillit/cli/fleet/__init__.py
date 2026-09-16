@@ -176,7 +176,11 @@ def fleet_campaign(
     if not proceed:
         return
 
-    greeting = random.choice(_FLEET_CAMPAIGN_GREETINGS).format(campaign_name=campaign_name)
+    greeting = (
+        random.choice(_FLEET_CAMPAIGN_GREETINGS).format(campaign_name=campaign_name)
+        if resume_campaign is None
+        else None
+    )
     _launch_fleet_session(
         parsed,
         campaign_id,

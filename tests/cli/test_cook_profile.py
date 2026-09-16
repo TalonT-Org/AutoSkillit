@@ -86,7 +86,10 @@ def _make_mock_backend_class(
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
             if system_prompts is not None:
-                system_prompts.append(kwargs.get("system_prompt"))
+                launch = kwargs["launch"]
+                system_prompts.append(
+                    getattr(launch, "system_prompt", None) or getattr(launch, "briefing", None)
+                )
             return CmdSpec(cmd=("claude",), env={})
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:

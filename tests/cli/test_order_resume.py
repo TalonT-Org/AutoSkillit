@@ -11,7 +11,7 @@ from autoskillit.cli.session._session_launch import (
     _InfraExitSignal,
     _launch_cook_session,
 )
-from autoskillit.core import NamedResume
+from autoskillit.core import FreshLaunch, ResumeWithBriefing
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -22,7 +22,7 @@ class TestLaunchCookSessionInfraResume:
     ) -> None:
         call_count = 0
 
-        def mock_run_interactive(system_prompt, **kwargs):
+        def mock_run_interactive(*, launch, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -34,17 +34,21 @@ class TestLaunchCookSessionInfraResume:
             "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
+            _launch_cook_session(
+                launch=FreshLaunch(system_prompt="prompt"),
+                required_env=frozenset(),
+                **launch_kwargs,
+            )
 
         assert call_count == 1
         assert "Automatic Codex context compaction was blocked" in capsys.readouterr().out
 
     def test_infra_exit_uses_named_resume(self, launch_kwargs: dict[str, object]) -> None:
-        resume_specs: list = []
+        launches: list = []
 
-        def mock_run_interactive(system_prompt, **kwargs):
-            resume_specs.append(kwargs.get("resume_spec"))
-            if len(resume_specs) == 1:
+        def mock_run_interactive(*, launch, **kwargs):
+            launches.append(launch)
+            if len(launches) == 1:
                 return _InfraExitSignal(session_id="sess-42", category="api_error")
             return None
 
@@ -53,13 +57,16 @@ class TestLaunchCookSessionInfraResume:
             "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
+            _launch_cook_session(
+                launch=FreshLaunch(system_prompt="prompt"),
+                required_env=frozenset(),
+                **launch_kwargs,
+            )
 
-        assert isinstance(resume_specs[1], NamedResume)
-        assert resume_specs[1].session_id == "sess-42"
+        assert launches[1] == ResumeWithBriefing(session_id="sess-42", briefing="prompt")
 
     def test_max_infra_resumes_exceeded(self, launch_kwargs: dict[str, object]) -> None:
-        def mock_run_interactive(system_prompt, **kwargs):
+        def mock_run_interactive(*, launch, **kwargs):
             return _InfraExitSignal(session_id="sess-loop", category="process_killed")
 
         with (
@@ -70,12 +77,16 @@ class TestLaunchCookSessionInfraResume:
             ),
             pytest.raises(SystemExit, match="Too many infrastructure resumes"),
         ):
-            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
+            _launch_cook_session(
+                launch=FreshLaunch(system_prompt="prompt"),
+                required_env=frozenset(),
+                **launch_kwargs,
+            )
 
     def test_no_resume_on_clean_exit(self, launch_kwargs: dict[str, object]) -> None:
         call_count = 0
 
-        def mock_run_interactive(system_prompt, **kwargs):
+        def mock_run_interactive(*, launch, **kwargs):
             nonlocal call_count
             call_count += 1
             return None
@@ -85,6 +96,10 @@ class TestLaunchCookSessionInfraResume:
             "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
+            _launch_cook_session(
+                launch=FreshLaunch(system_prompt="prompt"),
+                required_env=frozenset(),
+                **launch_kwargs,
+            )
 
         assert call_count == 1

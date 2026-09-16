@@ -417,13 +417,15 @@ def test_build_interactive_cmd_codex_returns_cmd_spec(tmp_path: Path):
 def test_build_interactive_cmd_signature_shape():
     import inspect
 
+    from autoskillit.core import FreshLaunch
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
 
     sig = inspect.signature(CodingAgentBackend.build_interactive_cmd)
     params = sig.parameters
 
     assert "order_mode" not in params, "order_mode must not be in signature"
-    assert params["system_prompt"].default is None
+    assert params["launch"].default == FreshLaunch()
+    assert not {"initial_prompt", "resume_spec", "system_prompt"} & set(params)
     for name, param in params.items():
         if name == "self":
             continue

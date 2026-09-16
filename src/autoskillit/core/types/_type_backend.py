@@ -6,6 +6,7 @@ import posixpath
 import re as _re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
@@ -50,6 +51,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "PositionalRole",
     "CodexRuntimeSpec",
     "CodexAppServerPlan",
     "SessionAttemptHandle",
@@ -538,6 +540,13 @@ class SessionAttemptHandle:
         self._record_reaped(pid, pgid)
 
 
+class PositionalRole(StrEnum):
+    """Semantic role of a positional command argument."""
+
+    RESUME_TARGET = "resume_target"
+    PROMPT = "prompt"
+
+
 @dataclass(frozen=True, slots=True)
 class CmdOrigin:
     """Provenance metadata for a CmdSpec, capturing the structural role of each element."""
@@ -545,7 +554,7 @@ class CmdOrigin:
     binary: str
     mode_flags: tuple[str, ...] = ()
     kv_flags: tuple[tuple[str, str], ...] = ()
-    positional: tuple[str, ...] = ()
+    positional: tuple[tuple[PositionalRole, str], ...] = ()
     variadic_pairs: tuple[tuple[str, str], ...] = ()
 
 

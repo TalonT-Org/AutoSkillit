@@ -27,13 +27,14 @@ from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat, SkillExecutionRole
 from ._type_execution_identity import ExecutionIdentity
 from ._type_exploration import ExplorationRouterPlan
+from ._type_launch_intent import FreshLaunch, InteractiveLaunch
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
 )
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import PreLaunchReadiness, ValidatedAddDir
-from ._type_resume import NoResume, ResumeSpec
+from ._type_resume import ResumeSpec
 from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import (
     SemanticAdaptationContext,
@@ -243,6 +244,8 @@ class CodingAgentBackend(Protocol):
 
     def binary_name(self) -> str: ...
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]: ...
+
     def build_resume_cmd(
         self,
         *,
@@ -305,14 +308,12 @@ class CodingAgentBackend(Protocol):
     def build_interactive_cmd(
         self,
         *,
-        initial_prompt: str | None = None,
+        launch: InteractiveLaunch = FreshLaunch(),
         model: str | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
-        resume_spec: ResumeSpec = NoResume(),
-        system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),

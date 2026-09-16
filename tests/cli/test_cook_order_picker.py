@@ -488,20 +488,18 @@ class TestOrderResumeParsing:
     def test_order_recipe_resume_with_session_id(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """order my-recipe --resume <uuid> passes NamedResume to launch — REQ-CLI-003."""
+        """order my-recipe --resume <uuid> passes RestoreSession to launch — REQ-CLI-003."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NamedResume, NoResume
+        from autoskillit.core import RestoreSession
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -512,8 +510,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -535,10 +532,9 @@ class TestOrderResumeParsing:
                 app(["order", "my-recipe", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == NamedResume(
+        assert captured["launch"] == RestoreSession(
             session_id="fa910a41-d1ca-4cae-b878-01028a0c7c1c"
         )
-        assert captured["prompt"] == ""
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
 
@@ -547,18 +543,16 @@ class TestOrderResumeParsing:
     ) -> None:
         """order --resume <uuid> (no recipe name) reroutes UUID to session_id — REQ-CLI-003."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NamedResume, NoResume
+        from autoskillit.core import RestoreSession
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -569,8 +563,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -581,10 +574,9 @@ class TestOrderResumeParsing:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == NamedResume(
+        assert captured["launch"] == RestoreSession(
             session_id="4b581974-1f19-4aec-8405-78c5ede5e233"
         )
-        assert captured["prompt"] == ""
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
 
@@ -593,18 +585,16 @@ class TestOrderResumeParsing:
     ) -> None:
         """order --resume (no uuid, no recipe) calls _launch_cook_session; no recipe validation."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NoResume
+        from autoskillit.core import FreshLaunch
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -615,8 +605,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -633,10 +622,42 @@ class TestOrderResumeParsing:
             assert exc_info.value.code == 0
 
         assert captured, "fake_launch was never called"
-        assert captured["resume_spec"] == NoResume()
-        assert "MCP STARTUP RECOVERY" in captured["prompt"]
+        assert isinstance(captured["launch"], FreshLaunch)
+        assert "MCP STARTUP RECOVERY" in (captured["launch"].system_prompt or "")
+        assert captured["launch"].initial_prompt is None
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
+
+    def test_order_bare_resume_picker_selection_restores_session(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A picker choice resumes that session without adding a greeting."""
+        from autoskillit.cli.app import app
+        from autoskillit.core import RestoreSession
+
+        monkeypatch.chdir(tmp_path)
+        captured: dict[str, object] = {}
+
+        def fake_launch(*, launch, **_kwargs):
+            captured["launch"] = launch
+
+        with (
+            patch.object(
+                _patch_session__session_order,
+                "_launch_cook_session",
+                side_effect=fake_launch,
+            ),
+            patch.object(
+                _patch_session__session_picker,
+                "pick_session",
+                return_value="picked-session",
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "--resume"])
+            assert exc_info.value.code == 0
+
+        assert captured["launch"] == RestoreSession(session_id="picked-session")
 
     def test_order_resume_uuid_does_not_validate_recipe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

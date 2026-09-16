@@ -29,6 +29,7 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
+    FreshLaunch,
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
@@ -294,7 +295,7 @@ def _run_session_launch(
 
     monkeypatch.setattr(subprocess, "Popen", record_spawn)
     _run_interactive_session(
-        system_prompt="selector integration",
+        launch=FreshLaunch(system_prompt="selector integration"),
         project_dir=state.home / "project",
         backend=backend,
     )
@@ -477,7 +478,7 @@ def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
     )
     launch_id = "0123456789abcdef"
     _launch_cook_session(
-        "projection immutability integration",
+        launch=FreshLaunch(system_prompt="projection immutability integration"),
         project_dir=project_dir,
         required_env=frozenset(),
         backend=backend,

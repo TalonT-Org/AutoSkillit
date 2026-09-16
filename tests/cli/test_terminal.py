@@ -472,6 +472,8 @@ class TestCookTerminalGuard:
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
+        from autoskillit.core import FreshLaunch
+
         app_mod = importlib.import_module("autoskillit.cli.session._session_launch")
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -496,7 +498,7 @@ class TestCookTerminalGuard:
 
         with pytest.raises(KeyboardInterrupt):
             app_mod._launch_cook_session(
-                "system prompt",
+                launch=FreshLaunch(system_prompt="system prompt"),
                 required_env=frozenset(),
                 **launch_kwargs,
             )

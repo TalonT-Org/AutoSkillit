@@ -28,7 +28,7 @@ from dataclasses import replace
 
 import pytest
 
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, FreshLaunch
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -114,7 +114,7 @@ def _resume_spec(force: bool) -> CmdSpec:
 def _interactive_spec(force: bool) -> CmdSpec:
     backend = ClaudeCodeBackend()
     spec = backend.build_interactive_cmd(
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         env_extras={"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"},
         force_inactive_agent_teams=force,
         project_root="/tmp",

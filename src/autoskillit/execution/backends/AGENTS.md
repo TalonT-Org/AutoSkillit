@@ -35,3 +35,13 @@ builder instead emits `codex app-server --listen stdio://` JSON-RPC
 (`_codex/app_server.py`), which implements the `LineDriver` protocol. When
 adding a Codex builder, mix in whichever of these two boundaries matches its
 transport rather than hand-rolling either argv or JSON-RPC construction.
+
+## Interactive launch ordering
+
+Each backend owns the CLI classifications for its interactive command through
+`interactive_ordering_flags() -> tuple[frozenset[str], frozenset[str]]`. The
+first set contains variadic flags and the second contains flags that consume a
+value. Interactive launch sites must pass both sets to
+`assert_interactive_ordering(spec=..., variadic_flags=...,
+value_bearing_flags=...)`; callers must not infer flag behavior from another
+backend or from a shared parser heuristic.

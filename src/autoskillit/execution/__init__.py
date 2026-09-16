@@ -149,6 +149,7 @@ from autoskillit.execution.github_review import (
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     assert_interactive_ordering,
+    assert_resume_purity,
     resolve_model_pin,
     run_headless_core,
 )
@@ -318,6 +319,7 @@ __all__ = [
     "DefaultLaunchResolver",
     "resolve_backend_override",
     "assert_interactive_ordering",
+    "assert_resume_purity",
     "resolve_model_pin",
     # testing
     "parse_pytest_summary",

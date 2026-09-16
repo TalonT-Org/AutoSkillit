@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import random
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,8 +21,7 @@ from autoskillit.cli.session._session_launch import (
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
     BareResume,
-    NamedResume,
-    NoResume,
+    FreshLaunch,
     RecipeSource,
     SkillContractError,
     SkillExecutionRole,
@@ -214,34 +214,37 @@ def order(
                 raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
             recipe = resolved.name
 
+    if isinstance(resume_spec, BareResume):
+        try:
+            sweep_orphaned_tethers(default_tether_dir())
+        except Exception:
+            logger.warning("order_startup_tether_sweep_failed", exc_info=True)
+        backend.recover_cook_history()
+
+    from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
+
+    launch = resolve_interactive_launch(
+        resume_spec=resume_spec,
+        session_type="order",
+        project_dir=project_dir,
+        backend=backend,
+    )
+
     if recipe is None:
         from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
-        from autoskillit.cli.session._session_picker import pick_session as _pick_session
 
-        if isinstance(resume_spec, BareResume):
-            try:
-                sweep_orphaned_tethers(default_tether_dir())
-            except Exception:
-                logger.warning("order_startup_tether_sweep_failed", exc_info=True)
-            backend.recover_cook_history()
-            _sel = _pick_session(
-                "order",
-                project_dir,
-                backend.session_locator(),
+        if isinstance(launch, FreshLaunch):
+            launch = replace(
+                launch,
+                system_prompt=_build_open_kitchen_prompt(
+                    mcp_prefix=mcp_prefix,
+                    has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
+                    skill_compilation=skill_compilation,
+                    project_root=project_dir,
+                    backend=backend,
+                ),
+                initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
             )
-            resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
-        system_prompt = (
-            _build_open_kitchen_prompt(
-                mcp_prefix=mcp_prefix,
-                has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-                skill_compilation=skill_compilation,
-                project_root=project_dir,
-                backend=backend,
-            )
-            if isinstance(resume_spec, NoResume)
-            else ""
-        )
-        greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
         launch_id, launch_env = _write_order_entry(project_dir, None)
         launch_extra_env = launch_env
     else:
@@ -349,28 +352,26 @@ def order(
         )
         if confirm.lower() in ("n", "no"):
             return
-        greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
         launch_id, launch_env = _write_order_entry(project_dir, recipe)
         launch_extra_env = {**_extra_env, **launch_env}
-        system_prompt = (
-            _build_orchestrator_prompt(
-                recipe,
-                mcp_prefix=mcp_prefix,
-                ingredients_table=_itable,
-                has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-                skill_compilation=skill_compilation,
-                project_root=project_dir,
-                backend=backend,
+        if isinstance(launch, FreshLaunch):
+            launch = replace(
+                launch,
+                system_prompt=_build_orchestrator_prompt(
+                    recipe,
+                    mcp_prefix=mcp_prefix,
+                    ingredients_table=_itable,
+                    has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
+                    skill_compilation=skill_compilation,
+                    project_root=project_dir,
+                    backend=backend,
+                ),
+                initial_prompt=random.choice(_COOK_GREETINGS).format(recipe_name=recipe),
             )
-            if isinstance(resume_spec, NoResume)
-            else ""
-        )
 
     _launch_cook_session(
-        system_prompt,
-        initial_message=greeting,
+        launch,
         extra_env=launch_extra_env,
-        resume_spec=resume_spec,
         project_dir=project_dir,
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
         backend=backend,

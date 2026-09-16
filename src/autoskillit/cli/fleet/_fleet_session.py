@@ -14,9 +14,14 @@ from autoskillit.core import (
     FLEET_SESSION_REQUIRED_ENV,
     CodingAgentBackend,
     FleetSessionEnv,
+    FreshLaunch,
     InfraExitCategory,
+    InteractiveLaunch,
     NamedResume,
     NoResume,
+    RestoreSession,
+    ResumeSpec,
+    ResumeWithBriefing,
     SkillExecutionRole,
     dump_yaml_str,
     get_logger,
@@ -25,7 +30,6 @@ from autoskillit.core import (
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.core import ResumeSpec
     from autoskillit.fleet import ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
@@ -54,21 +58,17 @@ def _fleet_session_launcher(
     mcp_tool_timeout_sec: float,
     cook_ceiling_seconds: float,
     systemd_scope_enabled: bool,
-) -> Iterator[Callable[[str, str | None, dict[str, str], ResumeSpec], Any]]:
+) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
     """Keep one leased wrapper home through a fleet session's retry loop."""
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
     def raw_launch(
-        prompt: str,
-        initial_message: str | None,
+        launch: InteractiveLaunch,
         extra_env: dict[str, str],
-        resume_spec: ResumeSpec,
     ) -> Any:
         return _run_interactive_session(
-            prompt,
-            initial_message=initial_message,
+            launch,
             extra_env=extra_env,
-            resume_spec=resume_spec,
             project_dir=project_dir,
             required_env=FLEET_SESSION_REQUIRED_ENV,
             backend=backend,
@@ -151,19 +151,15 @@ def _fleet_session_launcher(
             launch_binding = projection_binding if launch_load_mode.consumes_artifact else None
 
             def managed_launch(
-                prompt: str,
-                initial_message: str | None,
+                launch: InteractiveLaunch,
                 extra_env: dict[str, str],
-                resume_spec: ResumeSpec,
             ) -> Any:
                 nonlocal attempt
                 attempt += 1
                 launch_env = {**extra_env, LAUNCH_ID_ENV_VAR: launch_id}
                 return _run_interactive_session(
-                    prompt,
-                    initial_message=initial_message,
+                    launch,
                     extra_env=launch_env,
-                    resume_spec=resume_spec,
                     project_dir=project_dir,
                     required_env=FLEET_SESSION_REQUIRED_ENV,
                     backend=backend,
@@ -336,9 +332,19 @@ def _launch_fleet_session(
         else:
             current_resume_spec = NoResume()
 
+    if isinstance(current_resume_spec, NamedResume):
+        current_launch: InteractiveLaunch = ResumeWithBriefing(
+            session_id=current_resume_spec.session_id,
+            briefing=prompt,
+        )
+    else:
+        current_launch = FreshLaunch(
+            system_prompt=prompt,
+            initial_prompt=initial_message,
+        )
+
     seen_reload_ids: set[str] = set()
     infra_resume_count = 0
-    current_initial_message = initial_message
 
     with _fleet_session_launcher(
         backend=_backend,
@@ -353,17 +359,15 @@ def _launch_fleet_session(
     ) as launch_session:
         while True:
             session_signal = launch_session(
-                prompt,
-                current_initial_message,
+                current_launch,
                 extra_env,
-                current_resume_spec,
             )
             if session_signal is None:
                 break
             if isinstance(session_signal, str):
-                current_resume_spec = admit_reload(session_signal, seen_reload_ids, _MAX_RELOADS)
+                resumed = admit_reload(session_signal, seen_reload_ids, _MAX_RELOADS)
+                current_launch = RestoreSession(session_id=resumed.session_id)
                 resume_session_id = session_signal
-                is_reload = True
             else:
                 if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
                     print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
@@ -375,19 +379,14 @@ def _launch_fleet_session(
                         f"Last exit: {session_signal.category}"
                     )
                 resume_session_id = session_signal.session_id
-                current_resume_spec = NamedResume(session_id=resume_session_id)
-                is_reload = False
+                current_launch = RestoreSession(session_id=resume_session_id)
 
             if campaign_recipe is None:
-                if is_reload:
-                    current_initial_message = None
                 continue
 
             assert state_path is not None
             assert campaign_id is not None
             update_orchestrator_session_id(state_path, resume_session_id)
-            current_initial_message = None
-
             fresh_metadata = resume_campaign_from_state(
                 state_path, campaign_recipe.continue_on_failure
             )

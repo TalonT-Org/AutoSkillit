@@ -10,7 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, CmdOrigin, CmdSpec, NamedResume, NoResume
+from autoskillit.core import (
+    CmdOrigin,
+    CmdSpec,
+    FreshLaunch,
+    PositionalRole,
+    RestoreSession,
+    ResumeWithBriefing,
+)
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
 from autoskillit.execution.backends.codex import CodexFlags
@@ -68,34 +75,37 @@ class TestCodexInteractiveCmdBaseStructure:
             f'sqlite_home="{generated_home}"',
         ) in spec.origin.kv_flags
 
-    def test_no_resume_base_command(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
+    def test_fresh_base_command(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert "resume" not in spec.cmd
 
     @pytest.mark.parametrize(
-        "resume_spec",
-        [NoResume(), BareResume(), NamedResume(session_id="s1")],
-        ids=["NoResume", "BareResume", "NamedResume"],
+        "launch",
+        [
+            FreshLaunch(),
+            RestoreSession(session_id="s1"),
+            ResumeWithBriefing(session_id="s1", briefing="continue"),
+        ],
+        ids=["fresh", "restore", "resume_with_briefing"],
     )
-    def test_returns_cmd_spec_with_tuple(self, resume_spec) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=resume_spec)
+    def test_returns_cmd_spec_with_tuple(self, launch) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=launch)
         assert isinstance(spec, CmdSpec)
         assert isinstance(spec.cmd, tuple)
 
 
 class TestCodexInteractiveCmdResumeVariants:
-    def test_no_resume_excludes_resume_subcommand(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
+    def test_fresh_launch_excludes_resume_subcommand(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
 
-    def test_named_resume_includes_resume_with_session_id(self) -> None:
+    def test_resume_with_briefing_includes_resume_session_and_briefing(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
-            resume_spec=NamedResume(session_id="abc123"),
+            launch=ResumeWithBriefing(session_id="abc123", briefing="continue"),
             model="gpt-5.6-sol",
             generated_home=Path("/session/home"),
-            initial_prompt="",
             add_dirs=[Path("/first"), Path("/second")],
             env_extras={"AUTOSKILLIT_PROVIDER_PROFILE": "test-profile"},
         )
@@ -112,7 +122,7 @@ class TestCodexInteractiveCmdResumeVariants:
             CodexFlags.CONFIG_OVERRIDE,
             'sqlite_home="/session/home"',
             "abc123",
-            "",
+            "continue",
             CodexFlags.ADD_DIR,
             "/first",
             CodexFlags.ADD_DIR,
@@ -130,18 +140,24 @@ class TestCodexInteractiveCmdResumeVariants:
                 (CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"),
                 (CodexFlags.CONFIG_OVERRIDE, 'sqlite_home="/session/home"'),
             ),
-            positional=("abc123", ""),
+            positional=(
+                (PositionalRole.RESUME_TARGET, "abc123"),
+                (PositionalRole.PROMPT, "continue"),
+            ),
             variadic_pairs=(
                 (CodexFlags.ADD_DIR, "/first"),
                 (CodexFlags.ADD_DIR, "/second"),
             ),
         )
 
-    def test_bare_resume_includes_resume_without_session_id(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=BareResume())
+    def test_restore_session_includes_resume_with_no_prompt(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=RestoreSession(session_id="abc123"))
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         idx = list(spec.cmd).index(CodexFlags.RESUME_SUBCOMMAND)
         assert spec.cmd[idx + 1] == CodexFlags.DANGEROUSLY_BYPASS
+        assert spec.cmd[-1] == "abc123"
+        assert spec.origin is not None
+        assert spec.origin.positional == ((PositionalRole.RESUME_TARGET, "abc123"),)
 
 
 class TestCodexInteractiveCmdModelFlag:
@@ -156,10 +172,9 @@ class TestCodexInteractiveCmdModelFlag:
 
 
 class TestCodexInteractiveCmdSystemPrompt:
-    def test_system_prompt_with_no_resume_produces_config_override(self) -> None:
+    def test_fresh_system_prompt_produces_config_override(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
-            system_prompt="do stuff",
-            resume_spec=NoResume(),
+            launch=FreshLaunch(system_prompt="do stuff"),
         )
         assert _developer_instructions(spec) == (
             f"do stuff\n\n{codex_discipline_suffix(include_scope=True)}"
@@ -169,30 +184,24 @@ class TestCodexInteractiveCmdSystemPrompt:
         ]
         assert "features.image_generation=false" in overrides
 
-    def test_system_prompt_with_named_resume_suppressed(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(
-            system_prompt="do stuff",
-            resume_spec=NamedResume(session_id="s1"),
-        )
+    @pytest.mark.parametrize(
+        "launch",
+        [
+            RestoreSession(session_id="s1"),
+            ResumeWithBriefing(session_id="s1", briefing="continue"),
+        ],
+        ids=["restore", "resume_with_briefing"],
+    )
+    def test_resume_variants_do_not_emit_fresh_developer_instructions(self, launch) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=launch)
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
         assert not any(v.startswith("developer_instructions=") for v in overrides)
         assert "features.image_generation=false" in overrides
 
-    def test_system_prompt_with_bare_resume_suppressed(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(
-            system_prompt="do stuff",
-            resume_spec=BareResume(),
-        )
-        overrides = [
-            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
-        ]
-        assert not any(v.startswith("developer_instructions=") for v in overrides)
-        assert "features.image_generation=false" in overrides
-
-    def test_no_system_prompt_with_no_resume_excludes_config_override(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
+    def test_fresh_launch_without_system_prompt_uses_scope_discipline(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
@@ -202,8 +211,7 @@ class TestCodexInteractiveCmdSystemPrompt:
     def test_system_prompt_override_is_valid_toml_with_quotes_and_newlines(self) -> None:
         caller_prompt = 'line one "quoted"\nline two \\ path'
         spec = CodexBackend().build_interactive_cmd(
-            system_prompt=caller_prompt,
-            resume_spec=NoResume(),
+            launch=FreshLaunch(system_prompt=caller_prompt),
         )
         assert _developer_instructions(spec) == (
             f"{caller_prompt}\n\n{codex_discipline_suffix(include_scope=True)}"
@@ -218,8 +226,7 @@ class TestCodexInteractiveCmdSystemPrompt:
             'caller """ prompt = "quoted"\n[features]\npath = C:\\temp\\$HOME\n# literal text'
         )
         spec = CodexBackend().build_interactive_cmd(
-            system_prompt=caller_prompt,
-            resume_spec=NoResume(),
+            launch=FreshLaunch(system_prompt=caller_prompt),
         )
         config_pairs: list[str] = []
         for index, value in enumerate(spec.cmd[:-1]):
@@ -315,7 +322,7 @@ class TestCodexInteractiveCmdCodexHome:
 class TestCodexInteractiveCmdPositionalOrdering:
     def test_codex_initial_prompt_precedes_add_dir(self) -> None:
         result = CodexBackend().build_interactive_cmd(
-            initial_prompt="hello",
+            launch=FreshLaunch(initial_prompt="hello"),
             add_dirs=[Path("/tmp/a")],
         )
         prompt_idx = list(result.cmd).index("hello")

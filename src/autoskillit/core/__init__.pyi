@@ -831,6 +831,7 @@ from .types import BackendEventKind as BackendEventKind
 from .types import BackendPinResolution as BackendPinResolution
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
+from .types import FreshLaunch as FreshLaunch
 from .types import BindingFailure as BindingFailure
 from .types import BindingFailureCode as BindingFailureCode
 from .types import BindingMode as BindingMode
@@ -1054,6 +1055,7 @@ from .types import ModelPinResolution as ModelPinResolution
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
+from .types import InteractiveLaunch as InteractiveLaunch
 from .types import NativeShellCaptureDecision as NativeShellCaptureDecision
 from .types import NativeShellCaptureDiagnostic as NativeShellCaptureDiagnostic
 from .types import NativeShellCaptureMode as NativeShellCaptureMode
@@ -1062,6 +1064,7 @@ from .types import NativeShellCaptureReason as NativeShellCaptureReason
 from .types import NativeShellCaptureStatus as NativeShellCaptureStatus
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import PositionalRole as PositionalRole
 from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
@@ -1176,6 +1179,8 @@ from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
+from .types import RestoreSession as RestoreSession
+from .types import ResumeWithBriefing as ResumeWithBriefing
 from .types import RetiredArtifactShape as RetiredArtifactShape
 from .types import RetirementBackstopDef as RetirementBackstopDef
 from .types import RetirementOutcome as RetirementOutcome

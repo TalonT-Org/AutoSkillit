@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from autoskillit.core import (
         CodingAgentBackend,
         RepositoryProfileId,
+        ResumeSpec,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
@@ -228,9 +229,12 @@ def cook(
         BareResume,
         ExplorationVectorApplicabilityId,
         ExplorationVectorDisposition,
+        FreshLaunch,
         NamedResume,
         NoResume,
         RepositoryProfileId,
+        RestoreSession,
+        ResumeWithBriefing,
         SessionType,
         SkillExecutionRole,
         bind_session_owner,
@@ -255,11 +259,6 @@ def cook(
         all_backends(),
         required_backend_names={backend.name},
     )
-    initial_prompt: str | None = None
-    first_run = is_first_run(project_dir)
-    if first_run:
-        initial_prompt = run_onboarding_menu(project_dir, color=color)
-
     ephemeral_root = resolve_ephemeral_root()
     skills_provider = SkillsDirectoryProvider(
         temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
@@ -344,17 +343,28 @@ def cook(
             except Exception:
                 logger.warning("cook_startup_tether_sweep_failed", exc_info=True)
             backend.recover_cook_history()
-            from autoskillit.cli.session._session_picker import pick_session
 
-            selected_id = pick_session(
-                SESSION_TYPE_COOK,
-                project_dir,
-                backend.session_locator(),
+        from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
+
+        launch = resolve_interactive_launch(
+            resume_spec=resume_spec,
+            session_type=SESSION_TYPE_COOK,
+            project_dir=project_dir,
+            backend=backend,
+        )
+        showed_onboarding = False
+        if isinstance(launch, FreshLaunch):
+            onboarding_result = (
+                run_onboarding_menu(project_dir, color=color)
+                if is_first_run(project_dir)
+                else None
             )
-            if selected_id is not None:
-                resume_spec = NamedResume(session_id=selected_id)
-            else:
-                resume_spec = NoResume()
+            showed_onboarding = onboarding_result is not None
+            launch = replace(
+                launch,
+                system_prompt=cook_system_prompt,
+                initial_prompt=onboarding_result,
+            )
 
         from autoskillit.cli.session._session_startup_trace import StartupTrace
         from autoskillit.cli.ui._timed_input import timed_prompt
@@ -386,19 +396,26 @@ def cook(
             )
         cook_env_extras.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
 
-        current_resume_spec = resume_spec
-        current_initial_prompt = initial_prompt
+        current_launch = launch
         max_reloads = 10
         seen_reload_ids: set[str] = set()
         attempt = 0
 
         from autoskillit.cli.session._session_process import run_cook_attempt
         from autoskillit.cli.session._session_reload import admit_reload, consume_reload_sentinel
-        from autoskillit.execution import assert_interactive_ordering
+        from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
 
         try:
             while True:
                 attempt += 1
+                match current_launch:
+                    case FreshLaunch():
+                        current_resume_spec: ResumeSpec = NoResume()
+                    case (
+                        RestoreSession(session_id=session_id)
+                        | ResumeWithBriefing(session_id=session_id)
+                    ):
+                        current_resume_spec = NamedResume(session_id=session_id)
                 launch_binding = projection_binding if load_mode.consumes_artifact else None
                 try:
                     prepared = prepare_interactive_launch(
@@ -407,9 +424,7 @@ def cook(
                         extra_env=cook_env_extras,
                         required_env=None,
                         plugin_binding=launch_binding,
-                        resume_spec=current_resume_spec,
-                        system_prompt=cook_system_prompt,
-                        initial_prompt=current_initial_prompt,
+                        launch=current_launch,
                         add_dirs=[managed_home.skills_dir],
                         generated_home=managed_home.generated_home,
                         home_prepared=True,
@@ -429,7 +444,13 @@ def cook(
                     cwd=str(project_dir),
                     origin=final_origin,
                 )
-                assert_interactive_ordering(spec=spec)
+                variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
+                assert_interactive_ordering(
+                    spec=spec,
+                    variadic_flags=variadic_flags,
+                    value_bearing_flags=value_bearing_flags,
+                )
+                assert_resume_purity(spec=spec, launch=current_launch)
                 validation_errors = backend.validate_interactive_invocation(spec)
                 if validation_errors:
                     raise RuntimeError(
@@ -497,19 +518,19 @@ def cook(
                 if reload_session_id is None:
                     if result.returncode != 0:
                         raise SystemExit(result.returncode)
-                    if first_run and initial_prompt is not None:
+                    if showed_onboarding:
                         from autoskillit.cli.session._session_onboarding import mark_onboarded
 
                         mark_onboarded(project_dir)
                     trace.close(status="success")
                     return
 
-                current_resume_spec = admit_reload(
+                resumed = admit_reload(
                     reload_session_id,
                     seen_reload_ids,
                     max_reloads,
                 )
-                current_initial_prompt = None
+                current_launch = RestoreSession(session_id=resumed.session_id)
         except BaseException:
             trace.close(status="failed")
             raise

@@ -26,6 +26,63 @@ from autoskillit.recipe.contracts.staleness_cache import (
 logger = get_logger(__name__)
 
 
+def _compare_block_fingerprints(recipe_obj: Any, stored_card: Any) -> list[StaleItem]:
+    current_card = _generate_recipe_card_for_recipe(recipe_obj)
+    current_fps = {fp.name: fp for fp in current_card.block_fingerprints}
+    stale_items: list[StaleItem] = []
+    for stored_fp in stored_card.block_fingerprints:
+        current_fp = current_fps.get(stored_fp.name)
+        if current_fp is None:
+            stale_items.append(
+                StaleItem(
+                    skill=stored_fp.name,
+                    reason="block_composition_drift",
+                    stored_value=repr(stored_fp),
+                    current_value="(block removed)",
+                )
+            )
+        elif current_fp != stored_fp:
+            stale_items.append(
+                StaleItem(
+                    skill=stored_fp.name,
+                    reason="block_composition_drift",
+                    stored_value=repr(stored_fp),
+                    current_value=repr(current_fp),
+                )
+            )
+    return stale_items
+
+
+def _current_skill_hash(
+    skill_name: str,
+    *,
+    skills_dir: Path | None,
+    resolver: SkillResolver | None,
+    project_root: Path | None,
+) -> str:
+    if skills_dir is not None:
+        current_hash = compute_skill_hash(skill_name, skills_dir=skills_dir)
+    else:
+        if resolver is None:
+            raise RuntimeError("check_staleness called without effective_skills_dir or resolver")
+        info = resolver.resolve_effective(skill_name, project_root)
+        if info is not None and info.invalidities:
+            from autoskillit.workspace import render_skill_invalidities
+
+            logger.warning(
+                "skill_staleness_check_skipped_invalid_candidate",
+                skill=skill_name,
+                reason=render_skill_invalidities(info.invalidities),
+            )
+            info = None
+        current_hash = (
+            compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
+            if info is not None
+            else ""
+        )
+    return current_hash
+
+
 def check_contract_staleness(
     contract: dict[str, Any] | Any,
     *,
@@ -62,30 +119,7 @@ def check_contract_staleness(
     if stored_card is not None:
         recipe_obj = contract if hasattr(contract, "steps") else None
         if recipe_obj is not None:
-            current_card = _generate_recipe_card_for_recipe(recipe_obj)
-            current_fps = {fp.name: fp for fp in current_card.block_fingerprints}
-            stale_items: list[StaleItem] = []
-            for stored_fp in stored_card.block_fingerprints:
-                current_fp = current_fps.get(stored_fp.name)
-                if current_fp is None:
-                    stale_items.append(
-                        StaleItem(
-                            skill=stored_fp.name,
-                            reason="block_composition_drift",
-                            stored_value=repr(stored_fp),
-                            current_value="(block removed)",
-                        )
-                    )
-                elif current_fp != stored_fp:
-                    stale_items.append(
-                        StaleItem(
-                            skill=stored_fp.name,
-                            reason="block_composition_drift",
-                            stored_value=repr(stored_fp),
-                            current_value=repr(current_fp),
-                        )
-                    )
-            return stale_items
+            return _compare_block_fingerprints(recipe_obj, stored_card)
 
     if hasattr(contract, "steps"):
         return []
@@ -140,28 +174,12 @@ def check_contract_staleness(
         _resolver = resolver
         effective_skills_dir = None
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-        if effective_skills_dir is not None:
-            current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
-        else:
-            if _resolver is None:
-                raise RuntimeError(
-                    "check_staleness called without effective_skills_dir or resolver"
-                )
-            info = _resolver.resolve_effective(skill_name, project_root)
-            if info is not None and info.invalidities:
-                from autoskillit.workspace import render_skill_invalidities
-
-                logger.warning(
-                    "skill_staleness_check_skipped_invalid_candidate",
-                    skill=skill_name,
-                    reason=render_skill_invalidities(info.invalidities),
-                )
-                info = None
-            current_hash = (
-                compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
-                if info is not None
-                else ""
-            )
+        current_hash = _current_skill_hash(
+            skill_name,
+            skills_dir=effective_skills_dir,
+            resolver=_resolver,
+            project_root=project_root,
+        )
         if current_hash and stored_hash != current_hash:
             stale.append(
                 StaleItem(

@@ -98,6 +98,73 @@ def _parse_methodology_tradition(data: dict, source_path: Path) -> MethodologyTr
     )
 
 
+def _parse_venue_appendix(
+    item: object, index: int, data: dict, source_path: Path
+) -> VenueAppendixDef:
+    if not isinstance(item, dict):
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"must be a dict, got {type(item).__name__}: {source_path}"
+        )
+    sub_area = item.get("sub_area")
+    if not isinstance(sub_area, str) or not sub_area:
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"'sub_area' must be a non-empty string: {source_path}"
+        )
+    if "trigger_keywords" not in item:
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"missing required key 'trigger_keywords': {source_path}"
+        )
+    trigger_keywords = item["trigger_keywords"]
+    if not isinstance(trigger_keywords, list):
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"'trigger_keywords' must be a list, "
+            f"got {type(trigger_keywords).__name__}: {source_path}"
+        )
+    if "expectations" not in item:
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"missing required key 'expectations': {source_path}"
+        )
+    expectations = item["expectations"]
+    if not isinstance(expectations, list):
+        raise TypeError(
+            f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+            f"'expectations' must be a list, got {type(expectations).__name__}: {source_path}"
+        )
+    parsed_expectations: list[dict[str, str]] = []
+    for expectation_index, expectation in enumerate(expectations):
+        if not isinstance(expectation, dict):
+            raise TypeError(
+                f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+                f"expectations[{expectation_index}] must be a dict, "
+                f"got {type(expectation).__name__}: {source_path}"
+            )
+        figure = expectation.get("figure")
+        source = expectation.get("source")
+        if not isinstance(figure, str) or not figure:
+            raise TypeError(
+                f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+                f"expectations[{expectation_index}] 'figure' must be a non-empty string: "
+                f"{source_path}"
+            )
+        if not isinstance(source, str) or not source:
+            raise TypeError(
+                f"Methodology tradition '{data['name']}' venue_specific_appendices[{index}] "
+                f"expectations[{expectation_index}] 'source' must be a non-empty string: "
+                f"{source_path}"
+            )
+        parsed_expectations.append({"figure": figure, "source": source})
+    return VenueAppendixDef(
+        sub_area=sub_area,
+        trigger_keywords=tuple(str(keyword) for keyword in trigger_keywords),
+        expectations=tuple(parsed_expectations),
+    )
+
+
 def _parse_venue_appendices(data: dict, source_path: Path) -> tuple[VenueAppendixDef, ...]:
     raw = data.get("venue_specific_appendices", [])
     if not isinstance(raw, list):
@@ -105,70 +172,9 @@ def _parse_venue_appendices(data: dict, source_path: Path) -> tuple[VenueAppendi
             f"Methodology tradition '{data['name']}' field 'venue_specific_appendices' "
             f"must be a list, got {type(raw).__name__}: {source_path}"
         )
-    result: list[VenueAppendixDef] = []
-    for i, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"must be a dict, got {type(item).__name__}: {source_path}"
-            )
-        sub_area = item.get("sub_area")
-        if not isinstance(sub_area, str) or not sub_area:
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"'sub_area' must be a non-empty string: {source_path}"
-            )
-        if "trigger_keywords" not in item:
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"missing required key 'trigger_keywords': {source_path}"
-            )
-        trigger_keywords = item["trigger_keywords"]
-        if not isinstance(trigger_keywords, list):
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"'trigger_keywords' must be a list, "
-                f"got {type(trigger_keywords).__name__}: {source_path}"
-            )
-        if "expectations" not in item:
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"missing required key 'expectations': {source_path}"
-            )
-        expectations = item["expectations"]
-        if not isinstance(expectations, list):
-            raise TypeError(
-                f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                f"'expectations' must be a list, got {type(expectations).__name__}: {source_path}"
-            )
-        parsed_expectations: list[dict[str, str]] = []
-        for j, exp in enumerate(expectations):
-            if not isinstance(exp, dict):
-                raise TypeError(
-                    f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                    f"expectations[{j}] must be a dict, got {type(exp).__name__}: {source_path}"
-                )
-            fig = exp.get("figure")
-            src = exp.get("source")
-            if not isinstance(fig, str) or not fig:
-                raise TypeError(
-                    f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                    f"expectations[{j}] 'figure' must be a non-empty string: {source_path}"
-                )
-            if not isinstance(src, str) or not src:
-                raise TypeError(
-                    f"Methodology tradition '{data['name']}' venue_specific_appendices[{i}] "
-                    f"expectations[{j}] 'source' must be a non-empty string: {source_path}"
-                )
-            parsed_expectations.append({"figure": fig, "source": src})
-        result.append(
-            VenueAppendixDef(
-                sub_area=sub_area,
-                trigger_keywords=tuple(str(kw) for kw in trigger_keywords),
-                expectations=tuple(parsed_expectations),
-            )
-        )
-    return tuple(result)
+    return tuple(
+        _parse_venue_appendix(item, index, data, source_path) for index, item in enumerate(raw)
+    )
 
 
 def _load_traditions_from_dir(directory: Path) -> dict[str, MethodologyTraditionSpec]:

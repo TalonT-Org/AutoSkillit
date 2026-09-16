@@ -117,6 +117,43 @@ def _rule_matches(rule: DisambiguationRuleDef, candidates: set[str]) -> bool:
     return False
 
 
+def _evaluate_first_matching_rule(
+    candidate_names: set[str],
+    rules: list[DisambiguationRuleDef],
+) -> tuple[str | None, list[str], list[str]]:
+    primary: str | None = None
+    union_rules: list[str] = []
+    trace_parts: list[str] = []
+    for rule in sorted(rules, key=lambda r: r.order):
+        if _rule_matches(rule, candidate_names):
+            primary = rule.primary_tradition
+            union_rules.extend(rule.applied_union_rules)
+            trace_parts.append(f"rule_{rule.name}")
+            for exc in rule.exceptions:
+                if exc.when_present in candidate_names:
+                    union_rules.extend(exc.add_union_rules)
+                    trace_parts.append(f"exception_{exc.when_present}")
+            break
+    return primary, union_rules, trace_parts
+
+
+def _apply_matching_overlaps(
+    candidate_names: set[str],
+    overlaps: list[CrossTraditionOverlapDef],
+    primary: str | None,
+    union_rules: list[str],
+    trace_parts: list[str],
+) -> str | None:
+    for overlap in sorted(overlaps, key=lambda o: o.order):
+        if overlap.trigger_traditions.issubset(candidate_names):
+            union_rules.extend(overlap.applied_union_rules)
+            trace_parts.append(f"overlap_{overlap.name}")
+            if primary is None or overlap.overrides_primary:
+                primary = overlap.primary_tradition
+                trace_parts.append(f"overlap_primary_{overlap.name}")
+    return primary
+
+
 def disambiguate(
     candidate_names: set[str],
     *,
@@ -155,31 +192,14 @@ def disambiguate(
 
         tradition_priority = {s.name: s.priority for s in load_all_methodology_traditions()}
 
-    primary: str | None = None
-    union_rules: list[str] = []
-    trace_parts: list[str] = []
     sorted_candidates = tuple(
         sorted(candidate_names, key=lambda n: (tradition_priority.get(n, 999), n))
     )
 
-    for rule in sorted(rules, key=lambda r: r.order):
-        if _rule_matches(rule, candidate_names):
-            primary = rule.primary_tradition
-            union_rules.extend(rule.applied_union_rules)
-            trace_parts.append(f"rule_{rule.name}")
-            for exc in rule.exceptions:
-                if exc.when_present in candidate_names:
-                    union_rules.extend(exc.add_union_rules)
-                    trace_parts.append(f"exception_{exc.when_present}")
-            break
-
-    for overlap in sorted(overlaps, key=lambda o: o.order):
-        if overlap.trigger_traditions.issubset(candidate_names):
-            union_rules.extend(overlap.applied_union_rules)
-            trace_parts.append(f"overlap_{overlap.name}")
-            if primary is None or overlap.overrides_primary:
-                primary = overlap.primary_tradition
-                trace_parts.append(f"overlap_primary_{overlap.name}")
+    primary, union_rules, trace_parts = _evaluate_first_matching_rule(candidate_names, rules)
+    primary = _apply_matching_overlaps(
+        candidate_names, overlaps, primary, union_rules, trace_parts
+    )
 
     if primary is None:
         primary = sorted_candidates[0]

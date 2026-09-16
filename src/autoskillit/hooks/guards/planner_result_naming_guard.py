@@ -61,12 +61,13 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
         return None
 
     subdir_parts = path_parts[dir_idx + 1 : -1]
-    # `any(part for part in subdir_parts if part)` (not `any(subdir_parts)`)
-    # because double-slash paths like `//result.json` produce an empty
-    # string segment where `any([""])` would be False — allowing the
-    # subdirectory check to be silently bypassed. An empty-string segment
-    # is not a real subdirectory, so we explicitly skip it here.
-    if any(part for part in subdir_parts if part):
+    # `path_parts` comes from `file_path.replace("\\", "/").split("/")`,
+    # so consecutive separators (e.g. `.autoskillit//phases/`) produce
+    # empty-string segments. `any()` already uses truthiness, so empty
+    # strings naturally do not count — we forbid result files that
+    # would land in any subdirectory of the tier dir, not directly
+    # under it.
+    if any(subdir_parts):
         return None
 
     if tier_dir == "phases":

@@ -65,6 +65,16 @@ def test_restore_session_has_no_prompt_constructor_field() -> None:
         RestoreSession(session_id="session-1", initial_prompt="hello")  # type: ignore[call-arg]
 
 
+@pytest.mark.parametrize("field", ("initial_prompt", "system_prompt"))
+def test_resume_with_briefing_has_no_prompt_constructor_fields(field: str) -> None:
+    with pytest.raises(TypeError):
+        ResumeWithBriefing(
+            session_id="session-1",
+            briefing="continue",
+            **{field: "hello"},  # type: ignore[arg-type]
+        )
+
+
 def test_resume_briefing_must_not_be_empty() -> None:
     with pytest.raises(ValueError, match="briefing must not be empty"):
         ResumeWithBriefing(session_id="session-1", briefing="")

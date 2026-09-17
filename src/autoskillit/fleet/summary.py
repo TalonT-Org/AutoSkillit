@@ -125,7 +125,7 @@ _REQUIRED_TOP_KEYS = frozenset(
 )
 
 
-def _validate_summary_top_level(data: dict[str, Any], errors: list[str]) -> None:
+def _validate_top_level(data: dict[str, Any], errors: list[str]) -> None:
     """Append top-level campaign summary schema errors."""
     for key in _FORBIDDEN_AGGREGATE_KEYS:
         if key in data:
@@ -165,7 +165,7 @@ def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
     Returns list of error strings. Empty list = valid.
     """
     errors: list[str] = []
-    _validate_summary_top_level(data, errors)
+    _validate_top_level(data, errors)
     _validate_per_dispatch_entries(data, errors)
     return errors
 

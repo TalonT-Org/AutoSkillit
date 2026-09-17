@@ -39,8 +39,7 @@ _FIELD_RE = re.compile(r"^(\w+)\s*=\s*(.*)$", re.MULTILINE)
 DispositionValue = Literal["applied", "skipped", "failed"]
 _DISPOSITION_VALUES: frozenset[DispositionValue] = frozenset({"applied", "skipped", "failed"})
 
-_REPORT_MALFORMED_LOG_KEY = "outcome_report_malformed"
-_REPORT_MALFORMED_SUBTYPE = "outcome_report_malformed"
+_REPORT_MALFORMED = "outcome_report_malformed"
 _EVIDENCE_FAILED_LOG_KEY = "outcome_evidence_failed"
 
 
@@ -310,8 +309,8 @@ def _disposition_semantics_failure(
     if verdict not in _SUCCESS_VERDICTS:
         return _AdjudicationFailure(
             retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-            log_key=_REPORT_MALFORMED_LOG_KEY,
-            subtype=_REPORT_MALFORMED_SUBTYPE,
+            log_key=_REPORT_MALFORMED,
+            subtype=_REPORT_MALFORMED,
             detail="processed review result is missing a recognized verdict",
         )
     return None
@@ -346,8 +345,8 @@ def _test_evidence_failure(
     except ValueError as exc:
         return _AdjudicationFailure(
             retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-            log_key=_REPORT_MALFORMED_LOG_KEY,
-            subtype=_REPORT_MALFORMED_SUBTYPE,
+            log_key=_REPORT_MALFORMED,
+            subtype=_REPORT_MALFORMED,
             detail=f"workspace outcome record timestamps are malformed: {exc}",
         )
     if not last_test.succeeded:
@@ -391,8 +390,8 @@ def apply_finding_disposition_adjudication(
             fields,
             _AdjudicationFailure(
                 retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-                log_key=_REPORT_MALFORMED_LOG_KEY,
-                subtype=_REPORT_MALFORMED_SUBTYPE,
+                log_key=_REPORT_MALFORMED,
+                subtype=_REPORT_MALFORMED,
                 detail=report_defect,
             ),
         ), fields
@@ -406,15 +405,14 @@ def apply_finding_disposition_adjudication(
         end_ts=end_ts,
     )
     if records is None:
-        assert evidence_defect is not None
         return _demote_outcome(
             sr,
             fields,
             _AdjudicationFailure(
                 retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-                log_key=_REPORT_MALFORMED_LOG_KEY,
-                subtype=_REPORT_MALFORMED_SUBTYPE,
-                detail=evidence_defect,
+                log_key=_REPORT_MALFORMED,
+                subtype=_REPORT_MALFORMED,
+                detail=evidence_defect or "workspace outcome evidence is unavailable",
             ),
         ), fields
     successful_commits = [
@@ -429,8 +427,8 @@ def apply_finding_disposition_adjudication(
             fields,
             _AdjudicationFailure(
                 retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-                log_key=_REPORT_MALFORMED_LOG_KEY,
-                subtype=_REPORT_MALFORMED_SUBTYPE,
+                log_key=_REPORT_MALFORMED,
+                subtype=_REPORT_MALFORMED,
                 detail=commit_defect,
             ),
         ), fields

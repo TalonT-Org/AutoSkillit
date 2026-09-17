@@ -379,18 +379,33 @@ class TestPtyWrappedSpawnUpdatesTetherWithWorkloadIdentity:
         # this bare name from execution.process's own globals, the same module
         # it's defined in, not from the outer execution package's re-export.
         update_calls: list[tuple[object, ...]] = []
+        workload_released = tmp_path / "workload-released"
+
+        def _record_update(path, workload_pid, workload_starttime_ticks) -> None:
+            update_calls.append((path, workload_pid, workload_starttime_ticks))
+            workload_released.touch()
+
         monkeypatch.setattr(
             process_module,
             "update_tether_workload",
-            lambda path, workload_pid, workload_starttime_ticks: update_calls.append(
-                (path, workload_pid, workload_starttime_ticks)
-            ),
+            _record_update,
         )
 
         result = await run_managed_async(
-            [sys.executable, "-c", "import time; time.sleep(0.3)"],
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pathlib import Path\n"
+                    "import time\n"
+                    f"marker = Path({str(workload_released)!r})\n"
+                    "deadline = time.monotonic() + 8.0\n"
+                    "while not marker.exists() and time.monotonic() < deadline:\n"
+                    "    time.sleep(0.05)\n"
+                ),
+            ],
             cwd=tmp_path,
-            timeout=5.0,
+            timeout=10.0,
             pty_mode=True,
             ceiling_seconds=60.0,
         )

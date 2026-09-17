@@ -12,7 +12,11 @@ from pathlib import Path
 
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
-from ..types._type_closure_report import ClosureReport
+from ..types._type_closure_report import (
+    CLOSURE_ROW_BLOCKING_ASSESSMENTS,
+    ClosureReport,
+)
+from .audit_semantic_codec import evaluate_rationale_contradiction
 from .closure_hashing import (
     compute_file_hash,
     compute_report_hash,
@@ -29,6 +33,36 @@ class VerificationResult:
     verdict: str | None
     errors: tuple[str, ...]
     report_path: str | None
+
+
+def _verify_rows(report: ClosureReport) -> list[str]:
+    errors: list[str] = []
+    for idx, row in enumerate(report.rows):
+        expected = compute_row_hash(
+            row.requirement_id,
+            row.requirement_text,
+            row.assessment,
+            row.evidence_summary,
+            row.source_file,
+            row.source_line,
+            row.source_section,
+        )
+        if row.row_hash != expected:
+            errors.append(
+                f"[row-hash] row[{idx}] {row.requirement_id}: row_hash mismatch (content tampered)"
+            )
+        finding = evaluate_rationale_contradiction(
+            row.requirement_id,
+            row.requirement_text,
+            row.evidence_summary,
+        )
+        if finding is not None and row.assessment not in CLOSURE_ROW_BLOCKING_ASSESSMENTS:
+            errors.append(
+                f"[substitution-floor] {row.requirement_id}: evidence describes a "
+                f"substitution ({finding.matched_marker}) of a prescribed "
+                f"mechanism, but assessment {row.assessment} is not blocking"
+            )
+    return errors
 
 
 def verify_closure_report(
@@ -127,18 +161,7 @@ def verify_closure_report(
             f"computed {computed_request_hash}"
         )
 
-    for idx, row in enumerate(report.rows):
-        expected = compute_row_hash(
-            row.requirement_id,
-            row.requirement_text,
-            row.assessment,
-            row.evidence_summary,
-            row.source_file,
-            row.source_line,
-            row.source_section,
-        )
-        if row.row_hash != expected:
-            errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+    errors.extend(_verify_rows(report))
 
     expected_report_hash = compute_report_hash(
         report.request_hash, [r.row_hash for r in report.rows], report.verdict

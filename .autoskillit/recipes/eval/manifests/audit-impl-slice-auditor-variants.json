@@ -1,0 +1,8 @@
+[
+  {
+    "id": "baseline",
+    "label": "Baseline",
+    "agent_file": "src/autoskillit/agents/audit-impl-slice-auditor.md",
+    "description": "Current audit-impl-slice-auditor definition."
+  }
+]

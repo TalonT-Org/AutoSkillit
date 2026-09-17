@@ -73,6 +73,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
         "prepare_experimental_review_publication",
+        "probe_audit_substitutions",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
         "REVIEW_HANDOFF_IDENTITY_FIELDS",
@@ -121,6 +122,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
         "prepare_experimental_review_publication",
+        "probe_audit_substitutions",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
         "review_handoff_pair_error",
@@ -145,6 +147,13 @@ def test_smoke_utils_callable_resolvable_via_importlib(name: str) -> None:
         ("annotate_pr_diff", {"pr_number": "1", "cwd": "/tmp/repo"}),
         ("parse_eval_manifests", {"canary_manifest": "{}", "variant_manifest": "{}"}),
         ("parse_agent_eval_manifests", {"canary_manifest": "{}", "variant_manifest": "{}"}),
+        (
+            "probe_audit_substitutions",
+            {
+                "requirements_path": "/tmp/requirements.json",
+                "diff_path": "/tmp/implementation.diff",
+            },
+        ),
         ("compute_domain_partitions", {"batch_branch": "b", "base_branch": "main", "cwd": "/tmp"}),
         ("fetch_merge_queue_data", {"base_branch": "main", "cwd": "/tmp"}),
         ("diagnose_merge_gate", {"test_stdout": "FAILED x", "test_stderr": ""}),
@@ -156,6 +165,28 @@ def test_callable_rejects_relative_output_dir(callable_name: str, minimal_args: 
     func = getattr(smoke_utils, callable_name)
     with pytest.raises(ValueError, match="absolute"):
         func(**minimal_args, output_dir=".autoskillit/temp/test")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {
+            "requirements_path": "requirements.json",
+            "diff_path": "/tmp/implementation.diff",
+            "output_dir": "/tmp/probe-output",
+        },
+        {
+            "requirements_path": "/tmp/requirements.json",
+            "diff_path": "implementation.diff",
+            "output_dir": "/tmp/probe-output",
+        },
+    ],
+)
+def test_probe_audit_substitutions_rejects_relative_input_paths(kwargs: dict[str, str]) -> None:
+    from autoskillit.smoke_utils import probe_audit_substitutions
+
+    with pytest.raises(ValueError, match="absolute"):
+        probe_audit_substitutions(**kwargs)
 
 
 def test_enrich_diff_context_rejects_relative_project_dir() -> None:

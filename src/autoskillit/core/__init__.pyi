@@ -24,9 +24,22 @@ from .audit.audit_cycle_verifier import AuditCycleVerificationError as AuditCycl
 from .audit.audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
 from .audit.audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
 from .audit.audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
+from .audit.audit_semantic_codec import (
+    PRESCRIPTIVE_MECHANISM_CUES as PRESCRIPTIVE_MECHANISM_CUES,
+)
+from .audit.audit_semantic_codec import SUBSTITUTION_MARKERS as SUBSTITUTION_MARKERS
 from .audit.audit_semantic_codec import AuditSemanticCodecError as AuditSemanticCodecError
+from .audit.audit_semantic_codec import ProbedRequirement as ProbedRequirement
+from .audit.audit_semantic_codec import SubstitutionFinding as SubstitutionFinding
+from .audit.audit_semantic_codec import SubstitutionTrigger as SubstitutionTrigger
 from .audit.audit_semantic_codec import (
     canonical_full_reference_records_match as canonical_full_reference_records_match,
+)
+from .audit.audit_semantic_codec import (
+    evaluate_diff_mock_of_prescribed_symbol as evaluate_diff_mock_of_prescribed_symbol,
+)
+from .audit.audit_semantic_codec import (
+    evaluate_rationale_contradiction as evaluate_rationale_contradiction,
 )
 from .audit.audit_semantic_codec import (
     load_audit_semantic_result as load_audit_semantic_result,
@@ -34,6 +47,7 @@ from .audit.audit_semantic_codec import (
 from .audit.audit_semantic_codec import (
     load_standalone_audit_evidence as load_standalone_audit_evidence,
 )
+from .audit.audit_semantic_codec import probe_substitutions as probe_substitutions
 from .audit.closure_hashing import HASH_RE as HASH_RE
 from .audit.closure_hashing import canonical_json_bytes as canonical_json_bytes
 from .audit.closure_hashing import compute_bytes_hash as compute_bytes_hash
@@ -789,6 +803,7 @@ from .types import AuditAttemptRecord as AuditAttemptRecord
 from .types import AuditAuthorityMaterializer as AuditAuthorityMaterializer
 from .types import AuditCycleAuthority as AuditCycleAuthority
 from .types import AuditCycleHead as AuditCycleHead
+from .types import AuditDisposition as AuditDisposition
 from .types import (
     AuditDispositionCommitOutcome as AuditDispositionCommitOutcome,
 )

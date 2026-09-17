@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tomllib
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -491,6 +492,7 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
 def test_run_interactive_session_terminates_when_owner_binding_refuses_corrupt_registry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
 ) -> None:
     from autoskillit.core import LAUNCH_ID_ENV_VAR
     from autoskillit.core.runtime.session_registry import registry_path
@@ -500,6 +502,7 @@ def test_run_interactive_session_terminates_when_owner_binding_refuses_corrupt_r
     path = registry_path(tmp_path)
     path.parent.mkdir(parents=True)
     path.write_text("not valid json", encoding="utf-8")
+    _stub_owner_binding(False)
     backend, _captured_kwargs = _make_capturing_backend()
 
     with pytest.raises(RuntimeError, match="session owner binding refused"):
@@ -517,17 +520,15 @@ def test_run_interactive_session_terminates_when_owner_binding_refuses_corrupt_r
 def test_run_interactive_session_terminates_when_owner_binding_raises(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
 ) -> None:
     from autoskillit.core import LAUNCH_ID_ENV_VAR
 
     process = InteractiveProcessStub(pid=888)
     expected = OSError("registry write failed")
 
-    def fail_bind(*_args: object) -> bool:
-        raise expected
-
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", fail_bind)
+    _stub_owner_binding(expected)
     backend, _captured_kwargs = _make_capturing_backend()
 
     with pytest.raises(OSError) as caught:
@@ -1716,6 +1717,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     launch_kwargs: dict[str, object],
+    _stub_owner_binding: Callable[[bool | BaseException], None],
 ) -> None:
     """A failed managed owner bind reaches the runner so it can reap the child."""
     from autoskillit.core import LAUNCH_ID_ENV_VAR, ManagedSessionHome, ValidatedAddDir
@@ -1736,7 +1738,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
         "run_cook_attempt",
         run_attempt,
     )
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: False)
+    _stub_owner_binding(False)
     generated_home = tmp_path / "generated"
     generated_home.mkdir()
     managed_home = ManagedSessionHome(

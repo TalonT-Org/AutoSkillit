@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tomllib
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -772,18 +773,13 @@ def test_cook_resume_reuses_claimed_launch_identity_everywhere(
 def test_cook_aborts_when_managed_owner_binding_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
     binding_outcome: bool | RuntimeError,
     error_match: str,
 ) -> None:
     backend = _Backend()
     captured = _install_harness(monkeypatch, tmp_path)
-
-    def fail_or_refuse(*_args: object) -> bool:
-        if isinstance(binding_outcome, BaseException):
-            raise binding_outcome
-        return binding_outcome
-
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", fail_or_refuse)
+    _stub_owner_binding(binding_outcome)
 
     with pytest.raises(RuntimeError, match=error_match):
         cli.cook(backend=backend)

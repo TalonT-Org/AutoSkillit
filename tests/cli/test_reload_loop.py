@@ -262,7 +262,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     run_events = lifecycle.events_of_type("run")
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
-    build_launches = [launch for event in events if event[0] == "build" for launch in (event[1],)]
+    build_launches = [event[1] for event in events if event[0] == "build"]
     assert len(build_launches) == 4
     fresh_launches = [launch for launch in build_launches if isinstance(launch, FreshLaunch)]
     restored_launches = [launch for launch in build_launches if isinstance(launch, RestoreSession)]

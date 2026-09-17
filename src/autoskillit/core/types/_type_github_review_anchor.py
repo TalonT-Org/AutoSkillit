@@ -140,10 +140,13 @@ class DiffAnchorAuthority:
         if not isinstance(self.availability, AnchorAuthorityAvailability):
             raise TypeError("availability must be an AnchorAuthorityAvailability")
 
-        right = _freeze_line_map(self.right_side_lines, "right_side_lines")
-        left = _freeze_line_map(self.left_side_lines, "left_side_lines")
-        object.__setattr__(self, "right_side_lines", right)
-        object.__setattr__(self, "left_side_lines", left)
+        right = self.right_side_lines
+        left = self.left_side_lines
+        if not isinstance(right, MappingProxyType) or not isinstance(left, MappingProxyType):
+            right = _freeze_line_map(self.right_side_lines, "right_side_lines")
+            left = _freeze_line_map(self.left_side_lines, "left_side_lines")
+            object.__setattr__(self, "right_side_lines", right)
+            object.__setattr__(self, "left_side_lines", left)
         if self.availability is AnchorAuthorityAvailability.UNAVAILABLE and (right or left):
             raise ValueError("unavailable authority cannot contain diff lines")
 

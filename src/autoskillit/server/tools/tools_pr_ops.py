@@ -310,16 +310,14 @@ async def verify_review_receipt(
             allow_nan=False,
         )
         identity_matches = (
-            authoritative.repository == repository.casefold()
+            authoritative.repository.casefold() == repository.casefold()
             and authoritative.pr_number == pr_number
             and authoritative.head_sha == head_sha
             and authoritative.logical_iteration == logical_iteration
             and authoritative.state.value == post_state
         )
         return _review_verification_result(
-            identity_matches
-            and artifact_wire == authoritative_wire
-            and is_final_github_review_state(authoritative.state.value)
+            identity_matches and artifact_wire == authoritative_wire
         )
     except Exception:
         logger.error("verify_review_receipt unhandled exception", exc_info=True)

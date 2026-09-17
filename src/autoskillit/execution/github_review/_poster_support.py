@@ -69,6 +69,11 @@ def payload(
     entries = []
     for disposition in omitted:
         if disposition.kind is ReviewFindingDispositionKind.OMITTED_INVALID:
+            if not 0 <= disposition.original_index < len(request.comments):
+                raise IndexError(
+                    f"omitted disposition original_index {disposition.original_index} "
+                    f"out of range for request with {len(request.comments)} comments"
+                )
             comment = request.comments[disposition.original_index]
             entries.append(
                 f"- `{comment.path}:{comment.line}` ({comment.side}): "

@@ -10,7 +10,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, overload
+from typing import TYPE_CHECKING, NoReturn, assert_never, overload
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
@@ -403,6 +403,8 @@ def _run_interactive_session(
             current_resume_spec: ResumeSpec = NoResume()
         case RestoreSession(session_id=session_id) | ResumeWithBriefing(session_id=session_id):
             current_resume_spec = NamedResume(session_id=session_id)
+        case _:
+            assert_never(launch)
     if managed:
         assert managed_home is not None
         assert attempt is not None

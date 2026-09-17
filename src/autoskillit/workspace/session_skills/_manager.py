@@ -31,6 +31,7 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
     ManagedSessionHome,
+    ObservedEntry,
     SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
@@ -65,6 +66,38 @@ from autoskillit.workspace.skills import render_skill_invalidities
 logger = get_logger(__name__)
 
 
+def _reclaim_stale_entry(
+    entry: ObservedEntry,
+    root: Path,
+    now: float,
+    max_age_seconds: int,
+    failures: list[BaseException],
+) -> bool:
+    """Recheck and remove one stale candidate while holding its nonblocking lease."""
+    lease = _SessionLease.acquire(
+        root / _SESSION_LEASES_SUBDIR / f"{entry.name}.lock",
+        blocking=False,
+    )
+    if lease is None:
+        return False
+    did_remove = False
+    try:
+        current_mtime = safe_mtime(entry.path)
+        if current_mtime is not None and now - current_mtime > max_age_seconds:
+            did_remove = _remove_and_verify(entry.path)
+    except VANISHED_ERRORS:
+        pass
+    except BaseException as exc:
+        logger.error("stale_session_cleanup_failed", exc_info=True)
+        failures.append(exc)
+    try:
+        lease.release()
+    except BaseException as exc:
+        logger.error("stale_session_lease_release_failed", exc_info=True)
+        failures.append(exc)
+    return did_remove
+
+
 @dataclass(frozen=True, slots=True)
 class _InitializedSession:
     generated_home: Path
@@ -96,6 +129,54 @@ class DefaultSessionSkillManager:
     def ephemeral_root(self) -> Path:
         """Return the root used for ephemeral session directories."""
         return self._root
+
+    def _assert_session_unowned(self, session_id: str) -> None:
+        if (
+            session_id in self._session_roots
+            or session_id in self._session_leases
+            or session_id in self._session_skills_subdirs
+            or session_id in self._session_skill_infos
+        ):
+            raise RuntimeError(f"Session is already owned by this manager: {session_id}")
+
+    def _session_home(
+        self,
+        session_id: str,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> tuple[Path, Path, Path, bool]:
+        conventions = projection_context.conventions
+        skills_subdir = (
+            conventions.skills_subdir
+            if conventions is not None
+            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        )
+        backend = projection_context.backend
+        if backend is not None and backend.capabilities.session_dir_persistent:
+            persistent = True
+            configured_root = self._persistent_roots.get(backend.name)
+        else:
+            persistent = False
+            configured_root = self._root
+        if configured_root is None:
+            selected_backend = backend.name if backend is not None else None
+            raise RuntimeError(
+                "A persistent_root is required for persistent generated-home sessions; "
+                f"selected_backend={selected_backend!r}; "
+                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
+            )
+        try:
+            effective_root = configured_root.resolve()
+        except OSError as exc:
+            raise RuntimeError(f"Invalid generated-home root {configured_root}: {exc}") from exc
+        if effective_root.exists() and not effective_root.is_dir():
+            raise RuntimeError(f"Generated-home root is not a directory: {effective_root}")
+        return skills_subdir, effective_root, effective_root / session_id, persistent
+
+    def _clear_session_ownership(self, session_id: str) -> None:
+        self._session_roots.pop(session_id, None)
+        self._session_skills_subdirs.pop(session_id, None)
+        self._session_skill_infos.pop(session_id, None)
+        self._session_leases.pop(session_id, None)
 
     def materialize_invocation(
         self,
@@ -187,41 +268,11 @@ class DefaultSessionSkillManager:
     ) -> ValidatedAddDir:
         """Restore one retained skill closure into a fresh generated home."""
         self._validate_session_id(session_id)
-        backend = projection_context.backend
-        if (
-            session_id in self._session_roots
-            or session_id in self._session_leases
-            or session_id in self._session_skills_subdirs
-            or session_id in self._session_skill_infos
-        ):
-            raise RuntimeError(f"Session is already owned by this manager: {session_id}")
-
-        conventions = projection_context.conventions
-        skills_subdir = (
-            conventions.skills_subdir
-            if conventions is not None
-            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        self._assert_session_unowned(session_id)
+        skills_subdir, effective_root, generated_home, _ = self._session_home(
+            session_id,
+            projection_context,
         )
-        configured_root = (
-            self._persistent_roots.get(backend.name)
-            if backend is not None and backend.capabilities.session_dir_persistent
-            else self._root
-        )
-        if configured_root is None:
-            selected_backend = backend.name if backend is not None else None
-            raise RuntimeError(
-                "A persistent_root is required for persistent generated-home sessions; "
-                f"selected_backend={selected_backend!r}; "
-                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
-            )
-        try:
-            effective_root = configured_root.resolve()
-        except OSError as exc:
-            raise RuntimeError(f"Invalid generated-home root {configured_root}: {exc}") from exc
-        if effective_root.exists() and not effective_root.is_dir():
-            raise RuntimeError(f"Generated-home root is not a directory: {effective_root}")
-
-        generated_home = effective_root / session_id
         lease: _SessionLease | None = None
         try:
             lease_path = effective_root / _SESSION_LEASES_SUBDIR / f"{session_id}.lock"
@@ -243,10 +294,7 @@ class DefaultSessionSkillManager:
         except BaseException as exc:
             logger.error("session_restore_failed", exc_info=True)
             failures: list[BaseException] = [exc]
-            self._session_roots.pop(session_id, None)
-            self._session_skills_subdirs.pop(session_id, None)
-            self._session_skill_infos.pop(session_id, None)
-            self._session_leases.pop(session_id, None)
+            self._clear_session_ownership(session_id)
             if lease is not None and os.path.lexists(generated_home):
                 try:
                     _remove_and_verify(generated_home)
@@ -405,39 +453,12 @@ class DefaultSessionSkillManager:
         self._validate_session_id(session_id)
         if explorer_binding_env is not None and explorer_binding_env_factory is not None:
             raise ValueError("provide an explorer binding map or factory, not both")
-        if (
-            session_id in self._session_roots
-            or session_id in self._session_leases
-            or session_id in self._session_skills_subdirs
-            or session_id in self._session_skill_infos
-        ):
-            raise RuntimeError(f"Session is already owned by this manager: {session_id}")
-
-        conventions = projection_context.conventions
-        skills_subdir = (
-            conventions.skills_subdir
-            if conventions is not None
-            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-        )
+        self._assert_session_unowned(session_id)
         backend = projection_context.backend
-        persistent = backend is not None and backend.capabilities.session_dir_persistent
-        if backend is not None and persistent:
-            configured_root = self._persistent_roots.get(backend.name)
-        else:
-            configured_root = self._root
-        if configured_root is None:
-            selected_backend = backend.name if backend is not None else None
-            raise RuntimeError(
-                "A persistent_root is required for persistent generated-home sessions; "
-                f"selected_backend={selected_backend!r}; "
-                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
-            )
-        try:
-            effective_root = configured_root.resolve()
-        except OSError as exc:
-            raise RuntimeError(f"Invalid generated-home root {configured_root}: {exc}") from exc
-        if effective_root.exists() and not effective_root.is_dir():
-            raise RuntimeError(f"Generated-home root is not a directory: {effective_root}")
+        skills_subdir, effective_root, generated_home, persistent = self._session_home(
+            session_id,
+            projection_context,
+        )
 
         if backend is not None:
             if (
@@ -449,7 +470,6 @@ class DefaultSessionSkillManager:
                 )
 
         owned_skills_subdir = Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
-        generated_home = effective_root / session_id
         lease: _SessionLease | None = None
         try:
             lease_path = effective_root / _SESSION_LEASES_SUBDIR / f"{session_id}.lock"
@@ -485,10 +505,7 @@ class DefaultSessionSkillManager:
         except BaseException as exc:
             logger.error("session_initialization_failed", exc_info=True)
             failures: list[BaseException] = [exc]
-            self._session_roots.pop(session_id, None)
-            self._session_skills_subdirs.pop(session_id, None)
-            self._session_skill_infos.pop(session_id, None)
-            self._session_leases.pop(session_id, None)
+            self._clear_session_ownership(session_id)
             if lease is not None and os.path.lexists(generated_home):
                 try:
                     _remove_and_verify(generated_home)
@@ -632,27 +649,13 @@ class DefaultSessionSkillManager:
                 if now - entry.mtime > max_age_seconds:
                     if entry.name in self._session_leases:
                         continue
-                    lease = _SessionLease.acquire(
-                        resolved_root / _SESSION_LEASES_SUBDIR / f"{entry.name}.lock",
-                        blocking=False,
+                    did_remove = _reclaim_stale_entry(
+                        entry,
+                        resolved_root,
+                        now,
+                        max_age_seconds,
+                        failures,
                     )
-                    if lease is None:
-                        continue
-                    did_remove = False
-                    try:
-                        current_mtime = safe_mtime(entry.path)
-                        if current_mtime is not None and now - current_mtime > max_age_seconds:
-                            did_remove = _remove_and_verify(entry.path)
-                    except VANISHED_ERRORS:
-                        pass
-                    except BaseException as exc:
-                        logger.error("stale_session_cleanup_failed", exc_info=True)
-                        failures.append(exc)
-                    try:
-                        lease.release()
-                    except BaseException as exc:
-                        logger.error("stale_session_lease_release_failed", exc_info=True)
-                        failures.append(exc)
                     if not did_remove:
                         continue
                     logger.warning(

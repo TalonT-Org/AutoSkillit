@@ -55,7 +55,11 @@ _EXPECTED_CALLERS = Counter(
             "_apply_semantic_adaptation",
         ): 1,
         (_ADAPT, "workspace/session_skills/_catalog.py", "compile_session_skill_catalog"): 1,
-        (_ADAPT, "workspace/session_skills/_materialization.py", "_materialize_session"): 1,
+        (
+            _ADAPT,
+            "workspace/session_skills/_materialization.py",
+            "_admit_invocation_records",
+        ): 1,
         (_ADAPT, "workspace/session_skills/_projection.py", "build_skill_projection_binding"): 1,
     }
 )

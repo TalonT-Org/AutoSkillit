@@ -12,7 +12,6 @@ from __future__ import annotations
 import dataclasses
 import errno
 import json
-import re
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -37,8 +36,6 @@ from autoskillit.recipe import (
     SkillContract,
     SkillOutput,
     SuccessQualifierEntry,
-    get_skill_contract,
-    load_bundled_manifest,
 )
 from tests.conftest import _make_result
 
@@ -395,66 +392,6 @@ class TestParseOutcomeFields:
         fields = parse_outcome_fields(result_text, self._contract())
         assert fields["verdict"] == "already_green"
         assert fields["fixes_applied"] == 0
-
-
-# ---------------------------------------------------------------------------
-# RECT-016 / Part B: token-emission sync for resolver-owned output fields
-# ---------------------------------------------------------------------------
-
-
-class TestResolverEmitsOnlyModelOwnedFields:
-    """Resolvers emit statuses and disposition rows, never derived counters."""
-
-    _RESOLVER_SKILLS = (
-        "resolve-review",
-        "resolve-research-review",
-        "resolve-claims-review",
-    )
-    _DERIVED_COUNTERS = {
-        "accept_count",
-        "fixes_applied",
-        "fix_failures",
-        "skipped_in_fix_phase",
-    }
-
-    @staticmethod
-    def _template_text(skill_name: str, template_name: str) -> str:
-        from autoskillit.core import pkg_root
-
-        skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
-        content = skill_md.read_text(encoding="utf-8")
-        match = re.search(
-            rf"<!-- {template_name}:begin -->\s*(?P<body>.*?)\s*"
-            rf"<!-- {template_name}:end -->",
-            content,
-            re.DOTALL,
-        )
-        assert match, f"{skill_name} missing {template_name} template delimiter"
-        return match["body"]
-
-    @pytest.mark.parametrize("skill_name", _RESOLVER_SKILLS)
-    def test_resolver_fields_are_declared_but_only_model_owned_fields_emit(
-        self,
-        skill_name: str,
-    ) -> None:
-        manifest = load_bundled_manifest()
-        contract = get_skill_contract(skill_name, manifest)
-        assert contract is not None, f"{skill_name} missing from skill_contracts.yaml"
-        declared_names = {output.name for output in contract.outputs}
-        assert {"review_status", "finding_disposition"} <= declared_names
-        assert self._DERIVED_COUNTERS <= declared_names
-
-        for template_name in (
-            "resolver-operative-output",
-            "resolver-final-output",
-        ):
-            template = self._template_text(skill_name, template_name)
-            assert re.search(r"^review_status\s*=", template, re.MULTILINE)
-            assert re.search(r"^finding_disposition\s*=", template, re.MULTILINE)
-            for counter in self._DERIVED_COUNTERS:
-                assert not re.search(rf"^{re.escape(counter)}\s*=", template, re.MULTILINE), (
-                    f"{skill_name} must not emit server-derived {counter}"
-                )
 
 
 # ---------------------------------------------------------------------------

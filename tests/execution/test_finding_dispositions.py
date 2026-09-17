@@ -138,8 +138,6 @@ class _MemoryOutcomeLedger:
 
 
 def _ledger(
-    _tmp_path: Path,
-    _workspace: Path,
     records: list[WorkspaceOutcomeRecord],
 ) -> _MemoryOutcomeLedger:
     ledger = _MemoryOutcomeLedger()
@@ -224,7 +222,7 @@ def test_historical_all_applied_report_preserves_success(tmp_path: Path) -> None
     result = _adjudicate(
         _processed("real_fix", rows),
         workspace,
-        _ledger(tmp_path, workspace, records),
+        _ledger(records),
     )
 
     assert result.success is True
@@ -267,7 +265,7 @@ def test_failed_commit_attempts_do_not_change_terminal_disposition(tmp_path: Pat
     result = _adjudicate(
         _processed("real_fix", ["finding_disposition = F-1 | applied | landed"]),
         workspace,
-        _ledger(tmp_path, workspace, records),
+        _ledger(records),
     )
 
     assert result.success is True
@@ -279,8 +277,6 @@ def test_lying_model_real_fix_with_fix_failures_demoted(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(
                 workspace,
@@ -305,8 +301,6 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(
                 workspace,
@@ -377,7 +371,7 @@ def test_malformed_reports_have_a_distinct_failure(
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    ledger = _ledger(tmp_path, workspace, []) if ledger_present else None
+    ledger = _ledger([]) if ledger_present else None
 
     result = _adjudicate(text, workspace, ledger)
 
@@ -417,8 +411,6 @@ def test_processed_review_requires_fresh_green_tests(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(workspace, at, kind=kind, succeeded=succeeded, sha=sha)
             for at, kind, succeeded, sha in records
@@ -489,8 +481,6 @@ def test_last_test_is_selected_chronologically(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(
                 workspace,
@@ -515,8 +505,6 @@ def test_evidence_window_and_workspace_are_enforced(tmp_path: Path) -> None:
     workspace.mkdir()
     other.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(
                 workspace,
@@ -594,8 +582,6 @@ def test_red_test_demotes_on_stall_recovery_path(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     ledger = _ledger(
-        tmp_path,
-        workspace,
         [
             _record(
                 workspace,

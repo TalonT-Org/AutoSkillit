@@ -1337,6 +1337,9 @@ from .types import (
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
+from .types import OutcomeComparison as OutcomeComparison
+from .types import evaluate_outcome_expression as evaluate_outcome_expression
+from .types import parse_outcome_expression as parse_outcome_expression
 from .types import fleet_error as fleet_error
 from .types import (
     is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,

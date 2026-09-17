@@ -7,11 +7,13 @@ extract_path_arg, resolve_target_skill, truncate_text, fleet_error, and session_
 from __future__ import annotations
 
 import json
+import operator
 import os
 import re
 import shlex
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import UnionType
@@ -38,6 +40,9 @@ __all__ = [
     "session_type",
     "strip_markdown_code_regions",
     "truncate_text",
+    "OutcomeComparison",
+    "evaluate_outcome_expression",
+    "parse_outcome_expression",
 ]
 
 _SKILL_CMD_RE = re.compile(
@@ -71,6 +76,62 @@ _SENSITIVE_TEXT_MARKERS = (
     "secret",
     "token=",
 )
+
+_OUTCOME_COMPARISON_RE = re.compile(r"^(\w+)\s*(>=|<=|!=|==|>|<)\s*(\d+)$")
+_OUTCOME_OPERATORS: dict[str, Callable[[int, int], bool]] = {
+    ">": operator.gt,
+    ">=": operator.ge,
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<=": operator.le,
+    "<": operator.lt,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class OutcomeComparison:
+    """One integer comparison in an outcome-contract expression."""
+
+    field_name: str
+    operator: str
+    literal: int
+
+
+def parse_outcome_expression(expression: object) -> tuple[OutcomeComparison, ...] | None:
+    """Parse integer comparisons joined by ``and``, or return ``None`` when invalid."""
+    if not isinstance(expression, str):
+        return None
+    comparisons: list[OutcomeComparison] = []
+    for conjunct in expression.split(" and "):
+        match = _OUTCOME_COMPARISON_RE.match(conjunct.strip())
+        if match is None:
+            return None
+        field_name, operator_name, literal = match.groups()
+        comparisons.append(
+            OutcomeComparison(
+                field_name=field_name,
+                operator=operator_name,
+                literal=int(literal),
+            )
+        )
+    return tuple(comparisons) if comparisons else None
+
+
+def evaluate_outcome_expression(
+    expression: str,
+    fields: Mapping[str, object],
+) -> bool | None:
+    """Evaluate an expression, returning ``None`` for absent or non-integer fields."""
+    comparisons = parse_outcome_expression(expression)
+    if comparisons is None:
+        return None
+    for comparison in comparisons:
+        value = fields.get(comparison.field_name)
+        if not isinstance(value, int):
+            return None
+        if not _OUTCOME_OPERATORS[comparison.operator](value, comparison.literal):
+            return False
+    return True
 
 
 class ContextAdmissionValidationError(ValueError):

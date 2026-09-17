@@ -216,6 +216,11 @@ skills:
       required: false
       recommended: true
     outputs:
+    - name: review_status
+      type: string
+      allowed_values: [processed, no_pr]
+    - name: finding_disposition
+      type: dispositions
     - name: verdict
       type: string
       allowed_values:
@@ -225,10 +230,16 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+      server_computed: true
     - name: accept_count
       type: integer
+      server_computed: true
     - name: fix_failures
       type: integer
+      server_computed: true
+    - name: skipped_in_fix_phase
+      type: integer
+      server_computed: true
     - name: deferred_observations_path
       type: string
       description: "Written when mode=local (accumulated critical/warning DISCUSS findings, excluding info-severity) or when mode=github (posted from prior local rounds)."
@@ -250,6 +261,14 @@ skills:
     - name: review_receipt_path
       type: string
       required: false
+    expected_output_patterns:
+    - "review_status[ \\t]*=[ \\t]*(processed|no_pr)"
+    pattern_examples:
+    - "review_status = processed\nfinding_disposition = review-1 | applied | 0123456789abcdef0123456789abcdef01234567\nverdict = real_fix\n%%ORDER_UP%%"
+    - "review_status = processed\nfinding_disposition = review-1 | skipped\nverdict = already_green\n%%ORDER_UP%%"
+    - "review_status = processed\nverdict = flake_suspected\n%%ORDER_UP%%"
+    - "review_status = processed\nverdict = ci_only_failure\n%%ORDER_UP%%"
+    - "review_status = no_pr\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
@@ -2198,6 +2217,11 @@ skills:
       type: string
       required: true
     outputs:
+    - name: review_status
+      type: string
+      allowed_values: [processed, no_pr]
+    - name: finding_disposition
+      type: dispositions
     - name: needs_rerun
       type: string
     - name: verdict
@@ -2209,17 +2233,24 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+      server_computed: true
     - name: accept_count
       type: integer
+      server_computed: true
     - name: fix_failures
       type: integer
+      server_computed: true
+    - name: skipped_in_fix_phase
+      type: integer
+      server_computed: true
     expected_output_patterns:
-    - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
+    - "review_status[ \\t]*=[ \\t]*(processed|no_pr)"
     pattern_examples:
-    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nreview_status = processed\nfinding_disposition = claim-1 | applied | 0123456789abcdef0123456789abcdef01234567\nverdict = real_fix\n%%ORDER_UP%%"
+    - "needs_rerun = false\nreview_status = processed\nfinding_disposition = claim-1 | skipped\nverdict = already_green\n%%ORDER_UP%%"
+    - "needs_rerun = true\nreview_status = processed\nverdict = flake_suspected\n%%ORDER_UP%%"
+    - "needs_rerun = false\nreview_status = processed\nverdict = ci_only_failure\n%%ORDER_UP%%"
+    - "review_status = no_pr\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
@@ -2239,6 +2270,11 @@ skills:
       type: string
       required: true
     outputs:
+    - name: review_status
+      type: string
+      allowed_values: [processed, no_pr]
+    - name: finding_disposition
+      type: dispositions
     - name: needs_rerun
       type: string
     - name: verdict
@@ -2250,17 +2286,24 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+      server_computed: true
     - name: accept_count
       type: integer
+      server_computed: true
     - name: fix_failures
       type: integer
+      server_computed: true
+    - name: skipped_in_fix_phase
+      type: integer
+      server_computed: true
     expected_output_patterns:
-    - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
+    - "review_status[ \\t]*=[ \\t]*(processed|no_pr)"
     pattern_examples:
-    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nreview_status = processed\nfinding_disposition = research-1 | applied | 0123456789abcdef0123456789abcdef01234567\nverdict = real_fix\n%%ORDER_UP%%"
+    - "needs_rerun = false\nreview_status = processed\nfinding_disposition = research-1 | skipped\nverdict = already_green\n%%ORDER_UP%%"
+    - "needs_rerun = true\nreview_status = processed\nverdict = flake_suspected\n%%ORDER_UP%%"
+    - "needs_rerun = false\nreview_status = processed\nverdict = ci_only_failure\n%%ORDER_UP%%"
+    - "review_status = no_pr\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"

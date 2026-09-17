@@ -17,6 +17,7 @@ from autoskillit.core import (
     InputSpecType,
     get_logger,
     load_yaml,
+    parse_outcome_expression,
     pkg_root,
     resolve_skill_name,
 )
@@ -83,6 +84,36 @@ def _parse_skill_input(skill_name: str, raw: Mapping[str, Any]) -> SkillInput:
     )
 
 
+def _validate_outcome_expression(
+    *,
+    skill_name: str,
+    rule_name: str,
+    expression_label: str,
+    expression: object,
+    output_names: set[str],
+    int_output_names: set[str],
+) -> None:
+    """Require a parseable integer expression over declared output fields."""
+    comparisons = parse_outcome_expression(expression)
+    if comparisons is None:
+        raise ValueError(
+            f"{rule_name}.{expression_label} for skill '{skill_name}' "
+            "must be a valid outcome expression"
+        )
+    for comparison in comparisons:
+        field_name = comparison.field_name
+        if field_name not in output_names:
+            raise ValueError(
+                f"{rule_name}.{expression_label} references undeclared output "
+                f"'{field_name}' in skill '{skill_name}'"
+            )
+        if field_name not in int_output_names:
+            raise ValueError(
+                f"{rule_name}.{expression_label} references non-integer output "
+                f"'{field_name}' in skill '{skill_name}'"
+            )
+
+
 def _parse_outcome_rules(
     skill_name: str,
     skill_data: Mapping[str, Any],
@@ -100,17 +131,14 @@ def _parse_outcome_rules(
                 f"outcome_invariants entry for skill '{skill_name}' missing 'when' or 'require'"
             )
         for expression_label, expression in [("when", when), ("require", require)]:
-            field_name = expression.split()[0] if expression.split() else ""
-            if field_name not in output_names:
-                raise ValueError(
-                    f"outcome_invariants.{expression_label} references undeclared output "
-                    f"'{field_name}' in skill '{skill_name}'"
-                )
-            if field_name not in int_output_names:
-                raise ValueError(
-                    f"outcome_invariants.{expression_label} references non-integer output "
-                    f"'{field_name}' in skill '{skill_name}'"
-                )
+            _validate_outcome_expression(
+                skill_name=skill_name,
+                rule_name="outcome_invariants",
+                expression_label=expression_label,
+                expression=expression,
+                output_names=output_names,
+                int_output_names=int_output_names,
+            )
         outcome_invariants.append(OutcomeInvariantEntry(when=when, require=require))
 
     success_qualifiers: list[SuccessQualifierEntry] = []
@@ -121,6 +149,14 @@ def _parse_outcome_rules(
             raise ValueError(
                 f"success_qualifiers entry for skill '{skill_name}' missing 'when' or 'qualifier'"
             )
+        _validate_outcome_expression(
+            skill_name=skill_name,
+            rule_name="success_qualifiers",
+            expression_label="when",
+            expression=when,
+            output_names=output_names,
+            int_output_names=int_output_names,
+        )
         success_qualifiers.append(SuccessQualifierEntry(when=when, qualifier=value))
     return outcome_invariants, success_qualifiers
 

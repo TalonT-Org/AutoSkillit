@@ -4,6 +4,7 @@ categories:
 - research
 uses_capabilities:
 - commit_files
+- test_check
 - github_api_write
 description: 'Fetch claim findings from audit-claims, run citation-aware intent validation (ACCEPT/REJECT/DISCUSS), apply
   targeted citation fixes, escalate findings requiring experiment reruns, and post inline replies.
@@ -96,8 +97,9 @@ skill uses the in-code defaults shown above.
 
 ## Workflow
 
-Read `claims_review.validation_command` (default: `null`) and
+Read the optional `claims_review.validation_command` (default: `null`) and
 `claims_review.validation_timeout` (default: `120`) from `.autoskillit/config.yaml`.
+This custom check never replaces the recorded `test_check` gate.
 
 ### Step 0: Validate Arguments
 
@@ -140,6 +142,7 @@ PR_URL=$(echo "$PR_LIST_OUTPUT" | awk '{print $2}')
 # Graceful degradation: .[0] returns null when no PR matches; PR_NUMBER will be empty
 if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
   echo "No PR found or gh unavailable — skipping claims review resolution"
+  # Write the bounded no-PR report and emit only: review_status = no_pr
   exit 0
 fi
 ```
@@ -151,7 +154,10 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping claims review resolution"
-- Exit 0 (graceful degradation — do not fail the pipeline)
+- Write a bounded no-PR report under `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/`.
+- Emit exactly `review_status = no_pr`; do not emit `needs_rerun`, a
+  `finding_disposition` row, or `verdict`.
+- Exit 0 (graceful degradation — do not fail the pipeline).
 
 ### Step 2: Fetch Review Comments
 
@@ -344,19 +350,20 @@ commit_files(paths=["{file}"], message="fix(claims-review): {description} [{dime
 ```
 The tool runs pre-commit hooks, handles auto-fix re-staging, and returns
 `{"success": true, "commit_sha": "..."}` or `{"success": false, "error": "..."}`.
-A finding counts toward `fixes_applied` ONLY when `commit_files` returns `success: true`.
-A failed call increments `fix_failures`. Do NOT use `--amend` — always create new commits.
+Record the finding as `applied` only when `commit_files` returns `success: true`, and attach
+the returned commit SHA. Failed attempts do not create a terminal disposition; after retries
+are exhausted, record the finding once as `failed`. Do NOT use `--amend` — always create new commits.
 Append `thread_node_id` to `addressed_thread_ids` (if not `None`).
 
 **Classification gate — REJECT/DISCUSS bypass:**
 - No code changes; record skip
 - Do NOT add to `addressed_thread_ids`
 
-### Step 5: Run Validation Command (max 3 iterations)
+### Step 5: Run Custom Validation, Then the Recorded Test Gate (max 3 iterations)
 
 ```python
 if validation_command is None:
-    # Skip validation step entirely — null validation_command means skip
+    # Skip only the optional custom command.
     validation_status = "SKIPPED"
 else:
     # Run with retry logic (max 3 iterations)
@@ -369,13 +376,21 @@ else:
             break
         if iteration >= 3:
             validation_status = "FAIL"
-            # Report failure, leave working directory intact, exit non-zero
+            # Write a bounded diagnostic report, emit supported diagnostic output,
+            # leave the working directory intact, and exit non-zero.
             exit(1)
         # Analyze failures, revert/adjust problematic commit, retry
+
+# Required for every processed result, including when validation_command is null.
+test_result = test_check(worktree_path=worktree_path)
+if test_result["passed"] is not True:
+    # Write bounded diagnostics, preserve the worktree, and exit non-zero.
+    exit(1)
 ```
 
-When `validation_command` is `null`, skip validation — do not run any command.
-When configured, enforce max 3 iteration retry loop before exiting non-zero.
+When `validation_command` is `null`, skip only that custom command. Always call the MCP
+`test_check` tool before a processed success so the server records the final test outcome.
+When configured, enforce the custom command's max 3 iteration retry loop before the final gate.
 
 ### Step 6: Resolve Addressed Review Threads
 
@@ -470,17 +485,15 @@ Intent validation:
                    rerun_required: {n} ESCALATED, design_flaw: {n} ESCALATED)
   - REJECT: {n}
   - DISCUSS: {n}
-Fixes applied: {n}
+Fixes applied: {number of applied finding_disposition rows}
 Escalations: {n}
 Validation: {SKIPPED | PASS | FAIL}
 Threads resolved: {n}/{total}
 Inline replies: {reply_posted_count} posted / {reply_failed_count} failed
-Status: PASS
+Status: {PASS|FAIL}
 ```
 
 Save full report to `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/report_{pr}_{ts}.md`.
-
-Exit 0.
 
 ## Temp File Layout
 
@@ -499,47 +512,64 @@ Exit 0.
 
 ## Structured Output
 
-After completing all thread processing (addressed + escalated), emit structured
-output tokens:
+<!-- gated-field-semantics:begin -->
+### Finding disposition and qualifier semantics
 
-**Verdict decision:**
-- If fixes were applied (`Fixes applied: N` where N >= 1): `verdict = real_fix`
-- If no fixes were needed (all findings already addressed): `verdict = already_green`
+For every processed finding, emit one `finding_disposition` row. `applied` requires a
+successful commit and includes that commit SHA. Use `skipped` for a finding intentionally
+left unchanged and `failed` for an attempted apply or commit that did not succeed. No PR
+means no findings, so no disposition rows are emitted.
 
-```
+`accepted_without_changes` is a success qualifier, never a disposition. It applies when
+`accept_count > 0 and fixes_applied == 0 and fix_failures == 0`; report it in prose only.
+Server derivation: `accept_count` equals the number of `finding_disposition` rows.
+Server derivation: `fixes_applied` equals the number of `applied` rows.
+Server derivation: `fix_failures` equals the number of `failed` rows.
+Server derivation: `skipped_in_fix_phase` equals the number of `skipped` rows.
+Do not emit those derived counters or arithmetic expressions for them in skill output.
+
+### Verdict Decision
+
+| Verdict | Decision | Route |
+| --- | --- | --- |
+| `real_fix` | At least one finding is `applied`, none is `failed`, and the final `test_check` passes. | Continue normal success routing. |
+| `already_green` | No finding is `applied` or `failed`, and the final `test_check` passes. | Continue normal success routing; the success qualifier may apply. |
+| `flake_suspected` | No finding is `applied` or `failed`; a local failure is followed by a passing unchanged-tree rerun. | Continue the existing flake route with the recorded evidence. |
+| `ci_only_failure` | No finding is `applied` or `failed`; local tests pass and evidence identifies a CI-only environment or configuration failure. | Continue the existing CI-only route with the recorded evidence. |
+
+Any terminal `failed` disposition is a failure and emits no success verdict. Every processed
+success requires a final passing `test_check`. The validation cap remains a failure: emit
+`review_status = processed`, terminal disposition rows, and diagnostics without adding another
+`review_status` value or claiming success.
+
+`needs_rerun = true` when an escalation record has `strategy = rerun_required`; otherwise
+it is `false`. It remains independent of the finding disposition and verdict.
+
+### Operative output template
+
+<!-- resolver-operative-output:begin -->
 needs_rerun = {true|false}
-verdict = {real_fix|already_green}
-fixes_applied = {N}
-accept_count = {N}
-fix_failures = {N}
-```
+review_status = processed
+finding_disposition = {finding-id} | {applied|skipped|failed} [| {commit-sha}]
+verdict = {real_fix|already_green|flake_suspected|ci_only_failure}
+<!-- resolver-operative-output:end -->
 
-- **`needs_rerun = true`**: At least one finding was classified as `rerun_required` in
-  the escalation records. This includes: (a) fixes requiring re-running the experiment
-  to generate supporting data, (b) protocol deviations where the experiment execution
-  diverged from the plan in ways that materially undermine the report's claims, or
-  (c) invalid statistical analyses (e.g., CIs from the wrong unit of analysis) that
-  remain cited as evidence for claims.
-- **`needs_rerun = false`**: No `rerun_required` escalations exist. May still have
-  `design_flaw` escalations (these are informational and do not require re-running).
-
-**Determination logic:** After writing `escalation_records_{pr}.json`, check whether any
-entry has `"strategy": "rerun_required"`. If yes → `true`. If no entries or all entries
-are `design_flaw` → `false`.
-
-`needs_rerun` is mandatory. The recipe captures it as `claims_needs_rerun` to route via
-`merge_escalations`.
+For no PR or unavailable `gh`, emit exactly `review_status = no_pr`; omit every other
+token. At a validation cap, write the diagnostic report, emit only supported processed
+diagnostic fields, and retain the non-zero exit.
 
 ## Output
 
-Emit the structured output tokens as the very last lines as your final output:
+Emit the applicable final tokens as the very last plain-text lines:
 
-> **IMPORTANT:** Emit the tokens as **literal plain text with no code fences, no markdown formatting**. The recipe capture system reads raw stdout.
-
-```
+<!-- resolver-final-output:begin -->
 needs_rerun = {true|false}
-verdict = {real_fix|already_green}
-fixes_applied = {N}
-```
+review_status = processed
+finding_disposition = {finding-id} | {applied|skipped|failed} [| {commit-sha}]
+verdict = {real_fix|already_green|flake_suspected|ci_only_failure}
+<!-- resolver-final-output:end -->
+
+For no PR, emit only `review_status = no_pr`.
 
 Summary: `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/report_{pr}_{ts}.md` (relative to the current working directory)
+<!-- gated-field-semantics:end -->

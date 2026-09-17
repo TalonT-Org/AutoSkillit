@@ -73,7 +73,12 @@ from autoskillit.execution.session._session_outcome import (
 from autoskillit.hooks import CODEX_AUTO_COMPACTION_DENIED_REASON
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
+    from autoskillit.core import (
+        AuditLog,
+        CodingAgentBackend,
+        SubprocessResult,
+        WorkspaceOutcomeLedger,
+    )
     from autoskillit.execution.session import ClaudeSessionResult
     from autoskillit.recipe._contracts_types import SkillContract
 
@@ -156,6 +161,7 @@ class _SkillResultContext:
     file_changes: Sequence[str]
     write_watch_dirs: Sequence[Path]
     backend_resume_session_id: str
+    outcome_ledger: WorkspaceOutcomeLedger | None
 
 
 def _build_stall_result(
@@ -186,6 +192,7 @@ def _build_stall_result(
         file_changes=context.file_changes,
         write_watch_dirs=context.write_watch_dirs,
         backend_resume_session_id=context.backend_resume_session_id,
+        outcome_ledger=context.outcome_ledger,
     )
     if recovered_sr is not None:
         return recovered_sr
@@ -306,6 +313,7 @@ def _build_skill_result(
     closure_report_root: Path | None = None,
     skill_contract: SkillContract | None = None,
     backend_resume_session_id: str = "",
+    outcome_ledger: WorkspaceOutcomeLedger | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -326,6 +334,7 @@ def _build_skill_result(
         file_changes=file_changes,
         write_watch_dirs=write_watch_dirs,
         backend_resume_session_id=backend_resume_session_id,
+        outcome_ledger=outcome_ledger,
     )
 
     lifecycle_gate_enabled = result.lifecycle_observation_enabled
@@ -767,7 +776,16 @@ def _build_skill_result(
         max_consecutive_retries=max_consecutive_retries,
     )
 
-    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract, cwd)
+    sr = _apply_post_session_adjudication(
+        sr,
+        evidence,
+        write_behavior,
+        skill_contract,
+        cwd,
+        outcome_ledger=outcome_ledger,
+        start_ts=result.start_ts,
+        end_ts=result.end_ts,
+    )
 
     # Closure verification gate: see _apply_closure_verification_gate.
     sr = _apply_closure_verification_gate(sr, closure_spec, closure_report_root)

@@ -20,6 +20,12 @@ SERVER_COMPUTED_OUTPUTS: frozenset[str] = frozenset(
     }
 )
 
+_REVIEW_RESOLVERS = (
+    "resolve-review",
+    "resolve-research-review",
+    "resolve-claims-review",
+)
+
 # Key pattern: if a contract output pattern requires an absolute path (contains
 # \s*=\s*/.+), verify that the SKILL.md does not assign the variable to a
 # relative path (i.e., assignments starting with ../ or a non-/ non-$ character).
@@ -154,3 +160,30 @@ def test_every_declared_output_has_emit_instruction_in_skill_md() -> None:
         failures.extend(_format_compat_check(skill_name, content, expected_output_patterns))
 
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.parametrize("skill_name", _REVIEW_RESOLVERS)
+def test_review_resolver_verdict_decisions_cover_contract_values(skill_name: str) -> None:
+    """Every contract verdict has a documented, reachable resolver decision."""
+    manifest = load_bundled_manifest()
+    contract = manifest["skills"][skill_name]
+    verdict = next(output for output in contract["outputs"] if output["name"] == "verdict")
+    skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    content = skill_md.read_text(encoding="utf-8")
+    match = re.search(
+        r"<!-- gated-field-semantics:begin -->\s*(?P<body>.*?)\s*"
+        r"<!-- gated-field-semantics:end -->",
+        content,
+        re.DOTALL,
+    )
+    assert match, f"{skill_name} must delimit its gated-field semantics"
+    body = match["body"]
+
+    for value in verdict["allowed_values"]:
+        row = re.compile(
+            rf"^\| `{re.escape(value)}` \| (?P<decision>.+) \| (?P<route>.+) \|$",
+            re.MULTILINE,
+        ).search(body)
+        assert row, f"{skill_name} has no Verdict Decision row for {value}"
+        assert row["decision"].strip()
+        assert row["route"].strip()

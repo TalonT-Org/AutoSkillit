@@ -374,8 +374,8 @@ For each path in `conflict_report_path_list`:
      content was not carried into the integration branch.
 
 Record all findings from this cross-reference alongside the standard Step 3 audit findings.
-Each `CONFLICT` or `MISSING` finding here forces a `NO GO` verdict per the existing verdict
-logic (Step 4).
+Each blocking finding from this cross-reference forces a `NO GO` verdict per the existing
+verdict logic (Step 4).
 
 ### Step 3 — Audit via Parallel Subagents (SINGLE MESSAGE)
 

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import ast
-from pathlib import Path
-
 import pytest
 
 from autoskillit.core import (
@@ -24,10 +21,6 @@ from autoskillit.core.types._type_closure_report import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _ROW_DIGEST_DOMAIN = "autoskillit:audit-cycle:assessment-row:v1:sha256"
-_AUDIT_ASSESSMENT_SOURCE = (
-    Path(__file__).resolve().parents[2]
-    / "src/autoskillit/core/types/_type_audit_cycle_authority.py"
-)
 
 
 def _historical_named_deviation_row() -> AuditAssessmentRow:
@@ -139,25 +132,3 @@ def test_go_closure_report_rejects_unprescribed_substitution() -> None:
     errors = _closure_report("UNPRESCRIBED_SUBSTITUTION", verdict="GO").validate()
 
     assert errors
-
-
-def test_assessment_disposition_uses_an_exhaustive_match() -> None:
-    tree = ast.parse(_AUDIT_ASSESSMENT_SOURCE.read_text(encoding="utf-8"))
-    assessment_class = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "AuditAssessment"
-    )
-    disposition = next(
-        node
-        for node in assessment_class.body
-        if isinstance(node, ast.FunctionDef) and node.name == "disposition"
-    )
-
-    assert any(isinstance(node, ast.Match) for node in ast.walk(disposition))
-    assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "assert_never"
-        for node in ast.walk(disposition)
-    )

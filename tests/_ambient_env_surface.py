@@ -2675,6 +2675,8 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    # NAMED_DEVIATION intentionally has no entry: after #4249 removed it from the closure
+    # frozenset, the R4 scanner no longer reports it as an ambient environment surface.
     "UNPRESCRIBED_SUBSTITUTION": AmbientEnvDisposition(
         var="UNPRESCRIBED_SUBSTITUTION",
         disposition="scrub",

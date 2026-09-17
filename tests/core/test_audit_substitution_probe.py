@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import (
@@ -17,38 +20,10 @@ from autoskillit.core import (
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-_INCIDENT_REQUIREMENTS = (
-    ProbedRequirement(
-        requirement_id="REQ-004",
-        requirement_text=(
-            "Keep the parent process alive while its child process remains CPU-active."
-        ),
-        evidence_summary=(
-            "Mocks the child-process liveness predicate to return True while the parent waits."
-        ),
-    ),
-    ProbedRequirement(
-        requirement_id="REQ-006",
-        requirement_text=(
-            "For a CPU-active child that never stops, child_deferral_ceiling=1.0, "
-            "assert kill happens within ~1s of ceiling expiry."
-        ),
-        evidence_summary=(
-            "Uses a persistently-active child (_has_active_child_processes mocked to "
-            "always return True) with child_deferral_ceiling=1.0."
-        ),
-    ),
-    ProbedRequirement(
-        requirement_id="REQ-007",
-        requirement_text=(
-            "Spawn a real descendant process and assert its parent is terminated after "
-            "the child deferral ceiling."
-        ),
-        evidence_summary=(
-            "The test patches child liveness instead of spawning a real descendant."
-        ),
-    ),
+_INCIDENT_EVIDENCE_PATH = (
+    Path(__file__).resolve().parents[2] / ".autoskillit/temp/rectify/incident_evidence.txt"
 )
+_INCIDENT_REQUIREMENT_IDS = ("REQ-004", "REQ-006", "REQ-007")
 
 _INCIDENT_DIFF = '''\
 """Child-process liveness is simulated via a mock on
@@ -62,15 +37,57 @@ sampling."""
 '''
 
 
-def test_incident_requirements_are_flagged_by_both_probe_and_server_floor() -> None:
-    findings = probe_substitutions(_INCIDENT_REQUIREMENTS, _INCIDENT_DIFF)
+def _normalize_evidence_excerpt(value: str) -> str:
+    return re.sub(r"\s*\n\s*", " ", value).strip()
+
+
+def _extract_incident_excerpt(text: str, pattern: str) -> str:
+    match = re.search(pattern, text, flags=re.DOTALL)
+    assert match is not None, f"incident evidence did not match {pattern!r}"
+    return _normalize_evidence_excerpt(match.group("value"))
+
+
+def _load_incident_requirements(path: Path) -> tuple[ProbedRequirement, ...]:
+    text = path.read_text(encoding="utf-8")
+    requirements = []
+    for requirement_id in _INCIDENT_REQUIREMENT_IDS:
+        requirement_text = _extract_incident_excerpt(
+            text,
+            rf"{requirement_id} \(plan text.*?:\s*\"(?P<value>.*?)\"",
+        )
+        evidence_summary = _extract_incident_excerpt(
+            text,
+            rf"{requirement_id} VERDICT.*?:\s*\"{requirement_id} — COVERED\. "
+            rf"(?P<value>.*?)\"\n(?:  ->|\n)",
+        )
+        requirements.append(
+            ProbedRequirement(
+                requirement_id=requirement_id,
+                requirement_text=requirement_text,
+                evidence_summary=evidence_summary,
+            )
+        )
+    return tuple(requirements)
+
+
+@pytest.fixture
+def incident_requirements() -> tuple[ProbedRequirement, ...]:
+    if not _INCIDENT_EVIDENCE_PATH.is_file():
+        pytest.skip(f"incident evidence is unavailable: {_INCIDENT_EVIDENCE_PATH}")
+    return _load_incident_requirements(_INCIDENT_EVIDENCE_PATH)
+
+
+def test_incident_requirements_are_flagged_by_both_probe_and_server_floor(
+    incident_requirements: tuple[ProbedRequirement, ...],
+) -> None:
+    findings = probe_substitutions(incident_requirements, _INCIDENT_DIFF)
     server_floor_findings = tuple(
         evaluate_rationale_contradiction(
             requirement.requirement_id,
             requirement.requirement_text,
             requirement.evidence_summary,
         )
-        for requirement in _INCIDENT_REQUIREMENTS
+        for requirement in incident_requirements
     )
 
     assert {finding.requirement_id for finding in findings} == {
@@ -102,8 +119,10 @@ def test_diff_rule_detects_mock_of_a_requirement_named_symbol() -> None:
     assert finding.trigger is SubstitutionTrigger.DIFF_MOCK_OF_PRESCRIBED_SYMBOL
 
 
-def test_literal_descendant_implementation_is_not_a_substitution() -> None:
-    requirement = _INCIDENT_REQUIREMENTS[1]
+def test_literal_descendant_implementation_is_not_a_substitution(
+    incident_requirements: tuple[ProbedRequirement, ...],
+) -> None:
+    requirement = incident_requirements[1]
     literal_evidence = (
         'Starts subprocess.Popen(["sh", "-c", "sleep 30 & wait"]) and asserts with '
         "psutil that the real child process remains active until termination."

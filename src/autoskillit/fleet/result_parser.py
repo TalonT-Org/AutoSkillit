@@ -155,6 +155,27 @@ def _parse_body(
     )
 
 
+def _parse_ordered_sources(
+    sentinel_dispatch_ids: Sequence[str],
+    sources: Sequence[
+        tuple[
+            str,
+            Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"],
+        ]
+    ],
+) -> L3ParseResult | None:
+    """Parse the first result block found across ordered IDs and sources."""
+    for dispatch_id in sentinel_dispatch_ids:
+        open_sentinel = f"---l3-result::{dispatch_id}---"
+        close_sentinel = f"---end-l3-result::{dispatch_id}---"
+        for text, source in sources:
+            positions = _scan_for_sentinel(text, open_sentinel, close_sentinel)
+            if positions is not None:
+                open_pos, close_pos = positions
+                return _parse_body(text, open_pos, close_pos, open_sentinel, source)
+    return None
+
+
 def parse_l3_result_block(
     stdout: str,
     expected_dispatch_id: str,
@@ -175,48 +196,28 @@ def parse_l3_result_block(
     other stages fail — this handles the resume case where the sentinel lives
     in a prior session's JSONL file rather than the current session's file.
     """
-    open_sentinel = f"---l3-result::{expected_dispatch_id}---"
-    close_sentinel = f"---end-l3-result::{expected_dispatch_id}---"
-
     cleaned = _collapse_hr_split_delimiters(_ANSI_RE.sub("", stdout))
-
-    positions = _scan_for_sentinel(cleaned, open_sentinel, close_sentinel)
-    if positions is not None:
-        open_pos, close_pos = positions
-        return _parse_body(cleaned, open_pos, close_pos, open_sentinel, "stdout")
-
-    jsonl_text: str | None = None
+    sources: list[
+        tuple[
+            str,
+            Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"],
+        ]
+    ] = [(cleaned, "stdout")]
     if assistant_messages_path is not None:
         jsonl_text = _collapse_hr_split_delimiters(
             _extract_text_from_jsonl(assistant_messages_path, skip_lines=resume_line_offset)
         )
-        positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
-        if positions is not None:
-            open_pos, close_pos = positions
-            return _parse_body(
-                jsonl_text, open_pos, close_pos, open_sentinel, "assistant_messages_jsonl"
-            )
+        sources.append((jsonl_text, "assistant_messages_jsonl"))
+
+    parsed = _parse_ordered_sources((expected_dispatch_id,), sources)
+    if parsed is not None:
+        return parsed
 
     # Fallback scan through prior dispatch_ids (defense-in-depth for resume)
     if prior_dispatch_ids:
-        for prior_id in prior_dispatch_ids:
-            prior_open = f"---l3-result::{prior_id}---"
-            prior_close = f"---end-l3-result::{prior_id}---"
-            positions = _scan_for_sentinel(cleaned, prior_open, prior_close)
-            if positions is not None:
-                open_pos, close_pos = positions
-                return _parse_body(cleaned, open_pos, close_pos, prior_open, "stdout")
-            if jsonl_text is not None:  # only set when assistant_messages_path was provided
-                positions = _scan_for_sentinel(jsonl_text, prior_open, prior_close)
-                if positions is not None:
-                    open_pos, close_pos = positions
-                    return _parse_body(
-                        jsonl_text,
-                        open_pos,
-                        close_pos,
-                        prior_open,
-                        "assistant_messages_jsonl",
-                    )
+        parsed = _parse_ordered_sources(prior_dispatch_ids, sources)
+        if parsed is not None:
+            return parsed
 
     # Stage 4: scan additional JSONL paths (cross-session recovery for resume)
     if additional_jsonl_paths:
@@ -224,17 +225,12 @@ def parse_l3_result_block(
             additional_text = _collapse_hr_split_delimiters(_extract_text_from_jsonl(jsonl_path))
             if not additional_text:
                 continue
-            positions = _scan_for_sentinel(additional_text, open_sentinel, close_sentinel)
-            if positions is not None:
-                open_pos, close_pos = positions
+            parsed = _parse_ordered_sources(
+                (expected_dispatch_id,), ((additional_text, "additional_jsonl"),)
+            )
+            if parsed is not None:
                 logger.debug("cross-session recovery matched %s", jsonl_path)
-                return _parse_body(
-                    additional_text,
-                    open_pos,
-                    close_pos,
-                    open_sentinel,
-                    "additional_jsonl",
-                )
+                return parsed
 
     return L3ParseResult(
         outcome="no_sentinel",

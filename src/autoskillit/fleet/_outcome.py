@@ -86,6 +86,22 @@ def _checkpoint_to_dict(cp: SessionCheckpoint | None) -> dict[str, Any]:
     return cp.to_dict()
 
 
+def _classify_missing_result(
+    skill_result: SkillResult,
+    *,
+    sidecar_exists: bool,
+    checkpoint: SessionCheckpoint | None,
+    error_code: FleetErrorCode,
+) -> tuple[DispatchStatus, str]:
+    """Classify a missing result according to resumability signals."""
+    has_progress = checkpoint is not None or sidecar_exists
+    if skill_result.session_id and skill_result.lifespan_started and has_progress:
+        if _is_abandon_reason(skill_result):
+            return DispatchStatus.FAILURE, error_code
+        return DispatchStatus.RESUMABLE, error_code
+    return DispatchStatus.FAILURE, error_code
+
+
 def classify_dispatch_outcome(
     parsed: L3ParseResult | None,
     skill_result: SkillResult,
@@ -113,20 +129,20 @@ def classify_dispatch_outcome(
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
 
     if subtype == "timeout":
-        has_progress = checkpoint is not None or sidecar_exists
-        if skill_result.session_id and skill_result.lifespan_started and has_progress:
-            if _is_abandon_reason(skill_result):
-                return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
-            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_TIMEOUT
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_TIMEOUT
+        return _classify_missing_result(
+            skill_result,
+            sidecar_exists=sidecar_exists,
+            checkpoint=checkpoint,
+            error_code=FleetErrorCode.FLEET_L3_TIMEOUT,
+        )
 
     if parsed is None:
-        has_progress = checkpoint is not None or sidecar_exists
-        if skill_result.session_id and skill_result.lifespan_started and has_progress:
-            if _is_abandon_reason(skill_result):
-                return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        return _classify_missing_result(
+            skill_result,
+            sidecar_exists=sidecar_exists,
+            checkpoint=checkpoint,
+            error_code=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+        )
 
     if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
         reason = _sanitize_managed_capture_diagnostics(str(parsed.payload.get("reason", "")))
@@ -143,12 +159,12 @@ def classify_dispatch_outcome(
         return DispatchStatus.FAILURE, reason
     if parsed.outcome == "completed_dirty":
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
-    has_progress = checkpoint is not None or sidecar_exists
-    if skill_result.session_id and skill_result.lifespan_started and has_progress:
-        if _is_abandon_reason(skill_result):
-            return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
-    return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+    return _classify_missing_result(
+        skill_result,
+        sidecar_exists=sidecar_exists,
+        checkpoint=checkpoint,
+        error_code=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
+    )
 
 
 def build_dispatch_result(

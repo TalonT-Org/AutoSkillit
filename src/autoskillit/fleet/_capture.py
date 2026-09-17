@@ -21,64 +21,57 @@ class CaptureCompletenessError(RuntimeError):
     """Raised when a capture spec extracts zero fields from the payload."""
 
 
+def _require_nonempty_capture_value(key: str, value: str, declared_type: str) -> None:
+    """Raise when a required capture value is empty."""
+    if not value:
+        raise CaptureValueTypeError(
+            key=key,
+            value=value,
+            declared_type=declared_type,
+            reason=f"{declared_type} value must be non-empty",
+        )
+
+
+def _validate_capture_path(key: str, value: str, declared_type: str) -> None:
+    """Validate that a captured path exists and is non-empty."""
+    try:
+        st = Path(value).stat()
+    except OSError:
+        raise CaptureValueTypeError(
+            key=key,
+            value=value,
+            declared_type=declared_type,
+            reason=f"path does not exist: {value}",
+        )
+    if st.st_size == 0:
+        raise CaptureValueTypeError(
+            key=key,
+            value=value,
+            declared_type=declared_type,
+            reason=f"path exists but file is empty (0 bytes): {value}",
+        )
+
+
 def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
     """Validate a captured value against its declared type.
 
     Raises CaptureValueTypeError if validation fails.
     """
-    if declared_type == "path":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="path value must be non-empty",
-            )
-        try:
-            st = Path(value).stat()
-        except OSError:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason=f"path does not exist: {value}",
-            )
-        if st.st_size == 0:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason=f"path exists but file is empty (0 bytes): {value}",
-            )
-    elif declared_type == "string":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="string value must be non-empty",
-            )
-    elif declared_type == "url":
-        if not value:
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason="url value must be non-empty",
-            )
-        if not (
-            value.startswith("http://")
-            or value.startswith("https://")
-            or value.startswith("file://")
-        ):
-            raise CaptureValueTypeError(
-                key=key,
-                value=value,
-                declared_type=declared_type,
-                reason=f"url value must start with http://, https://, or file://: {value!r}",
-            )
-    elif declared_type == "optional_string":
+    if declared_type == "optional_string":
         return
+    if declared_type not in ("path", "string", "url"):
+        return
+
+    _require_nonempty_capture_value(key, value, declared_type)
+    if declared_type == "path":
+        _validate_capture_path(key, value, declared_type)
+    elif declared_type == "url" and not value.startswith(("http://", "https://", "file://")):
+        raise CaptureValueTypeError(
+            key=key,
+            value=value,
+            declared_type=declared_type,
+            reason=f"url value must start with http://, https://, or file://: {value!r}",
+        )
 
 
 def _extract_captures(

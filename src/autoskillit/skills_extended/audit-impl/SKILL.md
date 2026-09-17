@@ -413,7 +413,7 @@ Each subagent returns structured findings:
 - `MISSING` — required change absent from diff
 - `ODD` — change in diff with no plan backing
 - `CONFLICT` — two plans' implementations interfere with each other
-- `NAMED_DEVIATION` — the planned symbol exists with the same role under a convention-driven name
+- `NAMED_DEVIATION` — the planned symbol exists with the same role under a convention-driven name; Step 4 performs the cross-slice reference guard
 - `UNPRESCRIBED_SUBSTITUTION` — the goal is met through a substantive mechanism or test-topology substitution
 
 ### Step 3.4 — Deterministic Substitution Probe

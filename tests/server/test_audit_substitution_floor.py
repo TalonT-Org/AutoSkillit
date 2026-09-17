@@ -176,7 +176,7 @@ def _materialize(
     result = DefaultAuditAuthorityMaterializer(ledger).materialize(
         reservation=reservation,
         semantic_result_path=reservation.semantic_result_path,
-        preflight_step_names=(),
+        preflight_step_names=("audit-preflight",),
     )
     return result, (ledger, reservation), execution_id
 

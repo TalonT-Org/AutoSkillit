@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import ProbedRequirement, atomic_write, probe_substitutions
+from autoskillit.core import (
+    ProbedRequirement,
+    atomic_write,
+    canonical_json_bytes,
+    probe_substitutions,
+)
 
 _AUDIT_REQUIREMENT_KEYS = frozenset({"requirement_id", "requirement_text", "evidence_summary"})
 
@@ -78,5 +83,5 @@ def probe_audit_substitutions(
     }
     paths["output_dir"].mkdir(parents=True, exist_ok=True)
     output_path = paths["output_dir"] / "audit_substitution_probe.json"
-    atomic_write(output_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write(output_path, canonical_json_bytes(payload))
     return {"probe_path": str(output_path)}

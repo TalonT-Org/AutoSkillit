@@ -181,21 +181,23 @@ def evaluate_diff_mock_of_prescribed_symbol(
     }
     if not identifiers:
         return None
-    for line in diff_text.splitlines():
-        if not line.startswith("+") or line.startswith("+++"):
-            continue
-        marker = _first_matching_term(line[1:], SUBSTITUTION_MARKERS)
-        if marker is None:
-            continue
-        line_identifiers = {match.group(0).casefold() for match in _IDENTIFIER_RE.finditer(line)}
-        matches = sorted(identifiers & line_identifiers)
-        if matches:
-            return SubstitutionFinding(
-                requirement_id=requirement_id,
-                trigger=SubstitutionTrigger.DIFF_MOCK_OF_PRESCRIBED_SYMBOL,
-                matched_marker=marker,
-                matched_cue=matches[0],
-            )
+    added_text = "\n".join(
+        line[1:]
+        for line in diff_text.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    )
+    marker = _first_matching_term(added_text, SUBSTITUTION_MARKERS)
+    added_identifiers = {
+        match.group(0).casefold() for match in _IDENTIFIER_RE.finditer(added_text)
+    }
+    matches = sorted(identifiers & added_identifiers)
+    if marker is not None and matches:
+        return SubstitutionFinding(
+            requirement_id=requirement_id,
+            trigger=SubstitutionTrigger.DIFF_MOCK_OF_PRESCRIBED_SYMBOL,
+            matched_marker=marker,
+            matched_cue=matches[0],
+        )
     return None
 
 

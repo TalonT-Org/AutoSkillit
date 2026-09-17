@@ -119,6 +119,25 @@ class AuditPreparedEffectDeliveryStatus(StrEnum):
     DELIVERED = "DELIVERED"
 
 
+def _validate_verdict_and_remediation(
+    owner: str,
+    rows: tuple[AuditAssessmentRow, ...],
+    verdict: object,
+    remediation_ref: object,
+) -> None:
+    if not isinstance(verdict, AuditVerdict):
+        raise ValueError(f"{owner}.verdict must be an AuditVerdict")
+    if remediation_ref is not None and not isinstance(remediation_ref, ArtifactRef):
+        raise ValueError(f"{owner}.remediation_ref must be an ArtifactRef or None")
+    if verdict is AuditVerdict.GO:
+        if remediation_ref is not None:
+            raise ValueError(f"{owner} GO verdict cannot carry remediation_ref")
+        if any(row.assessment.blocking for row in rows):
+            raise ValueError(f"{owner} GO verdict cannot carry blocking assessments")
+    elif remediation_ref is None:
+        raise ValueError(f"{owner} NO GO verdict requires remediation_ref")
+
+
 def _validate_semantic_fields(
     *,
     owner: str,
@@ -145,17 +164,7 @@ def _validate_semantic_fields(
     requirement_ids = tuple(row.requirement_id for row in rows)
     if len(set(requirement_ids)) != len(requirement_ids):
         raise ValueError(f"{owner}.assessments contain duplicate requirement IDs")
-    if not isinstance(verdict, AuditVerdict):
-        raise ValueError(f"{owner}.verdict must be an AuditVerdict")
-    if remediation_ref is not None and not isinstance(remediation_ref, ArtifactRef):
-        raise ValueError(f"{owner}.remediation_ref must be an ArtifactRef or None")
-    if verdict is AuditVerdict.GO:
-        if remediation_ref is not None:
-            raise ValueError(f"{owner} GO verdict cannot carry remediation_ref")
-        if any(row.assessment.blocking for row in rows):
-            raise ValueError(f"{owner} GO verdict cannot carry blocking assessments")
-    elif remediation_ref is None:
-        raise ValueError(f"{owner} NO GO verdict requires remediation_ref")
+    _validate_verdict_and_remediation(owner, rows, verdict, remediation_ref)
 
 
 def _semantic_payload(
@@ -173,6 +182,59 @@ def _semantic_payload(
         "schema_version": schema_version,
         "verdict": verdict.value,
     }
+
+
+def _validate_reservation_reference_binding(reservation: AuditIdentityReservation) -> None:
+    if reservation.reference_identity_profile_id != AUDIT_REFERENCE_IDENTITY_PROFILE_V1.profile_id:
+        raise ValueError("AuditIdentityReservation.reference_identity_profile_id is unsupported")
+    refs = _typed_tuple(
+        "AuditIdentityReservation.audited_plan_refs",
+        reservation.audited_plan_refs,
+        ArtifactRef,
+    )
+    if not refs:
+        raise ValueError("AuditIdentityReservation.audited_plan_refs must be non-empty")
+    reference_identity = compute_audit_reference_identity(refs)
+    if reference_identity != reservation.slot_key.ordered_reference_identity:
+        raise ValueError("AuditIdentityReservation ordered reference identity does not match")
+    if reservation.plan_set_id != reference_identity:
+        raise ValueError(
+            "AuditIdentityReservation.plan_set_id must be the ordered reference identity"
+        )
+
+
+def _validate_reservation_paths(reservation: AuditIdentityReservation) -> None:
+    root = _require_absolute_path(
+        "AuditIdentityReservation.allowed_root", reservation.allowed_root
+    )
+    artifact_paths = (
+        reservation.semantic_result_path,
+        reservation.inventory_path,
+        reservation.authority_path,
+    )
+    for field_name, path in zip(
+        ("semantic_result_path", "inventory_path", "authority_path"),
+        artifact_paths,
+        strict=True,
+    ):
+        checked_path = _require_absolute_path(f"AuditIdentityReservation.{field_name}", path)
+        try:
+            checked_path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"AuditIdentityReservation.{field_name} must be under allowed_root"
+            ) from exc
+    if len(set(artifact_paths)) != len(artifact_paths):
+        raise ValueError("AuditIdentityReservation artifact paths must be distinct")
+
+
+def _validate_reservation_expected_head(reservation: AuditIdentityReservation) -> None:
+    if reservation.expected_head is None:
+        return
+    if not isinstance(reservation.expected_head, AuditCycleHead):
+        raise ValueError("AuditIdentityReservation.expected_head has the wrong type")
+    if reservation.parent_authority_digest != reservation.expected_head.current_authority_digest:
+        raise ValueError("AuditIdentityReservation expected head digest does not match parent")
 
 
 @dataclass(frozen=True, slots=True)
@@ -423,24 +485,7 @@ class AuditIdentityReservation:
             "AuditIdentityReservation.runtime_binding_digest",
             self.runtime_binding_digest,
         )
-        if self.reference_identity_profile_id != AUDIT_REFERENCE_IDENTITY_PROFILE_V1.profile_id:
-            raise ValueError(
-                "AuditIdentityReservation.reference_identity_profile_id is unsupported"
-            )
-        refs = _typed_tuple(
-            "AuditIdentityReservation.audited_plan_refs",
-            self.audited_plan_refs,
-            ArtifactRef,
-        )
-        if not refs:
-            raise ValueError("AuditIdentityReservation.audited_plan_refs must be non-empty")
-        reference_identity = compute_audit_reference_identity(refs)
-        if reference_identity != self.slot_key.ordered_reference_identity:
-            raise ValueError("AuditIdentityReservation ordered reference identity does not match")
-        if self.plan_set_id != reference_identity:
-            raise ValueError(
-                "AuditIdentityReservation.plan_set_id must be the ordered reference identity"
-            )
+        _validate_reservation_reference_binding(self)
         for field_name in ("plan_set_id", "cycle_id", "scope_id", "part_id", "generated_at"):
             _require_nonempty(
                 f"AuditIdentityReservation.{field_name}",
@@ -454,33 +499,8 @@ class AuditIdentityReservation:
         )
         if self.parent_authority_digest != self.slot_key.prior_authority_digest:
             raise ValueError("AuditIdentityReservation parent digest does not match slot key")
-        root = _require_absolute_path("AuditIdentityReservation.allowed_root", self.allowed_root)
-        artifact_paths = (
-            self.semantic_result_path,
-            self.inventory_path,
-            self.authority_path,
-        )
-        for field_name, path in zip(
-            ("semantic_result_path", "inventory_path", "authority_path"),
-            artifact_paths,
-            strict=True,
-        ):
-            checked_path = _require_absolute_path(f"AuditIdentityReservation.{field_name}", path)
-            try:
-                checked_path.relative_to(root)
-            except ValueError as exc:
-                raise ValueError(
-                    f"AuditIdentityReservation.{field_name} must be under allowed_root"
-                ) from exc
-        if len(set(artifact_paths)) != len(artifact_paths):
-            raise ValueError("AuditIdentityReservation artifact paths must be distinct")
-        if self.expected_head is not None:
-            if not isinstance(self.expected_head, AuditCycleHead):
-                raise ValueError("AuditIdentityReservation.expected_head has the wrong type")
-            if self.parent_authority_digest != self.expected_head.current_authority_digest:
-                raise ValueError(
-                    "AuditIdentityReservation expected head digest does not match parent"
-                )
+        _validate_reservation_paths(self)
+        _validate_reservation_expected_head(self)
         _require_tracker_target(
             "AuditIdentityReservation",
             self.tracker_expected,
@@ -627,6 +647,41 @@ class AuditOutcome:
         )
 
 
+def _validate_correction_predecessor(attempt: AuditAttemptRecord) -> None:
+    if attempt.correction_predecessor is None:
+        return
+    if not isinstance(attempt.correction_predecessor, AuditAttemptId):
+        raise ValueError("AuditAttemptRecord.correction_predecessor has the wrong type")
+    if attempt.correction_predecessor == attempt.attempt_id:
+        raise ValueError("AuditAttemptRecord cannot correct its own attempt")
+
+
+def _validate_attempt_lifecycle(
+    attempt: AuditAttemptRecord,
+    effects: tuple[AuditPreparedEffect, ...],
+) -> None:
+    if attempt.lifecycle is AuditAttemptLifecycle.OPEN and (
+        attempt.semantic_digest is not None or effects or attempt.committed_outcome is not None
+    ):
+        raise ValueError("OPEN attempt cannot carry processed state")
+    if (
+        attempt.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED
+        and attempt.semantic_digest is None
+    ):
+        raise ValueError(f"{attempt.lifecycle.value} attempt requires semantic_digest")
+    if attempt.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED and effects:
+        raise ValueError("semantic-stage attempt cannot carry prepared effects")
+    if (
+        attempt.lifecycle
+        in {
+            AuditAttemptLifecycle.PREPARED,
+            AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION,
+        }
+        and not effects
+    ):
+        raise ValueError(f"{attempt.lifecycle.value} attempt requires prepared effects")
+
+
 @dataclass(frozen=True, slots=True)
 class AuditAttemptRecord:
     slot_id: AuditSlotId
@@ -645,11 +700,7 @@ class AuditAttemptRecord:
         if not isinstance(self.lifecycle, AuditAttemptLifecycle):
             raise ValueError("AuditAttemptRecord.lifecycle has the wrong type")
         _require_optional_digest("AuditAttemptRecord.semantic_digest", self.semantic_digest)
-        if self.correction_predecessor is not None:
-            if not isinstance(self.correction_predecessor, AuditAttemptId):
-                raise ValueError("AuditAttemptRecord.correction_predecessor has the wrong type")
-            if self.correction_predecessor == self.attempt_id:
-                raise ValueError("AuditAttemptRecord cannot correct its own attempt")
+        _validate_correction_predecessor(self)
         effects = _typed_tuple(
             "AuditAttemptRecord.prepared_effects",
             self.prepared_effects,
@@ -659,26 +710,7 @@ class AuditAttemptRecord:
             raise ValueError("AuditAttemptRecord.prepared_effects contain duplicate paths")
         if effects and self.semantic_digest is None:
             raise ValueError("prepared effects require semantic_digest")
-        if self.lifecycle is AuditAttemptLifecycle.OPEN and (
-            self.semantic_digest is not None or effects or self.committed_outcome is not None
-        ):
-            raise ValueError("OPEN attempt cannot carry processed state")
-        if (
-            self.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED
-            and self.semantic_digest is None
-        ):
-            raise ValueError(f"{self.lifecycle.value} attempt requires semantic_digest")
-        if self.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED and effects:
-            raise ValueError("semantic-stage attempt cannot carry prepared effects")
-        if (
-            self.lifecycle
-            in {
-                AuditAttemptLifecycle.PREPARED,
-                AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION,
-            }
-            and not effects
-        ):
-            raise ValueError(f"{self.lifecycle.value} attempt requires prepared effects")
+        _validate_attempt_lifecycle(self, effects)
         if (self.lifecycle is AuditAttemptLifecycle.RESPONSE_COMMITTED) != (
             self.committed_outcome is not None
         ):

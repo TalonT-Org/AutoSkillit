@@ -271,6 +271,15 @@ class TestAuditReservationOutcome:
                 attempt_id=AuditAttemptId("attempt-1"),
             )
 
+        with pytest.raises(ValueError, match="requires a reservation and handle"):
+            AuditReservationOutcome(
+                decision=ReservationDecision.DISPATCH_NEW,
+                slot_key=_slot_key(),
+                attempt_id=AuditAttemptId("attempt-1"),
+                reservation=_reservation(),
+                reservation_handle="",
+            )
+
     def test_dispatch_accepts_reservation_and_handle(self) -> None:
         outcome = AuditReservationOutcome(
             decision=ReservationDecision.DISPATCH_NEW,
@@ -322,6 +331,14 @@ class TestAuditReservationOutcome:
                 decision=ReservationDecision.CONFLICT,
                 slot_key=_slot_key(),
                 attempt_id=AuditAttemptId("attempt-1"),
+            )
+
+        with pytest.raises(ValueError, match="CONFLICT requires conflict_detail"):
+            AuditReservationOutcome(
+                decision=ReservationDecision.CONFLICT,
+                slot_key=_slot_key(),
+                attempt_id=AuditAttemptId("attempt-1"),
+                conflict_detail="",
             )
 
     def test_conflict_cannot_carry_dispatch_payload(self) -> None:

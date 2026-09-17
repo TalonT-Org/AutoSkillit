@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -648,6 +649,23 @@ def test_internal_pending_status_cannot_escape_as_public_status() -> None:
     assert standalone.path is None
     with pytest.raises(ValueError, match="cannot expose authority payload"):
         dataclasses.replace(standalone, verdict=AuditVerdict.GO)
+
+
+def test_committed_attempt_accepts_structural_outcome() -> None:
+    attempt_id = AuditAttemptId("attempt-1")
+    structural_outcome = SimpleNamespace(attempt_id=attempt_id)
+
+    attempt = AuditAttemptRecord(
+        slot_id=AuditSlotId("slot-1"),
+        attempt_id=attempt_id,
+        lifecycle=AuditAttemptLifecycle.RESPONSE_COMMITTED,
+        semantic_digest=_digest("f"),
+        correction_predecessor=None,
+        prepared_effects=(_prepared_effect(AuditPreparedEffectDeliveryStatus.DELIVERED),),
+        committed_outcome=structural_outcome,  # type: ignore[arg-type]
+    )
+
+    assert attempt.committed_outcome is structural_outcome
 
 
 def test_semantic_rejected_attempt_requires_semantic_digest() -> None:

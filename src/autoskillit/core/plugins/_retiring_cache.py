@@ -177,6 +177,7 @@ def _legacy_from_json(raw: object) -> LegacyRetiringEvidence:
 
 
 def _v2_retiring_arrays(raw: Mapping[str, object]) -> tuple[list[object], list[object]]:
+    """Validate the v2 retiring cache root and return its records and legacy_evidence lists."""
     if frozenset(raw) != _RETIRING_CACHE_V2_FIELDS:
         raise ValueError("v2 retiring cache root has unexpected fields")
     records_raw = raw["records"]
@@ -194,6 +195,7 @@ def _decode_retiring_items(
     tuple[QuarantinedRetiringRecord, ...],
     tuple[str, ...],
 ]:
+    """Decode items into structured records, quarantining any that fail to decode."""
     decoded: list[_RetiringCacheItem] = []
     quarantined: list[QuarantinedRetiringRecord] = []
     discovered_ids: list[str] = []

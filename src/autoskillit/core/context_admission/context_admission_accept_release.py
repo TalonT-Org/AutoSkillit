@@ -234,6 +234,7 @@ def _quarantine_acceptance(
     record: AdmissionBatchRecord,
     reason_code: str,
 ) -> AdmissionTransition:
+    """Quarantine an acceptance event by transitioning the batch into QUARANTINED."""
     next_state = _quarantined_acceptance_state(
         state,
         record,
@@ -365,6 +366,7 @@ def _partition_invalidated_generations(
     tuple[GenerationReservationRecord, ...],
     tuple[GenerationReservationRecord, ...],
 ]:
+    """Split generations into retained vs invalidated against the supplied record."""
     retained: list[GenerationReservationRecord] = []
     invalidated: list[GenerationReservationRecord] = []
     for generation in generations:

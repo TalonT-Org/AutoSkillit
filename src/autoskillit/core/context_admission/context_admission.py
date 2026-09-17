@@ -98,6 +98,7 @@ def _authority_unavailable(
     state: ContextAdmissionState,
     event: AuthorityUnavailableEvent,
 ) -> AdmissionTransition:
+    """Publish an authority-unavailable event without changing state."""
     kind = (
         AdmissionDecisionKind.UPSTREAM_GATED
         if event.authority_state is CoverageState.UPSTREAM_GATED

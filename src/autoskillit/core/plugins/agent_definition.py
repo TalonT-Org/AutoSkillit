@@ -148,6 +148,7 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError(f"Codex web_search must be one of {allowed}")
 
     def _validate_native_projection(self) -> None:
+        """Validate the Codex native projection fields (model, reasoning, sandbox)."""
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
             raise AgentDefinitionError(f"unsupported Codex model: {self.model!r}")
         if (
@@ -163,6 +164,7 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex reasoning effort requires a native model")
 
     def _validate_disabled_features(self) -> None:
+        """Validate Codex disabled_features tuple structure and canonical order."""
         if not isinstance(self.disabled_features, tuple):
             raise AgentDefinitionError("Codex disabled_features must be an immutable tuple")
         if any(not isinstance(feature, str) for feature in self.disabled_features):
@@ -219,6 +221,7 @@ class AgentDef:
             self._validate_reader_eligibility()
 
     def _validate_reader_tools(self) -> None:
+        """Validate the canonical reader tool allowlist (format, uniqueness, prefix)."""
         if any(not isinstance(tool, str) or not tool for tool in self.reader_tools):
             raise AgentDefinitionError("agent reader_tools must contain non-empty strings")
         if len(set(self.reader_tools)) != len(self.reader_tools):

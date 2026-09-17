@@ -143,6 +143,7 @@ def _active_kitchens_corrupt(
 def _filter_active_kitchen_entries(
     kitchens: list[object], schema_version: int
 ) -> tuple[tuple[dict[str, object], ...], bool]:
+    """Filter kitchens into admissible entries and report whether any v2 record was malformed."""
     entries: list[dict[str, object]] = []
     malformed_v2 = False
     for entry in kitchens:

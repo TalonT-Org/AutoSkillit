@@ -163,6 +163,7 @@ def _validate_reserve_structure(
     state: ActiveContextAdmissionState,
     event: ReserveRequestEvent,
 ) -> str | None:
+    """Return a reason code if the reserve request violates structure invariants, else None."""
     if (
         _batch_record(state, event.batch.batch_id) is not None
         or _closed_batch_location(state, event.batch.batch_id) is not None

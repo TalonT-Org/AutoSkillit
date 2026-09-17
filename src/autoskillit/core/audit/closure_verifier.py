@@ -42,6 +42,7 @@ def _reconstruct_external_inputs(
     target_sha: str,
     errors: list[str],
 ) -> None:
+    """Recompute authority/plan/report hashes and append any mismatches to errors."""
     try:
         computed_authority_hash = compute_file_hash(authority_path)
     except OSError as exc:
@@ -100,6 +101,7 @@ def _reconstruct_external_inputs(
 
 
 def _verify_report_self_integrity(report: ClosureReport, errors: list[str]) -> None:
+    """Verify every row and the report-level hash match the recomputed values."""
     for idx, row in enumerate(report.rows):
         expected = compute_row_hash(
             row.requirement_id,

@@ -19,30 +19,32 @@ _DIRECT_READ_VERB = re.compile(r"\b(?:read|consult|inspect)\b", re.IGNORECASE)
 # These are the only bundled skill-body uses of the literal token that do not
 # direct a session to read another skill's source. Keep each exception precise:
 # a new occurrence needs an explicit rationale or a declared dependency.
-_ALLOWED_SKILL_MD_MENTIONS: dict[tuple[str, int], str] = {
+# Each entry is keyed by (relative_path, line_substring_marker) so the match
+# survives incidental line shifts from unrelated edits.
+_ALLOWED_SKILL_MD_MENTIONS: dict[tuple[str, str], str] = {
     (
         "skills/sous-chef/SKILL.md",
-        1077,
+        "NEVER read SKILL.md files directly",
     ): "Prohibits direct source reads; it does not instruct an agent to read another skill.",
     (
         "skills_extended/write-recipe/SKILL.md",
-        36,
+        "Create SKILL.md files",
     ): "Generic authoring guidance about the filename, not a content read.",
     (
         "skills_extended/write-recipe/SKILL.md",
-        76,
+        "No SKILL.md, no slash command registration",
     ): "Generic authoring guidance about recipe artifacts, not a content read.",
     (
         "skills_extended/write-recipe/SKILL.md",
-        276,
+        "Does `.claude/skills/<name>/SKILL.md` exist",
     ): "Checks whether a project-local skill file exists, without reading it.",
     (
         "skills_extended/setup-project/SKILL.md",
-        202,
+        ".claude/skills/<name>/SKILL.md`) and as a bundled autoskillit skill",
     ): "Describes a project-local skill-file existence check, not a content read.",
     (
         "skills_extended/prepare-pr/SKILL.md",
-        179,
+        "SKILL.md files defining multi-step workflows",
     ): "Uses the filename in a generic glob description for a lens table.",
 }
 
@@ -82,16 +84,16 @@ def _skill_remedy(line: str) -> str:
 def test_bundled_skill_prose_declares_source_dependencies() -> None:
     """SKILL.md bodies may not direct sessions to read protected package sources."""
     findings: list[str] = []
-    seen_allowlist: set[tuple[str, int]] = set()
+    seen_allowlist: set[tuple[str, str]] = set()
 
     for skill_md in _bundled_skill_paths():
         relative_path = skill_md.relative_to(pkg_root()).as_posix()
         first_body_line, body_lines = _body_lines(skill_md.read_text(encoding="utf-8"))
         for line_number, line in enumerate(body_lines, start=first_body_line):
-            location = (relative_path, line_number)
             if "SKILL.md" in line:
-                if location in _ALLOWED_SKILL_MD_MENTIONS:
-                    seen_allowlist.add(location)
+                marker = _matching_marker(relative_path, line)
+                if marker is not None:
+                    seen_allowlist.add((relative_path, marker))
                 else:
                     findings.append(
                         f"{relative_path}:{line_number}: {line.strip()!r}\n"
@@ -116,8 +118,16 @@ def test_bundled_skill_prose_declares_source_dependencies() -> None:
     assert seen_allowlist == set(_ALLOWED_SKILL_MD_MENTIONS), (
         "Stale SKILL.md prose allowlist entries:\n"
         + "\n".join(
-            f"  {path}:{line}: {_ALLOWED_SKILL_MD_MENTIONS[(path, line)]}"
-            for path, line in sorted(set(_ALLOWED_SKILL_MD_MENTIONS) - seen_allowlist)
+            f"  {path}:marker={marker!r}: {_ALLOWED_SKILL_MD_MENTIONS[(path, marker)]}"
+            for path, marker in sorted(set(_ALLOWED_SKILL_MD_MENTIONS) - seen_allowlist)
         )
     )
     assert not findings, "Undeclared protected-source prose dependencies:\n" + "\n".join(findings)
+
+
+def _matching_marker(relative_path: str, line: str) -> str | None:
+    """Return the marker substring for ``relative_path`` if ``line`` matches one."""
+    for path, marker in _ALLOWED_SKILL_MD_MENTIONS:
+        if path == relative_path and marker in line:
+            return marker
+    return None

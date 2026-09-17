@@ -10,6 +10,7 @@ from autoskillit.config import TestCheckConfig
 from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_cmd
 from tests.conftest import _make_result
+from tests.infra._protected_path_command_corpus import ADMITTED_COMMANDS, DENIED_COMMANDS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -163,13 +164,7 @@ class TestRecipeReadProhibitionCmd:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "cmd",
-        [
-            "git add -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --name-only -- src/autoskillit/recipes/remediation.yaml",
-            "git status -- src/autoskillit/recipes/remediation.yaml",
-            "wc -l src/autoskillit/recipes/remediation.yaml",
-        ],
+        ADMITTED_COMMANDS,
     )
     async def test_allows_recipe_path_vcs_and_metadata_commands(self, tool_ctx_kitchen_open, cmd):
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
@@ -209,36 +204,7 @@ class TestRecipeReadProhibitionCmd:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "cmd",
-        [
-            "git diff -- src/autoskillit/recipes/remediation.yaml",
-            "git status -v -- src/autoskillit/recipes/remediation.yaml",
-            "git add -p -- src/autoskillit/recipes/remediation.yaml",
-            "git add --pathspec-from-file=src/autoskillit/recipes/remediation.yaml",
-            "git add --pathspec-from-file src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --patch-with-stat -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --patch-with-raw -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --binary -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --check -- src/autoskillit/recipes/remediation.yaml",
-            ("python3 <<'PY'\nprint(open('src/autoskillit/recipes/remediation.yaml').read())\nPY"),
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml\n"
-                "cat src/autoskillit/recipes/remediation.yaml"
-            ),
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml "
-                "& cat src/autoskillit/recipes/remediation.yaml"
-            ),
-            # Command substitution $(...) bypass — exercises the _SHELL_SUBSTITUTION_RE
-            # branch in command_has_blocked_protected_path_read.
-            "git add -- $(cat src/autoskillit/recipes/remediation.yaml)",
-            # State-var-via-history $_ bypass — exercises the
-            # _SHELL_STATE_VAR_RE branch gated on len(segments) > 1.
-            "git add -- src/autoskillit/recipes/remediation.yaml && cat $_",
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml"
-                "&&cat src/autoskillit/recipes/remediation.yaml"
-            ),
-        ],
+        DENIED_COMMANDS,
     )
     async def test_denies_protected_path_content_bypasses(self, tool_ctx_kitchen_open, cmd):
         result = json.loads(await run_cmd(cmd=cmd, cwd="/tmp"))

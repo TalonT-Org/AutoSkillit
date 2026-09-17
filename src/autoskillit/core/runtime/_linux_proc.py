@@ -17,6 +17,17 @@ _DEFAULT_PROC = Path("/proc")
 _DARWIN_PROC_PIDTBSDINFO = 3
 _DARWIN_ZOMBIE_STATUS = 5
 
+__all__ = [
+    "is_pid_alive",
+    "is_pid_zombie",
+    "is_session_alive",
+    "owner_liveness",
+    "read_boot_id",
+    "read_pid_namespace_inode",
+    "read_process_state",
+    "read_starttime_ticks",
+]
+
 
 class _DarwinTimeval(ctypes.Structure):
     _fields_ = [("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_int32)]

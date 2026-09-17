@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -481,6 +482,97 @@ class TestCLIOrderCommand:
 
         env = mock_run.call_args[1].get("env") or {}
         assert "AUTOSKILLIT_LAUNCH_ID" in env
+
+    @pytest.mark.parametrize(
+        ("binding_outcome", "error_match"),
+        [
+            pytest.param(False, "session owner binding refused", id="refused"),
+            pytest.param(
+                RuntimeError("registry unavailable"), "registry unavailable", id="raised"
+            ),
+        ],
+    )
+    def test_managed_order_binding_failure_reaps_and_releases_claim(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        _stub_owner_binding: Callable[[bool | BaseException], None],
+        binding_outcome: bool | RuntimeError,
+        error_match: str,
+    ) -> None:
+        from autoskillit.cli.session._session_launch import _run_interactive_session
+        from autoskillit.core import (
+            LAUNCH_ID_ENV_VAR,
+            SESSION_TYPE_ENV_VAR,
+            ManagedSessionHome,
+            SessionType,
+            ValidatedAddDir,
+        )
+        from tests.cli.test_session_launch import _make_capturing_backend
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        _stub_owner_binding(binding_outcome)
+        cleanup: list[str] = []
+
+        def run_attempt(_spec: object, **kwargs: object) -> None:
+            try:
+                kwargs["on_spawn"](777, 777)  # type: ignore[operator]
+            except BaseException:
+                cleanup.append("reaped")
+                raise
+            pytest.fail("managed owner binding failure must abort the attempt")
+
+        monkeypatch.setattr(_patch_session__session_process, "run_cook_attempt", run_attempt)
+        backend, _captured_kwargs = _make_capturing_backend()
+        generated_home = tmp_path / "managed-home"
+        skills_dir = generated_home / "skills"
+        skills_dir.mkdir(parents=True)
+        managed_home = ManagedSessionHome(
+            launch_id="launch-id",
+            generated_home=generated_home,
+            skills_dir=ValidatedAddDir(str(skills_dir)),
+            pass_fds=(),
+            unavailability_payload={"backend": "claude-code", "unavailable": ()},
+        )
+        release = MagicMock()
+        monkeypatch.setattr(
+            _patch_session__session_order,
+            "_write_order_entry",
+            lambda *_args: (
+                "launch-id",
+                {
+                    SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,
+                    LAUNCH_ID_ENV_VAR: "launch-id",
+                },
+            ),
+        )
+        monkeypatch.setattr(_patch_session__session_order, "release_session_claim", release)
+
+        def managed_launch(**kwargs: object) -> None:
+            _run_interactive_session(
+                launch=kwargs["launch"],  # type: ignore[arg-type]
+                extra_env=kwargs["extra_env"],  # type: ignore[arg-type]
+                project_dir=tmp_path,
+                required_env=kwargs["required_env"],  # type: ignore[arg-type]
+                backend=backend,  # type: ignore[arg-type]
+                skill_compilation=kwargs["skill_compilation"],  # type: ignore[arg-type]
+                managed_home=managed_home,
+                retained_projection_binding=MagicMock(inherited_fds=()),
+                startup_trace=MagicMock(),
+                attempt=1,
+            )
+
+        monkeypatch.setattr(_patch_session__session_order, "_launch_cook_session", managed_launch)
+
+        with pytest.raises(RuntimeError, match=error_match):
+            cli.order("test-script")
+
+        assert cleanup == ["reaped"]
+        release.assert_called_once_with(tmp_path, "launch-id")
 
     @pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
     def test_order_backend_produces_valid_command(

@@ -9,6 +9,7 @@ is_git_worktree to True themselves.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -62,8 +63,19 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def _stub_owner_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: True)
+def _stub_owner_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[bool | BaseException], None]:
+    def set_outcome(outcome: bool | BaseException) -> None:
+        def bind(*_args: object) -> bool:
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr("autoskillit.core.bind_session_owner", bind)
+
+    set_outcome(True)
+    return set_outcome
 
 
 @pytest.fixture

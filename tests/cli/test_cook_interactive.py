@@ -692,15 +692,47 @@ def test_cook_resume_reuses_claimed_launch_identity_everywhere(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from autoskillit.core.runtime.session_registry import (
+        claim_launch_for_session,
+        read_registry,
+        release_session_claim,
+        write_registry_entry,
+    )
+
     backend = _Backend()
     captured = _install_harness(monkeypatch, tmp_path)
     thread_id = "7c1b6dc2-02c2-47b8-a3af-77b399278c3b"
     launch_id = "0123456789abcdef"
+    write_registry_entry(
+        tmp_path,
+        launch_id,
+        "cook",
+        None,
+        claude_session_id=thread_id,
+    )
+    assert release_session_claim(tmp_path, launch_id)
+    claims = captured["claims"]
+    releases = captured["releases"]
+    events = captured["events"]
+    assert isinstance(claims, list)
+    assert isinstance(releases, list)
+    assert isinstance(events, list)
+
+    def real_claim(project_dir: Path, **kwargs: object) -> str:
+        claims.append({"project_dir": project_dir, **kwargs})
+        events.append(("claim", kwargs["claude_session_id"]))
+        return claim_launch_for_session(project_dir, **kwargs)  # type: ignore[arg-type]
+
+    def real_release(project_dir: Path, claimed_launch_id: str) -> bool:
+        releases.append(claimed_launch_id)
+        return release_session_claim(project_dir, claimed_launch_id)
+
+    monkeypatch.setattr("autoskillit.core.write_registry_entry", write_registry_entry)
+    monkeypatch.setattr("autoskillit.core.claim_launch_for_session", real_claim)
+    monkeypatch.setattr("autoskillit.core.release_session_claim", real_release)
 
     cli.cook(backend=backend, session_id=thread_id)
 
-    claims = captured["claims"]
-    assert isinstance(claims, list)
     assert claims == [
         {
             "project_dir": tmp_path,
@@ -709,8 +741,6 @@ def test_cook_resume_reuses_claimed_launch_identity_everywhere(
             "recipe_name": None,
         }
     ]
-    events = captured["events"]
-    assert isinstance(events, list)
     managed_enter = next(event for event in events if event[0] == "managed-enter")
     assert managed_enter[1] == launch_id
     assert [event[0] for event in events].index("claim") < [event[0] for event in events].index(
@@ -719,12 +749,17 @@ def test_cook_resume_reuses_claimed_launch_identity_everywhere(
     spec = captured["spec"]
     assert isinstance(spec, CmdSpec)
     assert spec.env[LAUNCH_ID_ENV_VAR] == launch_id
-    assert backend.context_calls[0]["launch_id"] == launch_id
-    current_resume_spec = backend.context_calls[0]["current_resume_spec"]
-    assert isinstance(current_resume_spec, NamedResume)
-    assert current_resume_spec.session_id == thread_id
-    releases = captured["releases"]
+    assert backend.context_calls
+    for context_call in backend.context_calls:
+        assert context_call["launch_id"] == launch_id
+        current_resume_spec = context_call["current_resume_spec"]
+        assert isinstance(current_resume_spec, NamedResume)
+        assert current_resume_spec.session_id == thread_id
     assert releases == [launch_id]
+    registry = read_registry(tmp_path)
+    assert list(registry) == [launch_id]
+    assert registry[launch_id]["claude_session_id"] == thread_id
+    assert "claimant_pid" not in registry[launch_id]
 
 
 @pytest.mark.parametrize(

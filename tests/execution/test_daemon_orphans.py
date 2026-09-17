@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core.runtime._linux_proc as process_identity
 from autoskillit.core import ProcessCleanupResult
 from autoskillit.execution import (
     OrphanedAutoSkillitDaemon,
@@ -148,6 +149,41 @@ def test_owner_probe_distinguishes_live_dead_and_unknown(monkeypatch: pytest.Mon
 def test_owner_probe_treats_matching_ticks_zombie_as_dead(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(subject, "owner_liveness", lambda *_args: False)
     assert subject._owner_is_dead(333, _BOOT, 22) is True
+
+
+@pytest.mark.parametrize(
+    ("current_boot", "current_ticks", "state", "expected_dead"),
+    [
+        pytest.param(_BOOT, 22, "S", False, id="live-matching"),
+        pytest.param(_BOOT, 23, "S", True, id="changed-starttime"),
+        pytest.param("87654321-4321-4321-4321-cba987654321", 22, "S", True, id="changed-boot"),
+        pytest.param(_BOOT, 22, "Z", True, id="zombie"),
+        pytest.param(_BOOT, 22, "X", True, id="dead-reaping"),
+        pytest.param(_BOOT, None, None, None, id="unavailable"),
+    ],
+)
+def test_reaper_owner_probe_covers_identity_liveness_cases(
+    monkeypatch: pytest.MonkeyPatch,
+    current_boot: str,
+    current_ticks: int | None,
+    state: str | None,
+    expected_dead: bool | None,
+) -> None:
+    monkeypatch.setattr(process_identity.sys, "platform", "linux")
+    monkeypatch.setattr(process_identity, "read_boot_id", lambda **_kwargs: current_boot)
+    monkeypatch.setattr(
+        process_identity,
+        "read_starttime_ticks",
+        lambda *_args, **_kwargs: current_ticks,
+    )
+    monkeypatch.setattr(
+        process_identity,
+        "read_process_state",
+        lambda *_args, **_kwargs: state,
+    )
+    monkeypatch.setattr(process_identity.os, "kill", lambda *_args: None)
+
+    assert subject._owner_is_dead(333, _BOOT, 22) is expected_dead
 
 
 @pytest.mark.parametrize(

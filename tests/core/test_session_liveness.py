@@ -102,27 +102,39 @@ def test_owner_liveness_refuses_unreadable_linux_identity(monkeypatch: pytest.Mo
 
 
 @pytest.mark.parametrize(
-    ("status", "starttime_ticks", "expected"),
+    ("status", "current_boot_id", "starttime_ticks", "expected"),
     [
-        (0, 2_000_003, True),
-        (subject._DARWIN_ZOMBIE_STATUS, 2_000_003, False),
-        (0, 2_000_004, False),
+        pytest.param(0, "1:000002", 2_000_003, True, id="live-matching"),
+        pytest.param(
+            subject._DARWIN_ZOMBIE_STATUS,
+            "1:000002",
+            2_000_003,
+            False,
+            id="zombie",
+        ),
+        pytest.param(0, "1:000002", 2_000_004, False, id="changed-starttime"),
+        pytest.param(0, "9:000009", 2_000_003, False, id="changed-boot"),
+        pytest.param(None, "1:000002", 2_000_003, None, id="unavailable"),
     ],
 )
 def test_darwin_owner_liveness_uses_boot_time_and_process_start(
     monkeypatch: pytest.MonkeyPatch,
-    status: int,
+    status: int | None,
+    current_boot_id: str,
     starttime_ticks: int,
-    expected: bool,
+    expected: bool | None,
 ) -> None:
-    info = subject._DarwinProcBsdInfo()
-    info.pbi_pid = 123
-    info.pbi_status = status
-    info.pbi_start_tvsec = 2
-    info.pbi_start_tvusec = 3
+    info = None
+    if status is not None:
+        info = subject._DarwinProcBsdInfo()
+        info.pbi_pid = 123
+        info.pbi_status = status
+        info.pbi_start_tvsec = 2
+        info.pbi_start_tvusec = 3
     monkeypatch.setattr(subject.sys, "platform", "darwin")
-    monkeypatch.setattr(subject, "_darwin_boot_id", lambda: "1:000002")
+    monkeypatch.setattr(subject, "_darwin_boot_id", lambda: current_boot_id)
     monkeypatch.setattr(subject, "_read_darwin_proc_bsd_info", lambda _pid: info)
+    monkeypatch.setattr(subject.os, "kill", lambda *_args: None)
 
     assert owner_liveness(123, "1:000002", starttime_ticks) is expected
 

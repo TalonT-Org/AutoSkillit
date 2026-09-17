@@ -16,7 +16,7 @@ import pytest
 
 from tests.arch._helpers import SRC_ROOT
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.medium]
 
 _REGISTRY_FILENAME = "session_registry.json"
 _DIRECT_PERSISTENCE_PATHS = frozenset(

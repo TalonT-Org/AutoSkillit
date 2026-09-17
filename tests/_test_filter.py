@@ -1355,6 +1355,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
             "cli/test_capture_store.py",
+            # file-level: Part C acceptance test drives the real open-kitchen bridge
+            "cli/test_resume_registry_identity.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",

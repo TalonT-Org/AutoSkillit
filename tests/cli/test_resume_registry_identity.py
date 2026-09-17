@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.ui._menu as _patch_ui__menu
+import autoskillit.execution.backends._claude_session_locator as _locator_module
 from autoskillit import cli
+from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
+from autoskillit.cli.session._session_launch_intent import pick_session
 from autoskillit.core import (
     LAUNCH_ID_ENV_VAR,
     SESSION_TYPE_ENV_VAR,
     RestoreSession,
     SessionType,
+    bridge_claude_session_id,
+    read_registry,
+    release_session_claim,
+    write_registry_entry,
 )
+from autoskillit.execution.backends import ClaudeSessionLocator
+from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -31,6 +41,37 @@ def _add_recipe(project_dir: Path) -> None:
     recipes_dir = project_dir / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+
+
+def _stage_claude_index(
+    monkeypatch: pytest.MonkeyPatch,
+    project_dir: Path,
+    session_id: str,
+) -> ClaudeSessionLocator:
+    index_dir = project_dir / "claude-index"
+    index_dir.mkdir()
+    (index_dir / "sessions-index.json").write_text(
+        json.dumps(
+            [
+                {
+                    "sessionId": session_id,
+                    "cwd": str(project_dir),
+                    "firstPrompt": "Cook session",
+                    "summary": "",
+                    "gitBranch": "develop",
+                    "modified": None,
+                    "isSidechain": False,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        _locator_module,
+        "claude_code_project_dir",
+        lambda _cwd: index_dir,
+    )
+    return ClaudeSessionLocator()
 
 
 def test_fresh_order_writes_a_new_registry_entry_without_a_resume_claim(
@@ -86,50 +127,105 @@ def test_fresh_order_writes_a_new_registry_entry_without_a_resume_claim(
     assert released == [(tmp_path, "fresh-launch")]
 
 
-def test_resumed_order_claims_original_entry_and_preserves_launch_env(
+def test_order_resume_preserves_cook_identity_through_hook_and_real_picker(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A resumed order uses the claimed launch id in both launch identity env values."""
     monkeypatch.chdir(tmp_path)
     _add_recipe(tmp_path)
-    claimed: list[tuple[Path, dict[str, object]]] = []
-    released: list[tuple[Path, str]] = []
     captured: dict[str, object] = {}
 
-    def claim(project_dir: Path, **kwargs: object) -> str:
-        claimed.append((project_dir, kwargs))
-        return "original-order-launch"
-
-    def release(project_dir: Path, launch_id: str) -> None:
-        released.append((project_dir, launch_id))
-
-    def launch(**kwargs: object) -> None:
-        captured.update(kwargs)
-
-    monkeypatch.setattr(_patch_session__session_order, "claim_launch_for_session", claim)
-    monkeypatch.setattr(_patch_session__session_order, "release_session_claim", release)
-    monkeypatch.setattr(_patch_session__session_order, "_launch_cook_session", launch)
+    write_registry_entry(tmp_path, "cook-launch", SESSION_TYPE_COOK, None)
+    bridge_claude_session_id(tmp_path, "cook-launch", _SESSION_ID)
+    assert release_session_claim(tmp_path, "cook-launch")
+    monkeypatch.setattr(
+        _patch_session__session_order,
+        "_launch_cook_session",
+        lambda **kwargs: captured.update(kwargs),
+    )
 
     cli.order("test-script", resume=True, session_id=_SESSION_ID)
 
-    assert claimed == [
-        (
-            tmp_path,
-            {
-                "claude_session_id": _SESSION_ID,
-                "session_type": "order",
-                "recipe_name": "test-script",
-            },
-        )
-    ]
+    extra_env = captured["extra_env"]
+    assert isinstance(extra_env, dict)
+    launch_id = extra_env[LAUNCH_ID_ENV_VAR]
+    assert launch_id == "cook-launch"
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
+    _bridge_session_registry(_SESSION_ID, str(tmp_path))
+
+    locator = _stage_claude_index(monkeypatch, tmp_path, _SESSION_ID)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
+    registry = read_registry(tmp_path)
+
+    assert len(registry) == 1
+    assert registry["cook-launch"]["claude_session_id"] == _SESSION_ID
+    assert registry["cook-launch"]["session_type"] == SESSION_TYPE_COOK
+    assert pick_session(SESSION_TYPE_COOK, tmp_path, locator) == _SESSION_ID
+
+
+def test_resumed_order_claims_real_row_without_changing_row_count(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _add_recipe(tmp_path)
+    captured: dict[str, object] = {}
+    write_registry_entry(
+        tmp_path,
+        "cook-launch",
+        SESSION_TYPE_COOK,
+        None,
+        claude_session_id=_SESSION_ID,
+    )
+    assert release_session_claim(tmp_path, "cook-launch")
+    row_count = len(read_registry(tmp_path))
+    monkeypatch.setattr(
+        _patch_session__session_order,
+        "_launch_cook_session",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    cli.order("test-script", resume=True, session_id=_SESSION_ID)
+
     assert captured["launch"] == RestoreSession(session_id=_SESSION_ID)
-    assert captured["launch_id"] == "original-order-launch"
+    assert captured["launch_id"] == "cook-launch"
     assert captured["extra_env"] == {
         SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,
-        LAUNCH_ID_ENV_VAR: "original-order-launch",
+        LAUNCH_ID_ENV_VAR: "cook-launch",
     }
-    assert released == [(tmp_path, "original-order-launch")]
+    assert len(read_registry(tmp_path)) == row_count == 1
+
+
+def test_unknown_resume_is_identified_before_launch_handoff(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    observed: dict[str, object] = {}
+
+    def inspect_before_handoff(**kwargs: object) -> None:
+        observed["launch"] = kwargs
+        observed["registry"] = read_registry(tmp_path)
+
+    monkeypatch.setattr(
+        _patch_session__session_order,
+        "_launch_cook_session",
+        inspect_before_handoff,
+    )
+
+    cli.order(resume=True, session_id=_SESSION_ID)
+
+    registry = observed["registry"]
+    assert isinstance(registry, dict)
+    assert len(registry) == 1
+    row = next(iter(registry.values()))
+    assert row["claude_session_id"] == _SESSION_ID
+    launch_kwargs = observed["launch"]
+    assert isinstance(launch_kwargs, dict)
+    launch_env = launch_kwargs["extra_env"]
+    assert isinstance(launch_env, dict)
+    assert launch_env[LAUNCH_ID_ENV_VAR] in registry
 
 
 def test_resumed_order_releases_claim_when_launch_fails(

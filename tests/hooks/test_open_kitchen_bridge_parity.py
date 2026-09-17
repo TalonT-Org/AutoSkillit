@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import io
 import json
+import multiprocessing
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.core.runtime.session_registry import bridge_claude_session_id, registry_path
+from autoskillit.core.runtime.session_registry import (
+    bridge_claude_session_id,
+    read_registry,
+    registry_path,
+)
 from tests.conftest import production_interpreter_env
 
-pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+pytestmark = [pytest.mark.medium]
 
 
 def _write_registry(project_dir: Path, registry: dict[str, dict[str, object]]) -> Path:
@@ -35,6 +42,32 @@ def _bridge(
 
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
     _bridge_session_registry(session_id, str(project_dir))
+
+
+def _race_bridge(
+    implementation: str,
+    project_dir: str,
+    launch_id: str,
+    session_id: str,
+    barrier: Any,
+    outcomes: Any,
+) -> None:
+    from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
+
+    project = Path(project_dir)
+    if implementation == "hook":
+        os.environ["AUTOSKILLIT_LAUNCH_ID"] = launch_id
+        os.environ["AUTOSKILLIT_STATE_ROOT"] = project_dir
+    barrier.wait(timeout=5)
+    try:
+        if implementation == "hook":
+            _bridge_session_registry(session_id, project_dir)
+        else:
+            bridge_claude_session_id(project, launch_id, session_id)
+    except ValueError:
+        outcomes.put((implementation, "refused"))
+    else:
+        outcomes.put((implementation, "success"))
 
 
 @pytest.mark.parametrize(
@@ -66,9 +99,10 @@ def test_bridge_rejects_non_unique_bindings_with_core_messages(
 ) -> None:
     core_project = tmp_path / "core"
     hook_project = tmp_path / "hook"
-    _write_registry(core_project, registry)
+    core_file = _write_registry(core_project, registry)
     registry_file = _write_registry(hook_project, registry)
-    before = registry_file.read_bytes()
+    core_before = core_file.read_bytes()
+    hook_before = registry_file.read_bytes()
 
     with pytest.raises(ValueError) as core_error:
         bridge_claude_session_id(core_project, "requested", session_id)
@@ -76,7 +110,9 @@ def test_bridge_rejects_non_unique_bindings_with_core_messages(
         _bridge(monkeypatch, hook_project, "requested", session_id)
 
     assert str(hook_error.value) == str(core_error.value) == expected_message
-    assert registry_file.read_bytes() == before
+    assert core_file.read_bytes() == core_before
+    assert registry_file.read_bytes() == hook_before
+    assert read_registry(core_project) == read_registry(hook_project) == registry
 
 
 def test_bridge_is_idempotent_for_its_existing_binding(
@@ -110,6 +146,10 @@ def test_bridge_preserves_existing_launch_metadata_and_other_rows(
         {
             "requested": {
                 "claude_session_id": None,
+                "claimant_pid": os.getpid() + 10_000,
+                "claimant_boot_id": "claimant-boot",
+                "claimant_starttime_ticks": 42,
+                "launched_at": "2026-09-17T00:00:00+00:00",
                 "owner_pid": 123,
                 "recipe_name": "implementation",
                 "session_type": "cook",
@@ -127,6 +167,10 @@ def test_bridge_preserves_existing_launch_metadata_and_other_rows(
     updated = json.loads(registry_file.read_text(encoding="utf-8"))
     assert updated["requested"] == {
         "claude_session_id": "session-123",
+        "claimant_pid": os.getpid() + 10_000,
+        "claimant_boot_id": "claimant-boot",
+        "claimant_starttime_ticks": 42,
+        "launched_at": "2026-09-17T00:00:00+00:00",
         "owner_pid": 123,
         "recipe_name": "implementation",
         "session_type": "cook",
@@ -136,6 +180,60 @@ def test_bridge_preserves_existing_launch_metadata_and_other_rows(
         "owner_pid": 456,
         "recipe_name": "research",
     }
+
+
+def test_core_and_hook_bridges_contend_on_one_session_claim(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    _write_registry(
+        project_dir,
+        {
+            "core-launch": {"claude_session_id": None},
+            "hook-launch": {"claude_session_id": None},
+        },
+    )
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(2)
+    outcomes = context.Queue()
+    processes = [
+        context.Process(
+            target=_race_bridge,
+            args=(
+                implementation,
+                str(project_dir),
+                launch_id,
+                "shared-session",
+                barrier,
+                outcomes,
+            ),
+        )
+        for implementation, launch_id in (
+            ("core", "core-launch"),
+            ("hook", "hook-launch"),
+        )
+    ]
+    for process in processes:
+        process.start()
+    try:
+        for process in processes:
+            process.join(timeout=10)
+        assert [process.exitcode for process in processes] == [0, 0]
+        assert sorted(outcomes.get(timeout=1)[1] for _process in processes) == [
+            "refused",
+            "success",
+        ]
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+
+    registry = read_registry(project_dir)
+    claimants = [
+        launch_id
+        for launch_id, row in registry.items()
+        if row.get("claude_session_id") == "shared-session"
+    ]
+    assert len(claimants) == 1
 
 
 def test_guard_main_reports_bridge_conflict_to_stderr(

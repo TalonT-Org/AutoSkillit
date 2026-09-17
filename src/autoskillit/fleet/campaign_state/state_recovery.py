@@ -115,39 +115,76 @@ def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
     return count
 
 
+class _MatchedResumeResult(NamedTuple):
+    """Resume-policy decision for one matched dispatch.
+
+    Fields:
+        short_circuit: Populated when the prior dispatch was SUCCESS and the
+            caller can short-circuit to ``_build_success_short_circuit``.
+        reset_performed: True when the policy auto-reset a blocking status to
+            PENDING via ``reset_blocking_dispatch``.
+        halt: True when ``continue_on_failure=False`` and the prior status was
+            terminal — caller must refuse the resume.
+        halted_reason: Populated when ``halt=True``; describes the refusal.
+    """
+
+    short_circuit: DispatchRecord | None
+    reset_performed: bool
+    halt: bool
+    halted_reason: str | None
+
+
 def _prepare_matched_resume(
     state_path: Path,
     dispatch_name: str,
     dispatch: DispatchRecord,
     *,
     continue_on_failure: bool,
-) -> tuple[DispatchRecord | None, bool, bool, str | None]:
+) -> _MatchedResumeResult:
     """Apply resume policy to one matched dispatch without rebuilding its lineage."""
     if dispatch.status == DispatchStatus.UNKNOWN:
-        return (
-            None,
-            False,
-            True,
-            f"Campaign halted: prior dispatch {dispatch_name!r} has an unsupported status",
+        return _MatchedResumeResult(
+            short_circuit=None,
+            reset_performed=False,
+            halt=True,
+            halted_reason=(
+                f"Campaign halted: prior dispatch {dispatch_name!r} has an unsupported status"
+            ),
         )
     if dispatch.status == DispatchStatus.SUCCESS:
-        return (dispatch, False, False, None)
+        return _MatchedResumeResult(dispatch, False, False, None)
     if dispatch.status in _RETRIABLE_NON_SUCCESS:
         if not continue_on_failure:
-            return (
-                None,
-                False,
-                True,
-                f"Campaign halted: prior dispatch {dispatch_name!r} is in "
-                f"{dispatch.status.value!r} and continue_on_failure is false",
+            return _MatchedResumeResult(
+                short_circuit=None,
+                reset_performed=False,
+                halt=True,
+                halted_reason=(
+                    f"Campaign halted: prior dispatch {dispatch_name!r} is in "
+                    f"{dispatch.status.value!r} and continue_on_failure is false"
+                ),
             )
         from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
             reset_blocking_dispatch,
         )
 
         reset_blocking_dispatch(state_path, dispatch_name)
-        return (None, True, False, None)
-    return (None, False, False, None)
+        return _MatchedResumeResult(None, True, False, None)
+    return _MatchedResumeResult(None, False, False, None)
+
+
+class _RecoveryResetResult(NamedTuple):
+    """Outcome of the locked recovery / reset pass.
+
+    Fields:
+        state_missing: True when the state file is absent or unreadable; the
+            caller treats this as a fail-open "fresh dispatch" path.
+        halted: Populated when recovery must halt the campaign with a sentinel
+            ResumeDecision; ``None`` when the pass finished without halting.
+    """
+
+    state_missing: bool
+    halted: ResumeDecision | None
 
 
 def prepare_resume(
@@ -217,7 +254,7 @@ def prepare_resume(
 
     prior_session_chain = list(target.session_chain)
     prior_dispatched_session_id = target.dispatched_session_id
-    short_circuit, reset_performed, halt, halted_reason = _prepare_matched_resume(
+    matched = _prepare_matched_resume(
         state_path,
         dispatch_name,
         target,
@@ -226,10 +263,10 @@ def prepare_resume(
     return ResumePreflight(
         prior_session_chain=prior_session_chain,
         prior_dispatched_session_id=prior_dispatched_session_id,
-        short_circuit=short_circuit,
-        reset_performed=reset_performed,
-        halt=halt,
-        halted_reason=halted_reason,
+        short_circuit=matched.short_circuit,
+        reset_performed=matched.reset_performed,
+        halt=matched.halt,
+        halted_reason=matched.halted_reason,
     )
 
 
@@ -405,7 +442,7 @@ def _run_locked_recovery_reset_pass(
     *,
     continue_on_failure: bool,
     reset_on_retry: bool,
-) -> tuple[bool, ResumeDecision | None]:
+) -> _RecoveryResetResult:
     """Recover stale dispatches and apply campaign-level reset policy under one lock."""
     from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
     from autoskillit.fleet.campaign_state.state_records import (  # noqa: PLC0415
@@ -414,13 +451,13 @@ def _run_locked_recovery_reset_pass(
 
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
-            return (True, None)
+            return _RecoveryResetResult(state_missing=True, halted=None)
         if m.state.opaque_dispatches or any(
             d.status == DispatchStatus.UNKNOWN for d in m.state.dispatches
         ):
-            return (
-                False,
-                ResumeDecision(
+            return _RecoveryResetResult(
+                state_missing=False,
+                halted=ResumeDecision(
                     next_dispatch_name="",
                     completed_dispatches_block=FLEET_HALTED_SENTINEL,
                 ),
@@ -435,9 +472,9 @@ def _run_locked_recovery_reset_pass(
                         _clear_dispatch_for_retry(d)
                         m.mark_dirty()
                     else:
-                        return (
-                            False,
-                            ResumeDecision(
+                        return _RecoveryResetResult(
+                            state_missing=False,
+                            halted=ResumeDecision(
                                 next_dispatch_name="",
                                 completed_dispatches_block=FLEET_HALTED_SENTINEL,
                             ),
@@ -447,7 +484,7 @@ def _run_locked_recovery_reset_pass(
                     # FAILURE stays as FAILURE (continue_on_failure=True semantics).
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
-    return (False, None)
+    return _RecoveryResetResult(state_missing=False, halted=None)
 
 
 def _escalate_capped_resumable_dispatch(state_path: Path, dispatch: DispatchRecord) -> bool:
@@ -507,15 +544,15 @@ def resume_campaign_from_state(
     # reset semantics for continue_on_failure=True differ from the campaign-level
     # requirements (it would reset FAILURE unconditionally on continue_on_failure
     # =True).
-    state_missing, halted = _run_locked_recovery_reset_pass(
+    reset_result = _run_locked_recovery_reset_pass(
         state_path,
         continue_on_failure=continue_on_failure,
         reset_on_retry=reset_on_retry,
     )
-    if state_missing:
+    if reset_result.state_missing:
         return None
-    if halted is not None:
-        return halted
+    if reset_result.halted is not None:
+        return reset_result.halted
 
     # Re-open state via read_state for the composition pass; return None on fail-open.
     from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415

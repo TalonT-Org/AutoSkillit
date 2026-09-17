@@ -22,6 +22,7 @@ from autoskillit.core import (
     AuditCycleHead,
     AuditCycleVerificationError,
     AuditCycleVerifier,
+    AuditDisposition,
     AuditFinalCommitRequest,
     AuditIdentityReservation,
     AuditMaterializationResult,
@@ -37,6 +38,7 @@ from autoskillit.core import (
     canonical_json_bytes,
     compute_bytes_hash,
     compute_canonical_hash,
+    evaluate_rationale_contradiction,
     load_audit_semantic_result,
     parse_plan_paths,
     read_stable_contained_bytes,
@@ -294,6 +296,31 @@ class DefaultAuditAuthorityMaterializer:
                     semantic_digest=semantic_digest,
                     error="semantic audited references differ from the reservation",
                 )
+
+            for row in semantic.assessments:
+                if row.assessment.disposition is AuditDisposition.PRE_SUBMISSION_ONLY:
+                    return self._semantic_rejection(
+                        attempt_id=attempt_id,
+                        installation_version=installation_version,
+                        semantic_digest=semantic_digest,
+                        error=f"{row.requirement_id}: {row.assessment.value} is not submittable",
+                    )
+                finding = evaluate_rationale_contradiction(
+                    row.requirement_id,
+                    row.requirement_text,
+                    row.evidence_summary,
+                )
+                if finding is not None and not row.assessment.blocking:
+                    return self._semantic_rejection(
+                        attempt_id=attempt_id,
+                        installation_version=installation_version,
+                        semantic_digest=semantic_digest,
+                        error=(
+                            f"{row.requirement_id}: evidence describes a substitution "
+                            f"({finding.matched_marker}) of a prescribed mechanism, but "
+                            f"assessment {row.assessment.value} is not blocking"
+                        ),
+                    )
 
             verifier = AuditCycleVerifier(reservation.allowed_root)
             _verify_semantic_references(

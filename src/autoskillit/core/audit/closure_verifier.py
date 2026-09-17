@@ -12,7 +12,11 @@ from pathlib import Path
 
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
-from ..types._type_closure_report import ClosureReport
+from ..types._type_closure_report import (
+    CLOSURE_ROW_BLOCKING_ASSESSMENTS,
+    ClosureReport,
+)
+from .audit_semantic_codec import evaluate_rationale_contradiction
 from .closure_hashing import (
     compute_file_hash,
     compute_report_hash,
@@ -139,6 +143,17 @@ def verify_closure_report(
         )
         if row.row_hash != expected:
             errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+        finding = evaluate_rationale_contradiction(
+            row.requirement_id,
+            row.requirement_text,
+            row.evidence_summary,
+        )
+        if finding is not None and row.assessment not in CLOSURE_ROW_BLOCKING_ASSESSMENTS:
+            errors.append(
+                f"{row.requirement_id}: evidence describes a substitution "
+                f"({finding.matched_marker}) of a prescribed mechanism, but assessment "
+                f"{row.assessment} is not blocking"
+            )
 
     expected_report_hash = compute_report_hash(
         report.request_hash, [r.row_hash for r in report.rows], report.verdict

@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core import ProbedRequirement, atomic_write, probe_substitutions
+
+_AUDIT_REQUIREMENT_KEYS = frozenset({"requirement_id", "requirement_text", "evidence_summary"})
+
 
 def _load_json(src: str) -> list | dict:
     """Load JSON from a string or file path. Returns a list or dict."""
@@ -23,3 +27,56 @@ def try_load_json(path: Path) -> dict | None:
         return json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def probe_audit_substitutions(
+    requirements_path: str,
+    diff_path: str,
+    output_dir: str,
+) -> dict[str, str]:
+    """Write deterministic substitution findings for audit-impl orchestration."""
+
+    paths = {
+        "requirements_path": Path(requirements_path),
+        "diff_path": Path(diff_path),
+        "output_dir": Path(output_dir),
+    }
+    for name, path in paths.items():
+        if not path.is_absolute():
+            raise ValueError(f"{name} must be absolute, got {str(path)!r}")
+
+    raw_requirements = json.loads(paths["requirements_path"].read_text(encoding="utf-8"))
+    if not isinstance(raw_requirements, list):
+        raise ValueError("requirements_path must contain a JSON array")
+    requirements: list[ProbedRequirement] = []
+    for index, raw in enumerate(raw_requirements):
+        if not isinstance(raw, dict) or frozenset(raw) != _AUDIT_REQUIREMENT_KEYS:
+            raise ValueError(
+                f"requirements[{index}] must contain exactly {sorted(_AUDIT_REQUIREMENT_KEYS)!r}"
+            )
+        if not all(isinstance(raw[key], str) for key in _AUDIT_REQUIREMENT_KEYS):
+            raise ValueError(f"requirements[{index}] values must all be strings")
+        requirements.append(ProbedRequirement(**raw))
+
+    findings = probe_substitutions(
+        tuple(requirements),
+        paths["diff_path"].read_text(encoding="utf-8"),
+    )
+    payload = {
+        "flagged_requirement_ids": list(
+            dict.fromkeys(finding.requirement_id for finding in findings)
+        ),
+        "findings": [
+            {
+                "requirement_id": finding.requirement_id,
+                "trigger": finding.trigger.value,
+                "matched_marker": finding.matched_marker,
+                "matched_cue": finding.matched_cue,
+            }
+            for finding in findings
+        ],
+    }
+    paths["output_dir"].mkdir(parents=True, exist_ok=True)
+    output_path = paths["output_dir"] / "audit_substitution_probe.json"
+    atomic_write(output_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return {"probe_path": str(output_path)}

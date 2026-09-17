@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from autoskillit.core import (
     RetryReason,
     TerminationReason,
     WorkspaceOutcomeKind,
+    WorkspaceOutcomeLedger,
     WorkspaceOutcomeRecord,
     WriteBehaviorSpec,
     WriteEvidence,
@@ -29,7 +31,6 @@ from autoskillit.execution.headless._headless_outcome import (
     derive_outcome_counters,
     parse_finding_dispositions,
 )
-from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
 from autoskillit.recipe import SkillContract, SkillOutput
 from autoskillit.recipe.contracts._contracts_types import (
     OutcomeInvariantEntry,
@@ -37,7 +38,7 @@ from autoskillit.recipe.contracts._contracts_types import (
 )
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _START = "2026-09-16T10:00:00+00:00"
 _END = "2026-09-16T10:01:00+00:00"
@@ -111,12 +112,37 @@ def _record(
     )
 
 
+class _MemoryOutcomeLedger:
+    def __init__(self) -> None:
+        self.records: list[WorkspaceOutcomeRecord] = []
+
+    def record(self, record: WorkspaceOutcomeRecord) -> None:
+        self.records.append(record)
+
+    def read(
+        self,
+        workspace: str,
+        *,
+        since: str,
+        until: str,
+    ) -> list[WorkspaceOutcomeRecord]:
+        start = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(until.replace("Z", "+00:00"))
+        canonical = Path(workspace).resolve()
+        return [
+            record
+            for record in self.records
+            if Path(record.workspace).resolve() == canonical
+            and start <= datetime.fromisoformat(record.recorded_at) <= end
+        ]
+
+
 def _ledger(
-    tmp_path: Path,
-    workspace: Path,
+    _tmp_path: Path,
+    _workspace: Path,
     records: list[WorkspaceOutcomeRecord],
-) -> DefaultWorkspaceOutcomeLedger:
-    ledger = DefaultWorkspaceOutcomeLedger(tmp_path / "ledger")
+) -> _MemoryOutcomeLedger:
+    ledger = _MemoryOutcomeLedger()
     for record in records:
         ledger.record(record)
     return ledger
@@ -125,7 +151,7 @@ def _ledger(
 def _adjudicate(
     text: str,
     workspace: Path,
-    ledger: DefaultWorkspaceOutcomeLedger | None,
+    ledger: WorkspaceOutcomeLedger | None,
     *,
     success: bool = True,
 ) -> SkillResult:

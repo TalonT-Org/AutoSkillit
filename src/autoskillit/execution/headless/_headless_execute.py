@@ -257,8 +257,7 @@ async def _execute_claude_headless(
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _temp_snapshots_pre[_wd] = None
         else:
-            # {} sentinel: dir missing at pre-scan. Distinct from None (OSError): {} allows
-            # post-scan comparison so session-created files are detected as writes.
+            # {} means missing at pre-scan; unlike None (OSError), compare it after the run.
             _temp_snapshots_pre[_wd] = {}
 
     _pre_session_sha = _capture_git_head_sha(cwd)

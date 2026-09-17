@@ -1069,6 +1069,7 @@ from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OrchestratorSurfaceDef as OrchestratorSurfaceDef
+from .types import OutcomeComparison as OutcomeComparison
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
@@ -1334,12 +1335,10 @@ from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
 )
+from .types import evaluate_outcome_expression as evaluate_outcome_expression
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
-from .types import OutcomeComparison as OutcomeComparison
-from .types import evaluate_outcome_expression as evaluate_outcome_expression
-from .types import parse_outcome_expression as parse_outcome_expression
 from .types import fleet_error as fleet_error
 from .types import (
     is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
@@ -1372,6 +1371,7 @@ from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_inc
 from .types import normalize_declared_truth as normalize_declared_truth
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
+from .types import parse_outcome_expression as parse_outcome_expression
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (
     pop_native_shell_capture_decision as pop_native_shell_capture_decision,

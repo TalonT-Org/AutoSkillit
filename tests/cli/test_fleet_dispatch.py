@@ -516,6 +516,7 @@ def test_fleet_dispatch_passes_initial_message(
     """fleet_dispatch starts a fresh launch with a concise greeting."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
+    from autoskillit.cli.fleet._fleet_preview import _FLEET_DISPATCH_GREETINGS
     from autoskillit.core import FreshLaunch
 
     _stub_list_recipes(
@@ -540,6 +541,7 @@ def test_fleet_dispatch_passes_initial_message(
     assert isinstance(launch, FreshLaunch)
     assert launch.system_prompt is not None
     assert launch.initial_prompt is not None
+    assert launch.initial_prompt in _FLEET_DISPATCH_GREETINGS
     assert "smoke-test" not in launch.initial_prompt
     assert len(launch.initial_prompt) < 200
 

@@ -342,7 +342,7 @@ def cook(
         )
 
         if not isinstance(resume_spec, NoResume):
-            prepare_resume_housekeeping(backend)
+            prepare_resume_housekeeping(backend, resume_spec=resume_spec)
         launch = resolve_interactive_launch(
             resume_spec=resume_spec,
             session_type=SESSION_TYPE_COOK,

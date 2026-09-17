@@ -25,16 +25,19 @@ _Registry = Mapping[str, Mapping[str, object]]  # registry row shape produced by
 logger = get_logger(__name__)
 
 
-def prepare_resume_housekeeping(backend: CodingAgentBackend) -> None:
+def prepare_resume_housekeeping(backend: CodingAgentBackend, *, resume_spec: ResumeSpec) -> None:
     """Run the resume-related side effects that previously lived inside resolve_interactive_launch.
 
     Cook and order invoke this before resolving a launch so the resolver stays pure.
+    The ``resume_spec`` is logged on failure so the launch route that triggered the
+    sweep can be correlated with the diagnostic payload.
     """
     try:
         sweep_orphaned_tethers(default_tether_dir())
     except (OSError, PermissionError, FileNotFoundError):
         logger.warning(
             "interactive_startup_tether_sweep_failed",
+            resume_spec_kind=type(resume_spec).__name__,
             tether_dir=str(default_tether_dir()),
             exc_info=True,
         )

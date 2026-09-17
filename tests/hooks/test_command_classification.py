@@ -1447,7 +1447,7 @@ def test_check_ignore_verbose_is_admitted_for_every_protected_path_category(
 
 
 @pytest.mark.parametrize(
-    ("command", "mechanism"),
+    "command",
     [
         f"git check-ignore --verbose --no-index -- {_PROTECTED_SKILL}",
         f"git check-ignore -v {_PROTECTED_RECIPE} {_PROTECTED_SKILL}",

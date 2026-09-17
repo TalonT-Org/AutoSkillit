@@ -28,9 +28,9 @@ _OTHER = (701, "test-boot", 12)
 _CHILD = (702, "test-boot", 13)
 
 
-def _claim_in_child(project_dir: str, barrier: Any, outcomes: Any) -> None:
+def _claim_in_child(project_dir: str, start: Any, finish: Any, outcomes: Any) -> None:
     """Attempt one real, independently locked claim after a bounded rendezvous."""
-    barrier.wait(timeout=5)
+    start.wait(timeout=5)
     try:
         claim_launch_for_session(
             Path(project_dir),
@@ -42,6 +42,7 @@ def _claim_in_child(project_dir: str, barrier: Any, outcomes: Any) -> None:
         outcomes.put("refused")
     else:
         outcomes.put("claimed")
+    finish.wait(timeout=5)
 
 
 def _deterministic_identity(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -318,10 +319,11 @@ def test_bind_requires_recorded_claimant_and_release_is_conditional(
 
 def test_claim_serializes_two_cli_reservations(tmp_path: Path) -> None:
     context = multiprocessing.get_context("spawn")
-    barrier = context.Barrier(2)
+    start = context.Barrier(2)
+    finish = context.Barrier(2)
     outcomes = context.Queue()
     processes = [
-        context.Process(target=_claim_in_child, args=(str(tmp_path), barrier, outcomes))
+        context.Process(target=_claim_in_child, args=(str(tmp_path), start, finish, outcomes))
         for _ in range(2)
     ]
     for process in processes:

@@ -392,8 +392,8 @@ from .runtime.session_registry import bind_session_owner as bind_session_owner
 from .runtime.session_registry import bridge_claude_session_id as bridge_claude_session_id
 from .runtime.session_registry import claim_launch_for_session as claim_launch_for_session
 from .runtime.session_registry import read_registry as read_registry
-from .runtime.session_registry import release_session_claim as release_session_claim
 from .runtime.session_registry import registry_path as registry_path
+from .runtime.session_registry import release_session_claim as release_session_claim
 from .runtime.session_registry import write_registry_entry as write_registry_entry
 from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
 from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease

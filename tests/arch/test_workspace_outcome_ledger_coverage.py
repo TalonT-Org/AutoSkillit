@@ -109,12 +109,14 @@ def _audit_function(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     expected: _ReturnInventory,
 ) -> list[str]:
-    # Walk only direct children of the function body (not all descendants) so
-    # nested helpers in test_check/commit_files don't get counted as top-level
-    # per-tool _finish closures.
+    # Walk all descendants so a helper nested inside a ``try`` (the current
+    # ``test_check`` / ``commit_files`` shape) is still discovered. The
+    # reviewer-suggested direct-child restriction is incompatible with the
+    # current source layout — restructuring the tools to hoist _finish out of
+    # the try block is the prerequisite for that change.
     helpers = [
         node
-        for node in function.body
+        for node in ast.walk(function)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_finish"
     ]
     outer_returns = _returns_in(function.body)

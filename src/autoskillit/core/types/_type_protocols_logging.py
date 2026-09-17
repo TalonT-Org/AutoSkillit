@@ -1,9 +1,4 @@
-"""Logging and observer protocol definitions.
-
-Durable cross-process ledger protocols (e.g. ``WorkspaceOutcomeLedger``)
-now live in ``_type_protocols_durable_outcomes.py`` and are re-exported
-below for backward compatibility.
-"""
+"""Logging and observer protocol definitions."""
 
 from __future__ import annotations
 
@@ -11,8 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_protocols_durable_outcomes import WorkspaceOutcomeLedger
-from ._type_results import FailureRecord, ModelTotalEntry
+from ._type_results import FailureRecord, ModelTotalEntry, WorkspaceOutcomeRecord
 
 __all__ = [
     "AuditLog",
@@ -24,6 +18,21 @@ __all__ = [
     "SupportsDebug",
     "SupportsLogger",
 ]
+
+
+@runtime_checkable
+class WorkspaceOutcomeLedger(Protocol):
+    """Durable cross-process history for workspace test and commit outcomes."""
+
+    def record(self, record: WorkspaceOutcomeRecord) -> None: ...
+
+    def read(
+        self,
+        workspace: str,
+        *,
+        since: str,
+        until: str,
+    ) -> list[WorkspaceOutcomeRecord]: ...
 
 
 @runtime_checkable

@@ -7,7 +7,7 @@ import json
 import os
 import stat
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,6 @@ from autoskillit.core import (
     WorkspaceOutcomeRecord,
     atomic_write,
 )
-from autoskillit.core.types._type_results import _require_aware_timestamp
 
 __all__ = ["DefaultWorkspaceOutcomeLedger", "find_stale_workspace_outcome_shards"]
 
@@ -43,9 +42,20 @@ _RECORD_KEYS = frozenset(
 
 
 def _parse_instant(value: str, *, field_name: str) -> datetime:
-    # Thin wrapper over the core helper so the ledger's public parsing
-    # contract stays intact while validation rules live in one place.
-    return _require_aware_timestamp(value, field_name=field_name)
+    # Duplicated from core.types._type_results._require_aware_timestamp to
+    # avoid a cross-package submodule import (REQ-IMP-002 forbids
+    # ``autoskillit.core.types.*`` from non-core/server/cli modules). Both
+    # sites must apply identical rules; the duplicate is the trade-off the
+    # layering invariant forces.
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a UTC offset")
+    return parsed.astimezone(UTC)
 
 
 def _canonical_workspace(workspace: str) -> str:

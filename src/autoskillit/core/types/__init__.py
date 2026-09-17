@@ -56,8 +56,6 @@ from ._type_enums import *  # noqa: F401, F403
 from ._type_enums import __all__ as _enums_all
 from ._type_enums_context_admission import *  # noqa: F401, F403
 from ._type_enums_context_admission import __all__ as _enums_context_admission_all
-from ._type_enums_durable_outcomes import *  # noqa: F401, F403
-from ._type_enums_durable_outcomes import __all__ as _enums_durable_outcomes_all
 from ._type_exceptions import *  # noqa: F401, F403
 from ._type_exceptions import __all__ as _exceptions_all
 from ._type_execution_identity import *  # noqa: F401, F403
@@ -98,8 +96,6 @@ from ._type_plugin_source import *  # noqa: F401, F403
 from ._type_plugin_source import __all__ as _plugin_source_all
 from ._type_protocols_backend import *  # noqa: F401, F403
 from ._type_protocols_backend import __all__ as _protocols_backend_all
-from ._type_protocols_durable_outcomes import *  # noqa: F401, F403
-from ._type_protocols_durable_outcomes import __all__ as _protocols_durable_outcomes_all
 from ._type_protocols_execution import *  # noqa: F401, F403
 from ._type_protocols_execution import __all__ as _protocols_execution_all
 from ._type_protocols_github import *  # noqa: F401, F403
@@ -166,7 +162,6 @@ __all__ = (
     + _dimensions_all
     + _enums_all
     + _enums_context_admission_all
-    + _enums_durable_outcomes_all
     + _exceptions_all
     + _exploration_all
     + _execution_identity_all
@@ -187,7 +182,6 @@ __all__ = (
     + _plugin_source_all
     + _retirement_backstops_all
     + _protocols_logging_all
-    + _protocols_durable_outcomes_all
     + _protocols_execution_all
     + _protocols_github_all
     + _protocols_workspace_all

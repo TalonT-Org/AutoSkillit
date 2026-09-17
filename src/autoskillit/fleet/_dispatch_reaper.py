@@ -109,6 +109,211 @@ def _is_dispatch_heartbeating(
         return False
 
 
+def _handle_immediate_reap_disposition(
+    dispatch: DispatchRecord,
+    *,
+    dry_run: bool,
+    skip_dispatch_ids: frozenset[str] | None,
+    min_reap_age_seconds: float,
+    current_boot_id: str | None,
+    m: CampaignStateMutator,
+    reaper_dispatch_id: str,
+) -> bool:
+    """Handle exclusions and stale dispositions that do not need PID identity checks."""
+    name = dispatch.name
+    if skip_dispatch_ids and dispatch.dispatch_id in skip_dispatch_ids:
+        logger.info(
+            "reap: [SKIPPED]     %s  dispatch_id=%s  (self-exclusion)",
+            name,
+            dispatch.dispatch_id,
+        )
+        return True
+
+    age = time.time() - dispatch.started_at if dispatch.started_at > 0 else float("inf")
+    if age < min_reap_age_seconds:
+        logger.info(
+            "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
+            name,
+            dispatch.dispatch_id,
+            age,
+        )
+        return True
+
+    pid = dispatch.dispatched_pid
+    if pid == 0:
+        if dry_run:
+            logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
+        else:
+            _apply_stale_dispatch(dispatch, "reaped_dead_pid", m, reaper_dispatch_id)
+            logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
+        return True
+
+    if (
+        dispatch.dispatched_boot_id != ""
+        and current_boot_id is not None
+        and dispatch.dispatched_boot_id != current_boot_id
+    ):
+        if dry_run:
+            logger.info("reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid)
+        else:
+            _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
+            logger.info("reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)", name, pid)
+        return True
+
+    if not psutil.pid_exists(pid):
+        _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
+        return True
+    return False
+
+
+def _confirm_dispatch_pid_identity(
+    dispatch: DispatchRecord,
+) -> tuple[bool, bool, float | None] | None:
+    """Confirm a recorded PID by ticks or, for legacy records, creation time."""
+    pid = dispatch.dispatched_pid
+    current_ticks = read_starttime_ticks(pid)
+    identity_confirmed = False
+    use_tick_identity = False
+    confirmed_create_time: float | None = None
+    if (
+        dispatch.dispatched_boot_id
+        and dispatch.dispatched_starttime_ticks > 0
+        and current_ticks is not None
+        and current_ticks == dispatch.dispatched_starttime_ticks
+    ):
+        identity_confirmed = True
+        use_tick_identity = True
+    elif dispatch.dispatched_starttime_ticks == 0 and dispatch.dispatched_create_time > 0.0:
+        try:
+            actual_create_time = psutil.Process(pid).create_time()
+            identity_confirmed = abs(actual_create_time - dispatch.dispatched_create_time) < 1.0
+            if identity_confirmed:
+                confirmed_create_time = actual_create_time
+        except psutil.NoSuchProcess:
+            return None
+        except psutil.AccessDenied:
+            pass
+    return identity_confirmed, use_tick_identity, confirmed_create_time
+
+
+def _reap_confirmed_orphan(
+    dispatch: DispatchRecord,
+    *,
+    state_path: Path,
+    dry_run: bool,
+    use_tick_identity: bool,
+    confirmed_create_time: float | None,
+    heartbeat_grace_seconds: float,
+    m: CampaignStateMutator,
+    reaper_dispatch_id: str,
+) -> None:
+    """Respect a fresh heartbeat, otherwise terminate a confirmed orphan."""
+    name = dispatch.name
+    pid = dispatch.dispatched_pid
+    if _is_dispatch_heartbeating(state_path.parent, dispatch.dispatch_id, heartbeat_grace_seconds):
+        logger.info(
+            "reap: [SKIPPED]     %s  dispatch_id=%s  (dispatch heartbeat active)",
+            name,
+            dispatch.dispatch_id,
+        )
+        return
+
+    if dry_run:
+        logger.info("reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid)
+    else:
+        try:
+            if use_tick_identity:
+                cleanup_result = kill_process_tree(
+                    pid,
+                    expected_boot_id=dispatch.dispatched_boot_id,
+                    expected_starttime_ticks=dispatch.dispatched_starttime_ticks,
+                )
+            else:
+                assert confirmed_create_time is not None
+                cleanup_result = kill_process_tree(
+                    pid,
+                    expected_create_time=confirmed_create_time,
+                )
+        except Exception:
+            logger.warning("reap: kill_process_tree failed for pid=%d", pid, exc_info=True)
+            return
+
+        if not cleanup_result.complete:
+            logger.warning(
+                "reap: [INCOMPLETE]  %s  pid=%d survivors=%s denied=%s "
+                "observation_complete=%s identity_refused=%s",
+                name,
+                pid,
+                cleanup_result.survivor_pids,
+                cleanup_result.access_denied_pids,
+                cleanup_result.observation_complete,
+                cleanup_result.identity_refused,
+            )
+            return
+        _apply_stale_dispatch(dispatch, "reaped_orphan", m, reaper_dispatch_id)
+        logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
+
+
+def _reap_running_dispatch(
+    dispatch: DispatchRecord,
+    *,
+    state_path: Path,
+    dry_run: bool,
+    skip_dispatch_ids: frozenset[str] | None,
+    min_reap_age_seconds: float,
+    current_boot_id: str | None,
+    heartbeat_grace_seconds: float,
+    m: CampaignStateMutator,
+    reaper_dispatch_id: str,
+) -> None:
+    """Run the immediate, identity, and termination reaping pipeline for one dispatch."""
+    if _handle_immediate_reap_disposition(
+        dispatch,
+        dry_run=dry_run,
+        skip_dispatch_ids=skip_dispatch_ids,
+        min_reap_age_seconds=min_reap_age_seconds,
+        current_boot_id=current_boot_id,
+        m=m,
+        reaper_dispatch_id=reaper_dispatch_id,
+    ):
+        return
+
+    identity = _confirm_dispatch_pid_identity(dispatch)
+    if identity is None:
+        _mark_dead_pid(
+            dry_run,
+            dispatch.name,
+            dispatch.dispatched_pid,
+            dispatch,
+            m,
+            reaper_dispatch_id,
+        )
+    elif identity[0]:
+        _reap_confirmed_orphan(
+            dispatch,
+            state_path=state_path,
+            dry_run=dry_run,
+            use_tick_identity=identity[1],
+            confirmed_create_time=identity[2],
+            heartbeat_grace_seconds=heartbeat_grace_seconds,
+            m=m,
+            reaper_dispatch_id=reaper_dispatch_id,
+        )
+    elif dry_run:
+        logger.info(
+            "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)",
+            dispatch.name,
+            dispatch.dispatched_pid,
+        )
+    else:
+        _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
+        logger.info(
+            "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
+            dispatch.name,
+            dispatch.dispatched_pid,
+        )
+
+
 def reap_stale_dispatches(
     state_path: Path,
     *,
@@ -163,142 +368,17 @@ def reap_stale_dispatches(
         )
 
         for dispatch in running:
-            name = dispatch.name
-            if skip_dispatch_ids and dispatch.dispatch_id in skip_dispatch_ids:
-                logger.info(
-                    "reap: [SKIPPED]     %s  dispatch_id=%s  (self-exclusion)",
-                    name,
-                    dispatch.dispatch_id,
-                )
-                continue
-            pid = dispatch.dispatched_pid
-
-            age = time.time() - dispatch.started_at if dispatch.started_at > 0 else float("inf")
-            if age < min_reap_age_seconds:
-                logger.info(
-                    "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
-                    name,
-                    dispatch.dispatch_id,
-                    age,
-                )
-                continue
-
-            if pid == 0:
-                if dry_run:
-                    logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
-                else:
-                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m, reaper_dispatch_id)
-                    logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
-                continue
-
-            if (
-                dispatch.dispatched_boot_id != ""
-                and current_boot_id is not None
-                and dispatch.dispatched_boot_id != current_boot_id
-            ):
-                if dry_run:
-                    logger.info(
-                        "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
-                    )
-                else:
-                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
-                    logger.info(
-                        "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
-                        name,
-                        pid,
-                    )
-                continue
-
-            if not psutil.pid_exists(pid):
-                _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
-                continue
-
-            current_ticks = read_starttime_ticks(pid)
-            use_tick_identity = False
-            confirmed_create_time: float | None = None
-            if (
-                dispatch.dispatched_boot_id
-                and dispatch.dispatched_starttime_ticks > 0
-                and current_ticks is not None
-                and current_ticks == dispatch.dispatched_starttime_ticks
-            ):
-                identity_confirmed = True
-                use_tick_identity = True
-            elif (
-                dispatch.dispatched_starttime_ticks == 0 and dispatch.dispatched_create_time > 0.0
-            ):
-                try:
-                    actual_ct = psutil.Process(pid).create_time()
-                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
-                    if identity_confirmed:
-                        confirmed_create_time = actual_ct
-                except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
-                    continue
-                except psutil.AccessDenied:
-                    identity_confirmed = False
-            else:
-                identity_confirmed = False
-
-            if identity_confirmed:
-                if _is_dispatch_heartbeating(
-                    state_path.parent, dispatch.dispatch_id, heartbeat_grace_seconds
-                ):
-                    logger.info(
-                        "reap: [SKIPPED]     %s  dispatch_id=%s  (dispatch heartbeat active)",
-                        name,
-                        dispatch.dispatch_id,
-                    )
-                    continue
-                if dry_run:
-                    logger.info(
-                        "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
-                    )
-                else:
-                    try:
-                        if use_tick_identity:
-                            cleanup_result = kill_process_tree(
-                                pid,
-                                expected_boot_id=dispatch.dispatched_boot_id,
-                                expected_starttime_ticks=dispatch.dispatched_starttime_ticks,
-                            )
-                        else:
-                            assert confirmed_create_time is not None
-                            cleanup_result = kill_process_tree(
-                                pid,
-                                expected_create_time=confirmed_create_time,
-                            )
-                    except Exception:
-                        logger.warning(
-                            "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
-                        )
-                        continue
-                    if not cleanup_result.complete:
-                        logger.warning(
-                            "reap: [INCOMPLETE]  %s  pid=%d survivors=%s denied=%s "
-                            "observation_complete=%s identity_refused=%s",
-                            name,
-                            pid,
-                            cleanup_result.survivor_pids,
-                            cleanup_result.access_denied_pids,
-                            cleanup_result.observation_complete,
-                            cleanup_result.identity_refused,
-                        )
-                        continue
-                    _apply_stale_dispatch(dispatch, "reaped_orphan", m, reaper_dispatch_id)
-                    logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
-            else:
-                if dry_run:
-                    logger.info(
-                        "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
-                    )
-                else:
-                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
-                    logger.info(
-                        "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
-                        name,
-                        pid,
-                    )
+            _reap_running_dispatch(
+                dispatch,
+                state_path=state_path,
+                dry_run=dry_run,
+                skip_dispatch_ids=skip_dispatch_ids,
+                min_reap_age_seconds=min_reap_age_seconds,
+                current_boot_id=current_boot_id,
+                heartbeat_grace_seconds=heartbeat_grace_seconds,
+                m=m,
+                reaper_dispatch_id=reaper_dispatch_id,
+            )
 
 
 async def reap_stale_dispatches_async(

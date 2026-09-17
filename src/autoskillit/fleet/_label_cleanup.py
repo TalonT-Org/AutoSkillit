@@ -42,6 +42,7 @@ async def _cleanup_single_issue(
     *,
     remove_labels: list[str],
     add_labels: list[str],
+    log_failed_swap: bool = False,
 ) -> bool:
     """Swap labels for a single issue URL. Returns True on success."""
     try:
@@ -53,7 +54,10 @@ async def _cleanup_single_issue(
         result = await github_client.swap_labels(
             owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
         )
-        if not result.get("success"):
+        success = result.get("success")
+        if not success:
+            if log_failed_swap:
+                logger.info("infra_label_cleanup", issue_url=issue_url, success=success)
             return False
         logger.info("infra_label_cleanup", issue_url=issue_url, success=True)
         return True
@@ -80,6 +84,81 @@ async def _cleanup_issue_urls(
         ):
             all_ok = False
     return all_ok
+
+
+def _collect_label_cleanup_candidates(
+    state_path: Path,
+) -> tuple[list[tuple[str, str | None, str]], list[tuple[str, str | None, str]]] | None:
+    """Collect label-cleanup candidates and persist dead RUNNING transitions."""
+    stale_dispatches: list[tuple[str, str | None, str]] = []
+    terminal_uncleaned: list[tuple[str, str | None, str]] = []
+    try:
+        with CampaignStateMutator(state_path) as m:
+            if m.state is None:
+                return stale_dispatches, terminal_uncleaned
+            for dispatch in m.state.dispatches:
+                if dispatch.status == DispatchStatus.RUNNING:
+                    if is_dispatch_session_alive(dispatch):
+                        continue
+                    stale_dispatches.append(
+                        (dispatch.name, dispatch.sidecar_path, dispatch.issue_url)
+                    )
+                    dispatch.status = DispatchStatus.INTERRUPTED
+                    m.mark_dirty()
+                elif (
+                    dispatch.status in TERMINAL_UNCLEANED_STATUSES
+                    and not dispatch.labels_cleaned
+                    and (dispatch.sidecar_path is not None or dispatch.issue_url)
+                ):
+                    terminal_uncleaned.append(
+                        (dispatch.name, dispatch.sidecar_path, dispatch.issue_url)
+                    )
+    except Exception:
+        logger.warning(
+            "startup_label_sweep_failed",
+            state_path=str(state_path),
+            exc_info=True,
+        )
+        return None
+    return stale_dispatches, terminal_uncleaned
+
+
+async def _cleanup_label_candidates(
+    stale_dispatches: list[tuple[str, str | None, str]],
+    terminal_uncleaned: list[tuple[str, str | None, str]],
+    github_client: GitHubFetcher | None,
+) -> dict[str, bool]:
+    """Clean stale candidates before terminal ones, without holding a state lock."""
+    cleanup_results: dict[str, bool] = {}
+    for name, sidecar_path, issue_url in stale_dispatches:
+        cleanup_results[name] = await cleanup_orphaned_labels(
+            sidecar_path, github_client, issue_url=issue_url
+        )
+    for name, sidecar_path, issue_url in terminal_uncleaned:
+        cleanup_results[name] = await cleanup_orphaned_labels(
+            sidecar_path, github_client, issue_url=issue_url
+        )
+    return cleanup_results
+
+
+def _mark_cleaned_label_candidates(state_path: Path, cleanup_results: dict[str, bool]) -> None:
+    """Persist successful label cleanup after all remote operations complete."""
+    if not cleanup_results:
+        return
+    try:
+        with CampaignStateMutator(state_path) as m:
+            if m.state is not None:
+                for dispatch in m.state.dispatches:
+                    if dispatch.name in cleanup_results and cleanup_results[dispatch.name]:
+                        dispatch.labels_cleaned = True
+                        m.mark_dirty()
+    except Exception:
+        logger.warning(
+            "startup_label_sweep_mark_cleaned_failed",
+            state_path=str(state_path),
+            cleaned_names=sorted(name for name, success in cleanup_results.items() if success),
+            exc_info=True,
+        )
 
 
 async def cleanup_orphaned_labels(
@@ -151,37 +230,14 @@ async def cleanup_orphaned_labels(
 
     all_succeeded = True
     for entry in sidecar_result.entries:
-        try:
-            owner, repo, number = _parse_issue_ref(entry.issue_url)
-        except ValueError:
-            logger.warning(
-                "infra_label_cleanup_skip_bad_url",
-                issue_url=entry.issue_url,
-            )
+        if not await _cleanup_single_issue(
+            github_client,
+            entry.issue_url,
+            remove_labels=rl,
+            add_labels=al,
+            log_failed_swap=True,
+        ):
             all_succeeded = False
-            continue
-        try:
-            result = await github_client.swap_labels(
-                owner,
-                repo,
-                number,
-                remove_labels=rl,
-                add_labels=al,
-            )
-            if not result.get("success"):
-                all_succeeded = False
-            logger.info(
-                "infra_label_cleanup",
-                issue_url=entry.issue_url,
-                success=result.get("success"),
-            )
-        except Exception:
-            all_succeeded = False
-            logger.warning(
-                "infra_label_cleanup_swap_failed",
-                issue_url=entry.issue_url,
-                exc_info=True,
-            )
     return all_succeeded
 
 
@@ -198,54 +254,14 @@ async def sweep_stale_dispatch_labels(
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
     for state_path in campaign_state_paths:
-        stale_dispatches: list[tuple[str, str | None, str]] = []
-        terminal_uncleaned: list[tuple[str, str | None, str]] = []
-        try:
-            with CampaignStateMutator(state_path) as m:
-                if m.state is None:
-                    continue
-                for d in m.state.dispatches:
-                    if d.status == DispatchStatus.RUNNING:
-                        if is_dispatch_session_alive(d):
-                            continue
-                        stale_dispatches.append((d.name, d.sidecar_path, d.issue_url))
-                        d.status = DispatchStatus.INTERRUPTED
-                        m.mark_dirty()
-                    elif (
-                        d.status in TERMINAL_UNCLEANED_STATUSES
-                        and not d.labels_cleaned
-                        and (d.sidecar_path is not None or d.issue_url)
-                    ):
-                        terminal_uncleaned.append((d.name, d.sidecar_path, d.issue_url))
-        except Exception:
-            logger.warning(
-                "startup_label_sweep_failed",
-                state_path=str(state_path),
-                exc_info=True,
-            )
+        candidates = _collect_label_cleanup_candidates(state_path)
+        if candidates is None:
             continue
-
-        cleanup_results: dict[str, bool] = {}
-        for name, sp, iu in stale_dispatches:
-            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client, issue_url=iu)
-        for name, sp, iu in terminal_uncleaned:
-            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client, issue_url=iu)
-
-        if cleanup_results:
-            try:
-                with CampaignStateMutator(state_path) as m:
-                    if m.state is not None:
-                        for d in m.state.dispatches:
-                            if d.name in cleanup_results and cleanup_results[d.name]:
-                                d.labels_cleaned = True
-                                m.mark_dirty()
-            except Exception:
-                logger.warning(
-                    "startup_label_sweep_mark_cleaned_failed",
-                    state_path=str(state_path),
-                    cleaned_names=sorted(n for n, s in cleanup_results.items() if s),
-                    exc_info=True,
-                )
+        stale_dispatches, terminal_uncleaned = candidates
+        cleanup_results = await _cleanup_label_candidates(
+            stale_dispatches, terminal_uncleaned, github_client
+        )
+        _mark_cleaned_label_candidates(state_path, cleanup_results)
 
 
 def discover_campaign_state_files(project_dir: Path) -> list[Path]:

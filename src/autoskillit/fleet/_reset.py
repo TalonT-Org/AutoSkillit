@@ -19,7 +19,7 @@ from autoskillit.fleet.campaign_state.state import (
     read_state,
     reset_blocking_dispatch,
 )
-from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
+from autoskillit.fleet.sidecar import SidecarReadResult, SidecarReadStatus, read_sidecar_from_path
 from autoskillit.workspace import (
     WORKTREES_DIR,
     remove_git_worktree,
@@ -108,95 +108,102 @@ def resolve_worktrees_dir(project_dir: Path, worktree_root: str | None) -> Path:
     return project_dir.parent / WORKTREES_DIR
 
 
-async def reset_dispatch_artifacts(
+def _load_reset_sidecar(dispatch: DispatchRecord, report: ResetReport) -> SidecarReadResult | None:
+    """Load sidecar evidence before removing local dispatch artifacts."""
+    if dispatch.sidecar_path is None:
+        return None
+    try:
+        return read_sidecar_from_path(Path(dispatch.sidecar_path))
+    except Exception as exc:
+        logger.warning("sidecar_read_failed", error=str(exc))
+        report.errors.append(f"sidecar_read: {exc}")
+        return None
+
+
+async def _remove_local_reset_artifacts(
     dispatch: DispatchRecord,
     *,
     project_dir: Path,
     worktrees_dir: Path,
     runner: SubprocessRunner,
-    github_client: GitHubFetcher | None,
-    target_state: IssueLabelState,
-    force: bool = False,
-) -> ResetReport:
-    report = ResetReport(
-        dispatch_name=dispatch.name,
-        branch_name=dispatch.branch_name or dispatch.name,
-    )
-    remove_labels, add_labels = compute_reset_labels(target_state)
-
-    sidecar_result = None
-    if dispatch.sidecar_path is not None:
-        try:
-            sidecar_result = read_sidecar_from_path(Path(dispatch.sidecar_path))
-        except Exception as exc:
-            logger.warning("sidecar_read_failed", error=str(exc))
-            report.errors.append(f"sidecar_read: {exc}")
-
-    labels_ok = await cleanup_orphaned_labels(
-        dispatch.sidecar_path,
-        github_client,
-        issue_url=dispatch.issue_url,
-        remove_labels=remove_labels,
-        add_labels=add_labels,
-    )
-    report.labels_reset = labels_ok
-
+    report: ResetReport,
+) -> None:
+    """Remove the worktree and its sidecar in their established order."""
     worktree_path = worktrees_dir / dispatch.name
     try:
-        wt_result = await remove_git_worktree(worktree_path, project_dir, runner)
-        report.worktree_removed = bool(wt_result.deleted) or bool(wt_result.skipped)
+        worktree_result = await remove_git_worktree(worktree_path, project_dir, runner)
+        report.worktree_removed = bool(worktree_result.deleted) or bool(worktree_result.skipped)
     except Exception as exc:
         logger.warning("remove_worktree_failed", error=str(exc))
         report.errors.append(f"remove_worktree: {exc}")
 
     try:
-        sc_result = remove_worktree_sidecar(project_dir, dispatch.name)
-        report.sidecar_removed = bool(sc_result.deleted) or bool(sc_result.skipped)
+        sidecar_result = remove_worktree_sidecar(project_dir, dispatch.name)
+        report.sidecar_removed = bool(sidecar_result.deleted) or bool(sidecar_result.skipped)
     except Exception as exc:
         logger.warning("remove_sidecar_failed", error=str(exc))
         report.errors.append(f"remove_sidecar: {exc}")
 
+
+async def _discover_reset_pr_urls(
+    dispatch: DispatchRecord,
+    sidecar_result: SidecarReadResult | None,
+    *,
+    project_dir: Path,
+    runner: SubprocessRunner,
+    report: ResetReport,
+) -> list[str]:
+    """Return sidecar PRs or the ordered dispatch-name/branch fallback."""
     pr_urls: list[str] = []
     if sidecar_result is not None and sidecar_result.source == SidecarReadStatus.FOUND:
-        pr_urls = [e.pr_url for e in sidecar_result.entries if e.pr_url is not None]
+        pr_urls = [entry.pr_url for entry in sidecar_result.entries if entry.pr_url is not None]
 
-    if not pr_urls and dispatch.sidecar_path is not None:
-        for _head_name in dict.fromkeys(
-            [dispatch.name]
-            + (
-                [dispatch.branch_name]
-                if dispatch.branch_name and dispatch.branch_name != dispatch.name
-                else []
+    if pr_urls or dispatch.sidecar_path is None:
+        return pr_urls
+
+    head_names = [dispatch.name]
+    if dispatch.branch_name and dispatch.branch_name != dispatch.name:
+        head_names.append(dispatch.branch_name)
+    for head_name in head_names:
+        try:
+            result = await runner(
+                ["gh", "pr", "list", "--head", head_name, "--json", "url", "--limit", "5"],
+                cwd=project_dir,
+                timeout=15,
             )
-        ):
-            try:
-                gh_result = await runner(
-                    ["gh", "pr", "list", "--head", _head_name, "--json", "url", "--limit", "5"],
-                    cwd=project_dir,
-                    timeout=15,
-                )
-                if gh_result.returncode == 0 and gh_result.stdout:
-                    parsed = json.loads(gh_result.stdout)
-                    pr_urls = [item["url"] for item in parsed if "url" in item]
-                    if pr_urls:
-                        break
-            except Exception as exc:
-                logger.warning("pr_fallback_search_failed", error=str(exc))
-                report.errors.append(f"pr_fallback_search: {exc}")
+            if result.returncode == 0 and result.stdout:
+                parsed = json.loads(result.stdout)
+                pr_urls = [item["url"] for item in parsed if "url" in item]
+                if pr_urls:
+                    break
+        except Exception as exc:
+            logger.warning("pr_fallback_search_failed", error=str(exc))
+            report.errors.append(f"pr_fallback_search: {exc}")
+    return pr_urls
 
+
+async def _handle_reset_prs(
+    pr_urls: list[str],
+    *,
+    project_dir: Path,
+    runner: SubprocessRunner,
+    report: ResetReport,
+    force: bool,
+) -> None:
+    """Protect reviewed open PRs unless forced, otherwise close each PR."""
     for pr_url in pr_urls:
         if not force:
             try:
-                _view_result = await runner(
+                view_result = await runner(
                     ["gh", "pr", "view", pr_url, "--json", "reviewDecision,state"],
                     cwd=project_dir,
                     timeout=15,
                 )
-                if _view_result.returncode == 0 and _view_result.stdout:
-                    _pr_data = json.loads(_view_result.stdout)
-                    _is_open = _pr_data.get("state") == "OPEN"
-                    _review = _pr_data.get("reviewDecision", "")
-                    if _is_open and _review in ("APPROVED", "CHANGES_REQUESTED"):
+                if view_result.returncode == 0 and view_result.stdout:
+                    pr_data = json.loads(view_result.stdout)
+                    is_open = pr_data.get("state") == "OPEN"
+                    review = pr_data.get("reviewDecision", "")
+                    if is_open and review in ("APPROVED", "CHANGES_REQUESTED"):
                         report.has_protected_artifacts = True
                         report.protected_prs.append(pr_url)
                         continue
@@ -226,6 +233,15 @@ async def reset_dispatch_artifacts(
             logger.warning("pr_close_failed", pr_url=pr_url, error=str(exc))
             report.errors.append(f"pr_close({pr_url}): {exc}")
 
+
+async def _delete_reset_branches(
+    dispatch: DispatchRecord,
+    *,
+    project_dir: Path,
+    runner: SubprocessRunner,
+    report: ResetReport,
+) -> None:
+    """Delete local then remote dispatch branches, retaining partial failures."""
     try:
         branch_result = await runner(
             ["git", "-C", str(project_dir), "branch", "-D", dispatch.name],
@@ -247,6 +263,61 @@ async def reset_dispatch_artifacts(
     except Exception as exc:
         logger.warning("remote_branch_delete_failed", error=str(exc))
         report.errors.append(f"remote_branch_delete: {exc}")
+
+
+async def reset_dispatch_artifacts(
+    dispatch: DispatchRecord,
+    *,
+    project_dir: Path,
+    worktrees_dir: Path,
+    runner: SubprocessRunner,
+    github_client: GitHubFetcher | None,
+    target_state: IssueLabelState,
+    force: bool = False,
+) -> ResetReport:
+    report = ResetReport(
+        dispatch_name=dispatch.name,
+        branch_name=dispatch.branch_name or dispatch.name,
+    )
+    remove_labels, add_labels = compute_reset_labels(target_state)
+    sidecar_result = _load_reset_sidecar(dispatch, report)
+
+    labels_ok = await cleanup_orphaned_labels(
+        dispatch.sidecar_path,
+        github_client,
+        issue_url=dispatch.issue_url,
+        remove_labels=remove_labels,
+        add_labels=add_labels,
+    )
+    report.labels_reset = labels_ok
+
+    await _remove_local_reset_artifacts(
+        dispatch,
+        project_dir=project_dir,
+        worktrees_dir=worktrees_dir,
+        runner=runner,
+        report=report,
+    )
+    pr_urls = await _discover_reset_pr_urls(
+        dispatch,
+        sidecar_result,
+        project_dir=project_dir,
+        runner=runner,
+        report=report,
+    )
+    await _handle_reset_prs(
+        pr_urls,
+        project_dir=project_dir,
+        runner=runner,
+        report=report,
+        force=force,
+    )
+    await _delete_reset_branches(
+        dispatch,
+        project_dir=project_dir,
+        runner=runner,
+        report=report,
+    )
 
     return report
 

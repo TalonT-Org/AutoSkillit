@@ -70,7 +70,7 @@ def payload(
     for disposition in omitted:
         if disposition.kind is ReviewFindingDispositionKind.OMITTED_INVALID:
             if not 0 <= disposition.original_index < len(request.comments):
-                raise IndexError(
+                raise ValueError(
                     f"omitted disposition original_index {disposition.original_index} "
                     f"out of range for request with {len(request.comments)} comments"
                 )

@@ -333,6 +333,11 @@ async def test_receipt_disposition_count_matches_body_entries(tmp_path: Path) ->
     assert omitted_count == body_count, (
         f"disposition count {omitted_count} must match body entry count {body_count}"
     )
+    # Fixture-encoded expectation: _request_with_initial_and_retry_omissions defines
+    # exactly two omitted findings (one dropped by retry, one rejected before POST).
+    # This guards against silent fixture growth that would otherwise pass the body
+    # consistency check above.
+    assert omitted_count == 2, f"expected exactly 2 omitted findings, got {omitted_count}"
 
 
 @pytest.mark.anyio

@@ -38,15 +38,18 @@ def test_remote_review_mutation_has_one_call_site_in_attempt() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and _call_name(node) == "create_review":
                 call_sites.append((path.name, _enclosing_function(tree, node)))
-    # Symbol-shape guard: every create_review call must resolve to _attempt (or a callee
-    # thereof). The previous filename-literal check was brittle to file/function renames.
+    # Symbol-shape guard: every create_review call must originate from poster.py and
+    # resolve to _attempt (the only authorized call site). The previous filename/function
+    # literal check was brittle to renames but allowed drifting call sites to slip past.
+    # Refactors that legitimately move create_review into a helper called from _attempt
+    # should update this test deliberately rather than silently.
     assert call_sites
     for filename, enclosing in call_sites:
         assert filename == "poster.py", (
             f"create_review call must originate from poster.py, got {filename}"
         )
-        assert enclosing in {"_attempt", "_post"}, (
-            f"create_review call must live in _attempt or its caller _post, got {enclosing!r}"
+        assert enclosing == "_attempt", (
+            f"create_review call must live in _attempt, got {enclosing!r}"
         )
     assert len(call_sites) == 1, (
         f"create_review must have exactly one call site, found {len(call_sites)}"

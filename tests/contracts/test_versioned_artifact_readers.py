@@ -91,25 +91,25 @@ def test_projection_hook_repair_uses_versioned_manifest_helpers() -> None:
     """Manifest repair must stay on the version-validating helper path."""
     source_path = Path(_hook_repair.__file__)
     tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-    repair = next(
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    read_calls = [
         node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "repair_broken_projection_hooks"
-    )
-    versioned_calls = [
-        node
-        for node in ast.walk(repair)
+        for node in ast.walk(functions["_load_projection_hook_manifest"])
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id in {"read_versioned_json", "write_versioned_json"}
+        and node.func.id == "read_versioned_json"
+    ]
+    write_calls = [
+        node
+        for node in ast.walk(functions["_write_projection_hook_manifest"])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "write_versioned_json"
     ]
 
-    assert {call.func.id for call in versioned_calls} == {
-        "read_versioned_json",
-        "write_versioned_json",
-    }
-    for call in versioned_calls:
-        version_arg = 1 if call.func.id == "read_versioned_json" else 2
-        assert len(call.args) > version_arg
-        assert ast.unparse(call.args[0]) == "manifest_path"
-        assert ast.unparse(call.args[version_arg]) == "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION"
+    assert len(read_calls) == 1
+    assert len(write_calls) == 1
+    assert ast.unparse(read_calls[0].args[0]) == "manifest_path"
+    assert ast.unparse(read_calls[0].args[1]) == "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION"
+    assert ast.unparse(write_calls[0].args[0]) == "manifest_path"
+    assert ast.unparse(write_calls[0].args[2]) == "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION"

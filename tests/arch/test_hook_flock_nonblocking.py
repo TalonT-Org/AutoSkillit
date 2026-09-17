@@ -146,7 +146,7 @@ _EXPECTED_ACQUISITIONS = (
     ("server/tools/_overlay_state.py", "locked_overlay", "acquire_flock_with_timeout"),
     (
         "workspace/_installed/_state.py",
-        "_enqueue_legacy_installed_plugin_versions",
+        "_enqueue_legacy_installed_plugin_candidate",
         "ArtifactLease.acquire_shared",
     ),
     (
@@ -176,32 +176,27 @@ _EXPECTED_ACQUISITIONS = (
     ),
     (
         "workspace/_projected_artifact/_hook_repair.py",
-        "repair_broken_plugin_cache_hooks",
-        "ArtifactLease.acquire_exclusive",
-    ),
-    (
-        "workspace/_projected_artifact/_hook_repair.py",
-        "repair_broken_projection_hooks",
+        "_repair_hook_incarnation",
         "ArtifactLease.acquire_exclusive",
     ),
     (
         "workspace/_projected_artifact/authority.py",
-        "acquire_launch_binding",
+        "_ensure_valid_publication",
         "ArtifactLease.acquire_exclusive",
     ),
     (
         "workspace/_projected_artifact/authority.py",
-        "acquire_launch_binding",
+        "_acquire_initial_projection_reader",
         "ArtifactLease.acquire_shared",
     ),
     (
         "workspace/_projected_artifact/authority.py",
-        "acquire_launch_binding",
+        "_acquire_final_projection_reader",
         "ArtifactLease.acquire_shared",
     ),
     (
         "workspace/_installed/_projection_cache.py",
-        "_reconcile_projection_entry",
+        "_reconcile_projection_retirement",
         "ArtifactLease.acquire_exclusive",
     ),
     (

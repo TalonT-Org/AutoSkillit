@@ -501,6 +501,38 @@ class GenerationArtifactRetirementOwner:
         )
 
 
+def _collect_stale_generation_candidates(
+    store_root: Path,
+    *,
+    home: ManagedHome,
+    plugin_ref: str,
+) -> list[tuple[Path, Path]]:
+    """Observe stale generation candidates in deterministic, race-tolerant order."""
+    candidates: list[tuple[Path, Path]] = []
+    version_entries = sorted(scan_observed(store_root), key=lambda entry: entry.name)
+    for version_entry in version_entries:
+        if (
+            version_entry.name.startswith(".")
+            or version_entry.is_symlink
+            or not version_entry.is_dir
+        ):
+            continue
+        version_dir = version_entry.path
+        incarnation_entries = sorted(scan_observed(version_dir), key=lambda entry: entry.name)
+        for incarnation_entry in incarnation_entries:
+            incarnation = incarnation_entry.path
+            if incarnation.name.startswith("."):
+                if _generation_residue_managed_path(incarnation) is not None:
+                    candidates.append((incarnation, version_dir))
+                continue
+            if incarnation_entry.is_symlink or not incarnation_entry.is_dir:
+                continue
+            if _is_selected_generation(home, plugin_ref, incarnation):
+                continue
+            candidates.append((incarnation, version_dir))
+    return candidates
+
+
 def prune_stale_generations(
     home: ManagedHome,
     plugin_ref: str,
@@ -530,29 +562,12 @@ def prune_stale_generations(
     owner = GenerationArtifactRetirementOwner(
         store_root, home=home, plugin_ref=plugin_ref, artifact_kind=artifact_kind
     )
-    candidates: list[tuple[Path, Path]] = []
     try:
-        version_entries = sorted(scan_observed(store_root), key=lambda entry: entry.name)
-        for version_entry in version_entries:
-            if (
-                version_entry.name.startswith(".")
-                or version_entry.is_symlink
-                or not version_entry.is_dir
-            ):
-                continue
-            version_dir = version_entry.path
-            incarnation_entries = sorted(scan_observed(version_dir), key=lambda entry: entry.name)
-            for incarnation_entry in incarnation_entries:
-                incarnation = incarnation_entry.path
-                if incarnation.name.startswith("."):
-                    if _generation_residue_managed_path(incarnation) is not None:
-                        candidates.append((incarnation, version_dir))
-                    continue
-                if incarnation_entry.is_symlink or not incarnation_entry.is_dir:
-                    continue
-                if _is_selected_generation(home, plugin_ref, incarnation):
-                    continue
-                candidates.append((incarnation, version_dir))
+        candidates = _collect_stale_generation_candidates(
+            store_root,
+            home=home,
+            plugin_ref=plugin_ref,
+        )
     except VANISHED_ERRORS:
         return 0
     except OSError as exc:

@@ -24,6 +24,9 @@ _SHARED_READ_SIDE_VALIDATORS = {
         "src/autoskillit/workspace/_installed/_projection_cache.py"
     ),
 }
+_SHARED_READ_SIDE_VALIDATOR_HELPERS = {
+    "read_projected_plugin_identity": ("_load_canonical_projection_manifest",),
+}
 
 
 def _call_name(func: ast.expr) -> str | None:
@@ -167,9 +170,18 @@ class TestSchemaReadConvention:
             assert function is not None, (
                 f"shared read-side validator {function_name} is missing from {relative_path}"
             )
+            validator_functions = (function,)
+            helper_names = _SHARED_READ_SIDE_VALIDATOR_HELPERS.get(function_name, ())
+            if helper_names:
+                validator_functions += tuple(
+                    node
+                    for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name in helper_names
+                )
             call_names = {
                 node.func.id if isinstance(node.func, ast.Name) else node.func.attr
-                for node in ast.walk(function)
+                for validator in validator_functions
+                for node in ast.walk(validator)
                 if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
             }
             assert "read_versioned_json" in call_names, (

@@ -99,6 +99,21 @@ def _is_list_annotation(annotation: ast.expr) -> bool:
     )
 
 
+def _annotation_root_names(annotation: ast.expr) -> set[str]:
+    """Return the set of bare-name ids referenced by an annotation expression.
+
+    Walks through Optional / Union / Subscript / Attribute wrappers so that
+    ``Foo | None``, ``list[Foo]``, and ``Optional[list[Foo]]`` all surface
+    ``Foo``. Type aliases and renamed imports are still resolved by name, so
+    callers should compare against the canonical symbol name(s) they expect.
+    """
+    names: set[str] = set()
+    for node in ast.walk(annotation):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+    return names
+
+
 def _metadata_admission_calls(
     paths: tuple[Path, ...],
 ) -> list[tuple[str, str | None, int, ast.expr, set[str]]]:
@@ -151,7 +166,7 @@ def test_metadata_admission_accepts_provenance_segments_at_its_sole_production_c
     admission = _find_function(flags_tree, _METADATA_ADMISSION)
 
     assert admission.args.args[0].annotation is not None
-    assert ast.unparse(admission.args.args[0].annotation).endswith("EvaluatedSegment")
+    assert "EvaluatedSegment" in _annotation_root_names(admission.args.args[0].annotation)
 
     production_calls = _metadata_admission_calls(_python_paths(_SOURCE_ROOT))
     assert {(path, owner) for path, owner, _, _, _ in production_calls} == {

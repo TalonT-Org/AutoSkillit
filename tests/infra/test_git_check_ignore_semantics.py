@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("infra"),
+    pytest.mark.medium,
+    pytest.mark.skipif(shutil.which("git") is None, reason="git binary required"),
+]
 
 
 def _run_git(repo: Path, env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:

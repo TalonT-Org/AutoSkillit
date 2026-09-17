@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from autoskillit.core import (
@@ -68,3 +70,25 @@ def test_projection_accepts_deferred_skip_edge_as_only_path_to_step() -> None:
     )
 
     assert projection.ordered_step_names == ("start", "guarded", "skip_only")
+
+
+def test_projection_snapshots_one_shot_and_mutable_inputs_once() -> None:
+    step_names = ["start", "finish"]
+    steps = [FinalizedRecipeStep(name=name) for name in step_names]
+    edges = [_edge("start", "success", "finish")]
+
+    projection = FinalizedRecipeProjection(
+        binding_projection=RecipeBindingProjection(invocations={}),
+        ordered_step_names=cast(tuple[str, ...], iter(step_names)),
+        entrypoint="start",
+        ordered_steps=cast(tuple[FinalizedRecipeStep, ...], iter(steps)),
+        ingredient_names=frozenset({"ingredient"}),
+        ordered_flow_edges=cast(tuple[RecipeFlowEdge, ...], edges),
+    )
+    step_names.append("late")
+    steps.clear()
+    edges.clear()
+
+    assert projection.ordered_step_names == ("start", "finish")
+    assert tuple(step.name for step in projection.ordered_steps) == ("start", "finish")
+    assert projection.ordered_flow_edges == (_edge("start", "success", "finish"),)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from types import MappingProxyType
 from typing import Literal
@@ -439,6 +439,66 @@ def _finding(
     )
 
 
+def _string_list_findings(
+    section: str,
+    value: object,
+    *,
+    invalid_type_code: str,
+    invalid_element_code: str,
+    expected_type: str,
+) -> Iterator[RecipeSectionValidationFinding]:
+    if type(value) is not list:
+        yield _finding(section, invalid_type_code, (section,), expected_type, value)
+        return
+    for index, element in enumerate(value):
+        if type(element) is not str:
+            yield _finding(
+                section,
+                invalid_element_code,
+                (section, index),
+                "string",
+                element,
+            )
+
+
+def _recipe_section_findings(
+    payload: Mapping[str, object],
+) -> Iterator[RecipeSectionValidationFinding]:
+    for section, definition in RECIPE_SECTION_REGISTRY.items():
+        value = payload.get(section, _MISSING)
+        if value is _MISSING:
+            if definition.missing_behavior == "invalid":
+                yield _finding(
+                    section,
+                    "missing_required_section",
+                    (section,),
+                    definition.value_kind,
+                    value,
+                )
+            continue
+        if value is None:
+            if definition.none_behavior == "invalid":
+                yield _finding(
+                    section,
+                    "invalid_section_type",
+                    (section,),
+                    definition.value_kind,
+                    value,
+                )
+            continue
+        if definition.value_kind == "string":
+            if type(value) is not str:
+                yield _finding(section, "invalid_section_type", (section,), "string", value)
+            continue
+        yield from _string_list_findings(
+            section,
+            value,
+            invalid_type_code="invalid_section_type",
+            invalid_element_code="invalid_section_element_type",
+            expected_type="array",
+        )
+
+
 def validate_recipe_artifact_sections(
     payload: Mapping[str, object],
 ) -> tuple[RecipeSectionValidationFinding, ...]:
@@ -453,91 +513,19 @@ def validate_recipe_artifact_sections(
         else:
             omitted_count += 1
 
-    for section, definition in RECIPE_SECTION_REGISTRY.items():
-        value = payload.get(section, _MISSING)
-        if value is _MISSING:
-            if definition.missing_behavior == "invalid":
-                record(
-                    _finding(
-                        section,
-                        "missing_required_section",
-                        (section,),
-                        definition.value_kind,
-                        value,
-                    )
-                )
-            continue
-        if value is None:
-            if definition.none_behavior == "invalid":
-                record(
-                    _finding(
-                        section,
-                        "invalid_section_type",
-                        (section,),
-                        definition.value_kind,
-                        value,
-                    )
-                )
-            continue
-        if definition.value_kind == "string":
-            if type(value) is not str:
-                record(
-                    _finding(
-                        section,
-                        "invalid_section_type",
-                        (section,),
-                        "string",
-                        value,
-                    )
-                )
-            continue
-        if type(value) is not list:
-            record(
-                _finding(
-                    section,
-                    "invalid_section_type",
-                    (section,),
-                    "array",
-                    value,
-                )
-            )
-            continue
-        for index, element in enumerate(value):
-            if type(element) is not str:
-                record(
-                    _finding(
-                        section,
-                        "invalid_section_element_type",
-                        (section, index),
-                        "string",
-                        element,
-                    )
-                )
+    for finding in _recipe_section_findings(payload):
+        record(finding)
 
     step_names = payload.get("post_prune_step_names", _MISSING)
     if step_names is not _MISSING:
-        if type(step_names) is not list:
-            record(
-                _finding(
-                    "post_prune_step_names",
-                    "invalid_post_prune_step_names",
-                    ("post_prune_step_names",),
-                    "array of strings",
-                    step_names,
-                )
-            )
-        else:
-            for index, step_name in enumerate(step_names):
-                if type(step_name) is not str:
-                    record(
-                        _finding(
-                            "post_prune_step_names",
-                            "invalid_post_prune_step_name",
-                            ("post_prune_step_names", index),
-                            "string",
-                            step_name,
-                        )
-                    )
+        for finding in _string_list_findings(
+            "post_prune_step_names",
+            step_names,
+            invalid_type_code="invalid_post_prune_step_names",
+            invalid_element_code="invalid_post_prune_step_name",
+            expected_type="array of strings",
+        ):
+            record(finding)
     if omitted_count:
         findings.append(
             RecipeSectionValidationFinding(

@@ -77,6 +77,95 @@ def _json_value(value: object) -> object:
     return value
 
 
+def _require_payload_mapping(value: object, field_name: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise LaunchContractError(f"{field_name} must be an object")
+    return value
+
+
+def _require_payload_str_mapping(value: object, field_name: str) -> dict[str, str]:
+    mapping = _require_payload_mapping(value, field_name)
+    if any(not isinstance(key, str) or not isinstance(item, str) for key, item in mapping.items()):
+        raise LaunchContractError(f"{field_name} must map strings to strings")
+    return {str(key): str(item) for key, item in mapping.items()}
+
+
+def _canonicalize_projection_refusals(
+    value: tuple[SkillProjectionRefusal, ...],
+    member_names: tuple[str, ...],
+) -> tuple[SkillProjectionRefusal, ...]:
+    if any(not isinstance(refusal, SkillProjectionRefusal) for refusal in value):
+        raise LaunchContractError("skill projection refusals are malformed")
+    unavailable = tuple(
+        sorted(
+            value,
+            key=lambda refusal: (
+                refusal.skill,
+                refusal.operation.value,
+                refusal.diagnostic,
+            ),
+        )
+    )
+    refusal_names = tuple(refusal.skill for refusal in unavailable)
+    if len(refusal_names) != len(set(refusal_names)):
+        raise LaunchContractError("skill projection refusals require unique skill names")
+    if set(refusal_names) & set(member_names):
+        raise LaunchContractError("skill projection admitted and refused members overlap")
+    return unavailable
+
+
+def _freeze_projection_sources(
+    value: Mapping[str, Mapping[str, object]],
+) -> Mapping[str, Mapping[str, object]]:
+    frozen: dict[str, Mapping[str, object]] = {}
+    for name, identity in value.items():
+        if not isinstance(name, str) or not isinstance(identity, Mapping):
+            raise LaunchContractError("skill projection source identities are malformed")
+        frozen[name] = _freeze_metadata(identity)
+    return MappingProxyType(dict(sorted(frozen.items())))
+
+
+def _freeze_projection_digest_maps(
+    binding: SkillProjectionBinding,
+    expected: set[str],
+) -> dict[str, Mapping[str, str]]:
+    frozen: dict[str, Mapping[str, str]] = {}
+    for field_name in (
+        "canonical_digests",
+        "projected_digests",
+        "semantic_digests",
+        "adaptation_digests",
+    ):
+        mapping = _freeze_str_mapping(getattr(binding, field_name), field_name.replace("_", " "))
+        if set(mapping) != expected:
+            raise LaunchContractError(
+                f"skill projection {field_name.replace('_', ' ')} do not match members"
+            )
+        frozen[field_name] = mapping
+    return frozen
+
+
+def _validate_projection_digests(binding: SkillProjectionBinding) -> None:
+    for field_name in ("canonical_digests", "projected_digests"):
+        for digest in getattr(binding, field_name).values():
+            if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                raise LaunchContractError(
+                    f"skill projection {field_name.replace('_', ' ')} must be sha256"
+                )
+    for name in binding.member_names:
+        semantic = binding.semantic_digests[name]
+        adaptation = binding.adaptation_digests[name]
+        if bool(semantic) != bool(adaptation):
+            raise LaunchContractError(
+                f"skill projection semantic/adaptation observation is incomplete for {name!r}"
+            )
+        for digest in (semantic, adaptation):
+            if digest and (
+                len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest)
+            ):
+                raise LaunchContractError("skill projection semantic digest must be sha256")
+
+
 @dataclass(frozen=True, slots=True)
 class SkillProjectionBinding:
     """Backend-adapted, non-executable skill projection bound beneath one launch."""
@@ -106,24 +195,10 @@ class SkillProjectionBinding:
         object.__setattr__(self, "member_names", tuple(self.member_names))
         object.__setattr__(self, "capability_union", frozenset(self.capability_union))
         object.__setattr__(self, "artifact_paths", tuple(self.artifact_paths))
-        raw_unavailable = tuple(self.unavailable)
-        if any(not isinstance(refusal, SkillProjectionRefusal) for refusal in raw_unavailable):
-            raise LaunchContractError("skill projection refusals are malformed")
-        unavailable = tuple(
-            sorted(
-                raw_unavailable,
-                key=lambda refusal: (
-                    refusal.skill,
-                    refusal.operation.value,
-                    refusal.diagnostic,
-                ),
-            )
+        unavailable = _canonicalize_projection_refusals(
+            tuple(self.unavailable),
+            self.member_names,
         )
-        refusal_names = tuple(refusal.skill for refusal in unavailable)
-        if len(refusal_names) != len(set(refusal_names)):
-            raise LaunchContractError("skill projection refusals require unique skill names")
-        if set(refusal_names) & set(self.member_names):
-            raise LaunchContractError("skill projection admitted and refused members overlap")
         object.__setattr__(self, "unavailable", unavailable)
         for field_name in (
             "branch_identity",
@@ -148,48 +223,14 @@ class SkillProjectionBinding:
         if self.projection_version < 1:
             raise LaunchContractError("skill projection binding version must be positive")
         expected = set(self.member_names)
-        frozen_sources: dict[str, Mapping[str, object]] = {}
-        for name, identity in self.source_identities.items():
-            if not isinstance(name, str) or not isinstance(identity, Mapping):
-                raise LaunchContractError("skill projection source identities are malformed")
-            frozen_sources[name] = _freeze_metadata(identity)
         object.__setattr__(
-            self,
-            "source_identities",
-            MappingProxyType(dict(sorted(frozen_sources.items()))),
+            self, "source_identities", _freeze_projection_sources(self.source_identities)
         )
-        for field_name in (
-            "canonical_digests",
-            "projected_digests",
-            "semantic_digests",
-            "adaptation_digests",
-        ):
-            mapping = _freeze_str_mapping(getattr(self, field_name), field_name.replace("_", " "))
-            if set(mapping) != expected:
-                raise LaunchContractError(
-                    f"skill projection {field_name.replace('_', ' ')} do not match members"
-                )
+        for field_name, mapping in _freeze_projection_digest_maps(self, expected).items():
             object.__setattr__(self, field_name, mapping)
         if set(self.source_identities) != expected:
             raise LaunchContractError("skill projection source identities do not match members")
-        for field_name in ("canonical_digests", "projected_digests"):
-            for digest in getattr(self, field_name).values():
-                if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
-                    raise LaunchContractError(
-                        f"skill projection {field_name.replace('_', ' ')} must be sha256"
-                    )
-        for name in self.member_names:
-            semantic = self.semantic_digests[name]
-            adaptation = self.adaptation_digests[name]
-            if bool(semantic) != bool(adaptation):
-                raise LaunchContractError(
-                    f"skill projection semantic/adaptation observation is incomplete for {name!r}"
-                )
-            for digest in (semantic, adaptation):
-                if digest and (
-                    len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest)
-                ):
-                    raise LaunchContractError("skill projection semantic digest must be sha256")
+        _validate_projection_digests(self)
 
     @property
     def canonical_payload(self) -> Mapping[str, object]:
@@ -307,20 +348,6 @@ class SkillProjectionBinding:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> SkillProjectionBinding:
-        def require_mapping(value: object, field_name: str) -> Mapping[str, object]:
-            if not isinstance(value, Mapping):
-                raise LaunchContractError(f"{field_name} must be an object")
-            return value
-
-        def require_str_mapping(value: object, field_name: str) -> dict[str, str]:
-            mapping = require_mapping(value, field_name)
-            if any(
-                not isinstance(key, str) or not isinstance(item, str)
-                for key, item in mapping.items()
-            ):
-                raise LaunchContractError(f"{field_name} must map strings to strings")
-            return {str(key): str(item) for key, item in mapping.items()}
-
         try:
             members_raw = payload["member_names"]
             capabilities_raw = payload["capability_union"]
@@ -334,7 +361,7 @@ class SkillProjectionBinding:
                 raise LaunchContractError("skill projection artifact paths must be an array")
             if not isinstance(unavailable_raw, (list, tuple)):
                 raise LaunchContractError("skill projection unavailable must be an array")
-            sources = require_mapping(payload["source_identities"], "source identities")
+            sources = _require_payload_mapping(payload["source_identities"], "source identities")
             projection_version = payload["projection_version"]
             if not isinstance(projection_version, int) or isinstance(projection_version, bool):
                 raise LaunchContractError("skill projection version must be an integer")
@@ -346,19 +373,19 @@ class SkillProjectionBinding:
                 execution_role=str(payload["execution_role"]),
                 capability_union=frozenset(str(item) for item in capabilities_raw),
                 source_identities={
-                    str(key): require_mapping(value, f"source identity {key}")
+                    str(key): _require_payload_mapping(value, f"source identity {key}")
                     for key, value in sources.items()
                 },
-                canonical_digests=require_str_mapping(
+                canonical_digests=_require_payload_str_mapping(
                     payload["canonical_digests"], "canonical digests"
                 ),
-                projected_digests=require_str_mapping(
+                projected_digests=_require_payload_str_mapping(
                     payload["projected_digests"], "projected digests"
                 ),
-                semantic_digests=require_str_mapping(
+                semantic_digests=_require_payload_str_mapping(
                     payload["semantic_digests"], "semantic digests"
                 ),
-                adaptation_digests=require_str_mapping(
+                adaptation_digests=_require_payload_str_mapping(
                     payload["adaptation_digests"], "adaptation digests"
                 ),
                 projection_version=projection_version,
@@ -369,22 +396,34 @@ class SkillProjectionBinding:
                 backend=str(payload["backend"]),
                 artifact_paths=tuple(str(item) for item in artifacts_raw),
                 command_digest=str(payload["command_digest"]),
-                branch_identity=require_str_mapping(payload["branch_identity"], "branch identity"),
-                worktree_identity=require_str_mapping(
+                branch_identity=_require_payload_str_mapping(
+                    payload["branch_identity"], "branch identity"
+                ),
+                worktree_identity=_require_payload_str_mapping(
                     payload["worktree_identity"], "worktree identity"
                 ),
-                executable_identity=require_str_mapping(
+                executable_identity=_require_payload_str_mapping(
                     payload["executable_identity"], "executable identity"
                 ),
-                plugin_identity=require_str_mapping(payload["plugin_identity"], "plugin identity"),
+                plugin_identity=_require_payload_str_mapping(
+                    payload["plugin_identity"], "plugin identity"
+                ),
                 unavailable=tuple(
                     SkillProjectionRefusal(
-                        skill=str(require_mapping(item, "skill projection refusal")["skill"]),
+                        skill=str(
+                            _require_payload_mapping(item, "skill projection refusal")["skill"]
+                        ),
                         operation=SkillSemanticOperation(
-                            str(require_mapping(item, "skill projection refusal")["operation"])
+                            str(
+                                _require_payload_mapping(item, "skill projection refusal")[
+                                    "operation"
+                                ]
+                            )
                         ),
                         diagnostic=str(
-                            require_mapping(item, "skill projection refusal")["diagnostic"]
+                            _require_payload_mapping(item, "skill projection refusal")[
+                                "diagnostic"
+                            ]
                         ),
                     )
                     for item in unavailable_raw

@@ -67,6 +67,17 @@ def _flow_generation_bytes(records: tuple[str, ...]) -> bytes:
     return bytes(generated)
 
 
+def _validate_artifact_read_bounds(generation: RecipeArtifactGeneration) -> None:
+    if not 0 < generation.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES:
+        raise ValueError("artifact_blob_size_bytes is outside supported bounds")
+    if not 0 <= generation.body_size_bytes <= generation.artifact_blob_size_bytes:
+        raise ValueError("body_size_bytes must fit within the artifact blob")
+    if generation.flow_size_bytes <= 0:
+        raise ValueError("flow_size_bytes must be positive")
+    if generation.flow_record_count <= 0:
+        raise ValueError("flow_record_count must be positive")
+
+
 @dataclass(frozen=True, slots=True)
 class RecipeFlowGeneration:
     """Canonical, ordered recipe-flow records with derived immutable identity."""
@@ -171,14 +182,7 @@ class RecipeArtifactGeneration:
             value = getattr(self, field_name)
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{field_name} must be an integer")
-        if not 0 < self.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES:
-            raise ValueError("artifact_blob_size_bytes is outside supported bounds")
-        if not 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes:
-            raise ValueError("body_size_bytes must fit within the artifact blob")
-        if self.flow_size_bytes <= 0:
-            raise ValueError("flow_size_bytes must be positive")
-        if self.flow_record_count <= 0:
-            raise ValueError("flow_record_count must be positive")
+        _validate_artifact_read_bounds(self)
 
     def has_valid_read_bounds(self) -> bool:
         """Return whether caller-provided sizes stay within server ceilings."""

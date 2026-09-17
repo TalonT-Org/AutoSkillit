@@ -48,7 +48,9 @@ def _verify_rows(report: ClosureReport) -> list[str]:
             row.source_section,
         )
         if row.row_hash != expected:
-            errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+            errors.append(
+                f"[row-hash] row[{idx}] {row.requirement_id}: row_hash mismatch (content tampered)"
+            )
         finding = evaluate_rationale_contradiction(
             row.requirement_id,
             row.requirement_text,
@@ -56,9 +58,9 @@ def _verify_rows(report: ClosureReport) -> list[str]:
         )
         if finding is not None and row.assessment not in CLOSURE_ROW_BLOCKING_ASSESSMENTS:
             errors.append(
-                f"{row.requirement_id}: evidence describes a substitution "
-                f"({finding.matched_marker}) of a prescribed mechanism, but assessment "
-                f"{row.assessment} is not blocking"
+                f"[substitution-floor] {row.requirement_id}: evidence describes a "
+                f"substitution ({finding.matched_marker}) of a prescribed "
+                f"mechanism, but assessment {row.assessment} is not blocking"
             )
     return errors
 

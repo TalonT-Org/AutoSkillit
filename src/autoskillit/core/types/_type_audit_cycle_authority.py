@@ -121,8 +121,8 @@ class AuditAssessmentRow:
     ) -> Self:
         if assessment.disposition is AuditDisposition.PRE_SUBMISSION_ONLY:
             raise ValueError(
-                f"{assessment.value} must be resolved to a submittable label before "
-                "an authority row is created"
+                f"AuditAssessmentRow[{requirement_id}]: {assessment.value} must be "
+                "resolved to a submittable label before an authority row is created"
             )
         payload = {
             "assessment": assessment.value,

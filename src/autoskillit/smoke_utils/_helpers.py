@@ -34,6 +34,30 @@ def try_load_json(path: Path) -> dict | None:
         return None
 
 
+def _read_audit_probe_input(label: str, path: Path) -> str:
+    """Read a probe input file with full orchestration context on failure."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"{label} is required for probe_audit_substitutions: {path}"
+        ) from exc
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{label} is not valid UTF-8: {path} ({exc.reason})") from exc
+
+
+def _decode_audit_requirements(label: str, path: Path) -> object:
+    """Decode a probe requirements JSON file with orchestration context."""
+    text = _read_audit_probe_input(label, path)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"{label} is not valid JSON ({exc.msg} at line {exc.lineno} "
+            f"column {exc.colno}): {path}"
+        ) from exc
+
+
 def probe_audit_substitutions(
     requirements_path: str,
     diff_path: str,
@@ -50,22 +74,26 @@ def probe_audit_substitutions(
         if not path.is_absolute():
             raise ValueError(f"{name} must be absolute, got {str(path)!r}")
 
-    raw_requirements = json.loads(paths["requirements_path"].read_text(encoding="utf-8"))
+    raw_requirements = _decode_audit_requirements("requirements_path", paths["requirements_path"])
     if not isinstance(raw_requirements, list):
-        raise ValueError("requirements_path must contain a JSON array")
+        raise ValueError(
+            f"requirements_path must contain a JSON array, got {type(raw_requirements).__name__}"
+        )
     requirements: list[ProbedRequirement] = []
     for index, raw in enumerate(raw_requirements):
         if not isinstance(raw, dict) or frozenset(raw) != _AUDIT_REQUIREMENT_KEYS:
+            actual = sorted(raw) if isinstance(raw, dict) else type(raw).__name__
             raise ValueError(
-                f"requirements[{index}] must contain exactly {sorted(_AUDIT_REQUIREMENT_KEYS)!r}"
+                f"requirements_path[{index}] must contain exactly "
+                f"{sorted(_AUDIT_REQUIREMENT_KEYS)!r}: got {actual}"
             )
         if not all(isinstance(raw[key], str) for key in _AUDIT_REQUIREMENT_KEYS):
-            raise ValueError(f"requirements[{index}] values must all be strings")
+            raise ValueError(f"requirements_path[{index}] values must all be strings")
         requirements.append(ProbedRequirement(**raw))
 
     findings = probe_substitutions(
         tuple(requirements),
-        paths["diff_path"].read_text(encoding="utf-8"),
+        _read_audit_probe_input("diff_path", paths["diff_path"]),
     )
     payload = {
         "flagged_requirement_ids": list(
@@ -76,7 +104,7 @@ def probe_audit_substitutions(
                 "requirement_id": finding.requirement_id,
                 "trigger": finding.trigger.value,
                 "matched_marker": finding.matched_marker,
-                "matched_cue": finding.matched_cue,
+                "matched_cue": finding.matched_prescription,
             }
             for finding in findings
         ],

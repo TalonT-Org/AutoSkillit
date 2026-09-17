@@ -129,7 +129,7 @@ class SubstitutionFinding:
     requirement_id: str
     trigger: SubstitutionTrigger
     matched_marker: str
-    matched_cue: str
+    matched_prescription: str
 
 
 def _tokens(value: str) -> tuple[str, ...]:
@@ -148,6 +148,26 @@ def _first_matching_term(value: str, terms: frozenset[str]) -> str | None:
     return None
 
 
+def _added_diff_text(diff_text: str) -> str:
+    """Return the joined text of added unified-diff lines.
+
+    Strips the leading ``+`` marker and skips the ``+++`` file header. Lines that
+    signal ``\\ No newline at end of file`` are dropped because they are not
+    real additions. The result is a corpus suitable for term and identifier
+    matching, not a structural reconstruction of the diff.
+    """
+    chunks: list[str] = []
+    for line in diff_text.splitlines():
+        if not line.startswith("+"):
+            continue
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+\\ No newline at end of file"):
+            continue
+        chunks.append(line[1:])
+    return "\n".join(chunks)
+
+
 def evaluate_rationale_contradiction(
     requirement_id: str,
     requirement_text: str,
@@ -163,7 +183,7 @@ def evaluate_rationale_contradiction(
         requirement_id=requirement_id,
         trigger=SubstitutionTrigger.RATIONALE_CONTRADICTION,
         matched_marker=marker,
-        matched_cue=cue,
+        matched_prescription=cue,
     )
 
 
@@ -181,11 +201,7 @@ def evaluate_diff_mock_of_prescribed_symbol(
     }
     if not identifiers:
         return None
-    added_text = "\n".join(
-        line[1:]
-        for line in diff_text.splitlines()
-        if line.startswith("+") and not line.startswith("+++")
-    )
+    added_text = _added_diff_text(diff_text)
     marker = _first_matching_term(added_text, SUBSTITUTION_MARKERS)
     added_identifiers = {
         match.group(0).casefold() for match in _IDENTIFIER_RE.finditer(added_text)
@@ -196,7 +212,7 @@ def evaluate_diff_mock_of_prescribed_symbol(
             requirement_id=requirement_id,
             trigger=SubstitutionTrigger.DIFF_MOCK_OF_PRESCRIBED_SYMBOL,
             matched_marker=marker,
-            matched_cue=matches[0],
+            matched_prescription=matches[0],
         )
     return None
 

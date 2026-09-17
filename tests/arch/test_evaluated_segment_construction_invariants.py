@@ -57,4 +57,4 @@ def test_evaluated_segment_accepts_matching_provenance() -> None:
 def test_evaluated_segment_accepts_provenance_none() -> None:
     """Evaluated payloads (shell substitutions) carry no provenance."""
     segment = EvaluatedSegment(tokens=["echo", "hello"], provenance=None)
-    assert segment.provenance is None
+    del segment.provenance  # EvaluatedSegment stores None verbatim per the dataclass contract

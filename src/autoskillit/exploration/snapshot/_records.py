@@ -166,26 +166,42 @@ class SnapshotCaptureResult:
     validated_activation: RepositoryProfileActivation | None = None
 
     def __post_init__(self) -> None:
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.reason is not None:
-            raise ValueError("complete snapshot capture cannot expose a failure reason")
-        if self.status is not SnapshotCaptureStatus.COMPLETE and self.reason is None:
-            raise ValueError("non-complete snapshot capture requires a failure reason")
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.snapshot is None:
-            raise ValueError("complete snapshot capture requires a snapshot")
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.validated_activation is None:
-            raise ValueError("complete snapshot capture requires a validated activation")
-        if (
-            self.status in {SnapshotCaptureStatus.STALE, SnapshotCaptureStatus.TRUNCATED}
-            and self.snapshot is None
-        ):
-            raise ValueError("terminal snapshot capture requires an atomic marker")
-        if self.status is SnapshotCaptureStatus.FAILED and self.snapshot is not None:
-            raise ValueError("failed snapshot capture cannot expose snapshot state")
-        if (
-            self.status is not SnapshotCaptureStatus.COMPLETE
-            and self.validated_activation is not None
-        ):
-            raise ValueError("non-complete snapshot capture cannot expose an activation")
+        invalid_conditions = (
+            (
+                self.status is SnapshotCaptureStatus.COMPLETE and self.reason is not None,
+                "complete snapshot capture cannot expose a failure reason",
+            ),
+            (
+                self.status is not SnapshotCaptureStatus.COMPLETE and self.reason is None,
+                "non-complete snapshot capture requires a failure reason",
+            ),
+            (
+                self.status is SnapshotCaptureStatus.COMPLETE and self.snapshot is None,
+                "complete snapshot capture requires a snapshot",
+            ),
+            (
+                self.status is SnapshotCaptureStatus.COMPLETE
+                and self.validated_activation is None,
+                "complete snapshot capture requires a validated activation",
+            ),
+            (
+                self.status in {SnapshotCaptureStatus.STALE, SnapshotCaptureStatus.TRUNCATED}
+                and self.snapshot is None,
+                "terminal snapshot capture requires an atomic marker",
+            ),
+            (
+                self.status is SnapshotCaptureStatus.FAILED and self.snapshot is not None,
+                "failed snapshot capture cannot expose snapshot state",
+            ),
+            (
+                self.status is not SnapshotCaptureStatus.COMPLETE
+                and self.validated_activation is not None,
+                "non-complete snapshot capture cannot expose an activation",
+            ),
+        )
+        for invalid, message in invalid_conditions:
+            if invalid:
+                raise ValueError(message)
         if self.snapshot is None or self.validated_activation is None:
             return
         activation = self.validated_activation

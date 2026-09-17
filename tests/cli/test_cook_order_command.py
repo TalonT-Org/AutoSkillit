@@ -502,10 +502,7 @@ class TestCLIOrderCommand:
     ) -> None:
         from autoskillit.cli.session._session_launch import _run_interactive_session
         from autoskillit.core import (
-            LAUNCH_ID_ENV_VAR,
-            SESSION_TYPE_ENV_VAR,
             ManagedSessionHome,
-            SessionType,
             ValidatedAddDir,
         )
         from tests.cli.test_session_launch import _make_capturing_backend
@@ -539,16 +536,12 @@ class TestCLIOrderCommand:
             unavailability_payload={"backend": "claude-code", "unavailable": ()},
         )
         release = MagicMock()
+        from autoskillit.cli.session._session_launch import _order_launch_env
+
         monkeypatch.setattr(
             _patch_session__session_order,
             "_write_order_entry",
-            lambda *_args: (
-                "launch-id",
-                {
-                    SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,
-                    LAUNCH_ID_ENV_VAR: "launch-id",
-                },
-            ),
+            lambda *_args: ("launch-id", _order_launch_env("launch-id")),
         )
         monkeypatch.setattr(_patch_session__session_order, "release_session_claim", release)
 

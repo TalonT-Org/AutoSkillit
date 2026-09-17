@@ -238,7 +238,7 @@ def test_claim_refuses_reload_gap_while_claimant_lives_after_child_exit(
         '"owner_pid":702,"owner_boot_id":"test-boot","owner_starttime_ticks":13}}',
         encoding="utf-8",
     )
-    monkeypatch.setattr(subject, "owner_liveness", lambda pid, *_args: pid == _OTHER[0])
+    monkeypatch.setattr(subject, "owner_liveness", lambda pid, *_args, **_kwargs: pid == _OTHER[0])
     before = path.read_bytes()
 
     with pytest.raises(ValueError, match="launch is reserved by a live or unavailable claimant"):

@@ -52,12 +52,21 @@ def _resolver_implementation() -> tuple[ast.FunctionDef, ...]:
         if function is None:
             continue
         reachable.append(function)
+
+        def _called_names(call: ast.Call) -> tuple[str, ...]:
+            target = call.func
+            if isinstance(target, ast.Name):
+                return (target.id,)
+            if isinstance(target, ast.Attribute):
+                return (target.attr,)
+            return ()
+
         pending.extend(
-            node.func.id
+            called
             for node in ast.walk(function)
             if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id in functions
+            for called in _called_names(node)
+            if called in functions
         )
     return tuple(reachable)
 

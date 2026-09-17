@@ -545,7 +545,7 @@ def is_git_command(segment: list[str]) -> bool:
     return verb == "git" or verb.endswith("/git")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class GitInvocation:
     subcommand: str
     flags: list[str]

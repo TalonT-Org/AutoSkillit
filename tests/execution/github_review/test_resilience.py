@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    DiffAnchorAuthority,
     GitHubReviewComment,
+    GitHubReviewRequest,
     ReviewFindingDispositionKind,
     ReviewOperationState,
     ReviewReconciliationResult,
@@ -234,6 +236,100 @@ async def test_generic_and_second_422_reconcile_before_terminal(
     )
     assert len(gateway.create_calls) == (2 if second else 1)
     assert gateway.call_trace[-2:] == ["create_review", "list_reviews"]
+
+
+@pytest.mark.anyio
+async def test_second_422_after_corrected_retry_terminates_without_third_attempt(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "ledger.sqlite3"
+    request = _request(tmp_path, event="REQUEST_CHANGES")
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="author",
+        pr_author_login="author",
+        outcomes=[
+            CreateOutcome(422, data=_self_review_error()),
+            CreateOutcome(422, data=_validation_error(0)),
+        ],
+    )
+
+    result = await _poster(database_path, gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.TERMINAL
+    assert len(gateway.create_calls) == 2
+    assert gateway.call_trace == [
+        "create_review",
+        "list_reviews",
+        "create_review",
+        "list_reviews",
+    ]
+    attempts = GitHubReviewLedger(database_path).load_attempts(
+        compute_review_operation_key(request)
+    )
+    assert [attempt.attempt_number for attempt in attempts] == [1, 2]
+
+
+def _request_with_initial_and_retry_omissions(tmp_path: Path) -> GitHubReviewRequest:
+    comments = (
+        GitHubReviewComment(path="src/a.py", line=10, body="Keep A"),
+        GitHubReviewComment(path="src/b.py", line=20, body="Dropped by retry"),
+        GitHubReviewComment(path="src/c.py", line=30, body="Rejected before POST"),
+    )
+    authority = DiffAnchorAuthority.authoritative(
+        repository="octo/example",
+        pr_number=42,
+        head_sha="a" * 40,
+        generation_id="mixed-omissions",
+        right_side_lines={"src/a.py": {10}, "src/b.py": {20}},
+        left_side_lines={},
+    )
+    return _request(tmp_path, comments=comments, anchor_authority=authority)
+
+
+@pytest.mark.anyio
+async def test_corrected_retry_body_names_every_omitted_finding(tmp_path: Path) -> None:
+    request = _request_with_initial_and_retry_omissions(tmp_path)
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    retry_body = gateway.create_calls[-1]["body"]
+    assert "Outside Diff Range" in retry_body
+    assert "Dropped by retry" in retry_body
+    assert "Rejected before POST" in retry_body
+
+
+@pytest.mark.anyio
+async def test_receipt_disposition_count_matches_body_entries(tmp_path: Path) -> None:
+    request = _request_with_initial_and_retry_omissions(tmp_path)
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.receipt is not None
+    omitted_count = sum(
+        item.kind is ReviewFindingDispositionKind.OMITTED_INVALID
+        for item in result.receipt.finding_dispositions
+    )
+    outside_diff = gateway.create_calls[-1]["body"].split("## Outside Diff Range", 1)[1]
+    assert omitted_count == outside_diff.count("\n- `") == 2
 
 
 @pytest.mark.anyio

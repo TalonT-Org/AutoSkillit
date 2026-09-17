@@ -40,6 +40,40 @@ async def test_empty_authority_publishes_body_only_before_inline_cap(tmp_path: P
     assert "Normalize this value." in gateway.create_calls[0]["body"]
 
 
+@pytest.mark.anyio
+async def test_missing_authority_artifact_yields_unavailable_not_allpass(
+    tmp_path: Path,
+) -> None:
+    comments = (
+        GitHubReviewComment(path="src/a.py", line=10, body="First unavailable finding"),
+        GitHubReviewComment(path="src/b.py", line=20, body="Second unavailable finding"),
+    )
+    request = _request(tmp_path, comments=comments)
+    unavailable = DiffAnchorAuthority.unavailable(
+        repository=request.repository,
+        pr_number=request.pr_number,
+        head_sha=request.head_sha,
+    )
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock)
+
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
+        replace(request, anchor_authority=unavailable)
+    )
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert len(gateway.create_calls) == 1
+    assert gateway.create_calls[0]["comments"] == []
+    assert "Outside Diff Range" in gateway.create_calls[0]["body"]
+    for comment in comments:
+        assert comment.body in gateway.create_calls[0]["body"]
+    assert result.receipt is not None
+    assert all(
+        item.kind is ReviewFindingDispositionKind.OMITTED_INVALID
+        for item in result.receipt.finding_dispositions
+    )
+
+
 def test_payload_cannot_be_built_from_unadmitted_findings(tmp_path: Path) -> None:
     request = _request(tmp_path)
     with pytest.raises(TypeError, match="admitted"):

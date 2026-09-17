@@ -380,6 +380,67 @@ def test_malformed_standard_finding_degrades_aggregate(
     assert result["validation_errors"]
 
 
+@pytest.mark.parametrize(
+    "malformed_finding",
+    [
+        {
+            "file": "src/app.py",
+            "line": "40",
+            "dimension": "bugs",
+            "severity": "warning",
+            "message": "Non-integer line",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "warning",
+            "message": "Closed-key violation",
+            "requires_decision": False,
+            "unexpected": True,
+        },
+    ],
+)
+def test_malformed_schema_still_degrades_but_unpostable_does_not(
+    malformed_finding: dict[str, object],
+) -> None:
+    malformed = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[malformed_finding],
+        anchor_authority=_authority({"src/app.py": [40]}),
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+    assert malformed["state"] == "degraded"
+    assert malformed["validation_errors"]
+
+    out_of_authority = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[
+            {
+                "file": "src/app.py",
+                "line": 41,
+                "dimension": "bugs",
+                "severity": "warning",
+                "message": "Body-only finding",
+                "requires_decision": False,
+            }
+        ],
+        anchor_authority=_authority({"src/app.py": [40]}),
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+    assert out_of_authority["state"] == "complete"
+    assert out_of_authority["validation_errors"] == []
+    assert out_of_authority["survivors"] == []
+    assert out_of_authority["unpostable"][0]["admission_reason"] == ("REJECTED_LINE_NOT_IN_DIFF")
+
+
 def test_mixed_batch_retains_valid_siblings_and_surfaces_rejects() -> None:
     findings = [
         {

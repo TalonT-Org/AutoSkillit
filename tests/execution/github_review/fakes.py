@@ -169,6 +169,23 @@ class StatefulReviewGateway:
             )
         return _success(list(self.comments_by_review.get(review_id, [])))
 
+    async def create_review_comment(
+        self,
+        repository: str,
+        pr_number: int,
+        body: str,
+        commit_id: str,
+        path: str,
+        line: int,
+        side: str = "RIGHT",
+    ) -> GatewayResult:
+        del repository, pr_number, body, commit_id, path, line, side
+        self.call_trace.append("create_review_comment")
+        raise AssertionError(
+            "review poster must publish via batched create_review; "
+            "create_review_comment is the per-comment fallback that this fixture forbids"
+        )
+
     def _commit(self, payload: dict[str, Any]) -> int:
         review_id = self._next_review_id
         self._next_review_id += 1

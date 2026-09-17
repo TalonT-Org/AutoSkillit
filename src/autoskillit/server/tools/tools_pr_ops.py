@@ -310,7 +310,7 @@ async def verify_review_receipt(
             allow_nan=False,
         )
         identity_matches = (
-            authoritative.repository == repository
+            authoritative.repository == repository.casefold()
             and authoritative.pr_number == pr_number
             and authoritative.head_sha == head_sha
             and authoritative.logical_iteration == logical_iteration

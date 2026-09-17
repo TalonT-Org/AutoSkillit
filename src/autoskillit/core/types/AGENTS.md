@@ -65,7 +65,8 @@ Each direct Python file has one responsibility:
 
 ### Recipe contracts
 
-- `_type_recipe_binding.py` — Frozen recipe-step binding and phoropter value objects.
+- `_type_recipe_binding.py` — Frozen recipe-step binding value objects.
+- `_type_phoropter.py` — Frozen phoropter prescription and reading-token value objects.
 - `_type_recipe_delivery.py` — Typed recipe-delivery budget, provenance, and decision contracts.
 - `_type_recipe_execution.py` — Immutable recipe-execution attestation and admission contracts.
 - `_type_recipe_sections.py` — Recipe-section schema validation and canonical digest helpers.

@@ -265,7 +265,7 @@ class DiffAnchorAuthority:
                 cast(Mapping[str, Iterable[int]], left), "left_side_lines"
             )
             return cls(
-                repository=cast(str, value["repository"]),
+                repository=cast(str, value["repository"]).casefold(),
                 pr_number=cast(int, value["pr_number"]),
                 head_sha=cast(str, value["head_sha"]),
                 generation_id=cast(str, value["generation_id"]),

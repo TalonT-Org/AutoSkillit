@@ -315,12 +315,16 @@ class DefaultGitHubReviewPoster:
             if slot.blocked_operation_key is not None:
                 outcome = ReviewAttemptOutcome.SLOT_BLOCKED
             else:
-                assert all(
+                if not all(
                     isinstance(finding.anchor, AdmittedAnchor)
                     and finding.anchor.authority_digest
                     == request.anchor_authority.authority_digest
                     for finding in findings
-                )
+                ):
+                    raise ValueError(
+                        "review findings must be admitted by the request anchor authority "
+                        "before mutation"
+                    )
                 response = await self.gateway.create_review(
                     request.repository,
                     request.pr_number,
@@ -419,15 +423,6 @@ class DefaultGitHubReviewPoster:
         assert response is not None and slot is not None
         response_class = response.response_class
         error = github_error_message(response.data) or response.error
-        if not retry:
-            self.ledger.complete_attempt(
-                operation_key=operation_key,
-                attempt_number=attempt_number,
-                state=attempt_state,
-                response_class=response_class,
-                status_code=response.status_code,
-                error=error,
-            )
         reconciliation = await self._reconcile_payload(
             request=request,
             operation_key=operation_key,
@@ -436,6 +431,19 @@ class DefaultGitHubReviewPoster:
             authenticated_login=authenticated_login,
         )
         if reconciliation.review_id is not None:
+            final_state = (
+                ReviewOperationState.SUCCEEDED
+                if outcome is ReviewAttemptOutcome.SUCCESS
+                else ReviewOperationState.RECONCILED
+            )
+            self.ledger.complete_attempt(
+                operation_key=operation_key,
+                attempt_number=attempt_number,
+                state=final_state,
+                response_class=response_class,
+                status_code=response.status_code,
+                error=error,
+            )
             result = self._finalize(
                 request=request,
                 operation_key=operation_key,
@@ -444,11 +452,7 @@ class DefaultGitHubReviewPoster:
                 effective_event=effective_event,
                 attempt_digest=attempt_digest,
                 response_class=response_class,
-                state=(
-                    ReviewOperationState.SUCCEEDED
-                    if outcome is ReviewAttemptOutcome.SUCCESS
-                    else ReviewOperationState.RECONCILED
-                ),
+                state=final_state,
                 reconciliation=reconciliation,
                 executed_mutations=attempt_number,
             )

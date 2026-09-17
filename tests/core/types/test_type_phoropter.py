@@ -6,24 +6,24 @@ import re
 
 import pytest
 
-from autoskillit.core.types._type_recipe_binding import (
+from autoskillit.core.types._type_phoropter import (
     READING_TOKEN_PATTERN,
     PhoropterPrescription,
     ReadingToken,
 )
-from autoskillit.core.types._type_recipe_binding import (
-    __all__ as recipe_binding_all,
+from autoskillit.core.types._type_phoropter import (
+    __all__ as phoropter_all,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_all_exports_complete() -> None:
-    assert {
+    assert set(phoropter_all) == {
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-    } <= set(recipe_binding_all)
+    }
 
 
 class TestPhoropterPrescription:

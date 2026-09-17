@@ -36,7 +36,7 @@ def _anchor_error(index: int) -> dict[str, object]:
 
 def _assert_batch_only(gateway: StatefulReviewGateway) -> None:
     assert gateway.call_trace.count("create_review") == len(gateway.create_calls)
-    assert not hasattr(gateway, "create_review_comment")
+    assert "create_review_comment" not in gateway.call_trace
 
 
 @pytest.mark.anyio

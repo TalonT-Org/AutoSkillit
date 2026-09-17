@@ -11,10 +11,14 @@ import pytest
 
 import autoskillit.hooks._runtime._command_classification as command_classification
 import autoskillit.hooks._runtime._github_mutation_analysis as github_mutation_analysis
+from autoskillit.hooks._classification._interpreters import (
+    all_evaluated_segments_with_provenance,
+)
 from autoskillit.hooks._runtime._command_classification import (
     _GIT_GLOBAL_FLAG_SPEC,
     _PYTHON_INVOCATION_FLAG_SPEC,
     _SHELL_INVOCATION_FLAG_SPEC,
+    PROTECTED_SOURCE_PATH_PATTERNS,
     StdinConsumer,
     _FlagArity,
     all_evaluated_segments,
@@ -1351,14 +1355,24 @@ def test_strip_heredoc_bodies(command: str, expected_stripped: str) -> None:
 
 
 class TestIsAllowedProtectedPathMetadataCommand:
+    @staticmethod
+    def _segment(command: str):
+        segments = all_evaluated_segments_with_provenance(command)
+        assert segments is not None
+        assert len(segments) == 1
+        return segments[0]
+
     def test_recognized_git_status_metadata_command_is_allowed(self) -> None:
-        assert is_allowed_protected_path_metadata_command(["git", "status"]) is True
+        segment = self._segment("git status")
+        assert is_allowed_protected_path_metadata_command(segment) is True
 
     def test_content_reading_git_subcommand_is_not_allowed(self) -> None:
-        assert is_allowed_protected_path_metadata_command(["git", "show", "HEAD"]) is False
+        segment = self._segment("git show HEAD")
+        assert is_allowed_protected_path_metadata_command(segment) is False
 
     def test_non_git_command_is_not_allowed(self) -> None:
-        assert is_allowed_protected_path_metadata_command(["cat", "file.py"]) is False
+        segment = self._segment("cat file.py")
+        assert is_allowed_protected_path_metadata_command(segment) is False
 
     def test_unrecognized_global_git_flag_shift_is_not_allowed(self) -> None:
         """Git subcommand shift (Part C, wiring check for the first of
@@ -1370,20 +1384,12 @@ class TestIsAllowedProtectedPathMetadataCommand:
         (-> False), not accidentally matched against
         _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS.
         """
-        assert (
-            is_allowed_protected_path_metadata_command(
-                ["git", "--namespace", "refs/foo", "status"]
-            )
-            is True
-        )
+        known = self._segment("git --namespace refs/foo status")
+        assert is_allowed_protected_path_metadata_command(known) is False
         # A genuinely unrecognized flag (not just one this allowlist predates)
         # must fail closed to False, not be silently treated as safe metadata.
-        assert (
-            is_allowed_protected_path_metadata_command(
-                ["git", "--this-flag-does-not-exist", "val", "status"]
-            )
-            is False
-        )
+        unknown = self._segment("git --this-flag-does-not-exist val status")
+        assert is_allowed_protected_path_metadata_command(unknown) is False
 
 
 class TestCommandHasBlockedProtectedPathRead:
@@ -1416,6 +1422,134 @@ class TestCommandHasBlockedProtectedPathRead:
     def test_text_stdin_consumer_live_read_is_blocked(self) -> None:
         cmd = 'perl <<\'EOF\'\nopen(FH, "<", "src/autoskillit/recipes/foo.yaml")\nEOF'
         assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
+
+
+_PROTECTED_RECIPE = "src/autoskillit/recipes/foo.yaml"
+_PROTECTED_SKILL = "src/autoskillit/skills/dry-walkthrough/SKILL.md"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"git check-ignore -v {_PROTECTED_RECIPE}",
+        f"git check-ignore --verbose --no-index -- {_PROTECTED_SKILL}",
+        f"git check-ignore -v {_PROTECTED_RECIPE} {_PROTECTED_SKILL}",
+        f"git check-ignore -v {_PROTECTED_RECIPE} || true",
+        (
+            f"git check-ignore -v {_PROTECTED_RECIPE} && "
+            f"git check-ignore --verbose {_PROTECTED_SKILL}"
+        ),
+    ],
+)
+def test_check_ignore_metadata_forms_are_admitted(command: str) -> None:
+    assert not command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+_GIT_METADATA_ARMS = (
+    f"add -- {_PROTECTED_RECIPE}",
+    f"diff --stat -- {_PROTECTED_RECIPE}",
+    f"diff --name-only -- {_PROTECTED_RECIPE}",
+    f"status -- {_PROTECTED_RECIPE}",
+    f"check-ignore -v {_PROTECTED_RECIPE}",
+)
+
+_GIT_GLOBAL_INJECTIONS = (
+    "-c core.fsmonitor=./evil.sh",
+    "-c core.excludesFile=./ignore",
+    "-c include.path=./config",
+    "--config-env=core.fsmonitor=EVIL",
+    "--git-dir=./repo.git",
+    "--work-tree=./tree",
+    "--bare",
+    "--namespace=evil",
+    "--exec-path=./bin",
+)
+
+
+@pytest.mark.parametrize("arm", _GIT_METADATA_ARMS)
+@pytest.mark.parametrize("global_option", _GIT_GLOBAL_INJECTIONS)
+def test_git_metadata_arms_reject_unsafe_globals(arm: str, global_option: str) -> None:
+    command = f"git {global_option} {arm}"
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize("arm", _GIT_METADATA_ARMS)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=./evil.sh",
+        f"env GIT_CONFIG_GLOBAL={_PROTECTED_RECIPE}",
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=./evil.sh",
+        "env X=1",
+        "sudo",
+        "timeout 5",
+    ],
+)
+def test_git_metadata_arms_reject_command_prefixes(arm: str, prefix: str) -> None:
+    command = f"{prefix} git {arm}"
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize("prefix", ["X=1", "env X=1", "sudo", "timeout 5"])
+def test_wc_metadata_arm_rejects_command_prefixes(prefix: str) -> None:
+    command = f"{prefix} wc -l {_PROTECTED_RECIPE}"
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize(
+    ("command", "blocked"),
+    [
+        (f"git -C /repo status -- {_PROTECTED_RECIPE}", False),
+        (f"git -C /repo check-ignore -v {_PROTECTED_RECIPE}", True),
+        (f"git -C /repo -c core.fsmonitor=./evil status -- {_PROTECTED_RECIPE}", True),
+        (f"git --no-pager status -- {_PROTECTED_RECIPE}", False),
+    ],
+)
+def test_git_metadata_global_controls(command: str, blocked: bool) -> None:
+    assert (
+        command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS) is blocked
+    )
+
+
+@pytest.mark.parametrize(
+    ("command", "mechanism"),
+    [
+        (f"git check-ignore -v {_PROTECTED_RECIPE} > out.txt", "redirect provenance"),
+        (f"git status -- {_PROTECTED_RECIPE} 2>&1", "redirect provenance"),
+        (f"git add -- {_PROTECTED_RECIPE} 2>/dev/null", "redirect provenance"),
+        (f"git status -- ${{P:-{_PROTECTED_RECIPE}}}", "dynamic argv provenance"),
+        (f'git status -- "${{P:-{_PROTECTED_RECIPE}}}"', "dynamic argv provenance"),
+        (f"git check-ignore -v {_PROTECTED_RECIPE} --stdin", "check-ignore grammar"),
+        (f"git check-ignore -v -z {_PROTECTED_RECIPE}", "check-ignore grammar"),
+        (f"git check-ignore -v -q {_PROTECTED_RECIPE}", "check-ignore grammar"),
+        (f"git check-ignore -v -n {_PROTECTED_RECIPE}", "check-ignore grammar"),
+        (f"git check-ignore -v --non-matching {_PROTECTED_RECIPE}", "check-ignore grammar"),
+        (f"git check-ignore -v --index {_PROTECTED_RECIPE}", "check-ignore grammar"),
+        (f"git check-ignore -v {_PROTECTED_RECIPE} && cat {_PROTECTED_RECIPE}", "mixed chain"),
+        (f"git status -- {_PROTECTED_RECIPE} ; git show HEAD:{_PROTECTED_RECIPE}", "mixed chain"),
+        (f"git check-ignore -v '{_PROTECTED_RECIPE}", "malformed quoting"),
+        (
+            "python - <<'EOF'\n"
+            f'import os; os.system("git check-ignore -v {_PROTECTED_RECIPE}")\n'
+            "EOF",
+            "provenance-free evaluated payload",
+        ),
+        (f"bash -c 'git check-ignore -v {_PROTECTED_RECIPE}'", "outer interpreter segment"),
+        (
+            f"python -c \"import os; os.system('git status -- {_PROTECTED_RECIPE}')\"",
+            "outer interpreter segment",
+        ),
+        (f"git status -- \\${{P:-{_PROTECTED_RECIPE}}}", "escaped dynamic argv"),
+    ],
+)
+def test_protected_path_admission_rejects_unproven_forms(command: str, mechanism: str) -> None:
+    assert mechanism
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+def test_single_quoted_literal_protected_path_is_admitted() -> None:
+    command = f"git status -- '{_PROTECTED_RECIPE}'"
+    assert not command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
 
 
 class TestAnalyzeGitHubMutations:

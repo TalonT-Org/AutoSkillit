@@ -49,15 +49,8 @@ class FindingDisposition:
     """One terminal session-reported disposition for an accepted finding."""
 
     finding_id: str
-    disposition: str
+    disposition: DispositionValue
     detail: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.disposition not in _DISPOSITION_VALUES:
-            raise ValueError(
-                f"FindingDisposition.disposition must be one of "
-                f"{sorted(_DISPOSITION_VALUES)}, got {self.disposition!r}"
-            )
 
 
 def _trailing_field_lines(result_text: str) -> list[str]:

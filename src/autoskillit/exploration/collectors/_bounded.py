@@ -447,6 +447,11 @@ def read_stable_contained_file(
         os.close(parent_fd)
 
 
+def _require_within_limit(value: int, limit: int, message: str) -> None:
+    if value > limit:
+        raise CollectorSafetyError(message)
+
+
 def _enumerate_contained_directory(
     root_fd: int,
     directory_chain: tuple[tuple[str, os.stat_result], ...],
@@ -491,22 +496,18 @@ def _enumerate_contained_directory(
         parent_parts = tuple(component for component, _expected in directory_chain)
         for entry in entries:
             inspected_entries += 1
-            if inspected_entries > max_files:
-                raise CollectorSafetyError("collector entry limit exceeded")
+            _require_within_limit(inspected_entries, max_files, "collector entry limit exceeded")
             try:
                 entry_stat = entry.stat(follow_symlinks=False)
             except OSError as exc:
                 raise CollectorSafetyError("collector entry cannot be inspected") from exc
-            if stat.S_ISLNK(entry_stat.st_mode):
-                continue
             relative_parts = (*parent_parts, entry.name)
             if stat.S_ISDIR(entry_stat.st_mode):
                 child_chains.append((*directory_chain, (entry.name, entry_stat)))
             elif stat.S_ISREG(entry_stat.st_mode):
                 regular_file_paths.append(PurePosixPath(*relative_parts).as_posix())
                 file_count += 1
-                if file_count > max_files:
-                    raise CollectorSafetyError("collector file limit exceeded")
+                _require_within_limit(file_count, max_files, "collector file limit exceeded")
     except OSError as exc:
         raise CollectorSafetyError("collector entry cannot be inspected") from exc
     finally:

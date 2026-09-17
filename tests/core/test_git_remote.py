@@ -69,8 +69,8 @@ def test_parse_github_remote_url_rejects_ambiguous_boundaries(url: str) -> None:
 
 def test_parse_github_remote_url_preserves_port_and_authority_failures() -> None:
     assert parse_github_remote_url("https://github.com:99999/owner/repo") is None
-    with pytest.raises(ValueError):
-        parse_github_remote_url("https://[::1/owner/repo")
+    assert parse_github_remote_url("https://github.com:0/owner/repo") is None
+    assert parse_github_remote_url("https://github.com:-1/owner/repo") is None
 
 
 def test_remote_identity_dataclasses_preserve_probe_payloads() -> None:

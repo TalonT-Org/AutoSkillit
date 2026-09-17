@@ -1330,6 +1330,7 @@ steps:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
+      anchor_authority_path: ${{ result.anchor_authority_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
       review_mode: ${{ result.review_mode }}
       pr_head_sha: ${{ result.pr_head_sha }}
@@ -1356,6 +1357,7 @@ steps:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
+      anchor_authority_path: ${{ result.anchor_authority_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
       review_mode: ${{ result.review_mode }}
       pr_head_sha: ${{ result.pr_head_sha }}
@@ -1367,7 +1369,8 @@ steps:
     optional_context_refs:
     - review_loop_count
     note: 'Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
-      review-pr. On failure, falls through to review_pr which uses empty fallback.
+      review-pr. Routes to release_issue_failure on annotation failure.
+      Missing authority permits no inline comments.
 
       '
   review_pr:
@@ -1381,6 +1384,7 @@ steps:
         annotated_diff_path: "${{ context.annotated_diff_path }}"
         hunk_ranges_path: "${{ context.hunk_ranges_path }}"
         valid_lines_path: "${{ context.valid_lines_path }}"
+        anchor_authority_path: "${{ context.anchor_authority_path }}"
         diff_metrics_path: "${{ context.diff_metrics_path }}"
         mode: "${{ context.review_mode }}"
         repository: "${{ context.review_repository }}"
@@ -1464,6 +1468,7 @@ steps:
         repository: "${{ context.review_repository }}"
         pr_number: "${{ context.pr_number }}"
         pr_head_sha: "${{ context.pr_head_sha }}"
+        anchor_authority_path: "${{ context.anchor_authority_path }}"
         logical_iteration: "resolve-review:${{ context.review_loop_count }}"
         receipt_path: "{{AUTOSKILLIT_TEMP}}/resolve-review/iter_${{ context.review_loop_count }}/batch_review_response_${{ context.pr_number }}.json"
       cwd: ${{ context.work_dir }}
@@ -1514,21 +1519,16 @@ steps:
 
       '
   check_resolve_review_posted:
-    tool: run_python
+    tool: verify_review_receipt
     with:
-      step_name: check_resolve_review_posted
-      callable: autoskillit.smoke_utils.check_review_posted
-      work_dir: ${{ context.work_dir }}
-      args:
-        cwd: ${{ context.work_dir }}
-        receipt_path: ${{ context.resolve_review_receipt_path }}
-        mode: github
-        repository: ${{ context.review_repository }}
-        pr_number: ${{ context.pr_number }}
-        head_sha: ${{ context.resolve_review_head_sha }}
-        logical_iteration: resolve-review:${{ context.review_loop_count }}
-        operation_key: ${{ context.resolve_review_operation_key }}
-        post_state: ${{ context.resolve_review_post_state }}
+      cwd: ${{ context.work_dir }}
+      receipt_path: ${{ context.resolve_review_receipt_path }}
+      mode: github
+      repository: ${{ context.review_repository }}
+      pr_number: ${{ context.pr_number }}
+      head_sha: ${{ context.pr_head_sha }}
+      logical_iteration: resolve-review:${{ context.review_loop_count }}
+      post_state: ${{ context.resolve_review_post_state }}
     on_result:
     - when: ${{ result.reviews_posted }} == 'true'
       route: pre_review_rebase
@@ -1588,21 +1588,16 @@ steps:
 
       '
   check_review_posted:
-    tool: run_python
+    tool: verify_review_receipt
     with:
-      step_name: check_review_posted
-      callable: autoskillit.smoke_utils.check_review_posted
-      work_dir: ${{ context.work_dir }}
-      args:
-        cwd: ${{ context.work_dir }}
-        receipt_path: ${{ context.review_receipt_path }}
-        mode: ${{ context.review_mode }}
-        repository: ${{ context.review_repository }}
-        pr_number: ${{ context.pr_number }}
-        head_sha: ${{ context.review_head_sha }}
-        logical_iteration: review-pr:${{ context.review_loop_count }}
-        operation_key: ${{ context.review_operation_key }}
-        post_state: ${{ context.review_post_state }}
+      cwd: ${{ context.work_dir }}
+      receipt_path: ${{ context.review_receipt_path }}
+      mode: ${{ context.review_mode }}
+      repository: ${{ context.review_repository }}
+      pr_number: ${{ context.pr_number }}
+      head_sha: ${{ context.pr_head_sha }}
+      logical_iteration: review-pr:${{ context.review_loop_count }}
+      post_state: ${{ context.review_post_state }}
     on_result:
     - when: ${{ result.reviews_posted }} == 'false'
       route: release_issue_failure

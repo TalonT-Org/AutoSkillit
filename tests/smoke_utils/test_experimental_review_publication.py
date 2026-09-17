@@ -6,12 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import DiffAnchorAuthority
 from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITORS,
     aggregate_combined_review_candidates,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
     render_review_finding_body,
+    render_unpostable_review_section,
     validate_experimental_auditor_outputs,
 )
 from tests.smoke_utils._experimental_helpers import (
@@ -19,6 +21,17 @@ from tests.smoke_utils._experimental_helpers import (
 )
 
 pytestmark = [pytest.mark.medium]
+
+
+def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
+    return DiffAnchorAuthority.authoritative(
+        repository="openai/autoskillit",
+        pr_number=1,
+        head_sha="a" * 40,
+        generation_id="generation",
+        right_side_lines=right_side_lines,
+        left_side_lines={},
+    )
 
 
 def test_experimental_publication_preserves_provenance_and_suppresses_stale_effects(
@@ -47,7 +60,7 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
                 ],
             },
         },
-        valid_diff_lines={"src/app.py": [42, 43]},
+        anchor_authority=_authority({"src/app.py": [42, 43]}),
         snapshot=snapshot,
         review_root=str(tmp_path),
     )
@@ -68,6 +81,7 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
         candidates=validation["candidates"],
         dispositions=dispositions,
         prior_resolved_findings=[],
+        anchor_authority=_authority({}),
     )
     assert [item["candidate_id"] for item in aggregation["survivors"]] == [
         accepted["candidate_id"]
@@ -303,7 +317,7 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
         prior_resolved_findings=[],
         standard_findings=standard,
         deletion_findings=deletion,
-        valid_diff_lines={"src/app.py": [40], "src/deleted.py": [7]},
+        anchor_authority=_authority({"src/app.py": [40], "src/deleted.py": [7]}),
         snapshot={"head_sha": "head", "base_sha": "base"},
         review_root=str(Path.cwd()),
     )
@@ -332,14 +346,6 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
         },
         {
             "file": "src/app.py",
-            "line": 41,
-            "dimension": "bugs",
-            "severity": "critical",
-            "message": "Unchanged line",
-            "requires_decision": False,
-        },
-        {
-            "file": "src/app.py",
             "line": 40,
             "dimension": "bugs",
             "severity": "critical",
@@ -349,7 +355,7 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
         },
     ],
 )
-def test_standard_review_findings_degrade_atomically(
+def test_malformed_standard_finding_degrades_aggregate(
     invalid_finding: dict[str, object],
 ) -> None:
     valid_finding = {
@@ -365,13 +371,72 @@ def test_standard_review_findings_degrade_atomically(
         dispositions=[],
         prior_resolved_findings=[],
         standard_findings=[valid_finding, invalid_finding],
-        valid_diff_lines={"src/valid.py": [7], "src/app.py": [40]},
+        anchor_authority=_authority({"src/valid.py": [7], "src/app.py": [40]}),
         snapshot={"head_sha": "head", "base_sha": "base"},
         review_root=str(Path.cwd()),
     )
     assert result["state"] == "degraded"
-    assert result["survivors"] == []
+    assert [(item["file"], item["line"]) for item in result["survivors"]] == [("src/valid.py", 7)]
     assert result["validation_errors"]
+
+
+def test_mixed_batch_retains_valid_siblings_and_surfaces_rejects() -> None:
+    findings = [
+        {
+            "file": "src/app.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Admitted",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 41,
+            "dimension": "bugs",
+            "severity": "warning",
+            "message": "Body only",
+            "requires_decision": False,
+        },
+    ]
+
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        anchor_authority=_authority({"src/app.py": [40]}),
+        standard_findings=findings,
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "complete"
+    assert [(item["file"], item["line"], item["message"]) for item in result["survivors"]] == [
+        ("src/app.py", 40, "Admitted")
+    ]
+    assert [
+        (item["file"], item["line"], item["message"], item["admission_reason"])
+        for item in result["unpostable"]
+    ] == [("src/app.py", 41, "Body only", "REJECTED_LINE_NOT_IN_DIFF")]
+    assert result["validation_errors"] == []
+
+    rendered = render_unpostable_review_section(result["unpostable"])
+    assert rendered.startswith("## Outside Diff Range")
+    assert "src/app.py:41" in rendered
+    assert "REJECTED_LINE_NOT_IN_DIFF" in rendered
+
+    publication = prepare_experimental_review_publication(
+        raw_ledger={},
+        survivors=result["survivors"],
+        unpostable=result["unpostable"],
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        annotation_generation_id="generation",
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+    raw_findings = publication["artifacts"]["raw_findings"]
+    assert raw_findings["unpostable"][0]["admission_reason"] == ("REJECTED_LINE_NOT_IN_DIFF")
+    assert raw_findings["outside_diff_range"] == rendered
 
 
 def test_standard_finding_closed_key_error_lists_missing_and_extra() -> None:
@@ -389,7 +454,7 @@ def test_standard_finding_closed_key_error_lists_missing_and_extra() -> None:
         dispositions=[],
         prior_resolved_findings=[],
         standard_findings=[finding],
-        valid_diff_lines={"src/app.py": [40]},
+        anchor_authority=_authority({"src/app.py": [40]}),
         snapshot={"head_sha": "head", "base_sha": "base"},
         review_root=str(Path.cwd()),
     )
@@ -422,7 +487,7 @@ def test_standard_review_findings_reject_unhashable_enum_values(
         dispositions=[],
         prior_resolved_findings=[],
         standard_findings=[finding],
-        valid_diff_lines={"src/app.py": [40]},
+        anchor_authority=_authority({"src/app.py": [40]}),
         snapshot={"head_sha": "head", "base_sha": "base"},
         review_root=str(Path.cwd()),
     )
@@ -432,7 +497,7 @@ def test_standard_review_findings_reject_unhashable_enum_values(
     assert result["validation_errors"] == [f"standard[0]: {field} must be a non-empty string"]
 
 
-def test_standard_review_findings_accept_hunk_range_fallback() -> None:
+def test_authoritative_empty_map_rejects_without_hunk_range_fallback() -> None:
     finding = {
         "file": "src/app.py",
         "line": 40,
@@ -447,14 +512,48 @@ def test_standard_review_findings_accept_hunk_range_fallback() -> None:
         dispositions=[],
         prior_resolved_findings=[],
         standard_findings=[finding],
-        valid_diff_lines={},
-        valid_line_ranges={"src/app.py": [[38, 42]]},
+        anchor_authority=_authority({}),
         snapshot={"head_sha": "head", "base_sha": "base"},
         review_root=str(Path.cwd()),
     )
 
     assert result["state"] == "complete"
-    assert [item["line"] for item in result["survivors"]] == [40]
+    assert result["survivors"] == []
+    assert [item["admission_reason"] for item in result["unpostable"]] == [
+        "REJECTED_PATH_NOT_IN_DIFF"
+    ]
+    assert result["validation_errors"] == []
+
+
+def test_unavailable_authority_produces_body_only_disposition() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "warning",
+        "message": "Authority was unavailable",
+        "requires_decision": False,
+    }
+
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        anchor_authority=DiffAnchorAuthority.unavailable(
+            repository="openai/autoskillit",
+            pr_number=1,
+            head_sha="a" * 40,
+        ),
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "complete"
+    assert result["survivors"] == []
+    assert [item["admission_reason"] for item in result["unpostable"]] == [
+        "REJECTED_AUTHORITY_UNAVAILABLE"
+    ]
     assert result["validation_errors"] == []
 
 
@@ -473,7 +572,7 @@ def test_standard_review_findings_require_snapshot_authority() -> None:
                 "requires_decision": False,
             }
         ],
-        valid_diff_lines={"src/app.py": [40]},
+        anchor_authority=_authority({"src/app.py": [40]}),
         review_root=str(Path.cwd()),
     )
     assert result["state"] == "degraded"

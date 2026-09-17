@@ -1715,6 +1715,7 @@
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
         "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
         "valid_lines_path": "${{ result.valid_lines_path }}",
+        "anchor_authority_path": "${{ result.anchor_authority_path }}",
         "diff_metrics_path": "${{ result.diff_metrics_path }}",
         "pr_head_sha": "${{ result.pr_head_sha }}"
       },
@@ -1736,13 +1737,14 @@
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
         "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
         "valid_lines_path": "${{ result.valid_lines_path }}",
+        "anchor_authority_path": "${{ result.anchor_authority_path }}",
         "diff_metrics_path": "${{ result.diff_metrics_path }}",
         "review_mode": "${{ result.review_mode }}",
         "pr_head_sha": "${{ result.pr_head_sha }}"
       },
       "on_success": "review_pr_integration",
       "on_failure": "register_clone_failure",
-      "note": "Pre-computes annotated diff and hunk ranges for review-pr server-side (where autoskillit is always installed). Writes both files to disk. On failure, falls through to review_pr_integration which uses empty VALID_LINE_RANGES fallback. Eliminates the autoskillit import in review-pr SKILL.md.\n"
+      "note": "Pre-computes annotated diff, line evidence, and anchor authority for review-pr. Routes to register_clone_failure on annotation failure. Missing authority permits no inline comments.\n"
     },
     "review_pr_integration": {
       "tool": "run_skill",
@@ -1755,6 +1757,7 @@
           "annotated_diff_path": "${{ context.annotated_diff_path }}",
           "hunk_ranges_path": "${{ context.hunk_ranges_path }}",
           "valid_lines_path": "${{ context.valid_lines_path }}",
+          "anchor_authority_path": "${{ context.anchor_authority_path }}",
           "diff_metrics_path": "${{ context.diff_metrics_path }}",
           "mode": "${{ context.review_mode }}",
           "repository": "${{ context.review_repository }}",
@@ -1809,21 +1812,16 @@
       "note": "Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against context.batch_branch. All four verdicts have explicit routes: changes_requested → resolve_review_integration, approved_with_comments → resolve_review_integration, needs_human → check_review_posted (effect verification gate) → derive_batch_ci_event, approved → check_review_posted → derive_batch_ci_event. On tool-level failure, routes to resolve_review_integration. needs_human is explicitly routed to satisfy the unrouted-verdict-value semantic rule.\n"
     },
     "check_review_posted": {
-      "tool": "run_python",
+      "tool": "verify_review_receipt",
       "with": {
-        "callable": "autoskillit.smoke_utils.check_review_posted",
-        "work_dir": "${{ context.work_dir }}",
-        "args": {
-          "cwd": "${{ context.work_dir }}",
-          "receipt_path": "${{ context.review_receipt_path }}",
-          "mode": "github",
-          "repository": "${{ context.review_repository }}",
-          "pr_number": "${{ context.review_pr_number }}",
-          "head_sha": "${{ context.review_head_sha }}",
-          "logical_iteration": "merge-prs:integration",
-          "operation_key": "${{ context.review_operation_key }}",
-          "post_state": "${{ context.review_post_state }}"
-        }
+        "cwd": "${{ context.work_dir }}",
+        "receipt_path": "${{ context.review_receipt_path }}",
+        "mode": "github",
+        "repository": "${{ context.review_repository }}",
+        "pr_number": "${{ context.review_pr_number }}",
+        "head_sha": "${{ context.pr_head_sha }}",
+        "logical_iteration": "merge-prs:integration",
+        "post_state": "${{ context.review_post_state }}"
       },
       "on_result": [
         {
@@ -1852,6 +1850,7 @@
           "repository": "${{ context.review_repository }}",
           "pr_number": "${{ context.review_pr_number }}",
           "pr_head_sha": "${{ context.pr_head_sha }}",
+          "anchor_authority_path": "${{ context.anchor_authority_path }}",
           "logical_iteration": "resolve-review:integration",
           "receipt_path": "{{AUTOSKILLIT_TEMP}}/resolve-review/iter_0/batch_review_response_${{ context.review_pr_number }}.json"
         },
@@ -1915,21 +1914,16 @@
       "note": "Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and summary review comments from GitHub and applies fixes. Retries up to 2 times (3 total attempts) before escalating to register_clone_failure (REQ-REVIEW-005). Routes via on_result: verdict dispatch — real_fix/already_green route through pre_review_rebase_integration (fetch+rebase before push); flake_suspected/ ci_only_failure escalate to register_clone_failure.\n"
     },
     "check_resolve_review_posted": {
-      "tool": "run_python",
+      "tool": "verify_review_receipt",
       "with": {
-        "callable": "autoskillit.smoke_utils.check_review_posted",
-        "work_dir": "${{ context.work_dir }}",
-        "args": {
-          "cwd": "${{ context.work_dir }}",
-          "receipt_path": "${{ context.resolve_review_receipt_path }}",
-          "mode": "github",
-          "repository": "${{ context.review_repository }}",
-          "pr_number": "${{ context.review_pr_number }}",
-          "head_sha": "${{ context.resolve_review_head_sha }}",
-          "logical_iteration": "resolve-review:integration",
-          "operation_key": "${{ context.resolve_review_operation_key }}",
-          "post_state": "${{ context.resolve_review_post_state }}"
-        }
+        "cwd": "${{ context.work_dir }}",
+        "receipt_path": "${{ context.resolve_review_receipt_path }}",
+        "mode": "github",
+        "repository": "${{ context.review_repository }}",
+        "pr_number": "${{ context.review_pr_number }}",
+        "head_sha": "${{ context.pr_head_sha }}",
+        "logical_iteration": "resolve-review:integration",
+        "post_state": "${{ context.resolve_review_post_state }}"
       },
       "on_result": [
         {

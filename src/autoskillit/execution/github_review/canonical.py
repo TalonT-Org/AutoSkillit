@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
+from dataclasses import InitVar, dataclass
 from pathlib import PurePosixPath
+from types import MappingProxyType
 from typing import Any
 
 import regex as re
 
 from autoskillit.core import (
+    AdmittedAnchor,
+    AnchorAdmission,
+    DiffAnchorAuthority,
     GitHubReviewComment,
     GitHubReviewRequest,
+    admit_anchor,
     is_valid_github_review_logical_iteration,
     normalize_owner_repo,
 )
@@ -19,6 +26,94 @@ from autoskillit.core import (
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
 _EVENTS = frozenset({"APPROVE", "COMMENT", "REQUEST_CHANGES"})
 _SIDES = frozenset({"LEFT", "RIGHT"})
+_FINDING_ADMISSION_TOKEN = object()
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalFinding:
+    canonical_index: int
+    original_index: int
+    digest: str
+    wire: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "wire", MappingProxyType(dict(self.wire)))
+
+
+@dataclass(frozen=True, slots=True)
+class AdmittedFinding(CanonicalFinding):
+    anchor: AdmittedAnchor
+    _token: InitVar[object] = None
+
+    def __post_init__(self, _token: object) -> None:
+        CanonicalFinding.__post_init__(self)
+        if _token is not _FINDING_ADMISSION_TOKEN:
+            raise TypeError("AdmittedFinding values can only be created by admit_findings")
+        if not isinstance(self.anchor, AdmittedAnchor) or any(
+            self.wire[key] != getattr(self.anchor, key)
+            for key in ("path", "line", "side", "start_line", "start_side")
+        ):
+            raise ValueError("finding must carry its admitted anchor")
+
+
+@dataclass(frozen=True, slots=True)
+class RejectedFinding:
+    finding: CanonicalFinding
+    reason: AnchorAdmission
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionOutcome:
+    admitted: tuple[AdmittedFinding, ...]
+    rejected: tuple[RejectedFinding, ...]
+
+
+def canonical_findings(request: GitHubReviewRequest) -> tuple[CanonicalFinding, ...]:
+    return tuple(
+        CanonicalFinding(
+            canonical_index,
+            original_index,
+            hashlib.sha256(
+                json.dumps(
+                    wire, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+            ).hexdigest(),
+            wire,
+        )
+        for canonical_index, (original_index, wire) in enumerate(
+            canonical_comment_records(request)
+        )
+    )
+
+
+def admit_findings(
+    findings: tuple[CanonicalFinding, ...],
+    authority: DiffAnchorAuthority,
+) -> AdmissionOutcome:
+    admitted: list[AdmittedFinding] = []
+    rejected: list[RejectedFinding] = []
+    for finding in findings:
+        anchor = admit_anchor(
+            authority,
+            **{
+                key: finding.wire[key]
+                for key in ("path", "line", "side", "start_line", "start_side")
+            },
+        )
+        if isinstance(anchor, AdmittedAnchor):
+            admitted.append(
+                AdmittedFinding(
+                    finding.canonical_index,
+                    finding.original_index,
+                    finding.digest,
+                    finding.wire,
+                    anchor,
+                    _token=_FINDING_ADMISSION_TOKEN,
+                )
+            )
+        else:
+            rejected.append(RejectedFinding(finding, anchor))
+    return AdmissionOutcome(tuple(admitted), tuple(rejected))
 
 
 def _normalize_text(value: str) -> str:
@@ -113,6 +208,8 @@ def _validated_identity_wire(request: GitHubReviewRequest) -> dict[str, Any]:
         raise ValueError("logical_iteration must be a namespaced string")
     return {
         "comments": [record for _, record in canonical_comment_records(request)],
+        "authority_digest": request.anchor_authority.authority_digest,
+        "availability": request.anchor_authority.availability.value,
         "head_sha": request.head_sha,
         "logical_iteration": request.logical_iteration,
         "pr_number": request.pr_number,

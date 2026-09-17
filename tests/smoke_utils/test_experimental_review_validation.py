@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import DiffAnchorAuthority
 from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITORS,
     aggregate_combined_review_candidates,
@@ -21,6 +22,17 @@ from tests.smoke_utils._experimental_helpers import (
 )
 
 pytestmark = [pytest.mark.medium]
+
+
+def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
+    return DiffAnchorAuthority.authoritative(
+        repository="openai/autoskillit",
+        pr_number=1,
+        head_sha="a" * 40,
+        generation_id="generation",
+        right_side_lines=right_side_lines,
+        left_side_lines={},
+    )
 
 
 def test_malformed_review_envelope_bounds_untrusted_output() -> None:
@@ -45,7 +57,7 @@ def test_malformed_review_envelope_bounds_untrusted_output() -> None:
     assert all(len(str(error).encode()) <= 1024 for error in envelope["errors"])
 
 
-def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path) -> None:
+def test_experimental_output_validation_is_per_producer_and_fixed_order(tmp_path: Path) -> None:
     reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
     input_candidates = {
         abstraction: _experimental_candidate("overengineering_abstraction_surface"),
@@ -62,7 +74,7 @@ def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path
         },
     }
     kwargs = {
-        "valid_diff_lines": {"src/app.py": [42]},
+        "anchor_authority": _authority({"src/app.py": [42]}),
         "snapshot": {"head_sha": "head", "diff_sha256": "diff"},
         "review_root": str(tmp_path),
     }
@@ -101,7 +113,7 @@ def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path
     malformed_outputs[abstraction]["output"][0]["message"] = ""
     degraded = validate_experimental_auditor_outputs(outputs=malformed_outputs, **kwargs)
     assert degraded["state"] == "degraded"
-    assert degraded["candidates"] == []
+    assert [item["auditor_name"] for item in degraded["candidates"]] == [reachability]
     assert degraded["status_by_name"][reachability]["status"] == "success"
     assert degraded["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
     assert len(degraded["malformed_envelopes"]) == 1
@@ -110,7 +122,7 @@ def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path
     wrong_enum_type[abstraction]["output"][0]["severity"] = []
     degraded = validate_experimental_auditor_outputs(outputs=wrong_enum_type, **kwargs)
     assert degraded["state"] == "degraded"
-    assert degraded["candidates"] == []
+    assert [item["auditor_name"] for item in degraded["candidates"]] == [reachability]
     assert degraded["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
 
     empty = validate_experimental_auditor_outputs(
@@ -155,13 +167,13 @@ def test_experimental_validation_degrades_extreme_confidence_without_raising(
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
 
     assert result["state"] == "degraded"
-    assert result["candidates"] == []
+    assert [item["auditor_name"] for item in result["candidates"]] == [reachability]
     assert result["status_by_name"][reachability]["status"] == "success"
     assert result["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
     assert len(result["malformed_envelopes"]) == 1
@@ -182,13 +194,13 @@ def test_experimental_validation_bounds_oversized_payload_and_rejects_mixed_batc
             },
             abstraction: {"terminal_status": "success", "output": [oversized]},
         },
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
 
     assert result["state"] == "degraded"
-    assert result["candidates"] == []
+    assert [item["auditor_name"] for item in result["candidates"]] == [reachability]
     envelope = result["malformed_envelopes"][0]
     assert envelope["received_byte_length"] > 1024 * 1024
     assert envelope["excerpt_byte_length"] <= 4096
@@ -199,7 +211,6 @@ def test_experimental_validation_bounds_oversized_payload_and_rejects_mixed_batc
     ("field", "value", "expected_reason"),
     [
         ("file", "../outside.py", "path_escape"),
-        ("line", 99, "not_changed_line"),
     ],
 )
 def test_experimental_validation_preserves_specific_reason_codes(
@@ -220,7 +231,7 @@ def test_experimental_validation_preserves_specific_reason_codes(
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
@@ -272,7 +283,7 @@ def test_experimental_validation_rejects_each_missing_behavior_facet(
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
@@ -321,7 +332,7 @@ def test_experimental_validation_rejects_behavior_facet_superstrings(
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
@@ -346,7 +357,7 @@ def test_experimental_validation_accepts_boundaries_and_negated_facets(tmp_path:
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
@@ -368,7 +379,7 @@ def test_experimental_candidate_closed_key_error_lists_missing_and_extra(tmp_pat
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
@@ -393,7 +404,7 @@ def test_experimental_candidate_closed_key_error_lists_missing_and_extra(tmp_pat
         ("schema_invalid", "schema_invalid"),
     ],
 )
-def test_experimental_failure_matrix_degrades_without_partial_candidates(
+def test_experimental_failure_matrix_isolates_invalid_producer(
     tmp_path: Path, failure_kind: str, expected_reason: str
 ) -> None:
     reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
@@ -416,13 +427,13 @@ def test_experimental_failure_matrix_degrades_without_partial_candidates(
 
     result = validate_experimental_auditor_outputs(
         outputs=outputs,
-        valid_diff_lines={"src/app.py": [42]},
+        anchor_authority=_authority({"src/app.py": [42]}),
         snapshot={"head_sha": "head", "diff_sha256": "diff"},
         review_root=str(tmp_path),
     )
 
     assert result["state"] == "degraded"
-    assert result["candidates"] == []
+    assert [item["auditor_name"] for item in result["candidates"]] == [reachability]
     assert result["status_by_name"][reachability]["status"] == "success"
     assert result["status_by_name"][abstraction]["reason_code"] == expected_reason
     envelope = result["malformed_envelopes"][0]
@@ -487,6 +498,7 @@ def test_experimental_aggregation_is_deterministic_and_retains_losers() -> None:
     kwargs = {
         "dispositions": dispositions,
         "prior_resolved_findings": [{"file": "src/old.py", "line": 12}],
+        "anchor_authority": _authority({}),
     }
 
     forward = aggregate_combined_review_candidates(candidates=candidates, **kwargs)
@@ -527,11 +539,13 @@ def test_experimental_aggregation_rejects_accepted_disposition_without_identity(
         candidates=[candidate],
         dispositions=[{"candidate_id": "candidate-1", "reason_code": "accepted"}],
         prior_resolved_findings=[],
+        anchor_authority=_authority({}),
     )
 
     assert result == {
         "state": "complete",
         "survivors": [],
+        "unpostable": [],
         "aggregation_records": [],
         "validation_errors": [],
     }
@@ -596,11 +610,13 @@ def test_combined_review_aggregation_is_cross_source_and_completion_order_indepe
         "prior_resolved_findings": [],
         "standard_findings": standard,
         "deletion_findings": deletion,
-        "valid_diff_lines": {
-            "src/app.py": [42],
-            "src/deleted.py": [8],
-            "src/other.py": [19],
-        },
+        "anchor_authority": _authority(
+            {
+                "src/app.py": [42],
+                "src/deleted.py": [8],
+                "src/other.py": [19],
+            }
+        ),
         "snapshot": {"head_sha": "head", "base_sha": "base"},
         "review_root": str(Path.cwd()),
     }

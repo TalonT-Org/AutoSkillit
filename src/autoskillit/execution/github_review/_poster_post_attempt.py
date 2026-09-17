@@ -25,6 +25,7 @@ from autoskillit.execution.github_review.gateway import DefaultGitHubReviewGatew
 from autoskillit.execution.github_review.ledger import GitHubReviewLedger
 
 from . import _poster_support
+from .canonical import AdmittedFinding, canonical_findings
 
 _EXPECTED_REMOTE_STATES = {
     "APPROVE": "APPROVED",
@@ -40,7 +41,7 @@ async def reconcile_payload(
     request: GitHubReviewRequest,
     operation_key: str,
     payload: Mapping[str, Any],
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
     authenticated_login: str,
 ) -> _poster_support.Reconciliation:
     reviews = await gateway.list_reviews(request.repository, request.pr_number)
@@ -92,7 +93,7 @@ async def _reconcile_remote_comment_set(
     request: GitHubReviewRequest,
     review_id: int,
     payload: Mapping[str, Any],
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
 ) -> _poster_support.Reconciliation:
     comments = await gateway.list_review_comments(
         request.repository,
@@ -160,7 +161,7 @@ def finalize(
     wall_clock: Callable[[], float],
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
     omitted: tuple[GitHubReviewFindingDisposition, ...],
     effective_event: str,
     attempt_digest: str,
@@ -189,7 +190,7 @@ def finalize(
     if len(dispositions) != len(request.comments):
         raise ValueError("review finding accounting is not exhaustive")
     now = wall_clock()
-    all_findings = _poster_support.canonical_findings(request)
+    all_findings = canonical_findings(request)
     receipt = GitHubReviewReceipt(
         schema_version=1,
         operation_key=operation_key,
@@ -201,7 +202,7 @@ def finalize(
         effective_event=effective_event,
         requested_body_digest=_poster_support.text_digest(request.body),
         effective_body_digest=_poster_support.effective_body_digest(
-            request, operation_key, findings, effective_event
+            request, operation_key, findings, effective_event, omitted
         ),
         canonical_finding_digest=_poster_support.finding_set_digest(all_findings),
         state=state,

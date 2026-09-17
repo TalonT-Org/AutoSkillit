@@ -42,12 +42,17 @@ comments and emits a verdict for recipe routing.
 
 ## Arguments
 
+- **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
+  bound to repository, PR, and head SHA. Required for inline comments; when absent,
+  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+
 `/autoskillit:audit-claims <worktree_path> <base_branch> <pr_url>`
 
 - **worktree_path** — Absolute path to the research worktree (skill derives
   `feature_branch` from `git rev-parse --abbrev-ref HEAD` inside it)
 - **base_branch** — The base branch the PR targets (e.g., "main")
 - **pr_url** — Explicit PR URL passed by the recipe (avoids re-discovering the PR)
+- **valid_lines_path** (optional) — right-side valid-line annotation evidence.
 
 ## When to Use
 
@@ -257,14 +262,57 @@ Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`. 
 
 1. Collect all Phase 2 subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition by postability: validate each finding's `line` against the PR diff hunks.
-   Findings whose line number falls outside a diff hunk are `UNPOSTABLE_FINDINGS` —
-   they cannot be posted as inline comments via the batch Reviews API.
-   Findings with valid diff-hunk lines are `FILTERED_FINDINGS`.
-4. Bucket `FILTERED_FINDINGS` by actionability:
+3. Use `aggregate_combined_review_candidates` with the deserialized
+   `anchor_authority_path` artifact to partition findings into `FILTERED_FINDINGS`
+   (`survivors`) and `UNPOSTABLE_FINDINGS` (`unpostable`, with admission reasons).
+   Retain `valid_lines_path` as right-side annotation evidence, never an alternative
+   authority. Unavailable authority and available-empty authority both admit no
+   inline comments; available authority requires exact side-aware membership.
+   Include every unpostable finding in the review body's "Outside Diff Range"
+   section. Never fall back to hunk intervals, file-level comments, or individual
+   comment requests. Missing authority permits body-only publication.
+4. Bucket all findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`) by actionability
+   so unpostable findings still contribute to the verdict:
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
+
+Before computing the verdict, run the shared programmatic partition below. Use the
+absolute review checkout for `REVIEW_ROOT`; capture `REVIEW_SNAPSHOT` from the
+reviewed head and base commits as `{"head_sha": pr_head_sha, "base_sha": base_sha}`.
+An invalid supplied artifact stops publication; absence creates explicit unavailable
+authority. Do not replace a failed artifact read with permissive line ranges.
+
+```python
+import json
+from pathlib import Path
+
+from autoskillit.core import DiffAnchorAuthority
+from autoskillit.smoke_utils import aggregate_combined_review_candidates
+
+ANCHOR_AUTHORITY = (
+    DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
+    if anchor_authority_path
+    else DiffAnchorAuthority.unavailable(
+        repository=repository, pr_number=int(pr_number), head_sha=pr_head_sha
+    )
+)
+AGGREGATION_RESULT = aggregate_combined_review_candidates(
+    candidates=[],
+    dispositions=[],
+    prior_resolved_findings=[],
+    standard_findings=FINDINGS,
+    allowed_dimensions={"external", "methodological", "comparative"},
+    anchor_authority=ANCHOR_AUTHORITY,
+    snapshot=REVIEW_SNAPSHOT,
+    review_root=REVIEW_ROOT,
+)
+FILTERED_FINDINGS = AGGREGATION_RESULT["survivors"]
+UNPOSTABLE_FINDINGS = AGGREGATION_RESULT["unpostable"]
+```
+
+If aggregation is degraded by malformed findings, stop publication and report
+`needs_human`. Anchor rejection alone does not degrade the audit.
 
 ### Step 4.5: Echo Primary Obligation
 
@@ -301,17 +349,26 @@ caller-supplied `receipt_path`. The logical iteration must start with `audit-cla
 The receipt must be under `${AUTOSKILLIT_TEMP}` and use the exact
 `batch_review_response_${pr_number}.json` basename.
 
-Prepare one complete `comments` array from `FINDINGS`, filtering to critical and warning
+Prepare one complete `comments` array from `FILTERED_FINDINGS`, filtering to critical and warning
 entries with a repository-relative path and positive numeric line. Preserve `side: "RIGHT"`.
 Put findings without a valid line in the complete review `body`, not in `comments`.
 
 Map `approved` to `APPROVE`, `needs_human` to `COMMENT`, and `changes_requested` to
 `REQUEST_CHANGES`. Call the structured publication tool once:
 
+Render the unpostable partition into the complete review body before publication:
+
+```python
+from autoskillit.smoke_utils import render_unpostable_review_section
+
+REVIEW_BODY += render_unpostable_review_section(UNPOSTABLE_FINDINGS)
+```
+
 ```text
 post_pr_review(
   cwd: "$worktree_path",
   receipt_path: "$receipt_path",
+  anchor_authority_path: "$anchor_authority_path",
   repository: "$repository",
   pr_number: "$pr_number",
   head_sha: "$pr_head_sha",

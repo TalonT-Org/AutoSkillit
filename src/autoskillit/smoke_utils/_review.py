@@ -32,6 +32,7 @@ def annotate_pr_diff(
     from autoskillit.core import atomic_write, parse_github_repo  # noqa: PLC0415
     from autoskillit.execution import (
         annotate_diff,
+        build_anchor_authority,
         compute_diff_metrics,
         extract_valid_lines,
         parse_hunk_ranges,
@@ -53,6 +54,7 @@ def annotate_pr_diff(
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"hunk_ranges_{pr_number}.json"
     valid_lines_path = out / f"valid_lines_{pr_number}.json"
+    anchor_authority_path = out / f"anchor_authority_{pr_number}.json"
     metrics_path = out / f"metrics_{pr_number}.json"
     metrics_path.unlink(missing_ok=True)
 
@@ -94,14 +96,17 @@ def annotate_pr_diff(
             raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
         return value
 
-    def _read_pr_refs() -> tuple[str, str]:
+    def _read_pr_refs() -> tuple[str, str, str]:
         result = subprocess.run(
             [
                 "gh",
                 "api",
                 f"repos/{{owner}}/{{repo}}/pulls/{pr_number}",
                 "--jq",
-                "{headRefOid: .head.sha, baseRefOid: .base.sha}",
+                (
+                    "{headRefOid:.head.sha,baseRefOid:.base.sha,"
+                    "baseRepoFullName:.base.repo.full_name}"
+                ),
             ],
             capture_output=True,
             text=False,
@@ -119,11 +124,17 @@ def annotate_pr_diff(
             raise RuntimeError("live PR head/base refs were malformed")
         head_sha = payload.get("headRefOid")
         base_sha = payload.get("baseRefOid")
+        base_repo_full_name = payload.get("baseRepoFullName")
         if not isinstance(head_sha, str) or not is_valid_github_review_head_sha(head_sha.strip()):
             raise RuntimeError("live PR head ref was missing")
         if not isinstance(base_sha, str) or not is_valid_github_review_head_sha(base_sha.strip()):
             raise RuntimeError("live PR base ref was missing")
-        return head_sha.strip(), base_sha.strip()
+        if (
+            not isinstance(base_repo_full_name, str)
+            or len(base_repo_full_name.strip().split("/")) != 2
+        ):
+            raise RuntimeError("live PR base repository was missing")
+        return head_sha.strip(), base_sha.strip(), base_repo_full_name.strip()
 
     def _read_provider_authority() -> tuple[str, str, str, str]:
         result = _run(
@@ -292,7 +303,7 @@ def annotate_pr_diff(
         }
     else:
         refs_before = _read_pr_refs()
-        head_sha, base_sha = refs_before
+        head_sha, base_sha, provider_base_repo_full_name = refs_before
         diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
         refs_after = _read_pr_refs()
         if refs_after != refs_before:
@@ -315,8 +326,9 @@ def annotate_pr_diff(
         sort_keys=True,
         separators=(",", ":"),
     )
+    _left_lines, right_lines = extract_valid_lines(diff_text)
     valid_lines_text = json.dumps(
-        extract_valid_lines(diff_text),
+        right_lines,
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -329,6 +341,27 @@ def annotate_pr_diff(
         file_threshold=file_thresh,
     )
     diff_sha256 = hashlib.sha256(diff_bytes).hexdigest()
+    generation_material = json.dumps(
+        {
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+            "merge_base_sha": merge_base_sha,
+            "base_repo_full_name": provider_base_repo_full_name,
+            "diff_sha256": diff_sha256,
+            "profile": diff_source,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    generation_id = hashlib.sha256(generation_material).hexdigest()
+    authority = build_anchor_authority(
+        diff_text,
+        repository=provider_base_repo_full_name.casefold(),
+        pr_number=int(pr_number),
+        head_sha=head_sha,
+        generation_id=generation_id,
+    )
+    authority_text = json.dumps(authority.to_wire(), sort_keys=True, separators=(",", ":"))
 
     def _artifact_record(path: Path, text: str) -> dict[str, str | int]:
         encoded = text.encode("utf-8")
@@ -342,26 +375,15 @@ def annotate_pr_diff(
         "annotated_diff": _artifact_record(annotated_path, annotated_text),
         "hunk_ranges": _artifact_record(ranges_path, ranges_text),
         "valid_lines": _artifact_record(valid_lines_path, valid_lines_text),
+        "anchor_authority": _artifact_record(anchor_authority_path, authority_text),
     }
-    generation_material = json.dumps(
-        {
-            "head_sha": head_sha,
-            "base_sha": base_sha,
-            "merge_base_sha": merge_base_sha,
-            "base_repo_full_name": provider_base_repo_full_name,
-            "diff_sha256": diff_sha256,
-            "profile": diff_source,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
     metrics_data = {
         "_head_sha": head_sha,
         "_base_sha": base_sha,
         "_merge_base_sha": merge_base_sha,
         "_base_repo_full_name": provider_base_repo_full_name,
         "review_mode": selected_review_mode,
-        "generation_id": hashlib.sha256(generation_material).hexdigest(),
+        "generation_id": generation_id,
         "diff_sha256": diff_sha256,
         "diff_byte_length": len(diff_bytes),
         "diff_source": diff_source,
@@ -379,6 +401,7 @@ def annotate_pr_diff(
         atomic_write(annotated_path, annotated_text)
         atomic_write(ranges_path, ranges_text)
         atomic_write(valid_lines_path, valid_lines_text)
+        atomic_write(anchor_authority_path, authority_text)
         atomic_write(metrics_path, metrics_text)
         _writes_succeeded = True
     finally:
@@ -392,6 +415,7 @@ def annotate_pr_diff(
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
         "valid_lines_path": str(valid_lines_path),
+        "anchor_authority_path": str(anchor_authority_path),
         "diff_metrics_path": str(metrics_path),
     }
 

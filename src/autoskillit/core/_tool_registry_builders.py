@@ -26,6 +26,7 @@ _INSPECTION_TOOLS = frozenset(
         "inspect_session_logs",
         "get_pipeline_report",
         "get_pr_reviews",
+        "verify_review_receipt",
         "get_quota_events",
         "get_timing_summary",
         "get_token_summary",
@@ -166,6 +167,34 @@ def _tool(
         initialization_operation=_initialization_operation(name),
         automatic_recipe_delivery=automatic_recipe_delivery,
         recovery_recipe_delivery=recovery_recipe_delivery,
+    )
+
+
+def _verify_review_receipt() -> ToolDef:
+    params = (
+        "cwd",
+        "receipt_path",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "mode",
+        "post_state",
+    )
+    return _tool(
+        "verify_review_receipt",
+        params,
+        required=params,
+        wire_types={
+            "cwd": ToolWireType.STRING,
+            "receipt_path": ToolWireType.STRING,
+            "repository": ToolWireType.STRING,
+            "pr_number": ToolWireType.INTEGER,
+            "head_sha": ToolWireType.STRING,
+            "logical_iteration": ToolWireType.STRING,
+            "mode": ToolWireType.STRING,
+            "post_state": ToolWireType.STRING,
+        },
     )
 
 

@@ -200,6 +200,7 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
         "post_pr_review": {
             "cwd": ToolWireType.STRING,
             "receipt_path": ToolWireType.STRING,
+            "anchor_authority_path": ToolWireType.STRING,
             "repository": ToolWireType.STRING,
             "pr_number": ToolWireType.INTEGER,
             "head_sha": ToolWireType.STRING,
@@ -208,6 +209,16 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             "body": ToolWireType.STRING,
             "comments": ToolWireType.ARRAY,
             "dry_run": ToolWireType.BOOLEAN,
+        },
+        "verify_review_receipt": {
+            "cwd": ToolWireType.STRING,
+            "receipt_path": ToolWireType.STRING,
+            "repository": ToolWireType.STRING,
+            "pr_number": ToolWireType.INTEGER,
+            "head_sha": ToolWireType.STRING,
+            "logical_iteration": ToolWireType.STRING,
+            "mode": ToolWireType.STRING,
+            "post_state": ToolWireType.STRING,
         },
     }
 
@@ -355,6 +366,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "get_issue_title",
             "get_pipeline_report",
             "get_pr_reviews",
+            "verify_review_receipt",
             "get_quota_events",
             "get_timing_summary",
             "get_token_summary",

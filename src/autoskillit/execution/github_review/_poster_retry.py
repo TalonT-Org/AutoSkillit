@@ -16,6 +16,7 @@ from autoskillit.core import (
 
 from . import _poster_support
 from ._ledger_schema import MutationSlot
+from .canonical import AdmittedFinding
 from .ledger import ReviewAttemptRecord
 
 if TYPE_CHECKING:
@@ -26,7 +27,8 @@ def attempt_material(
     *,
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
+    omitted: tuple[GitHubReviewFindingDisposition, ...],
     effective_event: str,
 ) -> tuple[dict[str, Any], bytes, str]:
     """Build the exact payload and digest persisted for one attempt."""
@@ -35,6 +37,7 @@ def attempt_material(
         request=request,
         operation_key=operation_key,
         findings=findings,
+        omitted=omitted,
         event=effective_event,
     )
     payload_json = _poster_support.canonical_json(payload)
@@ -54,7 +57,7 @@ def schedule_retry(
     status_code: int | None,
     error: str | None,
     retry_attempt_number: int,
-    retry_findings: tuple[_poster_support.CanonicalFinding, ...],
+    retry_findings: tuple[AdmittedFinding, ...],
     retry_effective_event: str,
     retry_omitted: tuple[GitHubReviewFindingDisposition, ...],
 ) -> None:
@@ -64,6 +67,7 @@ def schedule_retry(
         request=request,
         operation_key=operation_key,
         findings=retry_findings,
+        omitted=retry_omitted,
         effective_event=retry_effective_event,
     )
     poster.ledger.complete_attempt_and_schedule_retry(
@@ -87,7 +91,7 @@ async def resume_pending_retry(
     *,
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
     attempt: ReviewAttemptRecord,
 ) -> GitHubReviewPostResult:
     """Validate and claim a retry plan recovered from the durable ledger."""

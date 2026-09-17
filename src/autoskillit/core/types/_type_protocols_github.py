@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_github_review import GitHubReviewPostResult, GitHubReviewRequest
+from ._type_github_review import (
+    GitHubReviewPostResult,
+    GitHubReviewReceipt,
+    GitHubReviewRequest,
+)
 from ._type_results_execution import CIRunScope
 
 __all__ = [
@@ -21,6 +25,8 @@ class GitHubReviewPosterProtocol(Protocol):
     """Authoritative, idempotent pull-request review publisher."""
 
     async def post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult: ...
+
+    def verify_receipt(self, operation_key: str) -> GitHubReviewReceipt | None: ...
 
 
 @runtime_checkable

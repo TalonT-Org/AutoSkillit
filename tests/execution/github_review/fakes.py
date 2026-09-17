@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    DiffAnchorAuthority,
     GitHubReviewComment,
     GitHubReviewRequest,
     ReviewResponseClass,
@@ -79,6 +80,7 @@ class StatefulReviewGateway:
         self.reviews: list[dict[str, Any]] = []
         self.comments_by_review: dict[int, list[dict[str, Any]]] = {}
         self.create_calls: list[dict[str, Any]] = []
+        self.call_trace: list[str] = []
         self.create_timestamps: list[float] = []
         self.scope_calls = 0
         self.authenticated_user_calls = 0
@@ -118,6 +120,7 @@ class StatefulReviewGateway:
     ) -> GatewayResult:
         del repository, pr_number
         self.create_calls.append(payload)
+        self.call_trace.append("create_review")
         self.create_timestamps.append(self.clock())
         outcome = self.outcomes.pop(0)
         review_id = self._commit(payload) if outcome.commit else None
@@ -135,6 +138,7 @@ class StatefulReviewGateway:
         )
 
     async def list_reviews(self, repository: str, pr_number: int) -> GatewayResult:
+        self.call_trace.append("list_reviews")
         del repository, pr_number
         self.review_read_calls += 1
         if self.fail_reads:
@@ -231,6 +235,22 @@ def _request(tmp_path: Path, **overrides: object) -> GitHubReviewRequest:
         "receipt_path": tmp_path / "receipts" / "review.json",
     }
     values.update(overrides)
+    if "anchor_authority" not in values:
+        right: dict[str, set[int]] = {}
+        left: dict[str, set[int]] = {}
+        for comment in values["comments"]:
+            lines = right if comment.side == "RIGHT" else left
+            lines.setdefault(comment.path, set()).update(
+                range(comment.start_line or comment.line, comment.line + 1)
+            )
+        values["anchor_authority"] = DiffAnchorAuthority.authoritative(
+            repository=str(values["repository"]).casefold(),
+            pr_number=values["pr_number"],
+            head_sha=values["head_sha"],
+            generation_id="test-generation",
+            right_side_lines=right,
+            left_side_lines=left,
+        )
     return GitHubReviewRequest(**values)
 
 

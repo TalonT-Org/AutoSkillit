@@ -23,6 +23,7 @@ class ReviewConsumer:
     failure_route: str
     logical_iteration: str
     logical_iteration_pattern: str = ""
+    verification_mode: str = "${{ context.review_mode }}"
 
 
 _CONSUMERS = (
@@ -50,6 +51,7 @@ _CONSUMERS = (
         failure_route="register_clone_failure",
         logical_iteration="",
         logical_iteration_pattern=r"merge-prs:[a-z0-9][a-z0-9-]*",
+        verification_mode="github",
     ),
     ReviewConsumer(
         recipe_name="remediation",
@@ -67,6 +69,7 @@ _CONSUMERS = (
         failure_route="escalate_stop",
         logical_iteration="",
         logical_iteration_pattern=r"review-research-pr:[a-z0-9][a-z0-9-]*",
+        verification_mode="github",
     ),
     ReviewConsumer(
         recipe_name="research-review",
@@ -76,6 +79,7 @@ _CONSUMERS = (
         failure_route="escalate_stop",
         logical_iteration="",
         logical_iteration_pattern=r"review-research-pr:[a-z0-9][a-z0-9-]*",
+        verification_mode="github",
     ),
 )
 
@@ -150,6 +154,7 @@ def test_review_annotation_requires_a_stable_live_head_and_shared_namespace(
     assert annotate["with"]["work_dir"] == consumer.work_dir_ref
     assert "args" not in annotate["with"]
     assert annotate["capture"]["pr_head_sha"] == "${{ result.pr_head_sha }}"
+    assert annotate["capture"]["anchor_authority_path"] == ("${{ result.anchor_authority_path }}")
     assert annotate["on_failure"] == consumer.failure_route
     assert annotate["with"]["output_dir"] == review["with"]["output_dir"]
     assert annotate["with"]["output_dir"].startswith("{{AUTOSKILLIT_TEMP}}/")
@@ -168,6 +173,7 @@ def test_review_publisher_captures_receipt_identity(
     assert skill_inputs["repository"] == "${{ context.review_repository }}"
     assert skill_inputs["pr_number"] == consumer.pr_ref
     assert skill_inputs["pr_head_sha"] == "${{ context.pr_head_sha }}"
+    assert skill_inputs["anchor_authority_path"] == ("${{ context.anchor_authority_path }}")
     assert skill_inputs["receipt_path"].endswith(f"/batch_review_response_{consumer.pr_ref}.json")
     assert capture["review_operation_key"] == "${{ result.review_operation_key }}"
     assert capture["review_head_sha"] == "${{ result.review_head_sha }}"
@@ -182,29 +188,27 @@ def test_review_publisher_captures_receipt_identity(
 
 
 @pytest.mark.parametrize("consumer", _CONSUMERS, ids=lambda case: case.recipe_name)
-def test_check_review_posted_receives_the_exact_publication_identity(
+def test_verify_review_receipt_receives_the_exact_publication_identity(
     consumer: ReviewConsumer,
 ) -> None:
-    """The verifier receives only captured server identity, never a recomputed approximation."""
+    """The server verifier receives the artifact plus independent operation identity."""
     steps = _load_steps(consumer)
     review = steps[consumer.review_step]
     check = steps["check_review_posted"]
     with_block = check["with"]
-    with_args = with_block["args"]
     expected_logical_iteration = review["with"]["skill_inputs"]["logical_iteration"]
 
-    assert check["tool"] == "run_python"
-    assert with_block["callable"] == "autoskillit.smoke_utils.check_review_posted"
-    assert with_block["work_dir"] == consumer.work_dir_ref
-    assert with_args["cwd"] == consumer.work_dir_ref
-    assert with_args["receipt_path"] == "${{ context.review_receipt_path }}"
-    assert with_args["repository"] == "${{ context.review_repository }}"
-    assert with_args["pr_number"] == consumer.pr_ref
-    assert with_args["head_sha"] == "${{ context.review_head_sha }}"
-    assert with_args["logical_iteration"] == expected_logical_iteration
-    assert with_args["operation_key"] == "${{ context.review_operation_key }}"
-    assert with_args["post_state"] == "${{ context.review_post_state }}"
-    assert "output_dir" not in with_block
+    assert check["tool"] == "verify_review_receipt"
+    assert with_block == {
+        "cwd": consumer.work_dir_ref,
+        "receipt_path": "${{ context.review_receipt_path }}",
+        "mode": consumer.verification_mode,
+        "repository": "${{ context.review_repository }}",
+        "pr_number": consumer.pr_ref,
+        "head_sha": "${{ context.pr_head_sha }}",
+        "logical_iteration": expected_logical_iteration,
+        "post_state": "${{ context.review_post_state }}",
+    }
     assert check["on_failure"] == consumer.failure_route
     assert check["on_result"][0] == {
         "when": "${{ result.reviews_posted }} == 'false'",
@@ -268,7 +272,7 @@ def test_resolve_review_publication_is_effect_verified(
     steps = load_yaml(builtin_recipes_dir() / f"{recipe_name}.yaml")["steps"]
     resolve = steps[resolve_step]
     check = steps["check_resolve_review_posted"]
-    args = check["with"]["args"]
+    args = check["with"]
 
     assert (
         resolve["capture"]
@@ -288,16 +292,15 @@ def test_resolve_review_publication_is_effect_verified(
         "when": "${{ result.review_post_state }} == 'RECONCILED'",
         "route": "check_resolve_review_posted",
     } in resolve["on_result"]
-    assert check["with"]["callable"] == "autoskillit.smoke_utils.check_review_posted"
+    assert check["tool"] == "verify_review_receipt"
     assert args == {
         "cwd": "${{ context.work_dir }}",
         "receipt_path": "${{ context.resolve_review_receipt_path }}",
         "mode": "github",
         "repository": "${{ context.review_repository }}",
         "pr_number": pr_ref,
-        "head_sha": "${{ context.resolve_review_head_sha }}",
+        "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": logical_iteration,
-        "operation_key": "${{ context.resolve_review_operation_key }}",
         "post_state": "${{ context.resolve_review_post_state }}",
     }
     assert check["on_result"][0] == {

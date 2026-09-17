@@ -1,34 +1,23 @@
-"""Review-design, receipt, and verdict logic for smoke_utils.
+"""Review-design and verdict logic for smoke_utils.
 
 Companion to ``_review.py`` (which holds the PR annotation pipeline and generic
-iteration guards). This module owns the review-loop guard, receipt validation,
-context enrichment, counter initialization, and verdict scoring.
+iteration guards). This module owns the review-loop guard, context enrichment,
+counter initialization, and verdict scoring.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import stat
 from datetime import UTC
 from pathlib import Path
-from typing import Any, TypeGuard
 
 from autoskillit.core import (
     atomic_write,
     get_logger,
-    is_final_github_review_state,
-    is_valid_github_review_head_sha,
-    is_valid_github_review_logical_iteration,
-    is_valid_github_review_operation_key,
-    is_valid_github_review_repository,
-    review_receipt_validation_error,
 )
 from autoskillit.recipe import get_experiment_type_by_name
 
 logger = get_logger(__name__)
-
-_REVIEW_RECEIPT_MAX_BYTES = 1_048_576
 
 # Verdicts in this set yield ``had_blocking=false`` unconditionally regardless
 # of local rounds: approved comments are one-shot, while needs_human skips review.
@@ -100,135 +89,6 @@ def check_review_loop(
     }
 
 
-def _review_check_failed(sentinel: str) -> dict[str, str]:
-    return {"reviews_posted": "false", "sentinel": sentinel}
-
-
-def _load_unique_json_object(raw: bytes) -> dict[str, Any] | None:
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON key: {key}")
-            result[key] = value
-        return result
-
-    try:
-        decoded = raw.decode("utf-8")
-        value = json.loads(decoded, object_pairs_hook=reject_duplicate_keys)
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-def _read_stable_private_receipt(path: Path) -> bytes | None:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        before = path.lstat()
-        if (
-            not stat.S_ISREG(before.st_mode)
-            or before.st_nlink != 1
-            or before.st_size > _REVIEW_RECEIPT_MAX_BYTES
-        ):
-            return None
-        descriptor = os.open(path, flags)
-    except OSError:
-        return None
-    try:
-        opened = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
-        ):
-            return None
-        raw = os.read(descriptor, _REVIEW_RECEIPT_MAX_BYTES + 1)
-        after = os.fstat(descriptor)
-        if len(raw) > _REVIEW_RECEIPT_MAX_BYTES or (
-            opened.st_dev,
-            opened.st_ino,
-            opened.st_size,
-            opened.st_mtime_ns,
-        ) != (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        ):
-            return None
-        return raw
-    except OSError:
-        return None
-    finally:
-        os.close(descriptor)
-
-
-def _is_positive_int(value: object) -> TypeGuard[int]:
-    return isinstance(value, int) and not isinstance(value, bool) and value > 0
-
-
-def check_review_posted(
-    *,
-    cwd: str,
-    receipt_path: str,
-    mode: str,
-    repository: str,
-    pr_number: int,
-    head_sha: str,
-    logical_iteration: str,
-    operation_key: str,
-    post_state: str,
-) -> dict[str, str]:
-    """Validate an authoritative, identity-bound PR-review receipt."""
-    if mode == "local":
-        return {"reviews_posted": "true", "sentinel": ""}
-    if mode != "github":
-        return _review_check_failed("invalid_review_mode")
-    if (
-        not is_valid_github_review_repository(repository)
-        or not _is_positive_int(pr_number)
-        or not is_valid_github_review_head_sha(head_sha)
-        or not is_valid_github_review_logical_iteration(logical_iteration)
-        or not is_valid_github_review_operation_key(operation_key)
-        or not is_final_github_review_state(post_state)
-    ):
-        return _review_check_failed("invalid_expected_identity")
-
-    cwd_path = Path(cwd)
-    receipt = Path(receipt_path)
-    if not cwd_path.is_absolute() or not receipt.is_absolute():
-        return _review_check_failed("invalid_receipt_path")
-    if receipt.name != f"batch_review_response_{pr_number}.json":
-        return _review_check_failed("invalid_receipt_basename")
-    try:
-        root = cwd_path.resolve(strict=True)
-        managed_temp = (root / ".autoskillit" / "temp").resolve(strict=True)
-        resolved_receipt = receipt.resolve(strict=True)
-        resolved_receipt.relative_to(managed_temp)
-    except (OSError, ValueError):
-        return _review_check_failed("receipt_outside_managed_temp")
-    if resolved_receipt != receipt:
-        return _review_check_failed("receipt_symlink")
-
-    raw = _read_stable_private_receipt(receipt)
-    payload = _load_unique_json_object(raw) if raw is not None else None
-    if payload is None:
-        return _review_check_failed("invalid_receipt")
-
-    validation_error = review_receipt_validation_error(
-        payload,
-        operation_key=operation_key,
-        repository=repository,
-        pr_number=pr_number,
-        head_sha=head_sha,
-        logical_iteration=logical_iteration,
-        post_state=post_state,
-    )
-    if validation_error is not None:
-        return _review_check_failed(validation_error)
-    return {"reviews_posted": "true", "sentinel": ""}
-
-
 def enrich_diff_context(
     pr_number: str,
     project_dir: str,
@@ -294,6 +154,7 @@ def clear_review_annotation_context() -> dict[str, str]:
         "annotated_diff_path": "",
         "hunk_ranges_path": "",
         "valid_lines_path": "",
+        "anchor_authority_path": "",
         "diff_metrics_path": "",
         "review_mode": "",
         "pr_head_sha": "",

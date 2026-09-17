@@ -215,6 +215,10 @@ skills:
       type: file_path
       required: false
       recommended: true
+    - name: anchor_authority_path
+      type: file_path
+      required: false
+      recommended: true
     outputs:
     - name: review_status
       type: string
@@ -309,6 +313,10 @@ skills:
     - name: plan_path
       type: file_path
       required: true
+    - name: anchor_authority_path
+      type: file_path
+      required: false
+      recommended: true
     outputs:
     - name: worktree_path
       type: directory_path
@@ -2136,6 +2144,10 @@ skills:
       type: string
       required: false
       recommended: true
+    - name: anchor_authority_path
+      type: file_path
+      required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string
@@ -2186,6 +2198,14 @@ skills:
     - name: receipt_path
       type: file_path
       required: true
+    - name: anchor_authority_path
+      type: file_path
+      required: false
+      recommended: true
+    - name: valid_lines_path
+      type: file_path
+      required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string
@@ -3006,6 +3026,8 @@ callable_contracts:
   autoskillit.smoke_utils.clear_review_annotation_context:
     inputs: []
     outputs:
+    - name: anchor_authority_path
+      type: file_path
     - name: annotated_diff_path
       type: str
     - name: hunk_ranges_path
@@ -3017,49 +3039,6 @@ callable_contracts:
     - name: review_mode
       type: str
     - name: pr_head_sha
-      type: str
-  autoskillit.smoke_utils.check_review_posted:
-    description: >
-      Validates a bounded, contained, identity-matched authoritative review
-      receipt in github mode, or explicitly passes local mode. No subprocess calls.
-    inputs:
-    - name: cwd
-      type: str
-      required: true
-    - name: receipt_path
-      type: str
-      required: true
-    - name: mode
-      type: str
-      required: true
-      allowed_values:
-      - local
-      - github
-    - name: repository
-      type: str
-      required: true
-    - name: pr_number
-      type: int
-      required: true
-    - name: head_sha
-      type: str
-      required: true
-    - name: logical_iteration
-      type: str
-      required: true
-    - name: operation_key
-      type: str
-      required: true
-    - name: post_state
-      type: str
-      required: true
-    outputs:
-    - name: reviews_posted
-      type: str
-      allowed_values:
-      - "true"
-      - "false"
-    - name: sentinel
       type: str
   autoskillit.smoke_utils.check_bug_report_non_empty:
     inputs:
@@ -3099,6 +3078,8 @@ callable_contracts:
       type: str
       required: false
     outputs:
+    - name: anchor_authority_path
+      type: file_path
     - name: annotated_diff_path
       type: file_path
     - name: hunk_ranges_path

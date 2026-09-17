@@ -242,6 +242,15 @@ class TestResearchRecipeStructure:
         assert "review_verdict" in step.capture
         assert "verdict" not in step.capture  # old key must be gone
 
+    def test_review_writers_receive_the_annotation_authority(self, recipe) -> None:
+        annotate = recipe.steps["annotate_pr_diff"]
+        assert annotate.capture["anchor_authority_path"] == ("${{ result.anchor_authority_path }}")
+
+        for step_name in ("review_research_pr", "audit_claims"):
+            inputs = recipe.steps[step_name].with_args["skill_inputs"]
+            assert inputs["anchor_authority_path"] == ("${{ context.anchor_authority_path }}")
+            assert inputs["valid_lines_path"] == "${{ context.valid_lines_path }}"
+
     def test_audit_claims_step_routes_through_receipt_gate(self, recipe) -> None:
         step = recipe.steps["audit_claims"]
         assert step.tool == "run_skill"

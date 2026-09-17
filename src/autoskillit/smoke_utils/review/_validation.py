@@ -5,19 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
+from autoskillit.core import AnchorAdmission, DiffAnchorAuthority
 from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
     EXPERIMENTAL_REVIEW_AUDITORS,
     _closed_key_set_error,
     _is_non_empty_string,
 )
-from autoskillit.smoke_utils.review._constants import (
-    _STANDARD_REVIEW_DIMENSIONS,
-    _bounded_utf8,
-)
+from autoskillit.smoke_utils.review._constants import _bounded_utf8
 
 _EXPERIMENTAL_DIMENSIONS = dict(EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY)
 
@@ -151,9 +149,9 @@ def _candidate_validation_error(
     candidate: object,
     *,
     auditor_name: str,
-    valid_diff_lines: Mapping[str, Sequence[int]],
+    anchor_authority: DiffAnchorAuthority,
     review_root: Path,
-) -> tuple[str, str] | None:
+) -> tuple[str | AnchorAdmission, str] | None:
     key_error = _closed_key_set_error(
         candidate,
         expected=_EXPERIMENTAL_CANDIDATE_KEYS,
@@ -186,9 +184,6 @@ def _candidate_validation_error(
         return ("schema_invalid", "primary line must be a positive integer")
     if not _is_contained_relative_path(candidate["file"], review_root):
         return ("path_escape", "primary path escapes the review root")
-    if candidate["line"] not in valid_diff_lines.get(str(candidate["file"]), ()):
-        return ("not_changed_line", "primary anchor is not an exact changed line")
-
     evidence = candidate["evidence"]
     if not isinstance(evidence, list) or not evidence:
         return ("schema_invalid", "evidence must be a non-empty array")
@@ -250,7 +245,12 @@ def _candidate_validation_error(
             return ("schema_invalid", "confidence must be finite and within [0,1]")
     else:
         return ("schema_invalid", "confidence must be finite and within [0,1]")
-    return None
+    admission = anchor_authority.classify(str(candidate["file"]), int(candidate["line"]), "RIGHT")
+    return (
+        None
+        if admission is AnchorAdmission.ADMITTED
+        else (admission, "primary anchor was not admitted by the diff authority")
+    )
 
 
 def deletion_regression_is_eligible(deletion_context: object) -> bool:
@@ -264,10 +264,10 @@ def _standard_finding_validation_error(
     finding: object,
     *,
     deletion_only: bool,
-    valid_diff_lines: Mapping[str, Sequence[int]],
-    valid_line_ranges: Mapping[str, Sequence[Sequence[int]]],
+    anchor_authority: DiffAnchorAuthority,
+    allowed_dimensions: Collection[str],
     review_root: Path,
-) -> str | None:
+) -> str | AnchorAdmission | None:
     key_error = _closed_key_set_error(
         finding,
         expected=_STANDARD_FINDING_KEYS,
@@ -276,9 +276,7 @@ def _standard_finding_validation_error(
     if key_error is not None:
         return key_error
     assert isinstance(finding, dict)
-    expected_dimensions = (
-        {"deletion_regression"} if deletion_only else set(_STANDARD_REVIEW_DIMENSIONS)
-    )
+    expected_dimensions = {"deletion_regression"} if deletion_only else allowed_dimensions
     if not _is_non_empty_string(finding["dimension"]):
         return "dimension must be a non-empty string"
     if finding["dimension"] not in expected_dimensions:
@@ -295,34 +293,18 @@ def _standard_finding_validation_error(
         return "line must be a positive integer"
     if not _is_contained_relative_path(finding["file"], review_root):
         return "file escapes the review root"
-    file_path = str(finding["file"])
-    line = int(finding["line"])
-    if valid_diff_lines:
-        if line not in valid_diff_lines.get(file_path, ()):
-            return "file and line are not an exact changed-line anchor"
-    elif valid_line_ranges:
-        ranges = valid_line_ranges.get(file_path, ())
-        if not any(
-            isinstance(bounds, Sequence)
-            and not isinstance(bounds, (str, bytes))
-            and len(bounds) == 2
-            and _is_positive_int(bounds[0])
-            and _is_positive_int(bounds[1])
-            and int(bounds[0]) <= line <= int(bounds[1])
-            for bounds in ranges
-        ):
-            return "file and line are not within a changed hunk"
-    return None
+    admission = anchor_authority.classify(str(finding["file"]), int(finding["line"]), "RIGHT")
+    return None if admission is AnchorAdmission.ADMITTED else admission
 
 
 def validate_experimental_auditor_outputs(
     *,
     outputs: Mapping[str, Mapping[str, object]],
-    valid_diff_lines: Mapping[str, Sequence[int]],
+    anchor_authority: DiffAnchorAuthority,
     snapshot: Mapping[str, str],
     review_root: str,
 ) -> dict[str, object]:
-    """Validate both proof-only outputs atomically and assign deterministic identities."""
+    """Validate each proof-only producer independently and assign stable identities."""
     root = Path(review_root)
     if not root.is_absolute():
         raise ValueError(f"review_root must be absolute, got {review_root!r}")
@@ -330,6 +312,7 @@ def validate_experimental_auditor_outputs(
     status_by_name: dict[str, dict[str, str]] = {}
     malformed_envelopes: list[dict[str, object]] = []
     pending_candidates: list[dict[str, object]] = []
+    unpostable: list[dict[str, object]] = []
 
     for auditor_name in EXPERIMENTAL_REVIEW_AUDITORS:
         raw_result = outputs.get(auditor_name)
@@ -352,9 +335,11 @@ def validate_experimental_auditor_outputs(
                 raw_output = f"<unserializable {type(payload).__name__}>"
 
         error: str | None = None
-        validation_detail: str | None = None
+        validation_details: list[str] = []
         parsed: object = None
         parsed_candidates: list[object] = []
+        producer_candidates: list[dict[str, object]] = []
+        producer_unpostable: list[dict[str, object]] = []
         if result is None or "output" not in result:
             error = "missing_result"
         elif terminal_status != "success":
@@ -365,7 +350,7 @@ def validate_experimental_auditor_outputs(
             _MAX_EXPERIMENTAL_OUTPUT_BYTES
         ):
             error = "schema_invalid"
-            validation_detail = (
+            validation_details.append(
                 f"output exceeds {_MAX_EXPERIMENTAL_OUTPUT_BYTES} byte validation limit"
             )
         else:
@@ -382,12 +367,18 @@ def validate_experimental_auditor_outputs(
                     validation_error = _candidate_validation_error(
                         candidate,
                         auditor_name=auditor_name,
-                        valid_diff_lines=valid_diff_lines,
+                        anchor_authority=anchor_authority,
                         review_root=root,
                     )
+                    admission: AnchorAdmission | None = None
                     if validation_error is not None:
-                        error, validation_detail = validation_error
-                        break
+                        reason, detail = validation_error
+                        if isinstance(reason, AnchorAdmission):
+                            admission = reason
+                        else:
+                            error = reason if error is None else error
+                            validation_details.append(detail)
+                            continue
                     assert isinstance(candidate, dict)
                     canonical = json.dumps(candidate, sort_keys=True, separators=(",", ":"))
                     record_digest = hashlib.sha256(canonical.encode()).hexdigest()
@@ -402,19 +393,25 @@ def validate_experimental_auditor_outputs(
                         sort_keys=True,
                         separators=(",", ":"),
                     )
-                    pending_candidates.append(
-                        {
-                            **candidate,
-                            "auditor_name": auditor_name,
-                            "original_index": original_index,
-                            "record_digest": record_digest,
-                            "candidate_id": hashlib.sha256(identity.encode()).hexdigest(),
-                            "snapshot": dict(snapshot),
-                        }
-                    )
+                    enriched = {
+                        **candidate,
+                        "auditor_name": auditor_name,
+                        "original_index": original_index,
+                        "record_digest": record_digest,
+                        "candidate_id": hashlib.sha256(identity.encode()).hexdigest(),
+                        "snapshot": dict(snapshot),
+                    }
+                    if admission is None:
+                        producer_candidates.append(enriched)
+                    else:
+                        producer_unpostable.append(
+                            {**enriched, "admission_reason": admission.value}
+                        )
 
         if error is None:
             status_by_name[auditor_name] = {"status": "success", "reason_code": "accepted"}
+            pending_candidates.extend(producer_candidates)
+            unpostable.extend(producer_unpostable)
             continue
         status_by_name[auditor_name] = {"status": "degraded", "reason_code": error}
         malformed_envelopes.append(
@@ -422,7 +419,7 @@ def validate_experimental_auditor_outputs(
                 producer=auditor_name,
                 terminal_status=terminal_status,
                 raw_output=raw_output,
-                errors=[validation_detail or error],
+                errors=validation_details or [error],
                 rejection_reason=error,
             )
         )
@@ -431,12 +428,14 @@ def validate_experimental_auditor_outputs(
         return {
             "state": "degraded",
             "status_by_name": status_by_name,
-            "candidates": [],
+            "candidates": pending_candidates,
+            "unpostable": unpostable,
             "malformed_envelopes": malformed_envelopes,
         }
     return {
         "state": "complete",
         "status_by_name": status_by_name,
         "candidates": pending_candidates,
+        "unpostable": unpostable,
         "malformed_envelopes": [],
     }

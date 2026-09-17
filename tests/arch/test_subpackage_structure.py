@@ -53,6 +53,7 @@ class TestCoreSubpackages:
             "_type_exceptions",
             "_type_figure_spec",
             "_type_github_review",
+            "_type_github_review_anchor",
             "_type_capture",
             "_type_helpers",
             "_type_inspector",

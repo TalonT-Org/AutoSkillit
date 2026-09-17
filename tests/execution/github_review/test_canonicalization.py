@@ -18,6 +18,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _request(**overrides: object) -> GitHubReviewRequest:
+    from autoskillit.core import DiffAnchorAuthority
+
     values: dict[str, object] = {
         "repository": "octo/example",
         "pr_number": 42,
@@ -37,6 +39,17 @@ def _request(**overrides: object) -> GitHubReviewRequest:
         ),
     }
     values.update(overrides)
+    values.setdefault(
+        "anchor_authority",
+        DiffAnchorAuthority.authoritative(
+            repository=str(values["repository"]).casefold(),
+            pr_number=values["pr_number"],
+            head_sha=values["head_sha"],
+            generation_id="test-generation",
+            right_side_lines={"src/a.py": {8, 9, 10}, "src/b.py": {20}},
+            left_side_lines={},
+        ),
+    )
     return GitHubReviewRequest(**values)
 
 
@@ -47,6 +60,8 @@ def test_canonicalization_is_stable_utf8_json_with_all_remote_identity_fields() 
     assert canonical.endswith(b"}")
     decoded = json.loads(canonical)
     assert decoded == {
+        "authority_digest": _request().anchor_authority.authority_digest,
+        "availability": "AUTHORITATIVE",
         "body": "Review body",
         "comments": [
             {
@@ -165,7 +180,7 @@ def test_repository_identity_is_validated_and_case_normalized() -> None:
 
 @pytest.mark.parametrize("repository", ["", "not-a-repository", "owner/repo/extra"])
 def test_malformed_repository_identity_is_rejected(repository: str) -> None:
-    with pytest.raises(ValueError, match="canonical owner/repo"):
+    with pytest.raises(ValueError, match="repository"):
         compute_review_operation_key(_request(repository=repository))
 
 
@@ -185,3 +200,33 @@ def test_canonicalization_does_not_mutate_the_request() -> None:
     compute_review_operation_key(request)
     assert request.comments is before
     assert request.comments == _request().comments
+
+
+def test_operation_key_differs_when_authority_changes() -> None:
+    from dataclasses import replace
+
+    from autoskillit.core import DiffAnchorAuthority
+
+    request = _request()
+    unavailable = DiffAnchorAuthority.unavailable(
+        repository=request.repository,
+        pr_number=request.pr_number,
+        head_sha=request.head_sha,
+    )
+    different_map = DiffAnchorAuthority.authoritative(
+        repository=request.repository,
+        pr_number=request.pr_number,
+        head_sha=request.head_sha,
+        generation_id=request.anchor_authority.generation_id,
+        right_side_lines={"src/a.py": {10}},
+        left_side_lines={},
+    )
+    assert (
+        len(
+            {
+                compute_review_operation_key(replace(request, anchor_authority=authority))
+                for authority in (request.anchor_authority, unavailable, different_map)
+            }
+        )
+        == 3
+    )

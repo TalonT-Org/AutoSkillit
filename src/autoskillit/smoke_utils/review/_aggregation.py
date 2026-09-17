@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
+from autoskillit.core import AnchorAdmission, DiffAnchorAuthority
 from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITORS,
     _is_non_empty_string,
@@ -24,17 +25,19 @@ def aggregate_combined_review_candidates(
     candidates: Sequence[Mapping[str, object]],
     dispositions: Sequence[Mapping[str, object]],
     prior_resolved_findings: Sequence[Mapping[str, object]],
+    anchor_authority: DiffAnchorAuthority,
+    allowed_dimensions: Collection[str] = _STANDARD_REVIEW_DIMENSIONS,
     standard_findings: Sequence[Mapping[str, object]] = (),
     deletion_findings: Sequence[Mapping[str, object]] = (),
-    valid_diff_lines: Mapping[str, Sequence[int]] | None = None,
-    valid_line_ranges: Mapping[str, Sequence[Sequence[int]]] | None = None,
     snapshot: Mapping[str, str] | None = None,
     review_root: str = "",
 ) -> dict[str, object]:
     """Combine every source, then apply suppression-first deterministic deduplication."""
+    dimension_order = tuple(sorted(set(allowed_dimensions)))
     raw_findings = (*standard_findings, *deletion_findings)
     validated_standard: list[Mapping[str, object]] = []
     validated_deletion: list[Mapping[str, object]] = []
+    unpostable: list[dict[str, object]] = []
     validation_errors: list[str] = []
     if raw_findings:
         root = Path(review_root)
@@ -44,8 +47,6 @@ def aggregate_combined_review_candidates(
             validation_errors.append("review_root must be absolute")
         if not _is_non_empty_string(head_sha) or not _is_non_empty_string(base_sha):
             validation_errors.append("snapshot head/base authority must be non-empty")
-        if valid_diff_lines is None and valid_line_ranges is None:
-            validation_errors.append("changed-line authority is required")
         if not validation_errors:
             root = root.resolve()
             snapshot_identity = dict(snapshot or {})
@@ -57,28 +58,32 @@ def aggregate_combined_review_candidates(
                     error = _standard_finding_validation_error(
                         finding,
                         deletion_only=deletion_only,
-                        valid_diff_lines=valid_diff_lines or {},
-                        valid_line_ranges=valid_line_ranges or {},
+                        anchor_authority=anchor_authority,
+                        allowed_dimensions=dimension_order,
                         review_root=root,
                     )
-                    if error is not None:
+                    if isinstance(error, str) and not isinstance(error, AnchorAdmission):
                         validation_errors.append(f"{source}[{index}]: {error}")
                         continue
                     canonical = json.dumps(finding, sort_keys=True, separators=(",", ":"))
-                    destination.append(
-                        {
-                            **finding,
-                            "record_digest": hashlib.sha256(canonical.encode()).hexdigest(),
-                            "snapshot": snapshot_identity,
-                        }
-                    )
+                    enriched = {
+                        **finding,
+                        "record_digest": hashlib.sha256(canonical.encode()).hexdigest(),
+                        "snapshot": snapshot_identity,
+                    }
+                    if isinstance(error, AnchorAdmission):
+                        unpostable.append({**enriched, "admission_reason": error.value})
+                    else:
+                        destination.append(enriched)
     if validation_errors:
-        return {
-            "state": "degraded",
-            "survivors": [],
-            "aggregation_records": [],
-            "validation_errors": validation_errors,
-        }
+        if not validated_standard and not validated_deletion and not unpostable:
+            return {
+                "state": "degraded",
+                "survivors": [],
+                "unpostable": [],
+                "aggregation_records": [],
+                "validation_errors": validation_errors,
+            }
 
     accepted_dispositions: dict[str, Mapping[str, object]] = {}
     for item in dispositions:
@@ -89,7 +94,7 @@ def aggregate_combined_review_candidates(
         ):
             accepted_dispositions.setdefault(str(item["candidate_id"]), item)
     source_names = (
-        *_STANDARD_REVIEW_DIMENSIONS,
+        *dimension_order,
         "deletion_regression",
         *EXPERIMENTAL_REVIEW_AUDITORS,
     )
@@ -98,7 +103,7 @@ def aggregate_combined_review_candidates(
 
     def source_name(finding: Mapping[str, object], default: str) -> str:
         dimension = str(finding.get("dimension", ""))
-        if dimension in _STANDARD_REVIEW_DIMENSIONS or dimension == "deletion_regression":
+        if dimension in dimension_order or dimension == "deletion_regression":
             return dimension
         auditor_name = str(finding.get("auditor_name", ""))
         if auditor_name in EXPERIMENTAL_REVIEW_AUDITORS:
@@ -232,10 +237,11 @@ def aggregate_combined_review_candidates(
             )
     survivors.sort(key=rank)
     return {
-        "state": "complete",
+        "state": "degraded" if validation_errors else "complete",
         "survivors": survivors,
+        "unpostable": unpostable,
         "aggregation_records": aggregation_records,
-        "validation_errors": [],
+        "validation_errors": validation_errors,
     }
 
 

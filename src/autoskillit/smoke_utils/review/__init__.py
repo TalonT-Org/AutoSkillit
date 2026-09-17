@@ -13,6 +13,7 @@ from autoskillit.smoke_utils.review._publication import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
     render_review_finding_body,
+    render_unpostable_review_section,
 )
 from autoskillit.smoke_utils.review._validation import (
     build_malformed_review_envelope,
@@ -29,5 +30,6 @@ __all__ = [
     "prepare_experimental_review_publication",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
+    "render_unpostable_review_section",
     "validate_experimental_auditor_outputs",
 ]

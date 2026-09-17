@@ -44,13 +44,17 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
+- **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
+  bound to repository, PR, and head SHA. Required for inline comments; when absent,
+  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [anchor_authority_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
-- **valid_lines_path** (optional) — absolute path to a pre-computed valid lines JSON file (produced by `annotate_pr_diff` run_python step). Contains exact `{filepath: [line_numbers]}` set of new-file line numbers present in the diff. When provided, enables exact set-membership validation in Step 4 instead of hunk-span interval checking.
+- **valid_lines_path** (optional) — absolute path to the right-side valid-line annotation JSON produced by `annotate_pr_diff`. Retained as analysis evidence; inline admission uses the authority artifact.
 - **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
 - **mode** (optional, default: `github`) — Controls where findings are written:
   - `mode=github` (or absent/unrecognized): current behavior — post findings as GitHub inline review comments via the GitHub Reviews API.
@@ -319,6 +323,7 @@ Require `annotation_result.success=true` and a mapping-valued
 ```text
     annotated_diff_path="$(printf '%s' "$annotation_result" | jq -r '.result.annotated_diff_path')"
     hunk_ranges_path="$(printf '%s' "$annotation_result" | jq -r '.result.hunk_ranges_path')"
+    anchor_authority_path="$(printf '%s' "$annotation_result" | jq -r '.result.anchor_authority_path')"
     valid_lines_path="$(printf '%s' "$annotation_result" | jq -r '.result.valid_lines_path')"
     diff_metrics_path="$(printf '%s' "$annotation_result" | jq -r '.result.diff_metrics_path')"
 fi
@@ -643,9 +648,9 @@ refresh_final_snapshot_state() {
 }
 ```
 
-`VALID_DIFF_LINES` is the exact right-side changed-line authority. An eligible
-experimental run may never fall back to `VALID_LINE_RANGES`. Standard findings retain
-the existing exact-line-first, hunk-range-fallback behavior. Every Git command, agent
+`VALID_DIFF_LINES` is right-side annotation evidence. All findings use the explicit
+anchor authority for inline admission; no finding may fall back to hunk ranges.
+Every Git command, agent
 working directory, containment check, and parent evidence read uses
 `REVIEW_CHECKOUT_ROOT`.
 Call `refresh_final_snapshot_state` immediately before evidence reads, verdict
@@ -1043,10 +1048,20 @@ the named review state; do not reimplement their behavior in prose:
 ```python
 import json
 
+from pathlib import Path
+from autoskillit.core import DiffAnchorAuthority
 from autoskillit.smoke_utils import (
     aggregate_combined_review_candidates,
     render_review_finding_body,
     validate_experimental_auditor_outputs,
+)
+
+ANCHOR_AUTHORITY = (
+    DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
+    if anchor_authority_path
+    else DiffAnchorAuthority.unavailable(
+        repository=repository, pr_number=int(pr_number), head_sha=pr_head_sha
+    )
 )
 
 STANDARD_VALIDATION_ERRORS = []
@@ -1064,7 +1079,7 @@ else:
 if GATE_STATE == "valid_true":
     VALIDATION_RESULT = validate_experimental_auditor_outputs(
         outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
-        valid_diff_lines=VALID_DIFF_LINES,
+        anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
         review_root=REVIEW_CHECKOUT_ROOT,
     )
@@ -1092,6 +1107,7 @@ if STANDARD_VALIDATION_ERRORS:
     AGGREGATION_RESULT = {
         "state": "degraded",
         "survivors": [],
+        "unpostable": [],
         "aggregation_records": [],
         "validation_errors": STANDARD_VALIDATION_ERRORS,
     }
@@ -1101,8 +1117,7 @@ else:
         dispositions=DISPOSITION_RECORDS,
         prior_resolved_findings=prior_resolved_findings,
         standard_findings=STANDARD_FINDINGS,
-        valid_diff_lines=VALID_DIFF_LINES,
-        valid_line_ranges=VALID_LINE_RANGES,
+        anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
         review_root=REVIEW_CHECKOUT_ROOT,
     )
@@ -1112,7 +1127,9 @@ FINAL_REVIEW_FINDINGS = [
     {**finding, "rendered_body": render_review_finding_body(finding)}
     for finding in AGGREGATION_RESULT["survivors"]
 ]
-all_findings = FINAL_REVIEW_FINDINGS
+FILTERED_FINDINGS = FINAL_REVIEW_FINDINGS
+UNPOSTABLE_FINDINGS = AGGREGATION_RESULT["unpostable"]
+all_findings = FILTERED_FINDINGS + UNPOSTABLE_FINDINGS
 AGGREGATION_RECORDS = AGGREGATION_RESULT["aggregation_records"]
 ```
 
@@ -1134,22 +1151,16 @@ standard/deletion list afterward.
    index. Create a deterministic `dedup_group_id`; retain every member
    `candidate_id`, the winner, and rationale. Losers receive linked
    `duplicate_candidate` aggregation records.
-3. Partition findings using exact line validation when available:
-   - When `VALID_DIFF_LINES` is non-empty (loaded in Step 2.7), use **set-membership**:
-     a finding is postable if its `line` exists in `VALID_DIFF_LINES[file]`. This is
-     strictly more accurate than hunk-span interval checking.
-   - When `VALID_DIFF_LINES` is empty but `VALID_LINE_RANGES` is non-empty, fall back to
-     **hunk-span interval checking**: a finding is postable if its `(file, line)` falls
-     within any hunk range for that file.
-   - `FILTERED_FINDINGS`: findings that pass validation (either set-membership or interval).
-     These are safe to post as inline comments in Step 6.
-   - `UNPOSTABLE_FINDINGS`: findings that fail validation.
-     Log a warning for each. These findings are surfaced via:
-     - Step 6: Critical-severity unpostable findings are posted as file-level comments
-       (subject_type: "file") on the individual comments endpoint.
-     - Step 7: All unpostable findings appear in the "Outside Diff Range" section of the
-       review body.
-   - If both `VALID_DIFF_LINES` and `VALID_LINE_RANGES` are empty, all findings are `FILTERED_FINDINGS`.
+3. Use the programmatic aggregation partition and preserve authority availability:
+   - `FILTERED_FINDINGS` are `AGGREGATION_RESULT["survivors"]`; only exact anchors
+     admitted by the supplied `anchor_authority_path` may become inline comments.
+   - `UNPOSTABLE_FINDINGS` are `AGGREGATION_RESULT["unpostable"]`. Include all of them
+     in the review body's "Outside Diff Range" section with their admission reasons.
+   - Authority has three states: unavailable, available with no valid lines, and
+     available with valid lines. Unavailable or empty authority admits no inline
+     findings. Never substitute hunk intervals or infer availability from truthiness.
+   - Missing authority permits body-only publication; it never authorizes a file-level
+     or individual-comment fallback. Existing stale-snapshot guards still stop effects.
 4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
 5. Bucket by actionability (applied to combined findings):
@@ -1226,6 +1237,7 @@ if SNAPSHOT_IS_FRESH:
     PUBLICATION_SEED = prepare_experimental_review_publication(
         raw_ledger=RAW_LEDGER,
         survivors=FINAL_REVIEW_FINDINGS,
+        unpostable=UNPOSTABLE_FINDINGS,
         snapshot=GATE_AUTHORITY["snapshot"],
         annotation_generation_id=ANNOTATION_GENERATION_ID,
         mode=MODE,
@@ -1248,7 +1260,7 @@ authoritative `COMMIT_ID="$METRICS_HEAD_SHA"` and the same checkout/annotation
 generation. Never replace it with a later HEAD query.
 
 **When `mode=local`:**
-- Skip ALL GitHub API calls for posting comments (no batch review POST, no individual comment POSTs, no file-level comments, no summary review POST)
+- Skip ALL GitHub API calls for posting comments and reviews.
 - Build the local findings payload in memory; Step 8 atomically publishes
   `${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json` last
 
@@ -1327,10 +1339,19 @@ Map the verdict to the requested event:
 
 Call the structured publication tool once with the already-complete payload:
 
+Render the unpostable partition into the complete review body before publication:
+
+```python
+from autoskillit.smoke_utils import render_unpostable_review_section
+
+REVIEW_BODY += render_unpostable_review_section(UNPOSTABLE_FINDINGS)
+```
+
 ```text
 post_pr_review(
   cwd: "$PWD",
   receipt_path: "$receipt_path",
+  anchor_authority_path: "$anchor_authority_path",
   repository: "$repository",
   pr_number: "$pr_number",
   head_sha: "$pr_head_sha",
@@ -1442,6 +1463,7 @@ else:
     PUBLICATION = prepare_experimental_review_publication(
         raw_ledger=RAW_LEDGER,
         survivors=FINAL_REVIEW_FINDINGS,
+        unpostable=UNPOSTABLE_FINDINGS,
         snapshot=GATE_AUTHORITY["snapshot"],
         annotation_generation_id=ANNOTATION_GENERATION_ID,
         mode=MODE,

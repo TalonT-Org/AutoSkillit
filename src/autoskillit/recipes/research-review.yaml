@@ -219,6 +219,7 @@ steps:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
+      anchor_authority_path: ${{ result.anchor_authority_path }}
       review_mode: ${{ result.review_mode }}
       pr_head_sha: ${{ result.pr_head_sha }}
     on_success: review_research_pr
@@ -246,6 +247,7 @@ steps:
         annotated_diff_path: "${{ context.annotated_diff_path }}"
         hunk_ranges_path: "${{ context.hunk_ranges_path }}"
         valid_lines_path: "${{ context.valid_lines_path }}"
+        anchor_authority_path: "${{ context.anchor_authority_path }}"
       cwd: "${{ inputs.worktree_path }}"
       step_name: review_research_pr
       output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr/research-review"
@@ -273,20 +275,16 @@ steps:
       route_review_resolve safely falls through to route_claims_resolve.
 
   check_review_posted:
-    tool: run_python
+    tool: verify_review_receipt
     with:
-      callable: autoskillit.smoke_utils.check_review_posted
-      work_dir: "${{ inputs.worktree_path }}"
-      args:
-        cwd: "${{ inputs.worktree_path }}"
-        receipt_path: "${{ context.review_receipt_path }}"
-        mode: github
-        repository: "${{ context.review_repository }}"
-        pr_number: "${{ context.pr_number }}"
-        head_sha: "${{ context.review_head_sha }}"
-        logical_iteration: "review-research-pr:research-review"
-        operation_key: "${{ context.review_operation_key }}"
-        post_state: "${{ context.review_post_state }}"
+      cwd: "${{ inputs.worktree_path }}"
+      receipt_path: "${{ context.review_receipt_path }}"
+      mode: github
+      repository: "${{ context.review_repository }}"
+      pr_number: "${{ context.pr_number }}"
+      head_sha: "${{ context.pr_head_sha }}"
+      logical_iteration: "review-research-pr:research-review"
+      post_state: "${{ context.review_post_state }}"
     skip_when_false: inputs.review_research_pr
     on_skip: audit_claims
     on_result:
@@ -336,20 +334,16 @@ steps:
       gates complete before resolution.
 
   check_audit_review_posted:
-    tool: run_python
+    tool: verify_review_receipt
     with:
-      callable: autoskillit.smoke_utils.check_review_posted
-      work_dir: "${{ inputs.worktree_path }}"
-      args:
-        cwd: "${{ inputs.worktree_path }}"
-        receipt_path: "${{ context.audit_review_receipt_path }}"
-        mode: github
-        repository: "${{ context.review_repository }}"
-        pr_number: "${{ context.pr_number }}"
-        head_sha: "${{ context.audit_review_head_sha }}"
-        logical_iteration: "audit-claims:research-review"
-        operation_key: "${{ context.audit_review_operation_key }}"
-        post_state: "${{ context.audit_review_post_state }}"
+      cwd: "${{ inputs.worktree_path }}"
+      receipt_path: "${{ context.audit_review_receipt_path }}"
+      mode: github
+      repository: "${{ context.review_repository }}"
+      pr_number: "${{ context.pr_number }}"
+      head_sha: "${{ context.pr_head_sha }}"
+      logical_iteration: "audit-claims:research-review"
+      post_state: "${{ context.audit_review_post_state }}"
     skip_when_false: inputs.audit_claims
     on_skip: route_review_resolve
     on_result:

@@ -192,7 +192,11 @@ def _confirm_dispatch_pid_identity(
         except psutil.NoSuchProcess:
             return None
         except psutil.AccessDenied:
-            pass
+            logger.info(
+                "reaper_pid_identity_access_denied",
+                pid=pid,
+                dispatch_name=dispatch.name,
+            )
     return identity_confirmed, use_tick_identity, confirmed_create_time
 
 

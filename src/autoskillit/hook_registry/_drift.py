@@ -123,10 +123,13 @@ def find_broken_hook_scripts(
                 except ValueError as exc:
                     broken.append(f"{cmd}  # shlex parse error: {exc}")
                     continue
-                has_dispatcher = any(part.endswith("_dispatch.py") for part in parts)
-                if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+                has_valid_dispatcher_shape = len(parts) >= 3 and parts[-2].endswith("_dispatch.py")
+                has_misplaced_dispatcher = not has_valid_dispatcher_shape and any(
+                    part.endswith("_dispatch.py") for part in parts
+                )
+                if has_valid_dispatcher_shape:
                     script_path_str = parts[-2]
-                elif has_dispatcher:
+                elif has_misplaced_dispatcher:
                     broken.append(cmd)
                     continue
                 elif len(parts) >= 2:

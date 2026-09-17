@@ -156,20 +156,18 @@ def validate_lifecycle_contracts(
                     f"lifecycle resource {contract.resource!r} has no same-runner owner "
                     f"for {backend}/{session_scope}"
                 )
-            if "session_start" in contract.required_owner_roles:
-                session_start_owners = [
-                    hook_def
-                    for hook_def in registry
-                    if hook_def.event_type == "SessionStart"
-                    and contract.resource in hook_def.reclaims_resources
-                    and hook_applies_to_backend(
-                        hook_def,
-                        backend=backend,
-                        session_scope=session_scope,
-                    )
-                ]
-                if not session_start_owners:
-                    raise ValueError(
-                        f"lifecycle resource {contract.resource!r} has no SessionStart "
-                        f"owner for {backend}/{session_scope}"
-                    )
+            if "session_start" in contract.required_owner_roles and not [
+                hook_def
+                for hook_def in registry
+                if hook_def.event_type == "SessionStart"
+                and contract.resource in hook_def.reclaims_resources
+                and hook_applies_to_backend(
+                    hook_def,
+                    backend=backend,
+                    session_scope=session_scope,
+                )
+            ]:
+                raise ValueError(
+                    f"lifecycle resource {contract.resource!r} has no SessionStart "
+                    f"owner for {backend}/{session_scope}"
+                )

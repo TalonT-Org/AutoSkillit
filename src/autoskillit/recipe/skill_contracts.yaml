@@ -268,6 +268,8 @@ skills:
     - "review_status = processed\nfinding_disposition = review-1 | skipped\nverdict = already_green\n%%ORDER_UP%%"
     - "review_status = processed\nverdict = flake_suspected\n%%ORDER_UP%%"
     - "review_status = processed\nverdict = ci_only_failure\n%%ORDER_UP%%"
+    - "review_status = processed\nverdict = already_green\nreview_operation_key = review-op-1\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = .autoskillit/temp/resolve-review/review-receipt.json\n%%ORDER_UP%%"
+    - "review_status = processed\nverdict = already_green\nreview_operation_key = review-op-1\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = .autoskillit/temp/resolve-review/review-receipt.json\n%%ORDER_UP%%"
     - "review_status = no_pr\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:

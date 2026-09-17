@@ -1900,6 +1900,14 @@
           "route": "pre_review_rebase_integration"
         },
         {
+          "when": "${{ result.review_status }} == 'no_pr'",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.review_status }} == 'processed'",
+          "route": "register_clone_failure"
+        },
+        {
           "route": "register_clone_failure"
         }
       ],

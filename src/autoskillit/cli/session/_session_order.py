@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.cli.prompts import _build_orchestrator_prompt, _get_ingredients_table
+from autoskillit.cli.prompts import (
+    _build_open_kitchen_prompt,
+    _build_orchestrator_prompt,
+    _get_ingredients_table,
+)
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _write_order_entry,
@@ -354,7 +358,7 @@ def order(
     )
 
     if recipe is None:
-        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
+        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS
 
         if isinstance(launch, FreshLaunch):
             launch = replace(

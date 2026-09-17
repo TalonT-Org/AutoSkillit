@@ -107,9 +107,7 @@ def _install_order_harness(
     monkeypatch.setattr(_order, "render_skill_catalog_exclusions", lambda _items: None)
     monkeypatch.setattr(_order, "_get_ingredients_table", lambda *a, **kw: "ingredients")
     monkeypatch.setattr(_order, "_build_orchestrator_prompt", lambda *a, **kw: "prompt")
-    monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_open_kitchen_prompt", lambda *a, **kw: "prompt"
-    )
+    monkeypatch.setattr(_order, "_build_open_kitchen_prompt", lambda *a, **kw: "prompt")
     monkeypatch.setattr(_order, "_get_subsets_needed", lambda *a, **kw: frozenset({"github"}))
     monkeypatch.setattr(_order, "_get_packs_needed", lambda *a, **kw: frozenset({"research"}))
 

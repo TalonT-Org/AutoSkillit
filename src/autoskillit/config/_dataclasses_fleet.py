@@ -30,6 +30,10 @@ class FleetConfig:
         """Validate only when the feature is active."""
         if not feature_enabled:
             return
+
+        self._validate_enabled_values()
+
+    def _validate_enabled_values(self) -> None:
         if self.default_timeout_sec <= 0:
             raise ValueError(
                 f"default_timeout_sec must be positive, got {self.default_timeout_sec}"

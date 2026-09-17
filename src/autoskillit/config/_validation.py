@@ -2,8 +2,8 @@
 
 Owns:
   - ``_build_config_schema`` (derives a ``{section: {valid_yaml_keys}}`` map
-    from ``AutomationConfig`` fields, walking the YAML-alias and field-override
-    tables so the schema reflects the same key spelling users actually write).
+    from ``AutomationConfig`` dataclass fields and YAML-key aliases so the schema
+    reflects the same key spelling users actually write).
   - ``_CONFIG_SCHEMA`` (the eagerly-built schema dict; module-load).
   - ``validate_layer_keys`` (validates a YAML layer dict against the schema
     plus the secrets-only allowlist).
@@ -22,7 +22,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from autoskillit.config._coercion import _FIELD_OVERRIDES, _YAML_KEY_ALIASES
+from autoskillit.config._coercion import _YAML_KEY_ALIASES
 from autoskillit.config._dataclasses_errors import (
     _METADATA_KEYS,
     _SECRETS_ONLY_KEYS,
@@ -60,12 +60,6 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
             for sf in dataclasses.fields(sub_type):
                 alias = _YAML_KEY_ALIASES.get((f.name, sf.name))
                 yaml_keys.add(alias if alias is not None else sf.name)
-            # Also include YAML keys from field overrides that use different key names
-            for (sec_name, _field_name), _ in _FIELD_OVERRIDES.items():
-                if sec_name == f.name:
-                    alias = _YAML_KEY_ALIASES.get((sec_name, _field_name))
-                    if alias is not None:
-                        yaml_keys.add(alias)
             schema[f.name] = frozenset(yaml_keys)
         else:
             schema[f.name] = frozenset()

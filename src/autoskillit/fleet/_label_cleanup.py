@@ -145,6 +145,7 @@ def _mark_cleaned_label_candidates(state_path: Path, cleanup_results: dict[str, 
     """Persist successful label cleanup after all remote operations complete."""
     if not cleanup_results:
         return
+    cleaned_names = sorted(name for name, success in cleanup_results.items() if success)
     try:
         with CampaignStateMutator(state_path) as m:
             if m.state is not None:
@@ -152,11 +153,18 @@ def _mark_cleaned_label_candidates(state_path: Path, cleanup_results: dict[str, 
                     if dispatch.name in cleanup_results and cleanup_results[dispatch.name]:
                         dispatch.labels_cleaned = True
                         m.mark_dirty()
-    except Exception:
+    except (OSError, FileNotFoundError, PermissionError) as exc:
         logger.warning(
             "startup_label_sweep_mark_cleaned_failed",
             state_path=str(state_path),
-            cleaned_names=sorted(name for name, success in cleanup_results.items() if success),
+            cleaned_names=cleaned_names,
+            error=str(exc),
+        )
+    except Exception:
+        logger.error(
+            "startup_label_sweep_mark_cleaned_unexpected",
+            state_path=str(state_path),
+            cleaned_names=cleaned_names,
             exc_info=True,
         )
 

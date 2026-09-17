@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import time
 
 import pytest
 
+import autoskillit.core.runtime._linux_proc as subject
 from autoskillit.core.runtime._linux_proc import (
     is_pid_zombie,
     is_session_alive,
+    owner_liveness,
     read_boot_id,
     read_process_state,
     read_starttime_ticks,
@@ -84,5 +87,84 @@ def test_is_session_alive_returns_false_for_zombie() -> None:
             time.sleep(0.01)
         assert ticks is not None
         assert is_session_alive(child_pid, boot_id, ticks) is False
+        assert owner_liveness(child_pid, boot_id, ticks) is False
     finally:
         os.waitpid(child_pid, 0)
+
+
+def test_owner_liveness_refuses_unreadable_linux_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(subject.sys, "platform", "linux")
+    monkeypatch.setattr(subject, "read_boot_id", lambda **_kwargs: "boot")
+    monkeypatch.setattr(subject, "read_starttime_ticks", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(subject.os, "kill", lambda *_args: None)
+
+    assert owner_liveness(123, "boot", 10) is None
+
+
+@pytest.mark.parametrize(
+    ("status", "starttime_ticks", "expected"),
+    [
+        (0, 2_000_003, True),
+        (subject._DARWIN_ZOMBIE_STATUS, 2_000_003, False),
+        (0, 2_000_004, False),
+    ],
+)
+def test_darwin_owner_liveness_uses_boot_time_and_process_start(
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    starttime_ticks: int,
+    expected: bool,
+) -> None:
+    info = subject._DarwinProcBsdInfo()
+    info.pbi_pid = 123
+    info.pbi_status = status
+    info.pbi_start_tvsec = 2
+    info.pbi_start_tvusec = 3
+    monkeypatch.setattr(subject.sys, "platform", "darwin")
+    monkeypatch.setattr(subject, "_darwin_boot_id", lambda: "1:000002")
+    monkeypatch.setattr(subject, "_read_darwin_proc_bsd_info", lambda _pid: info)
+
+    assert owner_liveness(123, "1:000002", starttime_ticks) is expected
+
+
+def test_darwin_boot_time_refuses_short_sysctl_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Library:
+        sysctlbyname: object
+
+    def short_reply(
+        _name: bytes,
+        _value: object,
+        size: object,
+        _new_value: object,
+        _new_value_size: int,
+    ) -> int:
+        ctypes.cast(size, ctypes.POINTER(ctypes.c_size_t))[0] = 1
+        return 0
+
+    library = Library()
+    library.sysctlbyname = short_reply
+    monkeypatch.setattr(subject.ctypes, "CDLL", lambda *_args, **_kwargs: library)
+
+    assert subject._darwin_boot_time() is None
+
+
+def test_darwin_process_snapshot_refuses_short_proc_pidinfo_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Library:
+        proc_pidinfo: object
+
+    def short_reply(
+        _pid: int,
+        _flavor: int,
+        _arg: int,
+        _buffer: object,
+        size: int,
+    ) -> int:
+        return size - 1
+
+    library = Library()
+    library.proc_pidinfo = short_reply
+    monkeypatch.setattr(subject.ctypes, "CDLL", lambda *_args, **_kwargs: library)
+
+    assert subject._read_darwin_proc_bsd_info(123) is None

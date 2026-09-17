@@ -462,10 +462,8 @@ def _run_interactive_session(
                 attempt_handle.record_spawn(pid, pgid)
                 launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                 if launch_id and not bind_session_owner(_project_dir, launch_id, pid):
-                    logger.warning(
-                        "session_owner_binding_refused",
-                        launch_id=launch_id,
-                        pid=pid,
+                    raise RuntimeError(
+                        f"session owner binding refused for launch {launch_id!r} and pid {pid}"
                     )
 
             managed_result = run_cook_attempt(
@@ -528,10 +526,9 @@ def _run_interactive_session(
                 try:
                     launch_id = spec.env.get(LAUNCH_ID_ENV_VAR)
                     if launch_id and not bind_session_owner(_project_dir, launch_id, process.pid):
-                        logger.warning(
-                            "session_owner_binding_refused",
-                            launch_id=launch_id,
-                            pid=process.pid,
+                        raise RuntimeError(
+                            "session owner binding refused "
+                            f"for launch {launch_id!r} and pid {process.pid}"
                         )
                     returncode = process.wait()
                 except BaseException:
@@ -567,23 +564,28 @@ def _run_interactive_session(
     return None
 
 
-def _write_order_entry(project_dir: Path, recipe_name: str | None) -> tuple[str, dict[str, str]]:
-    import uuid
-
-    from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
+def _order_launch_env(launch_id: str) -> dict[str, str]:
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         SessionType,
-        write_registry_entry,
     )
 
-    lid = uuid.uuid4().hex[:16]
-    write_registry_entry(project_dir, lid, SESSION_TYPE_ORDER, recipe_name)
-    return lid, {
+    return {
         SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,
-        LAUNCH_ID_ENV_VAR: lid,
+        LAUNCH_ID_ENV_VAR: launch_id,
     }
+
+
+def _write_order_entry(project_dir: Path, recipe_name: str | None) -> tuple[str, dict[str, str]]:
+    import uuid
+
+    from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
+    from autoskillit.core import write_registry_entry
+
+    launch_id = uuid.uuid4().hex[:16]
+    write_registry_entry(project_dir, launch_id, SESSION_TYPE_ORDER, recipe_name)
+    return launch_id, _order_launch_env(launch_id)
 
 
 def _launch_cook_session(

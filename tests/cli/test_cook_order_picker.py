@@ -52,6 +52,20 @@ class TestCLIOrderPicker:
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
+    @pytest.fixture(autouse=True)
+    def _stub_resume_claims(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Keep picker behavior tests independent of registry claim persistence."""
+        monkeypatch.setattr(
+            _patch_session__session_order,
+            "claim_launch_for_session",
+            lambda *_args, **_kwargs: "claimed-order-launch",
+        )
+        monkeypatch.setattr(
+            _patch_session__session_order,
+            "release_session_claim",
+            lambda *_args, **_kwargs: None,
+        )
+
     @patch("autoskillit.cli.subprocess.Popen")
     def test_order_no_recipe_prompts_user(
         self,

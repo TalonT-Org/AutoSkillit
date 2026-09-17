@@ -82,7 +82,7 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
 
 
 def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
-    """Bridge AUTOSKILLIT_LAUNCH_ID to claude_session_id in the session registry."""
+    """Bridge a launch row to its Claude session without violating one-to-one ownership."""
     import fcntl
     import tempfile
 
@@ -114,6 +114,24 @@ def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
         row = registry.get(launch_id)
         if not isinstance(row, dict):
             return
+
+        existing_session_id = row.get("claude_session_id")
+        if existing_session_id == session_id:
+            return
+        if existing_session_id is not None:
+            raise ValueError(
+                f"Launch {launch_id!r} is already bound to session "
+                f"{existing_session_id!r}; cannot bind {session_id!r}"
+            )
+
+        for existing_launch_id, existing_row in registry.items():
+            if existing_launch_id == launch_id or not isinstance(existing_row, dict):
+                continue
+            if existing_row.get("claude_session_id") == session_id:
+                raise ValueError(
+                    f"Session {session_id!r} is already claimed by launch "
+                    f"{existing_launch_id!r}; cannot assign it to launch {launch_id!r}"
+                )
 
         row["claude_session_id"] = session_id
         content = json.dumps(registry)

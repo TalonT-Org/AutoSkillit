@@ -13,6 +13,7 @@ from autoskillit.core import (
     read_registry,
     write_registry_entry,
 )
+from autoskillit.core.runtime.session_registry import registry_path
 from autoskillit.execution.backends import ClaudeSessionLocator
 from tests._helpers import seed_registry_owner
 
@@ -137,6 +138,34 @@ class TestClaudeSessionLocator:
         )
 
         assert ClaudeSessionLocator().list_sessions(str(tmp_path)) == ()
+
+    def test_list_sessions_rejects_duplicate_registry_conversation_ids_without_mutation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        project = tmp_path / "project"
+        project.mkdir()
+        write_registry_entry(project, "launch-one", "cook", None)
+        write_registry_entry(project, "launch-two", "cook", None)
+        bridge_claude_session_id(project, "launch-one", "claude-duplicate")
+        bridge_claude_session_id(project, "launch-two", "claude-duplicate")
+        registry_bytes = registry_path(project).read_bytes()
+        index_dir = tmp_path / "claude-project"
+        index_dir.mkdir()
+        (index_dir / "sessions-index.json").write_text("[]", encoding="utf-8")
+        monkeypatch.setattr(
+            _locator_module,
+            "claude_code_project_dir",
+            lambda _cwd: index_dir,
+        )
+
+        with pytest.raises(ValueError) as error:
+            ClaudeSessionLocator().list_sessions(str(project))
+
+        assert "claude-duplicate" in str(error.value)
+        assert "launch-one" in str(error.value)
+        assert "launch-two" in str(error.value)
+        assert "removing one duplicate mapping" in str(error.value)
+        assert registry_path(project).read_bytes() == registry_bytes
 
     def test_locate_session_finds_existing_file(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

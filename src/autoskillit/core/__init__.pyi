@@ -320,6 +320,7 @@ from .plugins.agent_definition import normalize_codex_cli_version as normalize_c
 from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
+from .runtime._linux_proc import owner_liveness as owner_liveness
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_pid_namespace_inode as read_pid_namespace_inode
 from .runtime._linux_proc import read_process_state as read_process_state
@@ -389,7 +390,9 @@ from .runtime.session_provenance import (
 from .runtime.session_provenance import write_provenance_record as write_provenance_record
 from .runtime.session_registry import bind_session_owner as bind_session_owner
 from .runtime.session_registry import bridge_claude_session_id as bridge_claude_session_id
+from .runtime.session_registry import claim_launch_for_session as claim_launch_for_session
 from .runtime.session_registry import read_registry as read_registry
+from .runtime.session_registry import release_session_claim as release_session_claim
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
 from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention

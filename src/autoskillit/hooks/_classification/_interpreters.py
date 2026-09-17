@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         _LITERAL_PATH_CONSTRUCTOR_RE,
         _WRITE_APIS_RE,
         _WRITE_CALL_SITE_RE,
+        EvaluatedSegment,
         StdinLiteral,
         _command_position_candidate_spans,
         _CommandSegment,
@@ -492,10 +493,10 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     return payloads
 
 
-def all_evaluated_segments(
+def all_evaluated_segments_with_provenance(
     command: str, *, include_process_substitutions: bool = False
-) -> list[list[str]] | None:
-    """Return every segment that will actually execute, across every consumer.
+) -> list[EvaluatedSegment] | None:
+    """Return evaluated segments with submitted-command provenance when available.
 
     Outer segments, every recursively tokenized SHELL payload, every
     literal-argv Python subprocess spec as its own segment, and every
@@ -509,7 +510,7 @@ def all_evaluated_segments(
     `planner_gh_discovery_guard.py`) that must also see `<(...)`/`>(...)`
     bodies; the default preserves the historic shell-substitution-only reach.
     """
-    outer = tokenize_command_segments(command)
+    outer = _tokenize_command_segments_with_redirects(command)
     if not outer and command.strip():
         return None
     shell_segments = tokenize_shell_payload_segments(
@@ -518,17 +519,33 @@ def all_evaluated_segments(
     if shell_segments is None:
         return None
 
-    segments: list[list[str]] = [*outer, *shell_segments]
+    segments = [EvaluatedSegment(segment.tokens, segment) for segment in outer]
+    segments.extend(EvaluatedSegment(tokens, None) for tokens in shell_segments)
     for payload in evaluated_payloads(command):
         if payload.kind != StdinConsumer.PYTHON:
             continue
         specs, _has_unresolved = _python_program_command_specs(payload.text)
         for spec in specs:
             if isinstance(spec.payload, list):
-                segments.append(spec.payload)
+                segments.append(EvaluatedSegment(spec.payload, None))
             elif spec.invokes_shell:
-                segments.extend(tokenize_command_segments(spec.payload))
+                segments.extend(
+                    EvaluatedSegment(tokens, None)
+                    for tokens in tokenize_command_segments(spec.payload)
+                )
     return segments
+
+
+def all_evaluated_segments(
+    command: str, *, include_process_substitutions: bool = False
+) -> list[list[str]] | None:
+    """Return every segment that will actually execute, across every consumer."""
+    segments = all_evaluated_segments_with_provenance(
+        command, include_process_substitutions=include_process_substitutions
+    )
+    if segments is None:
+        return None
+    return [segment.tokens for segment in segments]
 
 
 def live_command_text(command: str) -> str:
@@ -670,6 +687,7 @@ if not TYPE_CHECKING:
     _LITERAL_PATH_CONSTRUCTOR_RE = _classification._LITERAL_PATH_CONSTRUCTOR_RE
     _WRITE_APIS_RE = _classification._WRITE_APIS_RE
     _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
+    EvaluatedSegment = _classification.EvaluatedSegment
     StdinLiteral = _classification.StdinLiteral
     strip_heredoc_bodies = _classification.strip_heredoc_bodies
     _command_position_candidate_spans = _classification._command_position_candidate_spans

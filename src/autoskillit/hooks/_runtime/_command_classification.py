@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
         ArgvToken,
+        EvaluatedSegment,
         StdinLiteral,
         _CommandSegment,
         _normalize_newlines_for_tokenize,
@@ -33,6 +34,7 @@ else:
         from _classification import _tokenizer
 
     ArgvToken = _tokenizer.ArgvToken
+    EvaluatedSegment = _tokenizer.EvaluatedSegment
     StdinLiteral = _tokenizer.StdinLiteral
     _CommandSegment = _tokenizer._CommandSegment
     _normalize_newlines_for_tokenize = _tokenizer._normalize_newlines_for_tokenize

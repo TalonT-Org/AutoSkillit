@@ -22,7 +22,7 @@ _DIRECT_READ_VERB = re.compile(r"\b(?:read|consult|inspect)\b", re.IGNORECASE)
 _ALLOWED_SKILL_MD_MENTIONS: dict[tuple[str, int], str] = {
     (
         "skills/sous-chef/SKILL.md",
-        1073,
+        1077,
     ): "Prohibits direct source reads; it does not instruct an agent to read another skill.",
     (
         "skills_extended/write-recipe/SKILL.md",

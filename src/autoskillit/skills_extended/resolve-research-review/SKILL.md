@@ -491,6 +491,9 @@ Save full report to `{{AUTOSKILLIT_TEMP}}/resolve-research-review/report_{pr}_{t
 
 ## Structured Output
 
+`needs_rerun = true` covers protocol deviations or execution that diverged from the
+approved research plan and therefore requires a fresh experiment run.
+
 <!-- gated-field-semantics:begin -->
 ### Finding disposition and qualifier semantics
 

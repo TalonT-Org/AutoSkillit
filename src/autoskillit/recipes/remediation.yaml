@@ -1762,6 +1762,10 @@ steps:
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: pre_review_rebase
+    - when: ${{ result.review_status }} == 'no_pr'
+      route: release_issue_failure
+    - when: ${{ result.review_status }} == 'processed'
+      route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: 'Runs when review_pr reports issues (verdict=changes_requested). The clone

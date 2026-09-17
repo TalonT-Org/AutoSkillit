@@ -1795,6 +1795,14 @@
           "route": "pre_review_rebase"
         },
         {
+          "when": "${{ result.review_status }} == 'no_pr'",
+          "route": "release_issue_failure"
+        },
+        {
+          "when": "${{ result.review_status }} == 'processed'",
+          "route": "release_issue_failure"
+        },
+        {
           "route": "release_issue_failure"
         }
       ],

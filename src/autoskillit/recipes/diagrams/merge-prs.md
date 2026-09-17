@@ -1,3 +1,5 @@
+<!-- autoskillit-recipe-hash: sha256:92527800f25522e06fdb88704b3a523cdcaccee2f070b685ff175dcc65f9904a -->
+<!-- autoskillit-diagram-format: v7 -->
 ## merge-prs
 
 ```text

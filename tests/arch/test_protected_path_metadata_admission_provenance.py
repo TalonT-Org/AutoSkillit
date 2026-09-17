@@ -34,14 +34,23 @@ def _call_name(node: ast.Call) -> str | None:
     return None
 
 
-class _NamedCallVisitor(ast.NodeVisitor):
-    def __init__(self, call_name: str) -> None:
-        self._call_name = call_name
+class _OwnerTrackingVisitor(ast.NodeVisitor):
+    """Base visitor that tracks the enclosing function/async-function owner.
+
+    Subclasses implement ``_visit_function_body`` to inspect the function
+    node (e.g. record arguments, observe calls). ``_owners[-1]`` is the
+    immediate enclosing function name, or ``None`` at module scope.
+    """
+
+    def __init__(self) -> None:
         self._owners: list[str | None] = [None]
-        self.calls: list[tuple[str | None, int, ast.expr]] = []
+
+    def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Hook: subclasses inspect the function node while it is the current owner."""  # noqa: ARG002
 
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self._owners.append(node.name)
+        self._visit_function_body(node)
         self.generic_visit(node)
         self._owners.pop()
 
@@ -50,6 +59,13 @@ class _NamedCallVisitor(ast.NodeVisitor):
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._visit_function(node)
+
+
+class _NamedCallVisitor(_OwnerTrackingVisitor):
+    def __init__(self, call_name: str) -> None:
+        super().__init__()
+        self._call_name = call_name
+        self.calls: list[tuple[str | None, int, ast.expr]] = []
 
     def visit_Call(self, node: ast.Call) -> None:
         if _call_name(node) == self._call_name and node.args:
@@ -57,31 +73,22 @@ class _NamedCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-class _ListAnnotationVisitor(ast.NodeVisitor):
+class _ListAnnotationVisitor(_OwnerTrackingVisitor):
     def __init__(self) -> None:
-        self._owners: list[str | None] = [None]
+        super().__init__()
         self.names: dict[str | None, set[str]] = {}
 
     def _record(self, name: str, annotation: ast.expr | None) -> None:
         if annotation is not None and _is_list_annotation(annotation):
             self.names.setdefault(self._owners[-1], set()).add(name)
 
-    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        self._owners.append(node.name)
+    def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
             self._record(argument.arg, argument.annotation)
         if node.args.vararg is not None:
             self._record(node.args.vararg.arg, node.args.vararg.annotation)
         if node.args.kwarg is not None:
             self._record(node.args.kwarg.arg, node.args.kwarg.annotation)
-        self.generic_visit(node)
-        self._owners.pop()
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._visit_function(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self._visit_function(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         if isinstance(node.target, ast.Name):

@@ -1425,7 +1425,7 @@ class TestCommandHasBlockedProtectedPathRead:
 
 
 _PROTECTED_RECIPE = "src/autoskillit/recipes/foo.yaml"
-_PROTECTED_SKILL = "src/autoskillit/skills/dry-walkthrough/SKILL.md"
+_PROTECTED_SKILL = "src/autoskillit/skills/foo/SKILL.md"
 _PROTECTED_AGENT = "src/autoskillit/agents/foo.md"
 _PROTECTED_SKILL_RESOURCE = "src/autoskillit/skill_resources/foo.md"
 

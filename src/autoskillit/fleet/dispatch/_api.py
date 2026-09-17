@@ -495,11 +495,12 @@ async def _run_dispatch(
             recipe=recipe,
             prior_session_chain=ready.prior_session_chain,
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
-            resume_session_id=ready.resume_session_id,
-            dispatch_checkpoint=ready.resume_checkpoint,
+            resume_session_id=execution_result.effective_resume_session_id,
+            incoming_resume_checkpoint=ready.resume_checkpoint,
             marker_dir=execution_result.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
             dispatch_sidecar_path=execution_result.dispatch_sidecar_path,
+            prior_dispatch_ids=[prior_dispatch_id] if prior_dispatch_id else None,
         )
         result = await finalize_state_write(
             classification=classification,
@@ -514,7 +515,6 @@ async def _run_dispatch(
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
             capture=capture,
-            dispatch_checkpoint=ready.resume_checkpoint,
             started_at=execution_result.started_at,
             ended_at=ended_at or time.time(),
             cache_invalidator=cache_invalidator,

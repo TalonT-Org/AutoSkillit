@@ -725,3 +725,62 @@ class TestTrackerBridgeIntegration:
         assert "plan" in record["resume_checkpoint"]["completed_items"]
         assert record["resume_checkpoint"]["backend_name"] == tool_ctx.backend.name
         assert record["resume_checkpoint"]["skill_name"] == "test-recipe"
+
+    @pytest.mark.anyio
+    async def test_incoming_checkpoint_is_authoritative_in_record_and_result(
+        self, tool_ctx, monkeypatch
+    ):
+        """Incoming resume progress wins over conflicting tracker progress everywhere."""
+        import json
+
+        from autoskillit.core import SessionCheckpoint
+        from autoskillit.fleet._api import _run_dispatch
+        from tests.fleet._helpers import _noop_quota_refresher
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        incoming_checkpoint = SessionCheckpoint(
+            completed_items=["incoming-step"],
+            step_name="incoming-step",
+            progress_pct=25.0,
+            backend_name="incoming-backend",
+            skill_name="incoming-skill",
+        )
+        tracker_checkpoint = SessionCheckpoint(
+            completed_items=["tracker-step"],
+            step_name="tracker-step",
+            progress_pct=75.0,
+            backend_name="tracker-backend",
+            skill_name="tracker-skill",
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "load_dispatch_progress",
+            lambda **_: (
+                tool_ctx.temp_dir / "missing-sidecar.jsonl",
+                [],
+                tracker_checkpoint,
+                None,
+            ),
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_refresher=_noop_quota_refresher,
+            resume_checkpoint=incoming_checkpoint,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        record = _read_dispatch_record(tool_ctx)
+        assert record["resume_checkpoint"] == incoming_checkpoint.to_dict()
+        assert envelope["resume_checkpoint"] == incoming_checkpoint.to_dict()

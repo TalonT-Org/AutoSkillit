@@ -115,6 +115,7 @@ def test_recipe_delivery_tool_classifications_are_exact() -> None:
         "create_and_publish_branch",
         "release_issue",
         "run_cmd",
+        "verify_review_receipt",
     }
 
     actual_automatic = {
@@ -133,6 +134,20 @@ def test_recipe_delivery_tool_classifications_are_exact() -> None:
     [
         ("run_python", ("callable", "args", "timeout", "work_dir", "step_name")),
         ("check_pr_mergeable", ("pr_number", "cwd", "repo", "step_name")),
+        (
+            "verify_review_receipt",
+            (
+                "cwd",
+                "receipt_path",
+                "repository",
+                "pr_number",
+                "head_sha",
+                "logical_iteration",
+                "mode",
+                "post_state",
+                "step_name",
+            ),
+        ),
         (
             "claim_and_resolve_issue",
             ("issue_url", "label", "allow_reentry", "step_name"),
@@ -219,6 +234,7 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             "logical_iteration": ToolWireType.STRING,
             "mode": ToolWireType.STRING,
             "post_state": ToolWireType.STRING,
+            "step_name": ToolWireType.STRING,
         },
     }
 

@@ -1529,6 +1529,7 @@ steps:
       head_sha: ${{ context.pr_head_sha }}
       logical_iteration: resolve-review:${{ context.review_loop_count }}
       post_state: ${{ context.resolve_review_post_state }}
+      step_name: check_resolve_review_posted
     on_result:
     - when: ${{ result.reviews_posted }} == 'true'
       route: pre_review_rebase
@@ -1598,6 +1599,7 @@ steps:
       head_sha: ${{ context.pr_head_sha }}
       logical_iteration: review-pr:${{ context.review_loop_count }}
       post_state: ${{ context.review_post_state }}
+      step_name: check_review_posted
     on_result:
     - when: ${{ result.reviews_posted }} == 'false'
       route: release_issue_failure

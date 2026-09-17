@@ -179,6 +179,7 @@ class TestModuleCascadeCore:
             "_type_context_admission_persistence",
             "_type_context_admission_persistence_envelope",
             "_type_github_review",
+            "_type_github_review_anchor",
             "_type_dispatch_identity",
             "_type_figure_spec",
             "_type_session_env",

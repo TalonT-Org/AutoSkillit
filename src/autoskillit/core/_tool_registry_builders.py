@@ -180,11 +180,12 @@ def _verify_review_receipt() -> ToolDef:
         "logical_iteration",
         "mode",
         "post_state",
+        "step_name",
     )
     return _tool(
         "verify_review_receipt",
         params,
-        required=params,
+        required=params[:-1],
         wire_types={
             "cwd": ToolWireType.STRING,
             "receipt_path": ToolWireType.STRING,
@@ -194,7 +195,9 @@ def _verify_review_receipt() -> ToolDef:
             "logical_iteration": ToolWireType.STRING,
             "mode": ToolWireType.STRING,
             "post_state": ToolWireType.STRING,
+            "step_name": ToolWireType.STRING,
         },
+        roles={"step_name": ToolParamRole.PROTOCOL},
         recovery_recipe_delivery=True,
     )
 

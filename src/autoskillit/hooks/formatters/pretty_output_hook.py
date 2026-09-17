@@ -143,8 +143,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
     "list_recipes": _fmt_list_recipes,
 }
 
-# Tools explicitly opted out of dedicated formatters.
-# The generic formatter is sufficient for these tools' response shapes.
+# Tools opted out of dedicated formatters use the generic formatter for their response shapes.
 # When adding a new tool, it MUST appear either in _FORMATTERS or here.
 _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     {

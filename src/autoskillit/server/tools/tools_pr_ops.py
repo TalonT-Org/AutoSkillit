@@ -248,6 +248,7 @@ async def verify_review_receipt(
     logical_iteration: str,
     mode: str,
     post_state: str,
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Verify a review effect against the server-owned publication ledger.

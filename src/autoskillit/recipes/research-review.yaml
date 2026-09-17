@@ -285,6 +285,7 @@ steps:
       head_sha: "${{ context.pr_head_sha }}"
       logical_iteration: "review-research-pr:research-review"
       post_state: "${{ context.review_post_state }}"
+      step_name: check_review_posted
     skip_when_false: inputs.review_research_pr
     on_skip: audit_claims
     on_result:
@@ -344,6 +345,7 @@ steps:
       head_sha: "${{ context.pr_head_sha }}"
       logical_iteration: "audit-claims:research-review"
       post_state: "${{ context.audit_review_post_state }}"
+      step_name: check_audit_review_posted
     skip_when_false: inputs.audit_claims
     on_skip: route_review_resolve
     on_result:

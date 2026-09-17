@@ -1451,7 +1451,8 @@
         "pr_number": "${{ context.pr_number }}",
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": "review-research-pr:research",
-        "post_state": "${{ context.review_post_state }}"
+        "post_state": "${{ context.review_post_state }}",
+        "step_name": "check_review_posted"
       },
       "skip_when_false": "inputs.review_research_pr",
       "on_skip": "audit_claims",
@@ -1525,7 +1526,8 @@
         "pr_number": "${{ context.pr_number }}",
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": "audit-claims:research",
-        "post_state": "${{ context.audit_review_post_state }}"
+        "post_state": "${{ context.audit_review_post_state }}",
+        "step_name": "check_audit_review_posted"
       },
       "skip_when_false": "inputs.audit_claims",
       "on_skip": "route_review_resolve",

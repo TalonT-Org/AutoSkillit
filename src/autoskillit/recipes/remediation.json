@@ -2151,7 +2151,8 @@
         "pr_number": "${{ context.pr_number }}",
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": "resolve-review:${{ context.review_loop_count }}",
-        "post_state": "${{ context.resolve_review_post_state }}"
+        "post_state": "${{ context.resolve_review_post_state }}",
+        "step_name": "check_resolve_review_posted"
       },
       "on_result": [
         {
@@ -2243,7 +2244,8 @@
         "pr_number": "${{ context.pr_number }}",
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": "review-pr:${{ context.review_loop_count }}",
-        "post_state": "${{ context.review_post_state }}"
+        "post_state": "${{ context.review_post_state }}",
+        "step_name": "check_review_posted"
       },
       "on_result": [
         {

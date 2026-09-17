@@ -280,31 +280,32 @@ def _commit_reconciliation_defect(
     return None
 
 
+def _invariant_violation(detail: str) -> _AdjudicationFailure:
+    """Construct the canonical outcome-invariant adjudication failure."""
+    return _AdjudicationFailure(
+        retry_reason=RetryReason.OUTCOME_INVARIANT,
+        log_key=_EVIDENCE_FAILED_LOG_KEY,
+        subtype="outcome_invariant_violation",
+        detail=detail,
+    )
+
+
 def _disposition_semantics_failure(
     dispositions: list[FindingDisposition],
     verdict: int | str | None,
 ) -> _AdjudicationFailure | None:
     applied = any(item.disposition == "applied" for item in dispositions)
     if any(item.disposition == "failed" for item in dispositions):
-        return _AdjudicationFailure(
-            retry_reason=RetryReason.OUTCOME_INVARIANT,
-            log_key=_EVIDENCE_FAILED_LOG_KEY,
-            subtype="outcome_invariant_violation",
-            detail="one or more accepted findings have a terminal failed disposition",
+        return _invariant_violation(
+            "one or more accepted findings have a terminal failed disposition",
         )
     if verdict == "real_fix" and not applied:
-        return _AdjudicationFailure(
-            retry_reason=RetryReason.OUTCOME_INVARIANT,
-            log_key=_EVIDENCE_FAILED_LOG_KEY,
-            subtype="outcome_invariant_violation",
-            detail="verdict=real_fix requires at least one applied finding disposition",
+        return _invariant_violation(
+            "verdict=real_fix requires at least one applied finding disposition",
         )
     if verdict in _SUCCESS_VERDICTS - {"real_fix"} and applied:
-        return _AdjudicationFailure(
-            retry_reason=RetryReason.OUTCOME_INVARIANT,
-            log_key=_EVIDENCE_FAILED_LOG_KEY,
-            subtype="outcome_invariant_violation",
-            detail=f"verdict={verdict} cannot accompany an applied finding disposition",
+        return _invariant_violation(
+            f"verdict={verdict} cannot accompany an applied finding disposition",
         )
     if verdict not in _SUCCESS_VERDICTS:
         return _AdjudicationFailure(

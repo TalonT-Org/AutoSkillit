@@ -577,7 +577,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_audit_cycle_disposition": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_binding": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
-    "_type_phoropter": frozenset({"core"}),
     "_type_closure_report": frozenset({"core"}),
     "context_admission": frozenset({"core", "pipeline"}),
     "context_admission_helpers": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,

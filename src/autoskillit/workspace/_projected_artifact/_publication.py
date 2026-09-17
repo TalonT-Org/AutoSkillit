@@ -261,8 +261,7 @@ def _render_agent_definition(path: Path, mcp_tool_prefix: str) -> None:
     )
     lines[tools_line_idx] = f"{indent}tools: {new_tools_value}{line_ending}"
     rendered = "".join(lines)
-    if rendered != content:
-        atomic_write(path, rendered)
+    atomic_write(path, rendered)
 
     rendered_def = load_agent_definition(path)
     if rendered_def.name != source_def.name:
@@ -305,7 +304,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
             continue
         try:
             _render_agent_definition(path, mcp_tool_prefix)
-        except (FileNotFoundError, NotADirectoryError):
+        except (FileNotFoundError, NotADirectoryError, UnicodeDecodeError):
             continue
 
 

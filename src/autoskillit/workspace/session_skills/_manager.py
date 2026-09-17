@@ -87,12 +87,12 @@ def _reclaim_stale_entry(
             did_remove = _remove_and_verify(entry.path)
     except VANISHED_ERRORS:
         pass
-    except BaseException as exc:
+    except Exception as exc:
         logger.error("stale_session_cleanup_failed", exc_info=True)
         failures.append(exc)
     try:
         lease.release()
-    except BaseException as exc:
+    except Exception as exc:
         logger.error("stale_session_lease_release_failed", exc_info=True)
         failures.append(exc)
     return did_remove

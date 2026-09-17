@@ -186,8 +186,6 @@ def _skill_info_from_frontmatter(
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
-    # Keep this retrieval local: source-introspection tests assert that the
-    # frontmatter orchestrator itself owns the machine-declared field read.
     required_resources_raw = data.get("requires_resources", [])
     required_resources, resource_digests, resource_invalidities = _admit_required_resources(
         required_resources_raw

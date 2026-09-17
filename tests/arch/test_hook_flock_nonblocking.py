@@ -186,12 +186,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     (
         "workspace/_projected_artifact/authority.py",
-        "_acquire_initial_projection_reader",
-        "ArtifactLease.acquire_shared",
-    ),
-    (
-        "workspace/_projected_artifact/authority.py",
-        "_acquire_final_projection_reader",
+        "_acquire_projection_reader",
         "ArtifactLease.acquire_shared",
     ),
     (

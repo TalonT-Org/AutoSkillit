@@ -272,19 +272,7 @@ def _try_validate_published_plugin_artifact(
         ) from exc
 
 
-def _acquire_initial_projection_reader(plan: _ProjectedArtifactPlan) -> ArtifactLease:
-    try:
-        return ArtifactLease.acquire_shared(
-            plan.lease_path,
-            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
-        )
-    except Exception as exc:
-        raise PluginArtifactPublicationError(
-            f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
-        ) from exc
-
-
-def _acquire_final_projection_reader(plan: _ProjectedArtifactPlan) -> ArtifactLease:
+def _acquire_projection_reader(plan: _ProjectedArtifactPlan) -> ArtifactLease:
     try:
         return ArtifactLease.acquire_shared(
             plan.lease_path,
@@ -516,7 +504,7 @@ class ProjectedPluginArtifactAuthority:
             raise PluginArtifactPublicationError(
                 "projected plugin publication planning failed"
             ) from exc
-        reader = _acquire_initial_projection_reader(plan)
+        reader = _acquire_projection_reader(plan)
         try:
             identity = _try_validate_published_plugin_artifact(plan)
         except BaseException as primary_error:
@@ -528,7 +516,7 @@ class ProjectedPluginArtifactAuthority:
 
         identity = self._ensure_valid_publication(plan)
 
-        reader = _acquire_final_projection_reader(plan)
+        reader = _acquire_projection_reader(plan)
         try:
             identity = _validate_published_plugin_artifact(
                 plan,

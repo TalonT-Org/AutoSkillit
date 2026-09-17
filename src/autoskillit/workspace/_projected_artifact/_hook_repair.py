@@ -74,9 +74,8 @@ def validate_staged_plugin_hooks(staging_root: Path) -> None:
         _validate_staged_hook_command(staging_root, command)
 
 
-def _iter_staged_hook_commands(data: object) -> Iterator[str]:
+def _iter_staged_hook_commands(data: dict[str, object]) -> Iterator[str]:
     """Yield commands while preserving staged-hook structural diagnostics."""
-    assert isinstance(data, dict)
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         raise ProjectedArtifactHooksInvalid("staged hooks.json must contain a hooks object")

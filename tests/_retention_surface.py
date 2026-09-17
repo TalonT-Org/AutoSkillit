@@ -1250,10 +1250,11 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     f"{_IL}::L493": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
-    # -- workspace._projected_artifact._hook_repair public root gates --
+    # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --
     f"{_HC}::L440": _self_limiting(
         "The plugin cache root is absent, leaving no hook incarnation to repair."
     ),
+    # -- workspace._projected_artifact._hook_repair::repair_broken_projection_hooks --
     f"{_HP}::L495": _self_limiting(
         "The projections root is absent, leaving no projection hook payload to repair."
     ),

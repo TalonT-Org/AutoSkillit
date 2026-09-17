@@ -10,7 +10,8 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple, Protocol
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
@@ -544,7 +545,8 @@ def is_git_command(segment: list[str]) -> bool:
     return verb == "git" or verb.endswith("/git")
 
 
-class GitInvocation(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class GitInvocation:
     subcommand: str
     flags: list[str]
     global_flags: list[str]

@@ -3241,7 +3241,7 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
     result = extract_git_subcommand_and_flags(segment)
 
     assert result is not None
-    assert result[0] != "<unresolved>"
+    assert result.subcommand != "<unresolved>"
 
 
 class TestDeferredStdinLiteralShapes:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import sys
@@ -20,8 +21,8 @@ from autoskillit.cli.session._session_launch import (
 )
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
-    BareResume,
     FreshLaunch,
+    InteractiveLaunch,
     RecipeSource,
     SkillContractError,
     SkillExecutionRole,
@@ -31,7 +32,6 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
-from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 from autoskillit.workspace import (
     DefaultSkillResolver,
     compile_session_skill_catalog,
@@ -119,6 +119,139 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
     print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
 
 
+def _resolve_order_recipe(recipe_name: str, project_dir: Path) -> tuple[RecipeInfo, Recipe]:
+    from autoskillit.core import YAMLError
+    from autoskillit.recipe import (
+        NON_INTERACTIVE_KINDS,
+        find_recipe_by_name,
+        list_recipes,
+        load_recipe,
+        validate_recipe_structure,
+    )
+
+    match = find_recipe_by_name(recipe_name, project_dir)
+    if match is None:
+        available = list_recipes(project_dir, exclude_kinds=NON_INTERACTIVE_KINDS).items
+        print(f"Recipe not found: '{recipe_name}'")
+        if available:
+            print("Available recipes:")
+            for candidate in available:
+                print(f"  - {candidate.name}")
+        else:
+            print("No recipes found")
+        sys.exit(1)
+
+    try:
+        parsed = load_recipe(match.path)
+    except YAMLError as exc:
+        print(f"Recipe YAML parse error: {exc}")
+        sys.exit(1)
+    except ValueError as exc:
+        print(f"Recipe structure error: {exc}")
+        sys.exit(1)
+
+    errors = validate_recipe_structure(parsed)
+    if errors:
+        print(f"Recipe '{recipe_name}' failed validation:")
+        for error in errors:
+            print(f"  - {error}")
+        sys.exit(1)
+    return match, parsed
+
+
+def _derive_order_feature_env(
+    recipe: Recipe,
+    *,
+    launch: InteractiveLaunch,
+    is_tty: bool,
+    project_dir: Path,
+) -> dict[str, str] | None:
+    from autoskillit.cli.ui._timed_input import timed_prompt
+    from autoskillit.config import load_config
+    from autoskillit.core import PACK_REGISTRY
+
+    config = load_config(project_dir)
+    automatic = not isinstance(launch, FreshLaunch) or not is_tty
+    extra_env: dict[str, str] = {}
+
+    disabled_subsets = frozenset(config.subsets.disabled)
+    needed_subsets = _get_subsets_needed(recipe, disabled_subsets)
+    if needed_subsets:
+        subset_list = ", ".join(sorted(needed_subsets))
+        if automatic:
+            extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+            sys.stdout.write(f"Temporarily enabling required subset(s): {subset_list}\n")
+        else:
+            print(f"\nThis recipe requires subset(s): {subset_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            choice = timed_prompt(
+                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            )
+            if choice == "1":
+                extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+            elif choice == "2":
+                _enable_subsets_permanently(project_dir, needed_subsets)
+            else:
+                return None
+
+    default_disabled = frozenset(
+        tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    enabled_packs = frozenset(config.packs.enabled)
+    needed_packs = _get_packs_needed(recipe, default_disabled - enabled_packs)
+    if needed_packs:
+        pack_list = ", ".join(sorted(needed_packs))
+        temporary_packs = sorted(enabled_packs | needed_packs)
+        if automatic:
+            extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + json.dumps(temporary_packs)
+            sys.stdout.write(f"Temporarily enabling required pack(s): {pack_list}\n")
+        else:
+            print(f"\nThis recipe requires pack(s): {pack_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            pack_choice = timed_prompt(
+                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            )
+            if pack_choice == "1":
+                extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + json.dumps(temporary_packs)
+            elif pack_choice == "2":
+                _enable_packs_permanently(project_dir, needed_packs)
+            else:
+                return None
+    return extra_env
+
+
+def _run_fresh_order_ceremony(
+    recipe_name: str,
+    recipe: Recipe,
+    recipe_info: RecipeInfo,
+    *,
+    launch: InteractiveLaunch,
+    is_tty: bool,
+    project_dir: Path,
+) -> bool:
+    if not isinstance(launch, FreshLaunch):
+        return True
+
+    from autoskillit.cli._preview import show_cook_preview
+    from autoskillit.cli.ui._ansi import permissions_warning
+
+    show_cook_preview(recipe_name, recipe, _recipes_dir_for(recipe_info), project_dir)
+    print(permissions_warning())
+    if not is_tty:
+        return True
+
+    from autoskillit.cli.ui._timed_input import timed_prompt
+
+    confirm = timed_prompt(
+        "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
+    )
+    return confirm.lower() not in ("n", "no")
+
+
 def order(
     recipe: str | None = None, session_id: str | None = None, *, resume: bool = False
 ) -> None:
@@ -140,10 +273,7 @@ def order(
     """
     from autoskillit.recipe import (
         NON_INTERACTIVE_KINDS,
-        find_recipe_by_name,
         list_recipes,
-        load_recipe,
-        validate_recipe_structure,
     )
 
     if os.environ.get("CLAUDECODE"):
@@ -214,13 +344,6 @@ def order(
                 raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
             recipe = resolved.name
 
-    if isinstance(resume_spec, BareResume):
-        try:
-            sweep_orphaned_tethers(default_tether_dir())
-        except Exception:
-            logger.warning("order_startup_tether_sweep_failed", exc_info=True)
-        backend.recover_cook_history()
-
     from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
 
     launch = resolve_interactive_launch(
@@ -248,119 +371,37 @@ def order(
         launch_id, launch_env = _write_order_entry(project_dir, None)
         launch_extra_env = launch_env
     else:
-        from autoskillit.cli.ui._timed_input import timed_prompt
-        from autoskillit.core import YAMLError
-
-        _match = find_recipe_by_name(recipe, Path.cwd())
-        if _match is None:
-            available = list_recipes(
-                Path.cwd(),
-                exclude_kinds=NON_INTERACTIVE_KINDS,
-            ).items
-            print(f"Recipe not found: '{recipe}'")
-            if available:
-                print("Available recipes:")
-                for r in available:
-                    print(f"  - {r.name}")
-            else:
-                print("No recipes found")
-            sys.exit(1)
-        # Validate recipe before launching session
-        try:
-            parsed = load_recipe(_match.path)
-        except YAMLError as exc:
-            print(f"Recipe YAML parse error: {exc}")
-            sys.exit(1)
-        except ValueError as exc:
-            print(f"Recipe structure error: {exc}")
-            sys.exit(1)
-
-        errors = validate_recipe_structure(parsed)
-        if errors:
-            print(f"Recipe '{recipe}' failed validation:")
-            for err in errors:
-                print(f"  - {err}")
-            sys.exit(1)
-
-        # Subset-disabled gate (REQ-VAL-004)
-        from autoskillit.config import load_config as _load_config
-
-        _cfg = _load_config(Path.cwd())
-        _disabled = frozenset(_cfg.subsets.disabled)
-        _extra_env: dict[str, str] = {}
-
-        if _disabled:
-            _needed = _get_subsets_needed(parsed, _disabled)
-            if _needed:
-                subset_list = ", ".join(sorted(_needed))
-                print(f"\nThis recipe requires subset(s): {subset_list}")
-                print("  1. Enable temporarily (for this run only)")
-                print("  2. Enable permanently (update .autoskillit/config.yaml)")
-                print("  3. Cancel")
-                _choice = timed_prompt(
-                    "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
-                )
-                if _choice == "1":
-                    _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
-                elif _choice == "2":
-                    _enable_subsets_permanently(Path.cwd(), _needed)
-                else:
-                    return
-
-        # Pack gate — check default-disabled packs (REQ-PACK-010)
-        from autoskillit.core import PACK_REGISTRY as _PACK_REGISTRY
-
-        _default_disabled = frozenset(
-            tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
+        recipe_info, parsed = _resolve_order_recipe(recipe, project_dir)
+        extra_env = _derive_order_feature_env(
+            parsed,
+            launch=launch,
+            is_tty=sys.stdin.isatty(),
+            project_dir=project_dir,
         )
-        _pack_enabled = frozenset(_cfg.packs.enabled)
-        _default_disabled_packs = _default_disabled - _pack_enabled
-
-        if _default_disabled_packs:
-            _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
-            if _packs_needed:
-                pack_list = ", ".join(sorted(_packs_needed))
-                print(f"\nThis recipe requires pack(s): {pack_list}")
-                print("  1. Enable temporarily (for this run only)")
-                print("  2. Enable permanently (update .autoskillit/config.yaml)")
-                print("  3. Cancel")
-                _pack_choice = timed_prompt(
-                    "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
-                )
-                if _pack_choice == "1":
-                    import json as _json
-
-                    _extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + _json.dumps(
-                        sorted(_packs_needed)
-                    )
-                elif _pack_choice == "2":
-                    _enable_packs_permanently(Path.cwd(), _packs_needed)
-                else:
-                    return
-
-        from autoskillit.cli._preview import show_cook_preview
-        from autoskillit.cli.prompts import _COOK_GREETINGS
-
-        _itable = _get_ingredients_table(recipe, _match, Path.cwd())
-        show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
-
-        from autoskillit.cli.ui._ansi import permissions_warning
-
-        print(permissions_warning())
-        confirm = timed_prompt(
-            "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
-        )
-        if confirm.lower() in ("n", "no"):
+        if extra_env is None:
             return
+        if not _run_fresh_order_ceremony(
+            recipe,
+            parsed,
+            recipe_info,
+            launch=launch,
+            is_tty=sys.stdin.isatty(),
+            project_dir=project_dir,
+        ):
+            return
+
         launch_id, launch_env = _write_order_entry(project_dir, recipe)
-        launch_extra_env = {**_extra_env, **launch_env}
+        launch_extra_env = {**extra_env, **launch_env}
         if isinstance(launch, FreshLaunch):
+            from autoskillit.cli.prompts import _COOK_GREETINGS
+
+            ingredients_table = _get_ingredients_table(recipe, recipe_info, project_dir)
             launch = replace(
                 launch,
                 system_prompt=_build_orchestrator_prompt(
                     recipe,
                     mcp_prefix=mcp_prefix,
-                    ingredients_table=_itable,
+                    ingredients_table=ingredients_table,
                     has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
                     skill_compilation=skill_compilation,
                     project_root=project_dir,

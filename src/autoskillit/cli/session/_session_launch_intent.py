@@ -17,9 +17,12 @@ from autoskillit.core import (
     ResumeSpec,
     SessionLocator,
     SessionSummary,
+    get_logger,
 )
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
 _Registry = Mapping[str, Mapping[str, object]]
+logger = get_logger(__name__)
 
 
 def resolve_interactive_launch(
@@ -30,6 +33,13 @@ def resolve_interactive_launch(
     backend: CodingAgentBackend,
 ) -> InteractiveLaunch:
     """Resolve CLI resume input to either a fresh launch or a concrete restore."""
+    if not isinstance(resume_spec, NoResume):
+        try:
+            sweep_orphaned_tethers(default_tether_dir())
+        except Exception:
+            logger.warning("interactive_startup_tether_sweep_failed", exc_info=True)
+        backend.recover_cook_history()
+
     match resume_spec:
         case NamedResume(session_id=session_id):
             return RestoreSession(session_id=session_id)

@@ -875,17 +875,17 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "rather than risk enumerating an untrusted-mode directory."
     ),
     # -- fleet._dispatch_reaper::reap_stale_dispatches --
-    f"{_D}::L346": _self_limiting(
+    f"{_D}::L351": _self_limiting(
         "No campaign state file at all; nothing to reap for this campaign."
     ),
-    f"{_D}::L351": _retries_after_input_changes(
+    f"{_D}::L356": _retries_after_input_changes(
         "The state file could not be parsed; an unreadable state must not be interpreted "
         "as zero running dispatches."
     ),
-    f"{_D}::L356": _self_limiting(
+    f"{_D}::L361": _self_limiting(
         "Nothing in RUNNING status for this campaign; the candidate set is empty."
     ),
-    f"{_D}::L364": RetentionDecision(
+    f"{_D}::L369": RetentionDecision(
         Revocability.REVOCABLE,
         "A reaper never reaps its own campaign's siblings -- self-exclusion is a live-owner "
         "equivalent, verified by the caller's own campaign_id match, not by any /proc read.",
@@ -919,23 +919,23 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "dispatch dead), not an eligibility skip."
     ),
     # -- fleet._dispatch_reaper::_reap_confirmed_orphan --
-    f"{_DCO}::L219": RetentionDecision(
+    f"{_DCO}::L223": RetentionDecision(
         Revocability.REVOCABLE,
         "An active dispatch heartbeat (a live kernel-observable mtime freshness check) "
         "retains the dispatch -- the domain equivalent of a revocable kernel reference.",
     ),
-    f"{_DCO}::L239": _retries_after_input_changes(
+    f"{_DCO}::L243": _retries_after_input_changes(
         "kill_process_tree raised; execution failure, not an eligibility gate on the "
         "candidate itself."
     ),
-    f"{_DCO}::L252": RetentionDecision(
+    f"{_DCO}::L256": RetentionDecision(
         Revocability.REVOCABLE,
         "Survivors reported by kill_process_tree's cleanup_result mean the process may "
         "still be alive -- the dispatch record is deliberately left RUNNING for a retry, "
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- fleet._dispatch_reaper::_reap_running_dispatch --
-    f"{_DR}::L279": _self_limiting(
+    f"{_DR}::L283": _self_limiting(
         "An immediate disposition already handled this dispatch, so the identity pipeline "
         "does not reconsider it."
     ),

@@ -766,7 +766,7 @@ def test_cook_resume_reuses_claimed_launch_identity_everywhere(
 @pytest.mark.parametrize(
     ("binding_outcome", "error_match"),
     [
-        pytest.param(False, "Failed to bind managed cook session owner", id="refused"),
+        pytest.param(False, "session owner binding refused", id="refused"),
         pytest.param(RuntimeError("registry unavailable"), "registry unavailable", id="raised"),
     ],
 )

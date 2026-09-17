@@ -15,7 +15,7 @@ Four sections cover:
 
 1. **Lifecycle Mapping** — per-method mapping of `CodingAgentBackend` protocol
    methods to ACP session methods for `ClaudeCodeBackend` and `CodexBackend`.
-2. **Recovery Ladder** — mapping of the 19 `RetryReason` enum values to ACP
+2. **Recovery Ladder** — mapping of the 20 `RetryReason` enum values to ACP
    session rungs (`session/resume`, `session/load`, `session/new`) and
    terminal/wait-and-retry handling, plus the contract-nudge mechanism.
 3. **Capabilities Translation** — field-by-field categorization of all 47
@@ -196,7 +196,7 @@ and has no ACP analogue. Both backends raise `CapabilityNotSupportedError`
 
 ## Section 2: Recovery Ladder
 
-The recovery ladder maps each of the 18 `RetryReason` enum values
+The recovery ladder maps each of the 20 `RetryReason` enum values
 (`src/autoskillit/core/types/_type_enums.py`, lines 44–64) to one of three ACP
 session rungs — `session/resume`, `session/load`, `session/new` — or to a
 terminal/wait-and-retry classification.
@@ -230,6 +230,7 @@ specific infra-classification signals (e.g. API errors → `RESUME`, rate limits
 | `RATE_LIMITED` | (wait-and-retry) | `on_rate_limit` | Transient HTTP 429 or rate-limit pattern — wait then same rung (`_headless_result.py:578` override). |
 | `CANCELLED` | (terminal) | N/A | Transport teardown; no recovery. |
 | `OUTCOME_INVARIANT` | `session/new` | `on_failure` | Skill-emitted outcome fields violated their declared relationship. |
+| `OUTCOME_REPORT_MALFORMED` | `session/new` | `on_failure` | Skill's terminal outcome report could not be parsed. Do not add a label. |
 | `ASYNC_OBLIGATION` | `session/new` | `on_failure` | Backend-owned work or a wakeup remained unresolved, the bounded completion drain expired, or lifecycle evidence was unavailable. Start fresh; never poll or resume the prior session. |
 | `CONTEXT_EXHAUSTED` | (terminal) | N/A | Correlated Codex automatic-compaction veto. Start an explicit new session, or compact manually and deliberately resume. |
 | `NONE` | (no retry) | N/A | Success — no recovery needed. |

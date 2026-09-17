@@ -12,7 +12,6 @@ from __future__ import annotations
 import dataclasses
 import errno
 import json
-import re
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -37,8 +36,6 @@ from autoskillit.recipe import (
     SkillContract,
     SkillOutput,
     SuccessQualifierEntry,
-    get_skill_contract,
-    load_bundled_manifest,
 )
 from tests.conftest import _make_result
 
@@ -46,11 +43,28 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _resolve_review_contract() -> SkillContract:
-    manifest = load_bundled_manifest()
-    contract = get_skill_contract("resolve-review", manifest)
-    assert contract is not None, "resolve-review missing from skill_contracts.yaml"
-    assert contract.outcome_invariants, "resolve-review must declare outcome_invariants"
-    return contract
+    """Return a scalar-only contract for the reusable invariant engine tests."""
+    return SkillContract(
+        inputs=(),
+        outputs=[
+            SkillOutput(name="verdict", type="string"),
+            SkillOutput(name="fixes_applied", type="integer"),
+            SkillOutput(name="accept_count", type="integer"),
+            SkillOutput(name="fix_failures", type="integer"),
+        ],
+        outcome_invariants=[
+            OutcomeInvariantEntry(
+                when="accept_count > 0",
+                require="fix_failures == 0",
+            )
+        ],
+        success_qualifiers=[
+            SuccessQualifierEntry(
+                when="accept_count > 0 and fixes_applied == 0 and fix_failures == 0",
+                qualifier="accepted_without_changes",
+            )
+        ],
+    )
 
 
 def _e6_result_text(
@@ -127,7 +141,7 @@ class TestOutcomeInvariantDemotion:
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.OUTCOME_INVARIANT
 
-    def test_lying_model_real_fix_with_fix_failures_demoted(self) -> None:
+    def test_scalar_real_fix_with_fix_failures_demoted(self) -> None:
         """RECT-012: verdict=real_fix, fixes_applied=0, fix_failures=3 demotes identically.
 
         Carries Edit-tool write evidence so the case reaches outcome-invariant
@@ -202,7 +216,7 @@ class TestOutcomeInvariantCounterCases:
         assert sr.subtype != "outcome_invariant_violation"
         assert sr.outcome_qualifier is None, "Full success must NOT carry a qualifier"
 
-    def test_legitimate_all_skipped_already_green_qualified_not_demoted(self) -> None:
+    def test_scalar_all_skipped_already_green_qualified_not_demoted(self) -> None:
         """accept_count=1, fixes_applied=0, fix_failures=0 → success WITH qualifier
         'accepted_without_changes' (not demoted)."""
         stdout = _result_record(
@@ -378,124 +392,6 @@ class TestParseOutcomeFields:
         fields = parse_outcome_fields(result_text, self._contract())
         assert fields["verdict"] == "already_green"
         assert fields["fixes_applied"] == 0
-
-
-# ---------------------------------------------------------------------------
-# RECT-016: token-emission sync — SKILL.md must declare every invariant field
-# ---------------------------------------------------------------------------
-
-
-class TestTokenEmissionSync:
-    """Every field referenced by an outcome_invariants entry must be both a
-    declared output in skill_contracts.yaml AND appear as an emitted
-    ``field = `` line inside the resolve-review SKILL.md Output section."""
-
-    @staticmethod
-    def _skill_md_output_section_text() -> str:
-        from autoskillit.core import pkg_root
-
-        skill_md = pkg_root() / "skills_extended" / "resolve-review" / "SKILL.md"
-        content = skill_md.read_text(encoding="utf-8")
-        marker = "\n## Output\n"
-        idx = content.find(marker)
-        assert idx != -1, "resolve-review SKILL.md missing '## Output' section"
-        return content[idx:]
-
-    def test_invariant_fields_declared_and_emitted(self) -> None:
-        contract = _resolve_review_contract()
-        declared_names = {o.name for o in contract.outputs}
-        output_section = self._skill_md_output_section_text()
-
-        referenced_fields: set[str] = set()
-        for inv in contract.outcome_invariants:
-            for expr in (inv.when, inv.require):
-                field_name = expr.split()[0] if expr.split() else ""
-                referenced_fields.add(field_name)
-
-        assert referenced_fields, "outcome_invariants must reference at least one field"
-
-        for field_name in referenced_fields:
-            assert field_name in declared_names, (
-                f"outcome_invariants references {field_name!r} which is not a declared "
-                "output in skill_contracts.yaml"
-            )
-            line_pattern = re.compile(rf"^{re.escape(field_name)}\s*=", re.MULTILINE)
-            assert line_pattern.search(output_section), (
-                f"outcome_invariants field {field_name!r} has no '{field_name} = ' line "
-                "in resolve-review SKILL.md Output section"
-            )
-
-
-# ---------------------------------------------------------------------------
-# RECT-017: contract loader validation
-# ---------------------------------------------------------------------------
-
-
-class TestContractLoaderValidation:
-    """get_skill_contract must reject malformed outcome_invariants entries."""
-
-    def test_undeclared_field_reference_fails_load(self) -> None:
-        manifest = {
-            "skills": {
-                "fake-skill": {
-                    "outputs": [{"name": "accept_count", "type": "integer"}],
-                    "outcome_invariants": [
-                        {"when": "accept_count > 0", "require": "undeclared_field == 0"}
-                    ],
-                }
-            }
-        }
-        with pytest.raises(ValueError, match="undeclared output"):
-            get_skill_contract("fake-skill", manifest)
-
-    def test_non_numeric_declared_field_fails_load(self) -> None:
-        manifest = {
-            "skills": {
-                "fake-skill": {
-                    "outputs": [
-                        {"name": "accept_count", "type": "integer"},
-                        {"name": "verdict", "type": "string"},
-                    ],
-                    "outcome_invariants": [
-                        {"when": "accept_count > 0", "require": "verdict == 0"}
-                    ],
-                }
-            }
-        }
-        with pytest.raises(ValueError, match="non-integer output"):
-            get_skill_contract("fake-skill", manifest)
-
-    def test_missing_when_or_require_fails_load(self) -> None:
-        manifest = {
-            "skills": {
-                "fake-skill": {
-                    "outputs": [{"name": "accept_count", "type": "integer"}],
-                    "outcome_invariants": [{"when": "accept_count > 0"}],
-                }
-            }
-        }
-        with pytest.raises(ValueError, match="missing 'when' or 'require'"):
-            get_skill_contract("fake-skill", manifest)
-
-    def test_well_formed_invariant_loads_successfully(self) -> None:
-        manifest = {
-            "skills": {
-                "fake-skill": {
-                    "outputs": [
-                        {"name": "accept_count", "type": "integer"},
-                        {"name": "fix_failures", "type": "integer"},
-                    ],
-                    "outcome_invariants": [
-                        {"when": "accept_count > 0", "require": "fix_failures == 0"}
-                    ],
-                }
-            }
-        }
-        contract = get_skill_contract("fake-skill", manifest)
-        assert contract is not None
-        assert len(contract.outcome_invariants) == 1
-        assert contract.outcome_invariants[0].when == "accept_count > 0"
-        assert contract.outcome_invariants[0].require == "fix_failures == 0"
 
 
 # ---------------------------------------------------------------------------

@@ -229,6 +229,9 @@ class TestProcessTreeKill:
             if '"type": "child_pid"' in line
         ]
         assert len(child_records) == 2
+        # Brief wait for kernel to reap the terminated children before asserting
+        # pid_exists returns False. The sibling test above uses the same pattern.
+        await anyio.sleep(0.5)
         assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
 
     @pytest.mark.anyio

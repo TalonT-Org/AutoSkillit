@@ -82,6 +82,49 @@ def _normalize_legacy_child_spawn_cardinality(data: dict[str, Any]) -> str | Non
     return None
 
 
+def _insert_missing_capabilities(
+    data: dict[str, Any], declared_caps: set[str], info: SkillInfo
+) -> str | None:
+    """Add every typed capability missing from a skill's frontmatter."""
+    missing: set[str] = set()
+    for item in info.invalidities:
+        if item.kind is not SkillInvalidityKind.UNDECLARED_CAPABILITY:
+            continue
+        if item.capability is None:
+            return "undeclared capability invalidity has no typed capability"
+        missing.add(item.capability)
+    declared_caps.update(missing)
+    data["uses_capabilities"] = sorted(declared_caps)
+    return None
+
+
+def _repair_retired_capability_frontmatter(
+    data: dict[str, Any], declared_caps: set[str]
+) -> str | None:
+    """Repair declared retired capabilities; raw-body-only findings cannot be fixed."""
+    from autoskillit.workspace import (  # noqa: PLC0415
+        RETIRED_SEMANTIC_CAPABILITIES,
+    )
+
+    retired = declared_caps & RETIRED_SEMANTIC_CAPABILITIES.keys()
+    if not retired:
+        return (
+            "raw portable token(s) in skill body cannot be fixed "
+            "frontmatter-only; rewrite the body to remove the "
+            "offending token(s), or leave this finding as an "
+            "operator-visible advisory"
+        )
+    declared_caps.difference_update(retired)
+    data["uses_capabilities"] = sorted(declared_caps)
+    data.setdefault("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
+    requirements = dict(data.get("semantic_requirements") or {})
+    for capability in retired:
+        field = RETIRED_SEMANTIC_CAPABILITIES[capability].rsplit(".", 1)[-1]
+        requirements.setdefault(field, [])
+    data["semantic_requirements"] = requirements
+    return None
+
+
 class SkillMigrationAdapter(DeterministicMigrationAdapter):
     """Deterministic adapter for repairing skill frontmatter in stale skills."""
 
@@ -161,67 +204,25 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         declared_caps = {str(capability) for capability in declared_caps_raw}
 
         for kind in applicable_kinds:
+            migration_error: str | None = None
             if kind is SkillInvalidityKind.UNDECLARED_CAPABILITY:
-                missing: set[str] = set()
-                for item in info.invalidities:
-                    if item.kind is kind:
-                        if item.capability is None:
-                            return MigrationResult(
-                                success=False,
-                                name=file.name,
-                                error="undeclared capability invalidity has no typed capability",
-                            )
-                        missing.add(item.capability)
-                declared_caps.update(missing)
-                data["uses_capabilities"] = sorted(declared_caps)
+                migration_error = _insert_missing_capabilities(data, declared_caps, info)
             elif kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:
                 data["semantic_version"] = SKILL_SEMANTIC_SCHEMA_VERSION
             elif kind is SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS:
-                # Only the retired-capability half of this kind is repairable
-                # without touching the body: dropping a retired name from
-                # uses_capabilities (a frontmatter field) and declaring its
-                # replacement stops it from being flagged again. A raw
-                # portable token (Agent(, subagent_type=, ...) literally
-                # present in the body cannot be fixed frontmatter-only —
-                # this adapter never rewrites body prose. If no declared
-                # retired capability triggered this kind, the only possible
-                # cause is such a raw body token, so report failure instead
-                # of silently claiming a fix that never happened.
-                from autoskillit.workspace import (  # noqa: PLC0415
-                    RETIRED_SEMANTIC_CAPABILITIES,
-                )
-
-                retired = declared_caps & RETIRED_SEMANTIC_CAPABILITIES.keys()
-                if not retired:
-                    return MigrationResult(
-                        success=False,
-                        name=file.name,
-                        error=(
-                            "raw portable token(s) in skill body cannot be fixed "
-                            "frontmatter-only; rewrite the body to remove the "
-                            "offending token(s), or leave this finding as an "
-                            "operator-visible advisory"
-                        ),
-                    )
-                declared_caps.difference_update(retired)
-                data["uses_capabilities"] = sorted(declared_caps)
-                data.setdefault("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
-                requirements = dict(data.get("semantic_requirements") or {})
-                for capability in retired:
-                    field = RETIRED_SEMANTIC_CAPABILITIES[capability].rsplit(".", 1)[-1]
-                    requirements.setdefault(field, [])
-                data["semantic_requirements"] = requirements
+                migration_error = _repair_retired_capability_frontmatter(data, declared_caps)
             elif kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
                 migration_error = _normalize_legacy_child_spawn_cardinality(data)
-                if migration_error is not None:
-                    return MigrationResult(
-                        success=False,
-                        name=file.name,
-                        error=migration_error,
-                    )
             else:
                 raise SkillContractError(
                     f"SkillMigrationAdapter has no migration for invalidity kind {kind.value!r}"
+                )
+
+            if migration_error is not None:
+                return MigrationResult(
+                    success=False,
+                    name=file.name,
+                    error=migration_error,
                 )
 
         new_frontmatter = dump_yaml_str(data).rstrip("\n")

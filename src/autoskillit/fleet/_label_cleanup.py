@@ -42,7 +42,6 @@ async def _cleanup_single_issue(
     *,
     remove_labels: list[str],
     add_labels: list[str],
-    log_failed_swap: bool = False,
 ) -> bool:
     """Swap labels for a single issue URL. Returns True on success."""
     try:
@@ -54,13 +53,9 @@ async def _cleanup_single_issue(
         result = await github_client.swap_labels(
             owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
         )
-        success = result.get("success")
-        if not success:
-            if log_failed_swap:
-                logger.info("infra_label_cleanup", issue_url=issue_url, success=success)
-            return False
-        logger.info("infra_label_cleanup", issue_url=issue_url, success=True)
-        return True
+        success = bool(result.get("success"))
+        logger.info("infra_label_cleanup", issue_url=issue_url, success=success)
+        return success
     except Exception:
         logger.warning("infra_label_cleanup_swap_failed", issue_url=issue_url, exc_info=True)
         return False
@@ -243,7 +238,6 @@ async def cleanup_orphaned_labels(
             entry.issue_url,
             remove_labels=rl,
             add_labels=al,
-            log_failed_swap=True,
         ):
             all_succeeded = False
     return all_succeeded

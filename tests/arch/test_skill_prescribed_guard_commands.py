@@ -104,7 +104,14 @@ def _substitute_protected_path(command: PrescribedGuardCommand) -> str:
 def test_prescribed_commands_remain_extractable_and_match_declared_verdict() -> None:
     for command in PRESCRIBED_GUARD_COMMANDS:
         source = (_REPO_ROOT / command.source_path).read_text(encoding="utf-8")
-        assert command.fragment in extract_git_commands(source), (
+        extracted = extract_git_commands(source)
+        assert isinstance(extracted, list), (
+            f"extract_git_commands must return a list of strings, got {type(extracted).__name__}"
+        )
+        assert all(isinstance(item, str) for item in extracted), (
+            "extract_git_commands must return a list of strings"
+        )
+        assert command.fragment in extracted, (
             f"{command.source_path} no longer prescribes {command.fragment!r}"
         )
 

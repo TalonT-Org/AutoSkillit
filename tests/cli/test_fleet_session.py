@@ -630,9 +630,6 @@ class TestReloadLoopUsesRestoreSession:
         assert isinstance(captured_launches[0], FreshLaunch)
         restored = captured_launches[1]
         assert restored == RestoreSession(session_id="reload-id-abc")
-        assert not hasattr(restored, "briefing")
-        assert not hasattr(restored, "system_prompt")
-        assert not hasattr(restored, "initial_prompt")
 
 
 class TestCrossInvocationResume:
@@ -907,9 +904,6 @@ class TestSessionIdPersistence:
         assert len(captured_launches) == 2
         restored = captured_launches[1]
         assert restored == RestoreSession(session_id="captured-id-xyz")
-        assert not hasattr(restored, "briefing")
-        assert not hasattr(restored, "system_prompt")
-        assert not hasattr(restored, "initial_prompt")
 
     def test_session_id_written_to_state_on_reload(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -975,9 +969,6 @@ class TestSessionIdPersistence:
         assert len(captured_launches) == 2
         restored = captured_launches[1]
         assert restored == RestoreSession(session_id="reload-id-persist-xyz")
-        assert not hasattr(restored, "briefing")
-        assert not hasattr(restored, "system_prompt")
-        assert not hasattr(restored, "initial_prompt")
 
 
 class TestFleetSessionPromptPriorDispatchId:

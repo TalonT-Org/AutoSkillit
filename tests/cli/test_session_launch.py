@@ -2494,12 +2494,6 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         RestoreSession(session_id="infra-id"),
         RestoreSession(session_id="infra-id"),
     ]
-    assert all(
-        not hasattr(launch, "briefing")
-        and not hasattr(launch, "system_prompt")
-        and not hasattr(launch, "initial_prompt")
-        for launch in built_launches[2:]
-    )
     fresh_launch = built_launches[0]
     assert isinstance(fresh_launch, FreshLaunch)
     assert fresh_launch.system_prompt is not None

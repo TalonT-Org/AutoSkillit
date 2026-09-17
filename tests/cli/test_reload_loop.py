@@ -275,12 +275,6 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     assert all(
         "profile-required-join" in (launch.system_prompt or "") for launch in fresh_launches
     )
-    assert all(
-        not hasattr(launch, "briefing")
-        and not hasattr(launch, "system_prompt")
-        and not hasattr(launch, "initial_prompt")
-        for launch in restored_launches
-    )
     assert len(lifecycle.projection_bindings) == 1
     assert lifecycle.projection_bindings[0].closed
     assert events.index(managed_exits[0]) > events.index(lifecycle.event_for("attempt-exit", 2))

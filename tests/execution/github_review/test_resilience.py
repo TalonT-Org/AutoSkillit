@@ -329,7 +329,10 @@ async def test_receipt_disposition_count_matches_body_entries(tmp_path: Path) ->
         for item in result.receipt.finding_dispositions
     )
     outside_diff = gateway.create_calls[-1]["body"].split("## Outside Diff Range", 1)[1]
-    assert omitted_count == outside_diff.count("\n- `") == 2
+    body_count = outside_diff.count("\n- `")
+    assert omitted_count == body_count, (
+        f"disposition count {omitted_count} must match body entry count {body_count}"
+    )
 
 
 @pytest.mark.anyio

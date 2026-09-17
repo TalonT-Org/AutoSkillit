@@ -105,12 +105,18 @@ async def test_anchor_authority_path_is_containment_checked(
     elif unsafe_kind == "symlink":
         linked = authority_path.with_name("source.json")
         authority_path.rename(linked)
-        authority_path.symlink_to(linked)
+        try:
+            authority_path.symlink_to(linked)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"symlink unsupported on this platform/filesystem: {exc}")
         unsafe_path = authority_path
     elif unsafe_kind == "hardlink":
         linked = authority_path.with_name("source.json")
         authority_path.rename(linked)
-        os.link(linked, authority_path)
+        try:
+            os.link(linked, authority_path)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"hardlink unsupported on this platform/filesystem: {exc}")
         unsafe_path = authority_path
     else:
         nested = authority_path.parent / "nested"

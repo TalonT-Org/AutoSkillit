@@ -199,17 +199,29 @@ def test_verify_review_receipt_receives_the_exact_publication_identity(
     expected_logical_iteration = review["with"]["skill_inputs"]["logical_iteration"]
 
     assert check["tool"] == "verify_review_receipt"
-    assert with_block == {
-        "cwd": consumer.work_dir_ref,
-        "receipt_path": "${{ context.review_receipt_path }}",
-        "mode": consumer.verification_mode,
-        "repository": "${{ context.review_repository }}",
-        "pr_number": consumer.pr_ref,
-        "head_sha": "${{ context.pr_head_sha }}",
-        "logical_iteration": expected_logical_iteration,
-        "post_state": "${{ context.review_post_state }}",
-        "step_name": "check_review_posted",
+    # Validate the key set plus critical values rather than full-dict equality, so
+    # future optional parameters (e.g. step_provider) don't silently break this guard.
+    required_with_keys = {
+        "cwd",
+        "receipt_path",
+        "mode",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "post_state",
+        "step_name",
     }
+    assert required_with_keys <= set(with_block)
+    assert with_block["cwd"] == consumer.work_dir_ref
+    assert with_block["receipt_path"] == "${{ context.review_receipt_path }}"
+    assert with_block["mode"] == consumer.verification_mode
+    assert with_block["repository"] == "${{ context.review_repository }}"
+    assert with_block["pr_number"] == consumer.pr_ref
+    assert with_block["head_sha"] == "${{ context.pr_head_sha }}"
+    assert with_block["logical_iteration"] == expected_logical_iteration
+    assert with_block["post_state"] == "${{ context.review_post_state }}"
+    assert with_block["step_name"] == "check_review_posted"
     assert check["on_failure"] == consumer.failure_route
     assert check["on_result"][0] == {
         "when": "${{ result.reviews_posted }} == 'false'",

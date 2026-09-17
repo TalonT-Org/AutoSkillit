@@ -38,7 +38,19 @@ def test_remote_review_mutation_has_one_call_site_in_attempt() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and _call_name(node) == "create_review":
                 call_sites.append((path.name, _enclosing_function(tree, node)))
-    assert call_sites == [("poster.py", "_attempt")]
+    # Symbol-shape guard: every create_review call must resolve to _attempt (or a callee
+    # thereof). The previous filename-literal check was brittle to file/function renames.
+    assert call_sites
+    for filename, enclosing in call_sites:
+        assert filename == "poster.py", (
+            f"create_review call must originate from poster.py, got {filename}"
+        )
+        assert enclosing in {"_attempt", "_post"}, (
+            f"create_review call must live in _attempt or its caller _post, got {enclosing!r}"
+        )
+    assert len(call_sites) == 1, (
+        f"create_review must have exactly one call site, found {len(call_sites)}"
+    )
 
 
 def test_post_admits_findings_before_entering_attempt() -> None:

@@ -15,6 +15,44 @@ from tests.server.conftest import _make_mock_ctx
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.mark.parametrize("use_child_outcome_root", [False, True])
+def test_make_context_workspace_outcome_ledger_root_selection(
+    tmp_path, monkeypatch, use_child_outcome_root
+):
+    from autoskillit.config import AutomationConfig
+    from autoskillit.server import _factory
+    from tests.fakes import FakePluginArtifactAuthority
+
+    configured_log_root = tmp_path / "configured-logs"
+    child_outcome_log_root = tmp_path / "child-outcome-logs"
+    config = AutomationConfig()
+    config.linux_tracing.log_dir = str(configured_log_root)
+    monkeypatch.setenv(
+        "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        str(child_outcome_log_root) if use_child_outcome_root else "",
+    )
+    expected_root = child_outcome_log_root if use_child_outcome_root else configured_log_root
+    plugin_authority = FakePluginArtifactAuthority(tmp_path)
+    ledger = object()
+    try:
+        with patch.object(
+            _factory,
+            "DefaultWorkspaceOutcomeLedger",
+            return_value=ledger,
+        ) as ledger_factory:
+            ctx = _factory.make_context(
+                config,
+                runner=None,
+                plugin_authority=plugin_authority,
+                project_dir=tmp_path,
+            )
+    finally:
+        plugin_authority.close()
+
+    assert ctx.workspace_outcome_ledger is ledger
+    ledger_factory.assert_called_once_with(expected_root / "workspace-outcomes")
+
+
 @pytest.mark.anyio
 async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
     """After _open_kitchen_handler(), ctx.active_recipe_packs is frozenset()."""
@@ -290,6 +328,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         AuditAdmissionStoreAuthority,
         ContextAdmissionStoreAuthority,
     )
+    from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
@@ -345,6 +384,9 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
             )
         ),
         audit_admission_ledger=audit_admission_ledger,
+        workspace_outcome_ledger=DefaultWorkspaceOutcomeLedger(
+            tmp_path / ".autoskillit" / "temp" / "workspace-outcomes"
+        ),
         audit_authority_materializer=DefaultAuditAuthorityMaterializer(audit_admission_ledger),
         committed_disposition_resolver=DefaultCommittedDispositionResolver(audit_admission_ledger),
     )

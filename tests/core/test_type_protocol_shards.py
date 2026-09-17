@@ -12,6 +12,7 @@ def test_logging_shard_all():
         "TimingLog",
         "McpResponseLog",
         "GitHubApiLog",
+        "WorkspaceOutcomeLedger",
         "SupportsDebug",
         "SupportsLogger",
     }

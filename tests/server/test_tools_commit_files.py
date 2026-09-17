@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+from datetime import datetime
 
 import pytest
 
+from autoskillit.core import CommitFailureClass, WorkspaceOutcomeKind
 from autoskillit.server.git import validate_commit_paths
 from autoskillit.server.tools.tools_workspace import commit_files
 from tests.conftest import _make_result
+from tests.server._outcome_ledger_fakes import _FailingLedger, _RecordingLedger
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -209,6 +213,7 @@ class TestCommitFilesPreCommitInvocation:
         )
 
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add
+        tool_ctx.runner.push(_make_result(0, "tree-before\n", ""))  # git write-tree
         tool_ctx.runner.push(_make_result(0, "", ""))  # pre-commit run --files (pass)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git commit
         tool_ctx.runner.push(_make_result(0, "sha123\n", ""))  # rev-parse HEAD
@@ -216,7 +221,7 @@ class TestCommitFilesPreCommitInvocation:
         result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
 
         assert result["success"] is True
-        pre_commit_call = tool_ctx.runner.call_args_list[1][0]
+        pre_commit_call = tool_ctx.runner.call_args_list[2][0]
         assert pre_commit_call == ["/usr/bin/pre-commit", "run", "--files", "a.py"]
         assert "--no-verify" not in pre_commit_call
 
@@ -267,13 +272,14 @@ class TestCommitFilesPreCommitInvocation:
         monkeypatch.setattr(shutil, "which", _which)
 
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add
+        tool_ctx.runner.push(_make_result(0, "tree-before\n", ""))  # git write-tree
         tool_ctx.runner.push(_make_result(0, "", ""))  # uv run pre-commit run --files
         tool_ctx.runner.push(_make_result(0, "", ""))  # git commit
         tool_ctx.runner.push(_make_result(0, "sha\n", ""))  # rev-parse HEAD
 
         await commit_files(paths=["a.py"], message="msg", cwd=str(wt))
 
-        pre_commit_call = tool_ctx.runner.call_args_list[1][0]
+        pre_commit_call = tool_ctx.runner.call_args_list[2][0]
         assert pre_commit_call == ["/usr/bin/uv", "run", "pre-commit", "run", "--files", "a.py"]
 
 
@@ -297,10 +303,12 @@ class TestCommitFilesHookAutoFixRetry:
         )
 
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add (initial)
+        tool_ctx.runner.push(_make_result(0, "tree-before\n", ""))  # git write-tree
         tool_ctx.runner.push(
             _make_result(1, "", "files were modified by this hook")
         )  # pre-commit fails (auto-fix)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add (re-add after auto-fix)
+        tool_ctx.runner.push(_make_result(0, "tree-after\n", ""))  # git write-tree changed
         tool_ctx.runner.push(_make_result(0, "", ""))  # pre-commit run --files (retry, passes)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git commit
         tool_ctx.runner.push(_make_result(0, "sha456\n", ""))  # rev-parse HEAD
@@ -311,12 +319,175 @@ class TestCommitFilesHookAutoFixRetry:
         calls = [c[0] for c in tool_ctx.runner.call_args_list]
         assert calls == [
             ["git", "-C", str(wt), "add", "--", "a.py"],
+            ["git", "-C", str(wt), "write-tree"],
             ["/usr/bin/pre-commit", "run", "--files", "a.py"],
             ["git", "-C", str(wt), "add", "--", "a.py"],
+            ["git", "-C", str(wt), "write-tree"],
             ["/usr/bin/pre-commit", "run", "--files", "a.py"],
             ["git", "-C", str(wt), "commit", "-m", "msg"],
             ["git", "-C", str(wt), "rev-parse", "HEAD"],
         ]
+
+    @pytest.mark.anyio
+    async def test_unchanged_staged_tree_skips_retry_and_preserves_both_streams(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+        tool_ctx.runner.push(_make_result(1, "stdout detail", "stderr detail"))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result["success"] is False
+        assert result["failure_class"] == CommitFailureClass.HOOK_REJECTED
+        assert result["retry_skipped_reason"] == ("staged tree unchanged after pre-commit failure")
+        assert "stderr detail\nstdout detail" in result["error"]
+        assert len(tool_ctx.runner.call_args_list) == 5
+
+    @pytest.mark.anyio
+    async def test_empty_hook_streams_still_name_failing_phase(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+        ledger = _RecordingLedger()
+        tool_ctx.workspace_outcome_ledger = ledger
+
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+        tool_ctx.runner.push(_make_result(1, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result["error"] == "pre-commit failed: pre-commit exited with status 1"
+        assert not result["error"].endswith(": ")
+        assert result["failure_class"] == CommitFailureClass.HOOK_REJECTED
+        assert len(ledger.records) == 1
+        record = ledger.records[0]
+        assert record.kind is WorkspaceOutcomeKind.COMMIT_ATTEMPT
+        assert record.succeeded is False
+        assert record.failure_class is CommitFailureClass.HOOK_REJECTED
+        assert record.commit_sha is None
+
+    @pytest.mark.anyio
+    async def test_failed_write_tree_proof_does_not_skip_retry(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(1, "", "write-tree failed"))
+        tool_ctx.runner.push(_make_result(1, "", "files were modified"))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same-tree\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "sha\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result == {"success": True, "commit_sha": "sha"}
+        assert [call[0] for call in tool_ctx.runner.call_args_list].count(
+            ["/usr/bin/pre-commit", "run", "--files", "a.py"]
+        ) == 2
+
+    @pytest.mark.anyio
+    async def test_pre_commit_calls_inherit_environment_and_pin_workspace_uv_cache(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setenv("AUTOSKILLIT_TEST_PARENT_ENV", "kept")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+
+        for result in (
+            _make_result(0, "", ""),
+            _make_result(0, "before\n", ""),
+            _make_result(1, "", "files were modified"),
+            _make_result(0, "", ""),
+            _make_result(0, "after\n", ""),
+            _make_result(0, "", ""),
+            _make_result(0, "", ""),
+            _make_result(0, "sha\n", ""),
+        ):
+            tool_ctx.runner.push(result)
+
+        await commit_files(paths=["a.py"], message="msg", cwd=str(wt))
+
+        hook_calls = [
+            call for call in tool_ctx.runner.call_args_list if call[0][0] == "/usr/bin/pre-commit"
+        ]
+        assert len(hook_calls) == 2
+        expected_cache = wt / ".autoskillit" / "temp" / "uv-cache"
+        for _cmd, _cwd, _timeout, kwargs in hook_calls:
+            assert kwargs["env"]["AUTOSKILLIT_TEST_PARENT_ENV"] == "kept"
+            assert kwargs["env"]["UV_CACHE_DIR"] == str(expected_cache)
+
+    @pytest.mark.parametrize(
+        ("diagnostic", "expected_class"),
+        [
+            ("Read-only file system", CommitFailureClass.HOOK_INFRASTRUCTURE),
+            ("os error 30", CommitFailureClass.HOOK_INFRASTRUCTURE),
+            (
+                "Permission denied: /tmp/uv-cache",
+                CommitFailureClass.HOOK_INFRASTRUCTURE,
+            ),
+            ("Permission denied: src/file.py", CommitFailureClass.HOOK_REJECTED),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_observed_infrastructure_signatures_are_classified(
+        self, tool_ctx, tmp_path, monkeypatch, diagnostic, expected_class
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []\n")
+        monkeypatch.setattr(
+            shutil,
+            "which",
+            lambda cmd, **kw: "/usr/bin/pre-commit" if cmd == "pre-commit" else None,
+        )
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same\n", ""))
+        tool_ctx.runner.push(_make_result(1, diagnostic, ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "same\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result["failure_class"] == expected_class
+        assert diagnostic in result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -339,15 +510,17 @@ class TestCommitFilesHardHookFailure:
         )
 
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add (initial)
+        tool_ctx.runner.push(_make_result(0, "tree-before\n", ""))  # git write-tree
         tool_ctx.runner.push(_make_result(1, "", "hook failed hard"))  # pre-commit fails
         tool_ctx.runner.push(_make_result(1, "", "fatal: pathspec"))  # re-add fails
 
         result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
 
         assert result["success"] is False
-        assert "pre-commit + re-add failed" in result["error"]
+        assert "pre-commit re-add failed" in result["error"]
+        assert result["failure_class"] == CommitFailureClass.GIT_ADD_FAILED
         # Never reaches git commit.
-        assert len(tool_ctx.runner.call_args_list) == 3
+        assert len(tool_ctx.runner.call_args_list) == 4
 
     @pytest.mark.anyio
     async def test_retry_pre_commit_still_failing_returns_error_no_commit(
@@ -363,8 +536,10 @@ class TestCommitFilesHardHookFailure:
         )
 
         tool_ctx.runner.push(_make_result(0, "", ""))  # git add (initial)
+        tool_ctx.runner.push(_make_result(0, "tree-before\n", ""))  # git write-tree
         tool_ctx.runner.push(_make_result(1, "", "lint error"))  # pre-commit fails
         tool_ctx.runner.push(_make_result(0, "", ""))  # re-add succeeds
+        tool_ctx.runner.push(_make_result(0, "tree-after\n", ""))  # git write-tree changed
         tool_ctx.runner.push(_make_result(1, "", "lint error persists"))  # retry still fails
 
         result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
@@ -372,8 +547,8 @@ class TestCommitFilesHardHookFailure:
         assert result["success"] is False
         assert "pre-commit retry failed" in result["error"]
         assert "lint error persists" in result["error"]
-        # No commit call occurred — only 4 subprocess calls total.
-        assert len(tool_ctx.runner.call_args_list) == 4
+        # No commit call occurred — only the hook transaction calls above.
+        assert len(tool_ctx.runner.call_args_list) == 6
         for call in tool_ctx.runner.call_args_list:
             assert call[0][:3] != ["git", "-C", str(wt)] or "commit" not in call[0]
 
@@ -426,7 +601,7 @@ class TestCommitFilesEnvelopeShape:
 
         result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
 
-        assert set(result.keys()) == {"success", "error"}
+        assert set(result.keys()) == {"success", "error", "failure_class"}
         assert result["success"] is False
         assert isinstance(result["error"], str)
 
@@ -437,8 +612,69 @@ class TestCommitFilesEnvelopeShape:
 
         result = json.loads(await commit_files(paths=["../escape.py"], message="msg", cwd=str(wt)))
 
-        assert set(result.keys()) == {"success", "error"}
+        assert set(result.keys()) == {"success", "error", "failure_class"}
         assert result["success"] is False
+
+
+class TestCommitFilesOutcomeAccounting:
+    @pytest.mark.anyio
+    async def test_success_records_one_realpath_utc_commit_outcome(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        ledger = _RecordingLedger()
+        tool_ctx.workspace_outcome_ledger = ledger
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "abc123\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt / ".")))
+
+        assert result == {"success": True, "commit_sha": "abc123"}
+        assert len(ledger.records) == 1
+        record = ledger.records[0]
+        assert record.workspace == os.path.realpath(wt)
+        assert record.kind is WorkspaceOutcomeKind.COMMIT_ATTEMPT
+        assert record.succeeded is True
+        assert record.commit_sha == "abc123"
+        assert record.failure_class is None
+        assert datetime.fromisoformat(record.recorded_at).utcoffset() is not None
+
+    @pytest.mark.anyio
+    async def test_path_rejection_records_classified_failure_once(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        ledger = _RecordingLedger()
+        tool_ctx.workspace_outcome_ledger = ledger
+
+        result = json.loads(
+            await commit_files(paths=["../outside.py"], message="msg", cwd=str(wt))
+        )
+
+        assert result["failure_class"] == CommitFailureClass.PATH_REJECTED
+        assert len(ledger.records) == 1
+        assert ledger.records[0].failure_class is CommitFailureClass.PATH_REJECTED
+        assert ledger.records[0].succeeded is False
+
+    @pytest.mark.anyio
+    async def test_ledger_failure_after_commit_preserves_landed_sha_without_retry(
+        self, tool_ctx, tmp_path
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        ledger = _FailingLedger()
+        tool_ctx.workspace_outcome_ledger = ledger
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "landed-sha\n", ""))
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+
+        assert result["success"] is False
+        assert result["failure_class"] == CommitFailureClass.UNHANDLED
+        assert result["commit_sha"] == "landed-sha"
+        assert "outcome recording failed" in result["error"]
+        assert ledger.calls == 1
+        assert len(tool_ctx.runner.call_args_list) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -488,3 +724,4 @@ class TestCommitFilesTiming:
         assert result["success"] is False
         assert "pre-commit" in result["error"]
         assert "binary" in result["error"] or "not found" in result["error"]
+        assert result["failure_class"] == CommitFailureClass.TOOLING_MISSING

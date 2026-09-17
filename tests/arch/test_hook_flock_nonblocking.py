@@ -140,6 +140,16 @@ _EXPECTED_ACQUISITIONS = (
     ("hooks/resume_gate_post_hook.py", "_acquire_lock", "flock"),
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),
     ("planner/merge.py", "replace_item", "acquire_flock_with_timeout"),
+    (
+        "pipeline/workspace_outcomes/_ledger.py",
+        "read",
+        "ArtifactLease.acquire_shared",
+    ),
+    (
+        "pipeline/workspace_outcomes/_ledger.py",
+        "record",
+        "ArtifactLease.acquire_exclusive",
+    ),
     ("server/recipe/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
     ("server/_misc.py", "_prime_quota_cache", "ArtifactLease.acquire_shared"),
     ("server/_misc.py", "_quota_refresh_loop", "ArtifactLease.acquire_shared"),

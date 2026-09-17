@@ -42,6 +42,7 @@ _NO_REF_SUBCOMMANDS: Final = frozenset(
         "remote",
         "status",
         "version",
+        "write-tree",
         "worktree",
     }
 )
@@ -170,11 +171,11 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "server/tools/tools_workspace.py",
         "_run_pre_commit_transaction",
-        127,
+        165,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("server/tools/tools_workspace.py", "commit_files", 329, "<unresolved>", "UNRESOLVABLE"),
+    ("server/tools/tools_workspace.py", "commit_files", 489, "<unresolved>", "UNRESOLVABLE"),
     ("smoke_utils/_git.py", "check_commits_ahead", 179, "rev-list", "BARE"),
     ("smoke_utils/_git.py", "check_ref_state", 235, "ls-remote", "BARE"),
     ("smoke_utils/_git.py", "check_ref_state", 259, "merge-base", "BARE"),

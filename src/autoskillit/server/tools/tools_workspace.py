@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,13 +15,17 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    CommitFailureClass,
     SpillSpec,
+    WorkspaceOutcomeKind,
+    WorkspaceOutcomeRecord,
     WorktreeGateContention,
     get_logger,
     resolve_temp_dir,
     spill_output,
     truncate_text,
 )
+from autoskillit.execution import build_sanitized_env
 from autoskillit.server import mcp
 from autoskillit.server._misc import condense_test_output
 from autoskillit.server._notify import _notify, track_response_size
@@ -32,6 +37,15 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
     prepare_recipe_segment_delivery,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._pre_commit_failure import (
+    parse_combined_process_output as _combined_process_output,
+)
+from autoskillit.server.tools._pre_commit_failure import (
+    parse_hook_failure_class as _parse_hook_failure_class,
+)
+from autoskillit.server.tools._pre_commit_failure import (
+    pre_commit_failure_class as _pre_commit_failure_class,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import TestResult
@@ -106,7 +120,12 @@ def _build_test_check_response(
     return response
 
 
-async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> dict[str, object] | None:
+async def _run_pre_commit_transaction(
+    cwd: str,
+    paths: list[str],
+    *,
+    workspace_temp_dir: str | None,
+) -> dict[str, object] | None:
     pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
     uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
     hook_cmd: list[str] | None = None
@@ -119,21 +138,82 @@ async def _run_pre_commit_transaction(cwd: str, paths: list[str]) -> dict[str, o
             return {
                 "success": False,
                 "error": "pre-commit config exists but no pre-commit binary found",
+                "failure_class": CommitFailureClass.TOOLING_MISSING.value,
             }
 
     if hook_cmd is not None:
-        rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+        uv_cache_dir = resolve_temp_dir(Path(cwd), workspace_temp_dir) / "uv-cache"
+        uv_cache_dir.mkdir(parents=True, exist_ok=True)
+        hook_env = build_sanitized_env()
+        hook_env["UV_CACHE_DIR"] = str(uv_cache_dir)
+        before_rc, before_stdout, _ = await _run_subprocess(
+            ["git", "-C", cwd, "write-tree"], cwd=cwd, timeout=30
+        )
+        rc, stdout, stderr = await _run_subprocess(
+            hook_cmd,
+            cwd=cwd,
+            timeout=120,
+            env=hook_env,
+        )
         if rc != 0:
-            rc2, _, _ = await _run_subprocess(
+            hook_output = _combined_process_output(
+                stderr,
+                stdout,
+                f"pre-commit exited with status {rc}",
+            )
+            failure_class = _pre_commit_failure_class(hook_output)
+            rc2, readd_stdout, readd_stderr = await _run_subprocess(
                 ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
             )
             if rc2 != 0:
-                _err = f"pre-commit + re-add failed: {stderr.strip()}"
-                return {"success": False, "error": _err}
-            rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+                readd_output = _combined_process_output(
+                    readd_stderr,
+                    readd_stdout,
+                    f"git add exited with status {rc2}",
+                )
+                return {
+                    "success": False,
+                    "error": f"pre-commit re-add failed: {readd_output}",
+                    "failure_class": CommitFailureClass.GIT_ADD_FAILED.value,
+                }
+            after_rc, after_stdout, _ = await _run_subprocess(
+                ["git", "-C", cwd, "write-tree"], cwd=cwd, timeout=30
+            )
+            if (
+                before_rc == 0
+                and after_rc == 0
+                # Skip the staged-tree equality optimization when the before-tree
+                # stdout was empty/whitespace-only (e.g. `git write-tree` on an
+                # empty staging area or a stray `b'\n'`). Without this guard,
+                # the optimization would collapse to False on every empty case
+                # and fall through to a retry that will fail with the same
+                # output, masking the no-op pre-commit failure mode.
+                and bool(before_stdout.strip())
+                and before_stdout.strip() == after_stdout.strip()
+            ):
+                return {
+                    "success": False,
+                    "error": f"pre-commit failed: {hook_output}",
+                    "failure_class": failure_class.value,
+                    "retry_skipped_reason": "staged tree unchanged after pre-commit failure",
+                }
+            rc3, stdout3, stderr3 = await _run_subprocess(
+                hook_cmd,
+                cwd=cwd,
+                timeout=120,
+                env=hook_env,
+            )
             if rc3 != 0:
-                _err = f"pre-commit retry failed: {stderr3.strip()}"
-                return {"success": False, "error": _err}
+                retry_output = _combined_process_output(
+                    stderr3,
+                    stdout3,
+                    f"pre-commit retry exited with status {rc3}",
+                )
+                return {
+                    "success": False,
+                    "error": f"pre-commit retry failed: {retry_output}",
+                    "failure_class": _pre_commit_failure_class(retry_output).value,
+                }
     return None
 
 
@@ -167,58 +247,83 @@ async def test_check(
 
     Never raises.
     """
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
-        with structlog.contextvars.bound_contextvars(tool="test_check", cwd=worktree_path):
-            logger.info("test_check", worktree=worktree_path)
+        resolved = os.path.realpath(worktree_path)
+        with structlog.contextvars.bound_contextvars(tool="test_check", cwd=resolved):
+            logger.info("test_check", worktree=resolved)
             await _notify(
                 ctx,
                 "info",
-                f"test_check: {worktree_path}",
+                f"test_check: {resolved}",
                 "autoskillit.test_check",
-                extra={"worktree": worktree_path},
+                extra={"worktree": resolved},
             )
 
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
-            if tool_ctx.tester is None:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"passed": False, "error": "Test runner not configured"},
-                        prepared_segment,
-                        success=False,
-                    )
-                )
 
-            resolved = os.path.realpath(worktree_path)
-            if not os.path.isdir(resolved):
-                logger.warning("test_check path does not exist", path=resolved)
-                return json.dumps(
-                    attach_recipe_segment(
+            def _finish(response: dict[str, object], *, success: bool) -> str:
+                wire_response = attach_recipe_segment(
+                    response,
+                    prepared_segment,
+                    success=success,
+                )
+                try:
+                    tool_ctx.workspace_outcome_ledger.record(
+                        WorkspaceOutcomeRecord(
+                            workspace=resolved,
+                            recorded_at=datetime.now(UTC).isoformat(),
+                            kind=WorkspaceOutcomeKind.TEST_RUN,
+                            succeeded=response.get("passed") is True,
+                            timed_out=response.get("timed_out") is True,
+                            infrastructure_missing=(
+                                response.get("infrastructure_missing") is True
+                            ),
+                        )
+                    )
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logger.error("test_check outcome recording failed", exc_info=True)
+                    wire_response = attach_recipe_segment(
                         {
                             "passed": False,
-                            "error": f"Worktree path does not exist: {resolved}",
-                            "infrastructure_missing": True,
+                            "error": (
+                                f"workspace outcome recording failed: {type(exc).__name__}: {exc}"
+                            ),
                         },
                         prepared_segment,
                         success=False,
                     )
+                return json.dumps(wire_response)
+
+            if tool_ctx.tester is None:
+                return _finish(
+                    {"passed": False, "error": "Test runner not configured"},
+                    success=False,
+                )
+
+            if not os.path.isdir(resolved):
+                logger.warning("test_check path does not exist", path=resolved)
+                return _finish(
+                    {
+                        "passed": False,
+                        "error": f"Worktree path does not exist: {resolved}",
+                        "infrastructure_missing": True,
+                    },
+                    success=False,
                 )
             infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
             if infra_issue is not None:
                 logger.warning("test_check infrastructure missing", detail=infra_issue)
-                return json.dumps(
-                    attach_recipe_segment(
-                        {
-                            "passed": False,
-                            "error": f"Test infrastructure not found: {infra_issue}",
-                            "infrastructure_missing": True,
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
+                return _finish(
+                    {
+                        "passed": False,
+                        "error": f"Test infrastructure not found: {infra_issue}",
+                        "infrastructure_missing": True,
+                    },
+                    success=False,
                 )
 
             _start = time.monotonic()
@@ -238,7 +343,7 @@ async def test_check(
                             else "test_check: tests failed"
                         ),
                         "autoskillit.test_check",
-                        extra={"worktree": worktree_path},
+                        extra={"worktree": resolved},
                     )
 
                 response = _build_test_check_response(
@@ -248,20 +353,14 @@ async def test_check(
                     timed_out=timed_out,
                     effective_passed=effective_passed,
                 )
-                return json.dumps(
-                    attach_recipe_segment(
-                        response,
-                        prepared_segment,
-                        success=effective_passed,
-                    )
-                )
+                return _finish(response, success=effective_passed)
             except WorktreeGateContention as exc:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"passed": False, "error": str(exc)},
-                        prepared_segment,
-                        success=False,
-                    )
+                return _finish({"passed": False, "error": str(exc)}, success=False)
+            except Exception as exc:
+                logger.error("test_check unhandled exception", exc_info=True)
+                return _finish(
+                    {"passed": False, "error": f"{type(exc).__name__}: {exc}"},
+                    success=False,
                 )
             finally:
                 if step_name:
@@ -304,59 +403,191 @@ async def commit_files(
 
     Never raises.
     """
+    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
-        with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=cwd):
-            logger.info("commit_files", path_count=len(paths), cwd=cwd)
-
-            if not cwd or not os.path.isdir(cwd):
-                return json.dumps(
-                    {"success": False, "error": f"cwd does not exist or is not a directory: {cwd}"}
-                )
-            if not paths:
-                return json.dumps({"success": False, "error": "paths list is empty"})
-
-            from autoskillit.server.git import validate_commit_paths  # circular-break
-
-            if (path_error := validate_commit_paths(cwd, paths)) is not None:
-                return json.dumps({"success": False, "error": path_error})
+        resolved = os.path.realpath(cwd)
+        with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=resolved):
+            logger.info("commit_files", path_count=len(paths), cwd=resolved)
 
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
+            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
+
+            def _finish(
+                response: dict[str, object],
+                *,
+                failure_class: CommitFailureClass | None = None,
+            ) -> str:
+                # Build a fresh envelope so callers can reuse the response dict without
+                # us silently corrupting their copy via .pop() / item assignment.
+                envelope = dict(response)
+                if failure_class is not None:
+                    envelope["failure_class"] = failure_class.value
+                commit_sha = envelope.get("commit_sha")
+                succeeded = envelope.get("success") is True
+                wire_envelope = attach_recipe_segment(
+                    envelope,
+                    prepared_segment,
+                    success=succeeded,
+                )
+                try:
+                    tool_ctx.workspace_outcome_ledger.record(
+                        WorkspaceOutcomeRecord(
+                            workspace=resolved,
+                            recorded_at=datetime.now(UTC).isoformat(),
+                            kind=WorkspaceOutcomeKind.COMMIT_ATTEMPT,
+                            succeeded=succeeded,
+                            commit_sha=commit_sha if isinstance(commit_sha, str) else None,
+                            failure_class=None if succeeded else failure_class,
+                        )
+                    )
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logger.error("commit_files outcome recording failed", exc_info=True)
+                    ledger_failure: dict[str, object] = {
+                        "success": False,
+                        "error": (
+                            f"workspace outcome recording failed: {type(exc).__name__}: {exc}"
+                        ),
+                        "failure_class": CommitFailureClass.UNHANDLED.value,
+                    }
+                    if isinstance(commit_sha, str) and commit_sha:
+                        ledger_failure["commit_sha"] = commit_sha
+                    return json.dumps(
+                        attach_recipe_segment(
+                            ledger_failure,
+                            prepared_segment,
+                            success=False,
+                        )
+                    )
+                return json.dumps(wire_envelope)
+
+            if not cwd or not os.path.isdir(resolved):
+                return _finish(
+                    {
+                        "success": False,
+                        "error": f"cwd does not exist or is not a directory: {resolved}",
+                    },
+                    failure_class=CommitFailureClass.PATH_REJECTED,
+                )
+            if not paths:
+                return _finish(
+                    {"success": False, "error": "paths list is empty"},
+                    failure_class=CommitFailureClass.PATH_REJECTED,
+                )
+
+            from autoskillit.server.git import validate_commit_paths  # circular-break
+
+            if (path_error := validate_commit_paths(resolved, paths)) is not None:
+                return _finish(
+                    {"success": False, "error": path_error},
+                    failure_class=CommitFailureClass.PATH_REJECTED,
+                )
             _start = time.monotonic()
 
             try:
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
+                    ["git", "-C", resolved, "add", "--"] + paths,
+                    cwd=resolved,
+                    timeout=30,
                 )
                 if rc != 0:
-                    return json.dumps(
-                        {"success": False, "error": f"git add failed: {stderr.strip()}"}
+                    return _finish(
+                        {
+                            "success": False,
+                            "error": (
+                                "git add failed: "
+                                + _combined_process_output(
+                                    stderr,
+                                    stdout,
+                                    f"git add exited with status {rc}",
+                                )
+                            ),
+                        },
+                        failure_class=CommitFailureClass.GIT_ADD_FAILED,
                     )
 
-                if (hook_error := await _run_pre_commit_transaction(cwd, paths)) is not None:
-                    return json.dumps(hook_error)
+                if (
+                    hook_error := await _run_pre_commit_transaction(
+                        resolved,
+                        paths,
+                        workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
+                    )
+                ) is not None:
+                    # ``_parse_hook_failure_class`` handles missing/unknown values by
+                    # returning UNHANDLED, so use a default to keep the missing-key
+                    # case routed through the helper's defensive contract.
+                    hook_failure_class = _parse_hook_failure_class(
+                        hook_error.pop("failure_class", None)
+                    )
+                    return _finish(hook_error, failure_class=hook_failure_class)
 
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30
+                    ["git", "-C", resolved, "commit", "-m", message],
+                    cwd=resolved,
+                    timeout=30,
                 )
                 if rc != 0:
-                    return json.dumps(
-                        {"success": False, "error": f"git commit failed: {stderr.strip()}"}
+                    return _finish(
+                        {
+                            "success": False,
+                            "error": (
+                                "git commit failed: "
+                                + _combined_process_output(
+                                    stderr,
+                                    stdout,
+                                    f"git commit exited with status {rc}",
+                                )
+                            ),
+                        },
+                        failure_class=CommitFailureClass.GIT_COMMIT_FAILED,
                     )
 
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "rev-parse", "HEAD"], cwd=cwd, timeout=10
+                    ["git", "-C", resolved, "rev-parse", "HEAD"],
+                    cwd=resolved,
+                    timeout=10,
                 )
                 commit_sha = stdout.strip()
+                if rc != 0 or not commit_sha:
+                    return _finish(
+                        {
+                            "success": False,
+                            "error": (
+                                "git rev-parse HEAD failed: "
+                                + _combined_process_output(
+                                    stderr,
+                                    stdout,
+                                    f"git rev-parse exited with status {rc}",
+                                )
+                            ),
+                        },
+                        failure_class=CommitFailureClass.UNHANDLED,
+                    )
 
-                return json.dumps({"success": True, "commit_sha": commit_sha})
+                return _finish({"success": True, "commit_sha": commit_sha})
+            except Exception as exc:
+                logger.error("commit_files unhandled exception", exc_info=True)
+                return _finish(
+                    {"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                    failure_class=CommitFailureClass.UNHANDLED,
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("commit_files unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(
+            attach_recipe_segment(
+                {
+                    "success": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "failure_class": CommitFailureClass.UNHANDLED.value,
+                },
+                prepared_segment,
+                success=False,
+            )
+        )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

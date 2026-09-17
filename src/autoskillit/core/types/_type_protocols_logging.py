@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_results import FailureRecord, ModelTotalEntry
+from ._type_results import FailureRecord, ModelTotalEntry, WorkspaceOutcomeRecord
 
 __all__ = [
     "AuditLog",
@@ -14,9 +14,25 @@ __all__ = [
     "TimingLog",
     "McpResponseLog",
     "GitHubApiLog",
+    "WorkspaceOutcomeLedger",
     "SupportsDebug",
     "SupportsLogger",
 ]
+
+
+@runtime_checkable
+class WorkspaceOutcomeLedger(Protocol):
+    """Durable cross-process history for workspace test and commit outcomes."""
+
+    def record(self, record: WorkspaceOutcomeRecord) -> None: ...
+
+    def read(
+        self,
+        workspace: str,
+        *,
+        since: str,
+        until: str,
+    ) -> list[WorkspaceOutcomeRecord]: ...
 
 
 @runtime_checkable

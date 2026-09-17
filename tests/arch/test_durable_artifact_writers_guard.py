@@ -268,3 +268,37 @@ def test_skill_unavailability_metadata_writer_is_registered() -> None:
     assert writer.artifact == "add-dir/skill-unavailability.json"
     assert writer.machine_local is False
     assert writer.detection is None
+
+
+def test_workspace_outcome_ledger_writer_is_registered() -> None:
+    """The ledger record method remains the registered persistence boundary."""
+    rel = "pipeline/workspace_outcomes/_ledger.py"
+    path = SRC_ROOT / rel
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    ledger_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "DefaultWorkspaceOutcomeLedger"
+    )
+    writer = next(
+        node
+        for node in ledger_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "record"
+    )
+    calls = {
+        node.func.id
+        for node in ast.walk(writer)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "atomic_write" in calls
+    registered = next(
+        entry
+        for entry in DURABLE_ARTIFACT_WRITERS
+        if entry.writer
+        == ("autoskillit.pipeline.workspace_outcomes._ledger:DefaultWorkspaceOutcomeLedger.record")
+    )
+    assert registered.machine_local is True
+    assert registered.detection == (
+        "autoskillit.pipeline.workspace_outcomes._ledger:find_stale_workspace_outcome_shards"
+    )

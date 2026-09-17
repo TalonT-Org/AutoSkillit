@@ -29,6 +29,7 @@ Files with no registration support their folder; files with several registration
 - `_overlay_state.py` — Support module: Locked, validated access to the kitchen session overlay.
 - `_pipeline_deps.py` — Support module: Curated Phase A dependencies from the finalized recipe routing graph.
 - `_preflight.py` — Support module: Dispatch-feasibility preflight — shared by open_kitchen and dispatch_food_truck.
+- `_pre_commit_failure.py` — Support module: Pre-commit failure classification helpers for commit_files.
 - `_serve_helpers.py` — Support module: Unified serve-pipeline helpers.
 - `_type_coercion.py` — Support module: Override value coercion and type-validation gate for typed recipe ingredients.
 - `_types.py` — Support module: Server tool response TypedDicts — typed contracts for MCP tool JSON responses.

@@ -407,6 +407,12 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Explorer projection staging cleanup removes only a private temporary directory.",
     ),
+    ("pipeline/workspace_outcomes/_ledger.py", "_quarantine_corrupt_shard", "shard_path.rename"): (
+        1,
+        "An unreadable workspace outcome shard is atomically moved into a sibling "
+        "quarantine directory under the per-workspace exclusive lease so subsequent "
+        "writes can recover instead of re-failing on the same bytes.",
+    ),
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {

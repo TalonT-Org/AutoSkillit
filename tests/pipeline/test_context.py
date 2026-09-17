@@ -18,6 +18,7 @@ from autoskillit.core import (
     GitHubFetcher,
     GitHubReviewPosterProtocol,
 )
+from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
 from autoskillit.pipeline.context import ToolContext, get_kitchen_process_identity
@@ -63,6 +64,12 @@ def _audit_ledger(project_dir: Path) -> DefaultAuditAdmissionLedger:
     return ledger
 
 
+def _workspace_outcome_ledger(project_dir: Path) -> DefaultWorkspaceOutcomeLedger:
+    return DefaultWorkspaceOutcomeLedger(
+        project_dir / ".autoskillit" / "temp" / "workspace-outcomes"
+    )
+
+
 class _UnusedPluginAuthority:
     def acquire_launch_binding(self, *, backend, load_mode):
         raise AssertionError("this test must not acquire a plugin artifact")
@@ -85,11 +92,13 @@ def test_tool_context_fields_accessible(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
     assert ctx.gate.enabled is True
     assert isinstance(ctx.plugin_authority, _UnusedPluginAuthority)
+    assert isinstance(ctx.workspace_outcome_ledger, DefaultWorkspaceOutcomeLedger)
 
 
 def test_tool_context_audit_isolation(tmp_path):
@@ -109,6 +118,7 @@ def test_tool_context_audit_isolation(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path / "a"),
         audit_admission_ledger=_audit_ledger(tmp_path / "a"),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path / "a"),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -127,6 +137,7 @@ def test_tool_context_audit_isolation(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path / "b"),
         audit_admission_ledger=_audit_ledger(tmp_path / "b"),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path / "b"),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -162,6 +173,7 @@ def test_gate_state_replacement(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -187,6 +199,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -312,6 +325,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -416,6 +430,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )
@@ -503,6 +518,7 @@ def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
             managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=_ledger(tmp_path),
             audit_admission_ledger=_audit_ledger(tmp_path),
+            workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
             audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
             committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
         )
@@ -523,6 +539,7 @@ def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
             skill_session_contract_store=FakeSkillSessionContractStore(),
             managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=_ledger(tmp_path),
+            workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         )
 
 
@@ -551,6 +568,7 @@ def test_toolcontext_requires_il0_managed_lineage_store_protocol(tmp_path):
             skill_session_contract_store=FakeSkillSessionContractStore(),
             context_admission_ledger=_ledger(tmp_path),
             audit_admission_ledger=_audit_ledger(tmp_path),
+            workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
             audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
             committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
         )
@@ -571,6 +589,7 @@ def test_toolcontext_raises_typeerror_when_context_ledger_unset(tmp_path):
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
             managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
+            workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         )
 
 
@@ -590,6 +609,27 @@ def test_toolcontext_raises_typeerror_when_audit_ledger_unset(tmp_path):
             skill_session_contract_store=FakeSkillSessionContractStore(),
             managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=_ledger(tmp_path),
+            workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
+        )
+
+
+def test_toolcontext_raises_typeerror_when_workspace_outcome_ledger_unset(tmp_path):
+    with pytest.raises(TypeError, match="workspace_outcome_ledger"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_authority=_UnusedPluginAuthority(),
+            runner=None,
+            launch_resolver=FakeLaunchResolver(),
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+            project_dir=tmp_path,
+            skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
+            context_admission_ledger=_ledger(tmp_path),
+            audit_admission_ledger=_audit_ledger(tmp_path),
         )
 
 
@@ -609,6 +649,7 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
         managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
+        workspace_outcome_ledger=_workspace_outcome_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
         committed_disposition_resolver=_COMMITTED_DISPOSITION_RESOLVER,
     )

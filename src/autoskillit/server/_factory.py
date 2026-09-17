@@ -17,6 +17,7 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR,
     AuditAdmissionLedger,
     AuditAdmissionStoreAuthority,
     CandidatePreSpawnRejection,
@@ -66,6 +67,7 @@ from autoskillit.execution import (
     all_backends,
     build_replay_runner,
     get_backend,
+    resolve_log_dir,
 )
 from autoskillit.fleet import build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
@@ -79,6 +81,7 @@ from autoskillit.pipeline import (
     DefaultRunSkillCompletionAuthority,
     DefaultTimingLog,
     DefaultTokenLog,
+    DefaultWorkspaceOutcomeLedger,
     OwnerBoundExplorationContextStore,
     ToolContext,
 )
@@ -403,6 +406,17 @@ def make_context(
             expected_owner_id=os.getuid(),
         )
     audit_admission_ledger = DefaultAuditAdmissionLedger(resolved_audit_admission_store_authority)
+    child_outcome_log_dir = os.environ.get(CHILD_OUTCOME_LOG_DIR_ENV_VAR)
+    # Resolve both branches through the same `.resolve()` call so the two
+    # code paths use identical normalization (defense#16 / bugs#22).
+    shared_outcome_root = (
+        Path(child_outcome_log_dir)
+        if child_outcome_log_dir
+        else resolve_log_dir(config.linux_tracing.log_dir)
+    ).resolve()
+    workspace_outcome_ledger = DefaultWorkspaceOutcomeLedger(
+        shared_outcome_root / "workspace-outcomes"
+    )
     audit_authority_materializer = DefaultAuditAuthorityMaterializer(audit_admission_ledger)
     committed_disposition_resolver = DefaultCommittedDispositionResolver(audit_admission_ledger)
     github_review_ledger = GitHubReviewLedger(github_review_ledger_path())
@@ -449,6 +463,7 @@ def make_context(
         managed_join_attestation_authority=managed_join_attestation_authority,
         context_admission_ledger=context_admission_ledger,
         audit_admission_ledger=audit_admission_ledger,
+        workspace_outcome_ledger=workspace_outcome_ledger,
         audit_authority_materializer=audit_authority_materializer,
         committed_disposition_resolver=committed_disposition_resolver,
         run_skill_completion=DefaultRunSkillCompletionAuthority(),

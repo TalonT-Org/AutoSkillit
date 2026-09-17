@@ -361,13 +361,29 @@ def _extract_git_targets(segment: list[str], cwd: str) -> list[str] | None:
     return None
 
 
+def _resolve_write_verb_operands(
+    operands: Sequence[str], cwd: str, *, stop_after_first_resolved: bool = False
+) -> list[str]:
+    """Resolve write operands, optionally stopping at the first valid path."""
+    targets: list[str] = []
+    for operand in operands:
+        resolved = _resolve_write_target(operand, cwd)
+        if resolved is None:
+            continue
+        if resolved not in _PSEUDO_DEVICE_PATHS:
+            targets.append(resolved)
+        if stop_after_first_resolved:
+            break
+    return targets
+
+
 def _extract_write_verb_targets(verb: str, segment: list[str], cwd: str) -> list[str]:
-    non_flag: list[str] = []
+    operands: list[str] = []
     index = 1
     while index < len(segment):
-        operand = _redirect_operand(segment, index)
-        if operand is not None:
-            _, consumed = operand
+        redirect = _redirect_operand(segment, index)
+        if redirect is not None:
+            _, consumed = redirect
             index += consumed
             continue
         token = segment[index]
@@ -376,42 +392,18 @@ def _extract_write_verb_targets(verb: str, segment: list[str], cwd: str) -> list
             and not token.startswith("&")
             and not _FD_REDIRECT_RE.match(token)
         ):
-            non_flag.append(token)
+            operands.append(token)
         index += 1
 
-    targets: list[str] = []
     if verb == "sed":
         flags = [token for token in segment[1:] if token.startswith("-")]
         has_inplace = any(token.startswith("-i") or token == "--in-place" for token in flags)
-        if has_inplace and non_flag:
-            path = non_flag[-1]
-            resolved = _resolve_write_target(path, cwd)
-            if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                targets.append(resolved)
-    elif verb == "tee":
-        for token in non_flag:
-            resolved = _resolve_write_target(token, cwd)
-            if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                targets.append(resolved)
-    elif verb in ("mv", "cp"):
-        if len(non_flag) >= 2:
-            path = non_flag[-1]
-            resolved = _resolve_write_target(path, cwd)
-            if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                targets.append(resolved)
-    elif verb == "patch":
-        for token in non_flag:
-            resolved = _resolve_write_target(token, cwd)
-            if resolved is not None:
-                if resolved not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(resolved)
-                break
-    elif verb in ("rm", "unlink"):
-        for token in non_flag:
-            resolved = _resolve_write_target(token, cwd)
-            if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-                targets.append(resolved)
-    return targets
+        return _resolve_write_verb_operands(operands[-1:] if has_inplace else (), cwd)
+    if verb in ("mv", "cp"):
+        return _resolve_write_verb_operands(operands[-1:] if len(operands) >= 2 else (), cwd)
+    if verb == "patch":
+        return _resolve_write_verb_operands(operands, cwd, stop_after_first_resolved=True)
+    return _resolve_write_verb_operands(operands, cwd)
 
 
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:

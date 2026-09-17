@@ -254,14 +254,18 @@ def _read_installed_plugin_artifact_manifest(
         )
     try:
         manifest_stat = selected_manifest.stat(follow_symlinks=False)
-    except FileNotFoundError as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest is missing: {selected_manifest}"
-        ) from exc
     except OSError as exc:
-        raise PluginArtifactUnavailableError(
-            f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
-        ) from exc
+        error_type = (
+            PluginArtifactValidationError
+            if isinstance(exc, FileNotFoundError)
+            else PluginArtifactUnavailableError
+        )
+        message = (
+            f"installed plugin incarnation manifest is missing: {selected_manifest}"
+            if isinstance(exc, FileNotFoundError)
+            else f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
+        )
+        raise error_type(message) from exc
     if not stat.S_ISREG(manifest_stat.st_mode):
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is not a regular file: {selected_manifest}"
@@ -276,13 +280,12 @@ def _read_installed_plugin_artifact_manifest(
         raise PluginArtifactUnavailableError(
             f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
         ) from exc
-    if raw is None:
+    if raw is None or frozenset(raw) != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS:
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is missing or invalid: {selected_manifest}"
-        )
-    if frozenset(raw) != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest has unexpected fields: {selected_manifest}"
+            if raw is None
+            else "installed plugin incarnation manifest has unexpected fields: "
+            f"{selected_manifest}"
         )
     if (
         type(raw.get("schema_version")) is not int
@@ -291,24 +294,28 @@ def _read_installed_plugin_artifact_manifest(
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest schema is invalid: {selected_manifest}"
         )
-    if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value:
+    if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value or any(
+        not isinstance(raw.get(field), str) or not raw[field]
+        for field in ("semantic_key", "incarnation_id", "artifact_digest")
+    ):
         raise PluginArtifactValidationError(
             f"installed plugin artifact kind is invalid: {selected_manifest}"
-        )
-    scalar_fields = ("semantic_key", "incarnation_id", "artifact_digest")
-    if any(not isinstance(raw.get(field), str) or not raw[field] for field in scalar_fields):
-        raise PluginArtifactValidationError(
-            "installed plugin incarnation manifest has invalid identity fields: "
+            if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value
+            else "installed plugin incarnation manifest has invalid identity fields: "
             f"{selected_manifest}"
         )
     if expected_semantic_key is not None and raw["semantic_key"] != expected_semantic_key:
         raise PluginArtifactValidationError(
             "installed plugin semantic identity does not match the current transaction"
         )
-    if raw.get("managed_path") != str(canonical_root):
-        raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
-    if raw.get("manifest_path") != str(canonical_manifest):
-        raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
+    if raw.get("managed_path") != str(canonical_root) or raw.get("manifest_path") != str(
+        canonical_manifest
+    ):
+        raise PluginArtifactValidationError(
+            "installed plugin managed path identity mismatch"
+            if raw.get("managed_path") != str(canonical_root)
+            else "installed plugin manifest path identity mismatch"
+        )
     return canonical_manifest, raw
 
 

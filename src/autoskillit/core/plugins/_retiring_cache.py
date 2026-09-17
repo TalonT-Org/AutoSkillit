@@ -17,7 +17,7 @@ import json
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, TypeVar
 
 from ..io import _AtomicWriteDurabilityError, atomic_write, write_versioned_json
 from ..io.paths import destination_location
@@ -71,6 +71,8 @@ _LEGACY_RETIRING_EVIDENCE_FIELDS = frozenset(
         "rejection_reason",
     }
 )
+
+_RetiringCacheItem = TypeVar("_RetiringCacheItem", RetiringArtifactRecord, LegacyRetiringEvidence)
 
 
 def _autoskillit_home(home: ManagedHome) -> Path:
@@ -174,6 +176,42 @@ def _legacy_from_json(raw: object) -> LegacyRetiringEvidence:
     )
 
 
+def _v2_retiring_arrays(raw: Mapping[str, object]) -> tuple[list[object], list[object]]:
+    if frozenset(raw) != _RETIRING_CACHE_V2_FIELDS:
+        raise ValueError("v2 retiring cache root has unexpected fields")
+    records_raw = raw["records"]
+    legacy_raw = raw["legacy_evidence"]
+    if not isinstance(records_raw, list) or not isinstance(legacy_raw, list):
+        raise ValueError("v2 retirement arrays are malformed")
+    return records_raw, legacy_raw
+
+
+def _decode_retiring_items(
+    items: list[object],
+    decoder: Callable[[object], _RetiringCacheItem],
+) -> tuple[
+    tuple[_RetiringCacheItem, ...],
+    tuple[QuarantinedRetiringRecord, ...],
+    tuple[str, ...],
+]:
+    decoded: list[_RetiringCacheItem] = []
+    quarantined: list[QuarantinedRetiringRecord] = []
+    discovered_ids: list[str] = []
+    for item in items:
+        try:
+            decoded.append(decoder(item))
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            quarantined.append(
+                QuarantinedRetiringRecord(
+                    raw_json=json.dumps(item, sort_keys=True),
+                    reason=str(exc),
+                )
+            )
+            if isinstance(item, dict) and isinstance(item.get("record_id"), str):
+                discovered_ids.append(item["record_id"])
+    return tuple(decoded), tuple(quarantined), tuple(discovered_ids)
+
+
 def _read_retiring_cache_unlocked(home: ManagedHome) -> RetiringCacheReadResult:
     cache = _retiring_cache_path(home)
     if not cache.exists():
@@ -206,54 +244,27 @@ def _read_retiring_cache_unlocked(home: ManagedHome) -> RetiringCacheReadResult:
             )
         if schema_version != _RETIRING_CACHE_SCHEMA_VERSION:
             raise ValueError(f"unsupported retiring cache schema {schema_version}")
-        if frozenset(raw) != _RETIRING_CACHE_V2_FIELDS:
-            raise ValueError("v2 retiring cache root has unexpected fields")
-        records_raw = raw["records"]
-        legacy_raw = raw["legacy_evidence"]
-        if not isinstance(records_raw, list) or not isinstance(legacy_raw, list):
-            raise ValueError("v2 retirement arrays are malformed")
-        records: list[RetiringArtifactRecord] = []
-        quarantined_records: list[QuarantinedRetiringRecord] = []
-        quarantined_record_ids: list[str] = []
-        for item in records_raw:
-            try:
-                records.append(_record_from_json(item))
-            except (ValueError, TypeError, KeyError, OverflowError) as exc:
-                quarantined_records.append(
-                    QuarantinedRetiringRecord(
-                        raw_json=json.dumps(item, sort_keys=True),
-                        reason=str(exc),
-                    )
-                )
-                if isinstance(item, dict) and isinstance(item.get("record_id"), str):
-                    quarantined_record_ids.append(item["record_id"])
-        legacy_evidence: list[LegacyRetiringEvidence] = []
-        quarantined_legacy_evidence: list[QuarantinedRetiringRecord] = []
-        for item in legacy_raw:
-            try:
-                legacy_evidence.append(_legacy_from_json(item))
-            except (ValueError, TypeError, KeyError, OverflowError) as exc:
-                quarantined_legacy_evidence.append(
-                    QuarantinedRetiringRecord(
-                        raw_json=json.dumps(item, sort_keys=True),
-                        reason=str(exc),
-                    )
-                )
-                if isinstance(item, dict) and isinstance(item.get("record_id"), str):
-                    quarantined_record_ids.append(item["record_id"])
+        records_raw, legacy_raw = _v2_retiring_arrays(raw)
+        records, quarantined_records, quarantined_record_ids = _decode_retiring_items(
+            records_raw, _record_from_json
+        )
+        legacy_evidence, quarantined_legacy_evidence, quarantined_legacy_ids = (
+            _decode_retiring_items(legacy_raw, _legacy_from_json)
+        )
         record_ids = (
             tuple(record.record_id for record in records)
             + tuple(item.record_id for item in legacy_evidence)
             + tuple(quarantined_record_ids)
+            + tuple(quarantined_legacy_ids)
         )
         if len(frozenset(record_ids)) != len(record_ids):
             raise ValueError("v2 retirement record IDs must be unique")
         return RetiringCacheReadResult(
             state=RetiringCacheState.EXACT_V2,
-            records=tuple(records),
-            legacy_evidence=tuple(legacy_evidence),
-            quarantined_records=tuple(quarantined_records),
-            quarantined_legacy_evidence=tuple(quarantined_legacy_evidence),
+            records=records,
+            legacy_evidence=legacy_evidence,
+            quarantined_records=quarantined_records,
+            quarantined_legacy_evidence=quarantined_legacy_evidence,
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
     except (
@@ -550,18 +561,12 @@ def append_retiring_record(
     fh = _open_lock(_retiring_cache_lock(resolved_home))
     try:
         state = _read_retiring_cache_unlocked(resolved_home)
-        if state.state is RetiringCacheState.ABSENT:
-            records: tuple[RetiringArtifactRecord, ...] = ()
-            evidence: tuple[LegacyRetiringEvidence, ...] = ()
-            quarantined_records: tuple[QuarantinedRetiringRecord, ...] = ()
-            quarantined_evidence: tuple[QuarantinedRetiringRecord, ...] = ()
-        elif state.state is RetiringCacheState.EXACT_V2:
-            records = state.records
-            evidence = state.legacy_evidence
-            quarantined_records = state.quarantined_records
-            quarantined_evidence = state.quarantined_legacy_evidence
-        else:
+        if state.state not in {RetiringCacheState.ABSENT, RetiringCacheState.EXACT_V2}:
             return None
+        records = state.records
+        evidence = state.legacy_evidence
+        quarantined_records = state.quarantined_records
+        quarantined_evidence = state.quarantined_legacy_evidence
         intent = _retirement_intent(record)
         for existing in records:
             if existing.record_id == record.record_id and existing != record:
@@ -576,6 +581,7 @@ def append_retiring_record(
             for item in (*quarantined_records, *quarantined_evidence)
         ):
             return None
+        persisted_or_durability_uncertain = False
         try:
             _write_retiring_cache_unlocked(
                 resolved_home,
@@ -585,11 +591,13 @@ def append_retiring_record(
                 quarantined_legacy_evidence=quarantined_evidence,
             )
         except _AtomicWriteDurabilityError:
-            if on_persisted is not None:
-                on_persisted(record.record_id)
+            persisted_or_durability_uncertain = True
             raise
-        if on_persisted is not None:
-            on_persisted(record.record_id)
+        else:
+            persisted_or_durability_uncertain = True
+        finally:
+            if persisted_or_durability_uncertain and on_persisted is not None:
+                on_persisted(record.record_id)
         return RetiringAppendResult(record_id=record.record_id, created=True)
     finally:
         fh.close()

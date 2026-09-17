@@ -310,7 +310,7 @@ def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
     )
 
 
-def _is_allowed_check_ignore_invocation(flags: Sequence[str]) -> bool:
+def _is_allowed_git_check_ignore_invocation(flags: Sequence[str]) -> bool:
     # `git check-ignore` is admitted only in its exact prescribed verbose form
     # (one -v/--verbose, at most one --no-index). The PR #5071 design contract
     # binds protected-path admission to the `git check-ignore -v {path}`
@@ -377,7 +377,7 @@ def _is_allowed_git_metadata_invocation(subcommand: str, flags: Sequence[str]) -
     if subcommand == "diff":
         return _is_allowed_git_diff_invocation(flags)
     if subcommand == "check-ignore":
-        return _is_allowed_check_ignore_invocation(flags)
+        return _is_allowed_git_check_ignore_invocation(flags)
     return False
 
 

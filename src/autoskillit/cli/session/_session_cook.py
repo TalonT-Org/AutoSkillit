@@ -335,8 +335,14 @@ def cook(
             cook_system_prompt,
             managed_home.unavailability_payload,
         )
-        from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
+        from autoskillit.cli.session._session_launch_intent import (
+            _run_fresh_launch_ceremony,
+            prepare_resume_housekeeping,
+            resolve_interactive_launch,
+        )
 
+        if not isinstance(resume_spec, NoResume):
+            prepare_resume_housekeeping(backend)
         launch = resolve_interactive_launch(
             resume_spec=resume_spec,
             session_type=SESSION_TYPE_COOK,
@@ -358,18 +364,14 @@ def cook(
             )
 
         from autoskillit.cli.session._session_startup_trace import StartupTrace
-        from autoskillit.cli.ui._timed_input import timed_prompt
 
         trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
-        if isinstance(launch, FreshLaunch) and sys.stdin.isatty():
-            confirm = timed_prompt(
-                "\nLaunch session? [Enter/n]",
-                default="",
-                timeout=120,
-                label="autoskillit cook",
-            )
-            if confirm.lower() in ("n", "no"):
-                return
+        if not _run_fresh_launch_ceremony(
+            launch=launch,
+            is_tty=sys.stdin.isatty(),
+            label="autoskillit cook",
+        ):
+            return
         trace.record_launch_anchor()
         write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
 

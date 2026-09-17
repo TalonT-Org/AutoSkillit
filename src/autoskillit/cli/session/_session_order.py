@@ -8,12 +8,11 @@ import random
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import regex as re
 
 from autoskillit.cli.prompts import (
-    _build_open_kitchen_prompt,
     _build_orchestrator_prompt,
     _get_ingredients_table,
 )
@@ -26,7 +25,6 @@ from autoskillit.cli.session._session_launch import (
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
     FreshLaunch,
-    InteractiveLaunch,
     RecipeSource,
     SkillContractError,
     SkillExecutionRole,
@@ -163,19 +161,46 @@ def _resolve_order_recipe(recipe_name: str, project_dir: Path) -> tuple[RecipeIn
     return match, parsed
 
 
+def _prompt_feature_enablement(
+    *,
+    feature_kind: str,
+    requirement_list: str,
+    label: str,
+    timeout: int = 120,
+) -> Literal["temporary", "permanent"] | None:
+    """Prompt the user with the 1/2/3 menu used for subset and pack enablement.
+
+    Returns ``"temporary"`` or ``"permanent"`` for option 1/2, or ``None`` on cancel.
+    Shared by the subset gate (REQ-VAL-004) and the pack gate (REQ-PACK-010).
+    """
+    from autoskillit.cli.ui._timed_input import timed_prompt
+
+    print(f"\nThis recipe requires {feature_kind}(s): {requirement_list}")
+    print("  1. Enable temporarily (for this run only)")
+    print("  2. Enable permanently (update .autoskillit/config.yaml)")
+    print("  3. Cancel")
+    choice = timed_prompt("Choose [1/2/3]:", default="3", timeout=timeout, label=label)
+    if choice == "1":
+        return "temporary"
+    if choice == "2":
+        return "permanent"
+    return None
+
+
 def _derive_order_feature_env(
     recipe: Recipe,
     *,
-    launch: InteractiveLaunch,
-    is_tty: bool,
+    automatic: bool,
     project_dir: Path,
 ) -> dict[str, str] | None:
-    from autoskillit.cli.ui._timed_input import timed_prompt
+    """Derive order session env overrides for subset/pack feature gates.
+
+    Implements the subset gate (REQ-VAL-004) and the pack gate (REQ-PACK-010).
+    """
     from autoskillit.config import load_config
     from autoskillit.core import PACK_REGISTRY
 
     config = load_config(project_dir)
-    automatic = not isinstance(launch, FreshLaunch) or not is_tty
     extra_env: dict[str, str] = {}
 
     disabled_subsets = frozenset(config.subsets.disabled)
@@ -186,16 +211,14 @@ def _derive_order_feature_env(
             extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
             sys.stdout.write(f"Temporarily enabling required subset(s): {subset_list}\n")
         else:
-            print(f"\nThis recipe requires subset(s): {subset_list}")
-            print("  1. Enable temporarily (for this run only)")
-            print("  2. Enable permanently (update .autoskillit/config.yaml)")
-            print("  3. Cancel")
-            choice = timed_prompt(
-                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            choice = _prompt_feature_enablement(
+                feature_kind="subset",
+                requirement_list=subset_list,
+                label="autoskillit order",
             )
-            if choice == "1":
+            if choice == "temporary":
                 extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
-            elif choice == "2":
+            elif choice == "permanent":
                 _enable_subsets_permanently(project_dir, needed_subsets)
             else:
                 return None
@@ -212,48 +235,32 @@ def _derive_order_feature_env(
             extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + json.dumps(temporary_packs)
             sys.stdout.write(f"Temporarily enabling required pack(s): {pack_list}\n")
         else:
-            print(f"\nThis recipe requires pack(s): {pack_list}")
-            print("  1. Enable temporarily (for this run only)")
-            print("  2. Enable permanently (update .autoskillit/config.yaml)")
-            print("  3. Cancel")
-            pack_choice = timed_prompt(
-                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            choice = _prompt_feature_enablement(
+                feature_kind="pack",
+                requirement_list=pack_list,
+                label="autoskillit order",
             )
-            if pack_choice == "1":
+            if choice == "temporary":
                 extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + json.dumps(temporary_packs)
-            elif pack_choice == "2":
+            elif choice == "permanent":
                 _enable_packs_permanently(project_dir, needed_packs)
             else:
                 return None
     return extra_env
 
 
-def _run_fresh_order_ceremony(
+def _show_order_ceremony_preview(
     recipe_name: str,
     recipe: Recipe,
     recipe_info: RecipeInfo,
-    *,
-    launch: InteractiveLaunch,
-    is_tty: bool,
     project_dir: Path,
-) -> bool:
-    if not isinstance(launch, FreshLaunch):
-        return True
-
+) -> None:
+    """Render the order-specific preview before the launch confirmation prompt."""
     from autoskillit.cli._preview import show_cook_preview
     from autoskillit.cli.ui._ansi import permissions_warning
 
     show_cook_preview(recipe_name, recipe, _recipes_dir_for(recipe_info), project_dir)
     print(permissions_warning())
-    if not is_tty:
-        return True
-
-    from autoskillit.cli.ui._timed_input import timed_prompt
-
-    confirm = timed_prompt(
-        "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
-    )
-    return confirm.lower() not in ("n", "no")
 
 
 def order(
@@ -288,6 +295,7 @@ def order(
 
     project_dir = Path.cwd()
     config = load_config(project_dir)
+    is_tty = sys.stdin.isatty()
     from autoskillit.cli.session._session_backend import resolve_global_backend
 
     backend = resolve_global_backend(
@@ -348,17 +356,25 @@ def order(
                 raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
             recipe = resolved.name
 
-    from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
+    from autoskillit.cli.session._session_launch_intent import (
+        _run_fresh_launch_ceremony,
+        prepare_resume_housekeeping,
+        resolve_interactive_launch,
+    )
+    from autoskillit.core import NoResume
 
+    if not isinstance(resume_spec, NoResume):
+        prepare_resume_housekeeping(backend)
     launch = resolve_interactive_launch(
         resume_spec=resume_spec,
         session_type="order",
         project_dir=project_dir,
         backend=backend,
     )
+    automatic = not isinstance(launch, FreshLaunch) or not is_tty
 
     if recipe is None:
-        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS
+        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
 
         if isinstance(launch, FreshLaunch):
             launch = replace(
@@ -378,19 +394,18 @@ def order(
         recipe_info, parsed = _resolve_order_recipe(recipe, project_dir)
         extra_env = _derive_order_feature_env(
             parsed,
-            launch=launch,
-            is_tty=sys.stdin.isatty(),
+            automatic=automatic,
             project_dir=project_dir,
         )
         if extra_env is None:
             return
-        if not _run_fresh_order_ceremony(
-            recipe,
-            parsed,
-            recipe_info,
+        if not _run_fresh_launch_ceremony(
             launch=launch,
-            is_tty=sys.stdin.isatty(),
-            project_dir=project_dir,
+            is_tty=is_tty,
+            label="autoskillit order",
+            before_prompt=lambda: _show_order_ceremony_preview(
+                recipe, parsed, recipe_info, project_dir
+            ),
         ):
             return
 

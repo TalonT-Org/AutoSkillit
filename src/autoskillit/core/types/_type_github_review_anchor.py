@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import InitVar, dataclass, field
+from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 from types import MappingProxyType
@@ -328,7 +328,7 @@ class AdmittedAnchor:
     side: str
     start_line: int | None
     start_side: str | None
-    _token: InitVar[object] = field(default=None, repr=False)
+    _token: InitVar[object] = None
 
     def __post_init__(self, _token: object) -> None:
         if _token is not _ADMISSION_TOKEN:

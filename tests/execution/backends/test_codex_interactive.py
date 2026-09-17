@@ -96,7 +96,7 @@ class TestCodexInteractiveCmdBaseStructure:
         assert isinstance(spec.cmd, tuple)
 
 
-class TestCodexInteractiveCmdResumeVariants:
+class TestCodexInteractiveCmdLaunchVariants:
     def test_fresh_launch_excludes_resume_subcommand(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd

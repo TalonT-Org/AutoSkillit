@@ -11,7 +11,7 @@ import dataclasses
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import regex as re
 
@@ -36,7 +36,12 @@ logger = get_logger(__name__)
 
 _FIELD_RE = re.compile(r"^(\w+)\s*=\s*(.*)$", re.MULTILINE)
 
-_DISPOSITION_VALUES = frozenset({"applied", "skipped", "failed"})
+DispositionValue = Literal["applied", "skipped", "failed"]
+_DISPOSITION_VALUES: frozenset[DispositionValue] = frozenset({"applied", "skipped", "failed"})
+
+_REPORT_MALFORMED_LOG_KEY = "outcome_report_malformed"
+_REPORT_MALFORMED_SUBTYPE = "outcome_report_malformed"
+_EVIDENCE_FAILED_LOG_KEY = "outcome_evidence_failed"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -46,6 +51,13 @@ class FindingDisposition:
     finding_id: str
     disposition: str
     detail: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.disposition not in _DISPOSITION_VALUES:
+            raise ValueError(
+                f"FindingDisposition.disposition must be one of "
+                f"{sorted(_DISPOSITION_VALUES)}, got {self.disposition!r}"
+            )
 
 
 def _trailing_field_lines(result_text: str) -> list[str]:
@@ -153,13 +165,13 @@ def parse_finding_dispositions(
             continue
         finding_id, disposition = parts[0], parts[1]
         detail = parts[2] if len(parts) == 3 and parts[2] else None
-        if disposition not in _DISPOSITION_VALUES:
-            defects.append(f"finding {finding_id!r} has unknown disposition {disposition!r}")
-            continue
         if finding_id in seen_ids:
             defects.append(f"duplicate finding disposition for {finding_id!r}")
             continue
         seen_ids.add(finding_id)
+        if disposition not in _DISPOSITION_VALUES:
+            defects.append(f"finding {finding_id!r} has unknown disposition {disposition!r}")
+            continue
         if disposition == "applied" and detail is None:
             defects.append(f"applied finding {finding_id!r} is missing a commit SHA")
             continue
@@ -188,38 +200,30 @@ _DERIVED_COUNTER_NAMES = (
 _SUCCESS_VERDICTS = frozenset({"real_fix", "already_green", "flake_suspected", "ci_only_failure"})
 
 
-def _demote_outcome_report(
+@dataclasses.dataclass(frozen=True, slots=True)
+class _AdjudicationFailure:
+    """One category of outcome-adjudication failure, carrying its own retry contract."""
+
+    retry_reason: RetryReason
+    log_key: str
+    subtype: str
+    detail: str
+
+
+def _demote_outcome(
     sr: SkillResult,
     fields: dict[str, int | str],
-    detail: str,
+    failure: _AdjudicationFailure,
 ) -> SkillResult:
-    logger.warning("outcome_report_malformed", detail=detail)
+    """Mark an outcome-adjudication failure with the contract carried by ``failure``."""
+    logger.warning(failure.log_key, subtype=failure.subtype, detail=failure.detail)
     return dataclasses.replace(
         sr,
         success=False,
-        subtype="outcome_report_malformed",
+        subtype=failure.subtype,
         needs_retry=True,
-        retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
-        result=detail,
-        outcome_fields=fields,
-    )
-
-
-def _demote_outcome_evidence(
-    sr: SkillResult,
-    fields: dict[str, int | str],
-    *,
-    subtype: str,
-    detail: str,
-) -> SkillResult:
-    logger.warning("outcome_evidence_failed", subtype=subtype, detail=detail)
-    return dataclasses.replace(
-        sr,
-        success=False,
-        subtype=subtype,
-        needs_retry=True,
-        retry_reason=RetryReason.OUTCOME_INVARIANT,
-        result=detail,
+        retry_reason=failure.retry_reason,
+        result=failure.detail,
         outcome_fields=fields,
     )
 
@@ -260,7 +264,13 @@ def _read_outcome_records(
         return None, "workspace outcome evidence is unavailable for disposition reconciliation"
     try:
         return outcome_ledger.read(cwd, since=start_ts, until=end_ts), None
-    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.exception(
+            "outcome_ledger_read_failed",
+            cwd=cwd,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
         return None, f"workspace outcome evidence is unavailable: {exc}"
 
 
@@ -281,27 +291,35 @@ def _commit_reconciliation_defect(
 def _disposition_semantics_failure(
     dispositions: list[FindingDisposition],
     verdict: int | str | None,
-) -> tuple[str, str] | None:
+) -> _AdjudicationFailure | None:
     applied = any(item.disposition == "applied" for item in dispositions)
     if any(item.disposition == "failed" for item in dispositions):
-        return (
-            "outcome_invariant_violation",
-            "one or more accepted findings have a terminal failed disposition",
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="outcome_invariant_violation",
+            detail="one or more accepted findings have a terminal failed disposition",
         )
     if verdict == "real_fix" and not applied:
-        return (
-            "outcome_invariant_violation",
-            "verdict=real_fix requires at least one applied finding disposition",
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="outcome_invariant_violation",
+            detail="verdict=real_fix requires at least one applied finding disposition",
         )
     if verdict in _SUCCESS_VERDICTS - {"real_fix"} and applied:
-        return (
-            "outcome_invariant_violation",
-            f"verdict={verdict} cannot accompany an applied finding disposition",
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="outcome_invariant_violation",
+            detail=f"verdict={verdict} cannot accompany an applied finding disposition",
         )
     if verdict not in _SUCCESS_VERDICTS:
-        return (
-            "outcome_report_malformed",
-            "processed review result is missing a recognized verdict",
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
+            log_key=_REPORT_MALFORMED_LOG_KEY,
+            subtype=_REPORT_MALFORMED_SUBTYPE,
+            detail="processed review result is missing a recognized verdict",
         )
     return None
 
@@ -313,22 +331,45 @@ def _recorded_at(recorded_at: str) -> datetime:
 def _test_evidence_failure(
     records: list[WorkspaceOutcomeRecord],
     successful_commits: list[WorkspaceOutcomeRecord],
-) -> tuple[str, str] | None:
+) -> _AdjudicationFailure | None:
     test_records = [record for record in records if record.kind is WorkspaceOutcomeKind.TEST_RUN]
     if not test_records:
-        return "test_evidence_missing", "processed review has no recorded test_check outcome"
-    last_test = max(
-        enumerate(test_records),
-        key=lambda item: (_recorded_at(item[1].recorded_at), item[0]),
-    )[1]
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="test_evidence_missing",
+            detail="processed review has no recorded test_check outcome",
+        )
+    try:
+        last_test = max(
+            enumerate(test_records),
+            key=lambda item: (_recorded_at(item[1].recorded_at), item[0]),
+        )[1]
+        last_test_ts = _recorded_at(last_test.recorded_at)
+        max_commit_ts = max(
+            (_recorded_at(record.recorded_at) for record in successful_commits),
+            default=last_test_ts,
+        )
+    except ValueError as exc:
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
+            log_key=_REPORT_MALFORMED_LOG_KEY,
+            subtype=_REPORT_MALFORMED_SUBTYPE,
+            detail=f"workspace outcome record timestamps are malformed: {exc}",
+        )
     if not last_test.succeeded:
-        return "tests_not_green", "processed review's final recorded test_check did not pass"
-    if successful_commits and _recorded_at(last_test.recorded_at) <= max(
-        _recorded_at(record.recorded_at) for record in successful_commits
-    ):
-        return (
-            "test_evidence_stale",
-            "final passing test_check predates or coincides with a successful commit",
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="tests_not_green",
+            detail="processed review's final recorded test_check did not pass",
+        )
+    if successful_commits and last_test_ts <= max_commit_ts:
+        return _AdjudicationFailure(
+            retry_reason=RetryReason.OUTCOME_INVARIANT,
+            log_key=_EVIDENCE_FAILED_LOG_KEY,
+            subtype="test_evidence_stale",
+            detail="final passing test_check predates or coincides with a successful commit",
         )
     return None
 
@@ -336,12 +377,9 @@ def _test_evidence_failure(
 def _apply_semantics_failure(
     sr: SkillResult,
     fields: dict[str, int | str],
-    failure: tuple[str, str],
+    failure: _AdjudicationFailure,
 ) -> SkillResult:
-    subtype, detail = failure
-    if subtype == "outcome_report_malformed":
-        return _demote_outcome_report(sr, fields, detail)
-    return _demote_outcome_evidence(sr, fields, subtype=subtype, detail=detail)
+    return _demote_outcome(sr, fields, failure)
 
 
 def apply_finding_disposition_adjudication(
@@ -363,7 +401,16 @@ def apply_finding_disposition_adjudication(
     fields = {**emitted_fields, **derived_fields}
     report_defect = _report_defect(emitted_fields, derived_fields, dispositions, defects)
     if report_defect is not None:
-        return _demote_outcome_report(sr, fields, report_defect), fields
+        return _demote_outcome(
+            sr,
+            fields,
+            _AdjudicationFailure(
+                retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
+                log_key=_REPORT_MALFORMED_LOG_KEY,
+                subtype=_REPORT_MALFORMED_SUBTYPE,
+                detail=report_defect,
+            ),
+        ), fields
     if emitted_fields["review_status"] == "no_pr":
         return dataclasses.replace(sr, outcome_fields=emitted_fields), emitted_fields
 
@@ -375,7 +422,16 @@ def apply_finding_disposition_adjudication(
     )
     if records is None:
         assert evidence_defect is not None
-        return _demote_outcome_report(sr, fields, evidence_defect), fields
+        return _demote_outcome(
+            sr,
+            fields,
+            _AdjudicationFailure(
+                retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
+                log_key=_REPORT_MALFORMED_LOG_KEY,
+                subtype=_REPORT_MALFORMED_SUBTYPE,
+                detail=evidence_defect,
+            ),
+        ), fields
     successful_commits = [
         record
         for record in records
@@ -383,14 +439,22 @@ def apply_finding_disposition_adjudication(
     ]
     commit_defect = _commit_reconciliation_defect(dispositions, successful_commits)
     if commit_defect is not None:
-        return _demote_outcome_report(sr, fields, commit_defect), fields
+        return _demote_outcome(
+            sr,
+            fields,
+            _AdjudicationFailure(
+                retry_reason=RetryReason.OUTCOME_REPORT_MALFORMED,
+                log_key=_REPORT_MALFORMED_LOG_KEY,
+                subtype=_REPORT_MALFORMED_SUBTYPE,
+                detail=commit_defect,
+            ),
+        ), fields
     semantics_failure = _disposition_semantics_failure(dispositions, emitted_fields.get("verdict"))
     if semantics_failure is not None:
-        return _apply_semantics_failure(sr, fields, semantics_failure), fields
+        return _demote_outcome(sr, fields, semantics_failure), fields
     test_failure = _test_evidence_failure(records, successful_commits)
     if test_failure is not None:
-        subtype, detail = test_failure
-        return _demote_outcome_evidence(sr, fields, subtype=subtype, detail=detail), fields
+        return _demote_outcome(sr, fields, test_failure), fields
     return dataclasses.replace(sr, outcome_fields=fields), fields
 
 

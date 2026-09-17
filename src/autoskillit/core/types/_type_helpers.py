@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import UnionType
-from typing import Any, Never, Union, assert_never, get_args, get_origin
+from typing import Any, Literal, Never, Union, assert_never, cast, get_args, get_origin
 
 from ._type_backend import BackendConventions
 from ._type_constants import SKILL_COMMAND_PREFIX
@@ -78,7 +78,8 @@ _SENSITIVE_TEXT_MARKERS = (
 )
 
 _OUTCOME_COMPARISON_RE = re.compile(r"^(\w+)\s*(>=|<=|!=|==|>|<)\s*(\d+)$")
-_OUTCOME_OPERATORS: dict[str, Callable[[int, int], bool]] = {
+OutcomeOperator = Literal[">", ">=", "==", "!=", "<=", "<"]
+_OUTCOME_OPERATORS: dict[OutcomeOperator, Callable[[int, int], bool]] = {
     ">": operator.gt,
     ">=": operator.ge,
     "==": operator.eq,
@@ -93,7 +94,7 @@ class OutcomeComparison:
     """One integer comparison in an outcome-contract expression."""
 
     field_name: str
-    operator: str
+    operator: OutcomeOperator
     literal: int
 
 
@@ -110,7 +111,7 @@ def parse_outcome_expression(expression: object) -> tuple[OutcomeComparison, ...
         comparisons.append(
             OutcomeComparison(
                 field_name=field_name,
-                operator=operator_name,
+                operator=cast("OutcomeOperator", operator_name),
                 literal=int(literal),
             )
         )
@@ -127,7 +128,7 @@ def evaluate_outcome_expression(
         return None
     for comparison in comparisons:
         value = fields.get(comparison.field_name)
-        if not isinstance(value, int):
+        if isinstance(value, bool) or not isinstance(value, int):
             return None
         if not _OUTCOME_OPERATORS[comparison.operator](value, comparison.literal):
             return False

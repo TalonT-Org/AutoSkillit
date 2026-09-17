@@ -260,44 +260,48 @@ def _load_canonical_projection_manifest(
 def _validate_projection_manifest(
     manifest: dict[str, object],
     *,
-    manifest_path: Path,
+    canonical_manifest: Path,
     expected_semantic_key: str,
     expected_projection_version: int | None,
 ) -> tuple[str, str, str]:
-    """Validate identity fields while keeping malformed and unavailable states separate."""
+    """Return ``(semantic_key, incarnation_id, artifact_digest)`` for a well-formed manifest."""
     if frozenset(manifest) != _PROJECTION_ARTIFACT_MANIFEST_FIELDS:
         raise PluginArtifactValidationError(
-            f"projected plugin identity manifest has unexpected fields: {manifest_path}"
+            f"projected plugin identity manifest has unexpected fields: {canonical_manifest}"
         )
     if manifest.get("artifact_kind") != PluginArtifactKind.PROJECTION.value:
         raise PluginArtifactValidationError(
-            f"projected plugin artifact kind is invalid: {manifest_path}"
+            f"projected plugin artifact kind is invalid: {canonical_manifest}"
         )
     semantic_key = manifest.get("semantic_key")
     if not isinstance(semantic_key, str) or semantic_key != expected_semantic_key:
         raise PluginArtifactValidationError(
-            f"projected plugin semantic key mismatch: {manifest_path}"
+            f"projected plugin semantic key mismatch: {canonical_manifest}"
         )
     incarnation_id = manifest.get("incarnation_id")
     if not is_canonical_plugin_artifact_incarnation_id(incarnation_id):
         raise PluginArtifactValidationError(
-            f"projected plugin incarnation is not canonical uuid4 hex: {manifest_path}"
+            f"projected plugin incarnation is not canonical uuid4 hex: {canonical_manifest}"
         )
     artifact_digest = manifest.get("artifact_digest")
     if not is_canonical_plugin_artifact_digest(artifact_digest):
-        raise PluginArtifactValidationError(f"projected plugin digest is invalid: {manifest_path}")
+        raise PluginArtifactValidationError(
+            f"projected plugin digest is invalid: {canonical_manifest}"
+        )
     projection_version = manifest.get("projection_version")
     if type(projection_version) is not int or projection_version < 1:
         raise PluginArtifactValidationError(
-            f"projected plugin version mismatch (invalid value): {manifest_path}"
+            f"projected plugin version mismatch (invalid value): {canonical_manifest}"
         )
     if expected_projection_version is not None and (
         projection_version != expected_projection_version
     ):
-        raise PluginArtifactValidationError(f"projected plugin version mismatch: {manifest_path}")
+        raise PluginArtifactValidationError(
+            f"projected plugin version mismatch: {canonical_manifest}"
+        )
     if not isinstance(manifest.get("skills"), dict):
         raise PluginArtifactValidationError(
-            f"projected plugin skills manifest is invalid: {manifest_path}"
+            f"projected plugin skills manifest is invalid: {canonical_manifest}"
         )
     return semantic_key, incarnation_id, artifact_digest
 
@@ -339,7 +343,7 @@ def read_projected_plugin_identity(
     )
     semantic_key, incarnation_id, artifact_digest = _validate_projection_manifest(
         manifest,
-        manifest_path=canonical_manifest,
+        canonical_manifest=canonical_manifest,
         expected_semantic_key=expected_semantic_key,
         expected_projection_version=expected_projection_version,
     )

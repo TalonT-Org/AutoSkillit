@@ -112,9 +112,7 @@ def _normalize_exploration_context(
     active_applicabilities: frozenset[ExplorationVectorApplicabilityId],
 ) -> frozenset[ExplorationVectorApplicabilityId]:
     """Validate and freeze the exploration inputs that affect projection bytes."""
-    if launch_context_ref is not None and (
-        not isinstance(launch_context_ref, str) or not launch_context_ref.strip()
-    ):
+    if launch_context_ref is not None and not launch_context_ref.strip():
         raise SkillContractError("exploration launch-context reference must be non-empty text")
     if resolved_profile is RepositoryProfileId.AUTO:
         raise SkillContractError("resolved exploration profile cannot remain auto")
@@ -136,6 +134,25 @@ class AgentSkillDocument:
     adaptation_payload: Mapping[str, object] = field(default_factory=dict)
     semantic_digest: str = ""
     adaptation_digest: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "semantic_payload", MappingProxyType(dict(self.semantic_payload)))
+        object.__setattr__(
+            self,
+            "adaptation_payload",
+            MappingProxyType(dict(self.adaptation_payload)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _SemanticAdaptationOutcome:
+    """Result of attaching semantic payload and optional backend adaptation to a skill document."""
+
+    content: str
+    semantic_payload: Mapping[str, object]
+    adaptation_payload: Mapping[str, object]
+    semantic_digest: str
+    adaptation_digest: str
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "semantic_payload", MappingProxyType(dict(self.semantic_payload)))
@@ -340,11 +357,11 @@ def _direct_install_projection_context(
     )
 
 
-def _validate_and_bind_projection_input(
+def _validate_projection_input(
     skill_info: SkillContractRecord,
     context: SkillProjectionContext,
 ) -> tuple[Mapping[str, object], str]:
-    """Return parsed projection inputs after validating their exact binding."""
+    """Return parsed projection inputs after confirming the contract matches the bound record."""
     if skill_info.invalidities:
         raise SkillContractError(
             f"cannot project invalid contract for {skill_info.name!r}: "
@@ -426,7 +443,7 @@ def _apply_semantic_adaptation(
     skill_info: SkillContractRecord,
     context: SkillProjectionContext,
     supplied_adaptation: SkillSemanticAdaptationResult | None,
-) -> tuple[str, Mapping[str, object], Mapping[str, object], str, str]:
+) -> _SemanticAdaptationOutcome:
     """Attach semantic payload and an optional backend-specific adaptation."""
     semantic_payload: Mapping[str, object] = MappingProxyType({})
     adaptation_payload: Mapping[str, object] = MappingProxyType({})
@@ -436,7 +453,13 @@ def _apply_semantic_adaptation(
         semantic_payload = skill_info.semantic_plan.canonical_payload
         semantic_digest = skill_info.semantic_plan.digest
     if skill_info.semantic_plan is None or context.backend is None:
-        return content, semantic_payload, adaptation_payload, semantic_digest, adaptation_digest
+        return _SemanticAdaptationOutcome(
+            content=content,
+            semantic_payload=semantic_payload,
+            adaptation_payload=adaptation_payload,
+            semantic_digest=semantic_digest,
+            adaptation_digest=adaptation_digest,
+        )
 
     adaptation = supplied_adaptation or context.backend.adapt_skill_semantics(
         skill_info.semantic_plan,
@@ -465,7 +488,13 @@ def _apply_semantic_adaptation(
             + "\n```"
             + "\n"
         )
-    return content, semantic_payload, adaptation_payload, semantic_digest, adaptation_digest
+    return _SemanticAdaptationOutcome(
+        content=content,
+        semantic_payload=semantic_payload,
+        adaptation_payload=adaptation_payload,
+        semantic_digest=semantic_digest,
+        adaptation_digest=adaptation_digest,
+    )
 
 
 def _prepare_exploration_replacements(
@@ -598,16 +627,17 @@ def project_agent_skill_document(
     semantic_adaptation: SkillSemanticAdaptationResult | None = None,
 ) -> AgentSkillDocument:
     """Remove machine authority fields while preserving public YAML and body."""
-    parsed_frontmatter, body = _validate_and_bind_projection_input(skill_info, context)
+    parsed_frontmatter, body = _validate_projection_input(skill_info, context)
     frontmatter = _public_projection_frontmatter(parsed_frontmatter, context.gating)
     content = _render_projection_content(frontmatter, body, context)
-    (
-        content,
-        semantic_payload,
-        adaptation_payload,
-        semantic_digest,
-        adaptation_digest,
-    ) = _apply_semantic_adaptation(content, skill_info, context, semantic_adaptation)
+    semantic_outcome = _apply_semantic_adaptation(
+        content, skill_info, context, semantic_adaptation
+    )
+    content = semantic_outcome.content
+    semantic_payload = semantic_outcome.semantic_payload
+    adaptation_payload = semantic_outcome.adaptation_payload
+    semantic_digest = semantic_outcome.semantic_digest
+    adaptation_digest = semantic_outcome.adaptation_digest
     content = _apply_exploration_content(content, skill_info, context)
     content = _append_projected_resources(content, skill_info)
     projected_digest, canonical_digest = _projection_digests(skill_info, content)

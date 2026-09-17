@@ -54,7 +54,10 @@ def test_deviation_evaluator_does_not_hardcode_a_subset_of_blocking_labels() -> 
         label for label in blocking if label in _DEVIATION_EVALUATOR.read_text(encoding="utf-8")
     }
 
-    assert not mentioned < blocking
+    assert mentioned == blocking, (
+        f"deviation evaluator must enumerate every blocking label verbatim "
+        f"(missing: {sorted(blocking - mentioned)!r})"
+    )
 
 
 def test_verdict_label_parser_rejects_a_missing_label_fixture(tmp_path: Path) -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -41,29 +41,28 @@ from autoskillit.pipeline import DefaultAuditAdmissionLedger
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
+from tests._audit_substitution_fixtures import (
+    INCIDENT_EVIDENCE,
+    INCIDENT_REQUIREMENT,
+    LITERAL_EVIDENCE,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _ROW_DIGEST_DOMAIN = "autoskillit:audit-cycle:assessment-row:v1:sha256"
-_INCIDENT_REQUIREMENT = (
-    "For a CPU-active child that never stops, child_deferral_ceiling=1.0, "
-    "assert kill happens within ~1s of ceiling expiry."
-)
-_INCIDENT_EVIDENCE = (
-    "Uses a persistently-active child (_has_active_child_processes mocked to "
-    "always return True) with child_deferral_ceiling=1.0."
-)
-_LITERAL_EVIDENCE = (
-    'Starts subprocess.Popen(["sh", "-c", "sleep 30 & wait"]) and asserts with '
-    "psutil that the real child process remains active until termination."
-)
 
 
 def _digest(value: str) -> str:
     return compute_bytes_hash(value.encode("utf-8"))
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="os.getuid is not portable to Windows; this suite targets POSIX identity.",
+)
 def _ledger(tmp_path: Path) -> DefaultAuditAdmissionLedger:
+    import os
+
     ledger = DefaultAuditAdmissionLedger(
         AuditAdmissionStoreAuthority(
             database_path=(tmp_path / "audit-admission.sqlite3").resolve(),
@@ -120,8 +119,8 @@ def _reserve(tmp_path: Path):
 def _row(
     assessment: AuditAssessment,
     *,
-    requirement_text: str = _INCIDENT_REQUIREMENT,
-    evidence_summary: str = _INCIDENT_EVIDENCE,
+    requirement_text: str = INCIDENT_REQUIREMENT,
+    evidence_summary: str = INCIDENT_EVIDENCE,
 ) -> AuditAssessmentRow:
     if assessment is not AuditAssessment.NAMED_DEVIATION:
         return AuditAssessmentRow.create(
@@ -149,7 +148,7 @@ def _materialize(
     *,
     assessment: AuditAssessment,
     verdict: AuditVerdict,
-    evidence_summary: str = _INCIDENT_EVIDENCE,
+    evidence_summary: str = INCIDENT_EVIDENCE,
 ) -> tuple[
     AuditMaterializationResult,
     tuple[DefaultAuditAdmissionLedger, AuditIdentityReservation],
@@ -241,7 +240,7 @@ def test_literal_implementation_remains_covered(tmp_path: Path) -> None:
         tmp_path,
         assessment=AuditAssessment.COVERED,
         verdict=AuditVerdict.GO,
-        evidence_summary=_LITERAL_EVIDENCE,
+        evidence_summary=LITERAL_EVIDENCE,
     )
     _ledger_value, reservation = context
 
@@ -269,17 +268,17 @@ def _closure_result(tmp_path: Path, *, assessment: str, verdict: str):
     authority_hash = compute_file_hash(authority_path)
     row = ClosureRow(
         requirement_id="REQ-006",
-        requirement_text=_INCIDENT_REQUIREMENT,
+        requirement_text=INCIDENT_REQUIREMENT,
         source_file="tests/execution/test_termination_executor.py",
         source_line=29,
         source_section="Child process deferral",
         assessment=assessment,
-        evidence_summary=_INCIDENT_EVIDENCE,
+        evidence_summary=INCIDENT_EVIDENCE,
         row_hash=compute_row_hash(
             "REQ-006",
-            _INCIDENT_REQUIREMENT,
+            INCIDENT_REQUIREMENT,
             assessment,
-            _INCIDENT_EVIDENCE,
+            INCIDENT_EVIDENCE,
             "tests/execution/test_termination_executor.py",
             29,
             "Child process deferral",

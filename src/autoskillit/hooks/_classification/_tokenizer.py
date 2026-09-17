@@ -130,6 +130,18 @@ class _CommandSegment:
     piped_from_previous: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class EvaluatedSegment:
+    """An evaluated argv segment and its submitted-command provenance.
+
+    ``provenance`` is absent for commands recovered from evaluated payloads,
+    whose tokens have no source span in the submitted command text.
+    """
+
+    tokens: list[str]
+    provenance: _CommandSegment | None
+
+
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
     """Replace each heredoc with a placeholder, returning its bound literal.
 

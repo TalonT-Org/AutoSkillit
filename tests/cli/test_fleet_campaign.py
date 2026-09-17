@@ -315,12 +315,14 @@ def test_fleet_campaign_greetings_have_campaign_name_placeholder() -> None:
 def test_launch_fleet_session_forwards_initial_message_campaign(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """_launch_fleet_session in campaign mode forwards initial_message on first launch only."""
+    """A campaign starts with a fresh launch that carries its greeting."""
     monkeypatch.chdir(tmp_path)
-    captured_calls: list[dict] = []
+    from autoskillit.core import FreshLaunch
 
-    def mock_run(system_prompt: str, **kwargs: object) -> None:
-        captured_calls.append(dict(kwargs))
+    captured_launches: list[object] = []
+
+    def mock_run(*, launch: object, **kwargs: object) -> None:
+        captured_launches.append(launch)
         return None
 
     monkeypatch.setattr(
@@ -360,21 +362,24 @@ def test_launch_fleet_session_forwards_initial_message_campaign(
         fleet_mode="campaign",
         initial_message="Hello, campaign!",
     )
-    assert len(captured_calls) == 1
-    assert captured_calls[0].get("initial_message") == "Hello, campaign!"
+    assert captured_launches == [
+        FreshLaunch(system_prompt="campaign-prompt", initial_prompt="Hello, campaign!")
+    ]
 
 
 def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """On reload in campaign mode, initial_message must be None (only injected on first launch)."""
+    """A campaign reload restores the session without replaying its greeting."""
     monkeypatch.chdir(tmp_path)
-    call_count = 0
-    captured_messages: list = []
+    from autoskillit.core import FreshLaunch, RestoreSession
 
-    def mock_run(system_prompt: str, **kwargs: object) -> object:
+    call_count = 0
+    captured_launches: list[object] = []
+
+    def mock_run(*, launch: object, **kwargs: object) -> object:
         nonlocal call_count
-        captured_messages.append(kwargs.get("initial_message"))
+        captured_launches.append(launch)
         call_count += 1
         return "reload-session-abc" if call_count == 1 else None
 
@@ -415,11 +420,13 @@ def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
         fleet_mode="campaign",
         initial_message="Hello!",
     )
-    assert len(captured_messages) >= 2, (
-        f"expected reload to fire but got only {len(captured_messages)} call(s)"
+    assert len(captured_launches) >= 2, (
+        f"expected reload to fire but got only {len(captured_launches)} call(s)"
     )
-    assert captured_messages[0] == "Hello!"
-    assert captured_messages[1] is None
+    assert captured_launches[0] == FreshLaunch(
+        system_prompt="campaign-prompt", initial_prompt="Hello!"
+    )
+    assert captured_launches[1] == RestoreSession(session_id="reload-session-abc")
 
 
 def test_resume_decision_retry_reason_field() -> None:

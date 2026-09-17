@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli.session._session_launch import prepare_interactive_launch
-from autoskillit.core.types._type_resume import NoResume
+from autoskillit.core import FreshLaunch
 from autoskillit.execution.backends import ClaudeCodeBackend
 from tests._realistic_project import (
     AGENT_TEAMS_ENV_VAR,
@@ -32,9 +32,7 @@ def _prepared_launch(project: Path, tmp_path: Path, *, force: bool):
         extra_env={"PATH": str(tmp_path / "bin")},
         required_env=None,
         plugin_binding=None,
-        resume_spec=NoResume(),
-        system_prompt=None,
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         force_inactive_agent_teams=force,
     )
 

@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
 from unittest.mock import MagicMock
 
+from autoskillit.core import CmdOrigin, FreshLaunch, PositionalRole, ResumeWithBriefing
+
 _ABSENT_SYNTHETIC_PID = 2_147_483_647
+
+
+class _InteractiveLaunchMetadata(TypedDict):
+    origin: CmdOrigin
+    is_resume: bool
 
 
 class InteractiveProcessStub:
@@ -37,3 +45,16 @@ def configure_popen(mock_popen: MagicMock, *, returncode: int = 0) -> Interactiv
     process = InteractiveProcessStub(returncode)
     mock_popen.return_value = process
     return process
+
+
+def interactive_launch_metadata(*, binary: str, launch: object) -> _InteractiveLaunchMetadata:
+    """Return the CmdSpec metadata required for an interactive test-double build."""
+    positional: tuple[tuple[PositionalRole, str], ...] = ()
+    if isinstance(launch, ResumeWithBriefing):
+        positional = ((PositionalRole.PROMPT, launch.briefing),)
+    elif isinstance(launch, FreshLaunch) and launch.initial_prompt is not None:
+        positional = ((PositionalRole.PROMPT, launch.initial_prompt),)
+    return {
+        "origin": CmdOrigin(binary=binary, positional=positional),
+        "is_resume": not isinstance(launch, FreshLaunch),
+    }

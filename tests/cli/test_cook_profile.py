@@ -20,9 +20,11 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
+    FreshLaunch,
     HookTrustPolicy,
     ManagedSessionHome,
     RepositoryProfileId,
+    RestoreSession,
     SessionAttemptHandle,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
@@ -43,6 +45,7 @@ from autoskillit.workspace import (
     SkillUnavailableMetadata,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
+from tests.cli._interactive_process import interactive_launch_metadata
 from tests.contracts._skill_admission_ledger import (
     COOK_SESSION_COMBINATION,
     SKILL_ADMISSION_LEDGER,
@@ -56,7 +59,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 def _make_mock_backend_class(
     *,
     supports_tool_list_changed: bool = True,
-    system_prompts: list[str | None] | None = None,
+    launches: list[object] | None = None,
 ):
     captured = []
 
@@ -83,11 +86,18 @@ def _make_mock_backend_class(
         def recover_cook_history(self) -> None:
             return None
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return ClaudeCodeBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
-            if system_prompts is not None:
-                system_prompts.append(kwargs.get("system_prompt"))
-            return CmdSpec(cmd=("claude",), env={})
+            if launches is not None:
+                launches.append(kwargs["launch"])
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             return []
@@ -116,12 +126,12 @@ def _run_cook(
     generated_home: Path,
     *,
     supports_tool_list_changed: bool = True,
-    system_prompts: list[str | None] | None = None,
+    launches: list[object] | None = None,
     reload_sentinels: tuple[str | None, ...] | None = None,
 ):
     mock_backend_cls, captured = _make_mock_backend_class(
         supports_tool_list_changed=supports_tool_list_changed,
-        system_prompts=system_prompts,
+        launches=launches,
     )
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
@@ -282,7 +292,7 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
-    system_prompts: list[str | None] = []
+    launches: list[object] = []
     refusals = (
         SkillUnavailableMetadata(
             skill="zeta",
@@ -307,10 +317,14 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
             cfg,
             _mock_mgr,
             tmp_path / "generated-home",
-            system_prompts=system_prompts,
+            launches=launches,
         )
 
-    assert system_prompts == [None, None]
+    assert len(launches) == 2
+    assert all(isinstance(launch, FreshLaunch) for launch in launches)
+    assert all(
+        launch.system_prompt is None for launch in launches if isinstance(launch, FreshLaunch)
+    )
     assert (
         "2 skills unavailable on this backend "
         "(required_join: fixed join unavailable): alpha, zeta"
@@ -318,14 +332,14 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
     )
 
 
-def test_cook_reload_attempts_each_receive_one_unavailability_block(
+def test_cook_only_fresh_attempts_receive_one_unavailability_block(
     _mock_mgr: MagicMock,
     tmp_path: Path,
 ) -> None:
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
-    system_prompts: list[str | None] = []
+    launches: list[object] = []
     refusal = SkillUnavailableMetadata(
         skill="investigate",
         backend="limited",
@@ -343,19 +357,27 @@ def test_cook_reload_attempts_each_receive_one_unavailability_block(
             _mock_mgr,
             tmp_path / "generated-home",
             supports_tool_list_changed=False,
-            system_prompts=system_prompts,
+            launches=launches,
             reload_sentinels=("reload-id", None),
         )
 
-    assert len(system_prompts) == 4
-    assert all(prompt is not None for prompt in system_prompts)
+    assert len(launches) == 4
+    fresh_launches = [launch for launch in launches if isinstance(launch, FreshLaunch)]
+    restored_launches = [launch for launch in launches if isinstance(launch, RestoreSession)]
+    assert len(fresh_launches) == 2
+    assert restored_launches == [RestoreSession(session_id="reload-id")] * 2
     assert all(
-        prompt.count("<autoskillit_skill_unavailability>") == 1
-        and prompt.count("</autoskillit_skill_unavailability>") == 1
-        for prompt in system_prompts
-        if prompt is not None
+        not hasattr(launch, "briefing")
+        and not hasattr(launch, "system_prompt")
+        and not hasattr(launch, "initial_prompt")
+        for launch in restored_launches
     )
-    assert len(set(system_prompts)) == 1
+    assert all(
+        (launch.system_prompt or "").count("<autoskillit_skill_unavailability>") == 1
+        and (launch.system_prompt or "").count("</autoskillit_skill_unavailability>") == 1
+        for launch in fresh_launches
+    )
+    assert len({launch.system_prompt for launch in fresh_launches}) == 1
 
 
 def test_profile_feature_disabled_exits(capsys, _mock_mgr):
@@ -458,6 +480,9 @@ def _run_finalized_profile_cook(
         def recover_cook_history(self) -> None:
             return None
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return CodexBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             captured["build_kwargs"] = kwargs
             env = dict(kwargs["env_extras"])  # type: ignore[arg-type]
@@ -474,6 +499,7 @@ def _run_finalized_profile_cook(
                 ),
                 env=env,
                 cwd="/ambient-cwd-must-not-survive",
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
             )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:

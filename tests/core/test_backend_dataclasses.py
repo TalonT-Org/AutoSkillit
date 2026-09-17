@@ -618,6 +618,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
+        "PositionalRole",
         "CodexAppServerPlan",
         "CodexRuntimeSpec",
         "SessionAttemptHandle",

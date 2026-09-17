@@ -104,7 +104,10 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
     command: list[str] = [origin.binary]
     for flag, value in origin.kv_flags:
-        if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
+        if flag == CodexFlags.PROFILE:
+            command.extend((flag, value))
+    for flag, value in origin.variadic_pairs:
+        if flag == CodexFlags.CONFIG_OVERRIDE:
             command.extend((flag, value))
     return tuple(command)
 
@@ -204,6 +207,17 @@ __all__ = [
 
 logger = get_logger(__name__)
 
+_CODEX_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.MODEL,
+        CodexFlags.MODEL_SHORT,
+        CodexFlags.ADD_DIR,
+        CodexFlags.SANDBOX,
+        CodexFlags.CONFIG_OVERRIDE,
+        CodexFlags.PROFILE,
+    }
+)
+
 
 def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list[str]]:
     origin = spec.origin
@@ -212,7 +226,7 @@ def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list
     reconstructed: list[str] = [origin.binary, *origin.mode_flags]
     for flag, value in origin.kv_flags:
         reconstructed.extend((flag, value))
-    reconstructed.extend(origin.positional)
+    reconstructed.extend(value for _role, value in origin.positional)
     for flag, value in origin.variadic_pairs:
         reconstructed.extend((flag, value))
     if tuple(reconstructed) != spec.cmd:
@@ -460,6 +474,9 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     def binary_name(self) -> str:
         return "codex"
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        return VARIADIC_CODEX_FLAGS, _CODEX_INTERACTIVE_VALUE_BEARING_FLAGS
+
     def translate_model(self, model: str) -> str:
         from autoskillit.core import (
             strip_context_window_suffix,
@@ -590,7 +607,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
 
         sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
         config_overrides = [
-            value for flag, value in origin.kv_flags if flag == CodexFlags.CONFIG_OVERRIDE
+            value for flag, value in origin.variadic_pairs if flag == CodexFlags.CONFIG_OVERRIDE
         ]
         if not config_overrides or config_overrides[-1] != sqlite_override:
             return [

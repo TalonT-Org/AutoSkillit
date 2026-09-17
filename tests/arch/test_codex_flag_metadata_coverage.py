@@ -7,9 +7,9 @@ import pytest
 from autoskillit.execution.backends.codex import (
     NON_VARIADIC_CODEX_FLAGS,
     VARIADIC_CODEX_FLAGS,
+    CodexBackend,
     CodexFlags,
 )
-from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -40,12 +40,11 @@ def test_all_categorized_codex_flags_are_valid_members():
 def test_codex_value_bearing_flags_subset_of_categorized():
     categorized = VARIADIC_CODEX_FLAGS | NON_VARIADIC_CODEX_FLAGS
     all_flags = frozenset(CodexFlags)
-    for entry in _CODEX_VALUE_BEARING_FLAGS:
-        assert entry in all_flags, (
-            f"_CODEX_VALUE_BEARING_FLAGS entry {entry!r} is not a live CodexFlags member"
-        )
+    _, value_bearing_flags = CodexBackend().interactive_ordering_flags()
+    for entry in value_bearing_flags:
+        assert entry in all_flags, f"value-bearing flag {entry!r} is not a live CodexFlags member"
         assert entry in categorized, (
-            f"_CODEX_VALUE_BEARING_FLAGS entry {entry!r} is not in "
+            f"value-bearing flag {entry!r} is not in "
             f"VARIADIC_CODEX_FLAGS or NON_VARIADIC_CODEX_FLAGS"
         )
 

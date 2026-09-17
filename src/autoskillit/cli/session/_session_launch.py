@@ -10,15 +10,19 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, overload
+from typing import TYPE_CHECKING, NoReturn, assert_never, overload
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     LAUNCH_ID_ENV_VAR,
+    FreshLaunch,
     InfraExitCategory,
+    InteractiveLaunch,
     NamedResume,
     NoResume,
+    RestoreSession,
+    ResumeWithBriefing,
     SkillContractError,
     executable_binding_matches_current_file,
     get_logger,
@@ -138,9 +142,7 @@ def prepare_interactive_launch(
     extra_env: Mapping[str, str] | None,
     required_env: frozenset[str] | None,
     plugin_binding: PluginLaunchBinding | None,
-    resume_spec: ResumeSpec,
-    system_prompt: str | None,
-    initial_prompt: str | None,
+    launch: InteractiveLaunch,
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
@@ -174,9 +176,7 @@ def prepare_interactive_launch(
             raise ValueError("\n".join(readiness.errors))
         merged_extras.update(readiness.attested_env)
     env_spec = backend.build_interactive_cmd(
-        initial_prompt=initial_prompt,
-        resume_spec=resume_spec,
-        system_prompt=system_prompt,
+        launch=launch,
         env_extras=merged_extras,
         required_env=required_env,
         plugin_binding=plugin_binding,
@@ -198,10 +198,8 @@ def prepare_interactive_launch(
             "interactive executable identity changed between probe and launch preparation"
         )
     spec = backend.build_interactive_cmd(
-        initial_prompt=initial_prompt,
+        launch=launch,
         executable=final,
-        resume_spec=resume_spec,
-        system_prompt=system_prompt,
         env_extras=merged_extras,
         required_env=required_env,
         plugin_binding=plugin_binding,
@@ -223,9 +221,7 @@ def _finalize_interactive_launch(
     extra_env: Mapping[str, str] | None,
     required_env: frozenset[str] | None,
     plugin_binding: PluginLaunchBinding | None,
-    resume_spec: ResumeSpec,
-    system_prompt: str | None,
-    initial_prompt: str | None,
+    launch: InteractiveLaunch,
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     generated_home: Path | None = None,
@@ -234,7 +230,7 @@ def _finalize_interactive_launch(
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
     """Build and validate the finalized invocation with its exact executable binding."""
-    from autoskillit.execution import assert_interactive_ordering
+    from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
 
     if exact_binding_probe_required:
         try:
@@ -244,9 +240,7 @@ def _finalize_interactive_launch(
                 extra_env=extra_env,
                 required_env=required_env,
                 plugin_binding=plugin_binding,
-                resume_spec=resume_spec,
-                system_prompt=system_prompt,
-                initial_prompt=initial_prompt,
+                launch=launch,
                 add_dirs=add_dirs,
                 generated_home=generated_home,
                 home_prepared=home_prepared,
@@ -260,9 +254,7 @@ def _finalize_interactive_launch(
         executable = prepared.executable
     else:
         candidate_spec = backend.build_interactive_cmd(
-            initial_prompt=initial_prompt,
-            resume_spec=resume_spec,
-            system_prompt=system_prompt,
+            launch=launch,
             env_extras=extra_env,
             required_env=required_env,
             plugin_binding=plugin_binding,
@@ -284,10 +276,8 @@ def _finalize_interactive_launch(
         except ValueError as exc:
             _exit_launch_preparation_error(exc)
         built_spec = backend.build_interactive_cmd(
-            initial_prompt=initial_prompt,
+            launch=launch,
             executable=executable,
-            resume_spec=resume_spec,
-            system_prompt=system_prompt,
             env_extras=extra_env,
             required_env=required_env,
             plugin_binding=plugin_binding,
@@ -299,7 +289,13 @@ def _finalize_interactive_launch(
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
         )
     spec = replace(built_spec, cwd=str(project_dir))
-    assert_interactive_ordering(spec=spec)
+    variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
+    assert_interactive_ordering(
+        spec=spec,
+        variadic_flags=variadic_flags,
+        value_bearing_flags=value_bearing_flags,
+    )
+    assert_resume_purity(spec=spec, launch=launch)
     validation_errors = backend.validate_interactive_invocation(spec)
     if validation_errors:
         _exit_launch_validation_errors(validation_errors)
@@ -320,11 +316,9 @@ def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
 
 
 def _run_interactive_session(
-    system_prompt: str,
+    launch: InteractiveLaunch,
     *,
-    initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
-    resume_spec: ResumeSpec | None = None,
     project_dir: Path | None = None,
     required_env: frozenset[str] | None = None,
     backend: CodingAgentBackend | None = None,
@@ -404,7 +398,13 @@ def _run_interactive_session(
         ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()
     )
 
-    final_resume_spec = resume_spec if resume_spec is not None else NoResume()
+    match launch:
+        case FreshLaunch():
+            current_resume_spec: ResumeSpec = NoResume()
+        case RestoreSession(session_id=session_id) | ResumeWithBriefing(session_id=session_id):
+            current_resume_spec = NamedResume(session_id=session_id)
+        case _:
+            assert_never(launch)
     if managed:
         assert managed_home is not None
         assert attempt is not None
@@ -417,9 +417,7 @@ def _run_interactive_session(
             extra_env=extra_env,
             required_env=required_env,
             plugin_binding=plugin_binding,
-            resume_spec=final_resume_spec,
-            system_prompt=system_prompt,
-            initial_prompt=initial_message,
+            launch=launch,
             add_dirs=[managed_home.skills_dir],
             generated_home=managed_home.generated_home,
             home_prepared=True,
@@ -437,7 +435,7 @@ def _run_interactive_session(
             project_dir=_project_dir,
             launch_id=managed_home.launch_id,
             attempt=attempt,
-            current_resume_spec=final_resume_spec,
+            current_resume_spec=current_resume_spec,
             ceiling_seconds=cook_ceiling_seconds,
         ) as attempt_handle:
             startup_trace.record_attempt_anchor(
@@ -506,9 +504,7 @@ def _run_interactive_session(
                 extra_env=extra_env,
                 required_env=required_env,
                 plugin_binding=binding,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                initial_prompt=initial_message,
+                launch=launch,
                 tools=tools_arg,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 mcp_tool_timeout_sec=mcp_tool_timeout_sec,
@@ -591,11 +587,9 @@ def _write_order_entry(project_dir: Path, recipe_name: str | None) -> tuple[str,
 
 
 def _launch_cook_session(
-    system_prompt: str,
+    launch: InteractiveLaunch,
     *,
-    initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
-    resume_spec: ResumeSpec = NoResume(),
     project_dir: Path | None = None,
     required_env: frozenset[str],
     backend: CodingAgentBackend,
@@ -614,8 +608,6 @@ def _launch_cook_session(
     launch_project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
     unavailability_payload = skill_compilation.unavailability_payload
 
-    current_resume_spec: ResumeSpec = resume_spec
-    _current_initial_message = initial_message
     seen_reload_ids: set[str] = set()
     infra_resume_count = 0
 
@@ -626,16 +618,14 @@ def _launch_cook_session(
         retained_binding: PluginLaunchBinding | None = None,
         trace: StartupTrace | None = None,
     ) -> None:
-        nonlocal current_resume_spec, _current_initial_message, infra_resume_count
+        nonlocal launch, infra_resume_count
         attempt = 0
         while True:
             if managed_home is not None:
                 attempt += 1
             session_signal = _run_interactive_session(
-                system_prompt,
-                initial_message=_current_initial_message,
+                launch=launch,
                 extra_env=extra_env,
-                resume_spec=current_resume_spec,
                 project_dir=launch_project_dir,
                 required_env=required_env,
                 backend=backend,
@@ -661,15 +651,21 @@ def _launch_cook_session(
                         f"Too many infrastructure resumes ({_max_infra_resumes} max). "
                         f"Last exit: {session_signal.category}"
                     )
-                current_resume_spec = NamedResume(session_id=session_signal.session_id)
-                _current_initial_message = None
+                launch = RestoreSession(session_id=session_signal.session_id)
                 continue
-            current_resume_spec = admit_reload(session_signal, seen_reload_ids, _max_reloads)
-            _current_initial_message = None
+            resumed = admit_reload(session_signal, seen_reload_ids, _max_reloads)
+            launch = RestoreSession(session_id=resumed.session_id)
 
     if not backend.capabilities.session_dir_persistent:
         render_skill_unavailability(unavailability_payload)
-        system_prompt = append_skill_unavailability(system_prompt, unavailability_payload)
+        if isinstance(launch, FreshLaunch):
+            launch = replace(
+                launch,
+                system_prompt=append_skill_unavailability(
+                    launch.system_prompt,
+                    unavailability_payload,
+                ),
+            )
         run_loop()
         return
 
@@ -730,10 +726,14 @@ def _launch_cook_session(
             projection_context,
         ) as managed_home:
             render_skill_unavailability(managed_home.unavailability_payload)
-            system_prompt = append_skill_unavailability(
-                system_prompt,
-                managed_home.unavailability_payload,
-            )
+            if isinstance(launch, FreshLaunch):
+                launch = replace(
+                    launch,
+                    system_prompt=append_skill_unavailability(
+                        launch.system_prompt,
+                        managed_home.unavailability_payload,
+                    ),
+                )
             trace = StartupTrace(launch_project_dir, launch_id, enabled=False)
             trace.record_launch_anchor()
             launch_binding = projection_binding if launch_load_mode.consumes_artifact else None

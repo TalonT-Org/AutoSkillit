@@ -13,8 +13,8 @@ import pytest
 
 import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_launch_intent as _patch_session__session_picker
 import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
-import autoskillit.cli.session._session_picker as _patch_session__session_picker
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
@@ -27,11 +27,11 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
+    FreshLaunch,
     HookTrustPolicy,
     ManagedSessionHome,
-    NamedResume,
-    NoResume,
     PreLaunchReadiness,
+    RestoreSession,
     SessionAttemptHandle,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
@@ -39,6 +39,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     atomic_write,
 )
+from tests.cli._interactive_process import interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -128,6 +129,12 @@ class _Backend:
     def session_locator(self) -> object:
         return SimpleNamespace()
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+
+        backend = CodexBackend() if self.binary_name() == "codex" else ClaudeCodeBackend()
+        return backend.interactive_ordering_flags()
+
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         self.build_calls.append(kwargs)
         command = ["claude", "--dangerously-skip-permissions"]
@@ -140,6 +147,7 @@ class _Backend:
         return CmdSpec(
             cmd=tuple(command),
             env=dict(kwargs["env_extras"]),  # type: ignore[arg-type]
+            **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
             inherited_fds=(
                 *self.extra_inherited_fds,
                 *getattr(plugin_binding, "inherited_fds", ()),
@@ -310,6 +318,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            return self._command_backend.interactive_ordering_flags()
 
     backend = _DelegatingCodexBackend()
     captured = _install_harness(monkeypatch, tmp_path)
@@ -499,7 +510,7 @@ def test_notification_capable_cook_has_no_pre_reveal_guidance(
 
     cli.cook(backend=backend)
 
-    assert backend.build_calls[0]["system_prompt"] is None
+    assert backend.build_calls[0]["launch"] == FreshLaunch()
 
 
 def test_cook_uses_managed_home_for_final_child_context(
@@ -532,7 +543,7 @@ def test_cook_uses_managed_home_for_final_child_context(
     build = backend.build_calls[0]
     assert build["generated_home"] == generated_home
     assert build["add_dirs"] == [ValidatedAddDir(str(skills_dir))]
-    assert build["resume_spec"] == NoResume()
+    assert build["launch"] == FreshLaunch()
     assert backend.recover_count == 0
     assert backend.context_calls[0]["session_home"] == generated_home
     assert backend.context_calls[0]["project_dir"] == tmp_path
@@ -611,19 +622,25 @@ def test_cook_bare_resume_recovers_then_uses_picker(
     cli.cook(backend=backend, resume=True)
 
     assert backend.recover_count == 1
-    assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-123")
+    assert backend.build_calls[0]["launch"] == RestoreSession("thread-123")
 
 
 def test_cook_bare_resume_without_selection_starts_fresh(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     backend = _Backend()
-    _install_harness(monkeypatch, tmp_path)
+    captured = _install_harness(
+        monkeypatch,
+        tmp_path,
+        first_run=True,
+        onboarding_prompt="start here",
+    )
 
     cli.cook(backend=backend, resume=True)
 
     assert backend.recover_count == 1
-    assert backend.build_calls[0]["resume_spec"] == NoResume()
+    assert backend.build_calls[0]["launch"] == FreshLaunch(initial_prompt="start here")
+    assert any(event[0] == "onboarded" for event in captured["events"])
 
 
 def test_cook_explicit_resume_does_not_run_recovery(
@@ -635,7 +652,7 @@ def test_cook_explicit_resume_does_not_run_recovery(
     cli.cook(backend=backend, session_id="thread-explicit")
 
     assert backend.recover_count == 0
-    assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-explicit")
+    assert backend.build_calls[0]["launch"] == RestoreSession("thread-explicit")
 
 
 def test_cook_marks_onboarded_only_after_success(
@@ -651,7 +668,7 @@ def test_cook_marks_onboarded_only_after_success(
 
     cli.cook(backend=backend)
 
-    assert backend.build_calls[0]["initial_prompt"] == "start here"
+    assert backend.build_calls[0]["launch"] == FreshLaunch(initial_prompt="start here")
     event_names = [event[0] for event in captured["events"]]
     assert event_names.index("run") < event_names.index("onboarded")
 
@@ -665,6 +682,23 @@ def test_cook_does_not_mark_onboarded_without_prompt(
     cli.cook(backend=backend)
 
     assert not any(event[0] == "onboarded" for event in captured["events"])
+
+
+def test_cook_explicit_resume_skips_onboarding(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(
+        monkeypatch,
+        tmp_path,
+        first_run=True,
+        onboarding_prompt="start here",
+    )
+
+    cli.cook(backend=backend, session_id="thread-explicit")
+
+    assert not any(event[0] == "onboarded" for event in captured["events"])
+    assert backend.build_calls[0]["launch"] == RestoreSession("thread-explicit")
 
 
 def test_cook_nonzero_exit_propagates_after_managed_cleanup(
@@ -773,7 +807,16 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             events.append(("build",))
-            return CmdSpec(cmd=("claude",), env={})
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             events.append(("validate", spec))

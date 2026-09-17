@@ -1,13 +1,47 @@
-"""Scoped resume picker: shows a filtered list of cook or order sessions."""
+"""Narrow CLI resume spelling into a prompt-free interactive launch intent."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import assert_never
 
-from autoskillit.core import SessionLocator, SessionSummary
+from autoskillit.core import (
+    BareResume,
+    CodingAgentBackend,
+    FreshLaunch,
+    InteractiveLaunch,
+    NamedResume,
+    NoResume,
+    RestoreSession,
+    ResumeSpec,
+    SessionLocator,
+    SessionSummary,
+)
 
 _Registry = Mapping[str, Mapping[str, object]]
+
+
+def resolve_interactive_launch(
+    *,
+    resume_spec: ResumeSpec,
+    session_type: str,
+    project_dir: Path,
+    backend: CodingAgentBackend,
+) -> InteractiveLaunch:
+    """Resolve CLI resume input to either a fresh launch or a concrete restore."""
+    match resume_spec:
+        case NamedResume(session_id=session_id):
+            return RestoreSession(session_id=session_id)
+        case BareResume():
+            selected_id = pick_session(session_type, project_dir, backend.session_locator())
+            if selected_id is not None:
+                return RestoreSession(session_id=selected_id)
+            return FreshLaunch()
+        case NoResume():
+            return FreshLaunch()
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def pick_session(
@@ -46,14 +80,10 @@ def _registry_entry(
 
 
 def _classify_session(summary: SessionSummary, registry: _Registry) -> str:
-    """Classify session as 'cook' or 'order'.
-
-    Uses registry lookup first, then the backend locator's classification.
-    """
+    """Classify a session from registry authority, then backend evidence."""
     registry_entry = _registry_entry(summary, registry)
     if registry_entry is not None:
         return str(registry_entry.get("session_type", "cook"))
-
     if summary.session_type_hint is not None:
         return summary.session_type_hint
     return "cook"
@@ -81,13 +111,7 @@ def _format_session_row(
     display_summary = (summary.summary or summary.first_prompt)[:60]
     branch = summary.git_branch or ""
     modified = summary.modified or ""
-
-    parts = [badge, display_summary]
-    if branch:
-        parts.append(branch)
-    if modified:
-        parts.append(modified)
-    return "  ".join(p for p in parts if p)
+    return "  ".join(part for part in (badge, display_summary, branch, modified) if part)
 
 
 def _run_picker(
@@ -95,28 +119,21 @@ def _run_picker(
     session_type: str,
     registry: _Registry,
 ) -> str | None:
-    """Print numbered list and prompt user for selection.
-
-    Returns the selected backend session ID on valid selection, None on 0.
-    Re-prompts on invalid input (max 3 retries, then returns None).
-    """
+    """Prompt for one filtered session, returning ``None`` for a fresh launch."""
     print(f"\nResume a {session_type} session:")
     print("  0. Start fresh session")
-    for i, entry in enumerate(sessions, 1):
-        row = _format_session_row(entry, session_type, registry)
-        print(f"  {i}. {row}")
+    for index, entry in enumerate(sessions, 1):
+        print(f"  {index}. {_format_session_row(entry, session_type, registry)}")
 
     from autoskillit.cli.ui._timed_input import timed_prompt
 
-    max_retries = 3
-    for _ in range(max_retries):
+    for _ in range(3):
         try:
             raw = timed_prompt(
                 f"\nSelect [0-{len(sessions)}]: ", timeout=0, label="session picker"
             )
         except KeyboardInterrupt:
             return None
-
         if not raw:
             continue
         try:
@@ -124,11 +141,9 @@ def _run_picker(
         except ValueError:
             print(f"Invalid input '{raw}'. Enter a number between 0 and {len(sessions)}.")
             continue
-
         if choice == 0:
             return None
         if 1 <= choice <= len(sessions):
             return sessions[choice - 1].session_id
         print(f"Out of range. Enter a number between 0 and {len(sessions)}.")
-
     return None

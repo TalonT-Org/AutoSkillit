@@ -6,12 +6,12 @@ from typing import Any
 import pytest
 
 from autoskillit.core import (
-    BareResume,
     ClaudeFlags,
     CmdSpec,
-    NamedResume,
-    NoResume,
+    FreshLaunch,
     OutputFormat,
+    RestoreSession,
+    ResumeWithBriefing,
     SessionCheckpoint,
     SkillSessionConfig,
 )
@@ -42,38 +42,32 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
 
 
-class TestBuildInteractiveCmdSystemPrompt:
-    """system_prompt is emitted as --append-system-prompt by build_interactive_cmd."""
+class TestBuildInteractiveCmdLaunchIntent:
+    """Only fresh launches can provide a system prompt to the interactive builder."""
 
-    def test_system_prompt_with_no_resume_appends_flag(self) -> None:
+    def test_fresh_system_prompt_appends_flag(self) -> None:
         backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(system_prompt="my-prompt", resume_spec=NoResume())
+        spec = backend.build_interactive_cmd(launch=FreshLaunch(system_prompt="my-prompt"))
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT in spec.cmd
         idx = spec.cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         assert spec.cmd[idx + 1] == "my-prompt"
 
-    def test_system_prompt_none_does_not_append_flag(self) -> None:
+    def test_fresh_launch_without_system_prompt_does_not_append_flag(self) -> None:
         backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(system_prompt=None)
+        spec = backend.build_interactive_cmd(launch=FreshLaunch())
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
 
-    def test_system_prompt_with_named_resume_suppresses_flag(self) -> None:
+    @pytest.mark.parametrize(
+        "launch",
+        [
+            RestoreSession(session_id="s1"),
+            ResumeWithBriefing(session_id="s1", briefing="continue"),
+        ],
+        ids=["restore", "resume_with_briefing"],
+    )
+    def test_resume_variants_do_not_append_fresh_system_prompt(self, launch) -> None:
         backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(
-            system_prompt="should-suppress", resume_spec=NamedResume(session_id="s1")
-        )
-        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
-
-    def test_system_prompt_with_bare_resume_suppresses_flag(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(
-            system_prompt="should-suppress", resume_spec=BareResume()
-        )
-        assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
-
-    def test_no_system_prompt_omits_flag_with_no_resume(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(system_prompt=None, resume_spec=NoResume())
+        spec = backend.build_interactive_cmd(launch=launch)
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
 
 

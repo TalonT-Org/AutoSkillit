@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import VARIADIC_CLAUDE_FLAGS, ClaudeFlags
+from autoskillit.core import ClaudeFlags, FreshLaunch
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.execution.backends.codex import CodexFlags
 
@@ -23,10 +23,11 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 )
 def test_positional_precedes_all_variadic_flags(variadic_kwargs):
     result = ClaudeCodeBackend().build_interactive_cmd(
-        initial_prompt="test prompt", **variadic_kwargs
+        launch=FreshLaunch(initial_prompt="test prompt"), **variadic_kwargs
     )
     prompt_idx = result.cmd.index("test prompt")
-    for flag in VARIADIC_CLAUDE_FLAGS:
+    variadic_flags, _ = ClaudeCodeBackend().interactive_ordering_flags()
+    for flag in variadic_flags:
         if flag in result.cmd:
             flag_idx = result.cmd.index(flag)
             assert prompt_idx < flag_idx, (
@@ -45,10 +46,16 @@ def test_positional_precedes_all_variadic_flags(variadic_kwargs):
 def test_all_backends_positional_precedes_variadic(backend_cls, variadic_kwargs):
     generated_home = Path("/tmp/codex-home") if backend_cls is CodexBackend else None
     result = backend_cls().build_interactive_cmd(
-        initial_prompt="test prompt", generated_home=generated_home, **variadic_kwargs
+        launch=FreshLaunch(initial_prompt="test prompt"),
+        generated_home=generated_home,
+        **variadic_kwargs,
     )
     prompt_idx = list(result.cmd).index("test prompt")
     flag_val = CodexFlags.ADD_DIR if backend_cls is CodexBackend else ClaudeFlags.ADD_DIR
+    variadic_flags, _ = backend_cls().interactive_ordering_flags()
+    assert flag_val in variadic_flags, (
+        f"{backend_cls.__name__}: expected {flag_val!r} to be classified as variadic"
+    )
     assert flag_val in result.cmd, (
         f"{backend_cls.__name__}: expected variadic flag {flag_val!r} in cmd but not found"
     )

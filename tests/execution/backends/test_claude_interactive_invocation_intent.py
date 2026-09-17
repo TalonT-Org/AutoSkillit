@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, FreshLaunch
 from autoskillit.execution.backends import ClaudeCodeBackend
 from tests._realistic_project import AGENT_TEAMS_ENV_VAR, make_realistic_project
 
@@ -25,7 +25,7 @@ def test_default_intent_ignores_teams_enabled_project(tmp_path: Path) -> None:
     project = make_realistic_project(tmp_path, agent_teams="1")
     backend = ClaudeCodeBackend()
 
-    spec = backend.build_interactive_cmd(initial_prompt="hello")
+    spec = backend.build_interactive_cmd(launch=FreshLaunch(initial_prompt="hello"))
     spec = CmdSpec(
         cmd=spec.cmd,
         env=spec.env,
@@ -59,7 +59,7 @@ def test_declared_intent_passes_on_a_clean_project(tmp_path: Path) -> None:
     backend = ClaudeCodeBackend()
 
     spec = backend.build_interactive_cmd(
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         force_inactive_agent_teams=True,
         project_root=str(project),
     )
@@ -86,7 +86,7 @@ def test_declared_intent_neutralizes_teams_enabled_settings(tmp_path: Path) -> N
     backend = ClaudeCodeBackend()
 
     spec = backend.build_interactive_cmd(
-        initial_prompt="hello",
+        launch=FreshLaunch(initial_prompt="hello"),
         force_inactive_agent_teams=True,
         project_root=str(project),
     )
@@ -128,7 +128,7 @@ def test_builder_refuses_eagerly_when_neutralization_cannot_confirm(
 
     with pytest.raises(RuntimeError, match="could not be parsed"):
         backend.build_interactive_cmd(
-            initial_prompt="hello",
+            launch=FreshLaunch(initial_prompt="hello"),
             force_inactive_agent_teams=True,
             project_root=str(project),
         )

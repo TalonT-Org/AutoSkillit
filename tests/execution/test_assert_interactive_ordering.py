@@ -6,12 +6,22 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, PositionalRole
 from autoskillit.core.types._type_backend import CmdOrigin
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.execution.headless._headless_helpers import assert_interactive_ordering
 from tests._realistic_project import AGENT_TEAMS_ENV_VAR, make_realistic_project
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _assert_backend_ordering(spec: CmdSpec, backend: ClaudeCodeBackend | CodexBackend) -> None:
+    variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
+    assert_interactive_ordering(
+        spec=spec,
+        variadic_flags=variadic_flags,
+        value_bearing_flags=value_bearing_flags,
+    )
 
 
 @pytest.mark.parametrize("malformed_local", [False, True])
@@ -37,7 +47,7 @@ def test_shape_validator_never_inspects_environment_content(
         cwd=str(project),
     )
 
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_correctly_ordered_cmd_passes():
@@ -45,7 +55,7 @@ def test_correctly_ordered_cmd_passes():
         cmd=("claude", "--dangerously-skip-permissions", "prompt", "--add-dir", "/a"),
         env={},
     )
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_positional_after_variadic_raises():
@@ -54,7 +64,7 @@ def test_positional_after_variadic_raises():
         env={},
     )
     with pytest.raises(ValueError, match="positional.*must precede.*variadic"):
-        assert_interactive_ordering(spec)
+        _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_no_positional_passes():
@@ -62,7 +72,7 @@ def test_no_positional_passes():
         cmd=("claude", "--dangerously-skip-permissions", "--add-dir", "/a"),
         env={},
     )
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_origin_does_not_bypass_validation():
@@ -72,12 +82,12 @@ def test_origin_does_not_bypass_validation():
         env={},
         origin=CmdOrigin(
             binary="claude",
-            positional=("prompt",),
+            positional=((PositionalRole.PROMPT, "prompt"),),
             variadic_pairs=(("--add-dir", "/path"),),
         ),
     )
     with pytest.raises(ValueError, match="positional.*must precede.*variadic"):
-        assert_interactive_ordering(spec)
+        _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_flag_value_not_mistaken_for_positional():
@@ -86,7 +96,7 @@ def test_flag_value_not_mistaken_for_positional():
         cmd=("claude", "--model", "claude-sonnet-4-6", "--add-dir", "/a"),
         env={},
     )
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_codex_config_override_value_not_mistaken_for_positional():
@@ -103,7 +113,7 @@ def test_codex_config_override_value_not_mistaken_for_positional():
         ),
         env={},
     )
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, CodexBackend())
 
 
 def test_tools_flag_after_positional_passes():
@@ -117,7 +127,7 @@ def test_tools_flag_after_positional_passes():
         ),
         env={},
     )
-    assert_interactive_ordering(spec)
+    _assert_backend_ordering(spec, ClaudeCodeBackend())
 
 
 def test_tools_flag_before_positional_raises():
@@ -132,4 +142,35 @@ def test_tools_flag_before_positional_raises():
         env={},
     )
     with pytest.raises(ValueError, match="positional.*must precede.*variadic"):
-        assert_interactive_ordering(spec)
+        _assert_backend_ordering(spec, ClaudeCodeBackend())
+
+
+def test_codex_variadic_after_positional_passes():
+    spec = CmdSpec(
+        cmd=(
+            "codex",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "my prompt",
+            "--add-dir",
+            "/a",
+        ),
+        env={},
+    )
+
+    _assert_backend_ordering(spec, CodexBackend())
+
+
+def test_codex_variadic_before_positional_raises():
+    spec = CmdSpec(
+        cmd=(
+            "codex",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--add-dir",
+            "/a",
+            "my prompt",
+        ),
+        env={},
+    )
+
+    with pytest.raises(ValueError, match="positional.*must precede.*variadic"):
+        _assert_backend_ordering(spec, CodexBackend())

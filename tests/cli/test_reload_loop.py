@@ -8,7 +8,6 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,7 +23,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from tests.cli._cook_launch_helpers import RecordingLifecycle
-from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -102,9 +101,11 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
+        FreshLaunch,
         HookTrustPolicy,
         NamedResume,
         NoResume,
+        RestoreSession,
         SkillUnavailabilityPayload,
     )
 
@@ -127,7 +128,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         skills_dir=skills_dir,
         projection_root=tmp_path / "projected-plugin",
         unavailability_payload=profile_payload,
-        returncodes=(17, 42),
+        returncodes=(17, 0),
     )
     events = lifecycle.events
 
@@ -153,14 +154,20 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             events.append(("recover",))
 
         def build_interactive_cmd(self, **kwargs):
-            resume_spec = kwargs["resume_spec"]
+            launch = kwargs["launch"]
             plugin_binding = kwargs["plugin_binding"]
-            events.append(("build", resume_spec, kwargs["system_prompt"]))
+            events.append(("build", launch))
             return CmdSpec(
                 cmd=("claude",),
                 env={"ATTEMPT": str(len(events))},
+                **interactive_launch_metadata(binary="claude", launch=launch),
                 inherited_fds=plugin_binding.inherited_fds,
             )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             events.append(("validate", spec))
@@ -222,9 +229,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     from autoskillit import cli
 
-    with pytest.raises(SystemExit) as exc_info:
-        cli.cook(backend=_MockBackend())
-    assert exc_info.value.code == 42
+    cli.cook(backend=_MockBackend())
 
     managed_enters = lifecycle.events_of_type("managed-enter")
     managed_exits = lifecycle.events_of_type("managed-exit")
@@ -248,21 +253,32 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     first_exit = events.index(lifecycle.event_for("attempt-exit", 1))
     second_build = events.index(
         next(
-            event for event in events if event[0] == "build" and isinstance(event[1], NamedResume)
+            event
+            for event in events
+            if event[0] == "build" and isinstance(event[1], RestoreSession)
         )
     )
     assert first_reaped < first_sentinel < first_exit < second_build
 
     run_events = lifecycle.events_of_type("run")
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
-    build_prompts = [cast(str, event[2]) for event in events if event[0] == "build"]
-    assert len(build_prompts) == 4
-    assert all(prompt.count("<autoskillit_skill_unavailability>") == 1 for prompt in build_prompts)
-    assert all("profile-required-join" in prompt for prompt in build_prompts)
+    build_launches = [event[1] for event in events if event[0] == "build"]
+    assert len(build_launches) == 4
+    fresh_launches = [launch for launch in build_launches if isinstance(launch, FreshLaunch)]
+    restored_launches = [launch for launch in build_launches if isinstance(launch, RestoreSession)]
+    assert len(fresh_launches) == 2
+    assert restored_launches == [RestoreSession(session_id="sess-001")] * 2
+    assert all(
+        (launch.system_prompt or "").count("<autoskillit_skill_unavailability>") == 1
+        for launch in fresh_launches
+    )
+    assert all(
+        "profile-required-join" in (launch.system_prompt or "") for launch in fresh_launches
+    )
     assert len(lifecycle.projection_bindings) == 1
     assert lifecycle.projection_bindings[0].closed
     assert events.index(managed_exits[0]) > events.index(lifecycle.event_for("attempt-exit", 2))
-    assert onboarded == []
+    assert onboarded == [tmp_path]
     assert ("recover",) not in events
 
 
@@ -340,7 +356,16 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             return None
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
-            return CmdSpec(cmd=("claude",), env={})
+            return CmdSpec(
+                cmd=("claude",),
+                env={},
+                **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
+            )
+
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import ClaudeCodeBackend
+
+            return ClaudeCodeBackend().interactive_ordering_flags()
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             return []
@@ -397,6 +422,8 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
 def test_interactive_session_reload_uses_named_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from autoskillit.core import FreshLaunch
+
     _write_sentinel(tmp_path, "isess-001")
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -409,44 +436,37 @@ def test_interactive_session_reload_uses_named_resume(
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
-    result = _run_interactive_session(system_prompt="test", project_dir=tmp_path)
+    result = _run_interactive_session(
+        launch=FreshLaunch(system_prompt="test"), project_dir=tmp_path
+    )
     assert result == "isess-001"
 
 
 # ---------------------------------------------------------------------------
-# RL-6 — Fleet reload re-launches with same system_prompt, no --resume
+# RL-6 — Fleet reload restores the session without replaying its system prompt
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.feature("fleet")
-def test_fleet_reload_relaunches_without_resume(
+def test_fleet_reload_restores_session_without_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from autoskillit.core import NamedResume, NoResume
+    from autoskillit.core import FreshLaunch, RestoreSession
 
     call_count = [0]
-    captured_resume_specs: list = []
+    captured_launches: list[object] = []
     captured_skill_compilations: list[object | None] = []
     skill_compilation = MagicMock()
     skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
     def fake_run_interactive_session(
-        prompt,
         *,
-        extra_env=None,
-        resume_spec=None,
-        project_dir=None,
-        initial_message=None,
-        required_env=None,
-        backend=None,
+        launch: object,
         skill_compilation=None,
-        force_inactive_agent_teams=False,
-        mcp_tool_timeout_sec=None,
-        cook_ceiling_seconds=None,
-        systemd_scope_enabled=None,
-    ):
+        **kwargs: object,
+    ) -> str | None:
         call_count[0] += 1
-        captured_resume_specs.append(resume_spec)
+        captured_launches.append(launch)
         captured_skill_compilations.append(skill_compilation)
         if call_count[0] == 1:
             return "franchise-sess"
@@ -483,7 +503,8 @@ def test_fleet_reload_relaunches_without_resume(
     )
 
     assert call_count[0] == 2
-    assert isinstance(captured_resume_specs[0], NoResume)
-    assert isinstance(captured_resume_specs[1], NamedResume)
-    assert captured_resume_specs[1].session_id == "franchise-sess"
+    assert captured_launches == [
+        FreshLaunch(system_prompt="test-prompt"),
+        RestoreSession(session_id="franchise-sess"),
+    ]
     assert all(compilation is skill_compilation for compilation in captured_skill_compilations)

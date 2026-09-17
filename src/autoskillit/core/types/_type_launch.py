@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-from ._type_backend import CmdOrigin, CmdSpec
+from ._type_backend import CmdOrigin, CmdSpec, PositionalRole
 from ._type_execution_identity import BackendAuthorityKind
 from ._type_launch_authority import (
     BackendAuthority,
@@ -498,6 +498,12 @@ class ResolvedLaunchContract:
                 raise LaunchContractError(f"{field_name} must be an array")
             return tuple(value)
 
+        def require_pair(value: object, field_name: str) -> tuple[object, object]:
+            pair = require_sequence(value, field_name)
+            if len(pair) != 2:
+                raise LaunchContractError(f"{field_name} must contain exactly two items")
+            return pair[0], pair[1]
+
         def require_int(value: object, field_name: str) -> int:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise LaunchContractError(f"{field_name} must be an integer")
@@ -547,26 +553,27 @@ class ResolvedLaunchContract:
                         )
                     ),
                     kv_flags=tuple(
-                        (str(pair[0]), str(pair[1]))
+                        (str(key), str(value))
                         for item in require_sequence(
                             origin_mapping["kv_flags"], "command origin key/value flags"
                         )
-                        for pair in (require_sequence(item, "command origin key/value flag"),)
-                        if len(pair) == 2
+                        for key, value in (require_pair(item, "command origin key/value flag"),)
                     ),
                     positional=tuple(
-                        str(item)
+                        (PositionalRole(str(role)), str(value))
                         for item in require_sequence(
                             origin_mapping["positional"], "command origin positional arguments"
                         )
+                        for role, value in (
+                            require_pair(item, "command origin positional argument"),
+                        )
                     ),
                     variadic_pairs=tuple(
-                        (str(pair[0]), str(pair[1]))
+                        (str(flag), str(value))
                         for item in require_sequence(
                             origin_mapping["variadic_pairs"], "command origin variadic pairs"
                         )
-                        for pair in (require_sequence(item, "command origin variadic pair"),)
-                        if len(pair) == 2
+                        for flag, value in (require_pair(item, "command origin variadic pair"),)
                     ),
                 )
             fallback_routes = tuple(

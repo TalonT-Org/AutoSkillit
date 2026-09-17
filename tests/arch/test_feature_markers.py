@@ -66,7 +66,7 @@ _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
 
 # Standalone functions within mixed files that MUST carry @pytest.mark.feature("fleet")
 _FLEET_FUNC_MARKERS: dict[str, set[str]] = {
-    "cli/test_reload_loop.py": {"test_fleet_reload_relaunches_without_resume"},
+    "cli/test_reload_loop.py": {"test_fleet_reload_restores_session_without_prompt"},
     "server/test_helpers_tier_guards.py": {
         "test_A11_require_fleet_permits_fleet_session",
         "test_A12_require_fleet_denies_orchestrator",

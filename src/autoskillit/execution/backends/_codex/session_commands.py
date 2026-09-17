@@ -6,7 +6,7 @@ import os
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
+from typing import assert_never, cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -29,19 +29,20 @@ from autoskillit.core import (
     SKILL_SESSION_REQUIRED_ENV,
     AgentDef,
     BackendCapabilities,
-    BareResume,
     CmdSpec,
     CodexAppServerPlan,
     ExecutableLaunchBinding,
+    FreshLaunch,
+    InteractiveLaunch,
     ManagedHeadlessSessionLineageRef,
-    NamedResume,
     NativeShellCaptureDecision,
     NativeShellCaptureMode,
-    NoResume,
     OutputFormat,
     PluginLaunchBinding,
     PluginLoadMode,
-    ResumeSpec,
+    PositionalRole,
+    RestoreSession,
+    ResumeWithBriefing,
     SessionCheckpoint,
     SkillDiscoveryRouteDef,
     SkillExecutionRole,
@@ -191,19 +192,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             | CODEX_RESERVED_HOME_ENV_VARS,
         )
         return env, extras, managed_catalog
-
-    @staticmethod
-    def _emit_interactive_resume_mode(builder: CmdBuilder, resume_spec: ResumeSpec) -> None:
-        match resume_spec:
-            case NoResume():
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
-            case NamedResume(session_id=sid):
-                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
-                builder.positional(sid)
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
-            case BareResume():
-                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
-                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
 
     @staticmethod
     def _prepare_interactive_environment(
@@ -590,14 +578,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
     def build_interactive_cmd(
         self,
         *,
-        initial_prompt: str | None = None,
+        launch: InteractiveLaunch = FreshLaunch(),
         model: str | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
-        resume_spec: ResumeSpec = NoResume(),
-        system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
@@ -622,13 +608,27 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         selected_profile = (env_extras or {}).get(PROVIDER_PROFILE_ENV_VAR, "")
         if selected_profile:
             builder.kv_flag(CodexFlags.PROFILE, selected_profile)
-        self._emit_interactive_resume_mode(builder, resume_spec)
+        config_overrides: list[str] = []
+        match launch:
+            case FreshLaunch(system_prompt=system_prompt, initial_prompt=initial_prompt):
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+            case RestoreSession(session_id=sid):
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.positional(sid, role=PositionalRole.RESUME_TARGET)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+                initial_prompt = None
+            case ResumeWithBriefing(session_id=sid, briefing=briefing):
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.positional(sid, role=PositionalRole.RESUME_TARGET)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
+                initial_prompt = briefing
+            case _ as unreachable:
+                assert_never(unreachable)
         if model:
             builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
-            for override in self.model_config_overrides(model):
-                builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
-        builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
-        if isinstance(resume_spec, NoResume):
+            config_overrides.extend(self.model_config_overrides(model))
+        config_overrides.append(_IMAGE_GENERATION_DISABLED)
+        if isinstance(launch, FreshLaunch):
             # Interactive TUI tasks are unknown at launch (including manual runs), so
             # they retain full scope coverage without a dispatch-time skill identity
             # that could select narrower skill-session delivery.
@@ -638,8 +638,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 if system_prompt is not None
                 else _interactive_suffix
             )
-            builder.kv_flag(
-                CodexFlags.CONFIG_OVERRIDE,
+            config_overrides.append(
                 f"developer_instructions={_format_toml_value(developer_instructions)}",
             )
         if generated_home is None and (
@@ -651,12 +650,13 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 generated_home,
                 argument_name="generated_home",
             )
-            builder.kv_flag(
-                CodexFlags.CONFIG_OVERRIDE,
+            config_overrides.append(
                 f"sqlite_home={_format_toml_value(str(generated_home))}",
             )
         if initial_prompt is not None:
-            builder.positional(initial_prompt)
+            builder.positional(initial_prompt, role=PositionalRole.PROMPT)
+        for override in config_overrides:
+            builder.variadic_pair(CodexFlags.CONFIG_OVERRIDE, override)
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         env, projected_skill_entries, route = self._prepare_interactive_environment(
@@ -676,7 +676,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             cmd=partial.cmd,
             env=executable.launch_environment if executable is not None else env,
             origin=partial.origin,
-            is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
+            is_resume=not isinstance(launch, FreshLaunch),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             managed_skill_catalog=managed_skill_catalog,
             projected_skill_entries=projected_skill_entries,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import NamedResume, ValidatedAddDir
+from autoskillit.core import RestoreSession, ValidatedAddDir
 from autoskillit.execution.backends.codex import CodexBackend
 
 pytestmark = [pytest.mark.small]
@@ -19,7 +19,7 @@ class TestCodexInteractiveLaunch:
 
     def test_resume_command_is_subcommand(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
-            resume_spec=NamedResume(session_id="sess-1"),
+            launch=RestoreSession(session_id="sess-1"),
             generated_home=_GENERATED_HOME,
         )
         assert "resume" in spec.cmd

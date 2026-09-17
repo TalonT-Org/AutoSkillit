@@ -26,20 +26,20 @@ def _make_campaign_recipe(name: str = "test-campaign") -> MagicMock:
 
 
 @pytest.mark.parametrize("campaign_mode", [False, True], ids=("dispatch", "campaign"))
-def test_fleet_call_sites_omit_managed_order_inputs(
+def test_fleet_call_sites_build_fresh_launches_without_managed_order_inputs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     campaign_mode: bool,
 ) -> None:
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
-    from autoskillit.core import FLEET_SESSION_REQUIRED_ENV, NoResume
+    from autoskillit.core import FLEET_SESSION_REQUIRED_ENV, FreshLaunch
 
-    calls: list[tuple[str, dict[str, object]]] = []
+    calls: list[tuple[object, dict[str, object]]] = []
     skill_compilation = MagicMock()
     skill_compilation.unavailability_payload = {"backend": "claude-code", "unavailable": ()}
 
-    def capture_session(prompt: str, **kwargs: object) -> None:
-        calls.append((prompt, kwargs))
+    def capture_session(launch: object, **kwargs: object) -> None:
+        calls.append((launch, kwargs))
 
     monkeypatch.setattr(
         _patch_session__session_launch,
@@ -84,14 +84,17 @@ def test_fleet_call_sites_omit_managed_order_inputs(
         )
 
     assert len(calls) == 1
-    prompt, kwargs = calls[0]
-    assert prompt == ("campaign-prompt" if campaign_mode else "dispatch-prompt")
-    assert kwargs["initial_message"] == "hello"
+    launch, kwargs = calls[0]
+    assert isinstance(launch, FreshLaunch)
+    assert launch.system_prompt == ("campaign-prompt" if campaign_mode else "dispatch-prompt")
+    assert launch.initial_prompt == "hello"
     assert kwargs["project_dir"] == tmp_path
     assert kwargs["required_env"] == FLEET_SESSION_REQUIRED_ENV
     assert kwargs["backend"] is not None
     assert kwargs["skill_compilation"] is skill_compilation
-    assert isinstance(kwargs["resume_spec"], NoResume)
+    assert "resume_spec" not in kwargs
+    assert "system_prompt" not in kwargs
+    assert "initial_message" not in kwargs
     extra_env = kwargs["extra_env"]
     assert isinstance(extra_env, dict)
     assert extra_env["AUTOSKILLIT_PROJECT_DIR"] == str(tmp_path)
@@ -296,10 +299,9 @@ class TestReloadLoopRefreshesMetadata:
         call_sequence = iter(["reload-id-1", None])
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str | None:
@@ -350,10 +352,9 @@ class TestReloadLoopRefreshesMetadata:
         call_sequence = iter(["reload-id-1", None])
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str | None:
@@ -423,10 +424,9 @@ class TestReloadLoopSentinelGuard:
         session_call_count = {"n": 0}
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str | None:
@@ -478,10 +478,9 @@ class TestReloadLoopSafetyGuards:
         counter = {"n": 0}
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str:
@@ -532,10 +531,9 @@ class TestReloadLoopSafetyGuards:
 
         # Always return the same reload_id
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str:
@@ -573,28 +571,29 @@ class TestReloadLoopSafetyGuards:
             )
 
 
-class TestReloadLoopUsesNamedResume:
-    """T3d: Reload loop passes NoResume on first call, NamedResume on reload."""
+class TestReloadLoopUsesRestoreSession:
+    """T3d: Reload loop restores the session without replaying its prompt."""
 
-    def test_named_resume_on_reload(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """First call uses NoResume(); after reload, NamedResume is used."""
-        from autoskillit.core import NamedResume, NoResume
+    def test_reload_uses_restore_session(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A reload restores its session and carries no new prompt or briefing."""
+        from autoskillit.core import FreshLaunch, RestoreSession
 
         monkeypatch.chdir(tmp_path)
         state_path = tmp_path / "state.json"
 
-        captured_specs: list[object] = []
+        captured_launches: list[object] = []
         call_sequence = iter(["reload-id-abc", None])
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> str | None:
-            captured_specs.append(resume_spec)
+            captured_launches.append(launch)
             return next(call_sequence)
 
         fresh_meta = MagicMock()
@@ -627,19 +626,20 @@ class TestReloadLoopUsesNamedResume:
             fleet_mode="campaign",
         )
 
-        assert len(captured_specs) == 2
-        assert captured_specs[0] == NoResume()
-        assert captured_specs[1] == NamedResume(session_id="reload-id-abc")
+        assert len(captured_launches) == 2
+        assert isinstance(captured_launches[0], FreshLaunch)
+        restored = captured_launches[1]
+        assert restored == RestoreSession(session_id="reload-id-abc")
 
 
 class TestCrossInvocationResume:
-    """T3e: Cross-invocation resume uses NamedResume from persisted orchestrator_session_id."""
+    """T3e: Cross-invocation resume briefs a persisted orchestrator session."""
 
-    def test_cross_invocation_resume_uses_named_resume(
+    def test_cross_invocation_resume_uses_briefing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """When CampaignState has orchestrator_session_id, first call uses NamedResume."""
-        from autoskillit.core import NamedResume
+        """A persisted session resumes with the next dispatch in its briefing."""
+        from autoskillit.core import ResumeWithBriefing
         from autoskillit.fleet import DispatchRecord, write_initial_state
 
         monkeypatch.chdir(tmp_path)
@@ -650,17 +650,16 @@ class TestCrossInvocationResume:
         dispatches = [DispatchRecord(name="dispatch-1")]
         write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
 
-        captured_specs: list[object] = []
+        captured_launches: list[object] = []
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> None:
-            captured_specs.append(resume_spec)
+            captured_launches.append(launch)
             return None
 
         monkeypatch.setattr(
@@ -671,7 +670,7 @@ class TestCrossInvocationResume:
         monkeypatch.setattr(
             _patch_cli_prompts,
             "_build_fleet_campaign_prompt",
-            lambda *a, **kw: "fake-prompt",
+            lambda *a, **kw: "fake-prompt for dispatch-1",
         )
 
         fresh_meta = MagicMock(spec=ResumeDecision)
@@ -697,14 +696,18 @@ class TestCrossInvocationResume:
             fleet_mode="campaign",
         )
 
-        assert len(captured_specs) == 1
-        assert captured_specs[0] == NamedResume(session_id="prior-session-abc")
+        assert len(captured_launches) == 1
+        launch = captured_launches[0]
+        assert isinstance(launch, ResumeWithBriefing)
+        assert launch.session_id == "prior-session-abc"
+        assert "dispatch-1" in launch.briefing
+        assert not hasattr(launch, "initial_prompt")
 
-    def test_fresh_campaign_still_uses_no_resume(
+    def test_fresh_campaign_uses_fresh_launch(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """When CampaignState has no orchestrator_session_id, first call uses NoResume."""
-        from autoskillit.core import NoResume
+        """A campaign without an orchestrator session starts a fresh launch."""
+        from autoskillit.core import FreshLaunch
         from autoskillit.fleet import DispatchRecord, write_initial_state
 
         monkeypatch.chdir(tmp_path)
@@ -715,17 +718,16 @@ class TestCrossInvocationResume:
         dispatches = [DispatchRecord(name="dispatch-1")]
         write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
 
-        captured_specs: list[object] = []
+        captured_launches: list[object] = []
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ) -> None:
-            captured_specs.append(resume_spec)
+            captured_launches.append(launch)
             return None
 
         monkeypatch.setattr(
@@ -759,8 +761,11 @@ class TestCrossInvocationResume:
             fleet_mode="campaign",
         )
 
-        assert len(captured_specs) == 1
-        assert captured_specs[0] == NoResume()
+        assert len(captured_launches) == 1
+        launch = captured_launches[0]
+        assert isinstance(launch, FreshLaunch)
+        assert launch.system_prompt == "fake-prompt"
+        assert launch.initial_prompt is None
 
 
 @pytest.mark.parametrize("fleet_mode", ["dispatch", "campaign"])
@@ -828,8 +833,8 @@ class TestSessionIdPersistence:
     def test_session_id_written_to_state_on_infra_resume(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """A resumable InfraExitSignal session_id is persisted to CampaignState."""
-        from autoskillit.core import InfraExitCategory
+        """An infra retry restores and persists its resumable session ID."""
+        from autoskillit.core import InfraExitCategory, RestoreSession
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
 
         monkeypatch.chdir(tmp_path)
@@ -846,15 +851,16 @@ class TestSessionIdPersistence:
                 None,
             ]
         )
+        captured_launches: list[object] = []
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ):
+            captured_launches.append(launch)
             sig = next(call_sequence)
             if sig is None:
                 return None
@@ -895,11 +901,15 @@ class TestSessionIdPersistence:
         state = read_state(state_path)
         assert state is not None
         assert state.orchestrator_session_id == "captured-id-xyz"
+        assert len(captured_launches) == 2
+        restored = captured_launches[1]
+        assert restored == RestoreSession(session_id="captured-id-xyz")
 
     def test_session_id_written_to_state_on_reload(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """Reload session_id is written to CampaignState via update_orchestrator_session_id."""
+        """A reload restores and persists its session ID."""
+        from autoskillit.core import RestoreSession
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
 
         monkeypatch.chdir(tmp_path)
@@ -911,15 +921,16 @@ class TestSessionIdPersistence:
         write_initial_state(state_path, "test-id", "test-campaign", "manifest.yaml", dispatches)
 
         call_sequence = iter(["reload-id-persist-xyz", None])
+        captured_launches: list[object] = []
 
         def _fake_run_session(
-            prompt: str,
+            launch: object,
             *,
             extra_env: dict,
-            resume_spec: object,
             project_dir: Path,
             **kwargs: object,
         ):
+            captured_launches.append(launch)
             return next(call_sequence)
 
         fresh_meta = MagicMock()
@@ -955,6 +966,9 @@ class TestSessionIdPersistence:
         state = read_state(state_path)
         assert state is not None
         assert state.orchestrator_session_id == "reload-id-persist-xyz"
+        assert len(captured_launches) == 2
+        restored = captured_launches[1]
+        assert restored == RestoreSession(session_id="reload-id-persist-xyz")
 
 
 class TestFleetSessionPromptPriorDispatchId:

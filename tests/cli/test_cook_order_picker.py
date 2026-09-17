@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.session._session_launch_intent as _patch_session__session_picker
 import autoskillit.cli.session._session_order as _patch_session__session_order
-import autoskillit.cli.session._session_picker as _patch_session__session_picker
 import autoskillit.cli.ui._menu as _patch_ui__menu
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags
@@ -161,13 +161,13 @@ class TestCLIOrderPicker:
         assert "Invalid selection" in captured.out
 
     @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_resume_bare_flag_produces_bare_resume_skips_discovery(
+    def test_order_bare_resume_restores_picker_selection(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order(resume=True) passes bare --resume; find_latest_session_id must not be called."""
+        """order(resume=True) restores the session selected by the scoped picker."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -175,25 +175,21 @@ class TestCLIOrderPicker:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         configure_popen(mock_run, returncode=0)
-        discovery_calls: list = []
+        picker_calls: list[str] = []
 
-        with patch(
-            "autoskillit.core.find_latest_session_id",
-            side_effect=lambda *a, **kw: discovery_calls.append(1) or "sess_abc",
-        ):
+        def fake_pick_session(session_type: str, project_dir, session_locator) -> str:
+            del project_dir, session_locator
+            picker_calls.append(session_type)
+            return "sess_abc"
+
+        with patch.object(_patch_session__session_picker, "pick_session", fake_pick_session):
             cli.order("test-script", resume=True)
 
         cmd = mock_run.call_args[0][0]
         assert "--resume" in cmd
         idx = cmd.index("--resume")
-        # bare --resume: next token (if any) must not be a session ID;
-        # session IDs have no spaces, initial prompts and flags are distinguishable
-        if idx + 1 < len(cmd):
-            next_tok = str(cmd[idx + 1])
-            assert " " in next_tok or next_tok.startswith("-"), (
-                f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
-            )
-        assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
+        assert cmd[idx + 1] == "sess_abc"
+        assert picker_calls == ["order"]
 
     @patch("autoskillit.cli.subprocess.Popen")
     def test_order_resume_explicit_session_id_skips_discovery(
@@ -227,13 +223,13 @@ class TestCLIOrderPicker:
         )
 
     @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_resume_bare_flag_always_emits_resume(
+    def test_order_bare_resume_without_selection_starts_fresh(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order(resume=True) always emits bare --resume; Claude Code handles empty history."""
+        """order(resume=True) starts fresh when the scoped picker returns no session."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -242,18 +238,11 @@ class TestCLIOrderPicker:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         configure_popen(mock_run, returncode=0)
 
-        cli.order("test-script", resume=True)
+        with patch.object(_patch_session__session_picker, "pick_session", return_value=None):
+            cli.order("test-script", resume=True)
 
         cmd = mock_run.call_args[0][0]
-        assert "--resume" in cmd
-        idx = cmd.index("--resume")
-        # bare --resume: next token (if any) must not be a session ID;
-        # session IDs have no spaces, initial prompts and flags are distinguishable
-        if idx + 1 < len(cmd):
-            next_tok = str(cmd[idx + 1])
-            assert " " in next_tok or next_tok.startswith("-"), (
-                f"bare --resume must not be followed by a session ID, got: {next_tok!r}"
-            )
+        assert "--resume" not in cmd
 
     @patch("autoskillit.cli.subprocess.Popen")
     def test_order_bare_resume_no_recipe_invokes_picker(
@@ -269,7 +258,8 @@ class TestCLIOrderPicker:
         configure_popen(mock_run, returncode=0)
         picker_calls: list = []
 
-        def fake_pick_session(session_type: str, project_dir, project_log_dir) -> str | None:
+        def fake_pick_session(session_type: str, project_dir, session_locator) -> str | None:
+            del project_dir, session_locator
             picker_calls.append(session_type)
             return None
 
@@ -488,20 +478,18 @@ class TestOrderResumeParsing:
     def test_order_recipe_resume_with_session_id(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """order my-recipe --resume <uuid> passes NamedResume to launch — REQ-CLI-003."""
+        """order my-recipe --resume <uuid> passes RestoreSession to launch — REQ-CLI-003."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NamedResume, NoResume
+        from autoskillit.core import RestoreSession
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -512,8 +500,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -535,10 +522,9 @@ class TestOrderResumeParsing:
                 app(["order", "my-recipe", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == NamedResume(
+        assert captured["launch"] == RestoreSession(
             session_id="fa910a41-d1ca-4cae-b878-01028a0c7c1c"
         )
-        assert captured["prompt"] == ""
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
 
@@ -547,18 +533,16 @@ class TestOrderResumeParsing:
     ) -> None:
         """order --resume <uuid> (no recipe name) reroutes UUID to session_id — REQ-CLI-003."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NamedResume, NoResume
+        from autoskillit.core import RestoreSession
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -569,8 +553,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -581,10 +564,9 @@ class TestOrderResumeParsing:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0
 
-        assert captured["resume_spec"] == NamedResume(
+        assert captured["launch"] == RestoreSession(
             session_id="4b581974-1f19-4aec-8405-78c5ede5e233"
         )
-        assert captured["prompt"] == ""
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
 
@@ -593,18 +575,16 @@ class TestOrderResumeParsing:
     ) -> None:
         """order --resume (no uuid, no recipe) calls _launch_cook_session; no recipe validation."""
         from autoskillit.cli.app import app
-        from autoskillit.core import NoResume
+        from autoskillit.core import FreshLaunch
 
         monkeypatch.chdir(tmp_path)
 
         captured: dict = {}
 
         def fake_launch(
-            prompt,
             *,
-            initial_message=None,
+            launch,
             extra_env=None,
-            resume_spec=NoResume(),
             project_dir=None,
             required_env=None,
             skill_compilation=None,
@@ -615,8 +595,7 @@ class TestOrderResumeParsing:
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
         ):
-            captured["prompt"] = prompt
-            captured["resume_spec"] = resume_spec
+            captured["launch"] = launch
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
@@ -633,10 +612,55 @@ class TestOrderResumeParsing:
             assert exc_info.value.code == 0
 
         assert captured, "fake_launch was never called"
-        assert captured["resume_spec"] == NoResume()
-        assert "MCP STARTUP RECOVERY" in captured["prompt"]
+        assert isinstance(captured["launch"], FreshLaunch)
+        assert "MCP STARTUP RECOVERY" in (captured["launch"].system_prompt or "")
+        assert captured["launch"].initial_prompt is not None
         assert captured["project_dir"] == tmp_path
         assert captured["backend"] is not None
+
+    def test_order_bare_resume_picker_selection_restores_session(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A picker choice resumes that session without adding a greeting."""
+        from autoskillit.cli.app import app
+        from autoskillit.core import RestoreSession
+
+        monkeypatch.chdir(tmp_path)
+        captured: dict[str, object] = {}
+
+        def fake_launch(
+            *,
+            launch,
+            extra_env=None,
+            project_dir=None,
+            required_env=None,
+            skill_compilation=None,
+            launch_id=None,
+            default_base_branch=None,
+            workspace_temp_dir=None,
+            backend=None,
+            force_inactive_agent_teams=False,
+            mcp_tool_timeout_sec=None,
+        ):
+            captured["launch"] = launch
+
+        with (
+            patch.object(
+                _patch_session__session_order,
+                "_launch_cook_session",
+                side_effect=fake_launch,
+            ),
+            patch.object(
+                _patch_session__session_picker,
+                "pick_session",
+                return_value="picked-session",
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "--resume"])
+            assert exc_info.value.code == 0
+
+        assert captured["launch"] == RestoreSession(session_id="picked-session")
 
     def test_order_resume_uuid_does_not_validate_recipe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

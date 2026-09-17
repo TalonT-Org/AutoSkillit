@@ -98,6 +98,7 @@ Each direct Python file has one responsibility:
 - `_type_invariant_registry.py` — Invariant registry — prose prohibitions mapped to runtime gates.
 - `_type_launch.py` — Portable launch authority and stable launch-contract values.
 - `_type_launch_authority.py` — Portable launch authority and provenance values.
+- `_type_launch_intent.py` — Closed CLI spelling and interactive-session launch intent values.
 - `_type_launch_projection.py` — Non-executable skill projection evidence bound beneath a physical launch.
 - `_type_managed_home.py` — Typed authority for AutoSkillit's process home.
 - `_type_native_shell_capture.py` — Closed launch-control and managed headless lineage contracts.
@@ -105,7 +106,6 @@ Each direct Python file has one responsibility:
 - `_type_persisted_formats.py` — Ledger of enums embedded in versioned persisted formats.
 - `_type_phoropter.py` — Phoropter family and phase types.
 - `_type_plugin_source.py` — Import-layer-safe plugin artifact lifecycle value objects.
-- `_type_resume.py` — Resume intent discriminated union for interactive session launch.
 - `_type_retirement_backstops.py` — Declared safety backstops for destructive plugin-artifact retirement.
 - `_type_session_env.py` — Typed env specs for session launch boundaries.
 - `_type_skill_contract.py` — Backend-neutral skill source identity contracts.

@@ -959,6 +959,7 @@ from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetSessionEnv as FleetSessionEnv
 from .types import ForkOccurrenceId as ForkOccurrenceId
+from .types import FreshLaunch as FreshLaunch
 from .types import GateState as GateState
 from .types import GenerationReconciledEffect as GenerationReconciledEffect
 from .types import GenerationReservationId as GenerationReservationId
@@ -997,6 +998,7 @@ from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import InstallMode as InstallMode
 from .types import InstructionExtractionMode as InstructionExtractionMode
 from .types import IntakeRuleDef as IntakeRuleDef
+from .types import InteractiveLaunch as InteractiveLaunch
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import InvocationTemplate as InvocationTemplate
@@ -1086,6 +1088,7 @@ from .types import PluginArtifactValidationError as PluginArtifactValidationErro
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
+from .types import PositionalRole as PositionalRole
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PreLaunchReadiness as PreLaunchReadiness
@@ -1174,8 +1177,10 @@ from .types import (
 )
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
+from .types import RestoreSession as RestoreSession
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
+from .types import ResumeWithBriefing as ResumeWithBriefing
 from .types import RetiredArtifactShape as RetiredArtifactShape
 from .types import RetirementBackstopDef as RetirementBackstopDef
 from .types import RetirementOutcome as RetirementOutcome

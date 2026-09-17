@@ -27,6 +27,7 @@ from autoskillit.core import (
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    FreshLaunch,
     load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
@@ -138,7 +139,7 @@ class TestFleetInteractive:
     )
     def test_primary_channel_populated(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Fleet discipline prompt",
+            launch=FreshLaunch(system_prompt="Fleet discipline prompt"),
             env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
         )
         _assert_interactive_primary_channel(backend, spec)
@@ -150,7 +151,7 @@ class TestFleetInteractive:
     )
     def test_session_type_fleet_in_env(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Fleet discipline prompt",
+            launch=FreshLaunch(system_prompt="Fleet discipline prompt"),
             env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
         )
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_FLEET
@@ -162,7 +163,7 @@ class TestFleetInteractive:
     )
     def test_intake_digest_delivery(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Fleet discipline prompt",
+            launch=FreshLaunch(system_prompt="Fleet discipline prompt"),
             env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
         )
         _assert_interactive_intake_digest(backend, spec)
@@ -174,7 +175,7 @@ class TestFleetInteractive:
     )
     def test_scope_digest_delivery(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Fleet discipline prompt",
+            launch=FreshLaunch(system_prompt="Fleet discipline prompt"),
             env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
         )
         _assert_interactive_scope_digest(backend, spec)
@@ -188,7 +189,7 @@ class TestOrchestratorInteractive:
     )
     def test_primary_channel_populated(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Orchestrator discipline prompt",
+            launch=FreshLaunch(system_prompt="Orchestrator discipline prompt"),
         )
         _assert_interactive_primary_channel(backend, spec)
 
@@ -199,7 +200,7 @@ class TestOrchestratorInteractive:
     )
     def test_no_session_type_assertion(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Orchestrator discipline prompt",
+            launch=FreshLaunch(system_prompt="Orchestrator discipline prompt"),
         )
         assert not spec.env.get(SESSION_TYPE_ENV_VAR, "")
 
@@ -210,7 +211,7 @@ class TestOrchestratorInteractive:
     )
     def test_intake_digest_delivery(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Orchestrator discipline prompt",
+            launch=FreshLaunch(system_prompt="Orchestrator discipline prompt"),
         )
         _assert_interactive_intake_digest(backend, spec)
 
@@ -221,7 +222,7 @@ class TestOrchestratorInteractive:
     )
     def test_scope_digest_delivery(self, backend) -> None:
         spec = backend.build_interactive_cmd(
-            system_prompt="Orchestrator discipline prompt",
+            launch=FreshLaunch(system_prompt="Orchestrator discipline prompt"),
         )
         _assert_interactive_scope_digest(backend, spec)
 

@@ -17,13 +17,16 @@ from autoskillit.core import (
     EnvPolicy,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
+    FreshLaunch,
+    InteractiveLaunch,
     LineDriver,
-    NoResume,
     OutputFormat,
     PluginLaunchBinding,
     PreLaunchReadiness,
+    RestoreSession,
     ResultParser,
     ResumeSpec,
+    ResumeWithBriefing,
     SemanticAdaptationContext,
     SessionLocator,
     SkillExecutionRole,
@@ -230,6 +233,44 @@ def test_coding_agent_backend_line_driver_exact_signature():
     }
 
 
+def test_coding_agent_backend_interactive_launch_signatures_are_exact() -> None:
+    import inspect
+    import typing
+
+    from autoskillit.core import CodingAgentBackend, FreshLaunch, InteractiveLaunch
+
+    signature = inspect.signature(CodingAgentBackend.build_interactive_cmd)
+    assert signature.parameters["launch"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["launch"].default == FreshLaunch()
+    hints = typing.get_type_hints(CodingAgentBackend.build_interactive_cmd)
+    assert hints["launch"] == InteractiveLaunch
+    assert not {"initial_prompt", "resume_spec", "system_prompt"} & set(signature.parameters)
+
+    ordering = inspect.signature(CodingAgentBackend.interactive_ordering_flags)
+    assert tuple(ordering.parameters) == ("self",)
+    assert typing.get_type_hints(CodingAgentBackend.interactive_ordering_flags) == {
+        "return": tuple[frozenset[str], frozenset[str]],
+    }
+
+
+def test_interactive_launch_variants_are_immutable_and_explicit() -> None:
+    import dataclasses
+
+    fresh = FreshLaunch(system_prompt="system", initial_prompt="start")
+    restore = RestoreSession(session_id="thread-123")
+    briefing = ResumeWithBriefing(session_id="thread-123", briefing="continue")
+
+    assert isinstance(fresh, InteractiveLaunch)
+    assert isinstance(restore, InteractiveLaunch)
+    assert isinstance(briefing, InteractiveLaunch)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        fresh.initial_prompt = "mutated"  # type: ignore[misc]
+    with pytest.raises(ValueError, match="session ID must not be empty"):
+        RestoreSession(session_id="")
+    with pytest.raises(ValueError, match="briefing must not be empty"):
+        ResumeWithBriefing(session_id="thread-123", briefing="")
+
+
 def test_line_driver_is_runtime_checkable():
     from autoskillit.core import LineDriver
 
@@ -316,6 +357,9 @@ class _Backend:
 
     def binary_name(self) -> str: ...
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        return frozenset(), frozenset()
+
     def build_resume_cmd(
         self,
         *,
@@ -346,13 +390,11 @@ class _Backend:
     def build_interactive_cmd(
         self,
         *,
-        initial_prompt: str | None = None,
+        launch: InteractiveLaunch = FreshLaunch(),
         model: str | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
-        resume_spec: ResumeSpec = NoResume(),
-        system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),

@@ -56,6 +56,7 @@ from autoskillit.execution.headless._headless_helpers import (
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
     assert_interactive_ordering,
+    assert_resume_purity,
 )
 from autoskillit.execution.headless._headless_launch import (
     _NUDGE_TIMEOUT,  # noqa: F401
@@ -119,6 +120,7 @@ __all__ = [
     "DefaultHeadlessExecutor",
     "PostSessionMetrics",
     "assert_interactive_ordering",
+    "assert_resume_purity",
     "run_headless_core",
 ]
 

@@ -655,6 +655,7 @@ def test_session_order_launch_calls_pass_explicit_home_authorities() -> None:
     import ast
 
     expected_values = {
+        "launch": "launch",
         "skill_compilation": "skill_compilation",
         "launch_id": "launch_id",
         "default_base_branch": "config.branching.default_base_branch",

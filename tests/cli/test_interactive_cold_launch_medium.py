@@ -14,6 +14,7 @@ import autoskillit.cli.ui._terminal as _patch_ui__terminal
 from autoskillit.cli.session._session_launch import _run_interactive_session
 from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
+    FreshLaunch,
     PluginLoadMode,
     atomic_write,
 )
@@ -83,7 +84,7 @@ def test_supported_cold_launch_spawns_with_probed_attestation(
     _write_claude_shim(shim, version)
 
     result = _run_interactive_session(
-        system_prompt="cold launch",
+        launch=FreshLaunch(system_prompt="cold launch"),
         extra_env={"PATH": str(tmp_path)},
         project_dir=tmp_path,
         backend=ClaudeCodeBackend(),
@@ -106,7 +107,7 @@ def test_unsupported_cold_launch_exits_without_spawn(
 
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(
-            system_prompt="cold launch",
+            launch=FreshLaunch(system_prompt="cold launch"),
             extra_env={"PATH": str(tmp_path)},
             project_dir=tmp_path,
             backend=ClaudeCodeBackend(),
@@ -137,7 +138,7 @@ def test_executable_identity_drift_exits_without_spawn(
 
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(
-            system_prompt="cold launch",
+            launch=FreshLaunch(system_prompt="cold launch"),
             extra_env={"PATH": str(tmp_path)},
             project_dir=tmp_path,
             backend=backend,
@@ -166,7 +167,7 @@ def test_unmanaged_launch_rejects_executable_drift_before_spawn(
 
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(
-            system_prompt="cold launch",
+            launch=FreshLaunch(system_prompt="cold launch"),
             extra_env={"PATH": str(tmp_path)},
             project_dir=tmp_path,
             backend=ClaudeCodeBackend(),

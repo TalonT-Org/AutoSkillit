@@ -25,6 +25,7 @@ from autoskillit.core import (
     LaunchSurface,
     LaunchValueSource,
     LaunchValueSourceKind,
+    PositionalRole,
     ProviderBinding,
     ResolvedLaunchContract,
     SemanticLaunchPlan,
@@ -130,7 +131,10 @@ def _adapter_result(preparation, **changes: object) -> LaunchAdapterResult:
             origin=CmdOrigin(
                 binary="/usr/bin/claude",
                 mode_flags=("-p",),
-                positional=(preparation.command, *preparation.arguments),
+                positional=tuple(
+                    (PositionalRole.PROMPT, value)
+                    for value in (preparation.command, *preparation.arguments)
+                ),
             ),
             process_idle_timeout_ms=90_000,
             inherited_fds=(9, 11),
@@ -773,6 +777,25 @@ def test_resolved_contract_strict_payload_round_trip_and_digest_verification() -
             contract.canonical_payload,
             expected_digest="0" * 64,
         )
+
+
+@pytest.mark.parametrize("field", ["kv_flags", "positional", "variadic_pairs"])
+def test_resolved_contract_rejects_malformed_command_origin_pairs(field: str) -> None:
+    resolver = DefaultLaunchResolver()
+    contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
+    payload = dict(contract.canonical_payload)
+    command = payload["command"]
+    assert isinstance(command, Mapping)
+    command = dict(command)
+    origin = command["origin"]
+    assert isinstance(origin, Mapping)
+    origin = dict(origin)
+    origin[field] = (("only-one-item",),)
+    command["origin"] = origin
+    payload["command"] = command
+
+    with pytest.raises(LaunchContractError, match="must contain exactly two items"):
+        ResolvedLaunchContract.from_payload(payload)
 
 
 def test_launch_contract_schema_is_exactly_version_four() -> None:

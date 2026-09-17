@@ -25,11 +25,13 @@ from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
+    FreshLaunch,
     ManagedSessionHome,
     PreLaunchReadiness,
     SessionAttemptHandle,
     ValidatedAddDir,
 )
+from tests.cli._interactive_process import interactive_launch_metadata
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -70,9 +72,18 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             del spec
             return []
 
+        def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+            from autoskillit.execution.backends import CodexBackend
+
+            return CodexBackend().interactive_ordering_flags()
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             captured_kwargs.append(kwargs)
-            return CmdSpec(cmd=("codex",), env={})
+            return CmdSpec(
+                cmd=("codex",),
+                env={},
+                **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
+            )
 
         def session_attempt_context(
             self,
@@ -127,7 +138,7 @@ def test_non_probe_fork_threads_true_intent_into_both_build_calls(
     )
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=backend,
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
@@ -158,7 +169,7 @@ def test_non_probe_fork_defaults_to_false_across_both_build_calls(
     )
 
     result = _run_interactive_session(
-        system_prompt="test",
+        launch=FreshLaunch(system_prompt="test"),
         backend=backend,
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
@@ -201,7 +212,7 @@ def test_launch_cook_session_forwards_force_inactive_agent_teams(
     )
 
     _launch_cook_session(
-        "system prompt",
+        launch=FreshLaunch(system_prompt="system prompt"),
         project_dir=tmp_path,
         required_env=frozenset(),
         force_inactive_agent_teams=force_inactive,

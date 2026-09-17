@@ -129,7 +129,7 @@ class TestModuleCascadeCore:
             "context_admission",
             "_version_snapshot",
             "claude_conventions",
-            "_type_resume",
+            "_type_launch_intent",
             "_type_helpers",
             "_type_protocols_workspace",
             "_type_protocols_backend",
@@ -261,9 +261,9 @@ class TestModuleCascadeCore:
             {"core", "pipeline", "recipe", "server"}
         )
 
-    def test_type_resume_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_resume"] == frozenset(
-            {"core", "cli", "execution", "fleet"}
+    def test_type_launch_intent_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_launch_intent"] == frozenset(
+            {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
         )
 
     def test_type_helpers_cascade(self) -> None:
@@ -697,26 +697,34 @@ class TestBuildTestScopeCoreCascade:
         ]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
-    def test_type_resume_narrow_routing(self, tmp_path: Path) -> None:
+    def test_type_launch_intent_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_resume.py"},
+            changed_files={"src/autoskillit/core/types/_type_launch_intent.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "execution", "fleet"]:
-            assert pkg in dir_names, f"_type_resume cascade should include {pkg}"
-        for excluded in [
-            "server",
-            "recipe",
+        for pkg in [
+            "core",
+            "execution",
             "pipeline",
+            "server",
+            "fleet",
+            "cli",
+            "recipe",
             "workspace",
+        ]:
+            assert pkg in dir_names, f"_type_launch_intent cascade should include {pkg}"
+        for excluded in [
+            "config",
             "migration",
             "hooks",
         ]:
-            assert excluded not in dir_names, f"_type_resume cascade should not include {excluded}"
+            assert excluded not in dir_names, (
+                f"_type_launch_intent cascade should not include {excluded}"
+            )
 
     def test_type_helpers_narrow_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)

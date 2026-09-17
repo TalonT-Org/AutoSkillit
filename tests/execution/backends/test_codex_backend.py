@@ -36,8 +36,12 @@ from autoskillit.core import (
     CodingAgentBackend,
     EnvPolicy,
     ExecutionIdentity,
+    FreshLaunch,
     OutputFormat,
+    PositionalRole,
+    RestoreSession,
     ResultParser,
+    ResumeWithBriefing,
     SessionCheckpoint,
     SessionLocator,
     SkillExecutionRole,
@@ -1342,40 +1346,42 @@ class TestCodexBuildInteractiveCmd:
     def test_dangerously_bypass_value(self) -> None:
         assert str(CodexFlags.DANGEROUSLY_BYPASS) == "--dangerously-bypass-approvals-and-sandbox"
 
-    def test_no_resume_produces_correct_base_command(self) -> None:
+    def test_fresh_launch_produces_correct_base_command(self) -> None:
         from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
-        spec = CodexBackend().build_interactive_cmd()
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
         assert spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE
         assert spec.env["CODEX_HOME"] == str(CodexBackend._fixture_home())
 
-    def test_named_resume_produces_resume_subcommand_with_session_id(self) -> None:
-        from autoskillit.core import NamedResume
-
-        spec = CodexBackend().build_interactive_cmd(resume_spec=NamedResume(session_id="abc"))
+    def test_restore_session_produces_resume_subcommand_with_session_id(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=RestoreSession(session_id="abc"))
         assert spec.cmd[0] == "codex"
         assert spec.cmd[1] == CodexFlags.RESUME_SUBCOMMAND
         assert "abc" in spec.cmd
         assert spec.origin is not None
-        assert "abc" in spec.origin.positional
+        assert spec.origin.positional == ((PositionalRole.RESUME_TARGET, "abc"),)
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
 
-    def test_bare_resume_produces_resume_subcommand_without_session_id(self) -> None:
-        from autoskillit.core import BareResume
-
-        spec = CodexBackend().build_interactive_cmd(resume_spec=BareResume())
+    def test_resume_with_briefing_adds_only_its_explicit_prompt(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(
+            launch=ResumeWithBriefing(session_id="abc", briefing="continue")
+        )
         assert spec.cmd[0] == "codex"
         assert spec.cmd[1] == CodexFlags.RESUME_SUBCOMMAND
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
-        assert "abc" not in spec.cmd
+        assert spec.origin is not None
+        assert spec.origin.positional == (
+            (PositionalRole.RESUME_TARGET, "abc"),
+            (PositionalRole.PROMPT, "continue"),
+        )
 
-    def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
+    def test_fresh_system_prompt_appends_config_override(self) -> None:
         from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
-        spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch(system_prompt="foo"))
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
@@ -1390,12 +1396,8 @@ class TestCodexBuildInteractiveCmd:
         )
         assert "features.image_generation=false" in overrides
 
-    def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
-        from autoskillit.core import NamedResume
-
-        spec = CodexBackend().build_interactive_cmd(
-            resume_spec=NamedResume(session_id="s1"), system_prompt="foo"
-        )
+    def test_restore_session_does_not_append_fresh_config_override(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=RestoreSession(session_id="s1"))
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
@@ -1449,9 +1451,12 @@ class TestCodexBuildInteractiveCmd:
 
         assert spec.skill_discovery_route is CODEX_PROJECTED_HOME_ROUTE
 
-    def test_initial_prompt_is_final_element(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
-        assert spec.cmd[-1] == "hello"
+    def test_initial_prompt_precedes_config_overrides(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch(initial_prompt="hello"))
+        prompt_idx = list(spec.cmd).index("hello")
+        config_override_idx = list(spec.cmd).index(CodexFlags.CONFIG_OVERRIDE)
+        assert prompt_idx < config_override_idx
+        assert spec.cmd[-1] != "hello"
 
     def test_plugin_binding_does_not_replace_generated_home(self) -> None:
         from pathlib import Path
@@ -2003,7 +2008,9 @@ class TestCodexMcpClientBackendRequired:
     @pytest.mark.parametrize(
         "build",
         [
-            lambda backend: backend.build_interactive_cmd(initial_prompt="work"),
+            lambda backend: backend.build_interactive_cmd(
+                launch=FreshLaunch(initial_prompt="work")
+            ),
             lambda backend: backend.build_headless_cmd("work"),
             lambda backend: backend.build_resume_cmd(resume_session_id="session-1", prompt="work"),
             lambda backend: backend.build_skill_session_cmd(

@@ -564,7 +564,11 @@ def test_real_interactive_validator_reaches_successful_native_probe(
     ]
     assert probe_prefix[0] == str(executable)
     assert probe_prefix[1:3] == ("--profile", "test-profile")
-    assert probe_prefix.count("-c") >= 1
+    assert probe_prefix[-2:] == (
+        codex.CodexFlags.CONFIG_OVERRIDE,
+        f'sqlite_home="{generated_home}"',
+    )
+    assert probe_prefix.count(codex.CodexFlags.CONFIG_OVERRIDE) >= 1
 
 
 def test_interactive_validator_returns_discovery_diagnostics_verbatim(

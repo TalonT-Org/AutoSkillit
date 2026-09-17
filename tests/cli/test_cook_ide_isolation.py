@@ -20,6 +20,7 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+from autoskillit.core import FreshLaunch
 from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
@@ -58,8 +59,7 @@ def test_cook_session_ignores_ide_lock_file(
         ) as mock_run,
     ):
         _launch_cook_session(
-            "system prompt",
-            initial_message="hello",
+            launch=FreshLaunch(system_prompt="system prompt", initial_prompt="hello"),
             required_env=frozenset(),
             **launch_kwargs,
         )

@@ -513,18 +513,21 @@ def test_fleet_dispatch_prints_version_header(
 def test_fleet_dispatch_passes_initial_message(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """fleet_dispatch passes a non-None initial_message to _run_interactive_session."""
+    """fleet_dispatch starts a fresh launch with a concise greeting."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
+    from autoskillit.cli.fleet._fleet_preview import _FLEET_DISPATCH_GREETINGS
+    from autoskillit.core import FreshLaunch
+
     _stub_list_recipes(
         monkeypatch,
         [_fake_recipe("smoke-test", "BUILTIN", "Run smoke tests")],
     )
     monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
-    captured_kwargs: dict = {}
+    captured_launches: list[object] = []
 
-    def mock_run_session(system_prompt: str, **kwargs: object) -> None:
-        captured_kwargs.update(kwargs)
+    def mock_run_session(*, launch: object, **kwargs: object) -> None:
+        captured_launches.append(launch)
         return None
 
     monkeypatch.setattr(
@@ -533,10 +536,14 @@ def test_fleet_dispatch_passes_initial_message(
         mock_run_session,
     )
     _fleet_dispatch()
-    greeting = captured_kwargs.get("initial_message")
-    assert greeting is not None
-    assert "smoke-test" not in greeting
-    assert len(greeting) < 200
+    assert len(captured_launches) == 1
+    launch = captured_launches[0]
+    assert isinstance(launch, FreshLaunch)
+    assert launch.system_prompt is not None
+    assert launch.initial_prompt is not None
+    assert launch.initial_prompt in _FLEET_DISPATCH_GREETINGS
+    assert "smoke-test" not in launch.initial_prompt
+    assert len(launch.initial_prompt) < 200
 
 
 def test_fleet_dispatch_greeting_contains_recipe_descriptions(
@@ -545,6 +552,8 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
     """The initial_message greeting does not include recipe names."""
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
+    from autoskillit.core import FreshLaunch
+
     _stub_list_recipes(
         monkeypatch,
         [
@@ -553,10 +562,10 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
         ],
     )
     monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
-    captured_kwargs: dict = {}
+    captured_launches: list[object] = []
 
-    def mock_run_session(system_prompt: str, **kwargs: object) -> None:
-        captured_kwargs.update(kwargs)
+    def mock_run_session(*, launch: object, **kwargs: object) -> None:
+        captured_launches.append(launch)
         return None
 
     monkeypatch.setattr(
@@ -565,9 +574,12 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
         mock_run_session,
     )
     _fleet_dispatch()
-    greeting = captured_kwargs["initial_message"]
-    assert "review-pr" not in greeting
-    assert "implement" not in greeting
+    assert len(captured_launches) == 1
+    launch = captured_launches[0]
+    assert isinstance(launch, FreshLaunch)
+    assert launch.initial_prompt is not None
+    assert "review-pr" not in launch.initial_prompt
+    assert "implement" not in launch.initial_prompt
 
 
 def test_fleet_dispatch_greetings_are_plain_strings() -> None:
@@ -617,12 +629,14 @@ def test_build_fleet_dispatch_prompt_no_recipe_table_section_when_none() -> None
 def test_launch_fleet_session_forwards_initial_message_dispatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """_launch_fleet_session passes initial_message to _run_interactive_session."""
+    """A dispatch starts a fresh launch that carries its greeting."""
     monkeypatch.chdir(tmp_path)
-    captured_kwargs: dict = {}
+    from autoskillit.core import FreshLaunch
 
-    def mock_run(system_prompt: str, **kwargs: object) -> None:
-        captured_kwargs.update(kwargs)
+    captured_launches: list[object] = []
+
+    def mock_run(*, launch: object, **kwargs: object) -> None:
+        captured_launches.append(launch)
         return None
 
     monkeypatch.setattr(
@@ -640,20 +654,26 @@ def test_launch_fleet_session_forwards_initial_message_dispatch(
         fleet_mode="dispatch",
         initial_message="Hello, dispatcher!",
     )
-    assert captured_kwargs.get("initial_message") == "Hello, dispatcher!"
+    assert len(captured_launches) == 1
+    launch = captured_launches[0]
+    assert isinstance(launch, FreshLaunch)
+    assert launch.system_prompt is not None
+    assert launch.initial_prompt == "Hello, dispatcher!"
 
 
 def test_launch_fleet_session_clears_initial_message_on_reload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """On reload, initial_message must be None (only injected on first launch)."""
+    """A dispatch reload restores the session without replaying its greeting."""
     monkeypatch.chdir(tmp_path)
-    call_count = 0
-    captured_messages: list = []
+    from autoskillit.core import FreshLaunch, RestoreSession
 
-    def mock_run(system_prompt: str, **kwargs: object) -> object:
+    call_count = 0
+    captured_launches: list[object] = []
+
+    def mock_run(*, launch: object, **kwargs: object) -> object:
         nonlocal call_count
-        captured_messages.append(kwargs.get("initial_message"))
+        captured_launches.append(launch)
         call_count += 1
         return "reload-session-abc" if call_count == 1 else None
 
@@ -672,8 +692,11 @@ def test_launch_fleet_session_clears_initial_message_on_reload(
         fleet_mode="dispatch",
         initial_message="Hello!",
     )
-    assert len(captured_messages) >= 2, (
-        f"expected reload to fire but got only {len(captured_messages)} call(s)"
+    assert len(captured_launches) >= 2, (
+        f"expected reload to fire but got only {len(captured_launches)} call(s)"
     )
-    assert captured_messages[0] == "Hello!"
-    assert captured_messages[1] is None
+    initial = captured_launches[0]
+    assert isinstance(initial, FreshLaunch)
+    assert initial.system_prompt is not None
+    assert initial.initial_prompt == "Hello!"
+    assert captured_launches[1] == RestoreSession(session_id="reload-session-abc")

@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, NamedResume, NoResume, OutputFormat
+from autoskillit.core import FreshLaunch, OutputFormat, RestoreSession, ResumeWithBriefing
 from autoskillit.core.types import CmdSpec
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
-from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _GENERATED_HOME = Path("/work/codex-home")
+_CODEX_VALUE_BEARING_FLAGS = CodexBackend().interactive_ordering_flags()[1]
 
 
 def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:
@@ -124,14 +124,16 @@ class TestNoApprovalFlagInExecBuilders:
 
 class TestInteractiveCmdUsesNoExecOnlyFlags:
     @pytest.mark.parametrize(
-        "resume_spec",
-        [NoResume(), NamedResume(session_id="sess-test"), BareResume()],
-        ids=["no_resume", "named_resume", "bare_resume"],
+        "launch",
+        [
+            FreshLaunch(),
+            RestoreSession(session_id="sess-test"),
+            ResumeWithBriefing(session_id="sess-test", briefing="continue"),
+        ],
+        ids=["fresh", "restore", "resume_with_briefing"],
     )
-    def test_interactive_excludes_exec_only_flags(self, resume_spec) -> None:
-        spec = CodexBackend().build_interactive_cmd(
-            resume_spec=resume_spec, generated_home=_GENERATED_HOME
-        )
+    def test_interactive_excludes_exec_only_flags(self, launch) -> None:
+        spec = CodexBackend().build_interactive_cmd(launch=launch, generated_home=_GENERATED_HOME)
         flags = _extract_flags(spec.cmd)
         assert "--json" not in flags
         assert "--sandbox" not in flags

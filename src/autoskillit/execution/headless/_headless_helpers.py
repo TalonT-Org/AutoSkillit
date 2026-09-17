@@ -7,18 +7,20 @@ import os
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
-    VARIADIC_CLAUDE_FLAGS,
-    ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
+    FreshLaunch,
+    InteractiveLaunch,
+    PositionalRole,
     ProviderBinding,
+    RestoreSession,
+    ResumeWithBriefing,
     SkillResult,
     get_logger,
 )
-from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.execution.headless._headless_git import _compute_loc_changed
 from autoskillit.execution.headless._headless_model import (
     resolve_model_identity,  # noqa: F401 - public helper compatibility export
@@ -28,31 +30,6 @@ from autoskillit.quota_constraints import quota_scope
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-
-_CLAUDE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
-    {
-        ClaudeFlags.PRINT,
-        ClaudeFlags.MODEL,
-        ClaudeFlags.OUTPUT_FORMAT,
-        ClaudeFlags.RESUME,
-        ClaudeFlags.APPEND_SYSTEM_PROMPT,
-        ClaudeFlags.PLUGIN_DIR,
-        ClaudeFlags.ADD_DIR,
-        ClaudeFlags.TOOLS,
-    }
-)
-
-_CODEX_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.MODEL,
-        CodexFlags.MODEL_SHORT,
-        CodexFlags.ADD_DIR,
-        CodexFlags.SANDBOX,
-        CodexFlags.CONFIG_OVERRIDE,
-    }
-)
-
-_ALL_VALUE_BEARING_FLAGS: frozenset[str] = _CLAUDE_VALUE_BEARING_FLAGS | _CODEX_VALUE_BEARING_FLAGS
 
 logger = get_logger(__name__)
 
@@ -134,10 +111,10 @@ def _resolve_pty_mode(backend: CodingAgentBackend) -> bool:
 
 
 def assert_interactive_ordering(
-    spec: CmdSpec,
     *,
-    variadic_flags: frozenset[str] = VARIADIC_CLAUDE_FLAGS,
-    value_bearing_flags: frozenset[str] | None = None,
+    spec: CmdSpec,
+    variadic_flags: frozenset[str],
+    value_bearing_flags: frozenset[str],
 ) -> None:
     """Validate that positional arguments precede variadic flags in an interactive CmdSpec.
 
@@ -153,8 +130,6 @@ def assert_interactive_ordering(
     would double-gate the same policy from two call sites.
     See tests/execution/test_assert_interactive_ordering.py.
     """
-    if value_bearing_flags is None:
-        value_bearing_flags = _ALL_VALUE_BEARING_FLAGS
     cmd = spec.cmd
     positional_indices = [
         i
@@ -170,6 +145,32 @@ def assert_interactive_ordering(
                         f"positional arg at index {pi} ({cmd[pi]!r}) must precede "
                         f"variadic flag {str(flag)!r} at index {flag_idx}"
                     )
+
+
+def assert_resume_purity(*, spec: CmdSpec, launch: InteractiveLaunch) -> None:
+    """A resumed interactive session must carry no unsolicited prompt positional."""
+    launch_is_resume = not isinstance(launch, FreshLaunch)
+    if spec.is_resume != launch_is_resume:
+        raise ValueError("interactive launch intent disagrees with CmdSpec.is_resume")
+    if isinstance(launch, FreshLaunch):
+        return
+    if spec.origin is None:
+        raise ValueError("resumed interactive launch requires CmdOrigin metadata")
+
+    prompt_tokens = [
+        value for role, value in spec.origin.positional if role is PositionalRole.PROMPT
+    ]
+    match launch:
+        case RestoreSession():
+            if prompt_tokens:
+                raise ValueError("restored interactive session cannot carry a prompt positional")
+        case ResumeWithBriefing(briefing=briefing):
+            if prompt_tokens != [briefing]:
+                raise ValueError(
+                    "briefing resume must carry exactly its declared prompt positional"
+                )
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | None:

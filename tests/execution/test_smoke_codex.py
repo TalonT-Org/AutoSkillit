@@ -15,7 +15,7 @@ from typing import NamedTuple
 import anyio
 import pytest
 
-from autoskillit.core import BackendEventKind, SessionEvent, ValidatedAddDir
+from autoskillit.core import BackendEventKind, FreshLaunch, SessionEvent, ValidatedAddDir
 from autoskillit.core.types import Severity, SubprocessResult
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends.codex import (
@@ -114,7 +114,7 @@ class TestCodexSmokeInteractiveCmdBuild:
     """Verify CodexBackend.build_interactive_cmd produces a valid CmdSpec."""
 
     def test_interactive_cmd_builds_without_error(self) -> None:
-        cmd = CodexBackend().build_interactive_cmd(initial_prompt="Hello")
+        cmd = CodexBackend().build_interactive_cmd(launch=FreshLaunch(initial_prompt="Hello"))
         assert cmd.cmd[0] == "codex"
         assert "--dangerously-bypass-approvals-and-sandbox" in cmd.cmd
 

@@ -15,7 +15,7 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 import regex as re
 from packaging.version import InvalidVersion, Version
@@ -35,22 +35,23 @@ from autoskillit.core import (
     AgentDef,
     BackendCapabilities,
     BackendConventions,
-    BareResume,
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
     ClaudeFlags,
     CmdSpec,
     ExecutableLaunchBinding,
     ExplorationDispatchRenderer,
+    FreshLaunch,
+    InteractiveLaunch,
     LineDriver,
     ManagedHeadlessSessionLineageRef,
-    NamedResume,
     NativeShellCaptureDecision,
-    NoResume,
     OutputFormat,
     PluginLaunchBinding,
+    PositionalRole,
     PreLaunchReadiness,
-    ResumeSpec,
+    RestoreSession,
+    ResumeWithBriefing,
     SemanticAdaptationContext,
     SkillDiscoveryMechanism,
     SkillDiscoveryRouteDef,
@@ -104,6 +105,19 @@ from autoskillit.execution.backends._explorer_dispatch import (
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
+
+_CLAUDE_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
+    {
+        ClaudeFlags.PRINT,
+        ClaudeFlags.MODEL,
+        ClaudeFlags.OUTPUT_FORMAT,
+        ClaudeFlags.RESUME,
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+        ClaudeFlags.PLUGIN_DIR,
+        ClaudeFlags.ADD_DIR,
+        ClaudeFlags.TOOLS,
+    }
+)
 
 
 __all__ = [
@@ -232,6 +246,9 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
     def binary_name(self) -> str:
         return "claude"
 
+    def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
+        return VARIADIC_CLAUDE_FLAGS, _CLAUDE_INTERACTIVE_VALUE_BEARING_FLAGS
+
     def translate_model(self, model: str) -> str:
         from autoskillit.core import (
             CLAUDE_MODEL_ALIASES,
@@ -340,14 +357,12 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
     def build_interactive_cmd(
         self,
         *,
-        initial_prompt: str | None = None,
+        launch: InteractiveLaunch = FreshLaunch(),
         model: str | None = None,
         executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
-        resume_spec: ResumeSpec = NoResume(),
-        system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
         tools: Sequence[str] = (),
@@ -359,10 +374,10 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
 
         Parameters
         ----------
-        initial_prompt
-            When provided, appended as a positional argument. Claude Code treats
-            positional arguments as the user's first message, auto-submitted on
-            session start.
+        launch
+            Closed launch intent. Fresh sessions may carry system and initial
+            prompts; restores cannot carry a prompt; briefing resumes submit only
+            their explicitly authorized briefing.
         model
             Optional model override.
         plugin_binding
@@ -371,15 +386,6 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             parent session already has the plugin loaded" is expressed.
         add_dirs
             Each entry is appended as ``--add-dir <path>``.
-        resume_spec
-            Resume intent discriminated union. ``NoResume`` (default) starts a fresh
-            session. ``BareResume`` passes ``--resume`` without an ID (Claude Code's
-            interactive picker). ``NamedResume`` passes ``--resume <id>``.
-        system_prompt
-            Optional system prompt text. When provided and resume_spec is NoResume,
-            appended as ``--append-system-prompt <value>``. Suppressed on resume
-            sessions (BareResume or NamedResume) because ``--append-system-prompt``
-            is incompatible with ``--resume``.
         env_extras
             Optional caller overrides merged into the resolved env after IDE scrubbing.
         required_env
@@ -402,21 +408,24 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         del generated_home
         builder = CmdBuilder(str(executable.path) if executable is not None else "claude")
         builder.mode_flag(ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS)
-        match resume_spec:
-            case NamedResume(session_id=sid):
+        match launch:
+            case FreshLaunch(system_prompt=system_prompt, initial_prompt=initial_prompt):
+                if system_prompt is not None:
+                    builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
+            case RestoreSession(session_id=sid):
                 builder.kv_flag(ClaudeFlags.RESUME, sid)
-            case BareResume():
-                builder.mode_flag(ClaudeFlags.RESUME)
-            case NoResume():
-                pass
-        if system_prompt is not None and isinstance(resume_spec, NoResume):
-            builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
+                initial_prompt = None
+            case ResumeWithBriefing(session_id=sid, briefing=briefing):
+                builder.kv_flag(ClaudeFlags.RESUME, sid)
+                initial_prompt = briefing
+            case _ as unreachable:
+                assert_never(unreachable)
         if model:
             builder.kv_flag(ClaudeFlags.MODEL, self.translate_model(model))
         if plugin_binding is not None:
             builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir))
         if initial_prompt is not None:
-            builder.positional(initial_prompt)
+            builder.positional(initial_prompt, role=PositionalRole.PROMPT)
         for d in add_dirs:
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
@@ -438,7 +447,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             cmd=partial.cmd,
             env=(executable.launch_environment if executable is not None else effective_env),
             origin=partial.origin,
-            is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
+            is_resume=not isinstance(launch, FreshLaunch),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             skill_discovery_route=CLAUDE_ADD_DIR_SKILLS_ROUTE,
             force_inactive_agent_teams=force_inactive_agent_teams,

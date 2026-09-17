@@ -218,7 +218,7 @@ def _count_within_turn_ngrams(
 def _record_inter_turn_gaps(
     turns: Sequence[Sequence[str]], pair_gaps: dict[tuple[str, str], list[int]]
 ) -> None:
-    """Append positive, distinct-tool gaps while resetting history per session."""
+    """Record positive, distinct-tool gaps while resetting history per session."""
     last_seen: dict[str, int] = {}
     for turn_idx, turn in enumerate(turns):
         for tool in turn:

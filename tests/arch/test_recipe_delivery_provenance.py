@@ -39,6 +39,15 @@ def _resolver() -> ast.FunctionDef:
 
 def _resolver_implementation() -> tuple[ast.FunctionDef, ...]:
     """Return resolver helpers transitively invoked from this module."""
+
+    def _called_names(call: ast.Call) -> tuple[str, ...]:
+        target = call.func
+        if isinstance(target, ast.Name):
+            return (target.id,)
+        if isinstance(target, ast.Attribute):
+            return (target.attr,)
+        return ()
+
     functions = _delivery_bounds_functions()
     pending = ["resolve_recipe_delivery_decision"]
     reachable: list[ast.FunctionDef] = []
@@ -52,14 +61,6 @@ def _resolver_implementation() -> tuple[ast.FunctionDef, ...]:
         if function is None:
             continue
         reachable.append(function)
-
-        def _called_names(call: ast.Call) -> tuple[str, ...]:
-            target = call.func
-            if isinstance(target, ast.Name):
-                return (target.id,)
-            if isinstance(target, ast.Attribute):
-                return (target.attr,)
-            return ()
 
         pending.extend(
             called

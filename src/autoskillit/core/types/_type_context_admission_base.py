@@ -105,6 +105,8 @@ def _decode_enum(value: Mapping[object, object]) -> StrEnum:
     try:
         return _ENUM_REGISTRY[enum_name](enum_value)
     except (TypeError, ValueError):
+        # Suppress cause: enum_value is attacker-controlled and must not leak
+        # into the error message or traceback.
         raise ContextAdmissionValidationError("invalid_serialized_enum") from None
 
 
@@ -150,6 +152,8 @@ def _decode_contract(value: Mapping[object, object], type_name: object) -> objec
     try:
         return contract_type(**kwargs)
     except TypeError:
+        # Suppress cause: kwargs come from attacker-controlled serialized data
+        # and the unexpected-kwarg name must not leak.
         raise ContextAdmissionValidationError("invalid_serialized_contract") from None
 
 

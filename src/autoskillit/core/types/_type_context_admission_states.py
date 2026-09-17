@@ -60,7 +60,7 @@ _OUTSTANDING_GENERATION_STATES = frozenset(
 _PoolKey: TypeAlias = tuple[ReserveClass, ProtectedPoolOwnerId]
 
 
-def _build_state_indexes(
+def _validate_and_build_state_indexes(
     state: ActiveContextAdmissionState,
 ) -> tuple[
     dict[_PoolKey, ProtectedPoolSpec],
@@ -175,7 +175,7 @@ def _validate_reservation_links(
             _raise_invalid("orphan_protected_charge_owner")
 
 
-def _charge_protected_inputs(
+def _accumulate_protected_inputs(
     batch_records: tuple[AdmissionBatchRecord, ...],
     reservations_by_id: Mapping[AdmissionReservationId, AdmissionReservation],
     pools_by_key: Mapping[_PoolKey, ProtectedPoolSpec],
@@ -210,11 +210,14 @@ def _charge_protected_inputs(
         elif record.state in _OUTSTANDING_ADMISSION_STATES:
             charge = matched_reservation.reserved_count if matched_reservation is not None else 0
         else:
+            # Committed/quarantined facts may exceed their reservation after an
+            # authoritative acceptance. They remain charged by _capacity, but are
+            # no longer an outstanding allocation against the pool.
             charge = 0
         protected_charges[key] = protected_charges.get(key, 0) + charge
 
 
-def _charge_protected_generations(
+def _accumulate_protected_generations(
     generation_records: tuple[GenerationReservationRecord, ...],
     batch_records_by_id: Mapping[AdmissionBatchId, AdmissionBatchRecord],
     pools_by_key: Mapping[_PoolKey, ProtectedPoolSpec],
@@ -459,18 +462,18 @@ class ActiveContextAdmissionState(_ContractValue):
             reservations_by_id,
             batch_records_by_id,
             occurrence_records_by_id,
-        ) = _build_state_indexes(self)
+        ) = _validate_and_build_state_indexes(self)
         _validate_occurrence_links(self.occurrence_records, batch_records_by_id)
         _validate_batch_manifest_links(self.batch_records, occurrence_records_by_id)
         _validate_reservation_links(self.reservations, batch_records_by_id, pools_by_key)
         protected_charges: dict[tuple[ReserveClass, ProtectedPoolOwnerId], int] = {}
-        _charge_protected_inputs(
+        _accumulate_protected_inputs(
             self.batch_records,
             reservations_by_id,
             pools_by_key,
             protected_charges,
         )
-        _charge_protected_generations(
+        _accumulate_protected_generations(
             self.generation_reservations,
             batch_records_by_id,
             pools_by_key,

@@ -296,7 +296,8 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
         git_parts = extract_git_subcommand_and_flags(segment)
         if git_parts is None:
             return False
-        subcommand, flags = git_parts
+        subcommand = git_parts.subcommand
+        flags = git_parts.flags
         if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
             return False
         if subcommand == "add":

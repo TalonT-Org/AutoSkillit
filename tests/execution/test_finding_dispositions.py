@@ -499,11 +499,9 @@ def test_last_test_is_selected_chronologically(
         assert result.subtype == "tests_not_green"
 
 
-def test_evidence_window_and_workspace_are_enforced(tmp_path: Path) -> None:
+def test_evidence_time_window_filter_excludes_out_of_window_records(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    other = tmp_path / "other"
     workspace.mkdir()
-    other.mkdir()
     ledger = _ledger(
         [
             _record(
@@ -517,6 +515,27 @@ def test_evidence_window_and_workspace_are_enforced(tmp_path: Path) -> None:
                 "2026-09-16T10:02:00+00:00",
                 kind=WorkspaceOutcomeKind.TEST_RUN,
                 succeeded=False,
+            ),
+        ],
+    )
+
+    result = _adjudicate(_processed("already_green", []), workspace, ledger)
+
+    assert result.success is True
+
+
+def test_evidence_workspace_filter_excludes_other_workspace_records(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    other = tmp_path / "other"
+    workspace.mkdir()
+    other.mkdir()
+    ledger = _ledger(
+        [
+            _record(
+                workspace,
+                "2026-09-16T10:00:01+00:00",
+                kind=WorkspaceOutcomeKind.TEST_RUN,
+                succeeded=True,
             ),
             _record(
                 other,

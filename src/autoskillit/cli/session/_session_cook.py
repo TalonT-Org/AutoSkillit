@@ -486,8 +486,8 @@ def cook(
                         attempt_handle.record_spawn(pid, pgid)
                         if not bind_session_owner(project_dir, launch_id, pid):
                             raise RuntimeError(
-                                "Failed to bind managed cook session owner "
-                                f"for launch {launch_id!r} and pid {pid}"
+                                f"session owner binding refused for launch {launch_id!r} "
+                                f"and pid {pid}"
                             )
 
                     result = run_cook_attempt(

@@ -18,7 +18,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
-from ._linux_proc import owner_liveness, read_boot_id, read_starttime_ticks
+from ._linux_proc import (
+    _is_valid_identity,
+    owner_liveness,
+    read_boot_id,
+    read_starttime_ticks,
+)
 from .artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, acquire_flock_with_timeout
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 runtime is stdlib-only
@@ -181,6 +186,11 @@ def bridge_claude_session_id(
 def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> bool:
     """Bind an existing launch row to the exact spawned client process.
 
+    The caller must have already reserved the claimant on ``launch_id`` via
+    ``write_registry_entry`` or ``claim_launch_for_session``; this function
+    returns ``False`` (rather than raising) when that claimant does not match
+    the current process identity.
+
     Return ``False`` when the registry or process identity cannot be read or
     persisted.  A non-positive or non-integer PID remains a caller error.
     """
@@ -212,7 +222,7 @@ def bind_session_owner(project_dir: Path, launch_id: str, owner_pid: int) -> boo
 
             entry.update(_identity_fields("owner", owner_identity))
             _atomic_write(path, _fast_dumps(registry))
-    except Exception:
+    except (OSError, ValueError):
         logger.warning("session owner binding failed", exc_info=True)
         return False
     return True
@@ -311,17 +321,9 @@ def _check_session_assignment(
 def _identity_for_pid(pid: int) -> tuple[int, str, int] | None:
     boot_id = read_boot_id()
     starttime_ticks = read_starttime_ticks(pid)
-    if (
-        isinstance(pid, bool)
-        or not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(boot_id, str)
-        or not boot_id
-        or isinstance(starttime_ticks, bool)
-        or not isinstance(starttime_ticks, int)
-        or starttime_ticks <= 0
-    ):
+    if not _is_valid_identity(pid, boot_id, starttime_ticks):
         return None
+    assert isinstance(boot_id, str) and isinstance(starttime_ticks, int)
     return pid, boot_id, starttime_ticks
 
 
@@ -342,17 +344,9 @@ def _stored_identity(entry: dict, prefix: str) -> tuple[int, str, int] | None:
     pid = entry.get(f"{prefix}_pid")
     boot_id = entry.get(f"{prefix}_boot_id")
     starttime_ticks = entry.get(f"{prefix}_starttime_ticks")
-    if (
-        isinstance(pid, bool)
-        or not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(boot_id, str)
-        or not boot_id
-        or isinstance(starttime_ticks, bool)
-        or not isinstance(starttime_ticks, int)
-        or starttime_ticks <= 0
-    ):
+    if not _is_valid_identity(pid, boot_id, starttime_ticks):
         return None
+    assert isinstance(pid, int) and isinstance(boot_id, str) and isinstance(starttime_ticks, int)
     return pid, boot_id, starttime_ticks
 
 

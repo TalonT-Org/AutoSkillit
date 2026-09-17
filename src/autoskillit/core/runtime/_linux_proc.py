@@ -29,6 +29,20 @@ __all__ = [
 ]
 
 
+def _is_valid_identity(pid: object, boot_id: object, starttime_ticks: object) -> bool:
+    """True only when all three identity fields are well-typed and positive."""
+    return (
+        not isinstance(pid, bool)
+        and isinstance(pid, int)
+        and pid > 0
+        and isinstance(boot_id, str)
+        and bool(boot_id)
+        and not isinstance(starttime_ticks, bool)
+        and isinstance(starttime_ticks, int)
+        and starttime_ticks > 0
+    )
+
+
 class _DarwinTimeval(ctypes.Structure):
     _fields_ = [("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_int32)]
 
@@ -82,7 +96,7 @@ def _darwin_boot_time() -> tuple[int, int] | None:
             None,
             0,
         )
-    except (AttributeError, OSError, TypeError, ValueError):
+    except (OSError, AttributeError):
         return None
     if result != 0 or size.value != ctypes.sizeof(boot_time):
         return None
@@ -117,7 +131,7 @@ def _read_darwin_proc_bsd_info(pid: int) -> _DarwinProcBsdInfo | None:
             ctypes.byref(info),
             expected_size,
         )
-    except (AttributeError, OSError, TypeError, ValueError):
+    except (OSError, AttributeError):
         return None
     if result != expected_size or info.pbi_pid != pid:
         return None
@@ -259,16 +273,7 @@ def owner_liveness(
     state while this identity is observed, so unavailable evidence remains a
     conservative refusal rather than proof of death.
     """
-    if (
-        isinstance(pid, bool)
-        or not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(boot_id, str)
-        or not boot_id
-        or isinstance(starttime_ticks, bool)
-        or not isinstance(starttime_ticks, int)
-        or starttime_ticks <= 0
-    ):
+    if not _is_valid_identity(pid, boot_id, starttime_ticks):
         return None
     if not (sys.platform.startswith("linux") or sys.platform == "darwin"):
         return None

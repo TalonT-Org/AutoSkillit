@@ -98,13 +98,13 @@ class TestTestGateBypassRefusal:
 
 
 class TestRecipeReadProhibitionCmd:
+    """run_cmd denies recipe/skill/agent file access in headless sessions."""
+
     def test_uses_shared_protected_path_classifier(self) -> None:
         assert (
             lifecycle_guards.command_has_blocked_protected_path_read
             is command_has_blocked_protected_path_read
         )
-
-    """run_cmd denies recipe/skill/agent file access in headless sessions."""
 
     @pytest.fixture(autouse=True)
     def _headless(self, monkeypatch):

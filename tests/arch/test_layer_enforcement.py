@@ -1918,6 +1918,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # outcome invariant tests verify _apply_post_session_adjudication against
     # SkillContract/OutcomeInvariantEntry/SuccessQualifierEntry definitions
     "tests/execution/test_outcome_invariants.py": frozenset({"autoskillit.recipe"}),
+    # finding disposition tests verify apply_finding_disposition_adjudication
+    # against the same SkillContract/OutcomeInvariantEntry/SuccessQualifierEntry
+    # definitions — same contract-aware cross-layer requirement
+    "tests/execution/test_finding_dispositions.py": frozenset({"autoskillit.recipe"}),
     # smoke composition tests validate recipe validity under codex backend — needs recipe API
     "tests/execution/test_smoke_codex.py": frozenset({"autoskillit.recipe"}),
     # enum-token recovery tests build SkillContract instances inline to verify

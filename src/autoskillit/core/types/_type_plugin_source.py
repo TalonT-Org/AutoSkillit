@@ -146,6 +146,16 @@ def normalize_inherited_fds(descriptors: Iterable[int]) -> tuple[int, ...]:
     return tuple(normalized)
 
 
+def _validate_incarnation_id(value: str, subject: str) -> None:
+    if not is_canonical_plugin_artifact_incarnation_id(value):
+        raise ValueError(f"{subject} incarnation_id must be canonical uuid4 hex")
+
+
+def _validate_artifact_digest(value: str, subject: str) -> None:
+    if not is_canonical_plugin_artifact_digest(value):
+        raise ValueError(f"{subject} digest must be lowercase SHA-256 hex")
+
+
 @dataclass(frozen=True, slots=True)
 class PluginArtifactIdentity:
     """Exact identity and validation evidence for one physical incarnation."""
@@ -160,12 +170,10 @@ class PluginArtifactIdentity:
     def __post_init__(self) -> None:
         if not isinstance(self.semantic_key, str) or not self.semantic_key:
             raise ValueError("plugin artifact semantic_key must be a non-empty string")
-        if not is_canonical_plugin_artifact_incarnation_id(self.incarnation_id):
-            raise ValueError("plugin artifact incarnation_id must be canonical uuid4 hex")
+        _validate_incarnation_id(self.incarnation_id, "plugin artifact")
         if type(self.manifest_schema_version) is not int or self.manifest_schema_version < 1:
             raise ValueError("plugin artifact manifest schema version must be a positive integer")
-        if not is_canonical_plugin_artifact_digest(self.artifact_digest):
-            raise ValueError("plugin artifact digest must be lowercase SHA-256 hex")
+        _validate_artifact_digest(self.artifact_digest, "plugin artifact")
         if not isinstance(self.managed_path, Path):
             raise ValueError("plugin artifact managed path must be a Path")
         if not isinstance(self.manifest_path, Path):
@@ -225,10 +233,8 @@ class RetiringArtifactRecord:
         )
         if not self.incarnation_id or not self.artifact_digest:
             raise ValueError("retiring artifact identity fields must not be empty")
-        if not is_canonical_plugin_artifact_incarnation_id(self.incarnation_id):
-            raise ValueError("retiring artifact incarnation_id must be canonical uuid4 hex")
-        if not is_canonical_plugin_artifact_digest(self.artifact_digest):
-            raise ValueError("retiring artifact digest must be lowercase SHA-256 hex")
+        _validate_incarnation_id(self.incarnation_id, "retiring artifact")
+        _validate_artifact_digest(self.artifact_digest, "retiring artifact")
         if not self.managed_path.is_absolute() or not self.manifest_path.is_absolute():
             raise ValueError("retiring artifact paths must be absolute")
         if type(self.schema_version) is not int or self.schema_version != 2:

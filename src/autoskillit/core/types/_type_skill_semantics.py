@@ -450,6 +450,30 @@ def required_join_is_unsupported(
     )
 
 
+def _validate_supported_adaptation(result: SkillSemanticAdaptationResult) -> None:
+    if any(not fragment.strip() for fragment in result.instruction_fragments):
+        raise SkillContractError("semantic adaptation instructions must be non-empty")
+    if result.adaptation_context_digest:
+        _require_sha256(
+            result.adaptation_context_digest,
+            "semantic adaptation context digest",
+        )
+    for field_name, mapping in (
+        ("logical role mapping", result.logical_role_mapping),
+        ("sibling skill targets", result.sibling_skill_targets),
+    ):
+        if any(not key.strip() or not value.strip() for key, value in mapping.items()):
+            raise SkillContractError(f"{field_name} must map non-empty strings")
+    for role, policy in result.model_effort_policy.items():
+        if not role.strip() or not isinstance(policy, tuple) or len(policy) != 2:
+            raise SkillContractError("model effort policy must use role -> (model, effort)")
+        model, effort = policy
+        if not isinstance(model, str) or (effort is not None and not isinstance(effort, str)):
+            raise SkillContractError("model effort policy values must be strings")
+        if effort is not None and effort not in SKILL_REASONING_EFFORTS:
+            raise SkillContractError(f"unknown adapted reasoning effort {effort!r}")
+
+
 @dataclass(frozen=True, slots=True)
 class SkillSemanticAdaptationResult:
     """Selected backend's exact adaptation or one unsupported-operation refusal."""
@@ -483,24 +507,7 @@ class SkillSemanticAdaptationResult:
             or self.model_effort_policy
         ):
             raise SkillContractError("unsupported semantic adaptation cannot carry instructions")
-        if any(not fragment.strip() for fragment in self.instruction_fragments):
-            raise SkillContractError("semantic adaptation instructions must be non-empty")
-        if self.adaptation_context_digest:
-            _require_sha256(self.adaptation_context_digest, "semantic adaptation context digest")
-        for field_name, mapping in (
-            ("logical role mapping", self.logical_role_mapping),
-            ("sibling skill targets", self.sibling_skill_targets),
-        ):
-            if any(not key.strip() or not value.strip() for key, value in mapping.items()):
-                raise SkillContractError(f"{field_name} must map non-empty strings")
-        for role, policy in self.model_effort_policy.items():
-            if not role.strip() or not isinstance(policy, tuple) or len(policy) != 2:
-                raise SkillContractError("model effort policy must use role -> (model, effort)")
-            model, effort = policy
-            if not isinstance(model, str) or (effort is not None and not isinstance(effort, str)):
-                raise SkillContractError("model effort policy values must be strings")
-            if effort is not None and effort not in SKILL_REASONING_EFFORTS:
-                raise SkillContractError(f"unknown adapted reasoning effort {effort!r}")
+        _validate_supported_adaptation(self)
 
     @property
     def canonical_payload(self) -> Mapping[str, object]:

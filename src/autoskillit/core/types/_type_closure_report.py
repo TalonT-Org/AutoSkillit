@@ -43,6 +43,64 @@ class ClosureRow:
     row_hash: str
 
 
+def _validate_report_rows(report: ClosureReport) -> list[str]:
+    errors: list[str] = []
+    seen: set[str] = set()
+    n = max(len(report.requirement_ids), len(report.rows))
+    for idx in range(n):
+        rid = report.requirement_ids[idx] if idx < len(report.requirement_ids) else None
+        row = report.rows[idx] if idx < len(report.rows) else None
+        if row is None:
+            errors.append(f"missing row for requirement_ids[{idx}] {rid!r}")
+            assert rid is not None
+            seen.add(rid)
+            continue
+        if rid is None:
+            errors.append(
+                f"extra row[{idx}] requirement_id={row.requirement_id!r} "
+                f"with no matching requirement_ids entry"
+            )
+            continue
+        if rid in seen:
+            errors.append(f"duplicate requirement_id at index {idx}: {rid!r}")
+        seen.add(rid)
+        if row.requirement_id != rid:
+            errors.append(
+                f"row[{idx}].requirement_id {row.requirement_id!r} "
+                f"!= requirement_ids[{idx}] {rid!r}"
+            )
+        if row.assessment not in _ALLOWED_ASSESSMENTS:
+            errors.append(
+                f"row[{idx}].assessment {row.assessment!r} not in {_ALLOWED_ASSESSMENTS}"
+            )
+        expected_row_hash = compute_row_hash(
+            row.requirement_id,
+            row.requirement_text,
+            row.assessment,
+            row.evidence_summary,
+            row.source_file,
+            row.source_line,
+            row.source_section,
+        )
+        if row.row_hash != expected_row_hash:
+            errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+    return errors
+
+
+def _validate_report_hash_formats(report: ClosureReport) -> list[str]:
+    errors = [
+        f"hash field has malformed format: {value!r}"
+        for value in (report.request_hash, report.authority_hash, report.report_hash)
+        if not _HASH_RE.match(value)
+    ]
+    errors.extend(
+        f"plan_hashes[{idx}] has malformed format: {value!r}"
+        for idx, value in enumerate(report.plan_hashes)
+        if not _HASH_RE.match(value)
+    )
+    return errors
+
+
 @dataclass(frozen=True, slots=True)
 class ClosureReport:
     schema_version: int
@@ -72,56 +130,13 @@ class ClosureReport:
                 f"rows/requirement_ids length mismatch: {len(self.rows)} vs "
                 f"{len(self.requirement_ids)}"
             )
-        seen: set[str] = set()
-        n = max(len(self.requirement_ids), len(self.rows))
-        for idx in range(n):
-            rid = self.requirement_ids[idx] if idx < len(self.requirement_ids) else None
-            row = self.rows[idx] if idx < len(self.rows) else None
-            if row is None:
-                errors.append(f"missing row for requirement_ids[{idx}] {rid!r}")
-                assert rid is not None
-                seen.add(rid)
-                continue
-            if rid is None:
-                errors.append(
-                    f"extra row[{idx}] requirement_id={row.requirement_id!r} "
-                    f"with no matching requirement_ids entry"
-                )
-                continue
-            if rid in seen:
-                errors.append(f"duplicate requirement_id at index {idx}: {rid!r}")
-            seen.add(rid)
-            if row.requirement_id != rid:
-                errors.append(
-                    f"row[{idx}].requirement_id {row.requirement_id!r} "
-                    f"!= requirement_ids[{idx}] {rid!r}"
-                )
-            if row.assessment not in _ALLOWED_ASSESSMENTS:
-                errors.append(
-                    f"row[{idx}].assessment {row.assessment!r} not in {_ALLOWED_ASSESSMENTS}"
-                )
-            expected_row_hash = compute_row_hash(
-                row.requirement_id,
-                row.requirement_text,
-                row.assessment,
-                row.evidence_summary,
-                row.source_file,
-                row.source_line,
-                row.source_section,
-            )
-            if row.row_hash != expected_row_hash:
-                errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+        errors.extend(_validate_report_rows(self))
         expected_report_hash = compute_report_hash(
             self.request_hash, [r.row_hash for r in self.rows], self.verdict
         )
         if self.report_hash != expected_report_hash:
             errors.append("report_hash mismatch (recomputed hash differs)")
-        for hash_field in (self.request_hash, self.authority_hash, self.report_hash):
-            if not _HASH_RE.match(hash_field):
-                errors.append(f"hash field has malformed format: {hash_field!r}")
-        for idx, ph in enumerate(self.plan_hashes):
-            if not _HASH_RE.match(ph):
-                errors.append(f"plan_hashes[{idx}] has malformed format: {ph!r}")
+        errors.extend(_validate_report_hash_formats(self))
         if self.verdict == "GO":
             blocking = [r for r in self.rows if r.assessment in CLOSURE_ROW_BLOCKING_ASSESSMENTS]
             if blocking:

@@ -127,6 +127,24 @@ def _freeze_json_value(value: object) -> object:
     return value
 
 
+def _validate_exploration_task_binding(vector: ExplorationVectorDef) -> None:
+    _require_canonical_identifier(vector.task.task_id, "exploration task id")
+    _require_canonical_identifier(
+        vector.task.frontier_item_id,
+        "exploration frontier item id",
+    )
+    for dependency in vector.task.depends_on:
+        _require_canonical_identifier(dependency, "exploration task dependency")
+    if len(set(vector.task.depends_on)) != len(vector.task.depends_on):
+        raise SkillContractError("exploration task dependencies must be unique")
+    if vector.task.task_id in vector.task.depends_on:
+        raise SkillContractError("exploration task cannot depend on itself")
+    if vector.task.profile is not vector.profile:
+        raise SkillContractError("exploration vector profile must match its task profile")
+    if any(not item.strip() for item in vector.task.scope):
+        raise SkillContractError("exploration task scope entries must be non-empty")
+
+
 @dataclass(frozen=True, slots=True)
 class ExplorationVectorDef:
     """Static reviewed definition bound to one replaceable SKILL.md prose vector."""
@@ -143,21 +161,7 @@ class ExplorationVectorDef:
 
     def __post_init__(self) -> None:
         _require_canonical_identifier(self.id, "exploration vector id")
-        _require_canonical_identifier(self.task.task_id, "exploration task id")
-        _require_canonical_identifier(
-            self.task.frontier_item_id,
-            "exploration frontier item id",
-        )
-        for dependency in self.task.depends_on:
-            _require_canonical_identifier(dependency, "exploration task dependency")
-        if len(set(self.task.depends_on)) != len(self.task.depends_on):
-            raise SkillContractError("exploration task dependencies must be unique")
-        if self.task.task_id in self.task.depends_on:
-            raise SkillContractError("exploration task cannot depend on itself")
-        if self.task.profile is not self.profile:
-            raise SkillContractError("exploration vector profile must match its task profile")
-        if any(not item.strip() for item in self.task.scope):
-            raise SkillContractError("exploration task scope entries must be non-empty")
+        _validate_exploration_task_binding(self)
         if not self.rationale.strip():
             raise SkillContractError("exploration vector rationale must be non-empty")
         if _VECTOR_MARKER_TOKEN in self.rationale:
@@ -286,6 +290,58 @@ class SkillVisibilitySpec:
         object.__setattr__(self, "tier3_skills", frozenset(self.tier3_skills))
 
 
+def _normalize_persisted_exploration(
+    contract: SkillSessionContract,
+) -> tuple[
+    Mapping[str, tuple[ExplorationVectorDef, ...]],
+    Mapping[str, tuple[tuple[int, Mapping[str, object]], ...]],
+    tuple[str, ...] | None,
+    Mapping[str, str],
+]:
+    vectors = contract.exploration_vectors or {name: () for name in contract.closure}
+    frozen_vectors = MappingProxyType({name: tuple(entries) for name, entries in vectors.items()})
+    opaque_vectors = {
+        name: tuple(
+            (
+                index,
+                MappingProxyType({key: _freeze_json_value(value) for key, value in raw.items()}),
+            )
+            for index, raw in entries
+        )
+        for name, entries in contract.opaque_exploration_vectors.items()
+    }
+    if not set(opaque_vectors).issubset(contract.closure):
+        raise SkillContractError("opaque exploration vector keys must be in closure")
+    for name, entries in opaque_vectors.items():
+        positions = tuple(index for index, _raw in entries)
+        if (
+            any(type(index) is not int or index < 0 for index in positions)
+            or len(set(positions)) != len(positions)
+            or any(
+                index >= len(frozen_vectors.get(name, ())) + len(entries) for index in positions
+            )
+        ):
+            raise SkillContractError("opaque exploration vector positions are invalid")
+    if contract.opaque_resolved_exploration_profile is not None and not isinstance(
+        contract.opaque_resolved_exploration_profile, str
+    ):
+        raise SkillContractError("opaque resolved exploration profile must be text")
+    raw_applicabilities = contract.raw_active_exploration_applicabilities
+    if raw_applicabilities is not None:
+        if any(not isinstance(item, str) for item in raw_applicabilities):
+            raise SkillContractError("raw exploration applicabilities must be text")
+        raw_applicabilities = tuple(raw_applicabilities)
+    sidecar_digests = contract.exploration_sidecar_digests or {
+        name: "" for name in contract.closure
+    }
+    return (
+        frozen_vectors,
+        MappingProxyType(opaque_vectors),
+        raw_applicabilities,
+        MappingProxyType(dict(sidecar_digests)),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SkillSessionContract:
     """Immutable execution contract bound to a projected skill snapshot."""
@@ -404,64 +460,20 @@ class SkillSessionContract:
                 raise SkillContractError("launch contract backend mismatch")
             if self.launch_contract.cwd != self.cwd:
                 raise SkillContractError("launch contract cwd mismatch")
-        exploration_vectors = self.exploration_vectors or {name: () for name in self.closure}
+        (
+            exploration_vectors,
+            opaque_vectors,
+            raw_applicabilities,
+            sidecar_digests,
+        ) = _normalize_persisted_exploration(self)
+        object.__setattr__(self, "exploration_vectors", exploration_vectors)
+        object.__setattr__(self, "opaque_exploration_vectors", opaque_vectors)
         object.__setattr__(
             self,
-            "exploration_vectors",
-            MappingProxyType(
-                {name: tuple(vectors) for name, vectors in exploration_vectors.items()}
-            ),
+            "raw_active_exploration_applicabilities",
+            raw_applicabilities,
         )
-        opaque_vectors = {
-            name: tuple(
-                (
-                    index,
-                    MappingProxyType(
-                        {key: _freeze_json_value(value) for key, value in raw.items()}
-                    ),
-                )
-                for index, raw in entries
-            )
-            for name, entries in self.opaque_exploration_vectors.items()
-        }
-        if not set(opaque_vectors).issubset(self.closure):
-            raise SkillContractError("opaque exploration vector keys must be in closure")
-        for name, entries in opaque_vectors.items():
-            positions = tuple(index for index, _raw in entries)
-            if (
-                any(type(index) is not int or index < 0 for index in positions)
-                or len(set(positions)) != len(positions)
-                or any(
-                    index >= len(self.exploration_vectors.get(name, ())) + len(entries)
-                    for index in positions
-                )
-            ):
-                raise SkillContractError("opaque exploration vector positions are invalid")
-        object.__setattr__(
-            self,
-            "opaque_exploration_vectors",
-            MappingProxyType(opaque_vectors),
-        )
-        if self.opaque_resolved_exploration_profile is not None and not isinstance(
-            self.opaque_resolved_exploration_profile, str
-        ):
-            raise SkillContractError("opaque resolved exploration profile must be text")
-        if self.raw_active_exploration_applicabilities is not None:
-            if any(
-                not isinstance(item, str) for item in self.raw_active_exploration_applicabilities
-            ):
-                raise SkillContractError("raw exploration applicabilities must be text")
-            object.__setattr__(
-                self,
-                "raw_active_exploration_applicabilities",
-                tuple(self.raw_active_exploration_applicabilities),
-            )
-        sidecar_digests = self.exploration_sidecar_digests or {name: "" for name in self.closure}
-        object.__setattr__(
-            self,
-            "exploration_sidecar_digests",
-            MappingProxyType(dict(sidecar_digests)),
-        )
+        object.__setattr__(self, "exploration_sidecar_digests", sidecar_digests)
         if not isinstance(self.execution_identity, ExecutionIdentity):
             raise SkillContractError("execution identity must be typed")
 

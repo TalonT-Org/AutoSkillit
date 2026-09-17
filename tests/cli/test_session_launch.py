@@ -1896,13 +1896,13 @@ print(json.dumps([entry]))
     path.chmod(0o755)
 
 
-@pytest.mark.parametrize("resume_kind", ("fresh", "named", "bare"))
+@pytest.mark.parametrize("launch_kind", ("fresh", "named"))
 def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    resume_kind: str,
+    launch_kind: str,
 ) -> None:
-    """The finalized exact-bound command must retain the catalog for every resume form."""
+    """The finalized exact-bound command must retain the catalog for both launch forms."""
     from autoskillit.cli.session._session_launch import prepare_interactive_launch
     from autoskillit.core import FreshLaunch, RestoreSession, ValidatedAddDir
     from autoskillit.execution.backends.codex import CodexBackend
@@ -1931,8 +1931,7 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches
     launch = {
         "fresh": FreshLaunch(system_prompt="test"),
         "named": RestoreSession("resume-id"),
-        "bare": FreshLaunch(system_prompt="test"),
-    }[resume_kind]
+    }[launch_kind]
     prepared = prepare_interactive_launch(
         backend,
         project_dir=tmp_path,

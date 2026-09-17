@@ -9,7 +9,6 @@ from pathlib import Path
 from autoskillit.core import (
     get_logger,
     is_valid_github_review_head_sha,
-    is_valid_github_review_repository,
 )
 
 logger = get_logger(__name__)
@@ -130,7 +129,7 @@ def annotate_pr_diff(
             raise RuntimeError("live PR head ref was missing")
         if not isinstance(base_sha, str) or not is_valid_github_review_head_sha(base_sha.strip()):
             raise RuntimeError("live PR base ref was missing")
-        if not isinstance(base_repo_full_name, str) or not is_valid_github_review_repository(
+        if not isinstance(base_repo_full_name, str) or not _is_well_formed_repository_full_name(
             base_repo_full_name.strip()
         ):
             raise RuntimeError("live PR base repository was missing")
@@ -169,7 +168,7 @@ def annotate_pr_diff(
             raise RuntimeError(f"base authority was missing: {provider_base_snapshot_sha!r}")
         if not isinstance(
             provider_base_repo_full_name, str
-        ) or not is_valid_github_review_repository(provider_base_repo_full_name.strip()):
+        ) or not _is_well_formed_repository_full_name(provider_base_repo_full_name.strip()):
             raise RuntimeError(f"provider base repo was missing: {provider_base_repo_full_name!r}")
         provider_head_sha = provider_head_sha.strip()
         provider_base_snapshot_sha = provider_base_snapshot_sha.strip()
@@ -478,3 +477,12 @@ def check_loop_with_progress(
         "zero_progress": "true" if zero_progress else "false",
         "prev_issues_fixed_count": current_fixed,
     }
+
+
+def _is_well_formed_repository_full_name(value: str) -> bool:
+    """Return whether a repository full name has two non-empty parts.
+
+    Accepts any case; the canonical lowercase form is enforced elsewhere.
+    """
+    parts = value.split("/")
+    return len(parts) == 2 and all(parts)

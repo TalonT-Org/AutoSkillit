@@ -266,7 +266,7 @@ def effective_body_digest(
 
 
 def finding_set_digest(findings: tuple[CanonicalFinding, ...]) -> str:
-    return hashlib.sha256(canonical_json([finding.wire for finding in findings])).hexdigest()
+    return hashlib.sha256(canonical_json([dict(finding.wire) for finding in findings])).hexdigest()
 
 
 def append_marker(body: str, marker: str) -> str:

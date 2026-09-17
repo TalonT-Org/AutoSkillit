@@ -149,7 +149,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils/_review_design.py", 143),
     ("src/autoskillit/smoke_utils/_review_design.py", 245),
     # tools_pr_ops.py — GitHubReviewReceipt.to_dict() already carries schema_version
-    ("src/autoskillit/server/tools/tools_pr_ops.py", 504),
+    ("src/autoskillit/server/tools/tools_pr_ops.py", 502),
     # smoke_utils/_git.py — partitions, merge queue data
     # Line 110 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches

@@ -208,6 +208,7 @@ def test_verify_review_receipt_receives_the_exact_publication_identity(
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": expected_logical_iteration,
         "post_state": "${{ context.review_post_state }}",
+        "step_name": "check_review_posted",
     }
     assert check["on_failure"] == consumer.failure_route
     assert check["on_result"][0] == {
@@ -302,6 +303,7 @@ def test_resolve_review_publication_is_effect_verified(
         "head_sha": "${{ context.pr_head_sha }}",
         "logical_iteration": logical_iteration,
         "post_state": "${{ context.resolve_review_post_state }}",
+        "step_name": "check_resolve_review_posted",
     }
     assert check["on_result"][0] == {
         "when": "${{ result.reviews_posted }} == 'true'",

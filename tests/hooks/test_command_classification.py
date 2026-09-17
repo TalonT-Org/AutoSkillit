@@ -1447,7 +1447,7 @@ def test_check_ignore_verbose_is_admitted_for_every_protected_path_category(
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "mechanism"),
     [
         f"git check-ignore --verbose --no-index -- {_PROTECTED_SKILL}",
         f"git check-ignore -v {_PROTECTED_RECIPE} {_PROTECTED_SKILL}",
@@ -1529,114 +1529,93 @@ def test_git_metadata_global_controls(command: str, blocked: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "mechanism"),
+    "command",
     [
         pytest.param(
             f"git check-ignore -v {_PROTECTED_RECIPE} > out.txt",
-            "redirect provenance",
             id="redirect provenance",
         ),
         pytest.param(
             f"git status -- {_PROTECTED_RECIPE} 2>&1",
-            "redirect provenance",
             id="redirect provenance stderr",
         ),
         pytest.param(
             f"git add -- {_PROTECTED_RECIPE} 2>/dev/null",
-            "redirect provenance",
             id="redirect provenance stderr-file",
         ),
         pytest.param(
             f"git status -- ${{P:-{_PROTECTED_RECIPE}}}",
-            "dynamic argv provenance",
             id="dynamic argv provenance",
         ),
         pytest.param(
             f'git status -- "${{P:-{_PROTECTED_RECIPE}}}"',
-            "dynamic argv provenance",
             id="dynamic argv provenance quoted",
         ),
         pytest.param(
             f"git status -- $(cat {_PROTECTED_RECIPE})",
-            "front-door: _SHELL_SUBSTITUTION_RE.search",
             id="shell substitution",
         ),
         pytest.param(
             f"git status -- {_PROTECTED_RECIPE} && true $PROTECTED_VAR",
-            "front-door: _SHELL_STATE_VAR_RE with len(segments) > 1",
             id="shell state var chained",
         ),
         pytest.param(
             f"git check-ignore -v {_PROTECTED_RECIPE} --stdin",
-            "check-ignore grammar",
             id="check-ignore stdin",
         ),
         pytest.param(
             f"git check-ignore -v -z {_PROTECTED_RECIPE}",
-            "check-ignore grammar",
             id="check-ignore -z",
         ),
         pytest.param(
             f"git check-ignore -v -q {_PROTECTED_RECIPE}",
-            "check-ignore grammar",
             id="check-ignore -q",
         ),
         pytest.param(
             f"git check-ignore -v -n {_PROTECTED_RECIPE}",
-            "check-ignore grammar",
             id="check-ignore -n",
         ),
         pytest.param(
             f"git check-ignore -v --non-matching {_PROTECTED_RECIPE}",
-            "check-ignore grammar",
             id="check-ignore --non-matching",
         ),
         pytest.param(
             f"git check-ignore -v --index {_PROTECTED_RECIPE}",
-            "check-ignore grammar",
             id="check-ignore --index",
         ),
         pytest.param(
             f"git check-ignore -v {_PROTECTED_RECIPE} && cat {_PROTECTED_RECIPE}",
-            "mixed chain",
             id="mixed chain check-ignore then cat",
         ),
         pytest.param(
             f"git status -- {_PROTECTED_RECIPE} ; git show HEAD:{_PROTECTED_RECIPE}",
-            "mixed chain",
             id="mixed chain status then show",
         ),
         pytest.param(
             f"git check-ignore -v '{_PROTECTED_RECIPE}",
-            "malformed quoting",
             id="malformed quoting",
         ),
         pytest.param(
             "python - <<'EOF'\n"
             f'import os; os.system("git check-ignore -v {_PROTECTED_RECIPE}")\n'
             "EOF",
-            "provenance-free evaluated payload",
             id="provenance-free evaluated payload",
         ),
         pytest.param(
             f"bash -c 'git check-ignore -v {_PROTECTED_RECIPE}'",
-            "outer interpreter segment",
             id="bash -c check-ignore",
         ),
         pytest.param(
             f"python -c \"import os; os.system('git status -- {_PROTECTED_RECIPE}')\"",
-            "outer interpreter segment",
             id="python -c status",
         ),
         pytest.param(
             f"git status -- \\${{P:-{_PROTECTED_RECIPE}}}",
-            "escaped dynamic argv",
             id="escaped dynamic argv",
         ),
     ],
 )
-def test_protected_path_admission_rejects_unproven_forms(command: str, mechanism: str) -> None:
-    del mechanism  # mechanism is descriptive only; consumed via pytest.param id above
+def test_protected_path_admission_rejects_unproven_forms(command: str) -> None:
     assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
 
 

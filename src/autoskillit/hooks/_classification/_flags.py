@@ -313,6 +313,13 @@ def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
 
 
 def _is_allowed_check_ignore_invocation(flags: Sequence[str]) -> bool:
+    # `git check-ignore` is admitted only in its exact prescribed verbose form
+    # (one -v/--verbose, at most one --no-index). The PR #5071 design contract
+    # binds protected-path admission to the `git check-ignore -v {path}`
+    # prescribed command (dry-walkthrough SKILL.md, prescribed-command corpus),
+    # so we require that exact shape -- bare `git check-ignore /path` is
+    # denied because no project caller uses it for protected-path metadata,
+    # and `-v -v` is denied as a fail-closed narrowing.
     verbose_count = _count_of(flags, ("-v", "--verbose"))
     if verbose_count != 1 or _count_of(flags, ("--no-index",)) > 1:
         return False

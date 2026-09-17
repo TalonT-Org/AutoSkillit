@@ -77,7 +77,17 @@ def _scope_selects(scope: set[Path], test_path: str) -> bool:
 
 
 def test_protected_path_corpus_and_classifier_import_inventory_is_bidirectional() -> None:
-    assert _protected_path_import_consumers() == _EXPECTED_IMPORT_CONSUMERS
+    actual = _protected_path_import_consumers()
+    expected = _EXPECTED_IMPORT_CONSUMERS
+    missing_files = set(expected) - set(actual)
+    assert not missing_files, f"missing import consumers: {sorted(missing_files)}"
+    missing_symbols = {
+        file: sorted(expected[file] - actual.get(file, frozenset()))
+        for file in expected
+        if not expected[file] <= actual.get(file, frozenset())
+    }
+    missing_symbols = {file: syms for file, syms in missing_symbols.items() if syms}
+    assert not missing_symbols, f"missing required symbols: {missing_symbols}"
 
 
 @pytest.mark.parametrize("mode", ["conservative", "aggressive"])

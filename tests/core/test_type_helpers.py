@@ -76,3 +76,45 @@ class TestExtractSkillName:
         from autoskillit.core import extract_skill_name
 
         assert extract_skill_name("test-skill args") is None
+
+
+class TestEvaluateOutcomeExpression:
+    """Cover the bool-typed input guard added to evaluate_outcome_expression.
+
+    bool subclasses int in Python, so the function must reject bool-typed values
+    explicitly — otherwise a True/False field would silently evaluate as 1/0 and
+    corrupt outcome-invariant semantics.
+    """
+
+    def test_bool_field_returns_none(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        assert evaluate_outcome_expression("accept_count > 0", {"accept_count": True}) is None
+
+    def test_false_bool_field_returns_none(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        assert evaluate_outcome_expression("accept_count > 0", {"accept_count": False}) is None
+
+    def test_string_field_returns_none(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        assert evaluate_outcome_expression("accept_count > 0", {"accept_count": "5"}) is None
+
+    def test_int_field_evaluates_truthily(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        assert evaluate_outcome_expression("accept_count > 0", {"accept_count": 5}) is True
+
+    def test_missing_field_returns_none(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        assert evaluate_outcome_expression("accept_count > 0", {}) is None
+
+    def test_conjunct_with_bool_returns_none(self):
+        from autoskillit.core import evaluate_outcome_expression
+
+        fields = {"accept_count": 5, "fix_failures": False}
+        assert evaluate_outcome_expression(
+            "accept_count > 0 and fix_failures == 0", fields
+        ) is None

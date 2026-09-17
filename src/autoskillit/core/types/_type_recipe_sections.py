@@ -439,7 +439,7 @@ def _finding(
     )
 
 
-def _string_list_findings(
+def _collect_string_list_findings(
     section: str,
     value: object,
     *,
@@ -461,7 +461,7 @@ def _string_list_findings(
             )
 
 
-def _recipe_section_findings(
+def _collect_recipe_section_findings(
     payload: Mapping[str, object],
 ) -> Iterator[RecipeSectionValidationFinding]:
     for section, definition in RECIPE_SECTION_REGISTRY.items():
@@ -490,7 +490,7 @@ def _recipe_section_findings(
             if type(value) is not str:
                 yield _finding(section, "invalid_section_type", (section,), "string", value)
             continue
-        yield from _string_list_findings(
+        yield from _collect_string_list_findings(
             section,
             value,
             invalid_type_code="invalid_section_type",
@@ -513,12 +513,12 @@ def validate_recipe_artifact_sections(
         else:
             omitted_count += 1
 
-    for finding in _recipe_section_findings(payload):
+    for finding in _collect_recipe_section_findings(payload):
         record(finding)
 
     step_names = payload.get("post_prune_step_names", _MISSING)
     if step_names is not _MISSING:
-        for finding in _string_list_findings(
+        for finding in _collect_string_list_findings(
             "post_prune_step_names",
             step_names,
             invalid_type_code="invalid_post_prune_step_names",

@@ -43,7 +43,7 @@ class ClosureRow:
     row_hash: str
 
 
-def _validate_report_rows(report: ClosureReport) -> list[str]:
+def _collect_report_rows(report: ClosureReport) -> list[str]:
     errors: list[str] = []
     seen: set[str] = set()
     n = max(len(report.requirement_ids), len(report.rows))
@@ -87,7 +87,7 @@ def _validate_report_rows(report: ClosureReport) -> list[str]:
     return errors
 
 
-def _validate_report_hash_formats(report: ClosureReport) -> list[str]:
+def _collect_report_hash_formats(report: ClosureReport) -> list[str]:
     errors = [
         f"hash field has malformed format: {value!r}"
         for value in (report.request_hash, report.authority_hash, report.report_hash)
@@ -130,13 +130,13 @@ class ClosureReport:
                 f"rows/requirement_ids length mismatch: {len(self.rows)} vs "
                 f"{len(self.requirement_ids)}"
             )
-        errors.extend(_validate_report_rows(self))
+        errors.extend(_collect_report_rows(self))
         expected_report_hash = compute_report_hash(
             self.request_hash, [r.row_hash for r in self.rows], self.verdict
         )
         if self.report_hash != expected_report_hash:
             errors.append("report_hash mismatch (recomputed hash differs)")
-        errors.extend(_validate_report_hash_formats(self))
+        errors.extend(_collect_report_hash_formats(self))
         if self.verdict == "GO":
             blocking = [r for r in self.rows if r.assessment in CLOSURE_ROW_BLOCKING_ASSESSMENTS]
             if blocking:

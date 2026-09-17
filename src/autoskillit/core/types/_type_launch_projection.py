@@ -83,6 +83,25 @@ def _require_payload_mapping(value: object, field_name: str) -> Mapping[str, obj
     return value
 
 
+def _require_payload_sequence(value: object, field_name: str) -> tuple[object, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise LaunchContractError(f"{field_name} must be an array")
+    return tuple(value)
+
+
+def _require_payload_pair(value: object, field_name: str) -> tuple[object, object]:
+    pair = _require_payload_sequence(value, field_name)
+    if len(pair) != 2:
+        raise LaunchContractError(f"{field_name} must contain exactly two items")
+    return pair[0], pair[1]
+
+
+def _require_payload_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise LaunchContractError(f"{field_name} must be an integer")
+    return value
+
+
 def _require_payload_str_mapping(value: object, field_name: str) -> dict[str, str]:
     mapping = _require_payload_mapping(value, field_name)
     if any(not isinstance(key, str) or not isinstance(item, str) for key, item in mapping.items()):

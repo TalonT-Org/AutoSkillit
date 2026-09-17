@@ -250,7 +250,7 @@ class GitHubReviewPostResult:
         return _wire(asdict(self))
 
 
-def _has_complete_finding_accounting(
+def _check_complete_finding_accounting(
     comment_ids: list[object],
     dispositions: list[object],
     count: int,
@@ -356,7 +356,7 @@ def review_receipt_validation_error(
     ):
         return "incomplete_finding_accounting"
 
-    if not _has_complete_finding_accounting(comment_ids, dispositions, count):
+    if not _check_complete_finding_accounting(comment_ids, dispositions, count):
         return "incomplete_finding_accounting"
     return None
 

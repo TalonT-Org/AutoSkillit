@@ -30,7 +30,10 @@ from ._type_launch_projection import (
     _freeze_str_mapping,
     _json_value,
     _payload_value,
+    _require_payload_int,
     _require_payload_mapping,
+    _require_payload_pair,
+    _require_payload_sequence,
     _require_payload_str_mapping,
 )
 
@@ -85,25 +88,6 @@ CANONICAL_LAUNCH_DIGEST_FIELDS = (
     "secret_bindings",
     "quota_identity",
 )
-
-
-def _require_payload_sequence(value: object, field_name: str) -> tuple[object, ...]:
-    if not isinstance(value, (list, tuple)):
-        raise LaunchContractError(f"{field_name} must be an array")
-    return tuple(value)
-
-
-def _require_payload_pair(value: object, field_name: str) -> tuple[object, object]:
-    pair = _require_payload_sequence(value, field_name)
-    if len(pair) != 2:
-        raise LaunchContractError(f"{field_name} must contain exactly two items")
-    return pair[0], pair[1]
-
-
-def _require_payload_int(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise LaunchContractError(f"{field_name} must be an integer")
-    return value
 
 
 def _decode_launch_value_source(value: object, field_name: str) -> LaunchValueSource:

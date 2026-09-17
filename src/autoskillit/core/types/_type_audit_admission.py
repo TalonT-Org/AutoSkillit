@@ -120,10 +120,11 @@ class AuditPreparedEffectDeliveryStatus(StrEnum):
 
 
 def _validate_verdict_and_remediation(
+    *,
     owner: str,
     rows: tuple[AuditAssessmentRow, ...],
-    verdict: object,
-    remediation_ref: object,
+    verdict: AuditVerdict | object,
+    remediation_ref: ArtifactRef | object,
 ) -> None:
     if not isinstance(verdict, AuditVerdict):
         raise ValueError(f"{owner}.verdict must be an AuditVerdict")
@@ -164,7 +165,12 @@ def _validate_semantic_fields(
     requirement_ids = tuple(row.requirement_id for row in rows)
     if len(set(requirement_ids)) != len(requirement_ids):
         raise ValueError(f"{owner}.assessments contain duplicate requirement IDs")
-    _validate_verdict_and_remediation(owner, rows, verdict, remediation_ref)
+    _validate_verdict_and_remediation(
+        owner=owner,
+        rows=rows,
+        verdict=verdict,
+        remediation_ref=remediation_ref,
+    )
 
 
 def _semantic_payload(

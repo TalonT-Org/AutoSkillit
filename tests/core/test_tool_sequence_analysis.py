@@ -148,6 +148,12 @@ class TestBuildDFG:
         assert dfg.bigrams[("B", "B")] == 1
         assert dfg.bigrams[("B", "C")] == 1
 
+    def test_bigrams_do_not_cross_session_boundaries(self) -> None:
+        first = TurnSequence(session_id="s1", recipe_name="", turns=[["A"]])
+        second = TurnSequence(session_id="s2", recipe_name="", turns=[["B"]])
+
+        assert ("A", "B") not in build_dfg([first, second]).bigrams
+
     def test_ngrams_mined_within_single_turn(self) -> None:
         sessions = [self._make_seq([["A", "B", "C"]])]
         dfg = build_dfg(sessions)
@@ -172,6 +178,18 @@ class TestBuildDFG:
         s2 = TurnSequence(session_id="s2", recipe_name="", turns=[["A"], [], ["B"]])
         dfg = build_dfg([s1, s2])
         assert dfg.pair_gaps[("A", "B")] == [2, 2]
+
+    def test_gap_analysis_preserves_pair_gap_order(self) -> None:
+        dfg = build_dfg([self._make_seq([["A"], ["B"], ["C"], ["B"]])])
+
+        assert dfg.pair_gaps[("A", "B")] == [1, 3]
+
+    def test_gap_analysis_excludes_same_tool_and_nonpositive_gaps(self) -> None:
+        dfg = build_dfg([self._make_seq([["A", "B"], ["A", "B"]])])
+
+        assert ("A", "A") not in dfg.pair_gaps
+        assert ("B", "B") not in dfg.pair_gaps
+        assert all(gap > 0 for gaps in dfg.pair_gaps.values() for gap in gaps)
 
     def test_empty_sessions_list_returns_zero_dfg(self) -> None:
         dfg = build_dfg([])

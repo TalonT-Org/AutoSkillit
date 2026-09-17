@@ -197,6 +197,41 @@ def parse_sessions_from_summary_dir(log_root: pathlib.Path) -> Iterator[TurnSequ
         )
 
 
+def _count_flattened_bigrams(
+    turns: Sequence[Sequence[str]], bigrams: Counter[tuple[str, str]]
+) -> None:
+    """Count adjacent tools, including turn boundaries, within one session."""
+    flattened = [tool for turn in turns for tool in turn]
+    bigrams.update(zip(flattened, flattened[1:], strict=False))
+
+
+def _count_within_turn_ngrams(
+    turns: Sequence[Sequence[str]], ngrams: Counter[tuple[str, ...]]
+) -> None:
+    """Count 2-5 tool n-grams without crossing a turn boundary."""
+    for turn in turns:
+        for length in range(2, _MAX_NGRAM_LEN + 1):
+            for start in range(len(turn) - length + 1):
+                ngrams[tuple(turn[start : start + length])] += 1
+
+
+def _append_inter_turn_gaps(
+    turns: Sequence[Sequence[str]], pair_gaps: dict[tuple[str, str], list[int]]
+) -> None:
+    """Append positive, distinct-tool gaps while resetting history per session."""
+    last_seen: dict[str, int] = {}
+    for turn_idx, turn in enumerate(turns):
+        for tool in turn:
+            for prev_tool, prev_turn in last_seen.items():
+                if prev_tool == tool:
+                    continue
+                gap = turn_idx - prev_turn
+                if gap > 0:
+                    pair_gaps.setdefault((prev_tool, tool), []).append(gap)
+        for tool in turn:
+            last_seen[tool] = turn_idx
+
+
 def build_dfg(sessions: Sequence[TurnSequence]) -> DFG:
     """Build bigrams (cross-turn), n-grams (within-turn), and gap analysis."""
     bigrams: Counter[tuple[str, str]] = Counter()
@@ -206,36 +241,9 @@ def build_dfg(sessions: Sequence[TurnSequence]) -> DFG:
 
     for seq in sessions:
         total_turns += len(seq.turns)
-
-        # Bigrams: across the flattened sequence (including cross-turn)
-        flat: list[str] = []
-        for turn in seq.turns:
-            flat.extend(turn)
-        for i in range(len(flat) - 1):
-            bigrams[(flat[i], flat[i + 1])] += 1
-
-        # N-grams: within each turn (length 2-5)
-        for turn in seq.turns:
-            for length in range(2, _MAX_NGRAM_LEN + 1):
-                for start in range(len(turn) - length + 1):
-                    ngrams[tuple(turn[start : start + length])] += 1
-
-        # Gap analysis: for each (A, B) pair, record turn distance
-        # For each turn i, for each tool A in turn i, find the next turn j > i
-        # where B appears, record j - i.
-        last_seen: dict[str, int] = {}
-        for turn_idx, turn in enumerate(seq.turns):
-            for tool in turn:
-                # Check if any prior tool has been waiting for this tool
-                for prev_tool, prev_turn in last_seen.items():
-                    if prev_tool == tool:
-                        continue
-                    pair = (prev_tool, tool)
-                    gap = turn_idx - prev_turn
-                    if gap > 0:
-                        pair_gaps.setdefault(pair, []).append(gap)
-            for tool in turn:
-                last_seen[tool] = turn_idx
+        _count_flattened_bigrams(seq.turns, bigrams)
+        _count_within_turn_ngrams(seq.turns, ngrams)
+        _append_inter_turn_gaps(seq.turns, pair_gaps)
 
     return DFG(bigrams=bigrams, ngrams=ngrams, pair_gaps=pair_gaps, total_turns=total_turns)
 

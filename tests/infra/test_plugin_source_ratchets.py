@@ -290,7 +290,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/_projected_artifact/authority.py",
-        "acquire_launch_binding",
+        "_publish_replacement",
         "shutil.rmtree",
     ): (
         1,

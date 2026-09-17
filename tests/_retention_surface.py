@@ -585,6 +585,10 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_rollback_repair",
     ): _DELEGATED_MUTATION_REASON,
     (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "_safe_incarnations",
+    ): _DELEGATED_MUTATION_REASON,
+    (
         "src/autoskillit/workspace/_installed/_projection_cache.py",
         "ProjectedPluginRetirementOwner.enqueue_retirement",
     ): _DELEGATED_MUTATION_REASON,
@@ -994,65 +998,65 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._installed._projection_cache::prune_stale_projections --
-    f"{_PP}::L699": _retries_after_input_changes(
+    f"{_PP}::L695": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L702": _self_limiting(
+    f"{_PP}::L698": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L711": _retries_after_input_changes(
+    f"{_PP}::L707": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),
     # -- workspace._installed._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L469": _retries_after_input_changes(
+    f"{_PRE}::L465": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L472": _retries_after_input_changes(
+    f"{_PRE}::L468": _retries_after_input_changes(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L474": _self_limiting(
+    f"{_PRE}::L470": _self_limiting(
         "A deterministic residue staging entry delegates to its original-key locked "
         "resume transition."
     ),
-    f"{_PRE}::L482": _retries_after_input_changes(
+    f"{_PRE}::L478": _retries_after_input_changes(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L484": _retries_after_input_changes(
+    f"{_PRE}::L480": _retries_after_input_changes(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRT}::L513": RetentionDecision(
+    f"{_PRT}::L509": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRT}::L515": _retries_after_input_changes(
+    f"{_PRT}::L511": _retries_after_input_changes(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRT}::L521": _self_limiting(
+    f"{_PRT}::L517": _self_limiting(
         "A permanently invalid projection delegates to the terminal quarantine transition "
         "under the held lease and lock."
     ),
-    f"{_PRT}::L528": _retries_after_input_changes(
+    f"{_PRT}::L524": _retries_after_input_changes(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRT}::L531": _retries_after_input_changes(
+    f"{_PRT}::L527": _retries_after_input_changes(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRT}::L533": _self_limiting(
+    f"{_PRT}::L529": _self_limiting(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRT}::L534": _self_limiting(
+    f"{_PRT}::L530": _self_limiting(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRT}::L536": _retries_after_input_changes(
+    f"{_PRT}::L532": _retries_after_input_changes(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),

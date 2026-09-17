@@ -115,6 +115,41 @@ def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
     return count
 
 
+def _prepare_matched_resume(
+    state_path: Path,
+    dispatch_name: str,
+    dispatch: DispatchRecord,
+    *,
+    continue_on_failure: bool,
+) -> tuple[DispatchRecord | None, bool, bool, str | None]:
+    """Apply resume policy to one matched dispatch without rebuilding its lineage."""
+    if dispatch.status == DispatchStatus.UNKNOWN:
+        return (
+            None,
+            False,
+            True,
+            f"Campaign halted: prior dispatch {dispatch_name!r} has an unsupported status",
+        )
+    if dispatch.status == DispatchStatus.SUCCESS:
+        return (dispatch, False, False, None)
+    if dispatch.status in _RETRIABLE_NON_SUCCESS:
+        if not continue_on_failure:
+            return (
+                None,
+                False,
+                True,
+                f"Campaign halted: prior dispatch {dispatch_name!r} is in "
+                f"{dispatch.status.value!r} and continue_on_failure is false",
+            )
+        from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+            reset_blocking_dispatch,
+        )
+
+        reset_blocking_dispatch(state_path, dispatch_name)
+        return (None, True, False, None)
+    return (None, False, False, None)
+
+
 def prepare_resume(
     state_path: Path,
     dispatch_name: str,
@@ -147,7 +182,7 @@ def prepare_resume(
     cap semantics apply regardless of the entry point that triggered the
     transition.
     """
-    from autoskillit.fleet.campaign_state.state import read_state, reset_blocking_dispatch
+    from autoskillit.fleet.campaign_state.state import read_state
 
     if not state_path.exists():
         return None
@@ -182,67 +217,19 @@ def prepare_resume(
 
     prior_session_chain = list(target.session_chain)
     prior_dispatched_session_id = target.dispatched_session_id
-
-    if target.status == DispatchStatus.UNKNOWN:
-        return ResumePreflight(
-            prior_session_chain=prior_session_chain,
-            prior_dispatched_session_id=prior_dispatched_session_id,
-            short_circuit=None,
-            reset_performed=False,
-            halt=True,
-            halted_reason=(
-                f"Campaign halted: prior dispatch {dispatch_name!r} has an unsupported status"
-            ),
-        )
-
-    # Case 1: SUCCESS — short-circuit the resume (caller can reuse prior result).
-    if target.status == DispatchStatus.SUCCESS:
-        return ResumePreflight(
-            prior_session_chain=prior_session_chain,
-            prior_dispatched_session_id=prior_dispatched_session_id,
-            short_circuit=target,
-            reset_performed=False,
-            halt=False,
-            halted_reason=None,
-        )
-
-    # Case 2: Resettable terminal status — auto-reset OR halt.
-    # _RETRIABLE_NON_SUCCESS == {FAILURE, INTERRUPTED, REFUSED} matches the
-    # canonical _RESETTABLE_STATUSES set in fleet._reset without forcing a
-    # module-level import (which would re-trigger the cycle through state.py).
-    if target.status in _RETRIABLE_NON_SUCCESS:
-        if not continue_on_failure:
-            return ResumePreflight(
-                prior_session_chain=prior_session_chain,
-                prior_dispatched_session_id=prior_dispatched_session_id,
-                short_circuit=None,
-                reset_performed=False,
-                halt=True,
-                halted_reason=(
-                    f"Campaign halted: prior dispatch {dispatch_name!r} is in "
-                    f"{target.status.value!r} and continue_on_failure is false"
-                ),
-            )
-        # Auto-reset blocking status → PENDING via the canonical helper.
-        reset_blocking_dispatch(state_path, dispatch_name)
-        return ResumePreflight(
-            prior_session_chain=prior_session_chain,
-            prior_dispatched_session_id=prior_dispatched_session_id,
-            short_circuit=None,
-            reset_performed=True,
-            halt=False,
-            halted_reason=None,
-        )
-
-    # Case 3: PENDING / RESUMABLE / SKIPPED / RELEASED — pass through. Cap
-    # enforcement is delegated to mark_dispatch_running (layer L3).
+    short_circuit, reset_performed, halt, halted_reason = _prepare_matched_resume(
+        state_path,
+        dispatch_name,
+        target,
+        continue_on_failure=continue_on_failure,
+    )
     return ResumePreflight(
         prior_session_chain=prior_session_chain,
         prior_dispatched_session_id=prior_dispatched_session_id,
-        short_circuit=None,
-        reset_performed=False,
-        halt=False,
-        halted_reason=None,
+        short_circuit=short_circuit,
+        reset_performed=reset_performed,
+        halt=halt,
+        halted_reason=halted_reason,
     )
 
 
@@ -413,6 +400,81 @@ def resolve_stale_running(
     return False
 
 
+def _run_locked_recovery_reset_pass(
+    state_path: Path,
+    *,
+    continue_on_failure: bool,
+    reset_on_retry: bool,
+) -> tuple[bool, ResumeDecision | None]:
+    """Recover stale dispatches and apply campaign-level reset policy under one lock."""
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_records import (  # noqa: PLC0415
+        _clear_dispatch_for_retry,
+    )
+
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            return (True, None)
+        if m.state.opaque_dispatches or any(
+            d.status == DispatchStatus.UNKNOWN for d in m.state.dispatches
+        ):
+            return (
+                False,
+                ResumeDecision(
+                    next_dispatch_name="",
+                    completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                ),
+            )
+        for d in m.state.dispatches:
+            if d.status == DispatchStatus.RUNNING:
+                resolve_stale_running(d, m, reason="stale_running_on_resume")
+        for d in m.state.dispatches:
+            if d.status in _RETRIABLE_NON_SUCCESS:
+                if not continue_on_failure:
+                    if reset_on_retry:
+                        _clear_dispatch_for_retry(d)
+                        m.mark_dirty()
+                    else:
+                        return (
+                            False,
+                            ResumeDecision(
+                                next_dispatch_name="",
+                                completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                            ),
+                        )
+                elif reset_on_retry and d.status != DispatchStatus.FAILURE:
+                    # INTERRUPTED / REFUSED reset on reset_on_retry=True.
+                    # FAILURE stays as FAILURE (continue_on_failure=True semantics).
+                    _clear_dispatch_for_retry(d)
+                    m.mark_dirty()
+    return (False, None)
+
+
+def _escalate_capped_resumable_dispatch(state_path: Path, dispatch: DispatchRecord) -> bool:
+    """Persist the campaign-level cap conversion in its own fresh transaction."""
+    if (
+        _count_consecutive_resumable_timeouts(dispatch.attempt_history)
+        < MAX_CONSECUTIVE_RESUME_ATTEMPTS
+    ):
+        return False
+
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
+
+    with CampaignStateMutator(state_path) as mutator:
+        if mutator.state is not None:
+            for persisted in mutator.state.dispatches:
+                if persisted.name == dispatch.name:
+                    persisted.status = DispatchStatus.FAILURE
+                    persisted.reason = (
+                        dispatch.attempt_history[-1].get("reason", FleetErrorCode.FLEET_L3_TIMEOUT)
+                        if dispatch.attempt_history
+                        else FleetErrorCode.FLEET_L3_TIMEOUT
+                    )
+                    mutator.mark_dirty()
+                    break
+    return True
+
+
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
@@ -438,14 +500,6 @@ def resume_campaign_from_state(
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
     """
-    from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
-        CampaignStateMutator,
-        read_state,
-    )
-    from autoskillit.fleet.campaign_state.state_records import (
-        _clear_dispatch_for_retry,  # noqa: PLC0415
-    )
-
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
     # mutator) before the composition pass re-reads state, so the compose pass
@@ -453,37 +507,19 @@ def resume_campaign_from_state(
     # reset semantics for continue_on_failure=True differ from the campaign-level
     # requirements (it would reset FAILURE unconditionally on continue_on_failure
     # =True).
-    with CampaignStateMutator(state_path) as m:
-        if m.state is None:
-            return None
-        if m.state.opaque_dispatches or any(
-            d.status == DispatchStatus.UNKNOWN for d in m.state.dispatches
-        ):
-            return ResumeDecision(
-                next_dispatch_name="",
-                completed_dispatches_block=FLEET_HALTED_SENTINEL,
-            )
-        for d in m.state.dispatches:
-            if d.status == DispatchStatus.RUNNING:
-                resolve_stale_running(d, m, reason="stale_running_on_resume")
-        for d in m.state.dispatches:
-            if d.status in _RETRIABLE_NON_SUCCESS:
-                if not continue_on_failure:
-                    if reset_on_retry:
-                        _clear_dispatch_for_retry(d)
-                        m.mark_dirty()
-                    else:
-                        return ResumeDecision(
-                            next_dispatch_name="",
-                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                        )
-                elif reset_on_retry and d.status != DispatchStatus.FAILURE:
-                    # INTERRUPTED / REFUSED reset on reset_on_retry=True.
-                    # FAILURE stays as FAILURE (continue_on_failure=True semantics).
-                    _clear_dispatch_for_retry(d)
-                    m.mark_dirty()
+    state_missing, halted = _run_locked_recovery_reset_pass(
+        state_path,
+        continue_on_failure=continue_on_failure,
+        reset_on_retry=reset_on_retry,
+    )
+    if state_missing:
+        return None
+    if halted is not None:
+        return halted
 
     # Re-open state via read_state for the composition pass; return None on fail-open.
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+
     state = read_state(state_path)
     if state is None:
         return None
@@ -526,25 +562,7 @@ def resume_campaign_from_state(
             completed_lines.append(f"- {d.name}: {d.status}")
             continue
         if d.status == DispatchStatus.RESUMABLE and not next_name:
-            # Defense-in-depth cap-conversion block (alongside L3 cap in
-            # mark_dispatch_running). Mutates via a fresh CampaignStateMutator
-            # to persist.
-            timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
-            if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
-                with CampaignStateMutator(state_path) as cap_m:
-                    if cap_m.state is not None:
-                        for x in cap_m.state.dispatches:
-                            if x.name == d.name:
-                                x.status = DispatchStatus.FAILURE
-                                x.reason = (
-                                    d.attempt_history[-1].get(
-                                        "reason", FleetErrorCode.FLEET_L3_TIMEOUT
-                                    )
-                                    if d.attempt_history
-                                    else FleetErrorCode.FLEET_L3_TIMEOUT
-                                )
-                                cap_m.mark_dirty()
-                                break
+            if _escalate_capped_resumable_dispatch(state_path, d):
                 return ResumeDecision(
                     next_dispatch_name="",
                     completed_dispatches_block=FLEET_HALTED_SENTINEL,
@@ -573,6 +591,45 @@ def resume_campaign_from_state(
     )
 
 
+def _read_campaign_state_for_issue(state_path: Path) -> CampaignState | None:
+    """Read one campaign state while retaining lookup's fail-open diagnostics."""
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+
+    try:
+        return read_state(state_path)
+    except Exception:
+        logger.warning("Failed to read campaign state from %s", state_path, exc_info=True)
+        return None
+
+
+def _eligible_dispatch_matches_issue(dispatch: DispatchRecord, issue_url: str) -> bool:
+    """Match an eligible dispatch directly before consulting its sidecar."""
+    if dispatch.issue_url and dispatch.issue_url == issue_url:
+        return True
+    if dispatch.sidecar_path is None:
+        return False
+
+    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+
+    entries = read_sidecar_from_path(Path(dispatch.sidecar_path)).entries
+    return any(entry.issue_url == issue_url for entry in entries)
+
+
+def _is_stale_pending_issue_match(dispatch: DispatchRecord, issue_url: str) -> bool:
+    """Return whether a pending direct match has aged past the retry quiet period."""
+    if (
+        dispatch.status != DispatchStatus.PENDING
+        or not dispatch.issue_url
+        or dispatch.issue_url != issue_url
+        or dispatch.labels_cleaned
+        or dispatch.dispatched_session_id
+        or not dispatch.attempt_history
+    ):
+        return False
+    ended_at = dispatch.attempt_history[-1].get("ended_at", 0.0)
+    return not ended_at or (time.time() - ended_at) > _PENDING_QUIET_PERIOD_SECONDS
+
+
 def find_dispatch_for_issue(
     issue_url: str,
     campaign_state_paths: list[Path],
@@ -588,70 +645,32 @@ def find_dispatch_for_issue(
     Returns the first matching DispatchRecord, else None. Reads are filesystem-only.
     Never raises.
     """
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-
     terminal_match: DispatchRecord | None = None
     for state_path in campaign_state_paths:
-        try:
-            state = read_state(state_path)
-        except Exception:
-            logger.warning("Failed to read campaign state from %s", state_path, exc_info=True)
-            continue
+        state = _read_campaign_state_for_issue(state_path)
         if state is None:
             continue
         for d in state.dispatches:
-            if d.issue_url and d.issue_url == issue_url:
-                if d.status == DispatchStatus.RUNNING:
-                    return d
-                elif (
-                    terminal_match is None
-                    and d.status in TERMINAL_UNCLEANED_STATUSES
-                    and not d.labels_cleaned
-                ):
-                    terminal_match = d
-                continue
-
-            if d.sidecar_path is None:
-                continue
             if d.status == DispatchStatus.RUNNING:
-                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
-                if any(e.issue_url == issue_url for e in entries):
+                if _eligible_dispatch_matches_issue(d, issue_url):
                     return d
             elif (
                 terminal_match is None
                 and d.status in TERMINAL_UNCLEANED_STATUSES
                 and not d.labels_cleaned
+                and _eligible_dispatch_matches_issue(d, issue_url)
             ):
-                entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
-                if any(e.issue_url == issue_url for e in entries):
-                    terminal_match = d
+                terminal_match = d
 
     if terminal_match is not None:
         return terminal_match
 
     for state_path in campaign_state_paths:
-        try:
-            state = read_state(state_path)
-        except Exception:
-            logger.warning("Failed to read campaign state from %s", state_path, exc_info=True)
-            continue
+        state = _read_campaign_state_for_issue(state_path)
         if state is None:
             continue
         for d in state.dispatches:
-            if d.status != DispatchStatus.PENDING:
-                continue
-            if not d.issue_url or d.issue_url != issue_url:
-                continue
-            if d.labels_cleaned:
-                continue
-            if d.dispatched_session_id:
-                continue
-            if not d.attempt_history:
-                continue
-            last_attempt = d.attempt_history[-1]
-            ended_at = last_attempt.get("ended_at", 0.0)
-            if not ended_at or (time.time() - ended_at) > _PENDING_QUIET_PERIOD_SECONDS:
+            if _is_stale_pending_issue_match(d, issue_url):
                 return d
     return None
 

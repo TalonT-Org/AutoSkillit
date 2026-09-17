@@ -416,7 +416,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/session/_session_cook.py", "cook", "pass_fds"): (
+    ("cli/session/_session_cook.py", "_run_managed", "pass_fds"): (
         1,
         "Cook passes the stable merge of command, home, and attempt descriptors.",
     ),

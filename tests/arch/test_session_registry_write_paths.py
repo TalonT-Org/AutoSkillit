@@ -38,7 +38,7 @@ _EXPECTED_REGISTRY_WRITES = (
     ),
     (
         "cli/session/_session_cook.py",
-        "cook",
+        "cook._run_managed",
         "write_registry_entry",
     ),
     (
@@ -246,7 +246,7 @@ def _destination(
         return "registry"
     if isinstance(expression, ast.Name):
         if expression.id in seen_names:
-            return "dynamic"
+            return "other"
         assigned = assignments.get(expression.id)
         if assigned is not None:
             return _destination(assigned, assignments, seen_names | {expression.id})

@@ -1718,7 +1718,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
     launch_kwargs: dict[str, object],
 ) -> None:
     """A failed managed owner bind reaches the runner so it can reap the child."""
-    from autoskillit.core import ManagedSessionHome, ValidatedAddDir
+    from autoskillit.core import LAUNCH_ID_ENV_VAR, ManagedSessionHome, ValidatedAddDir
 
     backend, _captured_kwargs = _make_capturing_backend()
     runner_cleanup: list[str] = []
@@ -1757,6 +1757,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
             retained_projection_binding=MagicMock(inherited_fds=()),
             startup_trace=MagicMock(),
             attempt=1,
+            extra_env={LAUNCH_ID_ENV_VAR: "launch-id"},
         )
 
     assert runner_cleanup == ["reaped"]

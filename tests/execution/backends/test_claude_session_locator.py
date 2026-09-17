@@ -144,10 +144,16 @@ class TestClaudeSessionLocator:
     ) -> None:
         project = tmp_path / "project"
         project.mkdir()
-        write_registry_entry(project, "launch-one", "cook", None)
-        write_registry_entry(project, "launch-two", "cook", None)
-        bridge_claude_session_id(project, "launch-one", "claude-duplicate")
-        bridge_claude_session_id(project, "launch-two", "claude-duplicate")
+        registry_path(project).parent.mkdir(parents=True)
+        registry_path(project).write_text(
+            json.dumps(
+                {
+                    "launch-one": {"claude_session_id": "claude-duplicate"},
+                    "launch-two": {"claude_session_id": "claude-duplicate"},
+                }
+            ),
+            encoding="utf-8",
+        )
         registry_bytes = registry_path(project).read_bytes()
         index_dir = tmp_path / "claude-project"
         index_dir.mkdir()

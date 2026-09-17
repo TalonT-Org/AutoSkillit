@@ -147,8 +147,6 @@ def test_guard_main_reports_bridge_conflict_to_stderr(
 
     project_dir = tmp_path / "project"
     _write_registry(project_dir, {"requested": {"claude_session_id": "old-session"}})
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", "requested")
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
     monkeypatch.setattr(
@@ -199,6 +197,7 @@ def _start_lock_holder(lock_path: Path) -> subprocess.Popen[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=production_interpreter_env(),
     )
     assert holder.stdout is not None
     assert holder.stdout.readline().strip() == "locked"

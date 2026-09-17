@@ -62,7 +62,7 @@ FAIL_CLOSED_GUARDS = (
     ),
     GuardCoverage(
         "src/autoskillit/cli/session/_session_cook.py",
-        "cook",
+        "_run_managed",
         "interactive executable changed after capability probing",
         "tests/cli/test_cook_cold_launch_medium.py",
         "test_cook_rejects_executable_drift_before_spawn",

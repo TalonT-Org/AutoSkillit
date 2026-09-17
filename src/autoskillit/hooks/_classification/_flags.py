@@ -299,6 +299,8 @@ def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
     provenance = segment.provenance
     if provenance is None or any(provenance.redirect_syntax):
         return False
+    if provenance.redirect_syntax is None or provenance.argv_tokens is None:
+        return False
     return not any(
         not token.fully_single_quoted and ("$" in token.raw_span or "`" in token.raw_span)
         for token in provenance.argv_tokens

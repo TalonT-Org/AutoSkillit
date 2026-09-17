@@ -141,6 +141,14 @@ class EvaluatedSegment:
     tokens: list[str]
     provenance: _CommandSegment | None
 
+    def __post_init__(self) -> None:
+        if not self.tokens:
+            raise ValueError("EvaluatedSegment requires a non-empty token list")
+        if self.provenance is not None and self.provenance.tokens != self.tokens:
+            raise ValueError(
+                "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
+            )
+
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
     """Replace each heredoc with a placeholder, returning its bound literal.

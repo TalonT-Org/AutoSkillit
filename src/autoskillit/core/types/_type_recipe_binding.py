@@ -500,6 +500,106 @@ class RecipeStepGuard:
             raise ValueError("RecipeStepGuard.context_name must be an identifier")
 
 
+def _validate_projection_guards(
+    guards: tuple[RecipeStepGuard, ...],
+    ordered_step_names: tuple[str, ...],
+) -> None:
+    if any(not isinstance(guard, RecipeStepGuard) for guard in guards):
+        raise TypeError(
+            "FinalizedRecipeProjection.ordered_step_guards must contain RecipeStepGuard entries"
+        )
+    if any(guard.step_name not in ordered_step_names for guard in guards):
+        raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
+    if any(
+        guard.bypass_target not in ordered_step_names
+        and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
+        for guard in guards
+    ):
+        raise ValueError(
+            "FinalizedRecipeProjection guard bypasses must name finalized steps "
+            "or terminal targets"
+        )
+    if len({guard.step_name for guard in guards}) != len(guards):
+        raise ValueError("FinalizedRecipeProjection guards must have unique step names")
+
+
+def _validate_projection_flow(
+    edges: tuple[RecipeFlowEdge, ...],
+    entrypoint: str,
+    ordered_step_names: tuple[str, ...],
+    step_names: frozenset[str],
+) -> None:
+    if any(not isinstance(edge, RecipeFlowEdge) for edge in edges):
+        raise TypeError(
+            "FinalizedRecipeProjection.ordered_flow_edges must contain RecipeFlowEdge entries"
+        )
+    if any(edge.source not in step_names for edge in edges):
+        raise ValueError(
+            "FinalizedRecipeProjection flow-edge sources must be finalized step names"
+        )
+    if any(
+        edge.target not in step_names and edge.target not in RECIPE_TERMINAL_TARGETS
+        for edge in edges
+    ):
+        raise ValueError(
+            "FinalizedRecipeProjection flow-edge targets must be finalized step names "
+            "or terminal targets"
+        )
+    reachable = {entrypoint}
+    pending = [entrypoint]
+    while pending:
+        source = pending.pop()
+        for edge in edges:
+            if edge.source != source or edge.target not in step_names or edge.target in reachable:
+                continue
+            reachable.add(edge.target)
+            pending.append(edge.target)
+    unreachable = tuple(name for name in ordered_step_names if name not in reachable)
+    if unreachable:
+        raise ValueError(
+            "FinalizedRecipeProjection finalized steps must be entrypoint-reachable: "
+            f"{unreachable!r}"
+        )
+
+
+def _validate_projection_segments(
+    segments: tuple[FinalizedRecipeSegment, ...],
+    ordered_step_names: tuple[str, ...],
+    step_names: frozenset[str],
+) -> None:
+    if any(not isinstance(segment, FinalizedRecipeSegment) for segment in segments):
+        raise TypeError(
+            "FinalizedRecipeProjection.delivery_segments must contain "
+            "FinalizedRecipeSegment entries"
+        )
+    if not segments:
+        return
+    segment_names = tuple(segment.name for segment in segments)
+    if len(segment_names) != len(set(segment_names)):
+        raise ValueError("FinalizedRecipeProjection delivery segment names must be unique")
+    flattened_steps = tuple(
+        step_name for segment in segments for step_name in segment.ordered_step_names
+    )
+    if flattened_steps != ordered_step_names:
+        raise ValueError(
+            "FinalizedRecipeProjection delivery segments must partition ordered steps"
+        )
+    segment_index = {
+        step_name: index
+        for index, segment in enumerate(segments)
+        for step_name in segment.ordered_step_names
+    }
+    for target_index, segment in enumerate(segments):
+        if any(source not in step_names for source in segment.checkpoint_sources):
+            raise ValueError(
+                "FinalizedRecipeProjection checkpoint sources must be finalized steps"
+            )
+        if any(segment_index[source] >= target_index for source in segment.checkpoint_sources):
+            raise ValueError(
+                "FinalizedRecipeProjection checkpoint sources must precede their target"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class FinalizedRecipeProjection:
     """Immutable execution projection of one fully finalized recipe."""
@@ -549,106 +649,24 @@ class FinalizedRecipeProjection:
             )
 
         ordered_step_guards = tuple(self.ordered_step_guards)
-        if any(not isinstance(guard, RecipeStepGuard) for guard in ordered_step_guards):
-            raise TypeError(
-                "FinalizedRecipeProjection.ordered_step_guards must contain "
-                "RecipeStepGuard entries"
-            )
-        if any(guard.step_name not in ordered_step_names for guard in ordered_step_guards):
-            raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
-        if any(
-            guard.bypass_target not in ordered_step_names
-            and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
-            for guard in ordered_step_guards
-        ):
-            raise ValueError(
-                "FinalizedRecipeProjection guard bypasses must name finalized steps "
-                "or terminal targets"
-            )
-        if len({guard.step_name for guard in ordered_step_guards}) != len(ordered_step_guards):
-            raise ValueError("FinalizedRecipeProjection guards must have unique step names")
-        object.__setattr__(self, "ordered_step_guards", ordered_step_guards)
-
         ordered_flow_edges = tuple(self.ordered_flow_edges)
-        if any(not isinstance(edge, RecipeFlowEdge) for edge in ordered_flow_edges):
-            raise TypeError(
-                "FinalizedRecipeProjection.ordered_flow_edges must contain RecipeFlowEdge entries"
-            )
         step_names = frozenset(ordered_step_names)
-        if any(edge.source not in step_names for edge in ordered_flow_edges):
-            raise ValueError(
-                "FinalizedRecipeProjection flow-edge sources must be finalized step names"
-            )
-        if any(
-            edge.target not in step_names and edge.target not in RECIPE_TERMINAL_TARGETS
-            for edge in ordered_flow_edges
-        ):
-            raise ValueError(
-                "FinalizedRecipeProjection flow-edge targets must be finalized step names "
-                "or terminal targets"
-            )
-
-        reachable = {self.entrypoint}
-        pending = [self.entrypoint]
-        while pending:
-            source = pending.pop()
-            for edge in ordered_flow_edges:
-                if (
-                    edge.source != source
-                    or edge.target not in step_names
-                    or edge.target in reachable
-                ):
-                    continue
-                reachable.add(edge.target)
-                pending.append(edge.target)
-        unreachable = tuple(name for name in ordered_step_names if name not in reachable)
-        if unreachable:
-            raise ValueError(
-                "FinalizedRecipeProjection finalized steps must be entrypoint-reachable: "
-                f"{unreachable!r}"
-            )
-
         delivery_segments = tuple(self.delivery_segments)
-        if any(not isinstance(segment, FinalizedRecipeSegment) for segment in delivery_segments):
-            raise TypeError(
-                "FinalizedRecipeProjection.delivery_segments must contain "
-                "FinalizedRecipeSegment entries"
-            )
-        if delivery_segments:
-            segment_names = tuple(segment.name for segment in delivery_segments)
-            if len(segment_names) != len(set(segment_names)):
-                raise ValueError("FinalizedRecipeProjection delivery segment names must be unique")
-            flattened_steps = tuple(
-                step_name
-                for segment in delivery_segments
-                for step_name in segment.ordered_step_names
-            )
-            if flattened_steps != ordered_step_names:
-                raise ValueError(
-                    "FinalizedRecipeProjection delivery segments must partition ordered steps"
-                )
-            segment_index = {
-                step_name: index
-                for index, segment in enumerate(delivery_segments)
-                for step_name in segment.ordered_step_names
-            }
-            for target_index, segment in enumerate(delivery_segments):
-                if any(source not in step_names for source in segment.checkpoint_sources):
-                    raise ValueError(
-                        "FinalizedRecipeProjection checkpoint sources must be finalized steps"
-                    )
-                if any(
-                    segment_index[source] >= target_index for source in segment.checkpoint_sources
-                ):
-                    raise ValueError(
-                        "FinalizedRecipeProjection checkpoint sources must precede their target"
-                    )
+        _validate_projection_guards(ordered_step_guards, ordered_step_names)
+        _validate_projection_flow(
+            ordered_flow_edges,
+            self.entrypoint,
+            ordered_step_names,
+            step_names,
+        )
+        _validate_projection_segments(delivery_segments, ordered_step_names, step_names)
 
         object.__setattr__(self, "ordered_step_names", ordered_step_names)
         object.__setattr__(self, "ordered_steps", ordered_steps)
         object.__setattr__(self, "ingredient_names", ingredient_names)
         object.__setattr__(self, "ordered_flow_edges", ordered_flow_edges)
         object.__setattr__(self, "delivery_segments", delivery_segments)
+        object.__setattr__(self, "ordered_step_guards", ordered_step_guards)
 
     def for_step(self, name: str) -> FinalizedRecipeStep | None:
         """Return the finalized record for ``name`` when it exists."""

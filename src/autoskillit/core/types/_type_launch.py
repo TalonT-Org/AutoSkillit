@@ -30,6 +30,11 @@ from ._type_launch_projection import (
     _freeze_str_mapping,
     _json_value,
     _payload_value,
+    _require_payload_int,
+    _require_payload_mapping,
+    _require_payload_pair,
+    _require_payload_sequence,
+    _require_payload_str_mapping,
 )
 
 __all__ = [
@@ -83,6 +88,14 @@ CANONICAL_LAUNCH_DIGEST_FIELDS = (
     "secret_bindings",
     "quota_identity",
 )
+
+
+def _decode_launch_value_source(value: object, field_name: str) -> LaunchValueSource:
+    mapping = _require_payload_mapping(value, field_name)
+    return LaunchValueSource(
+        kind=LaunchValueSourceKind(str(mapping["kind"])),
+        key_path=str(mapping["key_path"]),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,43 +492,6 @@ class ResolvedLaunchContract:
     ) -> ResolvedLaunchContract:
         """Rehydrate one typed contract and prove its complete canonical identity."""
 
-        def require_mapping(value: object, field_name: str) -> Mapping[str, object]:
-            if not isinstance(value, Mapping):
-                raise LaunchContractError(f"{field_name} must be an object")
-            return value
-
-        def require_str_mapping(value: object, field_name: str) -> dict[str, str]:
-            mapping = require_mapping(value, field_name)
-            if any(
-                not isinstance(key, str) or not isinstance(item, str)
-                for key, item in mapping.items()
-            ):
-                raise LaunchContractError(f"{field_name} must map strings to strings")
-            return {str(key): str(item) for key, item in mapping.items()}
-
-        def require_sequence(value: object, field_name: str) -> tuple[object, ...]:
-            if not isinstance(value, (list, tuple)):
-                raise LaunchContractError(f"{field_name} must be an array")
-            return tuple(value)
-
-        def require_pair(value: object, field_name: str) -> tuple[object, object]:
-            pair = require_sequence(value, field_name)
-            if len(pair) != 2:
-                raise LaunchContractError(f"{field_name} must contain exactly two items")
-            return pair[0], pair[1]
-
-        def require_int(value: object, field_name: str) -> int:
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise LaunchContractError(f"{field_name} must be an integer")
-            return value
-
-        def source(value: object, field_name: str) -> LaunchValueSource:
-            mapping = require_mapping(value, field_name)
-            return LaunchValueSource(
-                kind=LaunchValueSourceKind(str(mapping["kind"])),
-                key_path=str(mapping["key_path"]),
-            )
-
         try:
             field_order = tuple(payload)
             if field_order not in {
@@ -526,54 +502,60 @@ class ResolvedLaunchContract:
                     "launch contract fields do not match the canonical schema"
                 )
             if (
-                require_int(payload["schema_version"], "schema version")
+                _require_payload_int(payload["schema_version"], "schema version")
                 != LAUNCH_CONTRACT_SCHEMA_VERSION
             ):
                 raise LaunchContractError("unsupported launch contract schema version")
 
-            authority_payload = require_mapping(payload["backend_authority"], "backend authority")
+            authority_payload = _require_payload_mapping(
+                payload["backend_authority"], "backend authority"
+            )
             authority = BackendAuthority(
                 backend=str(authority_payload["backend"]),
                 kind=BackendAuthorityKind(str(authority_payload["kind"])),
                 tier=BackendAuthorityTier[str(authority_payload["tier"]).upper()],
                 key_path=str(authority_payload["key_path"]),
             )
-            models = require_mapping(payload["models"], "models")
-            command = require_mapping(payload["command"], "command")
+            models = _require_payload_mapping(payload["models"], "models")
+            command = _require_payload_mapping(payload["command"], "command")
             origin_payload = command.get("origin")
             origin: CmdOrigin | None = None
             if origin_payload is not None:
-                origin_mapping = require_mapping(origin_payload, "command origin")
+                origin_mapping = _require_payload_mapping(origin_payload, "command origin")
                 origin = CmdOrigin(
                     binary=str(origin_mapping["binary"]),
                     mode_flags=tuple(
                         str(item)
-                        for item in require_sequence(
+                        for item in _require_payload_sequence(
                             origin_mapping["mode_flags"], "command origin mode flags"
                         )
                     ),
                     kv_flags=tuple(
                         (str(key), str(value))
-                        for item in require_sequence(
+                        for item in _require_payload_sequence(
                             origin_mapping["kv_flags"], "command origin key/value flags"
                         )
-                        for key, value in (require_pair(item, "command origin key/value flag"),)
+                        for key, value in (
+                            _require_payload_pair(item, "command origin key/value flag"),
+                        )
                     ),
                     positional=tuple(
                         (PositionalRole(str(role)), str(value))
-                        for item in require_sequence(
+                        for item in _require_payload_sequence(
                             origin_mapping["positional"], "command origin positional arguments"
                         )
                         for role, value in (
-                            require_pair(item, "command origin positional argument"),
+                            _require_payload_pair(item, "command origin positional argument"),
                         )
                     ),
                     variadic_pairs=tuple(
                         (str(flag), str(value))
-                        for item in require_sequence(
+                        for item in _require_payload_sequence(
                             origin_mapping["variadic_pairs"], "command origin variadic pairs"
                         )
-                        for flag, value in (require_pair(item, "command origin variadic pair"),)
+                        for flag, value in (
+                            _require_payload_pair(item, "command origin variadic pair"),
+                        )
                     ),
                 )
             fallback_routes = tuple(
@@ -582,10 +564,12 @@ class ResolvedLaunchContract:
                     provider=str(route["provider"]),
                     profile=str(route["profile"]),
                     model=str(route["model"]),
-                    source=source(route["source"], "fallback route source"),
+                    source=_decode_launch_value_source(route["source"], "fallback route source"),
                 )
-                for item in require_sequence(payload["fallback_routes"], "fallback routes")
-                for route in (require_mapping(item, "fallback route"),)
+                for item in _require_payload_sequence(
+                    payload["fallback_routes"], "fallback routes"
+                )
+                for route in (_require_payload_mapping(item, "fallback route"),)
             )
             secret_bindings = tuple(
                 SecretEnvironmentBinding(
@@ -593,11 +577,13 @@ class ResolvedLaunchContract:
                     profile_identity=str(binding["profile_identity"]),
                     value_sha256=str(binding["value_sha256"]),
                 )
-                for item in require_sequence(payload["secret_bindings"], "secret bindings")
-                for binding in (require_mapping(item, "secret binding"),)
+                for item in _require_payload_sequence(
+                    payload["secret_bindings"], "secret bindings"
+                )
+                for binding in (_require_payload_mapping(item, "secret binding"),)
             )
             cwd = str(payload["cwd"])
-            nonsecret_env = require_str_mapping(payload["nonsecret_env"], "nonsecret env")
+            nonsecret_env = _require_payload_str_mapping(payload["nonsecret_env"], "nonsecret env")
             contract = cls(
                 surface=LaunchSurface(str(payload["surface"])),
                 selected_backend=str(payload["selected_backend"]),
@@ -606,19 +592,25 @@ class ResolvedLaunchContract:
                 provider=str(payload["provider"]),
                 profile=str(payload["profile"]),
                 normalized_endpoint=str(payload["normalized_endpoint"]),
-                provider_source=source(payload["provider_source"], "provider source"),
-                profile_source=source(payload["profile_source"], "profile source"),
-                endpoint_source=source(payload["endpoint_source"], "endpoint source"),
+                provider_source=_decode_launch_value_source(
+                    payload["provider_source"], "provider source"
+                ),
+                profile_source=_decode_launch_value_source(
+                    payload["profile_source"], "profile source"
+                ),
+                endpoint_source=_decode_launch_value_source(
+                    payload["endpoint_source"], "endpoint source"
+                ),
                 requested_model=(
                     str(models["requested"]) if models["requested"] is not None else None
                 ),
-                requested_model_source=source(
+                requested_model_source=_decode_launch_value_source(
                     models["requested_source"], "requested model source"
                 ),
                 configured_model=(
                     str(models["configured"]) if models["configured"] is not None else None
                 ),
-                configured_model_source=source(
+                configured_model_source=_decode_launch_value_source(
                     models["configured_source"], "configured model source"
                 ),
                 physical_model=(
@@ -626,17 +618,19 @@ class ResolvedLaunchContract:
                     if models["adapter_physical"] is not None
                     else None
                 ),
-                physical_model_source=source(
+                physical_model_source=_decode_launch_value_source(
                     models["adapter_physical_source"], "physical model source"
                 ),
                 effort=(str(payload["effort"]) if payload["effort"] is not None else None),
-                effort_source=source(payload["effort_source"], "effort source"),
+                effort_source=_decode_launch_value_source(
+                    payload["effort_source"], "effort source"
+                ),
                 semantic_digest=str(payload["semantic_digest"]),
                 adapter_digest=str(payload["adapter_digest"]),
                 projection_digest=str(payload["projection_digest"]),
                 skill_projection_binding=(
                     SkillProjectionBinding.from_payload(
-                        require_mapping(
+                        _require_payload_mapping(
                             payload["skill_projection_binding"],
                             "skill projection binding",
                         )
@@ -648,12 +642,13 @@ class ResolvedLaunchContract:
                 cwd=cwd,
                 cmd_spec=CmdSpec(
                     cmd=tuple(
-                        str(item) for item in require_sequence(command["argv"], "command argv")
+                        str(item)
+                        for item in _require_payload_sequence(command["argv"], "command argv")
                     ),
                     env=nonsecret_env,
                     cwd=cwd,
                     origin=origin,
-                    process_idle_timeout_ms=require_int(
+                    process_idle_timeout_ms=_require_payload_int(
                         command["process_idle_timeout_ms"],
                         "command process idle timeout",
                     ),
@@ -663,27 +658,35 @@ class ResolvedLaunchContract:
                 network_access=bool(command["network_access"]),
                 pty_required=bool(command["pty_required"]),
                 inherited_fd_policy=str(command["fd_policy"]),
-                inherited_fd_count=require_int(
+                inherited_fd_count=_require_payload_int(
                     command["inherited_fd_count"], "command inherited fd count"
                 ),
-                executable_identity=require_str_mapping(
+                executable_identity=_require_payload_str_mapping(
                     payload["executable_identity"], "executable identity"
                 ),
-                plugin_identity=require_str_mapping(payload["plugin_identity"], "plugin identity"),
-                branch_identity=require_str_mapping(payload["branch_identity"], "branch identity"),
-                worktree_identity=require_str_mapping(
+                plugin_identity=_require_payload_str_mapping(
+                    payload["plugin_identity"], "plugin identity"
+                ),
+                branch_identity=_require_payload_str_mapping(
+                    payload["branch_identity"], "branch identity"
+                ),
+                worktree_identity=_require_payload_str_mapping(
                     payload["worktree_identity"], "worktree identity"
                 ),
-                projection_identity=require_str_mapping(
+                projection_identity=_require_payload_str_mapping(
                     payload["projection_identity"], "projection identity"
                 ),
                 artifact_paths=tuple(
                     str(item)
-                    for item in require_sequence(payload["artifact_paths"], "artifact paths")
+                    for item in _require_payload_sequence(
+                        payload["artifact_paths"], "artifact paths"
+                    )
                 ),
                 nonsecret_env=nonsecret_env,
                 secret_bindings=secret_bindings,
-                quota_identity=require_str_mapping(payload["quota_identity"], "quota identity"),
+                quota_identity=_require_payload_str_mapping(
+                    payload["quota_identity"], "quota identity"
+                ),
             )
         except LaunchContractError:
             raise

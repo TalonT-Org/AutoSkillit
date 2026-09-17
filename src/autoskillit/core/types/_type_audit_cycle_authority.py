@@ -175,6 +175,40 @@ def compute_findings_digest(rows: tuple[AuditAssessmentRow, ...]) -> str:
     )
 
 
+def _validate_authority_artifact_refs(authority: AuditCycleAuthority) -> None:
+    if not authority.audited_plan_refs:
+        raise ValueError("AuditCycleAuthority.audited_plan_refs must be non-empty")
+    if len({ref.content_digest for ref in authority.audited_plan_refs}) != len(
+        authority.audited_plan_refs
+    ):
+        raise ValueError("AuditCycleAuthority.audited_plan_refs contain duplicate content")
+    if not isinstance(authority.inventory_ref, ArtifactRef):
+        raise ValueError("AuditCycleAuthority.inventory_ref must be an ArtifactRef")
+    if authority.remediation_ref is not None and not isinstance(
+        authority.remediation_ref, ArtifactRef
+    ):
+        raise ValueError("AuditCycleAuthority.remediation_ref must be an ArtifactRef")
+
+
+def _validate_authority_assessments(authority: AuditCycleAuthority) -> None:
+    ids = tuple(row.requirement_id for row in authority.assessments)
+    if len(set(ids)) != len(ids):
+        raise ValueError("AuditCycleAuthority.assessments contain duplicate requirement IDs")
+    _require_digest("AuditCycleAuthority.findings_digest", authority.findings_digest)
+    if authority.findings_digest != compute_findings_digest(authority.assessments):
+        raise ValueError("AuditCycleAuthority.findings_digest does not match assessments")
+    if not isinstance(authority.verdict, AuditVerdict):
+        raise ValueError("AuditCycleAuthority.verdict must be an AuditVerdict")
+    if authority.verdict is AuditVerdict.NO_GO and authority.remediation_ref is None:
+        raise ValueError("NO GO authority requires remediation_ref")
+    if authority.verdict is AuditVerdict.GO and authority.remediation_ref is not None:
+        raise ValueError("GO authority cannot contain remediation_ref")
+    if authority.verdict is AuditVerdict.GO and any(
+        row.assessment.blocking for row in authority.assessments
+    ):
+        raise ValueError("GO authority cannot contain blocking assessments")
+
+
 @dataclass(frozen=True, slots=True)
 class AuditCycleAuthority:
     schema_version: int
@@ -229,32 +263,8 @@ class AuditCycleAuthority:
                 "AuditCycleAuthority.parent_authority_digest",
                 self.parent_authority_digest,
             )
-        if not self.audited_plan_refs:
-            raise ValueError("AuditCycleAuthority.audited_plan_refs must be non-empty")
-        if len({ref.content_digest for ref in self.audited_plan_refs}) != len(
-            self.audited_plan_refs
-        ):
-            raise ValueError("AuditCycleAuthority.audited_plan_refs contain duplicate content")
-        if not isinstance(self.inventory_ref, ArtifactRef):
-            raise ValueError("AuditCycleAuthority.inventory_ref must be an ArtifactRef")
-        if self.remediation_ref is not None and not isinstance(self.remediation_ref, ArtifactRef):
-            raise ValueError("AuditCycleAuthority.remediation_ref must be an ArtifactRef")
-        ids = tuple(row.requirement_id for row in self.assessments)
-        if len(set(ids)) != len(ids):
-            raise ValueError("AuditCycleAuthority.assessments contain duplicate requirement IDs")
-        _require_digest("AuditCycleAuthority.findings_digest", self.findings_digest)
-        if self.findings_digest != compute_findings_digest(self.assessments):
-            raise ValueError("AuditCycleAuthority.findings_digest does not match assessments")
-        if not isinstance(self.verdict, AuditVerdict):
-            raise ValueError("AuditCycleAuthority.verdict must be an AuditVerdict")
-        if self.verdict is AuditVerdict.NO_GO and self.remediation_ref is None:
-            raise ValueError("NO GO authority requires remediation_ref")
-        if self.verdict is AuditVerdict.GO and self.remediation_ref is not None:
-            raise ValueError("GO authority cannot contain remediation_ref")
-        if self.verdict is AuditVerdict.GO and any(
-            row.assessment.blocking for row in self.assessments
-        ):
-            raise ValueError("GO authority cannot contain blocking assessments")
+        _validate_authority_artifact_refs(self)
+        _validate_authority_assessments(self)
         _require_nonempty("AuditCycleAuthority.generated_at", self.generated_at)
         _require_digest("AuditCycleAuthority.authority_digest", self.authority_digest)
         if self.authority_digest != self.compute_digest():

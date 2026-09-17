@@ -133,37 +133,48 @@ class ContextAdmissionAccountingResult:
                 raise ValueError("invalid_journal_sequence")
         if self.reason_code is not None:
             _validate_reason_code(self.reason_code)
-        if self.status is ContextAdmissionAccountingStatus.RECORDED:
-            if self.transition is None or self.journal_sequence is None:
-                raise ValueError("recorded_result_requires_publication")
-        elif self.status is ContextAdmissionAccountingStatus.EXACT_REPLAY:
-            if self.transition is None or self.transition.effects or self.journal_sequence is None:
-                raise ValueError("exact_replay_result_is_not_idempotent")
-        elif self.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION:
-            if self.transition is None:
-                raise ValueError("semantic_rejection_requires_transition")
-        elif self.status in {
-            ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED,
-            ContextAdmissionAccountingStatus.PROTOCOL_QUARANTINED,
-        }:
-            if self.transition is None or self.journal_sequence is None:
-                raise ValueError("published_result_requires_transition")
-        elif self.status in {
-            ContextAdmissionAccountingStatus.CONTENDED,
-            ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-        }:
-            if self.transition is not None or self.journal_sequence is not None:
-                raise ValueError("nonadmitting_storage_result_has_transition")
-        if self.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED:
-            if self.failure_reason is None or self.reason_code is None:
-                raise ValueError("storage_failure_requires_reason")
-        elif self.failure_reason is not None:
-            raise ValueError("nonstorage_result_has_storage_reason")
+        _validate_accounting_result_shape(self)
+        _validate_accounting_storage_reason(self)
         if (
             self.transition is not None
             and self.reason_code != self.transition.decision.reason_code
         ):
             raise ValueError("accounting_reason_code_mismatch")
+
+
+def _validate_accounting_result_shape(result: ContextAdmissionAccountingResult) -> None:
+    if result.status is ContextAdmissionAccountingStatus.RECORDED:
+        if result.transition is None or result.journal_sequence is None:
+            raise ValueError("recorded_result_requires_publication")
+    elif result.status is ContextAdmissionAccountingStatus.EXACT_REPLAY:
+        if (
+            result.transition is None
+            or result.transition.effects
+            or result.journal_sequence is None
+        ):
+            raise ValueError("exact_replay_result_is_not_idempotent")
+    elif result.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION:
+        if result.transition is None:
+            raise ValueError("semantic_rejection_requires_transition")
+    elif result.status in {
+        ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED,
+        ContextAdmissionAccountingStatus.PROTOCOL_QUARANTINED,
+    }:
+        if result.transition is None or result.journal_sequence is None:
+            raise ValueError("published_result_requires_transition")
+    elif result.status in {
+        ContextAdmissionAccountingStatus.CONTENDED,
+        ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+    } and (result.transition is not None or result.journal_sequence is not None):
+        raise ValueError("nonadmitting_storage_result_has_transition")
+
+
+def _validate_accounting_storage_reason(result: ContextAdmissionAccountingResult) -> None:
+    if result.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED:
+        if result.failure_reason is None or result.reason_code is None:
+            raise ValueError("storage_failure_requires_reason")
+    elif result.failure_reason is not None:
+        raise ValueError("nonstorage_result_has_storage_reason")
 
 
 @dataclass(frozen=True, slots=True)

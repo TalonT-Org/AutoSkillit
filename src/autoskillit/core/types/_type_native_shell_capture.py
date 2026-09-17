@@ -335,6 +335,53 @@ class NativeShellCaptureDiagnostic:
         return hashlib.sha256(payload).hexdigest()
 
 
+def _validate_lineage_identity(lineage: ManagedHeadlessSessionLineage) -> None:
+    _validate_identity(lineage.launch_id, "launch_id")
+    if not isinstance(lineage.decision, NativeShellCaptureDecision):
+        raise TypeError("decision must be a NativeShellCaptureDecision")
+    _validate_bounded_text(lineage.backend, "backend")
+    if not isinstance(lineage.session_kind, ManagedHeadlessSessionKind):
+        raise TypeError("session_kind must be a ManagedHeadlessSessionKind")
+    _validate_anchor(lineage.lineage_anchor)
+    _validate_nonnegative_int(lineage.anchor_device, "anchor_device")
+    _validate_nonnegative_int(lineage.anchor_inode, "anchor_inode")
+    _validate_digest(lineage.lineage_digest, "lineage_digest")
+    _validate_nonnegative_int(lineage.generation, "generation")
+    _validate_digest(lineage.record_digest, "record_digest")
+    if lineage.launch_contract_digest:
+        _validate_digest(lineage.launch_contract_digest, "launch_contract_digest")
+    if len(set(lineage.attempt_ids)) != len(lineage.attempt_ids):
+        raise ValueError("attempt_ids must be unique")
+    for attempt_id in lineage.attempt_ids:
+        _validate_identity(attempt_id, "attempt_id")
+
+
+def _validate_optional_runtime_id(value: str | None, field_name: str) -> None:
+    if value is not None:
+        _validate_bounded_text(value, field_name)
+
+
+def _validate_lineage_runtime_state(lineage: ManagedHeadlessSessionLineage) -> None:
+    _validate_unique_texts(
+        lineage.candidate_native_session_ids,
+        "candidate_native_session_ids",
+    )
+    _validate_optional_runtime_id(lineage.final_native_session_id, "final_native_session_id")
+    _validate_optional_runtime_id(lineage.dispatch_id, "dispatch_id")
+    if not isinstance(lineage.terminal_state, ManagedHeadlessSessionTerminalState):
+        raise TypeError("terminal_state must be a ManagedHeadlessSessionTerminalState")
+    if not all(isinstance(item, NativeShellCaptureObservation) for item in lineage.observations):
+        raise TypeError("observations must contain NativeShellCaptureObservation values")
+    if len(set(lineage.observations)) != len(lineage.observations):
+        raise ValueError("observations must be unique")
+    _validate_nonnegative_int(
+        lineage.dropped_observation_count,
+        "dropped_observation_count",
+    )
+    if lineage.schema_version != MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION:
+        raise ValueError("Unsupported managed lineage schema")
+
+
 @dataclass(frozen=True, slots=True)
 class ManagedHeadlessSessionLineage:
     """Validated immutable value returned by the durable lineage store."""
@@ -362,47 +409,8 @@ class ManagedHeadlessSessionLineage:
     schema_version: int = MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
-        _validate_identity(self.launch_id, "launch_id")
-        if not isinstance(self.decision, NativeShellCaptureDecision):
-            raise TypeError("decision must be a NativeShellCaptureDecision")
-        _validate_bounded_text(self.backend, "backend")
-        if not isinstance(self.session_kind, ManagedHeadlessSessionKind):
-            raise TypeError("session_kind must be a ManagedHeadlessSessionKind")
-        _validate_anchor(self.lineage_anchor)
-        _validate_nonnegative_int(self.anchor_device, "anchor_device")
-        _validate_nonnegative_int(self.anchor_inode, "anchor_inode")
-        _validate_digest(self.lineage_digest, "lineage_digest")
-        _validate_nonnegative_int(self.generation, "generation")
-        _validate_digest(self.record_digest, "record_digest")
-        if self.launch_contract_digest:
-            _validate_digest(self.launch_contract_digest, "launch_contract_digest")
-        if len(set(self.attempt_ids)) != len(self.attempt_ids):
-            raise ValueError("attempt_ids must be unique")
-        for attempt_id in self.attempt_ids:
-            _validate_identity(attempt_id, "attempt_id")
-        _validate_unique_texts(
-            self.candidate_native_session_ids,
-            "candidate_native_session_ids",
-        )
-        if self.final_native_session_id is not None:
-            _validate_bounded_text(
-                self.final_native_session_id,
-                "final_native_session_id",
-            )
-        if self.dispatch_id is not None:
-            _validate_bounded_text(self.dispatch_id, "dispatch_id")
-        if not isinstance(self.terminal_state, ManagedHeadlessSessionTerminalState):
-            raise TypeError("terminal_state must be a ManagedHeadlessSessionTerminalState")
-        if not all(isinstance(item, NativeShellCaptureObservation) for item in self.observations):
-            raise TypeError("observations must contain NativeShellCaptureObservation values")
-        if len(set(self.observations)) != len(self.observations):
-            raise ValueError("observations must be unique")
-        _validate_nonnegative_int(
-            self.dropped_observation_count,
-            "dropped_observation_count",
-        )
-        if self.schema_version != MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION:
-            raise ValueError("Unsupported managed lineage schema")
+        _validate_lineage_identity(self)
+        _validate_lineage_runtime_state(self)
 
     @property
     def reference(self) -> ManagedHeadlessSessionLineageRef:

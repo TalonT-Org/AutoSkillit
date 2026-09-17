@@ -35,48 +35,52 @@ class TestIsGitCommand:
         assert is_git_command(["gitignore", "status"]) is False
 
 
+def _assert_git_invoc(
+    result,
+    *,
+    subcommand,
+    flags=(),
+    global_flags=(),
+    prefix_tokens=(),
+):
+    assert result is not None
+    assert result.subcommand == subcommand
+    assert result.flags == list(flags)
+    assert result.global_flags == list(global_flags)
+    assert result.prefix_tokens == list(prefix_tokens)
+
+
 class TestExtractGitSubcommandAndFlags:
     def test_simple_commit_amend(self):
         result = extract_git_subcommand_and_flags(["git", "commit", "--amend"])
-        assert result is not None
-        assert result.subcommand == "commit"
-        assert result.flags == ["--amend"]
-        assert result.global_flags == []
-        assert result.prefix_tokens == []
+        _assert_git_invoc(result, subcommand="commit", flags=["--amend"])
 
     def test_global_flag_with_value(self):
         result = extract_git_subcommand_and_flags(
             ["git", "-C", "/path", "commit", "--amend", "--no-edit"]
         )
-        assert result is not None
-        assert result.subcommand == "commit"
-        assert result.flags == ["--amend", "--no-edit"]
-        assert result.global_flags == ["-C"]
+        _assert_git_invoc(
+            result,
+            subcommand="commit",
+            flags=["--amend", "--no-edit"],
+            global_flags=["-C"],
+        )
 
     def test_push_force_with_lease(self):
         result = extract_git_subcommand_and_flags(["git", "push", "--force-with-lease"])
-        assert result is not None
-        assert result.subcommand == "push"
-        assert result.flags == ["--force-with-lease"]
+        _assert_git_invoc(result, subcommand="push", flags=["--force-with-lease"])
 
     def test_add_flag(self):
         result = extract_git_subcommand_and_flags(["git", "add", "-u"])
-        assert result is not None
-        assert result.subcommand == "add"
-        assert result.flags == ["-u"]
+        _assert_git_invoc(result, subcommand="add", flags=["-u"])
 
     def test_full_path_git_reset_hard(self):
         result = extract_git_subcommand_and_flags(["/usr/bin/git", "reset", "--hard"])
-        assert result is not None
-        assert result.subcommand == "reset"
-        assert result.flags == ["--hard"]
+        _assert_git_invoc(result, subcommand="reset", flags=["--hard"])
 
     def test_no_pager_global_flag(self):
         result = extract_git_subcommand_and_flags(["git", "--no-pager", "log"])
-        assert result is not None
-        assert result.subcommand == "log"
-        assert result.flags == []
-        assert result.global_flags == ["--no-pager"]
+        _assert_git_invoc(result, subcommand="log", global_flags=["--no-pager"])
 
     def test_no_subcommand_returns_none(self):
         result = extract_git_subcommand_and_flags(["git"])
@@ -88,21 +92,17 @@ class TestExtractGitSubcommandAndFlags:
 
     def test_git_c_flag_skips_value(self):
         result = extract_git_subcommand_and_flags(["git", "-C", "/repo", "status"])
-        assert result is not None
-        assert result.subcommand == "status"
-        assert result.flags == []
-        assert result.global_flags == ["-C"]
+        _assert_git_invoc(result, subcommand="status", global_flags=["-C"])
 
     def test_git_work_tree_skips_value(self):
         result = extract_git_subcommand_and_flags(["git", "--work-tree", "/work", "checkout", "."])
-        assert result is not None
-        assert result.subcommand == "checkout"
-        assert result.flags == ["."]
-        assert result.global_flags == ["--work-tree"]
+        _assert_git_invoc(
+            result,
+            subcommand="checkout",
+            flags=["."],
+            global_flags=["--work-tree"],
+        )
 
     def test_git_bare_flag(self):
         result = extract_git_subcommand_and_flags(["git", "--bare", "log"])
-        assert result is not None
-        assert result.subcommand == "log"
-        assert result.flags == []
-        assert result.global_flags == ["--bare"]
+        _assert_git_invoc(result, subcommand="log", global_flags=["--bare"])

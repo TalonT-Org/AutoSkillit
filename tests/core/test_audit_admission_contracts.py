@@ -668,6 +668,23 @@ def test_committed_attempt_accepts_structural_outcome() -> None:
     assert attempt.committed_outcome is structural_outcome
 
 
+def test_committed_attempt_rejects_structural_outcome_with_mismatched_attempt_id() -> None:
+    attempt_id = AuditAttemptId("attempt-1")
+    other_attempt_id = AuditAttemptId("attempt-2")
+    structural_outcome = SimpleNamespace(attempt_id=other_attempt_id)
+
+    with pytest.raises(ValueError, match="belongs to another attempt"):
+        AuditAttemptRecord(
+            slot_id=AuditSlotId("slot-1"),
+            attempt_id=attempt_id,
+            lifecycle=AuditAttemptLifecycle.RESPONSE_COMMITTED,
+            semantic_digest=_digest("f"),
+            correction_predecessor=None,
+            prepared_effects=(_prepared_effect(AuditPreparedEffectDeliveryStatus.DELIVERED),),
+            committed_outcome=structural_outcome,  # type: ignore[arg-type]
+        )
+
+
 def test_semantic_rejected_attempt_requires_semantic_digest() -> None:
     with pytest.raises(ValueError, match="requires semantic_digest"):
         AuditAttemptRecord(

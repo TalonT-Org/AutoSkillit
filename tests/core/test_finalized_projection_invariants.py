@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 
 from autoskillit.core import (
@@ -79,11 +77,11 @@ def test_projection_snapshots_one_shot_and_mutable_inputs_once() -> None:
 
     projection = FinalizedRecipeProjection(
         binding_projection=RecipeBindingProjection(invocations={}),
-        ordered_step_names=cast(tuple[str, ...], iter(step_names)),
+        ordered_step_names=tuple(step_names),
         entrypoint="start",
-        ordered_steps=cast(tuple[FinalizedRecipeStep, ...], iter(steps)),
+        ordered_steps=tuple(steps),
         ingredient_names=frozenset({"ingredient"}),
-        ordered_flow_edges=cast(tuple[RecipeFlowEdge, ...], edges),
+        ordered_flow_edges=tuple(edges),
     )
     step_names.append("late")
     steps.clear()

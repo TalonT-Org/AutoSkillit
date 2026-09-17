@@ -6,7 +6,9 @@ import json
 
 import pytest
 
+import autoskillit.server.lifecycle._guards as lifecycle_guards
 from autoskillit.config import TestCheckConfig
+from autoskillit.hooks import command_has_blocked_protected_path_read
 from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_cmd
 from tests.conftest import _make_result
@@ -96,6 +98,12 @@ class TestTestGateBypassRefusal:
 
 
 class TestRecipeReadProhibitionCmd:
+    def test_uses_shared_protected_path_classifier(self) -> None:
+        assert (
+            lifecycle_guards.command_has_blocked_protected_path_read
+            is command_has_blocked_protected_path_read
+        )
+
     """run_cmd denies recipe/skill/agent file access in headless sessions."""
 
     @pytest.fixture(autouse=True)

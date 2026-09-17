@@ -119,7 +119,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "hooks/guards/_git_command_classification.py",
         "_git_result",
-        223,
+        224,
         "<unresolved>",
         "UNRESOLVABLE",
     ),

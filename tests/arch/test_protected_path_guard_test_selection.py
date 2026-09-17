@@ -30,8 +30,12 @@ _EXPECTED_IMPORT_CONSUMERS = {
     "arch/test_intake_rule_registry.py": frozenset(
         {"PROTECTED_SOURCE_PATH_PATTERNS", "command_has_blocked_protected_path_read"}
     ),
+    "arch/test_protected_read_guard_covers_declarable_sources.py": frozenset(
+        {"PROTECTED_SOURCE_PATH_PATTERNS"}
+    ),
     "hooks/test_command_classification.py": frozenset(
         {
+            "PROTECTED_SOURCE_PATH_PATTERNS",
             "command_has_blocked_protected_path_read",
             "is_allowed_protected_path_metadata_command",
         }

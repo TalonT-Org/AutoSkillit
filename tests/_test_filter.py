@@ -1351,6 +1351,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "__init__",
             "hooks",
+            "infra",
             # protected-path guard integration coverage (#4262)
             "infra/test_recipe_read_guard.py",
             "server/test_tools_run_cmd_invariants.py",

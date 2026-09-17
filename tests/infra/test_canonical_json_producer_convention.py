@@ -149,14 +149,14 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 411),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 410),
         producer_symbol="write_audit_semantic_result",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_semantic_result",
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 103, 117),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 458),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 457),
         producer_symbol="write_standalone_audit_evidence",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_standalone_evidence",
@@ -170,7 +170,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
 # flip to require_canonical=True is caught by test_non_canonical_exceptions_below.
 _NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
     "closure_report.json": (
-        ("src/autoskillit/core/audit/closure_verifier.py", 94),
+        ("src/autoskillit/core/audit/closure_verifier.py", 93),
         "Closure reports are written by write_versioned_json (see the "
         "_write_report fixture in tests/core/test_closure_verifier.py), not "
         "write_canonical_versioned_json — no content-addressed tamper-evidence "

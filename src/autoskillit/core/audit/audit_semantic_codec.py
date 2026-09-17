@@ -151,18 +151,17 @@ def _first_matching_term(value: str, terms: frozenset[str]) -> str | None:
 def _added_diff_text(diff_text: str) -> str:
     """Return the joined text of added unified-diff lines.
 
-    Strips the leading ``+`` marker and skips the ``+++`` file header. Lines that
-    signal ``\\ No newline at end of file`` are dropped because they are not
-    real additions. The result is a corpus suitable for term and identifier
-    matching, not a structural reconstruction of the diff.
+    Strips the leading ``+`` marker and skips the ``+++`` file header. The
+    ``\\ No newline at end of file`` escape (always prefixed with a single
+    space, never with ``+``) is filtered incidentally because it does not
+    start with ``+``. The result is a corpus suitable for term and
+    identifier matching, not a structural reconstruction of the diff.
     """
     chunks: list[str] = []
     for line in diff_text.splitlines():
         if not line.startswith("+"):
             continue
         if line.startswith("+++"):
-            continue
-        if line.startswith("+\\ No newline at end of file"):
             continue
         chunks.append(line[1:])
     return "\n".join(chunks)

@@ -432,6 +432,51 @@ def test_processed_review_requires_fresh_green_tests(
     assert result.outcome_fields is not None
 
 
+def test_malformed_workspace_record_timestamps_demote_to_report_malformed(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    good_record = _record(
+        workspace,
+        "2026-09-16T10:00:01+00:00",
+        kind=WorkspaceOutcomeKind.TEST_RUN,
+        succeeded=True,
+    )
+    corrupted = dataclasses.replace(good_record)
+    object.__setattr__(corrupted, "recorded_at", "not-a-timestamp")
+    ledger = _CorruptedTimestampLedger(workspace, [corrupted])
+
+    result = _adjudicate(_processed("already_green", []), workspace, ledger)
+
+    assert result.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
+    assert result.subtype == "outcome_report_malformed"
+    assert result.outcome_fields is not None
+
+
+class _CorruptedTimestampLedger:
+    """Test-only ledger that returns records whose ``recorded_at`` is unparseable."""
+
+    def __init__(self, workspace: Path, records: list[WorkspaceOutcomeRecord]) -> None:
+        self._workspace = workspace
+        self._records = records
+
+    def record(self, record: WorkspaceOutcomeRecord) -> None:
+        self._records.append(record)
+
+    def read(
+        self,
+        workspace: str,
+        *,
+        since: str,
+        until: str,
+    ) -> list[WorkspaceOutcomeRecord]:
+        canonical = Path(workspace).resolve()
+        return [
+            record for record in self._records if Path(record.workspace).resolve() == canonical
+        ]
+
+
 @pytest.mark.parametrize(
     ("sequence", "expected_success"),
     [([False, True], True), ([True, False], False)],

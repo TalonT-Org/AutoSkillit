@@ -1486,6 +1486,8 @@ steps:
       route: check_resolve_review_posted
     - when: ${{ result.review_post_state }} == 'RECONCILED'
       route: check_resolve_review_posted
+    # Ordering is load-bearing: verdict routes must precede review_status=processed,
+    # otherwise successful reviews would fall through to release_issue_failure.
     - when: ${{ result.verdict }} == 'real_fix'
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'already_green'

@@ -374,14 +374,6 @@ def _test_evidence_failure(
     return None
 
 
-def _apply_semantics_failure(
-    sr: SkillResult,
-    fields: dict[str, int | str],
-    failure: _AdjudicationFailure,
-) -> SkillResult:
-    return _demote_outcome(sr, fields, failure)
-
-
 def apply_finding_disposition_adjudication(
     sr: SkillResult,
     emitted_fields: dict[str, int | str],

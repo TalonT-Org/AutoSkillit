@@ -657,7 +657,9 @@ def test_cook_explicit_resume_runs_recovery_without_picker_or_confirmation(
 
     cli.cook(backend=backend, session_id="thread-explicit")
 
-    sweep.assert_called_once()
+    from autoskillit.execution import default_tether_dir
+
+    sweep.assert_called_once_with(default_tether_dir())
     assert backend.recover_count == 1
     picker.assert_not_called()
     prompt.assert_not_called()

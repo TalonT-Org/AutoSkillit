@@ -139,6 +139,7 @@ def test_cook_noninteractive_skips_confirmation(
     from autoskillit.cli.session._session_cook import cook
     from autoskillit.core import (
         CompiledSessionSkillCatalogAuthority,
+        FreshLaunch,
         ManagedSessionHome,
         SkillProjectionContextAuthority,
         ValidatedAddDir,
@@ -180,13 +181,21 @@ def test_cook_noninteractive_skips_confirmation(
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     prompt = MagicMock(side_effect=AssertionError("non-interactive cook must not prompt"))
     monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", prompt)
+    captured: list[object] = []
+
+    def _capture_prepare_interactive_launch(*args: object, **kwargs: object) -> None:
+        captured.append(kwargs.get("launch"))
+        raise RuntimeError("launch preparation reached")
+
     monkeypatch.setattr(
         "autoskillit.cli.session._session_cook.prepare_interactive_launch",
-        MagicMock(side_effect=RuntimeError("launch preparation reached")),
+        _capture_prepare_interactive_launch,
     )
     with pytest.raises(RuntimeError, match="launch preparation reached"):
         cook(backend=ClaudeCodeBackend())
     prompt.assert_not_called()
+    assert len(captured) == 1
+    assert isinstance(captured[0], FreshLaunch)
 
 
 def test_run_workspace_clean_noninteractive_exits(

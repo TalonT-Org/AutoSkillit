@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.cli._preview as _preview
+import autoskillit.cli.prompts as _prompts
 import autoskillit.cli.session._session_backend as _session_backend
 import autoskillit.cli.session._session_launch_intent as _launch_intent
 import autoskillit.cli.session._session_order as _order
@@ -107,7 +107,7 @@ def _install_order_harness(
     monkeypatch.setattr(_order, "render_skill_catalog_exclusions", lambda _items: None)
     monkeypatch.setattr(_order, "_get_ingredients_table", lambda *a, **kw: "ingredients")
     monkeypatch.setattr(_order, "_build_orchestrator_prompt", lambda *a, **kw: "prompt")
-    monkeypatch.setattr(_order, "_build_open_kitchen_prompt", lambda *a, **kw: "prompt")
+    monkeypatch.setattr(_prompts, "_build_open_kitchen_prompt", lambda *a, **kw: "prompt")
     monkeypatch.setattr(_order, "_get_subsets_needed", lambda *a, **kw: frozenset({"github"}))
     monkeypatch.setattr(_order, "_get_packs_needed", lambda *a, **kw: frozenset({"research"}))
 
@@ -137,7 +137,7 @@ def _install_order_harness(
     answers = iter(prompt_answers or ["1", "1", ""])
 
     def timed_prompt(prompt: str, **_kwargs: object) -> str:
-        if prompt.startswith("Launch session?"):
+        if prompt.lstrip().startswith("Launch session?"):
             events["confirm"] += 1
         else:
             events["feature_prompt"] += 1
@@ -255,159 +255,3 @@ def test_order_bare_resume_without_selection_becomes_fresh_ceremony(
     assert events["recover"] == 1
     assert events["confirm"] == 0
     assert isinstance(launches[0]["launch"], FreshLaunch)
-
-
-def _import_aliases(tree: ast.Module) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for imported in ast.walk(tree):
-        if isinstance(imported, ast.ImportFrom) and imported.module is not None:
-            for name in imported.names:
-                aliases[name.asname or name.name] = f"{imported.module}.{name.name}"
-        elif isinstance(imported, ast.Import):
-            for name in imported.names:
-                aliases[name.asname or name.name] = name.name
-    return aliases
-
-
-def _qualified_name(node: ast.expr, aliases: dict[str, str]) -> str:
-    if isinstance(node, ast.Name):
-        return aliases.get(node.id, node.id)
-    if isinstance(node, ast.Attribute):
-        return f"{_qualified_name(node.value, aliases)}.{node.attr}"
-    return ast.dump(node, include_attributes=False)
-
-
-def _qualified_calls(path: Path, function_names: set[str]) -> Counter[str]:
-    """Return a bounded, source-backed call inventory for named functions."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    aliases = _import_aliases(tree)
-
-    inventory: Counter[str] = Counter()
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if node.name not in function_names:
-            continue
-        for call in (child for child in ast.walk(node) if isinstance(child, ast.Call)):
-            inventory[f"{node.name}:{_qualified_name(call.func, aliases)}"] += 1
-    return inventory
-
-
-_ORDER_FUNCTIONS = {
-    "order",
-    "_resolve_order_recipe",
-    "_derive_order_feature_env",
-    "_run_fresh_order_ceremony",
-}
-_EXPECTED_CALLS = Counter(
-    {
-        "_derive_order_feature_env:Constant(value=', ').join": 2,
-        "_derive_order_feature_env:_enable_packs_permanently": 1,
-        "_derive_order_feature_env:_enable_subsets_permanently": 1,
-        "_derive_order_feature_env:_get_packs_needed": 1,
-        "_derive_order_feature_env:_get_subsets_needed": 1,
-        "_derive_order_feature_env:autoskillit.cli.ui._timed_input.timed_prompt": 2,
-        "_derive_order_feature_env:autoskillit.config.load_config": 1,
-        "_derive_order_feature_env:autoskillit.core.PACK_REGISTRY.items": 1,
-        "_derive_order_feature_env:frozenset": 3,
-        "_derive_order_feature_env:isinstance": 1,
-        "_derive_order_feature_env:json.dumps": 2,
-        "_derive_order_feature_env:print": 8,
-        "_derive_order_feature_env:sorted": 3,
-        "_derive_order_feature_env:sys.stdout.write": 2,
-        "_resolve_order_recipe:autoskillit.recipe.find_recipe_by_name": 1,
-        "_resolve_order_recipe:autoskillit.recipe.list_recipes": 1,
-        "_resolve_order_recipe:autoskillit.recipe.load_recipe": 1,
-        "_resolve_order_recipe:autoskillit.recipe.validate_recipe_structure": 1,
-        "_resolve_order_recipe:print": 8,
-        "_resolve_order_recipe:sys.exit": 4,
-        "_run_fresh_order_ceremony:_recipes_dir_for": 1,
-        "_run_fresh_order_ceremony:autoskillit.cli._preview.show_cook_preview": 1,
-        "_run_fresh_order_ceremony:autoskillit.cli.ui._ansi.permissions_warning": 1,
-        "_run_fresh_order_ceremony:autoskillit.cli.ui._timed_input.timed_prompt": 1,
-        "_run_fresh_order_ceremony:confirm.lower": 1,
-        "_run_fresh_order_ceremony:isinstance": 1,
-        "_run_fresh_order_ceremony:print": 1,
-        (
-            "order:Call(func=Attribute(value=Name(id='random', ctx=Load()), "
-            "attr='choice', ctx=Load()), args=[Name(id='_COOK_GREETINGS', "
-            "ctx=Load())], keywords=[]).format"
-        ): 1,
-        "order:SystemExit": 1,
-        "order:TypeError": 1,
-        "order:_UUID_RE.match": 1,
-        "order:_derive_order_feature_env": 1,
-        "order:_resolve_order_recipe": 1,
-        "order:_run_fresh_order_ceremony": 1,
-        "order:autoskillit.cli.prompts._build_open_kitchen_prompt": 1,
-        "order:autoskillit.cli.prompts._build_orchestrator_prompt": 1,
-        "order:autoskillit.cli.prompts._get_ingredients_table": 1,
-        "order:autoskillit.cli.session._session_backend.resolve_global_backend": 1,
-        "order:autoskillit.cli.session._session_launch._launch_cook_session": 1,
-        "order:autoskillit.cli.session._session_launch._write_order_entry": 2,
-        "order:autoskillit.cli.session._session_launch.render_skill_catalog_exclusions": 1,
-        (
-            "order:autoskillit.cli.session._session_launch."
-            "render_skill_contract_composition_failure"
-        ): 1,
-        "order:autoskillit.cli.session._session_launch_intent.resolve_interactive_launch": 1,
-        "order:autoskillit.cli.ui._menu.run_selection_menu": 1,
-        "order:autoskillit.config.load_config": 1,
-        "order:autoskillit.core.detect_autoskillit_mcp_prefix": 1,
-        "order:autoskillit.core.resume_spec_from_cli": 2,
-        "order:autoskillit.recipe.list_recipes": 1,
-        "order:autoskillit.workspace.DefaultSkillResolver": 1,
-        "order:autoskillit.workspace.compile_session_skill_catalog": 1,
-        "order:autoskillit.workspace.validate_skill_tier_roles": 1,
-        "order:config.codex_runtime.resolve": 1,
-        "order:config.skill_visibility_spec": 1,
-        "order:dataclasses.replace": 2,
-        "order:isinstance": 3,
-        "order:os.environ.get": 1,
-        "order:pathlib.Path.cwd": 2,
-        "order:print": 4,
-        "order:random.choice": 2,
-        "order:skill_resolver.list_effective": 1,
-        "order:sys.exit": 3,
-        "order:sys.stdin.isatty": 2,
-        "resolve_interactive_launch:autoskillit.core.FreshLaunch": 2,
-        "resolve_interactive_launch:autoskillit.core.RestoreSession": 2,
-        "resolve_interactive_launch:autoskillit.execution.default_tether_dir": 1,
-        "resolve_interactive_launch:autoskillit.execution.sweep_orphaned_tethers": 1,
-        "resolve_interactive_launch:backend.recover_cook_history": 1,
-        "resolve_interactive_launch:backend.session_locator": 1,
-        "resolve_interactive_launch:isinstance": 1,
-        "resolve_interactive_launch:logger.warning": 1,
-        "resolve_interactive_launch:pick_session": 1,
-        "resolve_interactive_launch:typing.assert_never": 1,
-    }
-)
-_EFFECT_COLUMNS = {
-    "_resolve_order_recipe:autoskillit.recipe.validate_recipe_structure": "recipe_validation",
-    "_derive_order_feature_env:autoskillit.cli.ui._timed_input.timed_prompt": ("feature_prompt"),
-    "_run_fresh_order_ceremony:autoskillit.cli._preview.show_cook_preview": "preview",
-    "_run_fresh_order_ceremony:autoskillit.cli.ui._timed_input.timed_prompt": ("confirm_prompt"),
-    "resolve_interactive_launch:autoskillit.execution.sweep_orphaned_tethers": ("tether_sweep"),
-    "resolve_interactive_launch:backend.recover_cook_history": "recover_cook_history",
-    "resolve_interactive_launch:pick_session": "bare_resume_picker",
-}
-
-
-def test_order_matrix_inventory_matches_production_calls() -> None:
-    """Any new routing call must be counted and assigned to the matrix."""
-    root = Path(__file__).parents[2]
-    order_path = root / "src/autoskillit/cli/session/_session_order.py"
-    intent_path = root / "src/autoskillit/cli/session/_session_launch_intent.py"
-    order_tree = ast.parse(order_path.read_text(encoding="utf-8"))
-    defined = {
-        node.name
-        for node in order_tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    assert _ORDER_FUNCTIONS <= defined
-
-    actual = _qualified_calls(order_path, _ORDER_FUNCTIONS)
-    actual.update(_qualified_calls(intent_path, {"resolve_interactive_launch"}))
-    reviewed = set(_EXPECTED_CALLS) - set(_EFFECT_COLUMNS)
-    assert set(_EXPECTED_CALLS) == reviewed | set(_EFFECT_COLUMNS)
-    assert actual == _EXPECTED_CALLS

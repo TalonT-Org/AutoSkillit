@@ -215,7 +215,7 @@ def _count_within_turn_ngrams(
                 ngrams[tuple(turn[start : start + length])] += 1
 
 
-def _append_inter_turn_gaps(
+def _record_inter_turn_gaps(
     turns: Sequence[Sequence[str]], pair_gaps: dict[tuple[str, str], list[int]]
 ) -> None:
     """Append positive, distinct-tool gaps while resetting history per session."""
@@ -243,7 +243,7 @@ def build_dfg(sessions: Sequence[TurnSequence]) -> DFG:
         total_turns += len(seq.turns)
         _count_flattened_bigrams(seq.turns, bigrams)
         _count_within_turn_ngrams(seq.turns, ngrams)
-        _append_inter_turn_gaps(seq.turns, pair_gaps)
+        _record_inter_turn_gaps(seq.turns, pair_gaps)
 
     return DFG(bigrams=bigrams, ngrams=ngrams, pair_gaps=pair_gaps, total_turns=total_turns)
 

@@ -232,15 +232,18 @@ class AgentDef:
                 raise AgentDefinitionError(f"invalid canonical reader tool: {tool!r}")
 
     def _validate_reader_eligibility(self) -> None:
-        # Reader-eligibility is structurally Codex-only: the read-only
-        # evidence reader is a Codex child surface (see
-        # execution/evidence_reader.py) and exposes only Codex projections.
-        # Codex knowledge is canonically at IL-0 because AgentDef is a unified
-        # Claude+Codex catalog and IL-0 cannot import the IL-1 backend
-        # capability layer that would otherwise host this policy. Keeping the
-        # check here preserves the "born valid" invariant: AgentDef rejects
-        # invalid reader eligibility at construction time, so consumers cannot
-        # forget to call a follow-up validation function.
+        """Reject Codex reader eligibility that would expose non-read-only surfaces.
+
+        Reader-eligibility is structurally Codex-only: the read-only evidence
+        reader is a Codex child surface (see execution/evidence_reader.py) and
+        exposes only Codex projections. Codex knowledge is canonically at IL-0
+        because AgentDef is a unified Claude+Codex catalog and IL-0 cannot
+        import the IL-1 backend capability layer that would otherwise host
+        this policy. Keeping the check here preserves the "born valid"
+        invariant: AgentDef rejects invalid reader eligibility at construction
+        time, so consumers cannot forget to call a follow-up validation
+        function.
+        """
         if self.codex.model is None or self.codex.reasoning_effort is None:
             raise AgentDefinitionError(
                 "reader-eligible agents require a fixed Codex model and reasoning effort"

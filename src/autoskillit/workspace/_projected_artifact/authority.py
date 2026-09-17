@@ -272,6 +272,18 @@ def _try_validate_published_plugin_artifact(
         ) from exc
 
 
+def _acquire_projection_reader(plan: _ProjectedArtifactPlan) -> ArtifactLease:
+    try:
+        return ArtifactLease.acquire_shared(
+            plan.lease_path,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        raise PluginArtifactPublicationError(
+            f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
+        ) from exc
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectedPluginArtifactAuthority:
     """Lazy owner of projected plugin publication and per-launch reader leases."""
@@ -492,15 +504,7 @@ class ProjectedPluginArtifactAuthority:
             raise PluginArtifactPublicationError(
                 "projected plugin publication planning failed"
             ) from exc
-        try:
-            reader = ArtifactLease.acquire_shared(
-                plan.lease_path,
-                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
-            )
-        except Exception as exc:
-            raise PluginArtifactPublicationError(
-                f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
-            ) from exc
+        reader = _acquire_projection_reader(plan)
         try:
             identity = _try_validate_published_plugin_artifact(plan)
         except BaseException as primary_error:
@@ -510,6 +514,34 @@ class ProjectedPluginArtifactAuthority:
             return self._binding(load_mode, plan, identity, reader)
         reader.close()
 
+        identity = self._ensure_valid_publication(plan)
+
+        reader = _acquire_projection_reader(plan)
+        try:
+            identity = _validate_published_plugin_artifact(
+                plan,
+                expected_identity=identity,
+            )
+        except PluginArtifactValidationError as primary_error:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action="acquire",
+                outcome="failed_validation",
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
+                semantic_key=plan.semantic_key,
+                incarnation=identity.incarnation_id,
+            )
+            reader.close_preserving(primary_error)
+            raise
+        except BaseException as primary_error:
+            reader.close_preserving(primary_error)
+            raise
+        return self._binding(load_mode, plan, identity, reader)
+
+    def _ensure_valid_publication(
+        self,
+        plan: _ProjectedArtifactPlan,
+    ) -> PluginArtifactIdentity:
         mutation_action = (
             "repair" if plan.destination.exists() or plan.manifest_path.exists() else "publish"
         )
@@ -532,104 +564,79 @@ class ProjectedPluginArtifactAuthority:
             with _InstallLock(self.home):
                 identity = _try_validate_published_plugin_artifact(plan)
                 if identity is None:
-                    plan.destination.parent.mkdir(parents=True, exist_ok=True)
-                    staged: _StagedProjectedArtifact | None = None
-                    try:
-                        staged = _stage_projected_plugin_artifact(plan)
-                        _publish_projected_plugin_root(staged, plan.destination)
-                        _publish_projected_plugin_manifest(staged, plan.manifest_path)
-                    except (
-                        PluginArtifactPublicationError,
-                        PluginArtifactValidationError,
-                    ):
-                        log_plugin_artifact_lifecycle(
-                            logger,
-                            action=mutation_action,
-                            outcome="failed_validation",
-                            artifact_kind=PluginArtifactKind.PROJECTION.value,
-                            semantic_key=plan.semantic_key,
-                            incarnation=(
-                                staged.identity.incarnation_id if staged is not None else "unknown"
-                            ),
-                        )
-                        raise
-                    except Exception as exc:
-                        log_plugin_artifact_lifecycle(
-                            logger,
-                            action=mutation_action,
-                            outcome="failed_validation",
-                            artifact_kind=PluginArtifactKind.PROJECTION.value,
-                            semantic_key=plan.semantic_key,
-                            incarnation=(
-                                staged.identity.incarnation_id if staged is not None else "unknown"
-                            ),
-                        )
-                        raise PluginArtifactPublicationError(
-                            f"projected plugin publication failed: {plan.semantic_key}"
-                        ) from exc
-                    finally:
-                        if staged is not None:
-                            shutil.rmtree(staged.root, ignore_errors=True)
-                            _discard_staging_manifest(staged.manifest)
-                    assert staged is not None
-                    try:
-                        identity = _validate_published_plugin_artifact(
-                            plan,
-                            expected_identity=staged.identity,
-                        )
-                    except PluginArtifactValidationError:
-                        log_plugin_artifact_lifecycle(
-                            logger,
-                            action=mutation_action,
-                            outcome="failed_validation",
-                            artifact_kind=PluginArtifactKind.PROJECTION.value,
-                            semantic_key=plan.semantic_key,
-                            incarnation=staged.identity.incarnation_id,
-                        )
-                        raise
-                    log_plugin_artifact_lifecycle(
-                        logger,
-                        action=mutation_action,
-                        outcome="succeeded",
-                        artifact_kind=PluginArtifactKind.PROJECTION.value,
-                        semantic_key=identity.semantic_key,
-                        incarnation=identity.incarnation_id,
-                    )
+                    identity = self._publish_replacement(plan, mutation_action=mutation_action)
+                assert identity is not None
         except BaseException as primary_error:
             writer.close_preserving(primary_error)
             raise
         else:
             writer.close()
+        return identity
 
+    def _publish_replacement(
+        self,
+        plan: _ProjectedArtifactPlan,
+        *,
+        mutation_action: str,
+    ) -> PluginArtifactIdentity:
+        """Publish one replacement while the caller holds both writer and install lock."""
+        plan.destination.parent.mkdir(parents=True, exist_ok=True)
+        staged: _StagedProjectedArtifact | None = None
         try:
-            reader = ArtifactLease.acquire_shared(
-                plan.lease_path,
-                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
-            )
-        except Exception as exc:
-            raise PluginArtifactPublicationError(
-                f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
-            ) from exc
-        try:
-            identity = _validate_published_plugin_artifact(
-                plan,
-                expected_identity=identity,
-            )
-        except PluginArtifactValidationError as primary_error:
+            staged = _stage_projected_plugin_artifact(plan)
+            _publish_projected_plugin_root(staged, plan.destination)
+            _publish_projected_plugin_manifest(staged, plan.manifest_path)
+        except (PluginArtifactPublicationError, PluginArtifactValidationError):
             log_plugin_artifact_lifecycle(
                 logger,
-                action="acquire",
+                action=mutation_action,
                 outcome="failed_validation",
                 artifact_kind=PluginArtifactKind.PROJECTION.value,
                 semantic_key=plan.semantic_key,
-                incarnation=identity.incarnation_id,
+                incarnation=staged.identity.incarnation_id if staged is not None else "unknown",
             )
-            reader.close_preserving(primary_error)
             raise
-        except BaseException as primary_error:
-            reader.close_preserving(primary_error)
+        except Exception as exc:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action=mutation_action,
+                outcome="failed_validation",
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
+                semantic_key=plan.semantic_key,
+                incarnation=staged.identity.incarnation_id if staged is not None else "unknown",
+            )
+            raise PluginArtifactPublicationError(
+                f"projected plugin publication failed: {plan.semantic_key}"
+            ) from exc
+        finally:
+            if staged is not None:
+                shutil.rmtree(staged.root, ignore_errors=True)
+                _discard_staging_manifest(staged.manifest)
+        assert staged is not None
+        try:
+            identity = _validate_published_plugin_artifact(
+                plan,
+                expected_identity=staged.identity,
+            )
+        except PluginArtifactValidationError:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action=mutation_action,
+                outcome="failed_validation",
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
+                semantic_key=plan.semantic_key,
+                incarnation=staged.identity.incarnation_id,
+            )
             raise
-        return self._binding(load_mode, plan, identity, reader)
+        log_plugin_artifact_lifecycle(
+            logger,
+            action=mutation_action,
+            outcome="succeeded",
+            artifact_kind=PluginArtifactKind.PROJECTION.value,
+            semantic_key=identity.semantic_key,
+            incarnation=identity.incarnation_id,
+        )
+        return identity
 
     def _binding(
         self,

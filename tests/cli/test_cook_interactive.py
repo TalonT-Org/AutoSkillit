@@ -643,16 +643,63 @@ def test_cook_bare_resume_without_selection_starts_fresh(
     assert any(event[0] == "onboarded" for event in captured["events"])
 
 
-def test_cook_explicit_resume_does_not_run_recovery(
+def test_cook_explicit_resume_runs_recovery_without_picker_or_confirmation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     backend = _Backend()
     _install_harness(monkeypatch, tmp_path)
+    sweep = MagicMock()
+    picker = MagicMock(side_effect=AssertionError("named resume must not open the picker"))
+    prompt = MagicMock(side_effect=AssertionError("resume must not ask for confirmation"))
+    monkeypatch.setattr(_patch_session__session_picker, "sweep_orphaned_tethers", sweep)
+    monkeypatch.setattr(_patch_session__session_picker, "pick_session", picker)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", prompt)
 
     cli.cook(backend=backend, session_id="thread-explicit")
 
-    assert backend.recover_count == 0
+    from autoskillit.execution import default_tether_dir
+
+    sweep.assert_called_once_with(default_tether_dir())
+    assert backend.recover_count == 1
+    picker.assert_not_called()
+    prompt.assert_not_called()
     assert backend.build_calls[0]["launch"] == RestoreSession("thread-explicit")
+
+
+def test_cook_fresh_non_interactive_launches_without_confirmation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path)
+    prompt = MagicMock(side_effect=AssertionError("non-interactive cook must not prompt"))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", prompt)
+
+    cli.cook(backend=backend)
+
+    prompt.assert_not_called()
+    assert backend.build_calls[0]["launch"] == FreshLaunch()
+
+
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_cook_native_model_restoration_receives_no_cli_override(
+    backend_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Both native-restoring backends own model restoration on resume."""
+    backend = _Backend()
+    backend.name = backend_name
+    monkeypatch.setattr(
+        backend,
+        "binary_name",
+        lambda: "codex" if backend_name == "codex" else "claude",
+    )
+    _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend, session_id="thread-explicit")
+
+    assert backend.build_calls[0].get("model") is None
 
 
 def test_cook_marks_onboarded_only_after_success(

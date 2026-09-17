@@ -82,6 +82,191 @@ def resolve_recipe_section_response_bound(
     return candidate
 
 
+def _has_expected_client_gate(
+    host_client_attestation: HostClientAttestation | None,
+) -> bool:
+    """Return whether the host attested the exact injected client token gate."""
+    return (
+        host_client_attestation is not None
+        and host_client_attestation.attested_client_gate_tokens
+        == CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
+    )
+
+
+def _effective_unannotated_limit(
+    *,
+    ordinary_limit: int,
+    budget: RecipeDeliveryBudgetDef | None,
+    host_client_attestation: HostClientAttestation | None,
+) -> int:
+    """Return the ordinary inline limit, including Claude's attested headroom."""
+    if _has_expected_client_gate(host_client_attestation) and budget is None:
+        assert host_client_attestation is not None
+        return (
+            host_client_attestation.attested_client_gate_tokens
+            * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+            // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+        )
+    return ordinary_limit
+
+
+def _allows_annotation_aware_inline(
+    *,
+    budget: RecipeDeliveryBudgetDef | None,
+    host_client_attestation: HostClientAttestation | None,
+    payload_serialized_chars: int | None,
+    exemption_ceiling_chars: int | None,
+) -> bool:
+    """Return whether Claude's attested annotation channel admits this payload."""
+    return (
+        _has_expected_client_gate(host_client_attestation)
+        and host_client_attestation is not None
+        and host_client_attestation.annotation_support
+        and budget is None
+        and payload_serialized_chars is not None
+        and exemption_ceiling_chars is not None
+        and exemption_ceiling_chars <= ANNOTATION_HARD_CAP_CHARS
+        and payload_serialized_chars <= exemption_ceiling_chars
+    )
+
+
+def _protected_delivery_prerequisite_failure(
+    *,
+    capabilities: BackendCapabilities,
+    required_serialized_tokens: int,
+    budget: RecipeDeliveryBudgetDef | None,
+    request: RecipeDeliveryRequest | None,
+    attestation: RecipeDeliveryAttestation | None,
+    supported_evidence: RecipeDeliveryEvidenceDef | None,
+) -> str | None:
+    """Validate protected-delivery availability and all required authorities."""
+    if not capabilities.protected_recipe_delivery_capable:
+        return "protected_host_delivery_unavailable"
+    if budget is None:
+        return "protected_delivery_budget_unavailable"
+    if not _is_sha256_identity(budget.contract_digest):
+        return "invalid_contract_digest"
+    if required_serialized_tokens > budget.authoritative_attested_recipe_result_token_limit:
+        return "authoritative_result_limit_exceeded"
+    if request is None:
+        return "delivery_request_missing"
+    if attestation is None:
+        return "host_attestation_missing"
+    if supported_evidence is None:
+        return "supported_evidence_missing"
+    return None
+
+
+def _request_validation_failure(
+    *,
+    budget: RecipeDeliveryBudgetDef,
+    request: RecipeDeliveryRequest,
+) -> str | None:
+    """Validate the caller request against the protected-delivery contract."""
+    if request.contract_version != budget.contract_version:
+        return "request_contract_version_mismatch"
+    if not request.delivery_call_id or not _is_sha256_identity(request.code_digest):
+        return "request_identity_invalid"
+    if request.audience != RECIPE_DELIVERY_ATTESTATION_AUDIENCE:
+        return "request_audience_mismatch"
+    if request.contract_digest != budget.contract_digest:
+        return "request_contract_digest_mismatch"
+    if (
+        request.caller_requested_outer_tokens
+        != budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return "requested_result_limit_mismatch"
+    return None
+
+
+def _attestation_binding_failure(
+    *,
+    budget: RecipeDeliveryBudgetDef,
+    request: RecipeDeliveryRequest,
+    attestation: RecipeDeliveryAttestation,
+) -> str | None:
+    """Validate the attestation's request and host bindings."""
+    if attestation.delivery_call_id != request.delivery_call_id:
+        return "delivery_call_id_mismatch"
+    if attestation.audience != request.audience:
+        return "attestation_audience_mismatch"
+    if not all(
+        (
+            attestation.thread_id,
+            attestation.turn_id,
+            attestation.outer_call_id,
+            attestation.code_mode_cell_id,
+            attestation.delivery_call_id,
+            attestation.nonce,
+        )
+    ):
+        return "attestation_identity_incomplete"
+    if attestation.contract_version != request.contract_version:
+        return "attestation_contract_version_mismatch"
+    if attestation.contract_digest != request.contract_digest:
+        return "attestation_contract_digest_mismatch"
+    if attestation.host_observed_requested_outer_tokens != request.caller_requested_outer_tokens:
+        return "host_observation_mismatch"
+    if (
+        attestation.selected_result_token_limit
+        != budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return "host_selected_limit_mismatch"
+    if attestation.code_digest != request.code_digest:
+        return "code_digest_mismatch"
+    if attestation.request_digest != recipe_delivery_request_digest(request):
+        return "request_digest_mismatch"
+    return None
+
+
+def _attestation_freshness_failure(
+    *,
+    budget: RecipeDeliveryBudgetDef,
+    attestation: RecipeDeliveryAttestation,
+    now_unix: int,
+) -> str | None:
+    """Validate expiry and parser versions after the request digest is bound."""
+    if attestation.expires_at_unix <= now_unix:
+        return "attestation_expired"
+    if attestation.parser_version != budget.parser_version:
+        return "attestation_parser_version_mismatch"
+    if attestation.evidence_version != budget.evidence_version:
+        return "attestation_evidence_version_mismatch"
+    return None
+
+
+def _supported_evidence_validation_failure(
+    *,
+    budget: RecipeDeliveryBudgetDef,
+    attestation: RecipeDeliveryAttestation,
+    supported_evidence: RecipeDeliveryEvidenceDef,
+) -> str | None:
+    """Validate that the host evidence definition backs the attestation."""
+    if attestation.evidence_identity != supported_evidence.identity:
+        return "unsupported_evidence_identity"
+    if not all(
+        (
+            supported_evidence.identity,
+            supported_evidence.host_channel,
+            supported_evidence.cli_identity,
+            supported_evidence.selected_limit_derivation,
+        )
+    ):
+        return "supported_evidence_incomplete"
+    if supported_evidence.contract_digest != budget.contract_digest:
+        return "evidence_contract_digest_mismatch"
+    if supported_evidence.parser_version != budget.parser_version:
+        return "evidence_parser_version_mismatch"
+    if supported_evidence.evidence_schema_version != budget.evidence_version:
+        return "evidence_schema_version_mismatch"
+    if (
+        supported_evidence.selected_result_token_limit
+        != budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return "evidence_selected_limit_mismatch"
+    return None
+
+
 def resolve_recipe_delivery_decision(
     *,
     capabilities: BackendCapabilities,
@@ -145,19 +330,10 @@ def resolve_recipe_delivery_decision(
     # only), the admission limit rises to the attested value × conservative
     # headroom (46,500). Without attestation, or for backends with their own
     # protected pipeline (Codex), the static conservative default applies.
-    _attestation_valid = (
-        host_client_attestation is not None
-        and host_client_attestation.attested_client_gate_tokens
-        == CLAUDE_INJECTED_CLIENT_RESULT_TOKENS
-    )
-    effective_unannotated_limit = (
-        (
-            host_client_attestation.attested_client_gate_tokens
-            * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
-            // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
-        )
-        if _attestation_valid and host_client_attestation is not None and budget is None
-        else ordinary_limit
+    effective_unannotated_limit = _effective_unannotated_limit(
+        ordinary_limit=ordinary_limit,
+        budget=budget,
+        host_client_attestation=host_client_attestation,
     )
     if required_serialized_tokens <= effective_unannotated_limit:
         return _decision(
@@ -175,16 +351,13 @@ def resolve_recipe_delivery_decision(
     # pipeline's receipt-based checks below, never through an unreceipted
     # annotation shortcut. Requires exact gate-token match to prevent
     # arbitrary positive attestation from bypassing the token gate.
-    if (
-        _attestation_valid
-        and host_client_attestation is not None
-        and host_client_attestation.annotation_support
-        and budget is None
-        and payload_serialized_chars is not None
-        and exemption_ceiling_chars is not None
-        and exemption_ceiling_chars <= ANNOTATION_HARD_CAP_CHARS
-        and payload_serialized_chars <= exemption_ceiling_chars
+    if _allows_annotation_aware_inline(
+        budget=budget,
+        host_client_attestation=host_client_attestation,
+        payload_serialized_chars=payload_serialized_chars,
+        exemption_ceiling_chars=exemption_ceiling_chars,
     ):
+        assert exemption_ceiling_chars is not None
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
             selected_limit=CLIENT_CHARS_PER_TOKEN_POLICY.to_tokens(
@@ -193,89 +366,50 @@ def resolve_recipe_delivery_decision(
             reason="annotation_aware_inline",
             receipt_status="not_required",
         )
-    if not capabilities.protected_recipe_delivery_capable:
-        return _envelope("protected_host_delivery_unavailable")
-    if budget is None:
-        return _envelope("protected_delivery_budget_unavailable")
-    if not _is_sha256_identity(budget.contract_digest):
-        return _envelope("invalid_contract_digest")
-    if required_serialized_tokens > budget.authoritative_attested_recipe_result_token_limit:
-        return _envelope("authoritative_result_limit_exceeded")
-    if request is None:
-        return _envelope("delivery_request_missing")
-    if attestation is None:
-        return _envelope("host_attestation_missing")
-    if supported_evidence is None:
-        return _envelope("supported_evidence_missing")
-    if request.contract_version != budget.contract_version:
-        return _envelope("request_contract_version_mismatch")
-    if not request.delivery_call_id or not _is_sha256_identity(request.code_digest):
-        return _envelope("request_identity_invalid")
-    if request.audience != RECIPE_DELIVERY_ATTESTATION_AUDIENCE:
-        return _envelope("request_audience_mismatch")
-    if request.contract_digest != budget.contract_digest:
-        return _envelope("request_contract_digest_mismatch")
-    if request.caller_requested_outer_tokens != (
-        budget.authoritative_attested_recipe_result_token_limit
-    ):
-        return _envelope("requested_result_limit_mismatch")
-    if attestation.delivery_call_id != request.delivery_call_id:
-        return _envelope("delivery_call_id_mismatch")
-    if attestation.audience != request.audience:
-        return _envelope("attestation_audience_mismatch")
-    if not all(
-        (
-            attestation.thread_id,
-            attestation.turn_id,
-            attestation.outer_call_id,
-            attestation.code_mode_cell_id,
-            attestation.delivery_call_id,
-            attestation.nonce,
-        )
-    ):
-        return _envelope("attestation_identity_incomplete")
-    if attestation.contract_version != request.contract_version:
-        return _envelope("attestation_contract_version_mismatch")
-    if attestation.contract_digest != request.contract_digest:
-        return _envelope("attestation_contract_digest_mismatch")
-    if attestation.host_observed_requested_outer_tokens != (request.caller_requested_outer_tokens):
-        return _envelope("host_observation_mismatch")
-    if attestation.selected_result_token_limit != (
-        budget.authoritative_attested_recipe_result_token_limit
-    ):
-        return _envelope("host_selected_limit_mismatch")
-    if attestation.code_digest != request.code_digest:
-        return _envelope("code_digest_mismatch")
-    if attestation.request_digest != recipe_delivery_request_digest(request):
-        return _envelope("request_digest_mismatch")
+    prerequisite_failure = _protected_delivery_prerequisite_failure(
+        capabilities=capabilities,
+        required_serialized_tokens=required_serialized_tokens,
+        budget=budget,
+        request=request,
+        attestation=attestation,
+        supported_evidence=supported_evidence,
+    )
+    if prerequisite_failure is not None:
+        return _envelope(prerequisite_failure)
+
+    assert budget is not None
+    assert request is not None
+    assert attestation is not None
+    assert supported_evidence is not None
+
+    request_failure = _request_validation_failure(budget=budget, request=request)
+    if request_failure is not None:
+        return _envelope(request_failure)
+
+    attestation_failure = _attestation_binding_failure(
+        budget=budget,
+        request=request,
+        attestation=attestation,
+    )
+    if attestation_failure is not None:
+        return _envelope(attestation_failure)
+
     effective_now = int(time.time()) if now_unix is None else now_unix
-    if attestation.expires_at_unix <= effective_now:
-        return _envelope("attestation_expired")
-    if attestation.parser_version != budget.parser_version:
-        return _envelope("attestation_parser_version_mismatch")
-    if attestation.evidence_version != budget.evidence_version:
-        return _envelope("attestation_evidence_version_mismatch")
-    if attestation.evidence_identity != supported_evidence.identity:
-        return _envelope("unsupported_evidence_identity")
-    if not all(
-        (
-            supported_evidence.identity,
-            supported_evidence.host_channel,
-            supported_evidence.cli_identity,
-            supported_evidence.selected_limit_derivation,
-        )
-    ):
-        return _envelope("supported_evidence_incomplete")
-    if supported_evidence.contract_digest != budget.contract_digest:
-        return _envelope("evidence_contract_digest_mismatch")
-    if supported_evidence.parser_version != budget.parser_version:
-        return _envelope("evidence_parser_version_mismatch")
-    if supported_evidence.evidence_schema_version != budget.evidence_version:
-        return _envelope("evidence_schema_version_mismatch")
-    if supported_evidence.selected_result_token_limit != (
-        budget.authoritative_attested_recipe_result_token_limit
-    ):
-        return _envelope("evidence_selected_limit_mismatch")
+    attestation_failure = _attestation_freshness_failure(
+        budget=budget,
+        attestation=attestation,
+        now_unix=effective_now,
+    )
+    if attestation_failure is not None:
+        return _envelope(attestation_failure)
+
+    supported_evidence_failure = _supported_evidence_validation_failure(
+        budget=budget,
+        attestation=attestation,
+        supported_evidence=supported_evidence,
+    )
+    if supported_evidence_failure is not None:
+        return _envelope(supported_evidence_failure)
 
     return _decision(
         RecipeDeliveryMode.ATTESTED_INLINE,

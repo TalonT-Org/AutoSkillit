@@ -96,6 +96,52 @@ def _close_preserving_primary(fd: int, primary: BaseException) -> None:
         )
 
 
+def _prepare_lock_directory(lock_path: Path, *, create: bool) -> int:
+    """Create when requested, securely open, and validate the lease directory."""
+    if create:
+        lock_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_fd = os.open(lock_path.parent, directory_flags)
+    try:
+        directory_stat = os.fstat(directory_fd)
+        if not stat.S_ISDIR(directory_stat.st_mode):
+            raise RuntimeError(f"Artifact lease root is not a directory: {lock_path.parent}")
+        if create:
+            os.fchmod(directory_fd, 0o700)
+    except BaseException as primary:
+        _close_preserving_primary(directory_fd, primary)
+        raise
+    return directory_fd
+
+
+def _open_validated_sidecar(
+    directory_fd: int,
+    lock_path: Path,
+    *,
+    create: bool,
+) -> int:
+    """Securely open and validate the regular sidecar while its directory fd is live."""
+    open_flags = os.O_RDWR | os.O_CREAT
+    if not create:
+        open_flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(
+        lock_path.name,
+        open_flags | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+        dir_fd=directory_fd,
+    )
+    try:
+        lease_stat = os.fstat(fd)
+        if not stat.S_ISREG(lease_stat.st_mode):
+            raise RuntimeError(f"Artifact lease is not a regular file: {lock_path}")
+        if create:
+            os.fchmod(fd, 0o600)
+    except BaseException as primary:
+        _close_preserving_primary(fd, primary)
+        raise
+    return fd
+
+
 class ArtifactLeaseContention(TimeoutError):
     """Raised when a bounded artifact lease acquisition times out."""
 
@@ -179,34 +225,10 @@ class ArtifactLease:
         if lock_path.suffix != ".lock":
             raise ValueError(f"Artifact lease path must use the .lock suffix: {lock_path}")
 
-        if create:
-            lock_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        directory_flags = (
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-        )
-        directory_fd = os.open(lock_path.parent, directory_flags)
+        directory_fd = _prepare_lock_directory(lock_path, create=create)
         fd: int | None = None
         try:
-            directory_stat = os.fstat(directory_fd)
-            if not stat.S_ISDIR(directory_stat.st_mode):
-                raise RuntimeError(f"Artifact lease root is not a directory: {lock_path.parent}")
-            if create:
-                os.fchmod(directory_fd, 0o700)
-
-            open_flags = os.O_RDWR | os.O_CREAT
-            if not create:
-                open_flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
-            fd = os.open(
-                lock_path.name,
-                open_flags | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-                dir_fd=directory_fd,
-            )
-            lease_stat = os.fstat(fd)
-            if not stat.S_ISREG(lease_stat.st_mode):
-                raise RuntimeError(f"Artifact lease is not a regular file: {lock_path}")
-            if create:
-                os.fchmod(fd, 0o600)
+            fd = _open_validated_sidecar(directory_fd, lock_path, create=create)
 
             operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
             try:

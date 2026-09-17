@@ -52,10 +52,14 @@ _EXPECTED_CALLERS = Counter(
         (
             _ADAPT,
             "workspace/_projected_artifact/_documents.py",
-            "project_agent_skill_document",
+            "_apply_semantic_adaptation",
         ): 1,
         (_ADAPT, "workspace/session_skills/_catalog.py", "compile_session_skill_catalog"): 1,
-        (_ADAPT, "workspace/session_skills/_materialization.py", "_materialize_session"): 1,
+        (
+            _ADAPT,
+            "workspace/session_skills/_materialization.py",
+            "_admit_invocation_records",
+        ): 1,
         (_ADAPT, "workspace/session_skills/_projection.py", "build_skill_projection_binding"): 1,
     }
 )
@@ -81,7 +85,7 @@ _REFUSAL_EXEMPTIONS: tuple[tuple[str, str, str, str], ...] = (
     (
         _ADAPT,
         "workspace/_projected_artifact/_documents.py",
-        "project_agent_skill_document",
+        "_apply_semantic_adaptation",
         (
             "Document rendering receives an already-admitted skill and has no structured "
             "refusal return; validate_for() remains its enforcement-only fail-closed path."

@@ -41,6 +41,78 @@ from ._resources import load_skill_resource
 logger = get_logger(__name__)
 
 
+def _admit_required_resources(
+    required_resources_raw: object,
+) -> tuple[tuple[str, ...], dict[str, str], tuple[SkillInvalidity, ...]]:
+    invalidities: list[SkillInvalidity] = []
+    if not isinstance(required_resources_raw, list):
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.FIELD_SHAPE,
+                "requires_resources must be a list",
+            )
+        )
+        required_resources_raw = []
+    required_resources = tuple(str(resource_id) for resource_id in required_resources_raw)
+    resource_digests: dict[str, str] = {}
+    for resource_id in required_resources:
+        try:
+            resource = load_skill_resource(resource_id)
+        except SkillContractError as exc:
+            invalidities.append(
+                SkillInvalidity(
+                    SkillInvalidityKind.RESOURCE_CONTRACT_INVALID,
+                    str(exc),
+                )
+            )
+        else:
+            resource_digests[resource_id] = resource.digest
+    return required_resources, resource_digests, tuple(invalidities)
+
+
+def _admit_exploration_sidecar(
+    data: dict[str, object],
+    *,
+    skill_path: Path,
+    skill_name: str,
+    content: str,
+) -> tuple[tuple[ExplorationVectorDef, ...], str, tuple[SkillInvalidity, ...]]:
+    if "exploration_vectors" in data:
+        return (
+            (),
+            "",
+            (
+                SkillInvalidity(
+                    SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                    "exploration_vectors in frontmatter is no longer supported; "
+                    "moved to the exploration.yaml sidecar",
+                ),
+            ),
+        )
+    sidecar_digest = ""
+    try:
+        sidecar_data, sidecar_digest = _skills_facade._load_exploration_sidecar(skill_path)
+        if sidecar_data is None:
+            return (), sidecar_digest, ()
+        parsed_vectors = _skills_facade._parse_exploration_sidecar(sidecar_data, skill_name)
+        return (
+            _skills_facade._bind_exploration_vector_markers(content, parsed_vectors),
+            sidecar_digest,
+            (),
+        )
+    except SkillContractError as exc:
+        return (
+            (),
+            sidecar_digest,
+            (
+                SkillInvalidity(
+                    SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                    str(exc),
+                ),
+            ),
+        )
+
+
 def _skill_info_from_frontmatter(
     name: str,
     source: SkillSource,
@@ -115,61 +187,20 @@ def _skill_info_from_frontmatter(
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
     required_resources_raw = data.get("requires_resources", [])
-    if not isinstance(required_resources_raw, list):
-        invalidities.append(
-            SkillInvalidity(
-                SkillInvalidityKind.FIELD_SHAPE,
-                "requires_resources must be a list",
-            )
-        )
-        required_resources_raw = []
-    required_resources = tuple(str(resource_id) for resource_id in required_resources_raw)
-    resource_digests: dict[str, str] = {}
-    for resource_id in required_resources:
-        try:
-            resource = load_skill_resource(resource_id)
-        except SkillContractError as exc:
-            invalidities.append(
-                SkillInvalidity(
-                    SkillInvalidityKind.RESOURCE_CONTRACT_INVALID,
-                    str(exc),
-                )
-            )
-        else:
-            resource_digests[resource_id] = resource.digest
+    required_resources, resource_digests, resource_invalidities = _admit_required_resources(
+        required_resources_raw
+    )
+    invalidities.extend(resource_invalidities)
 
-    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
-    exploration_sidecar_digest = ""
-    if "exploration_vectors" in data:
-        invalidities.append(
-            SkillInvalidity(
-                SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
-                "exploration_vectors in frontmatter is no longer supported; "
-                "moved to the exploration.yaml sidecar",
-            )
+    exploration_vectors, exploration_sidecar_digest, exploration_invalidities = (
+        _admit_exploration_sidecar(
+            data,
+            skill_path=skill_path,
+            skill_name=name,
+            content=parsed.content,
         )
-    else:
-        try:
-            sidecar_data, sidecar_digest = _skills_facade._load_exploration_sidecar(skill_path)
-            exploration_sidecar_digest = sidecar_digest
-            if sidecar_data is not None:
-                parsed_vectors = _skills_facade._parse_exploration_sidecar(sidecar_data, name)
-                exploration_vectors = _skills_facade._bind_exploration_vector_markers(
-                    parsed.content,
-                    parsed_vectors,
-                )
-            else:
-                # No sidecar found at this skill path: leave exploration_vectors
-                # empty and let downstream enforcement decide whether the body
-                # has unbound markers that require a sidecar.
-                pass
-        except SkillContractError as exc:
-            invalidities.append(
-                SkillInvalidity(
-                    SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
-                    str(exc),
-                )
-            )
+    )
+    invalidities.extend(exploration_invalidities)
 
     # These names are reserved machine-derived fields. Reading them here makes
     # attempts to inject source identity through YAML an explicit contract error.

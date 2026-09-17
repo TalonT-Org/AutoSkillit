@@ -10,11 +10,13 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
         ArgvToken,
+        EvaluatedSegment,
         StdinLiteral,
         _CommandSegment,
         _normalize_newlines_for_tokenize,
@@ -33,6 +35,7 @@ else:
         from _classification import _tokenizer
 
     ArgvToken = _tokenizer.ArgvToken
+    EvaluatedSegment = _tokenizer.EvaluatedSegment
     StdinLiteral = _tokenizer.StdinLiteral
     _CommandSegment = _tokenizer._CommandSegment
     _normalize_newlines_for_tokenize = _tokenizer._normalize_newlines_for_tokenize
@@ -542,16 +545,37 @@ def is_git_command(segment: list[str]) -> bool:
     return verb == "git" or verb.endswith("/git")
 
 
-def extract_git_subcommand_and_flags(
-    segment: list[str],
-) -> tuple[str, list[str]] | None:
+@dataclass(slots=True)
+class GitInvocation:
+    subcommand: str
+    flags: list[str]
+    global_flags: list[str]
+    prefix_tokens: list[str]
+
+
+def _normalized_git_global_flag(token: str) -> str:
+    if token.startswith("--") and "=" in token:
+        return token.partition("=")[0]
+    for flag, arity in _GIT_GLOBAL_FLAG_SPEC.items():
+        if (
+            arity == _FlagArity.VALUE
+            and len(flag) == 2
+            and token.startswith(flag)
+            and token != flag
+        ):
+            return flag
+    return token
+
+
+def extract_git_subcommand_and_flags(segment: list[str]) -> GitInvocation | None:
     """Extract the git subcommand and its flags from a tokenized segment.
 
     Skips global git flags (and their value tokens) to find the subcommand,
-    then returns (subcommand, remaining_tokens). Returns None if the segment
+    then returns its subcommand, remaining tokens, global flags, and skipped
+    command prefix. Returns None if the segment
     is not a git command or has no subcommand.
 
-    Returns ("<unresolved>", []) when an unrecognized `-`-prefixed global
+    Returns a `"<unresolved>"` invocation when an unrecognized `-`-prefixed global
     flag is encountered before the subcommand -- distinguishable from None
     (not a git command, or the segment ends before a subcommand appears),
     since this function's three callers treat the two differently: an
@@ -568,19 +592,22 @@ def extract_git_subcommand_and_flags(
     verb = segment[start]
     if verb != "git" and not verb.endswith("/git"):
         return None
+    prefix_tokens = segment[:start]
+    global_flags: list[str] = []
     i = start + 1
     while i < len(segment):
         token = segment[i]
         if token.startswith("-"):
             _, next_i, recognized = _consume_str_flag(segment, i, _GIT_GLOBAL_FLAG_SPEC)
             if not recognized:
-                return ("<unresolved>", [])
+                return GitInvocation("<unresolved>", [], [], [])
+            global_flags.append(_normalized_git_global_flag(token))
             i = next_i
             continue
         # First non-flag token is the subcommand
         subcommand = token
         remaining = segment[i + 1 :]
-        return (subcommand, remaining)
+        return GitInvocation(subcommand, remaining, global_flags, prefix_tokens)
     return None
 
 

@@ -137,14 +137,8 @@ def read_skill_frontmatter(path: Path) -> SkillFrontmatterParseResult:
     return parse_frontmatter_content(content)
 
 
-def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> list[str]:
-    """Validate a parsed SKILL.md frontmatter dict against agentskills.io spec.
-
-    Returns an empty list when valid, or a list of human-readable error strings.
-    """
+def _validate_frontmatter_name(name: object, skill_name: str) -> list[str]:
     errors: list[str] = []
-
-    name = frontmatter.get("name")
     if not isinstance(name, str) or not name:
         errors.append("frontmatter missing required 'name' field")
     else:
@@ -157,19 +151,26 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
                 f"'name' {name!r} must match ^[a-z0-9-]+$"
                 " (lowercase letters, digits, hyphens only)"
             )
+    return errors
 
-    desc = frontmatter.get("description")
-    if not isinstance(desc, str) or not desc:
+
+def _validate_frontmatter_description(description: object) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(description, str) or not description:
         errors.append("frontmatter missing required 'description' field")
     else:
-        if len(desc) > _DESCRIPTION_MAX_LEN:
+        if len(description) > _DESCRIPTION_MAX_LEN:
             errors.append(
-                f"'description' exceeds {_DESCRIPTION_MAX_LEN} character limit (got {len(desc)})"
+                f"'description' exceeds {_DESCRIPTION_MAX_LEN} character limit "
+                f"(got {len(description)})"
             )
-        if "<" in desc or ">" in desc:
+        if "<" in description or ">" in description:
             errors.append("'description' must not contain '<' or '>' characters")
+    return errors
 
-    write_paths = frontmatter.get("write_paths")
+
+def _validate_frontmatter_write_paths(write_paths: object) -> list[str]:
+    errors: list[str] = []
     if write_paths is not None:
         if not isinstance(write_paths, list):
             errors.append("'write_paths' must be a list of strings")
@@ -187,5 +188,17 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
                         "'{{AUTOSKILLIT_TEMP}}/' "
                         f"(got {wp!r})"
                     )
+    return errors
+
+
+def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> list[str]:
+    """Validate a parsed SKILL.md frontmatter dict against agentskills.io spec.
+
+    Returns an empty list when valid, or a list of human-readable error strings.
+    """
+    errors: list[str] = []
+    errors.extend(_validate_frontmatter_name(frontmatter.get("name"), skill_name))
+    errors.extend(_validate_frontmatter_description(frontmatter.get("description")))
+    errors.extend(_validate_frontmatter_write_paths(frontmatter.get("write_paths")))
 
     return errors

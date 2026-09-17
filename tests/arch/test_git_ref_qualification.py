@@ -119,7 +119,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "hooks/guards/_git_command_classification.py",
         "_git_result",
-        223,
+        224,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
@@ -200,9 +200,21 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
         "fetch",
         "BARE",
     ),
-    ("workspace/clone/__init__.py", "clone_repo", 286, "<unresolved>", "UNRESOLVABLE"),
-    ("workspace/clone/__init__.py", "clone_repo", 294, "<unresolved>", "UNRESOLVABLE"),
-    ("workspace/clone/__init__.py", "push_to_remote", 488, "push", "BARE"),
+    (
+        "workspace/clone/__init__.py",
+        "_decontaminate_generated_files",
+        169,
+        "<unresolved>",
+        "UNRESOLVABLE",
+    ),
+    (
+        "workspace/clone/__init__.py",
+        "_decontaminate_generated_files",
+        177,
+        "<unresolved>",
+        "UNRESOLVABLE",
+    ),
+    ("workspace/clone/__init__.py", "push_to_remote", 511, "push", "BARE"),
 )
 _DEFERRED_REF_SITES: dict[tuple[str, str, int, str, str], TrackedDeferral] = {}
 

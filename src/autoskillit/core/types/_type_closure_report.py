@@ -15,13 +15,17 @@ from ..audit.closure_hashing import compute_report_hash, compute_row_hash
 __all__ = [
     "CLOSURE_REPORT_SCHEMA_VERSION",
     "CLOSURE_ROW_ALLOWED_ASSESSMENTS",
+    "CLOSURE_ROW_BLOCKING_ASSESSMENTS",
     "ClosureRow",
     "ClosureReport",
 ]
 
 CLOSURE_REPORT_SCHEMA_VERSION: int = 1
 CLOSURE_ROW_ALLOWED_ASSESSMENTS: frozenset[str] = frozenset(
-    {"COVERED", "MISSING", "ODD", "CONFLICT", "NAMED_DEVIATION"}
+    {"COVERED", "MISSING", "ODD", "CONFLICT", "UNPRESCRIBED_SUBSTITUTION"}
+)
+CLOSURE_ROW_BLOCKING_ASSESSMENTS: frozenset[str] = frozenset(
+    {"MISSING", "CONFLICT", "UNPRESCRIBED_SUBSTITUTION"}
 )
 
 _ALLOWED_ASSESSMENTS = CLOSURE_ROW_ALLOWED_ASSESSMENTS
@@ -119,11 +123,9 @@ class ClosureReport:
             if not _HASH_RE.match(ph):
                 errors.append(f"plan_hashes[{idx}] has malformed format: {ph!r}")
         if self.verdict == "GO":
-            blocking = [r for r in self.rows if r.assessment in {"MISSING", "CONFLICT"}]
+            blocking = [r for r in self.rows if r.assessment in CLOSURE_ROW_BLOCKING_ASSESSMENTS]
             if blocking:
-                errors.append(
-                    f"verdict=GO but {len(blocking)} rows have MISSING/CONFLICT assessments"
-                )
+                errors.append(f"verdict=GO but {len(blocking)} rows have blocking assessments")
         if self.verdict == "NO GO" and (
             self.remediation_path is None or not self.remediation_path
         ):

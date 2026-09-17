@@ -7,7 +7,10 @@ materialization step, not to this codec.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -24,9 +27,17 @@ from ..types._type_audit_artifact_ref import ArtifactRef
 
 __all__ = [
     "AuditSemanticCodecError",
+    "PRESCRIPTIVE_MECHANISM_CUES",
+    "ProbedRequirement",
+    "SUBSTITUTION_MARKERS",
+    "SubstitutionFinding",
+    "SubstitutionTrigger",
     "canonical_full_reference_records_match",
+    "evaluate_diff_mock_of_prescribed_symbol",
+    "evaluate_rationale_contradiction",
     "load_audit_semantic_result",
     "load_standalone_audit_evidence",
+    "probe_substitutions",
 ]
 
 _DEFAULT_MAX_SIZE_BYTES = 10_000_000
@@ -58,6 +69,176 @@ _ASSESSMENT_KEYS = frozenset(
         "row_digest",
     }
 )
+
+SUBSTITUTION_MARKERS: frozenset[str] = frozenset(
+    {
+        "mock",
+        "mocks",
+        "mocked",
+        "monkeypatch",
+        "patch",
+        "patched",
+        "stub",
+        "stubbed",
+        "side_effect",
+        "fake",
+        "faked",
+        "simulated",
+        "simulates",
+        "instead of",
+        "in lieu of",
+        "rather than",
+    }
+)
+PRESCRIPTIVE_MECHANISM_CUES: frozenset[str] = frozenset(
+    {
+        "spawn",
+        "real",
+        "actual",
+        "topology",
+        "parent",
+        "child",
+        "descendant",
+        "process",
+        "end-to-end",
+        "integration",
+        "live",
+        "genuine",
+        "not mocked",
+    }
+)
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_IDENTIFIER_RE = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_])")
+
+
+class SubstitutionTrigger(StrEnum):
+    RATIONALE_CONTRADICTION = "RATIONALE_CONTRADICTION"
+    DIFF_MOCK_OF_PRESCRIBED_SYMBOL = "DIFF_MOCK_OF_PRESCRIBED_SYMBOL"
+
+
+@dataclass(frozen=True, slots=True)
+class ProbedRequirement:
+    requirement_id: str
+    requirement_text: str
+    evidence_summary: str
+
+
+@dataclass(frozen=True, slots=True)
+class SubstitutionFinding:
+    requirement_id: str
+    trigger: SubstitutionTrigger
+    matched_marker: str
+    matched_prescription: str
+
+
+def _tokens(value: str) -> tuple[str, ...]:
+    return tuple(_TOKEN_RE.findall(value.casefold().replace("_", " ")))
+
+
+def _first_matching_term(value: str, terms: frozenset[str]) -> str | None:
+    haystack = _tokens(value)
+    for term in sorted(terms):
+        needle = _tokens(term)
+        width = len(needle)
+        if width and any(
+            haystack[index : index + width] == needle for index in range(len(haystack))
+        ):
+            return term
+    return None
+
+
+def _added_diff_text(diff_text: str) -> str:
+    """Return the joined text of added unified-diff lines.
+
+    Strips the leading ``+`` marker and skips the ``+++`` file header. The
+    ``\\ No newline at end of file`` escape (always prefixed with a single
+    space, never with ``+``) is filtered incidentally because it does not
+    start with ``+``. The result is a corpus suitable for term and
+    identifier matching, not a structural reconstruction of the diff.
+    """
+    chunks: list[str] = []
+    for line in diff_text.splitlines():
+        if not line.startswith("+"):
+            continue
+        if line.startswith("+++"):
+            continue
+        chunks.append(line[1:])
+    return "\n".join(chunks)
+
+
+def evaluate_rationale_contradiction(
+    requirement_id: str,
+    requirement_text: str,
+    evidence_summary: str,
+) -> SubstitutionFinding | None:
+    """Detect evidence that substitutes for a requirement's prescribed mechanism."""
+
+    marker = _first_matching_term(evidence_summary, SUBSTITUTION_MARKERS)
+    cue = _first_matching_term(requirement_text, PRESCRIPTIVE_MECHANISM_CUES)
+    if marker is None or cue is None:
+        return None
+    return SubstitutionFinding(
+        requirement_id=requirement_id,
+        trigger=SubstitutionTrigger.RATIONALE_CONTRADICTION,
+        matched_marker=marker,
+        matched_prescription=cue,
+    )
+
+
+def evaluate_diff_mock_of_prescribed_symbol(
+    requirement_id: str,
+    requirement_text: str,
+    diff_text: str,
+) -> SubstitutionFinding | None:
+    """Detect added diff lines that mock an identifier named by a requirement."""
+
+    identifiers = {
+        match.group(0).casefold()
+        for match in _IDENTIFIER_RE.finditer(requirement_text)
+        if "_" in match.group(0)
+    }
+    if not identifiers:
+        return None
+    added_text = _added_diff_text(diff_text)
+    marker = _first_matching_term(added_text, SUBSTITUTION_MARKERS)
+    added_identifiers = {
+        match.group(0).casefold() for match in _IDENTIFIER_RE.finditer(added_text)
+    }
+    matches = sorted(identifiers & added_identifiers)
+    if marker is not None and matches:
+        return SubstitutionFinding(
+            requirement_id=requirement_id,
+            trigger=SubstitutionTrigger.DIFF_MOCK_OF_PRESCRIBED_SYMBOL,
+            matched_marker=marker,
+            matched_prescription=matches[0],
+        )
+    return None
+
+
+def probe_substitutions(
+    requirements: tuple[ProbedRequirement, ...],
+    diff_text: str,
+) -> tuple[SubstitutionFinding, ...]:
+    """Apply both deterministic substitution rules to each requirement."""
+
+    findings: list[SubstitutionFinding] = []
+    for requirement in requirements:
+        candidates = (
+            evaluate_rationale_contradiction(
+                requirement.requirement_id,
+                requirement.requirement_text,
+                requirement.evidence_summary,
+            ),
+            evaluate_diff_mock_of_prescribed_symbol(
+                requirement.requirement_id,
+                requirement.requirement_text,
+                diff_text,
+            ),
+        )
+        findings.extend(candidate for candidate in candidates if candidate is not None)
+    return tuple(dict.fromkeys(findings))
+
 
 AuditSemanticCodecReason = Literal[
     "artifact_read_failed",

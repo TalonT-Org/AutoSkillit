@@ -146,6 +146,15 @@ def _paths_from_maps(maps_text: str) -> list[Path]:
     return paths
 
 
+def _numeric_process_dirs(proc_root: Path) -> list[Path]:
+    """Eagerly enumerate numeric process directories with one root-error boundary."""
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError as exc:
+        raise LivenessScanUnavailable(f"cannot enumerate {proc_root}: {exc}") from exc
+    return [entry for entry in entries if entry.name.isdigit() and entry.is_dir()]
+
+
 def harvest_kernel_references(proc_root: Path) -> list[PathEvidence]:
     """Harvest REVOCABLE evidence: cwd, fd/*, maps -- kernel-maintained, live-view proof of
     present use. Feeds veto_paths() only.
@@ -155,14 +164,8 @@ def harvest_kernel_references(proc_root: Path) -> list[PathEvidence]:
     per-entry PermissionError/FileNotFoundError is routine, not a scan failure. A failure to
     enumerate proc_root itself raises LivenessScanUnavailable.
     """
-    try:
-        process_dirs = list(proc_root.iterdir())
-    except OSError as exc:
-        raise LivenessScanUnavailable(f"cannot enumerate {proc_root}: {exc}") from exc
     evidence: list[PathEvidence] = []
-    for process_dir in process_dirs:
-        if not process_dir.name.isdigit() or not process_dir.is_dir():
-            continue
+    for process_dir in _numeric_process_dirs(proc_root):
         try:
             cwd = Path(os.readlink(process_dir / "cwd"))
         except OSError:
@@ -201,14 +204,8 @@ def harvest_snapshot_references(proc_root: Path) -> list[PathEvidence]:
     ever gain a path reference, never lose one, for the life of the holder. Feeds
     snapshot_referenced() only -- see the module docstring for why both sources are MONOTONIC.
     """
-    try:
-        process_dirs = list(proc_root.iterdir())
-    except OSError as exc:
-        raise LivenessScanUnavailable(f"cannot enumerate {proc_root}: {exc}") from exc
     evidence: list[PathEvidence] = []
-    for process_dir in process_dirs:
-        if not process_dir.name.isdigit() or not process_dir.is_dir():
-            continue
+    for process_dir in _numeric_process_dirs(proc_root):
         for filename, source in (
             ("environ", EvidenceSource.PROC_ENVIRON),
             ("cmdline", EvidenceSource.PROC_CMDLINE),

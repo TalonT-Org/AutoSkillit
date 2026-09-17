@@ -1,5 +1,3 @@
-"""Tamper-evident audit-cycle verification and pure inventory admission."""
-
 from __future__ import annotations
 
 import re
@@ -44,11 +42,7 @@ _STEP_HEADING_RE = re.compile(
 @runtime_checkable
 class ArtifactByteReader(Protocol):
     def __call__(
-        self,
-        path: str | Path,
-        allowed_root: str | Path,
-        *,
-        max_size_bytes: int,
+        self, path: str | Path, allowed_root: str | Path, *, max_size_bytes: int
     ) -> tuple[Path, bytes]: ...
 
 
@@ -186,6 +180,45 @@ class InventoryAdmissionEvaluator:
         inventory_requirement_ids: tuple[str, ...],
         current_plan_text: str,
     ) -> InventoryAdmissionDecision:
+        authority_decision = self._verify_authority_consistency(
+            authority=authority,
+            trusted_head=trusted_head,
+            report=report,
+            expected_generation=expected_generation,
+            expected_plan_set_id=expected_plan_set_id,
+            expected_scope_id=expected_scope_id,
+        )
+        if authority_decision is not None:
+            return authority_decision
+
+        assert authority is not None
+        assert trusted_head is not None
+        verdict_decision = self._evaluate_go_successor_or_no_go(
+            authority=authority,
+            trusted_head=trusted_head,
+            expected_part_id=expected_part_id,
+        )
+        if verdict_decision is not None:
+            return verdict_decision
+
+        return self._verify_no_go(
+            authority=authority,
+            report=report,
+            current_plan_ref=current_plan_ref,
+            inventory_requirement_ids=inventory_requirement_ids,
+            current_plan_text=current_plan_text,
+        )
+
+    @staticmethod
+    def _verify_authority_consistency(
+        *,
+        authority: AuditCycleAuthority | None,
+        trusted_head: AuditCycleHead | None,
+        report: PlanDispositionReport | None,
+        expected_generation: str,
+        expected_plan_set_id: str,
+        expected_scope_id: str,
+    ) -> InventoryAdmissionDecision | None:
         if authority is None:
             if report is not None:
                 return _reject(
@@ -195,46 +228,76 @@ class InventoryAdmissionEvaluator:
             return InventoryAdmissionDecision.omit(AdmissionReason.NO_AUTHORITY)
         if trusted_head is None:
             return _reject(AdmissionReason.HEAD_MISSING, "trusted audit-cycle head is absent")
-        if authority.authority_digest != trusted_head.current_authority_digest:
-            return _reject(
-                AdmissionReason.AUTHORITY_NOT_CURRENT,
-                "authority is not the trusted current head",
-            )
-        if authority.execution_generation != trusted_head.execution_generation:
-            return _reject(
-                AdmissionReason.GENERATION_MISMATCH,
-                "authority and trusted head generations differ",
-            )
-        if authority.cycle_id != trusted_head.cycle_id:
-            return _reject(AdmissionReason.CYCLE_MISMATCH, "authority and head cycle IDs differ")
-        if authority.plan_set_id != trusted_head.plan_set_id:
-            return _reject(
-                AdmissionReason.PLAN_SET_MISMATCH,
-                "authority and head plan-set IDs differ",
-            )
-        if authority.scope_id != trusted_head.scope_id:
-            return _reject(AdmissionReason.SCOPE_MISMATCH, "authority and head scope IDs differ")
-        if authority.part_id != trusted_head.part_id:
-            return _reject(AdmissionReason.PART_MISMATCH, "authority and head part IDs differ")
-        if authority.audit_round != trusted_head.audit_round:
-            return _reject(AdmissionReason.ROUND_MISMATCH, "authority and head rounds differ")
-        if authority.verdict is not trusted_head.verdict:
-            return _reject(
-                AdmissionReason.AUTHORITY_NOT_CURRENT,
-                "authority and trusted head verdicts differ",
-            )
-        if authority.execution_generation != expected_generation:
-            return _reject(
-                AdmissionReason.GENERATION_MISMATCH,
-                "authority is from another execution generation",
-            )
-        if authority.plan_set_id != expected_plan_set_id:
-            return _reject(
-                AdmissionReason.PLAN_SET_MISMATCH,
-                "authority is from another plan set",
-            )
-        if authority.scope_id != expected_scope_id:
-            return _reject(AdmissionReason.SCOPE_MISMATCH, "authority is from another scope")
+        for (reason, detail), failed in (
+            (
+                (
+                    AdmissionReason.AUTHORITY_NOT_CURRENT,
+                    "authority is not the trusted current head",
+                ),
+                authority.authority_digest != trusted_head.current_authority_digest,
+            ),
+            (
+                (
+                    AdmissionReason.GENERATION_MISMATCH,
+                    "authority and trusted head generations differ",
+                ),
+                authority.execution_generation != trusted_head.execution_generation,
+            ),
+            (
+                (AdmissionReason.CYCLE_MISMATCH, "authority and head cycle IDs differ"),
+                authority.cycle_id != trusted_head.cycle_id,
+            ),
+            (
+                (AdmissionReason.PLAN_SET_MISMATCH, "authority and head plan-set IDs differ"),
+                authority.plan_set_id != trusted_head.plan_set_id,
+            ),
+            (
+                (AdmissionReason.SCOPE_MISMATCH, "authority and head scope IDs differ"),
+                authority.scope_id != trusted_head.scope_id,
+            ),
+            (
+                (AdmissionReason.PART_MISMATCH, "authority and head part IDs differ"),
+                authority.part_id != trusted_head.part_id,
+            ),
+            (
+                (AdmissionReason.ROUND_MISMATCH, "authority and head rounds differ"),
+                authority.audit_round != trusted_head.audit_round,
+            ),
+            (
+                (
+                    AdmissionReason.AUTHORITY_NOT_CURRENT,
+                    "authority and trusted head verdicts differ",
+                ),
+                authority.verdict is not trusted_head.verdict,
+            ),
+            (
+                (
+                    AdmissionReason.GENERATION_MISMATCH,
+                    "authority is from another execution generation",
+                ),
+                authority.execution_generation != expected_generation,
+            ),
+            (
+                (AdmissionReason.PLAN_SET_MISMATCH, "authority is from another plan set"),
+                authority.plan_set_id != expected_plan_set_id,
+            ),
+            (
+                (AdmissionReason.SCOPE_MISMATCH, "authority is from another scope"),
+                authority.scope_id != expected_scope_id,
+            ),
+        ):
+            if failed:
+                return _reject(reason, detail)
+
+        return None
+
+    @staticmethod
+    def _evaluate_go_successor_or_no_go(
+        *,
+        authority: AuditCycleAuthority,
+        trusted_head: AuditCycleHead,
+        expected_part_id: str,
+    ) -> InventoryAdmissionDecision | None:
         if authority.verdict is AuditVerdict.GO:
             if expected_part_id == authority.part_id:
                 return InventoryAdmissionDecision.omit(AdmissionReason.TRUSTED_GO)
@@ -249,114 +312,143 @@ class InventoryAdmissionEvaluator:
                 AdmissionReason.PART_MISMATCH,
                 "NO GO authority is from another part",
             )
+
+        return None
+
+    @staticmethod
+    def _verify_no_go(
+        *,
+        authority: AuditCycleAuthority,
+        report: PlanDispositionReport | None,
+        current_plan_ref: ArtifactRef | None,
+        inventory_requirement_ids: tuple[str, ...],
+        current_plan_text: str,
+    ) -> InventoryAdmissionDecision:
         if report is None:
             return _reject(
                 AdmissionReason.AUTHORITY_WITHOUT_REPORT,
                 "current NO GO authority requires a disposition report",
             )
-        provenance_checks = (
+        failure = next(
             (
-                report.execution_generation == authority.execution_generation,
-                AdmissionReason.GENERATION_MISMATCH,
-                "report generation differs from authority",
+                (reason, detail)
+                for (actual, expected), reason, detail in (
+                    (
+                        (report.execution_generation, authority.execution_generation),
+                        AdmissionReason.GENERATION_MISMATCH,
+                        "report generation differs from authority",
+                    ),
+                    (
+                        (report.cycle_id, authority.cycle_id),
+                        AdmissionReason.CYCLE_MISMATCH,
+                        "report cycle differs from authority",
+                    ),
+                    (
+                        (report.plan_set_id, authority.plan_set_id),
+                        AdmissionReason.PLAN_SET_MISMATCH,
+                        "report plan set differs from authority",
+                    ),
+                    (
+                        (report.scope_id, authority.scope_id),
+                        AdmissionReason.SCOPE_MISMATCH,
+                        "report scope differs from authority",
+                    ),
+                    (
+                        (report.part_id, authority.part_id),
+                        AdmissionReason.PART_MISMATCH,
+                        "report part differs from authority",
+                    ),
+                    (
+                        (report.audit_round, authority.audit_round),
+                        AdmissionReason.ROUND_MISMATCH,
+                        "report round differs from authority",
+                    ),
+                    (
+                        (report.parent_authority_digest, authority.authority_digest),
+                        AdmissionReason.PARENT_MISMATCH,
+                        "report is not bound to this authority",
+                    ),
+                    (
+                        (report.inventory_digest, authority.inventory_ref.content_digest),
+                        AdmissionReason.INVENTORY_MISMATCH,
+                        "report inventory differs from authority",
+                    ),
+                    (
+                        (report.findings_digest, authority.findings_digest),
+                        AdmissionReason.FINDINGS_MISMATCH,
+                        "report findings differ from authority",
+                    ),
+                )
+                if actual != expected
             ),
-            (
-                report.cycle_id == authority.cycle_id,
-                AdmissionReason.CYCLE_MISMATCH,
-                "report cycle differs from authority",
-            ),
-            (
-                report.plan_set_id == authority.plan_set_id,
-                AdmissionReason.PLAN_SET_MISMATCH,
-                "report plan set differs from authority",
-            ),
-            (
-                report.scope_id == authority.scope_id,
-                AdmissionReason.SCOPE_MISMATCH,
-                "report scope differs from authority",
-            ),
-            (
-                report.part_id == authority.part_id,
-                AdmissionReason.PART_MISMATCH,
-                "report part differs from authority",
-            ),
-            (
-                report.audit_round == authority.audit_round,
-                AdmissionReason.ROUND_MISMATCH,
-                "report round differs from authority",
-            ),
-            (
-                report.parent_authority_digest == authority.authority_digest,
-                AdmissionReason.PARENT_MISMATCH,
-                "report is not bound to this authority",
-            ),
-            (
-                report.inventory_digest == authority.inventory_ref.content_digest,
-                AdmissionReason.INVENTORY_MISMATCH,
-                "report inventory differs from authority",
-            ),
-            (
-                report.findings_digest == authority.findings_digest,
-                AdmissionReason.FINDINGS_MISMATCH,
-                "report findings differ from authority",
-            ),
+            None,
         )
-        for matches, reason, detail in provenance_checks:
-            if not matches:
-                return _reject(reason, detail)
-        if current_plan_ref is None:
-            return _reject(AdmissionReason.PLAN_MISMATCH, "current plan is unverified")
-        if report.current_plan_ref.content_digest != current_plan_ref.content_digest:
+        if failure is not None:
+            return _reject(*failure)
+        if current_plan_ref is None or (
+            report.current_plan_ref.content_digest != current_plan_ref.content_digest
+        ):
             return _reject(
                 AdmissionReason.PLAN_MISMATCH,
-                "report is bound to another current plan",
+                "current plan is unverified"
+                if current_plan_ref is None
+                else "report is bound to another current plan",
             )
-        if (
+        inventory_is_invalid = (
             not inventory_requirement_ids
             or len(inventory_requirement_ids) != len(set(inventory_requirement_ids))
             or any(not isinstance(item, str) or not item for item in inventory_requirement_ids)
-        ):
-            return _reject(
-                AdmissionReason.INVENTORY_INVALID,
-                "inventory requirement IDs must be non-empty and unique",
-            )
+        )
         assessment_ids = tuple(row.requirement_id for row in authority.assessments)
         report_ids = tuple(row.requirement_id for row in report.dispositions)
-        if assessment_ids != inventory_requirement_ids or report_ids != inventory_requirement_ids:
+        inventory_ids_are_misaligned = (assessment_ids, report_ids) != (
+            inventory_requirement_ids,
+            inventory_requirement_ids,
+        )
+        if inventory_is_invalid or inventory_ids_are_misaligned:
             return _reject(
-                AdmissionReason.REQUIREMENT_ORDER_MISMATCH,
-                "inventory, assessment, and disposition IDs/order must match exactly",
+                AdmissionReason.INVENTORY_INVALID
+                if inventory_is_invalid
+                else AdmissionReason.REQUIREMENT_ORDER_MISMATCH,
+                "inventory requirement IDs must be non-empty and unique"
+                if inventory_is_invalid
+                else "inventory, assessment, and disposition IDs/order must match exactly",
             )
         try:
             plan_rows = _parse_requirements_map(current_plan_text)
         except ValueError as exc:
             return _reject(AdmissionReason.REQUIREMENTS_MAP_INVALID, str(exc))
-        if tuple(row.requirement_id for row in plan_rows) != inventory_requirement_ids:
+        plan_requirement_ids = tuple(row.requirement_id for row in plan_rows)
+        plan_rows_are_aligned = (plan_requirement_ids, plan_rows) == (
+            inventory_requirement_ids,
+            report.dispositions,
+        )
+        if not plan_rows_are_aligned:
             return _reject(
-                AdmissionReason.REQUIREMENT_ORDER_MISMATCH,
-                "Requirements Map IDs/order differ from inventory",
-            )
-        if plan_rows != report.dispositions:
-            return _reject(
-                AdmissionReason.DISPOSITION_MISMATCH,
-                "Requirements Map and disposition report rows differ",
+                AdmissionReason.REQUIREMENT_ORDER_MISMATCH
+                if plan_requirement_ids != inventory_requirement_ids
+                else AdmissionReason.DISPOSITION_MISMATCH,
+                "Requirements Map IDs/order differ from inventory"
+                if plan_requirement_ids != inventory_requirement_ids
+                else "Requirements Map and disposition report rows differ",
             )
         try:
-            step_blocks = _implementation_step_blocks(current_plan_text)
+            step_blocks = (
+                _implementation_step_blocks(current_plan_text)
+                if any(row.disposition == "carried@step" for row in plan_rows)
+                else {}
+            )
         except ValueError as exc:
-            if any(row.disposition == "carried@step" for row in plan_rows):
-                return _reject(AdmissionReason.IMPLEMENTATION_STEP_MISSING, str(exc))
-            step_blocks = {}
+            return _reject(AdmissionReason.IMPLEMENTATION_STEP_MISSING, str(exc))
         for assessment, disposition in zip(authority.assessments, plan_rows, strict=True):
-            if assessment.assessment.blocking:
-                if disposition.disposition != "carried@step":
-                    return _reject(
-                        AdmissionReason.UNMAPPED_REQUIREMENT,
-                        f"{assessment.requirement_id} is blocking but not carried",
-                    )
-                step = disposition.implementation_step
-                block = step_blocks.get(step or "")
-                if (
+            step = disposition.implementation_step
+            blocking = assessment.assessment.blocking
+            carried = disposition.disposition == "carried@step"
+            block = step_blocks.get(step or "") if blocking and carried else None
+            citation_is_missing = (
+                blocking
+                and carried
+                and (
                     block is None
                     or re.search(
                         rf"(?<![A-Za-z0-9_-]){re.escape(assessment.requirement_id)}"
@@ -364,18 +456,32 @@ class InventoryAdmissionEvaluator:
                         block,
                     )
                     is None
-                ):
-                    return _reject(
-                        AdmissionReason.IMPLEMENTATION_STEP_MISSING,
-                        f"{assessment.requirement_id} is not cited by {step!r}",
+                )
+            )
+            row_is_invalid = (blocking and (not carried or citation_is_missing)) or (
+                not blocking and disposition.satisfied_round != authority.audit_round
+            )
+            if row_is_invalid:
+                reason, detail = (
+                    (
+                        AdmissionReason.UNMAPPED_REQUIREMENT,
+                        f"{assessment.requirement_id} is blocking but not carried",
                     )
-            else:
-                if disposition.satisfied_round != authority.audit_round:
-                    return _reject(
-                        AdmissionReason.SATISFIED_ROUND_MISMATCH,
-                        f"{assessment.requirement_id} must be satisfied-by-round-"
-                        f"{authority.audit_round}",
+                    if blocking and not carried
+                    else (
+                        (
+                            AdmissionReason.IMPLEMENTATION_STEP_MISSING,
+                            f"{assessment.requirement_id} is not cited by {step!r}",
+                        )
+                        if blocking
+                        else (
+                            AdmissionReason.SATISFIED_ROUND_MISMATCH,
+                            f"{assessment.requirement_id} must be satisfied-by-round-"
+                            f"{authority.audit_round}",
+                        )
                     )
+                )
+                return _reject(reason, detail)
         return InventoryAdmissionDecision.admitted(report.dispositions)
 
 
@@ -395,15 +501,10 @@ class AuditCycleVerifier:
 
     def _read_path(self, path: str | Path) -> bytes:
         try:
-            _, data = self._reader(
-                path,
-                self._allowed_root,
-                max_size_bytes=self._max_size_bytes,
-            )
+            _, data = self._reader(path, self._allowed_root, max_size_bytes=self._max_size_bytes)
         except (ContainmentError, OSError) as exc:
             raise AuditCycleVerificationError(
-                AdmissionReason.INVENTORY_INVALID,
-                f"artifact containment/read failed: {exc}",
+                AdmissionReason.INVENTORY_INVALID, f"artifact containment/read failed: {exc}"
             ) from exc
         return data
 
@@ -411,8 +512,7 @@ class AuditCycleVerifier:
         data = self._read_path(ref.locator)
         if len(data) != ref.byte_size:
             raise AuditCycleVerificationError(
-                AdmissionReason.INVENTORY_MISMATCH,
-                "artifact byte size differs from its reference",
+                AdmissionReason.INVENTORY_MISMATCH, "artifact byte size differs from its reference"
             )
         if compute_bytes_hash(data) != ref.content_digest:
             raise AuditCycleVerificationError(
@@ -427,9 +527,7 @@ class AuditCycleVerifier:
     def decode_authority(self, data: bytes) -> AuditCycleAuthority:
         """Decode authority bytes through the strict canonical verifier boundary."""
         raw = decode_versioned_json_bytes(
-            data,
-            expected_version=AUDIT_CYCLE_SCHEMA_VERSION,
-            require_canonical=True,
+            data, expected_version=AUDIT_CYCLE_SCHEMA_VERSION, require_canonical=True
         )
         if raw is None:
             raise AuditCycleVerificationError(
@@ -440,16 +538,13 @@ class AuditCycleVerifier:
             return AuditCycleAuthority.from_dict(raw)
         except ValueError as exc:
             raise AuditCycleVerificationError(
-                AdmissionReason.AUTHORITY_NOT_CURRENT,
-                f"authority validation failed: {exc}",
+                AdmissionReason.AUTHORITY_NOT_CURRENT, f"authority validation failed: {exc}"
             ) from exc
 
     def load_report(self, path: str | Path) -> PlanDispositionReport:
         data = self._read_path(path)
         raw = decode_versioned_json_bytes(
-            data,
-            expected_version=AUDIT_CYCLE_SCHEMA_VERSION,
-            require_canonical=True,
+            data, expected_version=AUDIT_CYCLE_SCHEMA_VERSION, require_canonical=True
         )
         if raw is None:
             raise AuditCycleVerificationError(
@@ -473,8 +568,7 @@ class AuditCycleVerifier:
             )
         if candidate.cycle_id != trusted_head.cycle_id:
             raise AuditCycleVerificationError(
-                AdmissionReason.CYCLE_MISMATCH,
-                "successor authority crosses cycle identity",
+                AdmissionReason.CYCLE_MISMATCH, "successor authority crosses cycle identity"
             )
         if (
             candidate.plan_set_id != trusted_head.plan_set_id
@@ -487,13 +581,11 @@ class AuditCycleVerifier:
             )
         if candidate.audit_round != trusted_head.audit_round + 1:
             raise AuditCycleVerificationError(
-                AdmissionReason.ROUND_MISMATCH,
-                "successor authority round is not monotonic",
+                AdmissionReason.ROUND_MISMATCH, "successor authority round is not monotonic"
             )
         if candidate.parent_authority_digest != trusted_head.current_authority_digest:
             raise AuditCycleVerificationError(
-                AdmissionReason.PARENT_MISMATCH,
-                "successor parent is not the trusted current head",
+                AdmissionReason.PARENT_MISMATCH, "successor parent is not the trusted current head"
             )
         if candidate.inventory_ref != trusted_head.inventory_ref:
             raise AuditCycleVerificationError(
@@ -514,9 +606,8 @@ class AuditCycleVerifier:
         trusted_head: AuditCycleHead,
         current_plan_path: str | Path,
     ) -> VerifiedAuditCycle:
-        authority = self.load_authority(authority_path)
         return self._verify_active_tuple(
-            authority=authority,
+            authority=self.load_authority(authority_path),
             report_path=report_path,
             trusted_head=trusted_head,
             current_plan_path=current_plan_path,
@@ -532,8 +623,7 @@ class AuditCycleVerifier:
     ) -> VerifiedAuditCycle:
         if authority.authority_digest != trusted_head.current_authority_digest:
             raise AuditCycleVerificationError(
-                AdmissionReason.AUTHORITY_NOT_CURRENT,
-                "authority is stale or replayed",
+                AdmissionReason.AUTHORITY_NOT_CURRENT, "authority is stale or replayed"
             )
         report = self.load_report(report_path)
         provenance = InventoryAdmissionEvaluator().evaluate(
@@ -558,9 +648,10 @@ class AuditCycleVerifier:
                 AdmissionReason.PLAN_MISMATCH,
                 "report current-plan locator differs from bound plan path",
             )
-        plan_bytes = self.verify_artifact_ref(report.current_plan_ref)
         try:
-            plan_text = plan_bytes.decode("utf-8", errors="strict")
+            plan_text = self.verify_artifact_ref(report.current_plan_ref).decode(
+                "utf-8", errors="strict"
+            )
         except UnicodeDecodeError as exc:
             raise AuditCycleVerificationError(
                 AdmissionReason.PLAN_MISMATCH, "current plan is not UTF-8"
@@ -573,11 +664,23 @@ class AuditCycleVerifier:
                 "active NO GO authority has no remediation artifact",
             )
         self.verify_artifact_ref(authority.remediation_ref)
-        inventory_bytes = self.verify_artifact_ref(authority.inventory_ref)
+        requirement_ids = self._decode_inventory_requirement_ids(
+            self.verify_artifact_ref(authority.inventory_ref),
+            schema_version=authority.inventory_ref.schema_version,
+        )
+        return VerifiedAuditCycle(
+            authority=authority,
+            report=report,
+            inventory_requirement_ids=requirement_ids,
+            current_plan_text=plan_text,
+        )
+
+    @staticmethod
+    def _decode_inventory_requirement_ids(
+        inventory_bytes: bytes, *, schema_version: int
+    ) -> tuple[str, ...]:
         inventory_raw = decode_versioned_json_bytes(
-            inventory_bytes,
-            expected_version=authority.inventory_ref.schema_version,
-            require_canonical=True,
+            inventory_bytes, expected_version=schema_version, require_canonical=True
         )
         if inventory_raw is None:
             raise AuditCycleVerificationError(
@@ -593,8 +696,7 @@ class AuditCycleVerifier:
             row_ids = tuple(item["id"] for item in requirements_raw)
         except (KeyError, TypeError) as exc:
             raise AuditCycleVerificationError(
-                AdmissionReason.INVENTORY_INVALID,
-                f"inventory schema is invalid: {exc}",
+                AdmissionReason.INVENTORY_INVALID, f"inventory schema is invalid: {exc}"
             ) from exc
         if requirement_ids != row_ids:
             raise AuditCycleVerificationError(
@@ -606,12 +708,7 @@ class AuditCycleVerifier:
                 AdmissionReason.INVENTORY_INVALID,
                 "inventory requirement IDs must be non-empty strings",
             )
-        return VerifiedAuditCycle(
-            authority=authority,
-            report=report,
-            inventory_requirement_ids=requirement_ids,
-            current_plan_text=plan_text,
-        )
+        return requirement_ids
 
     def evaluate_paths(
         self,
@@ -643,17 +740,7 @@ class AuditCycleVerifier:
             )
         try:
             authority = self.load_authority(authority_path)
-            if authority.verdict is AuditVerdict.GO:
-                return evaluator.evaluate(
-                    authority=authority,
-                    trusted_head=trusted_head,
-                    report=None,
-                    expected_generation=expected_generation,
-                    expected_plan_set_id=expected_plan_set_id,
-                    expected_scope_id=expected_scope_id,
-                    expected_part_id=expected_part_id,
-                )
-            if report_path is None or trusted_head is None:
+            if authority.verdict is AuditVerdict.GO or report_path is None or trusted_head is None:
                 return evaluator.evaluate(
                     authority=authority,
                     trusted_head=trusted_head,

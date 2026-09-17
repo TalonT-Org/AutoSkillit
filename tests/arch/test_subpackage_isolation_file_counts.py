@@ -130,6 +130,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
     "core/git": 6,  # 5 focused modules + __init__
+    # #4249 extends audit_semantic_codec.py, preserving this package's existing file budget.
     "core/audit": 5,  # 4 files + __init__ + buffer
     "core/plugins": 10,  # 7 files + __init__ + buffer
     "core/pipeline": 5,  # 4 files + __init__ + buffer
@@ -162,6 +163,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "workspace": 1,  # was 6; #5018 moved 5 skill-capability modules into skill_capabilities/
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
     "hooks/guards": 42,
+    # #4249 extends _helpers.py, preserving this package's existing file budget.
     "smoke_utils": 11,
 }
 

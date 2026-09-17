@@ -94,6 +94,47 @@ class ContextAdmissionReducerDef:
     ]
 
 
+def _authority_unavailable(
+    state: ContextAdmissionState,
+    event: AuthorityUnavailableEvent,
+) -> AdmissionTransition:
+    """Publish an authority-unavailable event without changing state."""
+    kind = (
+        AdmissionDecisionKind.UPSTREAM_GATED
+        if event.authority_state is CoverageState.UPSTREAM_GATED
+        else AdmissionDecisionKind.WATERMARK_UNAVAILABLE
+    )
+    if isinstance(state, ActiveContextAdmissionState):
+        revision, sequence = _effect_coordinates(
+            state,
+            capacity_changed=False,
+        )
+        return _publish(
+            state,
+            state,
+            event,
+            kind=kind,
+            reason_code=event.reason_code,
+            effects=(
+                AuthorityUnavailableEffect(
+                    source_event_id=event.event_id,
+                    resulting_aggregate_revision=revision,
+                    resulting_admission_sequence=sequence,
+                    target_id=state.snapshot.window_epoch_id,
+                    reason_code=event.reason_code,
+                    authority_state=event.authority_state,
+                ),
+            ),
+        )
+    return _publish(
+        state,
+        state,
+        event,
+        kind=kind,
+        reason_code=event.reason_code,
+    )
+
+
 def reduce_context_admission(
     state: ContextAdmissionState,
     event: ContextAdmissionEvent,
@@ -106,40 +147,7 @@ def reduce_context_admission(
         case OpenEpochEvent():
             return _open_epoch(state, event)
         case AuthorityUnavailableEvent():
-            kind = (
-                AdmissionDecisionKind.UPSTREAM_GATED
-                if event.authority_state is CoverageState.UPSTREAM_GATED
-                else AdmissionDecisionKind.WATERMARK_UNAVAILABLE
-            )
-            if isinstance(state, ActiveContextAdmissionState):
-                revision, sequence = _effect_coordinates(
-                    state,
-                    capacity_changed=False,
-                )
-                return _publish(
-                    state,
-                    state,
-                    event,
-                    kind=kind,
-                    reason_code=event.reason_code,
-                    effects=(
-                        AuthorityUnavailableEffect(
-                            source_event_id=event.event_id,
-                            resulting_aggregate_revision=revision,
-                            resulting_admission_sequence=sequence,
-                            target_id=state.snapshot.window_epoch_id,
-                            reason_code=event.reason_code,
-                            authority_state=event.authority_state,
-                        ),
-                    ),
-                )
-            return _publish(
-                state,
-                state,
-                event,
-                kind=kind,
-                reason_code=event.reason_code,
-            )
+            return _authority_unavailable(state, event)
         case ProposeOccurrenceEvent():
             return _propose(state, event)
         case ReserveRequestEvent():
@@ -152,14 +160,17 @@ def reduce_context_admission(
             return _dispatch(state, event)
         case AcceptInputEvent():
             return _accept(state, event)
-        case ReleaseNonAdmissionEvent() | RollbackAdmissionEvent():
+        case (
+            ReleaseNonAdmissionEvent()
+            | RollbackAdmissionEvent()
+            | ResolveIndeterminateNonAdmissionEvent()
+            | ResolveIndeterminateRollbackEvent()
+        ):
             return _release_or_rollback(state, event)
         case MarkIndeterminateEvent():
             return _mark_indeterminate(state, event)
         case ResolveIndeterminateAcceptedEvent():
             return _resolve_indeterminate_accepted(state, event)
-        case ResolveIndeterminateNonAdmissionEvent() | ResolveIndeterminateRollbackEvent():
-            return _release_or_rollback(state, event)
         case StartGenerationEvent():
             return _start_generation(state, event)
         case ReconcileGenerationEvent():

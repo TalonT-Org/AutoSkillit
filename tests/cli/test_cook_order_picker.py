@@ -516,6 +516,16 @@ class TestOrderResumeParsing:
             ),
             patch("autoskillit.recipe.load_recipe", return_value=MagicMock()),
             patch("autoskillit.recipe.validate_recipe_structure", return_value=[]),
+            patch.object(
+                _patch_session__session_order,
+                "_get_subsets_needed",
+                return_value=frozenset(),
+            ),
+            patch.object(
+                _patch_session__session_order,
+                "_get_packs_needed",
+                return_value=frozenset(),
+            ),
             patch("builtins.input", return_value=""),
         ):
             with pytest.raises(SystemExit) as exc_info:

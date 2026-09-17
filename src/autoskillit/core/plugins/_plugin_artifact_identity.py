@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import stat
 from pathlib import Path
+from typing import Any
 
 from ..io import (
     TreeVanishedError,
@@ -214,25 +215,8 @@ def _classify_bytecode_contamination(root: Path) -> str:
     return ", ".join(parts)
 
 
-def read_installed_plugin_artifact_identity(
-    managed_path: Path,
-    *,
-    expected_semantic_key: str | None = None,
-    manifest_path: Path | None = None,
-    allow_symlinks: bool = False,
-    ignore_bytecode: bool = False,
-) -> PluginArtifactIdentity:
-    """Validate one installed artifact using the launch-time identity contract.
-
-    ``allow_symlinks`` defaults to False (sanitized plugin content must never
-    contain one); install-root generations (issue #4597 Phase 3) are real
-    venvs that always do (``lib64 -> lib``) and must pass ``True``.
-
-    ``ignore_bytecode`` defaults to False; install-root generations run their
-    own interpreter from inside their tree, which writes ``__pycache__``
-    merely by being imported — must pass ``True`` there or the generation
-    fails its own digest the moment it is actually used.
-    """
+def _canonical_installed_plugin_artifact_root(managed_path: Path) -> Path:
+    """Return a verified canonical directory for an installed artifact."""
     supplied_root = Path(managed_path)
     if not supplied_root.is_absolute():
         raise PluginArtifactValidationError(
@@ -253,7 +237,15 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactValidationError(
             f"installed plugin root must be a canonical directory: {supplied_root}"
         )
+    return canonical_root
 
+
+def _read_installed_plugin_artifact_manifest(
+    canonical_root: Path,
+    manifest_path: Path | None,
+    expected_semantic_key: str | None,
+) -> tuple[Path, dict[str, Any]]:
+    """Acquire and validate the static fields of one artifact manifest."""
     canonical_manifest = installed_plugin_artifact_manifest_path(canonical_root)
     selected_manifest = canonical_manifest if manifest_path is None else Path(manifest_path)
     if selected_manifest != canonical_manifest:
@@ -262,19 +254,22 @@ def read_installed_plugin_artifact_identity(
         )
     try:
         manifest_stat = selected_manifest.stat(follow_symlinks=False)
-    except FileNotFoundError as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest is missing: {selected_manifest}"
-        ) from exc
     except OSError as exc:
-        raise PluginArtifactUnavailableError(
-            f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
-        ) from exc
+        error_type = (
+            PluginArtifactValidationError
+            if isinstance(exc, FileNotFoundError)
+            else PluginArtifactUnavailableError
+        )
+        message = (
+            f"installed plugin incarnation manifest is missing: {selected_manifest}"
+            if isinstance(exc, FileNotFoundError)
+            else f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
+        )
+        raise error_type(message) from exc
     if not stat.S_ISREG(manifest_stat.st_mode):
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is not a regular file: {selected_manifest}"
         )
-
     try:
         raw = read_versioned_json(
             selected_manifest,
@@ -285,13 +280,12 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactUnavailableError(
             f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
         ) from exc
-    if raw is None:
+    if raw is None or frozenset(raw) != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS:
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is missing or invalid: {selected_manifest}"
-        )
-    if frozenset(raw) != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest has unexpected fields: {selected_manifest}"
+            if raw is None
+            else "installed plugin incarnation manifest has unexpected fields: "
+            f"{selected_manifest}"
         )
     if (
         type(raw.get("schema_version")) is not int
@@ -300,32 +294,64 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest schema is invalid: {selected_manifest}"
         )
-    if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value:
+    if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value or any(
+        not isinstance(raw.get(field), str) or not raw[field]
+        for field in ("semantic_key", "incarnation_id", "artifact_digest")
+    ):
         raise PluginArtifactValidationError(
             f"installed plugin artifact kind is invalid: {selected_manifest}"
-        )
-    scalar_fields = ("semantic_key", "incarnation_id", "artifact_digest")
-    if any(not isinstance(raw.get(field), str) or not raw[field] for field in scalar_fields):
-        raise PluginArtifactValidationError(
-            "installed plugin incarnation manifest has invalid identity fields: "
+            if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value
+            else "installed plugin incarnation manifest has invalid identity fields: "
             f"{selected_manifest}"
-        )
-    if not is_canonical_plugin_artifact_incarnation_id(raw["incarnation_id"]):
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation is not canonical uuid4 hex: {selected_manifest}"
-        )
-    if not is_canonical_plugin_artifact_digest(raw["artifact_digest"]):
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact digest is invalid: {selected_manifest}"
         )
     if expected_semantic_key is not None and raw["semantic_key"] != expected_semantic_key:
         raise PluginArtifactValidationError(
             "installed plugin semantic identity does not match the current transaction"
         )
-    if raw.get("managed_path") != str(canonical_root):
-        raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
-    if raw.get("manifest_path") != str(canonical_manifest):
-        raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
+    if raw.get("managed_path") != str(canonical_root) or raw.get("manifest_path") != str(
+        canonical_manifest
+    ):
+        raise PluginArtifactValidationError(
+            "installed plugin managed path identity mismatch"
+            if raw.get("managed_path") != str(canonical_root)
+            else "installed plugin manifest path identity mismatch"
+        )
+    return canonical_manifest, raw
+
+
+def read_installed_plugin_artifact_identity(
+    managed_path: Path,
+    *,
+    expected_semantic_key: str | None = None,
+    manifest_path: Path | None = None,
+    allow_symlinks: bool = False,
+    ignore_bytecode: bool = False,
+) -> PluginArtifactIdentity:
+    """Validate one installed artifact using the launch-time identity contract.
+
+    ``allow_symlinks`` defaults to False (sanitized plugin content must never
+    contain one); install-root generations (issue #4597 Phase 3) are real
+    venvs that always do (``lib64 -> lib``) and must pass ``True``.
+
+    ``ignore_bytecode`` defaults to False; install-root generations run their
+    own interpreter from inside their tree, which writes ``__pycache__``
+    merely by being imported — must pass ``True`` there or the generation
+    fails its own digest the moment it is actually used.
+    """
+    canonical_root = _canonical_installed_plugin_artifact_root(managed_path)
+    canonical_manifest, raw = _read_installed_plugin_artifact_manifest(
+        canonical_root,
+        manifest_path,
+        expected_semantic_key,
+    )
+    if not is_canonical_plugin_artifact_incarnation_id(raw["incarnation_id"]):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation is not canonical uuid4 hex: {canonical_manifest}"
+        )
+    if not is_canonical_plugin_artifact_digest(raw["artifact_digest"]):
+        raise PluginArtifactValidationError(
+            f"installed plugin artifact digest is invalid: {canonical_manifest}"
+        )
     # Generation-store identity cross-check: when the directory name IS a
     # canonical incarnation_id (uuid4 hex), it must match the manifest's
     # incarnation_id — the path IS the identity.  Legacy Claude-cache

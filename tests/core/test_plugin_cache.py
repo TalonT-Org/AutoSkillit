@@ -16,6 +16,7 @@ import psutil
 import pytest
 
 import autoskillit.core.plugins._active_kitchens as _patch_plugins__active_kitchens
+import autoskillit.core.plugins._retiring_cache as _patch_plugins__retiring_cache
 from autoskillit.core import (
     ActiveKitchensState,
     PluginArtifactIdentity,
@@ -38,6 +39,7 @@ from autoskillit.core._plugin_cache import (
     sample_kitchen_process_identity,
     unregister_active_kitchen,
 )
+from autoskillit.core.io import _AtomicWriteDurabilityError
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -444,6 +446,51 @@ def test_retirement_deduplication_ignores_regenerated_deadline(
     assert repeated_result.created is False
     assert repeated_result.record_id == original.record_id
     assert read_retiring_cache().records == (original,)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "callback_fires", "durability_uncertain"),
+    [
+        ("persisted", True, False),
+        ("durability_uncertain", True, True),
+        ("unsafe_state", False, False),
+    ],
+)
+def test_append_retiring_record_callback_fires_only_after_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    scenario: str,
+    callback_fires: bool,
+    durability_uncertain: bool,
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    record = _retiring_record(tmp_path)
+    callbacks: list[str] = []
+
+    if scenario == "durability_uncertain":
+
+        def raise_durability_error(*_args: object, **_kwargs: object) -> None:
+            raise _AtomicWriteDurabilityError(
+                record.managed_path,
+                OSError("directory fsync failed"),
+            )
+
+        monkeypatch.setattr(
+            _patch_plugins__retiring_cache,
+            "_write_retiring_cache_unlocked",
+            raise_durability_error,
+        )
+    elif scenario == "unsafe_state":
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        _make_retiring_file(cache, schema_version=1, retiring=[])
+
+    if durability_uncertain:
+        with pytest.raises(_AtomicWriteDurabilityError):
+            append_retiring_record(record, on_persisted=callbacks.append)
+    else:
+        append_retiring_record(record, on_persisted=callbacks.append)
+
+    assert callbacks == ([record.record_id] if callback_fires else [])
 
 
 @pytest.mark.parametrize(

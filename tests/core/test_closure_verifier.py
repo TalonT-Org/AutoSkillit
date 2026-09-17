@@ -461,4 +461,11 @@ class TestRejection:
             target_sha="tgt",
         )
         assert result_83.success is False
-        assert any("length mismatch" in e for e in result_83.errors)
+        assert result_83.errors == (
+            "rows/requirement_ids length mismatch: 83 vs 72",
+            *(
+                f"extra row[{idx}] requirement_id='REQ-{idx + 1:03d}' "
+                "with no matching requirement_ids entry"
+                for idx in range(72, 83)
+            ),
+        )

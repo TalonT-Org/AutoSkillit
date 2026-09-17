@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 REMOTE_PRECEDENCE: tuple[str, ...] = ("upstream", "origin")
 
@@ -98,6 +98,30 @@ def _split_github_path(path: str) -> tuple[str, str] | None:
     return owner, repository
 
 
+def _conventional_github_transport(parsed: SplitResult) -> Literal["https", "ssh"] | None:
+    """Validate a conventional URL's authority and return its transport."""
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if parsed.query or parsed.fragment or port is not None:
+        return None
+    scheme = parsed.scheme.casefold()
+    if scheme == "https":
+        if parsed.hostname is None or parsed.hostname.casefold() != _GITHUB_HOST:
+            return None
+        if parsed.username is not None or parsed.password is not None:
+            return None
+        return "https"
+    if scheme == "ssh":
+        if parsed.hostname is None or parsed.hostname.casefold() != _GITHUB_HOST:
+            return None
+        if parsed.username != "git" or parsed.password is not None:
+            return None
+        return "ssh"
+    return None
+
+
 def parse_github_remote_url(url: str) -> GitHubRepositoryRef | None:
     """Parse an exact GitHub HTTPS or SSH remote URL.
 
@@ -119,26 +143,8 @@ def parse_github_remote_url(url: str) -> GitHubRepositoryRef | None:
         )
 
     parsed = urlsplit(candidate)
-    try:
-        port = parsed.port
-    except ValueError:
-        return None
-    if parsed.query or parsed.fragment or port is not None:
-        return None
-    scheme = parsed.scheme.casefold()
-    if scheme == "https":
-        if parsed.hostname is None or parsed.hostname.casefold() != _GITHUB_HOST:
-            return None
-        if parsed.username is not None or parsed.password is not None:
-            return None
-        transport: Literal["https", "ssh"] = "https"
-    elif scheme == "ssh":
-        if parsed.hostname is None or parsed.hostname.casefold() != _GITHUB_HOST:
-            return None
-        if parsed.username != "git" or parsed.password is not None:
-            return None
-        transport = "ssh"
-    else:
+    transport = _conventional_github_transport(parsed)
+    if transport is None:
         return None
 
     components = _split_github_path(parsed.path)

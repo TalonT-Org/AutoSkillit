@@ -281,9 +281,22 @@ def test_protected_backend_without_selected_budget_fails_closed() -> None:
     assert decision.contract_digest == ""
 
 
-@pytest.mark.parametrize("missing", ["request", "attestation", "evidence"])
-def test_missing_authority_is_envelope(missing: str) -> None:
+@pytest.mark.parametrize(
+    ("missing", "request_contract_digest", "expected_reason"),
+    [
+        ("request", _CONTRACT_DIGEST, None),
+        ("attestation", _CONTRACT_DIGEST, None),
+        ("evidence", _CONTRACT_DIGEST, None),
+        ("evidence", f"sha256:{'0' * 64}", "supported_evidence_missing"),
+    ],
+)
+def test_missing_authority_is_envelope(
+    missing: str,
+    request_contract_digest: str,
+    expected_reason: str | None,
+) -> None:
     request = _request()
+    request = dataclasses.replace(request, contract_digest=request_contract_digest)
     decision = _resolve(
         required=10_001,
         request=None if missing == "request" else request,
@@ -291,6 +304,8 @@ def test_missing_authority_is_envelope(missing: str) -> None:
         evidence=None if missing == "evidence" else _protected_evidence(),
     )
     assert decision.mode is RecipeDeliveryMode.ENVELOPE
+    if expected_reason is not None:
+        assert decision.reason == expected_reason
 
 
 def test_mismatched_observation_and_unsupported_identity_are_envelope() -> None:

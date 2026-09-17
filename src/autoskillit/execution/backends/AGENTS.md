@@ -45,3 +45,16 @@ value. Interactive launch sites must pass both sets to
 `assert_interactive_ordering(spec=..., variadic_flags=...,
 value_bearing_flags=...)`; callers must not infer flag behavior from another
 backend or from a shared parser heuristic.
+
+## Interactive resume model authority
+
+Claude Code and Codex both restore the effective model from their native session record.
+The CLI must therefore leave `model=None` when building an interactive resume command;
+passing a model would override the backend's persisted authority.
+
+Verify this contract per installed backend version against its native resume behavior and
+at the AutoSkillit CLI-to-builder boundary. Claude Code's session contract states that a
+resumed session keeps its stored model unless an explicit CLI or environment override is
+present. Codex's `ResumeModelSettings::RestoreFromThread` path sends no model or provider
+override and restores the persisted thread settings. Boundary tests must capture the actual
+resume builder call for both backends and assert that AutoSkillit supplies no model override.

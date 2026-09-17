@@ -140,6 +140,27 @@ def _active_kitchens_corrupt(
     )
 
 
+def _filter_active_kitchen_entries(
+    kitchens: list[object], schema_version: int
+) -> tuple[tuple[dict[str, object], ...], bool]:
+    """Filter kitchens into admissible entries and report whether any v2 record was malformed."""
+    entries: list[dict[str, object]] = []
+    malformed_v2 = False
+    for entry in kitchens:
+        if not isinstance(entry, dict):
+            if schema_version == _ACTIVE_KITCHENS_SCHEMA_VERSION:
+                malformed_v2 = True
+            continue
+        try:
+            _identity_from_entry(entry)
+        except (TypeError, ValueError, OverflowError):
+            if schema_version == _ACTIVE_KITCHENS_SCHEMA_VERSION:
+                malformed_v2 = True
+            continue
+        entries.append(dict(entry))
+    return tuple(entries), malformed_v2
+
+
 def _read_active_kitchens_unlocked(path: Path) -> ActiveKitchensReadResult:
     try:
         if not path.exists():
@@ -167,18 +188,7 @@ def _read_active_kitchens_unlocked(path: Path) -> ActiveKitchensReadResult:
     kitchens = raw.get("kitchens")
     if not isinstance(kitchens, list):
         return _active_kitchens_corrupt(path, "active kitchen registry kitchens must be a list")
-    entries: list[dict[str, object]] = []
-    malformed_v2 = False
-    for entry in kitchens:
-        try:
-            _identity_from_entry(entry)
-        except (TypeError, ValueError, OverflowError):
-            if schema_version == 1:
-                continue
-            malformed_v2 = True
-            continue
-        entries.append(dict(entry))
-    frozen_entries = tuple(entries)
+    frozen_entries, malformed_v2 = _filter_active_kitchen_entries(kitchens, schema_version)
     if malformed_v2:
         return _active_kitchens_corrupt(
             path,

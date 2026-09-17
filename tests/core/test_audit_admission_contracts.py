@@ -201,6 +201,17 @@ def _prepared_effect(
     ("enum_type", "expected"),
     [
         (
+            AuditAssessment,
+            {
+                "COVERED",
+                "MISSING",
+                "ODD",
+                "CONFLICT",
+                "NAMED_DEVIATION",
+                "UNPRESCRIBED_SUBSTITUTION",
+            },
+        ),
+        (
             AuditArtifactFieldOwnership,
             {
                 "CHILD_SEMANTIC",
@@ -260,7 +271,8 @@ def _prepared_effect(
 )
 def test_status_enums_are_closed(
     enum_type: type[
-        AuditArtifactFieldOwnership
+        AuditAssessment
+        | AuditArtifactFieldOwnership
         | AuditMaterializationStatus
         | AuditOutcomeStatus
         | ReservationDecision

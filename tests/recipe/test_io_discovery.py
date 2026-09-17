@@ -914,6 +914,9 @@ def test_eval_fixture_inventory() -> None:
         "RP11-reference.md",
         "RP12-diff.txt",
         "RP12-reference.md",
+        "AS01-context.md",
+        "AS02-context.md",
+        "AS03-context.md",
     ]
     expected_overlays = [
         "baseline.md",
@@ -927,6 +930,8 @@ def test_eval_fixture_inventory() -> None:
         "make-plan-canaries.json",
         "make-plan-variants.json",
         "review-pr-canaries.json",
+        "audit-impl-slice-auditor-canaries.json",
+        "audit-impl-slice-auditor-variants.json",
     ]
 
     missing = []
@@ -946,6 +951,17 @@ def test_eval_fixture_inventory() -> None:
     )
 
 
+def _assert_manifest_has_no_temp_paths(value: object, *, location: str) -> None:
+    if isinstance(value, str):
+        assert "temp/" not in value, f"{location} still points to temp/: {value!r}"
+    elif isinstance(value, dict):
+        for key, nested in value.items():
+            _assert_manifest_has_no_temp_paths(nested, location=f"{location}.{key}")
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _assert_manifest_has_no_temp_paths(nested, location=f"{location}[{index}]")
+
+
 def test_eval_manifest_paths_point_to_recipes_eval() -> None:
     """Manifest JSON files must reference fixture paths under .autoskillit/recipes/eval/,
     not temp/.
@@ -957,35 +973,12 @@ def test_eval_manifest_paths_point_to_recipes_eval() -> None:
 
     manifests_dir = _PROJECT_ROOT / ".autoskillit" / "recipes" / "eval" / "manifests"
 
-    canary_manifest = json.loads((manifests_dir / "make-plan-canaries.json").read_text())
-    for entry in canary_manifest:
-        if entry.get("task_file"):
-            assert "temp/" not in entry["task_file"], (
-                f"Canary {entry['id']} task_file still points to temp/: {entry['task_file']!r}"
-            )
-        if entry.get("reference_path"):
-            assert "temp/" not in entry["reference_path"], (
-                f"Canary {entry['id']} reference_path still points to temp/: "
-                f"{entry['reference_path']!r}"
-            )
-
-    variant_manifest = json.loads((manifests_dir / "make-plan-variants.json").read_text())
-    for entry in variant_manifest:
-        if entry.get("overlay_file"):
-            assert "temp/" not in entry["overlay_file"], (
-                f"Variant {entry['id']} overlay_file still points to temp/: "
-                f"{entry['overlay_file']!r}"
-            )
-
-    review_canary_manifest = json.loads((manifests_dir / "review-pr-canaries.json").read_text())
-    for entry in review_canary_manifest:
-        for key, val in entry.get("prompt_vars", {}).items():
-            if isinstance(val, str):
-                assert "temp/" not in val, (
-                    f"Canary {entry['id']} prompt_vars.{key} still points to temp/: {val!r}"
-                )
-        if entry.get("reference_path"):
-            assert "temp/" not in entry["reference_path"], (
-                f"Canary {entry['id']} reference_path still points to temp/: "
-                f"{entry['reference_path']!r}"
-            )
+    for manifest_name in (
+        "make-plan-canaries.json",
+        "make-plan-variants.json",
+        "review-pr-canaries.json",
+        "audit-impl-slice-auditor-canaries.json",
+        "audit-impl-slice-auditor-variants.json",
+    ):
+        manifest = json.loads((manifests_dir / manifest_name).read_text())
+        _assert_manifest_has_no_temp_paths(manifest, location=manifest_name)

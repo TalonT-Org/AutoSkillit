@@ -21,6 +21,7 @@ from autoskillit.core import (
     InventoryAdmissionEvaluator,
     PlanDispositionReport,
     PlanDispositionRow,
+    read_stable_contained_bytes,
 )
 from autoskillit.core.closure_hashing import canonical_json_bytes, compute_bytes_hash
 
@@ -420,6 +421,116 @@ def test_inventory_requirement_ids_must_be_array(
         )
 
     assert exc_info.value.reason is AdmissionReason.INVENTORY_INVALID
+
+
+def test_verify_active_tuple_reads_and_returns_complete_verified_cycle(
+    tmp_path: Path,
+) -> None:
+    rows = _dispositions()
+    plan_text = _plan_text(rows)
+    plan_bytes = plan_text.encode("utf-8")
+    audited_paths = (tmp_path / "audited-a.md", tmp_path / "audited-b.md")
+    audited_bytes = (b"# Audited A\n", b"# Audited B\n")
+    remediation_path = tmp_path / "remediation.md"
+    remediation_bytes = b"# Remediation\n"
+    inventory_path = tmp_path / "inventory.json"
+    inventory_bytes = canonical_json_bytes(
+        {
+            "schema_version": 1,
+            "requirement_ids": ["ITEM-A", "ITEM-B"],
+            "requirements": [{"id": "ITEM-A"}, {"id": "ITEM-B"}],
+        }
+    )
+
+    def write_ref(path: Path, data: bytes, media_type: str) -> ArtifactRef:
+        path.write_bytes(data)
+        return ArtifactRef(
+            locator=str(path),
+            media_type=media_type,
+            schema_version=1,
+            byte_size=len(data),
+            content_digest=compute_bytes_hash(data),
+        )
+
+    current_plan_path = tmp_path / "current-plan.md"
+    current_plan_ref = write_ref(current_plan_path, plan_bytes, "text/markdown")
+    audited_refs = tuple(
+        write_ref(path, data, "text/markdown")
+        for path, data in zip(audited_paths, audited_bytes, strict=True)
+    )
+    remediation_ref = write_ref(remediation_path, remediation_bytes, "text/markdown")
+    inventory_ref = write_ref(inventory_path, inventory_bytes, "application/json")
+    authority = AuditCycleAuthority.create(
+        execution_generation="generation-1",
+        cycle_id="cycle-1",
+        plan_set_id="plans-1",
+        scope_id="scope-1",
+        part_id="part-a",
+        audit_round=2,
+        parent_authority_digest=_HASH_A,
+        audited_plan_refs=audited_refs,
+        inventory_ref=inventory_ref,
+        assessments=(
+            _assessment("ITEM-A", AuditAssessment.COVERED),
+            _assessment("ITEM-B", AuditAssessment.MISSING),
+        ),
+        verdict=AuditVerdict.NO_GO,
+        remediation_ref=remediation_ref,
+        generated_at="2026-07-23T00:00:00Z",
+    )
+    report = PlanDispositionReport.create(
+        execution_generation=authority.execution_generation,
+        cycle_id=authority.cycle_id,
+        plan_set_id=authority.plan_set_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+        audit_round=authority.audit_round,
+        parent_authority_digest=authority.authority_digest,
+        inventory_digest=authority.inventory_ref.content_digest,
+        findings_digest=authority.findings_digest,
+        current_plan_ref=current_plan_ref,
+        dispositions=rows,
+        generated_at="2026-07-23T00:01:00Z",
+    )
+    authority_path = tmp_path / "authority.json"
+    report_path = tmp_path / "report.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+    report_path.write_bytes(report.canonical_bytes)
+
+    reads: list[Path] = []
+
+    def recording_reader(
+        path: str | Path,
+        allowed_root: str | Path,
+        *,
+        max_size_bytes: int,
+    ) -> tuple[Path, bytes]:
+        reads.append(Path(path))
+        return read_stable_contained_bytes(
+            path,
+            allowed_root,
+            max_size_bytes=max_size_bytes,
+        )
+
+    verified = AuditCycleVerifier(tmp_path, reader=recording_reader).verify_active_tuple(
+        authority_path=authority_path,
+        report_path=report_path,
+        trusted_head=_head(authority),
+        current_plan_path=current_plan_path,
+    )
+
+    assert reads == [
+        authority_path,
+        report_path,
+        current_plan_path,
+        *audited_paths,
+        remediation_path,
+        inventory_path,
+    ]
+    assert verified.authority == authority
+    assert verified.report == report
+    assert verified.inventory_requirement_ids == ("ITEM-A", "ITEM-B")
+    assert verified.current_plan_text == plan_text
 
 
 def test_report_row_reorder_rejects(tmp_path: Path) -> None:

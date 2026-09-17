@@ -31,6 +31,100 @@ class VerificationResult:
     report_path: str | None
 
 
+def _reconstruct_external_inputs(
+    *,
+    report: ClosureReport,
+    authority_path: Path,
+    authority_hash: str,
+    plan_paths: tuple[Path, ...],
+    base_sha: str,
+    diff_sha: str,
+    target_sha: str,
+    errors: list[str],
+) -> None:
+    try:
+        computed_authority_hash = compute_file_hash(authority_path)
+    except OSError as exc:
+        errors.append(f"authority_path unreadable: {exc}")
+        computed_authority_hash = None
+    if computed_authority_hash is not None and computed_authority_hash != authority_hash:
+        errors.append(
+            f"authority_hash argument mismatch: expected {authority_hash}, got "
+            f"{computed_authority_hash}"
+        )
+    if report.authority_hash != authority_hash:
+        errors.append(
+            f"report.authority_hash mismatch: report says {report.authority_hash}, expected "
+            f"{authority_hash}"
+        )
+
+    plan_file_hashes: list[str | None] = []
+    can_compute_request = True
+    if len(report.plan_hashes) != len(plan_paths):
+        errors.append(
+            f"plan_hashes count mismatch: report has {len(report.plan_hashes)}, "
+            f"spec has {len(plan_paths)}"
+        )
+    else:
+        for idx, path in enumerate(plan_paths):
+            try:
+                computed = compute_file_hash(path)
+            except OSError as exc:
+                errors.append(f"plan_paths[{idx}] unreadable: {exc}")
+                computed = None
+                can_compute_request = False
+            plan_file_hashes.append(computed)
+            if computed is not None and report.plan_hashes[idx] != computed:
+                errors.append(
+                    f"plan_hashes[{idx}] mismatch: report says {report.plan_hashes[idx]}, "
+                    f"computed {computed}"
+                )
+
+    if can_compute_request:
+        valid_hashes = [file_hash for file_hash in plan_file_hashes if file_hash is not None]
+        computed_request_hash: str | None = compute_request_hash(
+            authority_hash,
+            valid_hashes,
+            base_sha,
+            diff_sha,
+            target_sha,
+        )
+    else:
+        computed_request_hash = None
+        errors.append("cannot compute request_hash: plan file(s) unreadable")
+    if computed_request_hash is not None and report.request_hash != computed_request_hash:
+        errors.append(
+            f"request_hash mismatch: report says {report.request_hash}, "
+            f"computed {computed_request_hash}"
+        )
+
+
+def _verify_report_self_integrity(report: ClosureReport, errors: list[str]) -> None:
+    for idx, row in enumerate(report.rows):
+        expected = compute_row_hash(
+            row.requirement_id,
+            row.requirement_text,
+            row.assessment,
+            row.evidence_summary,
+            row.source_file,
+            row.source_line,
+            row.source_section,
+        )
+        if row.row_hash != expected:
+            errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
+
+    expected_report_hash = compute_report_hash(
+        report.request_hash, [row.row_hash for row in report.rows], report.verdict
+    )
+    if report.report_hash != expected_report_hash:
+        errors.append(
+            f"report_hash mismatch: report says {report.report_hash}, "
+            f"computed {expected_report_hash}"
+        )
+
+    errors.extend(report.validate())
+
+
 def verify_closure_report(
     report_path: Path,
     authority_path: Path,
@@ -71,85 +165,17 @@ def verify_closure_report(
             success=False, verdict=None, errors=tuple(errors), report_path=str(report_path)
         )
 
-    try:
-        computed_authority_hash = compute_file_hash(authority_path)
-    except OSError as exc:
-        errors.append(f"authority_path unreadable: {exc}")
-        computed_authority_hash = None
-    if computed_authority_hash is not None and computed_authority_hash != authority_hash:
-        errors.append(
-            f"authority_hash argument mismatch: expected {authority_hash}, got "
-            f"{computed_authority_hash}"
-        )
-    if report.authority_hash != authority_hash:
-        errors.append(
-            f"report.authority_hash mismatch: report says {report.authority_hash}, expected "
-            f"{authority_hash}"
-        )
-
-    plan_file_hashes: list[str | None] = []
-    can_compute_request = True
-    if len(report.plan_hashes) != len(plan_paths):
-        errors.append(
-            f"plan_hashes count mismatch: report has {len(report.plan_hashes)}, "
-            f"spec has {len(plan_paths)}"
-        )
-    else:
-        for idx, p in enumerate(plan_paths):
-            try:
-                computed = compute_file_hash(p)
-            except OSError as exc:
-                errors.append(f"plan_paths[{idx}] unreadable: {exc}")
-                computed = None
-                can_compute_request = False
-            plan_file_hashes.append(computed)
-            if computed is not None and report.plan_hashes[idx] != computed:
-                errors.append(
-                    f"plan_hashes[{idx}] mismatch: report says {report.plan_hashes[idx]}, "
-                    f"computed {computed}"
-                )
-
-    if can_compute_request:
-        valid_hashes = [h for h in plan_file_hashes if h is not None]
-        computed_request_hash: str | None = compute_request_hash(
-            authority_hash,
-            valid_hashes,
-            base_sha,
-            diff_sha,
-            target_sha,
-        )
-    else:
-        computed_request_hash = None
-        errors.append("cannot compute request_hash: plan file(s) unreadable")
-    if computed_request_hash is not None and report.request_hash != computed_request_hash:
-        errors.append(
-            f"request_hash mismatch: report says {report.request_hash}, "
-            f"computed {computed_request_hash}"
-        )
-
-    for idx, row in enumerate(report.rows):
-        expected = compute_row_hash(
-            row.requirement_id,
-            row.requirement_text,
-            row.assessment,
-            row.evidence_summary,
-            row.source_file,
-            row.source_line,
-            row.source_section,
-        )
-        if row.row_hash != expected:
-            errors.append(f"row[{idx}].row_hash mismatch (content tampered)")
-
-    expected_report_hash = compute_report_hash(
-        report.request_hash, [r.row_hash for r in report.rows], report.verdict
+    _reconstruct_external_inputs(
+        report=report,
+        authority_path=authority_path,
+        authority_hash=authority_hash,
+        plan_paths=plan_paths,
+        base_sha=base_sha,
+        diff_sha=diff_sha,
+        target_sha=target_sha,
+        errors=errors,
     )
-    if report.report_hash != expected_report_hash:
-        errors.append(
-            f"report_hash mismatch: report says {report.report_hash}, "
-            f"computed {expected_report_hash}"
-        )
-
-    errors.extend(report.validate())
+    _verify_report_self_integrity(report, errors)
 
     success = len(errors) == 0
     return VerificationResult(

@@ -186,6 +186,45 @@ class InventoryAdmissionEvaluator:
         inventory_requirement_ids: tuple[str, ...],
         current_plan_text: str,
     ) -> InventoryAdmissionDecision:
+        authority_decision = self._verify_authority_consistency(
+            authority=authority,
+            trusted_head=trusted_head,
+            report=report,
+            expected_generation=expected_generation,
+            expected_plan_set_id=expected_plan_set_id,
+            expected_scope_id=expected_scope_id,
+        )
+        if authority_decision is not None:
+            return authority_decision
+
+        assert authority is not None
+        assert trusted_head is not None
+        verdict_decision = self._evaluate_go_successor_or_no_go(
+            authority=authority,
+            trusted_head=trusted_head,
+            expected_part_id=expected_part_id,
+        )
+        if verdict_decision is not None:
+            return verdict_decision
+
+        return self._verify_no_go(
+            authority=authority,
+            report=report,
+            current_plan_ref=current_plan_ref,
+            inventory_requirement_ids=inventory_requirement_ids,
+            current_plan_text=current_plan_text,
+        )
+
+    @staticmethod
+    def _verify_authority_consistency(
+        *,
+        authority: AuditCycleAuthority | None,
+        trusted_head: AuditCycleHead | None,
+        report: PlanDispositionReport | None,
+        expected_generation: str,
+        expected_plan_set_id: str,
+        expected_scope_id: str,
+    ) -> InventoryAdmissionDecision | None:
         if authority is None:
             if report is not None:
                 return _reject(
@@ -235,6 +274,16 @@ class InventoryAdmissionEvaluator:
             )
         if authority.scope_id != expected_scope_id:
             return _reject(AdmissionReason.SCOPE_MISMATCH, "authority is from another scope")
+
+        return None
+
+    @staticmethod
+    def _evaluate_go_successor_or_no_go(
+        *,
+        authority: AuditCycleAuthority,
+        trusted_head: AuditCycleHead,
+        expected_part_id: str,
+    ) -> InventoryAdmissionDecision | None:
         if authority.verdict is AuditVerdict.GO:
             if expected_part_id == authority.part_id:
                 return InventoryAdmissionDecision.omit(AdmissionReason.TRUSTED_GO)
@@ -249,61 +298,68 @@ class InventoryAdmissionEvaluator:
                 AdmissionReason.PART_MISMATCH,
                 "NO GO authority is from another part",
             )
+
+        return None
+
+    @staticmethod
+    def _verify_no_go(
+        *,
+        authority: AuditCycleAuthority,
+        report: PlanDispositionReport | None,
+        current_plan_ref: ArtifactRef | None,
+        inventory_requirement_ids: tuple[str, ...],
+        current_plan_text: str,
+    ) -> InventoryAdmissionDecision:
         if report is None:
             return _reject(
                 AdmissionReason.AUTHORITY_WITHOUT_REPORT,
                 "current NO GO authority requires a disposition report",
             )
-        provenance_checks = (
-            (
-                report.execution_generation == authority.execution_generation,
+        if report.execution_generation != authority.execution_generation:
+            return _reject(
                 AdmissionReason.GENERATION_MISMATCH,
                 "report generation differs from authority",
-            ),
-            (
-                report.cycle_id == authority.cycle_id,
+            )
+        if report.cycle_id != authority.cycle_id:
+            return _reject(
                 AdmissionReason.CYCLE_MISMATCH,
                 "report cycle differs from authority",
-            ),
-            (
-                report.plan_set_id == authority.plan_set_id,
+            )
+        if report.plan_set_id != authority.plan_set_id:
+            return _reject(
                 AdmissionReason.PLAN_SET_MISMATCH,
                 "report plan set differs from authority",
-            ),
-            (
-                report.scope_id == authority.scope_id,
+            )
+        if report.scope_id != authority.scope_id:
+            return _reject(
                 AdmissionReason.SCOPE_MISMATCH,
                 "report scope differs from authority",
-            ),
-            (
-                report.part_id == authority.part_id,
+            )
+        if report.part_id != authority.part_id:
+            return _reject(
                 AdmissionReason.PART_MISMATCH,
                 "report part differs from authority",
-            ),
-            (
-                report.audit_round == authority.audit_round,
+            )
+        if report.audit_round != authority.audit_round:
+            return _reject(
                 AdmissionReason.ROUND_MISMATCH,
                 "report round differs from authority",
-            ),
-            (
-                report.parent_authority_digest == authority.authority_digest,
+            )
+        if report.parent_authority_digest != authority.authority_digest:
+            return _reject(
                 AdmissionReason.PARENT_MISMATCH,
                 "report is not bound to this authority",
-            ),
-            (
-                report.inventory_digest == authority.inventory_ref.content_digest,
+            )
+        if report.inventory_digest != authority.inventory_ref.content_digest:
+            return _reject(
                 AdmissionReason.INVENTORY_MISMATCH,
                 "report inventory differs from authority",
-            ),
-            (
-                report.findings_digest == authority.findings_digest,
+            )
+        if report.findings_digest != authority.findings_digest:
+            return _reject(
                 AdmissionReason.FINDINGS_MISMATCH,
                 "report findings differ from authority",
-            ),
-        )
-        for matches, reason, detail in provenance_checks:
-            if not matches:
-                return _reject(reason, detail)
+            )
         if current_plan_ref is None:
             return _reject(AdmissionReason.PLAN_MISMATCH, "current plan is unverified")
         if report.current_plan_ref.content_digest != current_plan_ref.content_digest:
@@ -574,9 +630,26 @@ class AuditCycleVerifier:
             )
         self.verify_artifact_ref(authority.remediation_ref)
         inventory_bytes = self.verify_artifact_ref(authority.inventory_ref)
+        requirement_ids = self._decode_inventory_requirement_ids(
+            inventory_bytes,
+            schema_version=authority.inventory_ref.schema_version,
+        )
+        return VerifiedAuditCycle(
+            authority=authority,
+            report=report,
+            inventory_requirement_ids=requirement_ids,
+            current_plan_text=plan_text,
+        )
+
+    @staticmethod
+    def _decode_inventory_requirement_ids(
+        inventory_bytes: bytes,
+        *,
+        schema_version: int,
+    ) -> tuple[str, ...]:
         inventory_raw = decode_versioned_json_bytes(
             inventory_bytes,
-            expected_version=authority.inventory_ref.schema_version,
+            expected_version=schema_version,
             require_canonical=True,
         )
         if inventory_raw is None:
@@ -606,12 +679,7 @@ class AuditCycleVerifier:
                 AdmissionReason.INVENTORY_INVALID,
                 "inventory requirement IDs must be non-empty strings",
             )
-        return VerifiedAuditCycle(
-            authority=authority,
-            report=report,
-            inventory_requirement_ids=requirement_ids,
-            current_plan_text=plan_text,
-        )
+        return requirement_ids
 
     def evaluate_paths(
         self,

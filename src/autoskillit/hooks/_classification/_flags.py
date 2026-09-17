@@ -50,6 +50,7 @@ _CONFIG_INJECTING_GIT_GLOBALS: frozenset[str] = frozenset({"-c", "--config-env",
 _REPO_REDIRECTING_GIT_GLOBALS: frozenset[str] = frozenset(
     {"--git-dir", "--work-tree", "--bare", "--namespace"}
 )
+_CHECK_IGNORE_FORBIDDEN_GIT_GLOBALS: frozenset[str] = frozenset({"-C"})
 
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
@@ -295,6 +296,10 @@ def _is_allowed_wc_flag(token: str) -> bool:
     return bool(_WC_FLAG_RE.fullmatch(token))
 
 
+def _count_of(flags: Sequence[str], allowed: Sequence[str]) -> int:
+    return sum(flag in allowed for flag in flags)
+
+
 def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
     provenance = segment.provenance
     if provenance is None or any(provenance.redirect_syntax):
@@ -308,8 +313,8 @@ def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
 
 
 def _is_allowed_check_ignore_invocation(flags: Sequence[str]) -> bool:
-    verbose_count = sum(flag in {"-v", "--verbose"} for flag in flags)
-    if verbose_count != 1 or flags.count("--no-index") > 1:
+    verbose_count = _count_of(flags, ("-v", "--verbose"))
+    if verbose_count != 1 or _count_of(flags, ("--no-index",)) > 1:
         return False
 
     operands: list[str] = []
@@ -346,16 +351,24 @@ def _is_allowed_git_diff_invocation(flags: Sequence[str]) -> bool:
     return any(flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags)
 
 
+def _is_allowed_git_add_invocation(flags: Sequence[str]) -> bool:
+    return not any(
+        flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
+        for flag in flags
+    )
+
+
+def _is_allowed_git_status_invocation(flags: Sequence[str]) -> bool:
+    return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
+
+
 def _is_allowed_git_metadata_invocation(subcommand: str, flags: Sequence[str]) -> bool:
     if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
         return False
     if subcommand == "add":
-        return not any(
-            flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
-            for flag in flags
-        )
+        return _is_allowed_git_add_invocation(flags)
     if subcommand == "status":
-        return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
+        return _is_allowed_git_status_invocation(flags)
     if subcommand == "diff":
         return _is_allowed_git_diff_invocation(flags)
     if subcommand == "check-ignore":
@@ -366,7 +379,7 @@ def _is_allowed_git_metadata_invocation(subcommand: str, flags: Sequence[str]) -
 def _has_forbidden_git_globals(subcommand: str, global_flags: Sequence[str]) -> bool:
     forbidden = _CONFIG_INJECTING_GIT_GLOBALS | _REPO_REDIRECTING_GIT_GLOBALS
     if subcommand == "check-ignore":
-        forbidden |= {"-C"}
+        forbidden |= _CHECK_IGNORE_FORBIDDEN_GIT_GLOBALS
     return bool(forbidden.intersection(global_flags))
 
 
@@ -409,12 +422,13 @@ def command_has_blocked_protected_path_read(
     than the raw string, so a protected-path mention inside an inert
     heredoc/herestring body (prose in a fenced Markdown block, an inline
     backtick example) never trips the check, while a live SHELL/PYTHON/TEXT
-    stdin body's mention still does. `all_evaluated_segments` replaces the
-    private `_tokenize_protected_read_segments` tokenizer for the per-segment
-    allowed-metadata-command check. When the live text matches but no argv
-    segment accounts for the occurrence (a PYTHON/TEXT stdin body's content
-    is prose/source, never its own argv segment), the read stays fail-closed
-    rather than being silently lost because its source isn't an argv segment.
+    stdin body's mention still does. `all_evaluated_segments_with_provenance`
+    replaces the private `_tokenize_protected_read_segments` tokenizer for the
+    per-segment allowed-metadata-command check. When the live text matches but
+    no argv segment accounts for the occurrence (a PYTHON/TEXT stdin body's
+    content is prose/source, never its own argv segment), the read stays
+    fail-closed rather than being silently lost because its source isn't an
+    argv segment.
     """
     live_text = live_command_text(command)
     if not any(pattern.search(live_text) for pattern in protected_path_patterns):

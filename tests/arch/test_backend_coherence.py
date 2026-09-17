@@ -135,12 +135,12 @@ def test_skills_subdir_uses_conventions_field():
 
     from autoskillit.workspace import session_skills
 
-    source = inspect.getsource(session_skills.DefaultSessionSkillManager._initialize_bound_records)
+    source = inspect.getsource(session_skills.DefaultSessionSkillManager._session_home)
     tree = ast.parse(textwrap.dedent(source))
     has_skills_subdir = any(
         isinstance(node, ast.Attribute) and node.attr == "skills_subdir" for node in ast.walk(tree)
     )
-    assert has_skills_subdir, "materialization must read .skills_subdir conventions field"
+    assert has_skills_subdir, "session-home resolution must read .skills_subdir conventions field"
 
 
 def test_applicable_guards_uses_capability_field():

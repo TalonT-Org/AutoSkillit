@@ -224,6 +224,17 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     # 3. Legacy evidence is visible but never deletion authority. Exact v2
     #    records are errors only when the registered path still validates as
     #    the same incarnation.
+    findings.extend(_retirement_cache_findings(home))
+
+    # 4. Version agreement, one finding per derived file (see module docstring).
+    findings.extend(_derived_version_findings(importlib.metadata.version("autoskillit")))
+
+    return tuple(findings)
+
+
+def _retirement_cache_findings(home: ManagedHome) -> list[InstallStateFinding]:
+    """Return the ordered retirement-cache evidence family for install diagnostics."""
+    findings: list[InstallStateFinding] = []
     registered = frozenset(registered_install_paths(home.root))
     retirement = read_retiring_cache(home=home)
     if retirement.state is RetiringCacheState.CORRUPT:
@@ -287,11 +298,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                         "references it. Run `autoskillit install` to reconcile the registry.",
                     )
                 )
-
-    # 4. Version agreement, one finding per derived file (see module docstring).
-    findings.extend(_derived_version_findings(importlib.metadata.version("autoskillit")))
-
-    return tuple(findings)
+    return findings
 
 
 def _record_matches_current_installed_artifact(
@@ -414,57 +421,14 @@ def _enqueue_legacy_installed_plugin_versions(
         key=lambda item: item.name,
     )
     for candidate in candidates:
-        if candidate.name == running_version and running_generation is None:
-            continue
-        marker = candidate.parent / (f".{candidate.name}.autoskillit-rejected-legacy")
-        if marker.exists():
-            continue
-        try:
-            # acquire_shared (not acquire_existing_shared): unlike the generation
-            # store's artifacts, a legacy Claude-cache install predating the lease
-            # mechanism may never have had a lock sidecar created for it — this
-            # lazily materializes one rather than failing every legacy candidate
-            # outright (issue #4770 Related Issue 2).
-            with ArtifactLease.acquire_shared(
-                installed_plugin_artifact_lease_path(candidate),
-                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
-            ):
-                try:
-                    identity = read_installed_plugin_artifact_identity(
-                        candidate,
-                        expected_semantic_key=installed_plugin_semantic_key(
-                            _AUTOSKILLIT_PLUGIN_KEY,
-                            candidate.name,
-                        ),
-                        manifest_path=installed_plugin_artifact_manifest_path(candidate),
-                    )
-                except PluginArtifactValidationError as exc:
-                    try:
-                        atomic_write(marker, "", strict_durability=True, exclusive=True)
-                    except FileExistsError:
-                        continue
-                    logger.warning(
-                        "reconcile_install_artifacts: rejected invalid legacy version %s: %s",
-                        candidate,
-                        exc,
-                    )
-                    continue
-        except ArtifactLeaseContention:
-            continue
-        except (PluginArtifactUnavailableError, OSError):
-            raise
-        try:
-            if engine.enqueue_retirement(identity, deadline) is None:
-                logger.warning(
-                    "reconcile_install_artifacts: retiring queue unreadable, skipped %s",
-                    candidate,
-                )
-        except (PluginArtifactValidationError, OSError, RuntimeError, ValueError) as exc:
-            logger.warning(
-                "reconcile_install_artifacts: could not enqueue legacy version %s: %s",
-                candidate,
-                exc,
-            )
+        _enqueue_legacy_installed_plugin_candidate(
+            candidate,
+            engine=engine,
+            deadline=deadline,
+            plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
+            running_version=running_version,
+            running_generation=running_generation,
+        )
     try:
         next(artifact.iterdir())
     except StopIteration:
@@ -478,6 +442,69 @@ def _enqueue_legacy_installed_plugin_versions(
             )
     except OSError:
         pass
+
+
+def _enqueue_legacy_installed_plugin_candidate(
+    candidate: Path,
+    *,
+    engine: PluginArtifactRetirementEngine,
+    deadline: datetime,
+    plugin_ref: str,
+    running_version: str,
+    running_generation: Path | None,
+) -> None:
+    """Admit one legacy incarnation under lease before handing it to retirement."""
+    if candidate.name == running_version and running_generation is None:
+        return
+    marker = candidate.parent / (f".{candidate.name}.autoskillit-rejected-legacy")
+    if marker.exists():
+        return
+    try:
+        # acquire_shared (not acquire_existing_shared): unlike the generation
+        # store's artifacts, a legacy Claude-cache install predating the lease
+        # mechanism may never have had a lock sidecar created for it — this
+        # lazily materializes one rather than failing every legacy candidate
+        # outright (issue #4770 Related Issue 2).
+        with ArtifactLease.acquire_shared(
+            installed_plugin_artifact_lease_path(candidate),
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        ):
+            try:
+                identity = read_installed_plugin_artifact_identity(
+                    candidate,
+                    expected_semantic_key=installed_plugin_semantic_key(
+                        plugin_ref,
+                        candidate.name,
+                    ),
+                    manifest_path=installed_plugin_artifact_manifest_path(candidate),
+                )
+            except PluginArtifactValidationError as exc:
+                try:
+                    atomic_write(marker, "", strict_durability=True, exclusive=True)
+                except FileExistsError:
+                    return
+                logger.warning(
+                    "reconcile_install_artifacts: rejected invalid legacy version %s: %s",
+                    candidate,
+                    exc,
+                )
+                return
+    except ArtifactLeaseContention:
+        return
+    except (PluginArtifactUnavailableError, OSError):
+        raise
+    try:
+        if engine.enqueue_retirement(identity, deadline) is None:
+            logger.warning(
+                "reconcile_install_artifacts: retiring queue unreadable, skipped %s",
+                candidate,
+            )
+    except (PluginArtifactValidationError, OSError, RuntimeError, ValueError) as exc:
+        logger.warning(
+            "reconcile_install_artifacts: could not enqueue legacy version %s: %s",
+            candidate,
+            exc,
+        )
 
 
 _RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path, ManagedHome], None]] = {

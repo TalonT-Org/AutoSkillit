@@ -347,6 +347,23 @@ def _validate_supplied_lease(
     )
 
 
+def _failed_installed_artifact_verification(
+    *,
+    lease: ArtifactLease,
+    owns_lease: bool,
+    findings: list[InstallStateFinding],
+    primary_error: BaseException,
+) -> InstalledArtifactVerification:
+    """Close an owned lease after an expected failure without borrowing cleanup."""
+    if owns_lease:
+        lease.close_preserving(primary_error)
+    return InstalledArtifactVerification(
+        None,
+        tuple(findings),
+        None if owns_lease else lease,
+    )
+
+
 def verify_installed_plugin_artifact(
     spec: InstallStateSpec,
 ) -> InstalledArtifactVerification:
@@ -406,12 +423,11 @@ def verify_installed_plugin_artifact(
                 "`autoskillit install`.",
             )
         )
-        if owns_lease:
-            lease.close_preserving(exc)
-        return InstalledArtifactVerification(
-            None,
-            tuple(findings),
-            None if owns_lease else lease,
+        return _failed_installed_artifact_verification(
+            lease=lease,
+            owns_lease=owns_lease,
+            findings=findings,
+            primary_error=exc,
         )
     except PluginArtifactValidationError as exc:
         findings.append(
@@ -421,12 +437,11 @@ def verify_installed_plugin_artifact(
                 f"identity validation: {exc}. Run `autoskillit install` to republish it.",
             )
         )
-        if owns_lease:
-            lease.close_preserving(exc)
-        return InstalledArtifactVerification(
-            None,
-            tuple(findings),
-            None if owns_lease else lease,
+        return _failed_installed_artifact_verification(
+            lease=lease,
+            owns_lease=owns_lease,
+            findings=findings,
+            primary_error=exc,
         )
     except BaseException as primary_error:
         if owns_lease:

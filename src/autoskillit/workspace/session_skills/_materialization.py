@@ -1,17 +1,6 @@
-"""Session-skill materialization transaction.
+"""Ordered session-skill materialization transaction.
 
-Single owner of the ordering-sensitive ``_materialize_session`` transaction,
-the single catalog's profile merge, discovery entry point, and restore path.
-
-The step order in ``_materialize_session`` is load-bearing:
-
-- ``ensure_pre_launch`` runs before ``backend.setup_session_dir``, so a
-  pre-launch failure aborts before any backend session state is created;
-- records are pruned by ``finalized_native_roles`` after backend setup,
-  never before;
-- unavailability JSON is published before the ungated session tree;
-- bundled-record filtering applies only for ``SkillExecutionRole.SESSION`` —
-  other roles keep bundled records in the materialized tree.
+Prelaunch precedes setup; metadata precedes the ungated tree; bundled filtering is SESSION-only.
 """
 
 from __future__ import annotations
@@ -29,6 +18,7 @@ from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
     AgentDef,
     CompiledSessionSkillCatalogAuthority,
+    EffectiveSkillCatalogAuthority,
     SkillAuthority,
     SkillContractError,
     SkillDiscoveryRouteDef,
@@ -59,7 +49,6 @@ from autoskillit.workspace.session_skills._projection import (
     SkillProjectionContext,
     materialize_agent_skill_tree,
 )
-from autoskillit.workspace.skills import SkillInfo
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -85,7 +74,6 @@ def _materialize_profile_skill_infos(
     *,
     execution_role: SkillExecutionRole,
 ) -> CompiledSessionSkillCatalog:
-    """Project an admitted profile catalog into one existing session catalog."""
     for unavailable in compilation.unavailable:
         logger.warning(
             "profile_skill_unavailable",
@@ -130,7 +118,6 @@ def _materialize_profile_skill_infos(
 
 
 def _remove_profile_staging(staging: Path) -> None:
-    """Remove a transaction-private profile projection directory completely."""
     if not os.path.lexists(staging):
         return
     if staging.is_symlink() or not staging.is_dir():
@@ -145,7 +132,6 @@ def _merge_profile_projection(
     catalog_dir: Path,
     execution_role: SkillExecutionRole,
 ) -> None:
-    """Merge profile projections after checking every collision before moving one."""
     if catalog_dir.is_symlink() or not catalog_dir.is_dir():
         raise SkillContractError(f"session skill catalog must be a real directory: {catalog_dir}")
     entries = sorted(staging.iterdir(), key=lambda entry: entry.name)
@@ -180,7 +166,6 @@ def materialize_profile_skills(
     *,
     finalized_native_roles: frozenset[str] | None,
 ) -> CompiledSessionSkillCatalog:
-    """Safely project the admitted skill catalog from one declared profile source."""
     infos = _profile_skill_infos(profile_skills_source)
     admission_compilation = compile_session_skill_catalog(
         _profile_skill_catalog(infos),
@@ -207,11 +192,39 @@ def materialize_profile_skills(
     )
 
 
+def _admit_invocation_records(
+    records: tuple[SkillAuthority, ...],
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend,
+) -> tuple[tuple[SkillAuthority, ...], set[str]]:
+    invocation = projection_context.invocation
+    assert invocation is not None
+    admitted_records: list[SkillAuthority] = []
+    invocation_required_native_roles: set[str] = set()
+    for record in records:
+        plan = record.semantic_plan
+        if plan is None:
+            admitted_records.append(record)
+            continue
+        adaptation = backend.adapt_skill_semantics(plan, projection_context.adaptation_context)
+        unsupported_operation = adaptation.validate_refusal_for(
+            plan,
+            backend=backend.name,
+        )
+        if unsupported_operation is not None:
+            if record.name == invocation.root.name:
+                adaptation.validate_for(plan, backend=backend.name)
+            continue
+        adaptation.validate_for(plan, backend=backend.name)
+        invocation_required_native_roles.update(_required_native_child_roles(plan, adaptation))
+        admitted_records.append(record)
+    return tuple(admitted_records), invocation_required_native_roles
+
+
 def _materialize_discovery_entry_point(
     generated_home: Path,
     route: SkillDiscoveryRouteDef,
 ) -> Path | None:
-    """Materialize the declared loader entry point when it is an alias."""
     if not route.entry_point_is_alias:
         return None
     entry = route.discovery_root(generated_home)
@@ -223,7 +236,6 @@ def _materialize_discovery_entry_point(
 
 
 def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
-    """Freeze the managed catalog entries before discovery aliases are exposed."""
     entries: list[tuple[str, str]] = []
     for skill_dir in sorted(catalog_dir.iterdir(), key=lambda entry: entry.name):
         if skill_dir.name.startswith("."):
@@ -242,6 +254,169 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
     return tuple(entries)
 
 
+def _configure_managed_session_route(
+    generated_home: Path,
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend,
+) -> None:
+    attestation = (
+        projection_context.adaptation_context.managed_join_attestation
+        if projection_context.adaptation_context is not None
+        else None
+    )
+    if backend.capabilities.managed_fixed_batch_route_capable and attestation is not None:
+        configure_managed_home = getattr(backend, "configure_managed_session_dir", None)
+        if not callable(configure_managed_home):
+            raise SkillContractError("managed-route backend cannot configure a generated home")
+        configure_managed_home(
+            generated_home,
+            attestation=attestation,
+            route=projection_context.managed_codex_route or "parent",
+        )
+
+
+def _add_session_agent_defs(
+    setup_kwargs: _SessionSetupKwargs,
+    projection_context: SkillProjectionContextAuthority,
+    compilation: CompiledSessionSkillCatalogAuthority | None,
+    profile_admission_compilation: CompiledSessionSkillCatalog | None,
+    invocation_required_native_roles: set[str],
+    explorer_binding_env: _ExplorerBindingEnv | None,
+) -> None:
+    if not any(
+        (
+            compilation is not None,
+            profile_admission_compilation is not None,
+            projection_context.invocation is not None,
+        )
+    ):
+        return
+    required_native_roles = set(invocation_required_native_roles)
+    if compilation is not None:
+        if not isinstance(compilation, CompiledSessionSkillCatalog):
+            raise SkillContractError(
+                "agent-definition provisioning requires a concrete session compilation"
+            )
+        for targets in compilation.required_native_roles.values():
+            required_native_roles.update(targets)
+    if profile_admission_compilation is not None:
+        for targets in profile_admission_compilation.required_native_roles.values():
+            required_native_roles.update(targets)
+    setup_kwargs["agent_defs"] = _session_agent_definitions(
+        required_native_roles,
+        explorer_binding_env,
+    )
+
+
+def _setup_generated_session(
+    generated_home: Path,
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend | None,
+    execution_role: SkillExecutionRole,
+    compilation: CompiledSessionSkillCatalogAuthority | None,
+    profile_admission_compilation: CompiledSessionSkillCatalog | None,
+    invocation_required_native_roles: set[str],
+    explorer_binding_env: _ExplorerBindingEnv | None,
+    explorer_binding_env_factory: _ExplorerBindingEnvFactory | None,
+) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None]:
+    if backend is not None and backend.capabilities.mcp_config_capable:
+        readiness = backend.ensure_pre_launch(session_dir=generated_home)
+        if readiness.errors:
+            raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
+    if explorer_binding_env_factory is not None:
+        explorer_binding_env = explorer_binding_env_factory(generated_home)
+    if backend is None:
+        return None, explorer_binding_env
+    setup_kwargs: _SessionSetupKwargs = {
+        "parent_sandbox_mode": projection_context.parent_sandbox_mode,
+        "execution_role": execution_role,
+    }
+    if explorer_binding_env is not None:
+        setup_kwargs["explorer_binding_env"] = explorer_binding_env
+    _add_session_agent_defs(
+        setup_kwargs,
+        projection_context,
+        compilation,
+        profile_admission_compilation,
+        invocation_required_native_roles,
+        explorer_binding_env,
+    )
+    finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
+    _configure_managed_session_route(generated_home, projection_context, backend)
+    return finalized_native_roles, explorer_binding_env
+
+
+def _publish_session_skill_tree(
+    generated_home: Path,
+    add_dir: Path,
+    skills_base: Path,
+    records: tuple[SkillAuthority, ...],
+    effective_catalog: EffectiveSkillCatalogAuthority | None,
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend | None,
+    execution_role: SkillExecutionRole,
+    profile_compilation: CompiledSessionSkillCatalog | None,
+    explorer_binding_env: _ExplorerBindingEnv | None,
+) -> ValidatedAddDir:
+    ungated_context = SkillProjectionContext(
+        cwd=projection_context.cwd,
+        project_root=projection_context.project_root,
+        catalog=effective_catalog,
+        invocation=projection_context.invocation,
+        backend=projection_context.backend,
+        conventions=projection_context.conventions,
+        substitutions=projection_context.substitutions,
+        gating=False,
+        namespace=projection_context.namespace,
+        exploration_launch_context_ref=projection_context.exploration_launch_context_ref,
+        resolved_exploration_profile=projection_context.resolved_exploration_profile,
+        active_exploration_applicabilities=(projection_context.active_exploration_applicabilities),
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        adaptation_context=projection_context.adaptation_context,
+        managed_codex_route=projection_context.managed_codex_route,
+        explorer_provisioning_eligible=(
+            explorer_binding_env is not None or projection_context.explorer_provisioning_eligible
+        ),
+        projection_version=projection_context.projection_version,
+    )
+    session_records = records
+    if backend is not None and execution_role is SkillExecutionRole.SESSION:
+        session_records = tuple(
+            record for record in records if record.source is not SkillSource.BUNDLED
+        )
+    materialize_agent_skill_tree(skills_base, session_records, ungated_context)
+    if backend is not None and profile_compilation is not None:
+        _materialize_profile_skill_infos(
+            skills_base,
+            profile_compilation,
+            backend,
+            projection_context,
+            execution_role=execution_role,
+        )
+    skill_entries = _freeze_skill_entries(skills_base)
+    route = backend.conventions.managed_skill_discovery if backend is not None else None
+    if route is not None:
+        entry = _materialize_discovery_entry_point(generated_home, route)
+        if entry is not None:
+            logger.debug("discovery_entry_point_materialized", path=str(entry))
+    if backend is not None and backend.capabilities.session_dir_persistent:
+        _create_inert_rollout_paths(generated_home, backend)
+    if backend is not None:
+        layout_errors = list(
+            backend.validate_session_layout(
+                generated_home,
+                project_dir=projection_context.project_root or projection_context.cwd,
+            )
+        )
+        if layout_errors:
+            raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
+    return ValidatedAddDir(
+        path=str(add_dir),
+        session_home=str(generated_home),
+        skill_entries=skill_entries,
+    )
+
+
 def _materialize_session(
     generated_home: Path,
     records: tuple[SkillAuthority, ...],
@@ -257,7 +432,6 @@ def _materialize_session(
     add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
     skills_base = add_dir / skills_subdir
     skills_base.mkdir(parents=True, exist_ok=True)
-
     effective_catalog = projection_context.catalog
     invocation_required_native_roles: set[str] = set()
     if compilation is not None:
@@ -272,25 +446,11 @@ def _materialize_session(
         effective_catalog = compilation.catalog
         records = tuple(effective_catalog.skills)
     elif backend is not None and projection_context.invocation is not None:
-        admitted_records: list[SkillAuthority] = []
-        for record in records:
-            plan = record.semantic_plan
-            if plan is None:
-                admitted_records.append(record)
-                continue
-            adaptation = backend.adapt_skill_semantics(plan, projection_context.adaptation_context)
-            unsupported_operation = adaptation.validate_refusal_for(
-                plan,
-                backend=backend.name,
-            )
-            if unsupported_operation is not None:
-                if record.name == projection_context.invocation.root.name:
-                    adaptation.validate_for(plan, backend=backend.name)
-                continue
-            adaptation.validate_for(plan, backend=backend.name)
-            invocation_required_native_roles.update(_required_native_child_roles(plan, adaptation))
-            admitted_records.append(record)
-        records = tuple(admitted_records)
+        records, invocation_required_native_roles = _admit_invocation_records(
+            records,
+            projection_context,
+            backend,
+        )
 
     execution_role = (
         effective_catalog.execution_role
@@ -300,69 +460,29 @@ def _materialize_session(
     profile_skills_source = (
         backend.conventions.profile_skills_source if backend is not None else None
     )
-    profile_skill_infos: tuple[SkillInfo, ...] = ()
     profile_admission_compilation: CompiledSessionSkillCatalog | None = None
     if (
         backend is not None
         and execution_role is SkillExecutionRole.SESSION
         and profile_skills_source is not None
     ):
-        profile_skill_infos = _profile_skill_infos(profile_skills_source)
         profile_admission_compilation = compile_session_skill_catalog(
-            _profile_skill_catalog(profile_skill_infos),
+            _profile_skill_catalog(_profile_skill_infos(profile_skills_source)),
             backend,
             adaptation_context=projection_context.adaptation_context,
         )
 
-    if backend is not None and backend.capabilities.mcp_config_capable:
-        readiness = backend.ensure_pre_launch(session_dir=generated_home)
-        if readiness.errors:
-            raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
-    if explorer_binding_env_factory is not None:
-        explorer_binding_env = explorer_binding_env_factory(generated_home)
-    finalized_native_roles: frozenset[str] | None = None
-    if backend is not None:
-        setup_kwargs: _SessionSetupKwargs = {
-            "parent_sandbox_mode": projection_context.parent_sandbox_mode,
-            "execution_role": execution_role,
-        }
-        if explorer_binding_env is not None:
-            setup_kwargs["explorer_binding_env"] = explorer_binding_env
-        if (
-            compilation is not None
-            or profile_admission_compilation is not None
-            or projection_context.invocation is not None
-        ):
-            required_native_roles = set(invocation_required_native_roles)
-            if compilation is not None:
-                if not isinstance(compilation, CompiledSessionSkillCatalog):
-                    raise SkillContractError(
-                        "agent-definition provisioning requires a concrete session compilation"
-                    )
-                for targets in compilation.required_native_roles.values():
-                    required_native_roles.update(targets)
-            if profile_admission_compilation is not None:
-                for targets in profile_admission_compilation.required_native_roles.values():
-                    required_native_roles.update(targets)
-            setup_kwargs["agent_defs"] = _session_agent_definitions(
-                required_native_roles,
-                explorer_binding_env,
-            )
-        finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
-        attestation = (
-            projection_context.adaptation_context.managed_join_attestation
-            if projection_context.adaptation_context is not None
-            else None
-        )
-        if backend.capabilities.managed_fixed_batch_route_capable and attestation is not None:
-            configure_managed_home = getattr(backend, "configure_managed_session_dir", None)
-            if not callable(configure_managed_home):
-                raise SkillContractError("managed-route backend cannot configure a generated home")
-            configure_managed_home(
-                generated_home,
-                attestation=attestation,
-                route=projection_context.managed_codex_route or "parent",
-            )
+    finalized_native_roles, explorer_binding_env = _setup_generated_session(
+        generated_home,
+        projection_context,
+        backend,
+        execution_role,
+        compilation,
+        profile_admission_compilation,
+        invocation_required_native_roles,
+        explorer_binding_env,
+        explorer_binding_env_factory,
+    )
 
     if finalized_native_roles is not None and projection_context.invocation is not None:
         missing_invocation_roles = sorted(
@@ -449,67 +569,19 @@ def _materialize_session(
         unavailability_payload=unavailability_payload,
     )
 
-    ungated_context = SkillProjectionContext(
-        cwd=projection_context.cwd,
-        project_root=projection_context.project_root,
-        catalog=effective_catalog,
-        invocation=projection_context.invocation,
-        backend=projection_context.backend,
-        conventions=projection_context.conventions,
-        substitutions=projection_context.substitutions,
-        gating=False,
-        namespace=projection_context.namespace,
-        exploration_launch_context_ref=projection_context.exploration_launch_context_ref,
-        resolved_exploration_profile=projection_context.resolved_exploration_profile,
-        active_exploration_applicabilities=(projection_context.active_exploration_applicabilities),
-        parent_sandbox_mode=projection_context.parent_sandbox_mode,
-        adaptation_context=projection_context.adaptation_context,
-        managed_codex_route=projection_context.managed_codex_route,
-        explorer_provisioning_eligible=(
-            explorer_binding_env is not None or projection_context.explorer_provisioning_eligible
-        ),
-        projection_version=projection_context.projection_version,
-    )
-    session_records = records
-    if backend is not None and execution_role is SkillExecutionRole.SESSION:
-        session_records = tuple(
-            record for record in records if record.source is not SkillSource.BUNDLED
-        )
-    materialize_agent_skill_tree(skills_base, session_records, ungated_context)
-    if backend is not None and profile_compilation is not None:
-        _materialize_profile_skill_infos(
-            skills_base,
-            profile_compilation,
-            backend,
-            projection_context,
-            execution_role=execution_role,
-        )
-    skill_entries = _freeze_skill_entries(skills_base)
-    route = backend.conventions.managed_skill_discovery if backend is not None else None
-    if route is not None:
-        entry = _materialize_discovery_entry_point(generated_home, route)
-        if entry is not None:
-            logger.debug("discovery_entry_point_materialized", path=str(entry))
-    if backend is not None and backend.capabilities.session_dir_persistent:
-        _create_inert_rollout_paths(generated_home, backend)
-    if backend is not None:
-        layout_errors = list(
-            backend.validate_session_layout(
-                generated_home,
-                project_dir=projection_context.project_root or projection_context.cwd,
-            )
-        )
-        if layout_errors:
-            raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
-    return (
-        ValidatedAddDir(
-            path=str(add_dir),
-            session_home=str(generated_home),
-            skill_entries=skill_entries,
-        ),
+    skills_dir = _publish_session_skill_tree(
+        generated_home,
+        add_dir,
+        skills_base,
         records,
-        unavailability_payload,
+        effective_catalog,
+        projection_context,
+        backend,
+        execution_role,
+        profile_compilation,
+        explorer_binding_env,
     )
+    return skills_dir, records, unavailability_payload
 
 
 def _restore_session(
@@ -519,7 +591,6 @@ def _restore_session(
     *,
     skills_subdir: Path,
 ) -> ValidatedAddDir:
-    """Rebuild a generated backend home around one retained skill closure."""
     backend = projection_context.backend
     add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
     catalog_dir = add_dir / skills_subdir
@@ -562,7 +633,6 @@ def _copy_restored_skill_catalog(
     *,
     skills_subdir: Path,
 ) -> None:
-    """Validate a retained closure and copy it without accepting symlinks."""
     if snapshot_dir.is_symlink():
         raise ValueError(f"restored skill snapshot root must not be a symlink: {snapshot_dir}")
     if not snapshot_dir.is_dir():
@@ -597,7 +667,6 @@ def _copy_restored_skill_catalog(
 
 
 def _validate_restored_snapshot(snapshot_dir: Path) -> None:
-    """Reject links anywhere in a stored snapshot before inspecting its catalog."""
     for entry in strict_walk(snapshot_dir):
         if entry.kind == "l":
             raise ValueError(
@@ -606,7 +675,6 @@ def _validate_restored_snapshot(snapshot_dir: Path) -> None:
 
 
 def _validate_restored_skill_catalog(source_catalog: Path) -> None:
-    """Require a complete regular-file catalog before creating its destination."""
     skill_names: set[str] = set()
     skill_documents: set[str] = set()
     for entry in strict_walk(source_catalog):
@@ -630,7 +698,6 @@ def _validate_restored_skill_catalog(source_catalog: Path) -> None:
 
 
 def _copy_restored_regular_file(source_dir_fd: int, source_name: str, destination: Path) -> None:
-    """Copy one strict-walk file through a no-follow descriptor."""
     source_fd = os.open(
         source_name,
         os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -652,7 +719,6 @@ def _create_inert_rollout_paths(
     generated_home: Path,
     backend: CodingAgentBackend,
 ) -> None:
-    """Create ``.inert-<name>`` rollout dirs and matching public symlinks for the backend."""
     configured = backend.capabilities.session_dir_symlinks
     for name in sorted(configured):
         if Path(name).name != name or name in {"", ".", ".."}:

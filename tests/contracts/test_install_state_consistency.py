@@ -771,7 +771,7 @@ class TestRetiredArtifactShapeRegistry:
         )
         target = (
             "src/autoskillit/workspace/_installed/_state.py",
-            "_enqueue_legacy_installed_plugin_versions",
+            "_enqueue_legacy_installed_plugin_candidate",
         )
         run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
 

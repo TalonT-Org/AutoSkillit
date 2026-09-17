@@ -9,7 +9,7 @@ semantic declarations. Includes the retirement registry
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from autoskillit.core import (
     CODEX_VALID_MODEL_IDS,
@@ -87,16 +87,14 @@ def _mapping_list(value: Any, field_name: str) -> list[dict[str, Any]]:
     return value
 
 
-def parse_skill_semantic_plan(
-    data: dict[str, Any],
+def _semantic_token_diagnostics(
     *,
     path: Path,
+    schema_version: object,
     content: str,
     uses_capabilities: frozenset[str],
-) -> tuple[SkillSemanticPlan | None, tuple[tuple[SkillInvalidityKind, str], ...]]:
-    """Parse one source declaration without granting it backend authority."""
+) -> list[tuple[SkillInvalidityKind, str]]:
     diagnostics: list[tuple[SkillInvalidityKind, str]] = []
-    schema_version = data.get("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
     retired_caps = sorted(uses_capabilities & RETIRED_SEMANTIC_CAPABILITIES.keys())
     for capability in retired_caps:
         diagnostics.append(
@@ -132,6 +130,132 @@ def parse_skill_semantic_plan(
                     ),
                 )
             )
+    return diagnostics
+
+
+def _requirements_mapping_diagnostics(
+    raw_requirements: object,
+    *,
+    path: Path,
+    schema_version: object,
+) -> list[tuple[SkillInvalidityKind, str]]:
+    if not isinstance(raw_requirements, dict):
+        return [
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements",
+                    replacement="a mapping of version-1 semantic requirement fields",
+                ),
+            )
+        ]
+    diagnostics: list[tuple[SkillInvalidityKind, str]] = []
+    for token in sorted(set(raw_requirements) - _SEMANTIC_REQUIREMENT_KEYS):
+        replacement = _RETIRED_SEMANTIC_DECLARATIONS.get(
+            token, f"one of {sorted(_SEMANTIC_REQUIREMENT_KEYS)}"
+        )
+        diagnostics.append(
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=token,
+                    replacement=replacement,
+                ),
+            )
+        )
+    return diagnostics
+
+
+def _optional_spec(
+    raw_requirements: dict[str, Any],
+    field_name: str,
+    spec_type: type[Any],
+) -> Any:
+    raw = raw_requirements.get(field_name)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SkillContractError(f"semantic_requirements.{field_name} must be a mapping")
+    return spec_type(**raw)
+
+
+def _build_skill_semantic_plan(
+    schema_version: int,
+    raw_requirements: dict[str, Any],
+) -> SkillSemanticPlan:
+    logical_roles = tuple(
+        LogicalRoleSpec(
+            name=str(item.get("name", "")),
+            purpose=str(item.get("purpose", "")),
+        )
+        for item in _mapping_list(raw_requirements.get("logical_roles", []), "logical_roles")
+    )
+    child_spawns = tuple(
+        ChildSpawnSpec(
+            role=str(item.get("role", "")),
+            count=item.get("count"),
+            for_each=item.get("for_each"),
+        )
+        for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns")
+    )
+    child_model_policies = tuple(
+        ChildModelPolicySpec(
+            role=str(item.get("role", "")),
+            model_class=(
+                str(item["model_class"]) if item.get("model_class") is not None else None
+            ),
+            reasoning_effort=(
+                str(item["reasoning_effort"]) if item.get("reasoning_effort") is not None else None
+            ),
+        )
+        for item in _mapping_list(
+            raw_requirements.get("child_model_policies", []),
+            "child_model_policies",
+        )
+    )
+    sibling_skills = tuple(
+        SiblingSkillSpec(name=str(item.get("name", "")))
+        for item in _mapping_list(raw_requirements.get("sibling_skills", []), "sibling_skills")
+    )
+    git_metadata_writes = tuple(
+        GitMetadataWriteSpec(purpose=str(item.get("purpose", "")))
+        for item in _mapping_list(
+            raw_requirements.get("git_metadata_writes", []),
+            "git_metadata_writes",
+        )
+    )
+    return SkillSemanticPlan(
+        schema_version=schema_version,
+        child_spawns=child_spawns,
+        concurrency=_optional_spec(raw_requirements, "concurrency", ConcurrencySpec),
+        join=_optional_spec(raw_requirements, "join", JoinSpec),
+        evidence=_optional_spec(raw_requirements, "evidence", EvidenceSpec),
+        child_model_policies=child_model_policies,
+        logical_roles=logical_roles,
+        sibling_skills=sibling_skills,
+        git_metadata_writes=git_metadata_writes,
+    )
+
+
+def parse_skill_semantic_plan(
+    data: dict[str, Any],
+    *,
+    path: Path,
+    content: str,
+    uses_capabilities: frozenset[str],
+) -> tuple[SkillSemanticPlan | None, tuple[tuple[SkillInvalidityKind, str], ...]]:
+    """Parse one source declaration without granting it backend authority."""
+    schema_version = data.get("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
+    diagnostics = _semantic_token_diagnostics(
+        path=path,
+        schema_version=schema_version,
+        content=content,
+        uses_capabilities=uses_capabilities,
+    )
 
     has_declaration = "semantic_version" in data or "semantic_requirements" in data
     if not has_declaration:
@@ -164,103 +288,19 @@ def parse_skill_semantic_plan(
         return None, tuple(diagnostics)
 
     raw_requirements = data.get("semantic_requirements", {})
-    if not isinstance(raw_requirements, dict):
-        diagnostics.append(
-            (
-                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
-                _semantic_error(
-                    path,
-                    schema_version=schema_version,
-                    offending="semantic_requirements",
-                    replacement="a mapping of version-1 semantic requirement fields",
-                ),
-            )
+    diagnostics.extend(
+        _requirements_mapping_diagnostics(
+            raw_requirements,
+            path=path,
+            schema_version=schema_version,
         )
-        return None, tuple(diagnostics)
-
-    unknown = sorted(set(raw_requirements) - _SEMANTIC_REQUIREMENT_KEYS)
-    for token in unknown:
-        replacement = _RETIRED_SEMANTIC_DECLARATIONS.get(
-            token, f"one of {sorted(_SEMANTIC_REQUIREMENT_KEYS)}"
-        )
-        diagnostics.append(
-            (
-                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
-                _semantic_error(
-                    path,
-                    schema_version=schema_version,
-                    offending=token,
-                    replacement=replacement,
-                ),
-            )
-        )
+    )
     if diagnostics:
         return None, tuple(diagnostics)
+    assert isinstance(raw_requirements, dict)
 
     try:
-        logical_roles = tuple(
-            LogicalRoleSpec(
-                name=str(item.get("name", "")),
-                purpose=str(item.get("purpose", "")),
-            )
-            for item in _mapping_list(raw_requirements.get("logical_roles", []), "logical_roles")
-        )
-        child_spawns = tuple(
-            ChildSpawnSpec(
-                role=str(item.get("role", "")),
-                count=item.get("count"),
-                for_each=item.get("for_each"),
-            )
-            for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns")
-        )
-        child_model_policies = tuple(
-            ChildModelPolicySpec(
-                role=str(item.get("role", "")),
-                model_class=(
-                    str(item["model_class"]) if item.get("model_class") is not None else None
-                ),
-                reasoning_effort=(
-                    str(item["reasoning_effort"])
-                    if item.get("reasoning_effort") is not None
-                    else None
-                ),
-            )
-            for item in _mapping_list(
-                raw_requirements.get("child_model_policies", []),
-                "child_model_policies",
-            )
-        )
-        sibling_skills = tuple(
-            SiblingSkillSpec(name=str(item.get("name", "")))
-            for item in _mapping_list(raw_requirements.get("sibling_skills", []), "sibling_skills")
-        )
-        git_metadata_writes = tuple(
-            GitMetadataWriteSpec(purpose=str(item.get("purpose", "")))
-            for item in _mapping_list(
-                raw_requirements.get("git_metadata_writes", []),
-                "git_metadata_writes",
-            )
-        )
-
-        def optional_spec(field_name: str, spec_type: type[Any]) -> Any:
-            raw = raw_requirements.get(field_name)
-            if raw is None:
-                return None
-            if not isinstance(raw, dict):
-                raise SkillContractError(f"semantic_requirements.{field_name} must be a mapping")
-            return spec_type(**raw)
-
-        plan = SkillSemanticPlan(
-            schema_version=schema_version,
-            child_spawns=child_spawns,
-            concurrency=optional_spec("concurrency", ConcurrencySpec),
-            join=optional_spec("join", JoinSpec),
-            evidence=optional_spec("evidence", EvidenceSpec),
-            child_model_policies=child_model_policies,
-            logical_roles=logical_roles,
-            sibling_skills=sibling_skills,
-            git_metadata_writes=git_metadata_writes,
-        )
+        plan = _build_skill_semantic_plan(cast(int, schema_version), raw_requirements)
     except ChildSpawnCardinalityError as exc:
         diagnostics.append(
             (

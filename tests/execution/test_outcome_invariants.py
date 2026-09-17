@@ -432,26 +432,29 @@ class TestTokenEmissionSync:
         assert match, f"{skill_name} missing {template_name} template delimiter"
         return match["body"]
 
-    def test_resolver_fields_are_declared_but_only_model_owned_fields_emit(self) -> None:
+    @pytest.mark.parametrize("skill_name", _RESOLVER_SKILLS)
+    def test_resolver_fields_are_declared_but_only_model_owned_fields_emit(
+        self,
+        skill_name: str,
+    ) -> None:
         manifest = load_bundled_manifest()
-        for skill_name in self._RESOLVER_SKILLS:
-            contract = get_skill_contract(skill_name, manifest)
-            assert contract is not None, f"{skill_name} missing from skill_contracts.yaml"
-            declared_names = {output.name for output in contract.outputs}
-            assert {"review_status", "finding_disposition"} <= declared_names
-            assert self._DERIVED_COUNTERS <= declared_names
+        contract = get_skill_contract(skill_name, manifest)
+        assert contract is not None, f"{skill_name} missing from skill_contracts.yaml"
+        declared_names = {output.name for output in contract.outputs}
+        assert {"review_status", "finding_disposition"} <= declared_names
+        assert self._DERIVED_COUNTERS <= declared_names
 
-            for template_name in (
-                "resolver-operative-output",
-                "resolver-final-output",
-            ):
-                template = self._template_text(skill_name, template_name)
-                assert re.search(r"^review_status\s*=", template, re.MULTILINE)
-                assert re.search(r"^finding_disposition\s*=", template, re.MULTILINE)
-                for counter in self._DERIVED_COUNTERS:
-                    assert not re.search(rf"^{re.escape(counter)}\s*=", template, re.MULTILINE), (
-                        f"{skill_name} must not emit server-derived {counter}"
-                    )
+        for template_name in (
+            "resolver-operative-output",
+            "resolver-final-output",
+        ):
+            template = self._template_text(skill_name, template_name)
+            assert re.search(r"^review_status\s*=", template, re.MULTILINE)
+            assert re.search(r"^finding_disposition\s*=", template, re.MULTILINE)
+            for counter in self._DERIVED_COUNTERS:
+                assert not re.search(rf"^{re.escape(counter)}\s*=", template, re.MULTILINE), (
+                    f"{skill_name} must not emit server-derived {counter}"
+                )
 
 
 # ---------------------------------------------------------------------------

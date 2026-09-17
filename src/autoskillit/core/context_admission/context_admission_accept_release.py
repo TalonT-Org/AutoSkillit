@@ -17,9 +17,7 @@ from ..types._type_context_admission import (
     ActiveContextAdmissionState,
     AdmissionBatchRecord,
     AdmissionEffect,
-    AdmissionOccurrenceId,
     AdmissionTransition,
-    CanonicalSpanId,
     ChargeCommittedEffect,
     ClosedEpochAudit,
     ContextAdmissionState,
@@ -230,6 +228,41 @@ def _accept_closed_input(
     )
 
 
+def _quarantine_acceptance(
+    state: ActiveContextAdmissionState,
+    event: AcceptInputEvent,
+    record: AdmissionBatchRecord,
+    reason_code: str,
+) -> AdmissionTransition:
+    """Quarantine an acceptance event by transitioning the batch into QUARANTINED."""
+    next_state = _quarantined_acceptance_state(
+        state,
+        record,
+        event.witness,
+        event.exact_input_charge,
+        reason_code,
+    )
+    return _publish(
+        state,
+        next_state,
+        event,
+        kind=AdmissionDecisionKind.QUARANTINED,
+        reason_code=reason_code,
+        requested_count=event.exact_input_charge,
+        reserve_class=record.batch.reserve_class,
+        protected_pool_owner_id=record.batch.protected_pool_owner_id,
+        capacity_changed=True,
+        effects=_acceptance_effects(
+            state,
+            event,
+            record,
+            event.exact_input_charge,
+            event.witness,
+            quarantine_reason_code=reason_code,
+        ),
+    )
+
+
 def _accept(
     state: ContextAdmissionState,
     event: AcceptInputEvent,
@@ -272,81 +305,34 @@ def _accept(
         return _reject(state, event, "non-authoritative-measurement")
     if event.exact_input_charge < 0:
         return _reject(state, event, "invalid-exact-charge")
-    expected_owned_spans: list[CanonicalSpanId] = []
-    expected_owned_pairs: list[tuple[CanonicalSpanId, AdmissionOccurrenceId]] = []
-    for occurrence in state.occurrence_records:
-        if occurrence.occurrence.occurrence_id in set(record.batch.occurrence_ids):
-            expected_owned_spans.extend(occurrence.occurrence.owned_span_ids)
-            expected_owned_pairs.extend(
-                (span_id, occurrence.occurrence.occurrence_id)
-                for span_id in occurrence.occurrence.owned_span_ids
-            )
+    member_ids = set(record.batch.occurrence_ids)
+    expected_owned_pairs = tuple(
+        (span_id, occurrence.occurrence.occurrence_id)
+        for occurrence in state.occurrence_records
+        if occurrence.occurrence.occurrence_id in member_ids
+        for span_id in occurrence.occurrence.owned_span_ids
+    )
+    expected_owned_spans = tuple(span_id for span_id, _ in expected_owned_pairs)
     manifest_pairs = tuple(
         (owner.span_id, owner.occurrence_id) for owner in event.final_manifest.span_owners
     )
-    if (
+    authority_mismatch = (
         event.authority_source != event.witness.authority_source_id
         or event.authority_source != binding.authority_source_id
-    ):
-        reason_code = "authority-source-mismatch"
-        next_state = _quarantined_acceptance_state(
-            state,
-            record,
-            event.witness,
-            event.exact_input_charge,
-            reason_code,
+    )
+    reason_code = (
+        "authority-source-mismatch"
+        if authority_mismatch
+        else "incomplete-canonical-span-ownership"
+        if (
+            len(expected_owned_spans) != len(set(expected_owned_spans))
+            or set(manifest_pairs) != set(expected_owned_pairs)
+            or len(manifest_pairs) != len(expected_owned_pairs)
         )
-        return _publish(
-            state,
-            next_state,
-            event,
-            kind=AdmissionDecisionKind.QUARANTINED,
-            reason_code=reason_code,
-            requested_count=event.exact_input_charge,
-            reserve_class=record.batch.reserve_class,
-            protected_pool_owner_id=record.batch.protected_pool_owner_id,
-            capacity_changed=True,
-            effects=_acceptance_effects(
-                state,
-                event,
-                record,
-                event.exact_input_charge,
-                event.witness,
-                quarantine_reason_code=reason_code,
-            ),
-        )
-    if (
-        len(expected_owned_spans) != len(set(expected_owned_spans))
-        or set(manifest_pairs) != set(expected_owned_pairs)
-        or len(manifest_pairs) != len(expected_owned_pairs)
-    ):
-        reason_code = "incomplete-canonical-span-ownership"
-        next_state = _quarantined_acceptance_state(
-            state,
-            record,
-            event.witness,
-            event.exact_input_charge,
-            reason_code,
-        )
-        return _publish(
-            state,
-            next_state,
-            event,
-            kind=AdmissionDecisionKind.QUARANTINED,
-            reason_code=reason_code,
-            requested_count=event.exact_input_charge,
-            reserve_class=record.batch.reserve_class,
-            protected_pool_owner_id=record.batch.protected_pool_owner_id,
-            capacity_changed=True,
-            effects=_acceptance_effects(
-                state,
-                event,
-                record,
-                event.exact_input_charge,
-                event.witness,
-                quarantine_reason_code=reason_code,
-            ),
-        )
+        else None
+    )
+    if reason_code is not None:
+        return _quarantine_acceptance(state, event, record, reason_code)
     next_state, kind, reason = _accepted_state(
         state,
         record,
@@ -371,6 +357,28 @@ def _accept(
             event.witness,
         ),
     )
+
+
+def _partition_invalidated_generations(
+    generations: tuple[GenerationReservationRecord, ...],
+    record: AdmissionBatchRecord,
+) -> tuple[
+    tuple[GenerationReservationRecord, ...],
+    tuple[GenerationReservationRecord, ...],
+]:
+    """Split generations into retained vs invalidated against the supplied record."""
+    retained: list[GenerationReservationRecord] = []
+    invalidated: list[GenerationReservationRecord] = []
+    for generation in generations:
+        if generation.batch_id == record.batch.batch_id and generation.state in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }:
+            invalidated.append(generation)
+        else:
+            retained.append(generation)
+    return tuple(retained), tuple(invalidated)
 
 
 def _release_closed_batch(
@@ -480,38 +488,34 @@ def _release_closed_batch(
             ),
             *effects,
         )
-    generation_effects: tuple[AdmissionEffect, ...] = ()
-    generation_records: list[GenerationReservationRecord] = []
-    invalidated_generation_count = 0
+    generation_records, invalidated_generations = _partition_invalidated_generations(
+        audit.terminal_generation_reservations,
+        record,
+    )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
-    for generation in audit.terminal_generation_reservations:
-        if generation.batch_id == record.batch.batch_id and generation.state in {
-            GenerationState.RESERVED,
-            GenerationState.STREAMING,
-            GenerationState.INDETERMINATE,
-        }:
-            generation_effects += (
-                ReservationInvalidatedEffect(
-                    source_event_id=event.event_id,
-                    resulting_aggregate_revision=revision,
-                    resulting_admission_sequence=sequence,
-                    target_id=generation.generation_reservation_id,
-                    charge_domain=ChargeDomain.OUTPUT_GENERATION,
-                    reserve_class=generation.reserve_class,
-                    protected_pool_owner_id=generation.protected_pool_owner_id,
-                    count=generation.maximum_allowance,
-                    window_epoch_id=generation.window_epoch_id,
-                    snapshot_sequence=generation.snapshot_sequence,
-                    witness_ids=(event.witness.witness_id,),
-                ),
-            )
-            invalidated_generation_count += generation.maximum_allowance
-        else:
-            generation_records.append(generation)
+    generation_effects: tuple[AdmissionEffect, ...] = tuple(
+        ReservationInvalidatedEffect(
+            source_event_id=event.event_id,
+            resulting_aggregate_revision=revision,
+            resulting_admission_sequence=sequence,
+            target_id=generation.generation_reservation_id,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+            reserve_class=generation.reserve_class,
+            protected_pool_owner_id=generation.protected_pool_owner_id,
+            count=generation.maximum_allowance,
+            window_epoch_id=generation.window_epoch_id,
+            snapshot_sequence=generation.snapshot_sequence,
+            witness_ids=(event.witness.witness_id,),
+        )
+        for generation in invalidated_generations
+    )
+    invalidated_generation_count = sum(
+        generation.maximum_allowance for generation in invalidated_generations
+    )
     if generation_effects:
         updated_audit = replace(
             updated_audit,
-            terminal_generation_reservations=tuple(generation_records),
+            terminal_generation_reservations=generation_records,
             retained_generation_count=sum(
                 generation.maximum_allowance
                 for generation in generation_records
@@ -637,36 +641,31 @@ def _release_or_rollback(
             ),
             *effects,
         )
-    generation_effects: tuple[AdmissionEffect, ...] = ()
-    generation_records: list[GenerationReservationRecord] = []
+    generation_records, invalidated_generations = _partition_invalidated_generations(
+        next_state.generation_reservations,
+        record,
+    )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
-    for generation in next_state.generation_reservations:
-        if generation.batch_id == record.batch.batch_id and generation.state in {
-            GenerationState.RESERVED,
-            GenerationState.STREAMING,
-            GenerationState.INDETERMINATE,
-        }:
-            generation_effects += (
-                ReservationInvalidatedEffect(
-                    source_event_id=event.event_id,
-                    resulting_aggregate_revision=revision,
-                    resulting_admission_sequence=sequence,
-                    target_id=generation.generation_reservation_id,
-                    charge_domain=ChargeDomain.OUTPUT_GENERATION,
-                    reserve_class=generation.reserve_class,
-                    protected_pool_owner_id=generation.protected_pool_owner_id,
-                    count=generation.maximum_allowance,
-                    window_epoch_id=generation.window_epoch_id,
-                    snapshot_sequence=generation.snapshot_sequence,
-                    witness_ids=(event.witness.witness_id,),
-                ),
-            )
-        else:
-            generation_records.append(generation)
+    generation_effects: tuple[AdmissionEffect, ...] = tuple(
+        ReservationInvalidatedEffect(
+            source_event_id=event.event_id,
+            resulting_aggregate_revision=revision,
+            resulting_admission_sequence=sequence,
+            target_id=generation.generation_reservation_id,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+            reserve_class=generation.reserve_class,
+            protected_pool_owner_id=generation.protected_pool_owner_id,
+            count=generation.maximum_allowance,
+            window_epoch_id=generation.window_epoch_id,
+            snapshot_sequence=generation.snapshot_sequence,
+            witness_ids=(event.witness.witness_id,),
+        )
+        for generation in invalidated_generations
+    )
     if generation_effects:
         next_state = replace(
             next_state,
-            generation_reservations=tuple(generation_records),
+            generation_reservations=generation_records,
         )
         effects += generation_effects
     return _publish(

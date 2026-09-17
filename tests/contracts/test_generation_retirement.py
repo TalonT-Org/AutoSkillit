@@ -20,6 +20,7 @@ Every test here fails against the pre-fix code.
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from datetime import UTC, datetime, timedelta
@@ -28,15 +29,18 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    ArtifactLease,
     LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginLoadMode,
     RetirementOutcome,
     _InstallLock,
     generation_plugin_selector_path,
     generation_selector_path,
     is_reclaimable_artifact_path,
     managed_home_for,
+    migrate_retiring_cache_v1,
     read_retiring_cache,
     resolve_current_generation_for_plugin,
 )
@@ -194,6 +198,103 @@ def test_promotion_drops_bookkeeping_for_already_gone_paths(tmp_path: Path) -> N
     outcome = owner.try_promote_legacy_evidence(evidence, datetime.now(UTC))
 
     assert outcome is RetirementOutcome.RECORD_REMOVED
+
+
+@pytest.mark.parametrize(
+    ("preexisting_intent", "expected_outcome"),
+    (
+        (False, RetirementOutcome.RECLAIMED),
+        (True, RetirementOutcome.RECORD_REMOVED),
+    ),
+)
+def test_promotion_rederives_exact_identity_before_removing_legacy_evidence(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preexisting_intent: bool,
+    expected_outcome: RetirementOutcome,
+) -> None:
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.workspace import (
+        ProjectedPluginRetirementOwner,
+        project_default_plugin_authority,
+    )
+    from tests.contracts._projection_helpers import session_catalog
+
+    managed = managed_home_for(home)
+    binding = project_default_plugin_authority(
+        cwd=home,
+        base_branch="main",
+        catalog=session_catalog(),
+    ).acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    identity = binding.identity
+    binding.close()
+
+    retired_at = "2026-07-29T03:18:17.568199+00:00"
+    cache_path = managed.autoskillit_dir / "retiring_cache.json"
+    cache_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "retiring": [
+                    {
+                        "version": f"projection:{identity.semantic_key}",
+                        "path": str(identity.managed_path),
+                        "retired_at": retired_at,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    migrated = migrate_retiring_cache_v1(
+        {PluginArtifactKind.PROJECTION: identity.managed_path.parent},
+        home=managed,
+    )
+    (evidence,) = migrated.legacy_evidence
+    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent, home=managed)
+    now = datetime.now(UTC)
+    if preexisting_intent:
+        appended = owner.enqueue_retirement(identity, now)
+        assert appended is not None and appended.created
+
+    real_close = ArtifactLease.close
+    close_calls = 0
+
+    def recording_close(lease: ArtifactLease) -> None:
+        nonlocal close_calls
+        close_calls += 1
+        real_close(lease)
+
+    monkeypatch.setattr(ArtifactLease, "close", recording_close)
+
+    outcome = owner.try_promote_legacy_evidence(evidence, now)
+
+    state = read_retiring_cache(home=managed)
+    assert outcome is expected_outcome
+    assert close_calls == 1
+    assert state.legacy_evidence == ()
+    assert len(state.records) == 1
+    queued = state.records[0]
+    assert (
+        queued.artifact_kind,
+        queued.semantic_key,
+        queued.incarnation_id,
+        queued.manifest_schema_version,
+        queued.artifact_digest,
+        queued.managed_path,
+        queued.manifest_path,
+    ) == (
+        PluginArtifactKind.PROJECTION,
+        identity.semantic_key,
+        identity.incarnation_id,
+        identity.manifest_schema_version,
+        identity.artifact_digest,
+        identity.managed_path,
+        identity.manifest_path,
+    )
 
 
 # ---------------------------------------------------------------------------

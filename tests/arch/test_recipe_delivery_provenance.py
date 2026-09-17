@@ -25,12 +25,51 @@ _DELIVERY_BOUNDS = (
 )
 
 
-def _resolver() -> ast.FunctionDef:
+def _delivery_bounds_functions() -> dict[str, ast.FunctionDef]:
     tree = ast.parse(_DELIVERY_BOUNDS.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == "resolve_recipe_delivery_decision":
-            return node
-    pytest.fail("resolve_recipe_delivery_decision not found")
+    return {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+
+
+def _resolver() -> ast.FunctionDef:
+    resolver = _delivery_bounds_functions().get("resolve_recipe_delivery_decision")
+    if resolver is None:
+        pytest.fail("resolve_recipe_delivery_decision not found")
+    return resolver
+
+
+def _resolver_implementation() -> tuple[ast.FunctionDef, ...]:
+    """Return resolver helpers transitively invoked from this module."""
+
+    def _called_names(call: ast.Call) -> tuple[str, ...]:
+        target = call.func
+        if isinstance(target, ast.Name):
+            return (target.id,)
+        if isinstance(target, ast.Attribute):
+            return (target.attr,)
+        return ()
+
+    functions = _delivery_bounds_functions()
+    pending = ["resolve_recipe_delivery_decision"]
+    reachable: list[ast.FunctionDef] = []
+    seen: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        function = functions.get(name)
+        if function is None:
+            continue
+        reachable.append(function)
+
+        pending.extend(
+            called
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call)
+            for called in _called_names(node)
+            if called in functions
+        )
+    return tuple(reachable)
 
 
 def _assigned_expression(function: ast.FunctionDef, target_name: str) -> ast.expr:
@@ -93,22 +132,23 @@ def test_attestation_gate_and_annotation_ceiling_are_independent() -> None:
     independent admission channels — the resolver must never cross-compare a
     char ceiling against a token count.
     """
-    function = _resolver()
+    functions = _resolver_implementation()
     # Walk the AST for Compare nodes — no comparison should involve both
     # "attested_client_gate_tokens" and "exemption_ceiling_chars".
-    for node in ast.walk(function):
-        if isinstance(node, ast.Compare):
-            names = {
-                n.attr if isinstance(n, ast.Attribute) else n.id
-                for n in ast.walk(node)
-                if isinstance(n, (ast.Name, ast.Attribute))
-            }
-            assert not (
-                "attested_client_gate_tokens" in names and "exemption_ceiling_chars" in names
-            ), (
-                "resolver cross-compares attested gate tokens with annotation ceiling — "
-                "these are independent admission channels (token vs char)"
-            )
+    for function in functions:
+        for node in ast.walk(function):
+            if isinstance(node, ast.Compare):
+                names = {
+                    n.attr if isinstance(n, ast.Attribute) else n.id
+                    for n in ast.walk(node)
+                    if isinstance(n, (ast.Name, ast.Attribute))
+                }
+                assert not (
+                    "attested_client_gate_tokens" in names and "exemption_ceiling_chars" in names
+                ), (
+                    "resolver cross-compares attested gate tokens with annotation ceiling — "
+                    "these are independent admission channels (token vs char)"
+                )
 
 
 def test_resolver_validates_attestation_gate_before_trusting() -> None:
@@ -118,7 +158,7 @@ def test_resolver_validates_attestation_gate_before_trusting() -> None:
     the expected injected value (CLAUDE_INJECTED_CLIENT_RESULT_TOKENS) so
     arbitrary positive attestations cannot bypass the token gate.
     """
-    body = ast.dump(_resolver())
+    body = "\n".join(ast.dump(function) for function in _resolver_implementation())
     # The resolver must reference CLAUDE_INJECTED_CLIENT_RESULT_TOKENS to
     # validate the attested gate — its name (or its re-export) must appear.
     assert "CLAUDE_INJECTED_CLIENT_RESULT_TOKENS" in body, (

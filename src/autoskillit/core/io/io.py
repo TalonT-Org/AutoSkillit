@@ -23,6 +23,7 @@ import tempfile
 import threading
 import uuid
 from collections.abc import Iterator
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -184,15 +185,11 @@ def atomic_write(
         os.replace(tmp, path)
     except Exception:
         if tmp is not None:
-            try:
+            with suppress(OSError):
                 os.unlink(tmp)
-            except OSError:
-                pass
         if exclusive:
-            try:
+            with suppress(OSError):
                 os.unlink(path)
-            except OSError:
-                pass
         raise
     # Durable rename: fsync the parent directory on POSIX.
     # Default callers retain best-effort parent durability. Identity-bearing
@@ -254,37 +251,102 @@ class TreeEntry:
     name: str
 
 
+def _scan_ordered_tree_entries(
+    dir_fd: int,
+    *,
+    relative_prefix: str,
+    root: Path,
+) -> tuple[os.DirEntry[str], ...]:
+    """Read one directory level and preserve strict_walk's output ordering."""
+    try:
+        raw_entries = list(os.scandir(dir_fd))
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise TreeVanishedError(relative_prefix, root) from exc
+
+    directory_entries: list[os.DirEntry[str]] = []
+    file_entries: list[os.DirEntry[str]] = []
+    for raw_entry in raw_entries:
+        try:
+            is_dir = raw_entry.is_dir()
+        except (FileNotFoundError, NotADirectoryError):
+            is_dir = False
+        (directory_entries if is_dir else file_entries).append(raw_entry)
+    directory_entries.sort(key=lambda entry: entry.name)
+    file_entries.sort(key=lambda entry: entry.name)
+    return (*directory_entries, *file_entries)
+
+
+def _classify_tree_entry(
+    raw_entry: os.DirEntry[str],
+    *,
+    dir_fd: int,
+    relative_prefix: str,
+    root: Path,
+) -> tuple[TreeEntry, os.stat_result]:
+    """Return one metadata entry and the stat identity needed for descent."""
+    relative = f"{relative_prefix}/{raw_entry.name}" if relative_prefix else raw_entry.name
+    try:
+        entry_stat = raw_entry.stat(follow_symlinks=False)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise TreeVanishedError(relative, root) from exc
+    if stat.S_ISLNK(entry_stat.st_mode):
+        kind: Literal["f", "d", "l"] = "l"
+    elif stat.S_ISDIR(entry_stat.st_mode):
+        kind = "d"
+    elif stat.S_ISREG(entry_stat.st_mode):
+        kind = "f"
+    else:
+        raise ValueError(f"artifact contains a special file: {root}/{relative}")
+    return (
+        TreeEntry(
+            relative_path=relative,
+            kind=kind,
+            mode=stat.S_IMODE(entry_stat.st_mode),
+            dir_fd=dir_fd,
+            name=raw_entry.name,
+        ),
+        entry_stat,
+    )
+
+
+def _open_tree_child_directory(
+    entry: TreeEntry,
+    *,
+    expected_stat: os.stat_result,
+    root: Path,
+    descent_flags: int,
+) -> int:
+    """Open a child directory and reject substitution after its no-follow stat."""
+    try:
+        sub_fd = os.open(entry.name, descent_flags, dir_fd=entry.dir_fd)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise TreeVanishedError(entry.relative_path, root) from exc
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise TreeVanishedError(entry.relative_path, root) from exc
+        raise
+    try:
+        sub_stat = os.fstat(sub_fd)
+        if (sub_stat.st_ino, sub_stat.st_dev) != (
+            expected_stat.st_ino,
+            expected_stat.st_dev,
+        ):
+            raise TreeVanishedError(entry.relative_path, root)
+    except BaseException:
+        os.close(sub_fd)
+        raise
+    return sub_fd
+
+
 def strict_walk(root: Path) -> Iterator[TreeEntry]:
     """Recursively enumerate *root*, failing loudly on any vanish or substitution.
 
-    Built directly on ``os.scandir(dir_fd)`` and directory-fd-pinned
-    ``os.open(name, dir_fd=...)`` descent — deliberately **not**
-    ``os.walk``/``os.fwalk``. ``os.fwalk``'s own internal parent-identity
-    guard (``samestat()``) detects a directory-substitution race but resolves
-    it by silently returning without descending, rather than raising —
-    reproducing the exact silent-omission failure this function exists to
-    close (issue #4770).
-
-    Closes the parent-directory-substitution race: before descending into any
-    subdirectory, its post-open ``(st_ino, st_dev)`` identity is compared
-    against the pre-open ``lstat`` identity already obtained for that same
-    name, raising :class:`TreeVanishedError` on any mismatch — including the
-    symlink-substitution shape, which surfaces as ``ELOOP`` because descent
-    opens use ``os.O_NOFOLLOW`` — instead of silently declining to descend.
-
-    Does **not** close contents-mutation races inside an already-held
-    directory: ``os.scandir``'s own documented contract states entry
-    inclusion is unspecified for files added or removed after the iterator is
-    created (CPython ``Doc/library/os.rst``). Per-entry ``stat`` failures from
-    such a mutation still surface as :class:`TreeVanishedError` (matching this
-    function's fail-loud design), but that is a narrower guarantee than the
-    parent-substitution defense above. A same-named leaf being replaced by
-    different content of the *same* kind between this function's guarded
-    ``stat`` and a caller's later ``open``/``readlink`` is out of scope
-    (see the #4770 rectify plan's "Investigated and explicitly deferred").
-
-    Any ``OSError`` other than the guarded vanish/substitution shapes above
-    (e.g. ``PermissionError``) propagates unchanged.
+    Descriptor-pinned, no-follow descent compares each opened directory's
+    identity with its preceding lstat, closing the substitution race that
+    ``os.fwalk`` silently omits (issue #4770). Per-entry disappearance and
+    substitution raise :class:`TreeVanishedError`; unrelated ``OSError``
+    instances propagate. Mutation of leaf content after classification remains
+    outside this iterator's guarantee.
     """
     if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
         raise NotImplementedError(
@@ -295,66 +357,29 @@ def strict_walk(root: Path) -> Iterator[TreeEntry]:
     descent_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
     def _walk_level(dir_fd: int, relative_prefix: str) -> Iterator[TreeEntry]:
-        try:
-            raw_entries = list(os.scandir(dir_fd))
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            raise TreeVanishedError(relative_prefix, root) from exc
-
-        directory_entries: list[os.DirEntry[str]] = []
-        file_entries: list[os.DirEntry[str]] = []
-        for raw_entry in raw_entries:
-            try:
-                is_dir = raw_entry.is_dir()
-            except (FileNotFoundError, NotADirectoryError):
-                is_dir = False
-            (directory_entries if is_dir else file_entries).append(raw_entry)
-        directory_entries.sort(key=lambda entry: entry.name)
-        file_entries.sort(key=lambda entry: entry.name)
-
         pending_subdirs: list[tuple[int, str]] = []
         next_subdir = 0
         try:
-            for entry in (*directory_entries, *file_entries):
-                relative = f"{relative_prefix}/{entry.name}" if relative_prefix else entry.name
-                try:
-                    entry_stat = entry.stat(follow_symlinks=False)
-                except (FileNotFoundError, NotADirectoryError) as exc:
-                    raise TreeVanishedError(relative, root) from exc
-                if stat.S_ISLNK(entry_stat.st_mode):
-                    kind: Literal["f", "d", "l"] = "l"
-                elif stat.S_ISDIR(entry_stat.st_mode):
-                    kind = "d"
-                elif stat.S_ISREG(entry_stat.st_mode):
-                    kind = "f"
-                else:
-                    raise ValueError(f"artifact contains a special file: {root}/{relative}")
-                yield TreeEntry(
-                    relative_path=relative,
-                    kind=kind,
-                    mode=stat.S_IMODE(entry_stat.st_mode),
+            for raw_entry in _scan_ordered_tree_entries(
+                dir_fd,
+                relative_prefix=relative_prefix,
+                root=root,
+            ):
+                entry, entry_stat = _classify_tree_entry(
+                    raw_entry,
                     dir_fd=dir_fd,
-                    name=entry.name,
+                    relative_prefix=relative_prefix,
+                    root=root,
                 )
-                if kind == "d":
-                    try:
-                        sub_fd = os.open(entry.name, descent_flags, dir_fd=dir_fd)
-                    except (FileNotFoundError, NotADirectoryError) as exc:
-                        raise TreeVanishedError(relative, root) from exc
-                    except OSError as exc:
-                        if exc.errno == errno.ELOOP:
-                            raise TreeVanishedError(relative, root) from exc
-                        raise
-                    try:
-                        sub_stat = os.fstat(sub_fd)
-                        if (sub_stat.st_ino, sub_stat.st_dev) != (
-                            entry_stat.st_ino,
-                            entry_stat.st_dev,
-                        ):
-                            raise TreeVanishedError(relative, root)
-                    except BaseException:
-                        os.close(sub_fd)
-                        raise
-                    pending_subdirs.append((sub_fd, relative))
+                yield entry
+                if entry.kind == "d":
+                    sub_fd = _open_tree_child_directory(
+                        entry,
+                        expected_stat=entry_stat,
+                        root=root,
+                        descent_flags=descent_flags,
+                    )
+                    pending_subdirs.append((sub_fd, entry.relative_path))
 
             while next_subdir < len(pending_subdirs):
                 sub_fd, relative = pending_subdirs[next_subdir]
@@ -384,6 +409,36 @@ def _is_bytecode_tree_entry(entry: TreeEntry) -> bool:
     )
 
 
+def _hash_directory_tree_entry(
+    digest: Any,
+    entry: TreeEntry,
+    *,
+    root: Path,
+    allow_symlinks: bool,
+) -> None:
+    """Hash one admitted tree entry using the stable framing protocol."""
+    if entry.kind == "l" and not allow_symlinks:
+        raise ValueError(f"artifact contains a symlink: {root / entry.relative_path}")
+    digest.update(entry.kind.encode("ascii"))
+    digest.update(entry.relative_path.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(entry.mode.to_bytes(2, "big"))
+    if entry.kind == "f":
+        try:
+            fd = os.open(entry.name, os.O_RDONLY, dir_fd=entry.dir_fd)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise TreeVanishedError(entry.relative_path, root) from exc
+        with os.fdopen(fd, "rb") as handle:
+            digest.update(hashlib.file_digest(handle, "sha256").digest())
+    elif entry.kind == "l":
+        try:
+            target = os.readlink(entry.name, dir_fd=entry.dir_fd)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise TreeVanishedError(entry.relative_path, root) from exc
+        digest.update(target.encode("utf-8"))
+    digest.update(b"\0")
+
+
 def directory_tree_digest(
     root: Path,
     *,
@@ -392,32 +447,11 @@ def directory_tree_digest(
 ) -> str:
     """Hash every relative entry, kind, mode, and regular-file byte.
 
-    ``allow_symlinks`` defaults to False: sanitized plugin/projection content
-    must never contain a symlink (a plausible escape vector out of the
-    sanitized tree), so its presence is treated as corruption. Real venvs
-    installed by ``uv`` (install-root generations, issue #4597 Phase 3) always
-    contain symlinks as normal structure (``lib64 -> lib``, interpreter
-    aliases) — pass ``allow_symlinks=True`` there. A symlink's "content" for
-    digest purposes is its target string (``os.readlink``), so retargeting it
-    still changes the digest — this stays tamper-evident, it just stops
-    rejecting the shape outright.
-
-    ``ignore_bytecode`` defaults to False: sanitized plugin/projection
-    content is never executed in place, so a ``__pycache__``/``.pyc``/``.pyo``
-    appearing there is genuine tampering evidence. An install-root
-    generation's own interpreter runs from inside its tree by design —
-    merely importing a module writes bytecode there — so treating that as
-    corruption would make every generation that has ever actually run
-    permanently fail its own digest check. Pass ``True`` there to exclude
-    ``is_python_bytecode_path`` entries from both hashing and traversal.
-
-    Traversal is delegated to :func:`strict_walk`, which fails loudly
-    (:class:`TreeVanishedError`) on any entry that vanishes or is substituted
-    mid-walk rather than silently omitting it from the digest — see issue
-    #4770. Raises plain ``ValueError`` for a caller-precondition violation
-    (``root`` is a symlink, or exists but is not a directory); raises
-    ``TreeVanishedError`` — a ``ValueError`` subclass — if ``root`` itself has
-    already vanished by the time this call runs.
+    Symlinks are rejected unless explicitly admitted; admitted links hash their
+    target text. ``ignore_bytecode`` excludes interpreter-generated cache
+    artifacts from install-root digests. Strict traversal raises
+    :class:`TreeVanishedError` for disappearance or substitution, while invalid
+    root shapes and forbidden links raise ``ValueError``.
     """
     root = Path(root)
     if root.is_symlink():
@@ -440,28 +474,12 @@ def directory_tree_digest(
                 if entry.kind == "d":
                     pruned_dir_prefixes.append(entry.relative_path)
                 continue
-
-        if entry.kind == "l" and not allow_symlinks:
-            raise ValueError(f"artifact contains a symlink: {root / entry.relative_path}")
-
-        digest.update(entry.kind.encode("ascii"))
-        digest.update(entry.relative_path.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(entry.mode.to_bytes(2, "big"))
-        if entry.kind == "f":
-            try:
-                fd = os.open(entry.name, os.O_RDONLY, dir_fd=entry.dir_fd)
-            except (FileNotFoundError, NotADirectoryError) as exc:
-                raise TreeVanishedError(entry.relative_path, root) from exc
-            with os.fdopen(fd, "rb") as handle:
-                digest.update(hashlib.file_digest(handle, "sha256").digest())
-        elif entry.kind == "l":
-            try:
-                target = os.readlink(entry.name, dir_fd=entry.dir_fd)
-            except (FileNotFoundError, NotADirectoryError) as exc:
-                raise TreeVanishedError(entry.relative_path, root) from exc
-            digest.update(target.encode("utf-8"))
-        digest.update(b"\0")
+        _hash_directory_tree_entry(
+            digest,
+            entry,
+            root=root,
+            allow_symlinks=allow_symlinks,
+        )
     return digest.hexdigest()
 
 

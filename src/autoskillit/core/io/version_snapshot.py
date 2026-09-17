@@ -32,12 +32,133 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
 
+def _snapshot_with_install_details() -> dict[str, Any]:
+    """Return the backend-independent fields of a version snapshot."""
+    install = _install_info()
+    return {
+        "autoskillit_version": _autoskillit_version(),
+        "install_type": install.get("install_type", "unknown"),
+        "commit_id": install.get("commit_id"),
+        "claude_code_version": "",
+        "plugins": [],
+        "codex_version": "",
+        "codex_plugins": [],
+    }
+
+
+def _collect_protocol_backend_snapshot(
+    backend: CodingAgentBackend,
+    result: dict[str, Any],
+) -> None:
+    """Collect version data through a configured backend protocol."""
+    try:
+        version_str = backend.version()
+    except Exception:
+        logger.warning("backend.version() failed", exc_info=True)
+        version_str = ""
+    try:
+        plugin_list = backend.list_plugins()
+    except Exception:
+        logger.warning("backend.list_plugins() failed", exc_info=True)
+        plugin_list = []
+
+    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+        result["claude_code_version"] = version_str
+        result["plugins"] = plugin_list
+    elif backend.name == AGENT_BACKEND_CODEX:
+        result["codex_version"] = version_str
+        result["codex_plugins"] = plugin_list
+    else:
+        logger.warning("Unrecognized backend name %r — version data discarded", backend.name)
+
+
+def _collect_legacy_claude_snapshot(result: dict[str, Any]) -> None:
+    """Collect Claude version and plugin data from legacy host state."""
+    exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
+    try:
+        proc = subprocess.run(
+            [exec_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode != 0:
+            logger.warning("claude --version exited with code %d", proc.returncode)
+        else:
+            result["claude_code_version"] = proc.stdout.strip() or proc.stderr.strip()
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        logger.warning("Failed to run claude --version", exc_info=True)
+
+    try:
+        path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            plugins_map: dict[str, Any] = data.get("plugins", {})
+            if isinstance(plugins_map, dict):
+                entries: list[dict[str, Any]] = []
+                for ref, installs in plugins_map.items():
+                    if not isinstance(installs, list) or not installs:
+                        continue
+                    first = installs[0]
+                    info = first if isinstance(first, dict) else {}
+                    entry: dict[str, Any] = {"ref": ref}
+                    if "version" in info:
+                        entry["version"] = info["version"]
+                    entries.append(entry)
+                result["plugins"] = entries
+    except Exception:
+        logger.warning("Failed to read installed_plugins.json", exc_info=True)
+
+
+def _collect_legacy_codex_snapshot(result: dict[str, Any]) -> None:
+    """Collect Codex version and plugin data from legacy host commands."""
+    try:
+        proc = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        result["codex_version"] = proc.stdout.strip() or proc.stderr.strip()
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        logger.warning("Failed to run codex --version", exc_info=True)
+
+    try:
+        proc = subprocess.run(
+            ["codex", "plugin", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.stdout.strip():
+            parsed = json.loads(proc.stdout)
+            if isinstance(parsed, list):
+                result["codex_plugins"] = parsed
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        logger.warning("Failed to run codex plugin list", exc_info=True)
+
+
+def _collect_legacy_backend_snapshot(result: dict[str, Any]) -> None:
+    """Collect data through the env-var-selected legacy backend path."""
+    env_backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
+    if env_backend == AGENT_BACKEND_CLAUDE_CODE:
+        _collect_legacy_claude_snapshot(result)
+    elif env_backend == AGENT_BACKEND_CODEX:
+        _collect_legacy_codex_snapshot(result)
+
+
 @functools.lru_cache(maxsize=4)
 def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[str, Any]:
     """Return a static version snapshot for the current process.
 
     When *backend* is provided, version and plugin data are retrieved via
-    Protocol method calls.  When *backend* is ``None``, the legacy env-var
+    Protocol method calls. When *backend* is ``None``, the legacy env-var
     dispatch path is used (subprocess + filesystem reads).
 
     Fields:
@@ -50,106 +171,11 @@ def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[
         codex_version: output of `codex --version`, or "".
         codex_plugins: list of plugin dicts from `codex plugin list --json`, or [].
     """
-    install = _install_info()
-    result: dict[str, Any] = {
-        "autoskillit_version": _autoskillit_version(),
-        "install_type": install.get("install_type", "unknown"),
-        "commit_id": install.get("commit_id"),
-        "claude_code_version": "",
-        "plugins": [],
-        "codex_version": "",
-        "codex_plugins": [],
-    }
-
-    if backend is not None:
-        try:
-            version_str = backend.version()
-        except Exception:
-            logger.warning("backend.version() failed", exc_info=True)
-            version_str = ""
-        try:
-            plugin_list = backend.list_plugins()
-        except Exception:
-            logger.warning("backend.list_plugins() failed", exc_info=True)
-            plugin_list = []
-
-        if backend.name == AGENT_BACKEND_CLAUDE_CODE:
-            result["claude_code_version"] = version_str
-            result["plugins"] = plugin_list
-        elif backend.name == AGENT_BACKEND_CODEX:
-            result["codex_version"] = version_str
-            result["codex_plugins"] = plugin_list
-        else:
-            logger.warning("Unrecognized backend name %r — version data discarded", backend.name)
+    result = _snapshot_with_install_details()
+    if backend is None:
+        _collect_legacy_backend_snapshot(result)
     else:
-        env_backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
-        if env_backend == AGENT_BACKEND_CLAUDE_CODE:
-            exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
-            try:
-                proc = subprocess.run(
-                    [exec_path, "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if proc.returncode != 0:
-                    logger.warning("claude --version exited with code %d", proc.returncode)
-                else:
-                    result["claude_code_version"] = proc.stdout.strip() or proc.stderr.strip()
-            except subprocess.TimeoutExpired:
-                pass
-            except Exception:
-                logger.warning("Failed to run claude --version", exc_info=True)
-
-            try:
-                path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-                if path.exists():
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                    plugins_map: dict[str, Any] = data.get("plugins", {})
-                    if isinstance(plugins_map, dict):
-                        entries: list[dict[str, Any]] = []
-                        for ref, installs in plugins_map.items():
-                            if not isinstance(installs, list) or not installs:
-                                continue
-                            first = installs[0]
-                            info = first if isinstance(first, dict) else {}
-                            entry: dict[str, Any] = {"ref": ref}
-                            if "version" in info:
-                                entry["version"] = info["version"]
-                            entries.append(entry)
-                        result["plugins"] = entries
-            except Exception:
-                logger.warning("Failed to read installed_plugins.json", exc_info=True)
-
-        elif env_backend == AGENT_BACKEND_CODEX:
-            try:
-                proc = subprocess.run(
-                    ["codex", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                result["codex_version"] = proc.stdout.strip() or proc.stderr.strip()
-            except subprocess.TimeoutExpired:
-                pass
-            except Exception:
-                logger.warning("Failed to run codex --version", exc_info=True)
-
-            try:
-                proc = subprocess.run(
-                    ["codex", "plugin", "list", "--json"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if proc.stdout.strip():
-                    parsed = json.loads(proc.stdout)
-                    if isinstance(parsed, list):
-                        result["codex_plugins"] = parsed
-            except subprocess.TimeoutExpired:
-                pass
-            except Exception:
-                logger.warning("Failed to run codex plugin list", exc_info=True)
+        _collect_protocol_backend_snapshot(backend, result)
 
     return copy.copy(result)
 

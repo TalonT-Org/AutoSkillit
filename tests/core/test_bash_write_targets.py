@@ -52,6 +52,18 @@ class TestExtractBashWriteTargets:
     def test_append_redirect(self):
         assert extract_bash_write_targets("echo x >> /path/out.txt") == ["/path/out.txt"]
 
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ("echo x 2> /path/err.txt", ["/path/err.txt"]),
+            ("echo x 2>/path/err.txt", ["/path/err.txt"]),
+            ("(echo x > /path/nested.txt) > /path/outer.txt)", ["/path/outer.txt"]),
+            ("echo x 2>&1", []),
+        ],
+    )
+    def test_redirect_operand_forms(self, command: str, expected: list[str]) -> None:
+        assert extract_bash_write_targets(command) == expected
+
     def test_git_checkout_files(self):
         result = extract_bash_write_targets("git checkout branch -- /path/file.txt")
         assert result == ["/path/file.txt"]
@@ -119,6 +131,21 @@ class TestExtractBashWriteTargets:
 
     def test_wrapper_only_segment_clean(self):
         assert extract_bash_write_targets("sudo nohup") == []
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("env -- tee /path/out.txt", ["/path/out.txt"]),
+        ("env --chdir=/tmp tee /path/out.txt", ["/path/out.txt"]),
+        ("env --chdir /tmp tee /path/out.txt", ["/path/out.txt"]),
+        ("env CACHE_DIR=/tmp tee /path/out.txt", ["/path/out.txt"]),
+        ("sudo", []),
+        ("CACHE_DIR=/tmp", []),
+    ],
+)
+def test_command_prefixes_preserve_public_write_targets(command: str, expected: list[str]) -> None:
+    assert extract_bash_write_targets(command) == expected
 
 
 _PARITY_CORPUS: list[tuple[str, str]] = [

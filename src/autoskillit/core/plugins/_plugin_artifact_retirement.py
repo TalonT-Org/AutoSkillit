@@ -171,6 +171,48 @@ class PluginArtifactRetirementEngine:
         )
         return record_ids
 
+    @staticmethod
+    def _queued_record(
+        records: tuple[RetiringArtifactRecord, ...], record_id: str
+    ) -> RetiringArtifactRecord | None:
+        """Return the queued record with the requested stable ID, if present."""
+        return next((current for current in records if current.record_id == record_id), None)
+
+    def _current_identity_status(
+        self, record: RetiringArtifactRecord
+    ) -> tuple[RetirementOutcome | None, str | None, bool]:
+        """Classify the current identity before destructive reclamation begins."""
+        try:
+            current = self._current_identity(record)
+        except PluginArtifactUnavailableError as exc:
+            return RetirementOutcome.DEFERRED_IO_ERROR, str(exc), False
+        except PluginArtifactValidationError:
+            return RetirementOutcome.REJECTED_IDENTITY, None, True
+        if current != record.identity:
+            return RetirementOutcome.REJECTED_IDENTITY, None, False
+        return None, None, False
+
+    def _eligible_legacy_evidence_path(self, evidence: LegacyRetiringEvidence) -> Path | None:
+        """Return a canonical direct-child artifact path for promotable evidence."""
+        if evidence.recognized_kind is not self.artifact_kind:
+            return None
+        try:
+            path = destination_location(Path(evidence.path))
+        except (OSError, TypeError, ValueError):
+            return None
+        return path if is_reclaimable_artifact_path(path, self.managed_root) else None
+
+    @staticmethod
+    def _rederive_legacy_identity(
+        path: Path,
+        identity_for_path: Callable[[Path], PluginArtifactIdentity],
+    ) -> PluginArtifactIdentity | None:
+        """Return exact identity re-derived from legacy path evidence, if possible."""
+        try:
+            return identity_for_path(path)
+        except (PluginArtifactValidationError, PluginArtifactUnavailableError, OSError):
+            return None
+
     def try_reclaim(self, record: RetiringArtifactRecord, now: datetime) -> RetirementOutcome:
         """Reclaim one queued record only while its lease and identity remain exact."""
         if now.tzinfo is None or now.utcoffset() is None:
@@ -210,14 +252,7 @@ class PluginArtifactRetirementEngine:
                         RetirementOutcome.DEFERRED_IO_ERROR,
                         detail=f"retiring cache became unsafe: {state.state.value}",
                     )
-                queued = next(
-                    (
-                        current
-                        for current in state.records
-                        if current.record_id == record.record_id
-                    ),
-                    None,
-                )
+                queued = self._queued_record(state.records, record.record_id)
                 if queued is None:
                     return RetirementOutcome.RECORD_REMOVED
                 if queued != record:
@@ -255,15 +290,12 @@ class PluginArtifactRetirementEngine:
                             detail=f"retirement staging path is ambiguous: {staging_path}",
                         )
                 else:
-                    try:
-                        current = self._current_identity(record)
-                    except PluginArtifactUnavailableError as exc:
-                        return self._log_reclaim(
-                            record,
-                            RetirementOutcome.DEFERRED_IO_ERROR,
-                            detail=str(exc),
-                        )
-                    except PluginArtifactValidationError:
+                    identity_status, detail, failed_validation = self._current_identity_status(
+                        record
+                    )
+                    if identity_status is RetirementOutcome.DEFERRED_IO_ERROR:
+                        return self._log_reclaim(record, identity_status, detail=detail)
+                    if identity_status is RetirementOutcome.REJECTED_IDENTITY:
                         if remove_retiring_records((record.record_id,), home=self._home) is None:
                             return self._log_reclaim(
                                 record,
@@ -273,18 +305,7 @@ class PluginArtifactRetirementEngine:
                         return self._log_reclaim(
                             record,
                             RetirementOutcome.REJECTED_IDENTITY,
-                            failed_validation=True,
-                        )
-                    if current != record.identity:
-                        if remove_retiring_records((record.record_id,), home=self._home) is None:
-                            return self._log_reclaim(
-                                record,
-                                RetirementOutcome.DEFERRED_IO_ERROR,
-                                detail="retiring cache became unsafe while rejecting identity",
-                            )
-                        return self._log_reclaim(
-                            record,
-                            RetirementOutcome.REJECTED_IDENTITY,
+                            failed_validation=failed_validation,
                         )
                     try:
                         os.rename(record.managed_path, staging_path)
@@ -340,15 +361,8 @@ class PluginArtifactRetirementEngine:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("artifact retirement sweep time must be timezone-aware")
         now = now.astimezone(UTC)
-        if evidence.recognized_kind is not self.artifact_kind:
-            return RetirementOutcome.LEGACY_EVIDENCE
-        try:
-            path = destination_location(Path(evidence.path))
-        except (OSError, TypeError, ValueError):
-            return RetirementOutcome.LEGACY_EVIDENCE
-        if not is_reclaimable_artifact_path(path, self.managed_root):
-            return RetirementOutcome.LEGACY_EVIDENCE
-        if not self.contains(path):
+        path = self._eligible_legacy_evidence_path(evidence)
+        if path is None:
             return RetirementOutcome.LEGACY_EVIDENCE
         if not path.exists():
             # Nothing left to protect (also covers a broken symlink: exists()
@@ -371,13 +385,8 @@ class PluginArtifactRetirementEngine:
         try:
             if self._is_current is not None and self._is_current(path):
                 return RetirementOutcome.DEFERRED_CONTENDED
-            try:
-                identity = identity_for_path(path)
-            except (
-                PluginArtifactValidationError,
-                PluginArtifactUnavailableError,
-                OSError,
-            ):
+            identity = self._rederive_legacy_identity(path, identity_for_path)
+            if identity is None:
                 # Cannot positively identify it; never delete on ambiguity.
                 return RetirementOutcome.LEGACY_EVIDENCE
             appended = self.enqueue_retirement(identity, now)

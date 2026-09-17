@@ -402,7 +402,7 @@ class TestParseOutcomeFields:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenEmissionSync:
+class TestResolverEmitsOnlyModelOwnedFields:
     """Resolvers emit statuses and disposition rows, never derived counters."""
 
     _RESOLVER_SKILLS = (

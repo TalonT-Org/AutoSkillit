@@ -502,6 +502,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_fs_observation.py",
             "test_git_refs.py",
             "test_git_remote.py",
+            "test_github_review_anchor_authority.py",
             "test_github_review_ledger_path.py",
             "test_github_url.py",
             "test_grab_bag_split_completeness.py",

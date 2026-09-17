@@ -170,6 +170,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "create_unique_branch",  # simple result
         "write_telemetry_files",  # simple path results
         "get_pr_reviews",  # list of reviews
+        "verify_review_receipt",  # simple boolean result
         "bulk_close_issues",  # bulk result
         "check_pr_mergeable",  # simple bool result
         "set_commit_status",  # simple ack

@@ -31,6 +31,7 @@ def test_gated_tools_contains_expected_names():
         "create_unique_branch",
         "write_telemetry_files",
         "get_pr_reviews",
+        "verify_review_receipt",
         "bulk_close_issues",
         "check_pr_mergeable",
         "set_commit_status",

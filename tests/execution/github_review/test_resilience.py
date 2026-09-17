@@ -536,8 +536,8 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
     final_attempt = GitHubReviewLedger(database_path).load_attempts(recovered.operation_key)[-1]
     assert final_attempt.state == ReviewOperationState.RECONCILED.value
     assert final_attempt.omitted_dispositions == (
-        dispositions[1],
         dispositions[0],
+        dispositions[1],
     )
 
 

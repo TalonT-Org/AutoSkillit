@@ -45,7 +45,8 @@ for actionable findings, commit each fix, and verify tests still pass.
 
 - **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
   bound to repository, PR, and head SHA. Required for inline comments; when absent,
-  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
 
 `/autoskillit:resolve-review <feature_branch> <base_branch> [mode=<local|github>]`
 

@@ -244,7 +244,9 @@ class TestResearchRecipeStructure:
 
     def test_review_writers_receive_the_annotation_authority(self, recipe) -> None:
         annotate = recipe.steps["annotate_pr_diff"]
-        assert annotate.capture["anchor_authority_path"] == ("${{ result.anchor_authority_path }}")
+        assert annotate.capture["anchor_authority_path"].from_ == (
+            "${{ result.anchor_authority_path }}"
+        )
 
         for step_name in ("review_research_pr", "audit_claims"):
             inputs = recipe.steps[step_name].with_args["skill_inputs"]

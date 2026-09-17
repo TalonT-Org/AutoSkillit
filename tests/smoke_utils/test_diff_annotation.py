@@ -488,7 +488,13 @@ def test_annotate_pr_diff_preserves_stderr_bytes_when_diff_fails(mock_run, tmp_p
 
     def fail_diff(args, **_kwargs):
         if args[:2] == ["gh", "api"]:
-            payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
+            payload = json.dumps(
+                {
+                    "headRefOid": _SHA,
+                    "baseRefOid": _BASE_SHA,
+                    "baseRepoFullName": "Acme/Base",
+                }
+            )
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
             return subprocess.CompletedProcess(args, 1, b"", b"diff failed: \xff")
@@ -573,7 +579,13 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
         if args[:2] == ["gh", "api"]:
             ref_reads += 1
             head = _SHA if ref_reads == 1 else "d" * 40
-            payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
+            payload = json.dumps(
+                {
+                    "headRefOid": head,
+                    "baseRefOid": _BASE_SHA,
+                    "baseRepoFullName": "Acme/Base",
+                }
+            )
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
             return subprocess.CompletedProcess(args, 0, _DIFF_OUTPUT.encode(), b"")

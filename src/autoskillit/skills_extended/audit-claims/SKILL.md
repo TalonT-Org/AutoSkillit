@@ -44,7 +44,8 @@ comments and emits a verdict for recipe routing.
 
 - **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
   bound to repository, PR, and head SHA. Required for inline comments; when absent,
-  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
 
 `/autoskillit:audit-claims <worktree_path> <base_branch> <pr_url>`
 

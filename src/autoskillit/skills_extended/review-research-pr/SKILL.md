@@ -40,7 +40,8 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 
 - **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
   bound to repository, PR, and head SHA. Required for inline comments; when absent,
-  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
 
 `/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [anchor_authority_path=<path>]`
 

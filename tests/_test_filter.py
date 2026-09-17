@@ -514,6 +514,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
+    "_type_github_review_anchor": frozenset(
+        {"core", "execution", "pipeline", "server", "smoke_utils"}
+    ),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli", "fleet", "server"}),
@@ -564,7 +567,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
     ),
-    "_type_phoropter": frozenset({"core"}),
     "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),

@@ -475,7 +475,7 @@ async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
     """The headless tool delegates through _get_ctx without opening the kitchen gate."""
     receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
     authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
-    authority_path.parent.mkdir(parents=True)
+    authority_path.parent.mkdir(parents=True, exist_ok=True)
     authority = DiffAnchorAuthority.authoritative(
         repository="o/r",
         pr_number=7,

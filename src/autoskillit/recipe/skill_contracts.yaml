@@ -313,10 +313,6 @@ skills:
     - name: plan_path
       type: file_path
       required: true
-    - name: anchor_authority_path
-      type: file_path
-      required: false
-      recommended: true
     outputs:
     - name: worktree_path
       type: directory_path
@@ -859,6 +855,10 @@ skills:
       recommended: true
     - name: valid_lines_path
       type: string
+      required: false
+      recommended: true
+    - name: anchor_authority_path
+      type: file_path
       required: false
       recommended: true
     - name: diff_metrics_path

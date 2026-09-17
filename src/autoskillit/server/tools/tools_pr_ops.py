@@ -250,18 +250,21 @@ async def verify_review_receipt(
     post_state: str,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Verify a review effect against the server-owned publication ledger."""
-    if (gate := _require_enabled()) is not None:
-        return gate
-    if mode == "local":
-        return _review_verification_result(post_state == "LOCAL")
-    if mode != "github":
-        return _review_verification_result(False)
+    """Verify a review effect against the server-owned publication ledger.
+
+    Never raises.
+    """
 
     try:
+        if (gate := _require_enabled()) is not None:
+            return gate
+        if mode == "local":
+            return _review_verification_result(post_state == "LOCAL")
+        if mode != "github":
+            return _review_verification_result(False)
         if (
             not Path(cwd).is_absolute()
-            or not Path(cwd).is_dir()
+            or not os.path.isdir(cwd)
             or not is_valid_github_review_repository(repository)
             or not isinstance(pr_number, int)
             or isinstance(pr_number, bool)
@@ -317,7 +320,8 @@ async def verify_review_receipt(
             and artifact_wire == authoritative_wire
             and is_final_github_review_state(authoritative.state.value)
         )
-    except (ContainmentError, OSError, TypeError, UnicodeDecodeError, ValueError):
+    except Exception:
+        logger.error("verify_review_receipt unhandled exception", exc_info=True)
         return _review_verification_result(False)
 
 

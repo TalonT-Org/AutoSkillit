@@ -46,7 +46,8 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 - **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
   bound to repository, PR, and head SHA. Required for inline comments; when absent,
-  publish findings in the review body only. Pass the path unchanged to `post_pr_review`.
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
 
 `/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [anchor_authority_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
 

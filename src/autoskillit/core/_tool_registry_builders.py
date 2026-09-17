@@ -195,6 +195,7 @@ def _verify_review_receipt() -> ToolDef:
             "mode": ToolWireType.STRING,
             "post_state": ToolWireType.STRING,
         },
+        recovery_recipe_delivery=True,
     )
 
 

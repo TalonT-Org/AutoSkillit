@@ -293,12 +293,13 @@ def _reap_running_dispatch(
             reaper_dispatch_id,
         )
     elif identity[0]:
+        _, use_tick_identity, confirmed_create_time = identity
         _reap_confirmed_orphan(
             dispatch,
             state_path=state_path,
             dry_run=dry_run,
-            use_tick_identity=identity[1],
-            confirmed_create_time=identity[2],
+            use_tick_identity=use_tick_identity,
+            confirmed_create_time=confirmed_create_time,
             heartbeat_grace_seconds=heartbeat_grace_seconds,
             m=m,
             reaper_dispatch_id=reaper_dispatch_id,

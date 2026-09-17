@@ -383,12 +383,8 @@ def _validate_json_nesting(encoded: bytes) -> None:
     escaped = False
     for value in encoded:
         if in_string:
-            if escaped:
-                escaped = False
-            elif value == ord("\\"):
-                escaped = True
-            elif value == ord('"'):
-                in_string = False
+            in_string = escaped or value != ord('"')
+            escaped = not escaped and value == ord("\\")
             continue
         if value == ord('"'):
             in_string = True

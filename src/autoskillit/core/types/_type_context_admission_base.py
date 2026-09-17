@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import fields
 from enum import StrEnum
-from typing import Any, ClassVar, get_type_hints
+from typing import Any, ClassVar, cast, get_type_hints
 
 from ._type_dispatch_identity import DispatchIdentity
 from ._type_enums import (
@@ -91,6 +91,68 @@ def _encode(value: object) -> object:
     _raise_invalid("unsupported_serialization_value")
 
 
+def _decode_enum(value: Mapping[object, object]) -> StrEnum:
+    if set(value) != {"__enum__", "value"}:
+        _raise_invalid("unknown_serialized_enum")
+    enum_name = value.get("__enum__")
+    enum_value = value.get("value")
+    if (
+        not isinstance(enum_name, str)
+        or enum_name not in _ENUM_REGISTRY
+        or not isinstance(enum_value, str)
+    ):
+        _raise_invalid("unknown_serialized_enum")
+    try:
+        return _ENUM_REGISTRY[enum_name](enum_value)
+    except (TypeError, ValueError):
+        raise ContextAdmissionValidationError("invalid_serialized_enum") from None
+
+
+def _decode_tagged_items(
+    value: Mapping[object, object],
+    tag: str,
+    reason: str,
+) -> tuple[object, ...] | frozenset[object]:
+    if set(value) != {tag}:
+        _raise_invalid(reason)
+    raw = value[tag]
+    if not isinstance(raw, list):
+        _raise_invalid(reason)
+    decoded = tuple(_decode(item) for item in raw)
+    return frozenset(decoded) if tag == "__frozenset__" else decoded
+
+
+def _decode_model_identity(value: Mapping[object, object]) -> ModelIdentity:
+    if set(value) != {"__type__", "configured_model", "effective_model", "profile_name"}:
+        _raise_invalid("invalid_model_identity")
+    configured_model = value["configured_model"]
+    effective_model = value["effective_model"]
+    profile_name = value["profile_name"]
+    if not all(
+        isinstance(item, str) for item in (configured_model, effective_model, profile_name)
+    ):
+        _raise_invalid("invalid_model_identity")
+    return ModelIdentity(
+        configured_model=cast(str, configured_model),
+        effective_model=cast(str, effective_model),
+        profile_name=cast(str, profile_name),
+    )
+
+
+def _decode_contract(value: Mapping[object, object], type_name: object) -> object:
+    if not isinstance(type_name, str) or type_name not in _TYPE_REGISTRY:
+        _raise_invalid("unknown_serialized_contract_type")
+    contract_type = _TYPE_REGISTRY[type_name]
+    kwargs = cast(
+        dict[str, object],
+        {key: _decode(item) for key, item in value.items() if key != "__type__"},
+    )
+    try:
+        return contract_type(**kwargs)
+    except TypeError:
+        raise ContextAdmissionValidationError("invalid_serialized_contract") from None
+
+
 def _decode(value: object) -> object:
     if isinstance(value, list):
         return tuple(_decode(item) for item in value)
@@ -102,67 +164,15 @@ def _decode(value: object) -> object:
             _raise_invalid("invalid_dispatch_identity")
         return DispatchIdentity.from_dispatch_id(dispatch_id)
     if "__enum__" in value:
-        if set(value) != {"__enum__", "value"}:
-            _raise_invalid("unknown_serialized_enum")
-        enum_name = value.get("__enum__")
-        enum_value = value.get("value")
-        if (
-            not isinstance(enum_name, str)
-            or enum_name not in _ENUM_REGISTRY
-            or not isinstance(enum_value, str)
-        ):
-            _raise_invalid("unknown_serialized_enum")
-        try:
-            return _ENUM_REGISTRY[enum_name](enum_value)
-        except (TypeError, ValueError):
-            # Suppress cause: enum_value is attacker-controlled and must not
-            # leak into the error message or traceback.
-            raise ContextAdmissionValidationError("invalid_serialized_enum") from None
+        return _decode_enum(value)
     if "__tuple__" in value:
-        if set(value) != {"__tuple__"}:
-            _raise_invalid("invalid_serialized_tuple")
-        raw = value["__tuple__"]
-        if not isinstance(raw, list):
-            _raise_invalid("invalid_serialized_tuple")
-        return tuple(_decode(item) for item in raw)
+        return _decode_tagged_items(value, "__tuple__", "invalid_serialized_tuple")
     if "__frozenset__" in value:
-        if set(value) != {"__frozenset__"}:
-            _raise_invalid("invalid_serialized_frozenset")
-        raw = value["__frozenset__"]
-        if not isinstance(raw, list):
-            _raise_invalid("invalid_serialized_frozenset")
-        return frozenset(_decode(item) for item in raw)
+        return _decode_tagged_items(value, "__frozenset__", "invalid_serialized_frozenset")
     type_name = value.get("__type__")
     if type_name == "ModelIdentity":
-        if set(value) != {
-            "__type__",
-            "configured_model",
-            "effective_model",
-            "profile_name",
-        }:
-            _raise_invalid("invalid_model_identity")
-        configured_model = value["configured_model"]
-        effective_model = value["effective_model"]
-        profile_name = value["profile_name"]
-        if not all(
-            isinstance(item, str) for item in (configured_model, effective_model, profile_name)
-        ):
-            _raise_invalid("invalid_model_identity")
-        return ModelIdentity(
-            configured_model=configured_model,
-            effective_model=effective_model,
-            profile_name=profile_name,
-        )
-    if not isinstance(type_name, str) or type_name not in _TYPE_REGISTRY:
-        _raise_invalid("unknown_serialized_contract_type")
-    contract_type = _TYPE_REGISTRY[type_name]
-    kwargs = {key: _decode(item) for key, item in value.items() if key != "__type__"}
-    try:
-        return contract_type(**kwargs)
-    except TypeError:
-        # Suppress cause: kwargs come from attacker-controlled serialized
-        # data and the unexpected-kwarg name must not leak.
-        raise ContextAdmissionValidationError("invalid_serialized_contract") from None
+        return _decode_model_identity(value)
+    return _decode_contract(value, type_name)
 
 
 class _ContractMeta(type):

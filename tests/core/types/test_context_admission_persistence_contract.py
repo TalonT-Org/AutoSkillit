@@ -602,6 +602,26 @@ def test_envelope_decoders_reject_unbounded_json_before_parsing(
         cast(Callable[[bytes], object], decoder)(b" " * (16 * 1024 * 1024 + 1))
 
 
+def test_envelope_header_ignores_escaped_string_delimiters_and_defers_malformed_json() -> None:
+    string_payload = ("[" * 129) + '\\"quoted\\"' + ("}" * 129)
+    encoded = (
+        '{"encoding_version":1,"payload":"'
+        + string_payload
+        + '","protocol_version":1,"type_discriminator":"AuthorityUnavailableEvent"}'
+    ).encode()
+
+    assert context_admission_envelope_header(encoded) == (
+        1,
+        1,
+        "AuthorityUnavailableEvent",
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        context_admission_envelope_header(
+            b'{"encoding_version":1,"payload":[},"protocol_version":1,'
+            b'"type_discriminator":"AuthorityUnavailableEvent"}'
+        )
+
+
 def test_envelope_decoder_consumes_deterministic_upcaster_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

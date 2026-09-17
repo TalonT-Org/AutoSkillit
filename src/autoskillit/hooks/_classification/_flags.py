@@ -96,6 +96,17 @@ _GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
         "--summary",
     }
 )
+# Flag prefixes that lift `git diff` out of the metadata arm even when a sibling
+# metadata flag like --stat is also present; mirrors the sibling module-level
+# `_GIT_DIFF_*_FLAGS` registries so the diff arm is read from one place.
+_GIT_DIFF_CONTENT_FLAG_PREFIXES: tuple[str, ...] = (
+    "-U",
+    "--unified",
+    "--word-diff",
+    "--color-words",
+    "--patch-with-stat",
+    "--patch-with-raw",
+)
 _SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
 _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
 _WC_FLAG_RE = re.compile(r"-l+|--lines$")
@@ -344,12 +355,7 @@ def _is_allowed_git_check_ignore_invocation(flags: Sequence[str]) -> bool:
 def _is_allowed_git_diff_invocation(flags: Sequence[str]) -> bool:
     if any(
         flag in _GIT_DIFF_CONTENT_FLAGS
-        or flag.startswith("-U")
-        or flag.startswith("--unified")
-        or flag.startswith("--word-diff")
-        or flag.startswith("--color-words")
-        or flag.startswith("--patch-with-stat")
-        or flag.startswith("--patch-with-raw")
+        or any(flag.startswith(prefix) for prefix in _GIT_DIFF_CONTENT_FLAG_PREFIXES)
         for flag in flags
     ):
         return False

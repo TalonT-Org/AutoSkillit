@@ -78,6 +78,7 @@ DENIED_COMMANDS = (
     "sudo git status -- src/autoskillit/recipes/remediation.yaml",
     "timeout 5 git status -- src/autoskillit/recipes/remediation.yaml",
     "git check-ignore --stdin -- src/autoskillit/recipes/remediation.yaml",
+    "git check-ignore src/autoskillit/recipes/remediation.yaml",
     "git check-ignore -z -- src/autoskillit/recipes/remediation.yaml",
     "git check-ignore -q -- src/autoskillit/recipes/remediation.yaml",
     "git check-ignore -n -- src/autoskillit/recipes/remediation.yaml",

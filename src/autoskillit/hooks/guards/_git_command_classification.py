@@ -169,7 +169,8 @@ def _blocked_op_in_evaluated_segment(
         result = extract_git_subcommand_and_flags([verb, *args])
         if result is None:
             continue
-        subcommand, remaining = result
+        subcommand = result.subcommand
+        remaining = result.flags
         if subcommand == "<unresolved>":
             return (subcommand,)
         for op_tuple in blocked_ops:
@@ -615,7 +616,8 @@ def _classify_git_segment(
     parsed = extract_git_subcommand_and_flags(segment)
     if parsed is None:
         return []
-    subcommand, args = parsed
+    subcommand = parsed.subcommand
+    args = parsed.flags
     if subcommand == "<unresolved>":
         # An unrecognized global git flag means the real subcommand could
         # not be found -- ambiguous-deny (route through _all_threatened

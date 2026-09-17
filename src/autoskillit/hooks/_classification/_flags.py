@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
     from autoskillit.hooks._classification._interpreters import (
-        all_evaluated_segments,
+        all_evaluated_segments_with_provenance,
         live_command_text,
     )
     from autoskillit.hooks._runtime._command_classification import (
         ArgvToken,
+        EvaluatedSegment,
         SearchPattern,
         _command_start_index,
         command_verb,
@@ -38,7 +39,18 @@ else:
 # Moved from _command_classification.py (rectify #4941 Part A) to keep that
 # facade under REQ-CNST-010's line cap; this module is their sole consumer.
 # Re-exported through the facade's existing block B bootstrap.
-_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
+_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
+    {"add", "check-ignore", "diff", "status"}
+)
+
+# `-C` remains admissible for add/diff/status because bundled workflows use it
+# with their worktree path. check-ignore has no such caller and rejects `-C`
+# arm-specifically in `_has_forbidden_git_globals`.
+_CONFIG_INJECTING_GIT_GLOBALS: frozenset[str] = frozenset({"-c", "--config-env", "--exec-path"})
+_REPO_REDIRECTING_GIT_GLOBALS: frozenset[str] = frozenset(
+    {"--git-dir", "--work-tree", "--bare", "--namespace"}
+)
+_CHECK_IGNORE_FORBIDDEN_GIT_GLOBALS: frozenset[str] = frozenset({"-C"})
 
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
@@ -83,6 +95,17 @@ _GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
         "--numstat",
         "--summary",
     }
+)
+# Flag prefixes that lift `git diff` out of the metadata arm even when a sibling
+# metadata flag like --stat is also present; mirrors the sibling module-level
+# `_GIT_DIFF_*_FLAGS` registries so the diff arm is read from one place.
+_GIT_DIFF_CONTENT_FLAG_PREFIXES: tuple[str, ...] = (
+    "-U",
+    "--unified",
+    "--word-diff",
+    "--color-words",
+    "--patch-with-stat",
+    "--patch-with-raw",
 )
 _SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
 _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
@@ -284,49 +307,119 @@ def _is_allowed_wc_flag(token: str) -> bool:
     return bool(_WC_FLAG_RE.fullmatch(token))
 
 
-def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
+def _count_of(flags: Sequence[str], allowed: Sequence[str]) -> int:
+    return sum(flag in allowed for flag in flags)
+
+
+def _segment_has_required_provenance(segment: EvaluatedSegment) -> bool:
+    provenance = segment.provenance
+    if provenance is None or any(provenance.redirect_syntax):
+        return False
+    return not any(
+        not token.fully_single_quoted and ("$" in token.raw_span or "`" in token.raw_span)
+        for token in provenance.argv_tokens
+    )
+
+
+def _is_allowed_git_check_ignore_invocation(flags: Sequence[str]) -> bool:
+    # `git check-ignore` is admitted only in its exact prescribed verbose form
+    # (one -v/--verbose, at most one --no-index). The PR #5071 design contract
+    # binds protected-path admission to the `git check-ignore -v {path}`
+    # prescribed command (dry-walkthrough SKILL.md, prescribed-command corpus),
+    # so we require that exact shape -- bare `git check-ignore /path` is
+    # denied because no project caller uses it for protected-path metadata,
+    # and `-v -v` is denied as a fail-closed narrowing.
+    verbose_count = _count_of(flags, ("-v", "--verbose"))
+    if verbose_count != 1 or _count_of(flags, ("--no-index",)) > 1:
+        return False
+
+    operands: list[str] = []
+    options_done = False
+    used_separator = False
+    for token in flags:
+        if not options_done and token == "--":
+            options_done = True
+            used_separator = True
+        elif not options_done and token in {"-v", "--verbose", "--no-index"}:
+            continue
+        elif not options_done and token.startswith("-"):
+            return False
+        else:
+            options_done = True
+            if token == "--" or (token.startswith("-") and not used_separator):
+                return False
+            operands.append(token)
+    return bool(operands)
+
+
+def _is_allowed_git_diff_invocation(flags: Sequence[str]) -> bool:
+    if any(
+        flag in _GIT_DIFF_CONTENT_FLAGS
+        or any(flag.startswith(prefix) for prefix in _GIT_DIFF_CONTENT_FLAG_PREFIXES)
+        for flag in flags
+    ):
+        return False
+    return any(flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags)
+
+
+def _is_allowed_git_add_invocation(flags: Sequence[str]) -> bool:
+    return not any(
+        flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
+        for flag in flags
+    )
+
+
+def _is_allowed_git_status_invocation(flags: Sequence[str]) -> bool:
+    return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
+
+
+def _is_allowed_git_metadata_invocation(subcommand: str, flags: Sequence[str]) -> bool:
+    if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
+        return False
+    if subcommand == "add":
+        return _is_allowed_git_add_invocation(flags)
+    if subcommand == "status":
+        return _is_allowed_git_status_invocation(flags)
+    if subcommand == "diff":
+        return _is_allowed_git_diff_invocation(flags)
+    if subcommand == "check-ignore":
+        return _is_allowed_git_check_ignore_invocation(flags)
+    return False
+
+
+def _has_forbidden_git_globals(subcommand: str, global_flags: Sequence[str]) -> bool:
+    forbidden = _CONFIG_INJECTING_GIT_GLOBALS | _REPO_REDIRECTING_GIT_GLOBALS
+    if subcommand == "check-ignore":
+        forbidden |= _CHECK_IGNORE_FORBIDDEN_GIT_GLOBALS
+    return bool(forbidden.intersection(global_flags))
+
+
+def is_allowed_protected_path_metadata_command(segment: EvaluatedSegment) -> bool:
     """Return True for protected-path commands that inspect metadata or VCS state.
 
     Protected recipe/skill/agent paths are normally deny-by-default because most
     commands that mention them are content reads. These narrow exceptions support
     legitimate pipeline work on files already in scope.
     """
-    verb = command_verb(segment)
+    if not _segment_has_required_provenance(segment):
+        return False
+
+    tokens = segment.tokens
+    verb = command_verb(tokens)
     if verb == "git" or verb.endswith("/git"):
-        git_parts = extract_git_subcommand_and_flags(segment)
+        git_parts = extract_git_subcommand_and_flags(tokens)
         if git_parts is None:
             return False
-        subcommand, flags = git_parts
-        if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
+        if git_parts.prefix_tokens or _has_forbidden_git_globals(
+            git_parts.subcommand, git_parts.global_flags
+        ):
             return False
-        if subcommand == "add":
-            return not any(
-                flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
-                for flag in flags
-            )
-        if subcommand == "status":
-            return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
-        if subcommand == "diff":
-            if any(
-                flag in _GIT_DIFF_CONTENT_FLAGS
-                or flag.startswith("-U")
-                or flag.startswith("--unified")
-                or flag.startswith("--word-diff")
-                or flag.startswith("--color-words")
-                or flag.startswith("--patch-with-stat")
-                or flag.startswith("--patch-with-raw")
-                for flag in flags
-            ):
-                return False
-            return any(
-                flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags
-            )
-        return False
+        return _is_allowed_git_metadata_invocation(git_parts.subcommand, git_parts.flags)
     if verb == "wc" or verb.endswith("/wc"):
-        start = _command_start_index(segment)
-        if start is None:
+        start = _command_start_index(tokens)
+        if start != 0:
             return False
-        flags = [token for token in segment[start + 1 :] if token.startswith("-")]
+        flags = [token for token in tokens[start + 1 :] if token.startswith("-")]
         return bool(flags) and all(_is_allowed_wc_flag(token) for token in flags)
     return False
 
@@ -340,12 +433,13 @@ def command_has_blocked_protected_path_read(
     than the raw string, so a protected-path mention inside an inert
     heredoc/herestring body (prose in a fenced Markdown block, an inline
     backtick example) never trips the check, while a live SHELL/PYTHON/TEXT
-    stdin body's mention still does. `all_evaluated_segments` replaces the
-    private `_tokenize_protected_read_segments` tokenizer for the per-segment
-    allowed-metadata-command check. When the live text matches but no argv
-    segment accounts for the occurrence (a PYTHON/TEXT stdin body's content
-    is prose/source, never its own argv segment), the read stays fail-closed
-    rather than being silently lost because its source isn't an argv segment.
+    stdin body's mention still does. `all_evaluated_segments_with_provenance`
+    replaces the private `_tokenize_protected_read_segments` tokenizer for the
+    per-segment allowed-metadata-command check. When the live text matches but
+    no argv segment accounts for the occurrence (a PYTHON/TEXT stdin body's
+    content is prose/source, never its own argv segment), the read stays
+    fail-closed rather than being silently lost because its source isn't an
+    argv segment.
     """
     live_text = live_command_text(command)
     if not any(pattern.search(live_text) for pattern in protected_path_patterns):
@@ -354,7 +448,7 @@ def command_has_blocked_protected_path_read(
     if _SHELL_SUBSTITUTION_RE.search(live_text):
         return True
 
-    segments = all_evaluated_segments(command)
+    segments = all_evaluated_segments_with_provenance(command)
     if not segments:
         return True
 
@@ -363,7 +457,7 @@ def command_has_blocked_protected_path_read(
 
     any_segment_matched = False
     for segment in segments:
-        segment_text = " ".join(segment)
+        segment_text = " ".join(segment.tokens)
         if any(pattern.search(segment_text) for pattern in protected_path_patterns):
             any_segment_matched = True
             if not is_allowed_protected_path_metadata_command(segment):
@@ -378,6 +472,7 @@ if not TYPE_CHECKING:
         import _command_classification as _classification
 
     ArgvToken = _classification.ArgvToken
+    EvaluatedSegment = _classification.EvaluatedSegment
     SearchPattern = _classification.SearchPattern
     _command_start_index = _classification._command_start_index
     command_verb = _classification.command_verb
@@ -389,7 +484,7 @@ if not TYPE_CHECKING:
         import _interpreters
 
     # Bind directly to _interpreters (never the _command_classification
-    # facade): all_evaluated_segments/live_command_text are facade-level
+    # facade): the evaluated-segment projections/live_command_text are facade-level
     # wrappers defined at the very bottom of _command_classification.py,
     # AFTER its own block B rebinds _flags/_interpreters -- a facade-first
     # load order (the standard hook-script bootstrap: `from
@@ -400,5 +495,5 @@ if not TYPE_CHECKING:
     # (not via its own bottom bootstrap), well before either of ITS bottom
     # bootstrap blocks, so a partially-initialized _interpreters module
     # reached through any reentrant load order already has them bound.
-    all_evaluated_segments = _interpreters.all_evaluated_segments
+    all_evaluated_segments_with_provenance = _interpreters.all_evaluated_segments_with_provenance
     live_command_text = _interpreters.live_command_text

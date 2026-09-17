@@ -10,6 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.infra._protected_path_command_corpus import ADMITTED_COMMANDS, DENIED_COMMANDS
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
@@ -108,13 +110,7 @@ class TestRunCmdBlocking:
 
     @pytest.mark.parametrize(
         "cmd",
-        [
-            "git add -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --name-only -- src/autoskillit/recipes/remediation.yaml",
-            "git status -- src/autoskillit/recipes/remediation.yaml",
-            "wc -l src/autoskillit/recipes/remediation.yaml",
-        ],
+        ADMITTED_COMMANDS,
     )
     def test_allows_recipe_path_vcs_and_metadata_commands(self, cmd):
         out = _run_guard(
@@ -155,43 +151,7 @@ class TestRunCmdBlocking:
 
     @pytest.mark.parametrize(
         "cmd",
-        [
-            "git diff -- src/autoskillit/recipes/remediation.yaml",
-            "git status -v -- src/autoskillit/recipes/remediation.yaml",
-            "git add -p -- src/autoskillit/recipes/remediation.yaml",
-            "git add --pathspec-from-file=src/autoskillit/recipes/remediation.yaml",
-            "git add --pathspec-from-file src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --patch-with-stat -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --patch-with-raw -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --stat --binary -- src/autoskillit/recipes/remediation.yaml",
-            "git diff --check -- src/autoskillit/recipes/remediation.yaml",
-            ("python3 <<'PY'\nprint(open('src/autoskillit/recipes/remediation.yaml').read())\nPY"),
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml\n"
-                "cat src/autoskillit/recipes/remediation.yaml"
-            ),
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml "
-                "& cat src/autoskillit/recipes/remediation.yaml"
-            ),
-            'git add -- "$(cat src/autoskillit/recipes/remediation.yaml)"',
-            "git add -- src/autoskillit/recipes/remediation.yaml && cat $_",
-            (
-                "git add -- src/autoskillit/recipes/remediation.yaml"
-                "&&cat src/autoskillit/recipes/remediation.yaml"
-            ),
-            # Input redirection: `<` is not in punctuation_chars; path is in
-            # the segment text, pattern matches, verb `cat` is not git/wc.
-            "cat < src/autoskillit/recipes/remediation.yaml",
-            # Content-reading git subcommands not in the metadata allowlist.
-            "git show HEAD:src/autoskillit/recipes/remediation.yaml",
-            "git log -p -- src/autoskillit/recipes/remediation.yaml",
-            "git blame src/autoskillit/recipes/remediation.yaml",
-            "git grep pattern -- src/autoskillit/recipes/remediation.yaml",
-            # -A/--all/--force stage content even when restricted to a path.
-            "git add -A -- src/autoskillit/recipes/remediation.yaml",
-            "git add --all -- src/autoskillit/recipes/remediation.yaml",
-        ],
+        DENIED_COMMANDS,
     )
     def test_denies_protected_path_content_bypasses(self, cmd):
         out = _run_guard(

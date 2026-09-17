@@ -1352,6 +1352,10 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "__init__",
             "hooks",
+            "infra",
+            # protected-path guard integration coverage (#4262)
+            "infra/test_recipe_read_guard.py",
+            "server/test_tools_run_cmd_invariants.py",
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
             "cli/test_capture_store.py",
@@ -1568,7 +1572,14 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "fleet": frozenset({"fleet"}),
     "server": frozenset({"server"}),
     "cli": frozenset({"cli"}),
-    "hooks": frozenset({"hooks"}),
+    "hooks": frozenset(
+        {
+            "hooks",
+            # protected-path guard integration coverage (#4262)
+            "infra/test_recipe_read_guard.py",
+            "server/test_tools_run_cmd_invariants.py",
+        }
+    ),
     "hook_registry": frozenset({"hooks", "core"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),

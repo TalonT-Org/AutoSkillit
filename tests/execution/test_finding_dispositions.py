@@ -534,9 +534,6 @@ def test_evidence_window_and_workspace_are_enforced(tmp_path: Path) -> None:
 
 def test_unreadable_evidence_is_malformed(tmp_path: Path) -> None:
     class UnreadableLedger:
-        def record(self, record: WorkspaceOutcomeRecord) -> None:
-            raise AssertionError("record is not used")
-
         def read(self, workspace: str, *, since: str, until: str) -> list[WorkspaceOutcomeRecord]:
             raise RuntimeError("evidence is incomplete")
 
@@ -558,12 +555,29 @@ def test_unreadable_evidence_is_malformed(tmp_path: Path) -> None:
     assert "evidence is incomplete" in result.result
 
 
-def test_status_policy_and_failed_session_anchor(tmp_path: Path) -> None:
+def test_no_pr_status_clean_exit(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
     no_pr = _adjudicate("review_status = no_pr", workspace, None)
+
+    assert no_pr.success is True
+    assert no_pr.outcome_fields == {"review_status": "no_pr"}
+
+
+def test_missing_review_status_demotes_to_malformed(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
     missing = _adjudicate("verdict = already_green", workspace, None)
+
+    assert missing.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
+
+
+def test_failed_session_anchor_is_preserved_as_path_contamination(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
     failed = _adjudicate(
         _processed("real_fix", ["finding_disposition = F-1 | applied | absent"]),
         workspace,
@@ -571,9 +585,6 @@ def test_status_policy_and_failed_session_anchor(tmp_path: Path) -> None:
         success=False,
     )
 
-    assert no_pr.success is True
-    assert no_pr.outcome_fields == {"review_status": "no_pr"}
-    assert missing.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
     assert failed.retry_reason is RetryReason.PATH_CONTAMINATION
     assert failed.subtype == "path_contamination"
 

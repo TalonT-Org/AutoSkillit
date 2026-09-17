@@ -25,6 +25,15 @@ _SHARED_READ_SIDE_VALIDATORS = {
     ),
 }
 
+# Module-level helper functions that the registered shared validator may delegate
+# through. When present in the source, the test walker descends into them so the
+# read-side delegation contract holds across refactors that extract the
+# ``read_versioned_json`` call into a sibling helper.
+_SHARED_READ_SIDE_VALIDATOR_HELPERS: dict[str, tuple[str, ...]] = {
+    "read_installed_plugin_artifact_identity": ("_read_installed_plugin_artifact_manifest",),
+    "read_projected_plugin_identity": ("_load_canonical_projection_manifest",),
+}
+
 
 def _call_name(func: ast.expr) -> str | None:
     if isinstance(func, ast.Name):
@@ -167,9 +176,18 @@ class TestSchemaReadConvention:
             assert function is not None, (
                 f"shared read-side validator {function_name} is missing from {relative_path}"
             )
+            validator_functions = (function,)
+            helper_names = _SHARED_READ_SIDE_VALIDATOR_HELPERS.get(function_name, ())
+            if helper_names:
+                validator_functions += tuple(
+                    node
+                    for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name in helper_names
+                )
             call_names = {
                 node.func.id if isinstance(node.func, ast.Name) else node.func.attr
-                for node in ast.walk(function)
+                for validator in validator_functions
+                for node in ast.walk(validator)
                 if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
             }
             assert "read_versioned_json" in call_names, (

@@ -139,6 +139,15 @@ class CodexAgentProjectionDef:
     web_search: _CodexWebSearchMode | None = None
 
     def __post_init__(self) -> None:
+        self._validate_native_projection()
+        self._validate_disabled_features()
+        if type(self.agents_enabled) is not bool:
+            raise AgentDefinitionError("Codex agents_enabled must be a boolean")
+        if self.web_search is not None and self.web_search not in _CODEX_WEB_SEARCH_MODES:
+            allowed = ", ".join(repr(mode) for mode in sorted(_CODEX_WEB_SEARCH_MODES))
+            raise AgentDefinitionError(f"Codex web_search must be one of {allowed}")
+
+    def _validate_native_projection(self) -> None:
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
             raise AgentDefinitionError(f"unsupported Codex model: {self.model!r}")
         if (
@@ -152,6 +161,8 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError(f"unsupported Codex sandbox mode: {self.sandbox_mode!r}")
         if self.reasoning_effort is not None and self.model is None:
             raise AgentDefinitionError("Codex reasoning effort requires a native model")
+
+    def _validate_disabled_features(self) -> None:
         if not isinstance(self.disabled_features, tuple):
             raise AgentDefinitionError("Codex disabled_features must be an immutable tuple")
         if any(not isinstance(feature, str) for feature in self.disabled_features):
@@ -165,11 +176,6 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex disabled_features must not contain duplicates")
         if self.disabled_features != tuple(sorted(self.disabled_features)):
             raise AgentDefinitionError("Codex disabled_features must use canonical order")
-        if type(self.agents_enabled) is not bool:
-            raise AgentDefinitionError("Codex agents_enabled must be a boolean")
-        if self.web_search is not None and self.web_search not in _CODEX_WEB_SEARCH_MODES:
-            allowed = ", ".join(repr(mode) for mode in sorted(_CODEX_WEB_SEARCH_MODES))
-            raise AgentDefinitionError(f"Codex web_search must be one of {allowed}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +213,12 @@ class AgentDef:
             raise AgentDefinitionError(
                 f"unsupported agent provisioning policy: {self.provisioning!r}"
             )
+
+        self._validate_reader_tools()
+        if self.reader_tools:
+            self._validate_reader_eligibility()
+
+    def _validate_reader_tools(self) -> None:
         if any(not isinstance(tool, str) or not tool for tool in self.reader_tools):
             raise AgentDefinitionError("agent reader_tools must contain non-empty strings")
         if len(set(self.reader_tools)) != len(self.reader_tools):
@@ -218,33 +230,33 @@ class AgentDef:
             short_name = tool[len(DIRECT_PREFIX) :]
             if not _DIRECT_TOOL_NAME_RE.fullmatch(short_name):
                 raise AgentDefinitionError(f"invalid canonical reader tool: {tool!r}")
-        if self.reader_tools:
-            # Reader-eligibility is structurally Codex-only: the read-only
-            # evidence reader is a Codex child surface (see
-            # execution/evidence_reader.py) and exposes only Codex
-            # projections. Codex knowledge is canonically at IL-0 because
-            # AgentDef is a unified Claude+Codex catalog and IL-0 cannot
-            # import the IL-1 backend capability layer that would otherwise
-            # host this policy. Keeping the check inline here preserves
-            # the "born valid" invariant: AgentDef rejects invalid reader
-            # eligibility at construction time, so consumers cannot
-            # forget to call a follow-up validation function.
-            if self.codex.model is None or self.codex.reasoning_effort is None:
-                raise AgentDefinitionError(
-                    "reader-eligible agents require a fixed Codex model and reasoning effort"
-                )
-            if self.codex.sandbox_mode != "read-only":
-                raise AgentDefinitionError("reader-eligible agents must use read-only sandbox")
-            if self.codex.agents_enabled:
-                raise AgentDefinitionError("reader-eligible agents must disable agents")
-            if self.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
-                raise AgentDefinitionError("reader-eligible agents must disable web search")
-            missing_features = set(_CODEX_DISABLEABLE_FEATURES) - set(self.codex.disabled_features)
-            if missing_features:
-                raise AgentDefinitionError(
-                    "reader-eligible agents must disable terminal features: "
-                    f"{sorted(missing_features)}"
-                )
+
+    def _validate_reader_eligibility(self) -> None:
+        # Reader-eligibility is structurally Codex-only: the read-only
+        # evidence reader is a Codex child surface (see
+        # execution/evidence_reader.py) and exposes only Codex projections.
+        # Codex knowledge is canonically at IL-0 because AgentDef is a unified
+        # Claude+Codex catalog and IL-0 cannot import the IL-1 backend
+        # capability layer that would otherwise host this policy. Keeping the
+        # check here preserves the "born valid" invariant: AgentDef rejects
+        # invalid reader eligibility at construction time, so consumers cannot
+        # forget to call a follow-up validation function.
+        if self.codex.model is None or self.codex.reasoning_effort is None:
+            raise AgentDefinitionError(
+                "reader-eligible agents require a fixed Codex model and reasoning effort"
+            )
+        if self.codex.sandbox_mode != "read-only":
+            raise AgentDefinitionError("reader-eligible agents must use read-only sandbox")
+        if self.codex.agents_enabled:
+            raise AgentDefinitionError("reader-eligible agents must disable agents")
+        if self.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+            raise AgentDefinitionError("reader-eligible agents must disable web search")
+        missing_features = set(_CODEX_DISABLEABLE_FEATURES) - set(self.codex.disabled_features)
+        if missing_features:
+            raise AgentDefinitionError(
+                "reader-eligible agents must disable terminal features: "
+                f"{sorted(missing_features)}"
+            )
 
 
 def _required_text(meta: dict[str, Any], key: str) -> str:

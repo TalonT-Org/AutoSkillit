@@ -512,16 +512,30 @@ def test_definition_and_projection_are_frozen() -> None:
 
 
 @pytest.mark.parametrize(
-    "projection",
+    ("projection", "error"),
     [
-        ("unknown", "max", "read-only"),
-        ("gpt-5.6-luna", "unknown", "read-only"),
-        ("gpt-5.6-luna", "max", "danger-full-access"),
+        (("unknown", "max", "read-only"), None),
+        (("gpt-5.6-luna", "unknown", "read-only"), None),
+        (("gpt-5.6-luna", "max", "danger-full-access"), None),
+        (
+            ("unknown", "max", "read-only", ("apps", "apps"), "false", "invalid"),
+            "unsupported Codex model",
+        ),
+        (
+            ("gpt-5.6-luna", "max", "read-only", ("apps", "apps"), "false", "invalid"),
+            "disabled_features must not contain duplicates",
+        ),
+        (
+            ("gpt-5.6-luna", "max", "read-only", ("apps",), "false", "invalid"),
+            "agents_enabled must be a boolean",
+        ),
     ],
 )
-def test_invalid_native_projection_fails_closed(projection: tuple[str, str, str]) -> None:
-    with pytest.raises(AgentDefinitionError):
-        CodexAgentProjectionDef(*projection)
+def test_invalid_native_projection_fails_closed(
+    projection: tuple[object, ...], error: str | None
+) -> None:
+    with pytest.raises(AgentDefinitionError, match=error):
+        CodexAgentProjectionDef(*projection)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("web_search", ["enabled", "LIVE", False, 1])

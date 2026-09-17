@@ -162,17 +162,17 @@ def _propose(
 def _validate_reserve_structure(
     state: ActiveContextAdmissionState,
     event: ReserveRequestEvent,
-) -> tuple[tuple[AdmissionOccurrenceRecord, ...], str | None]:
+) -> str | None:
     if (
         _batch_record(state, event.batch.batch_id) is not None
         or _closed_batch_location(state, event.batch.batch_id) is not None
     ):
-        return (), "batch-already-reserved"
+        return "batch-already-reserved"
     reservation = event.input_reservations[0]
     if any(
         existing.reservation_id == reservation.reservation_id for existing in state.reservations
     ):
-        return (), "reservation-id-reuse-with-changed-descriptor"
+        return "reservation-id-reuse-with-changed-descriptor"
     member_records = tuple(
         record
         for record in state.occurrence_records
@@ -188,7 +188,7 @@ def _validate_reserve_structure(
             for record in member_records
         )
     ):
-        return member_records, "batch-members-not-all-proposed"
+        return "batch-members-not-all-proposed"
     owned_pairs = tuple(
         (span_id, member.occurrence.occurrence_id)
         for member in member_records
@@ -203,9 +203,9 @@ def _validate_reserve_structure(
         or set(owned_pairs) != set(manifest_pairs)
         or len(owned_pairs) != len(manifest_pairs)
     ):
-        return member_records, "inconsistent-span-ownership"
+        return "inconsistent-span-ownership"
     if len(event.input_reservations) != 1:
-        return member_records, "atomic-input-reservation-required"
+        return "atomic-input-reservation-required"
     if (
         reservation.key.batch_id != event.batch.batch_id
         or reservation.occurrence_ids != event.batch.occurrence_ids
@@ -215,7 +215,7 @@ def _validate_reserve_structure(
         or reservation.reserve_class is not event.batch.reserve_class
         or reservation.protected_pool_owner_id != event.batch.protected_pool_owner_id
     ):
-        return member_records, "reservation-descriptor-mismatch"
+        return "reservation-descriptor-mismatch"
     expected_revisions = tuple(
         (
             record.occurrence.occurrence_id,
@@ -224,7 +224,7 @@ def _validate_reserve_structure(
         for record in member_records
     )
     if reservation.key.occurrence_revisions != expected_revisions:
-        return member_records, "reservation-revision-mismatch"
+        return "reservation-revision-mismatch"
     generation = event.generation_reservation
     if generation is not None and (
         any(
@@ -237,7 +237,7 @@ def _validate_reserve_structure(
             for existing in audit.terminal_generation_reservations
         )
     ):
-        return member_records, "generation-reservation-id-reuse-with-changed-descriptor"
+        return "generation-reservation-id-reuse-with-changed-descriptor"
     if generation is not None and (
         generation.request_id != event.batch.request_id
         or generation.batch_id != event.batch.batch_id
@@ -249,9 +249,9 @@ def _validate_reserve_structure(
         or generation.reserve_class is not event.batch.reserve_class
         or generation.protected_pool_owner_id != event.batch.protected_pool_owner_id
     ):
-        return member_records, "generation-descriptor-mismatch"
+        return "generation-descriptor-mismatch"
 
-    return member_records, None
+    return None
 
 
 def _reserve(
@@ -262,7 +262,7 @@ def _reserve(
         return _reject(state, event, "epoch-uninitialized")
     if event.snapshot_sequence != state.snapshot.snapshot_sequence:
         return _reject(state, event, "snapshot-sequence-mismatch")
-    member_records, reason_code = _validate_reserve_structure(state, event)
+    reason_code = _validate_reserve_structure(state, event)
     if reason_code is not None:
         return _reject(state, event, reason_code)
     reservation = event.input_reservations[0]

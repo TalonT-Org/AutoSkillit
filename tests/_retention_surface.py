@@ -147,6 +147,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/session_skills/_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         ),
+        ("src/autoskillit/workspace/session_skills/_manager.py", "_reclaim_stale_entry"),
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
@@ -299,6 +300,12 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
             "src/autoskillit/workspace/session_skills/_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         )
+    ),
+    (
+        "src/autoskillit/workspace/session_skills/_manager.py",
+        "_reclaim_stale_entry",
+    ): _convergence_adapters(
+        ("src/autoskillit/workspace/session_skills/_manager.py", "_reclaim_stale_entry")
     ),
     ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"): _convergence_adapters(
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates")
@@ -695,6 +702,7 @@ _CS = (
     "src/autoskillit/workspace/session_skills/_manager.py"
     "::DefaultSessionSkillManager.cleanup_stale"
 )
+_CSE = "src/autoskillit/workspace/session_skills/_manager.py::_reclaim_stale_entry"
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
 _SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
@@ -869,29 +877,29 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- workspace.session_skills._manager::cleanup_stale --
-    f"{_CS}::L626": _self_limiting(
+    f"{_CS}::L643": _self_limiting(
         "The candidate root vanished or was replaced before its scan; nothing there to reclaim."
     ),
-    f"{_CS}::L629": _self_limiting(
+    f"{_CS}::L646": _self_limiting(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L631": _self_limiting(
+    f"{_CS}::L648": _self_limiting(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L634": RetentionDecision(
+    f"{_CS}::L651": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L640": RetentionDecision(
+    f"{_CSE}::L82": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L657": RetentionDecision(
+    f"{_CS}::L660": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"

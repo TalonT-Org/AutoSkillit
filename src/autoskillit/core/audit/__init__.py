@@ -36,10 +36,18 @@ if TYPE_CHECKING:
         VerifiedAuditCycle,
     )
     from autoskillit.core.audit.audit_semantic_codec import (
+        PRESCRIPTIVE_MECHANISM_CUES,
+        SUBSTITUTION_MARKERS,
         AuditSemanticCodecError,
+        ProbedRequirement,
+        SubstitutionFinding,
+        SubstitutionTrigger,
         canonical_full_reference_records_match,
+        evaluate_diff_mock_of_prescribed_symbol,
+        evaluate_rationale_contradiction,
         load_audit_semantic_result,
         load_standalone_audit_evidence,
+        probe_substitutions,
     )
     from autoskillit.core.audit.closure_hashing import (
         HASH_RE,
@@ -80,6 +88,11 @@ __all__ = [
     "AuditSemanticCodecError",
     "HASH_RE",
     "InventoryAdmissionEvaluator",
+    "PRESCRIPTIVE_MECHANISM_CUES",
+    "ProbedRequirement",
+    "SUBSTITUTION_MARKERS",
+    "SubstitutionFinding",
+    "SubstitutionTrigger",
     "VerificationResult",
     "VerifiedAuditCycle",
     "canonical_full_reference_records_match",
@@ -90,9 +103,12 @@ __all__ = [
     "compute_report_hash",
     "compute_request_hash",
     "compute_row_hash",
+    "evaluate_diff_mock_of_prescribed_symbol",
+    "evaluate_rationale_contradiction",
     "load_audit_semantic_result",
     "load_standalone_audit_evidence",
     "parse_canonical_json_bytes",
+    "probe_substitutions",
     "verify_closure_report",
 ]
 

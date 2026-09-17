@@ -42,8 +42,8 @@ _ALLOWED_RAW_RECIPE_READS: frozenset[tuple[str, str, str]] = frozenset(
     {
         (
             "cli/session/_session_order.py",
-            "order",
-            "load_recipe(_match.path)",
+            "_resolve_order_recipe",
+            "load_recipe(match.path)",
         ),  # Validate the selected recipe before launching its session.
         (
             "cli/doctor/_doctor_config.py",

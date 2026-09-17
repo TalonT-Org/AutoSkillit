@@ -223,6 +223,62 @@ def _projection_skills_manifest(
     }
 
 
+def _first_tools_line_index(lines: list[str]) -> int | None:
+    """Return the first indentation-tolerant ``tools:`` line in a definition."""
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("tools:"):
+            return index
+    return None
+
+
+def _render_agent_definition(path: Path, mcp_tool_prefix: str) -> None:
+    """Rewrite and re-validate one eligible agent definition transactionally."""
+    content = path.read_bytes().decode("utf-8")
+    lines = content.splitlines(keepends=True)
+    tools_line_idx = _first_tools_line_index(lines)
+    if tools_line_idx is None:
+        return
+
+    source_def = load_agent_definition(path)
+    if not any(tool.startswith("mcp__") for tool in source_def.tools):
+        return
+    for tool in source_def.tools:
+        if tool.startswith("mcp__"):
+            validate_agent_tool_canonical(tool)
+
+    projected_tools = tuple(
+        project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools
+    )
+    new_tools_value = "[" + ", ".join(projected_tools) + "]"
+    original_tools_line = lines[tools_line_idx]
+    indent = original_tools_line[: len(original_tools_line) - len(original_tools_line.lstrip())]
+    line_ending = (
+        "\r\n"
+        if original_tools_line.endswith("\r\n")
+        else "\n"
+        if original_tools_line.endswith("\n")
+        else ""
+    )
+    lines[tools_line_idx] = f"{indent}tools: {new_tools_value}{line_ending}"
+    rendered = "".join(lines)
+    atomic_write(path, rendered)
+
+    rendered_def = load_agent_definition(path)
+    if rendered_def.name != source_def.name:
+        raise SkillContractError(
+            f"agent definition name changed after rendering: "
+            f"{source_def.name!r} → {rendered_def.name!r}"
+        )
+    if rendered_def.body != source_def.body:
+        raise SkillContractError(
+            f"agent definition body changed after rendering: {source_def.name!r}"
+        )
+    if projected_tools != rendered_def.tools:
+        raise SkillContractError(
+            f"agent definition tool projection mismatch after rendering: {source_def.name!r}"
+        )
+
+
 def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
     """Rewrite MCP tool prefixes in copied agent definitions.
 
@@ -247,61 +303,9 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
         if path.name in {"AGENTS.md", "CLAUDE.md"}:
             continue
         try:
-            content = path.read_bytes().decode("utf-8")
-        except (FileNotFoundError, NotADirectoryError):
+            _render_agent_definition(path, mcp_tool_prefix)
+        except (FileNotFoundError, NotADirectoryError, UnicodeDecodeError):
             continue
-        lines = content.splitlines(keepends=True)
-        tools_line_idx: int | None = None
-        for idx, line in enumerate(lines):
-            stripped = line.lstrip()
-            if stripped.startswith("tools:"):
-                tools_line_idx = idx
-                break
-        if tools_line_idx is None:
-            continue
-
-        source_def = load_agent_definition(path)
-        has_mcp_tools = any(tool.startswith("mcp__") for tool in source_def.tools)
-        if not has_mcp_tools:
-            continue
-
-        for tool in source_def.tools:
-            if tool.startswith("mcp__"):
-                validate_agent_tool_canonical(tool)
-
-        projected_tools = tuple(
-            project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools
-        )
-        new_tools_value = "[" + ", ".join(projected_tools) + "]"
-        original_tools_line = lines[tools_line_idx]
-        indent = original_tools_line[
-            : len(original_tools_line) - len(original_tools_line.lstrip())
-        ]
-        line_ending = (
-            "\r\n"
-            if original_tools_line.endswith("\r\n")
-            else "\n"
-            if original_tools_line.endswith("\n")
-            else ""
-        )
-        lines[tools_line_idx] = f"{indent}tools: {new_tools_value}{line_ending}"
-        rendered = "".join(lines)
-        atomic_write(path, rendered)
-
-        rendered_def = load_agent_definition(path)
-        if rendered_def.name != source_def.name:
-            raise SkillContractError(
-                f"agent definition name changed after rendering: "
-                f"{source_def.name!r} → {rendered_def.name!r}"
-            )
-        if rendered_def.body != source_def.body:
-            raise SkillContractError(
-                f"agent definition body changed after rendering: {source_def.name!r}"
-            )
-        if projected_tools != rendered_def.tools:
-            raise SkillContractError(
-                f"agent definition tool projection mismatch after rendering: {source_def.name!r}"
-            )
 
 
 def materialize_sanitized_plugin_root(

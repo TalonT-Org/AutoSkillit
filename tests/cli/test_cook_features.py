@@ -45,13 +45,14 @@ class TestOrderSubsetGate:
         mock_cfg.agent_backend.backend = "claude-code"
         return mock_cfg
 
-    def test_order_hard_error_non_interactive_on_disabled_subset(
+    @patch("autoskillit.cli.subprocess.Popen")
+    def test_order_non_interactive_temporarily_enables_disabled_subset(
         self,
+        mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
     ) -> None:
-        """T-VAL-008: order exits 1 non-interactively when recipe references a disabled subset."""
+        """T-VAL-008: non-interactive order temporarily enables required subsets."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
@@ -63,12 +64,18 @@ class TestOrderSubsetGate:
         mock_stdin = MagicMock()
         mock_stdin.isatty.return_value = False
         monkeypatch.setattr("sys.stdin", mock_stdin)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(
+            "autoskillit.cli.ui._timed_input.timed_prompt",
+            MagicMock(side_effect=AssertionError("non-interactive order must not prompt")),
+        )
+        configure_popen(mock_run, returncode=0)
 
-        with pytest.raises(SystemExit) as exc_info:
-            cli.order("github-recipe")
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "requires subset" in captured.out.lower()
+        cli.order("github-recipe")
+
+        mock_run.assert_called_once()
+        passed_env = mock_run.call_args.kwargs["env"]
+        assert passed_env["AUTOSKILLIT_SUBSETS__DISABLED"] == "@json []"
 
     @patch("autoskillit.cli.subprocess.Popen")
     def test_order_enable_temporarily_sets_env_override(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, assert_never
 
 from ..audit.closure_hashing import canonical_json_bytes, compute_canonical_hash
 from ._type_audit_admission_validation import (
@@ -18,6 +18,7 @@ __all__ = [
     "AUDIT_CYCLE_SCHEMA_VERSION",
     "AuditAssessment",
     "AuditAssessmentRow",
+    "AuditDisposition",
     "AuditCycleAuthority",
     "AuditCycleHead",
     "AuditVerdict",
@@ -56,16 +57,39 @@ class AuditVerdict(StrEnum):
     NO_GO = "NO GO"
 
 
+class AuditDisposition(StrEnum):
+    NON_BLOCKING = "NON_BLOCKING"
+    BLOCKING = "BLOCKING"
+    PRE_SUBMISSION_ONLY = "PRE_SUBMISSION_ONLY"
+
+
 class AuditAssessment(StrEnum):
     COVERED = "COVERED"
     MISSING = "MISSING"
     ODD = "ODD"
     CONFLICT = "CONFLICT"
     NAMED_DEVIATION = "NAMED_DEVIATION"
+    UNPRESCRIBED_SUBSTITUTION = "UNPRESCRIBED_SUBSTITUTION"
+
+    @property
+    def disposition(self) -> AuditDisposition:
+        match self:
+            case AuditAssessment.COVERED | AuditAssessment.ODD:
+                return AuditDisposition.NON_BLOCKING
+            case (
+                AuditAssessment.MISSING
+                | AuditAssessment.CONFLICT
+                | AuditAssessment.UNPRESCRIBED_SUBSTITUTION
+            ):
+                return AuditDisposition.BLOCKING
+            case AuditAssessment.NAMED_DEVIATION:
+                return AuditDisposition.PRE_SUBMISSION_ONLY
+            case _ as unreachable:
+                assert_never(unreachable)
 
     @property
     def blocking(self) -> bool:
-        return self in {AuditAssessment.MISSING, AuditAssessment.CONFLICT}
+        return self.disposition is AuditDisposition.BLOCKING
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +119,11 @@ class AuditAssessmentRow:
         assessment: AuditAssessment,
         evidence_summary: str,
     ) -> Self:
+        if assessment.disposition is AuditDisposition.PRE_SUBMISSION_ONLY:
+            raise ValueError(
+                f"AuditAssessmentRow[{requirement_id}]: {assessment.value} must be "
+                "resolved to a submittable label before an authority row is created"
+            )
         payload = {
             "assessment": assessment.value,
             "evidence_summary": evidence_summary,

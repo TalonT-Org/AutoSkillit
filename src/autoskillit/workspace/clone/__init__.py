@@ -127,6 +127,85 @@ def _record_repository_identity_source(
             )
 
 
+def _materialize_clone(
+    source: Path,
+    clone_path: Path,
+    branch: str,
+    strategy: str,
+    resolution: CloneSourceResolution,
+) -> tuple[Literal["remote", "local"], str, str]:
+    """Copy locally or clone the already-probed remote source into one run path."""
+    if strategy == "clone_local":
+        shutil.copytree(str(source), str(clone_path))
+        logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
+        return "local", "strategy_clone_local", ""
+    if resolution.reason != "ok":
+        logger.warning(
+            "clone_origin_probe_failed",
+            source=str(source),
+            reason=resolution.reason,
+            stderr=resolution.stderr,
+        )
+        raise RuntimeError(
+            f"clone_origin_probe_failed: reason={resolution.reason};"
+            f" source={source}; stderr={resolution.stderr};"
+            f' if a local-only clone is intended, pass strategy="clone_local".'
+        )
+    cmd = ["git", "clone", "--origin", "origin"]
+    if branch:
+        cmd += ["--branch", branch]
+    cmd += [resolution.url, str(clone_path)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git clone failed:\nstderr: {result.stderr.strip()}\nstdout: {result.stdout.strip()}"
+        )
+    logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
+    return "remote", "ok", "origin"
+
+
+def _decontaminate_generated_files(clone_path: Path) -> None:
+    """Untrack and remove inherited generated files without making cleanup fatal."""
+    ls_gen = subprocess.run(
+        ["git", "ls-files", "--", *sorted(GENERATED_FILES)],
+        cwd=str(clone_path),
+        capture_output=True,
+        text=True,
+    )
+    tracked_gen = [f.strip() for f in ls_gen.stdout.splitlines() if f.strip()]
+    if tracked_gen:
+        rm_gen = subprocess.run(
+            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_gen],
+            cwd=str(clone_path),
+            capture_output=True,
+            text=True,
+        )
+        if rm_gen.returncode == 0:
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "--no-verify",
+                    "-m",
+                    "chore: untrack generated files inherited from source",
+                ],
+                cwd=str(clone_path),
+                capture_output=True,
+                text=True,
+            )
+        else:
+            logger.warning(
+                "clone_decontaminate_untrack_failed",
+                clone_path=str(clone_path),
+                stderr=rm_gen.stderr.strip(),
+            )
+    for gen_path in GENERATED_FILES:
+        try:
+            os.unlink(clone_path / gen_path)
+        except FileNotFoundError:
+            pass
+
+
 def clone_repo(
     source_dir: str,
     run_name: str,
@@ -231,40 +310,13 @@ def clone_repo(
 
     resolution = _probe_clone_source_url(source)
 
-    if strategy == "clone_local":
-        shutil.copytree(str(source), str(clone_path))
-        logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
-        source_type: Literal["remote", "local"] = "local"
-        source_reason = "strategy_clone_local"
-        tracking_remote = ""
-    else:
-        if resolution.reason != "ok":
-            logger.warning(
-                "clone_origin_probe_failed",
-                source=str(source),
-                reason=resolution.reason,
-                stderr=resolution.stderr,
-            )
-            raise RuntimeError(
-                f"clone_origin_probe_failed: reason={resolution.reason};"
-                f" source={source}; stderr={resolution.stderr};"
-                f' if a local-only clone is intended, pass strategy="clone_local".'
-            )
-        cmd = ["git", "clone", "--origin", "origin"]
-        if branch:
-            cmd += ["--branch", branch]
-        cmd += [resolution.url, str(clone_path)]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            raise RuntimeError(
-                "git clone failed:"
-                f"\nstderr: {result.stderr.strip()}"
-                f"\nstdout: {result.stdout.strip()}"
-            )
-        logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
-        source_type = "remote"
-        source_reason = "ok"
-        tracking_remote = "origin"
+    source_type, source_reason, tracking_remote = _materialize_clone(
+        source,
+        clone_path,
+        branch,
+        strategy,
+        resolution,
+    )
 
     # Use caller-supplied override for clone push/fetch behavior only. Repository
     # identity remains bound to the configured source remote observed above.
@@ -282,48 +334,7 @@ def clone_repo(
         override_applied=bool(remote_url and remote_url != resolution.url),
     )
 
-    # Decontaminate: untrack inherited generated files
-    ls_gen = subprocess.run(
-        ["git", "ls-files", "--", *sorted(GENERATED_FILES)],
-        cwd=str(clone_path),
-        capture_output=True,
-        text=True,
-    )
-    tracked_gen = [f.strip() for f in ls_gen.stdout.splitlines() if f.strip()]
-    if tracked_gen:
-        rm_gen = subprocess.run(
-            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_gen],
-            cwd=str(clone_path),
-            capture_output=True,
-            text=True,
-        )
-        if rm_gen.returncode == 0:
-            subprocess.run(
-                [
-                    "git",
-                    "commit",
-                    "--no-verify",
-                    "-m",
-                    "chore: untrack generated files inherited from source",
-                ],
-                cwd=str(clone_path),
-                capture_output=True,
-                text=True,
-            )
-        else:
-            logger.warning(
-                "clone_decontaminate_untrack_failed",
-                clone_path=str(clone_path),
-                stderr=rm_gen.stderr.strip(),
-            )
-
-    # Delete on-disk generated files (covers clone_local copytree copies)
-    for gen_path in GENERATED_FILES:
-        full = clone_path / gen_path
-        try:
-            os.unlink(full)
-        except FileNotFoundError:
-            pass
+    _decontaminate_generated_files(clone_path)
 
     return {
         "clone_path": str(clone_path),
@@ -391,6 +402,18 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
     except OSError as exc:
         logger.error("clone_remove_failed", clone_path=clone_path, error=str(exc))
         return {"removed": "false", "reason": str(exc)}
+
+
+def _classify_push_failure(stderr_text: str, *, force: bool) -> str | None:
+    """Return the existing semantic error type for one failed push, if any."""
+    if force:
+        if "stale info" in stderr_text:
+            return "force_with_lease_stale"
+        if "no upstream configured" in stderr_text or "has no upstream branch" in stderr_text:
+            return "force_with_lease_no_upstream"
+    if "GH006" in stderr_text or "merge queue" in stderr_text.lower():
+        return "queued_branch"
+    return None
 
 
 def push_to_remote(
@@ -505,17 +528,9 @@ def push_to_remote(
             stderr=stderr_text,
         )
         failure: dict[str, str | bool] = {"success": False, "stderr": stderr_text}
-        if force:
-            if "stale info" in stderr_text:
-                failure["error_type"] = "force_with_lease_stale"
-            elif (
-                "no upstream configured" in stderr_text or "has no upstream branch" in stderr_text
-            ):
-                failure["error_type"] = "force_with_lease_no_upstream"
-        if "error_type" not in failure and (
-            "GH006" in stderr_text or "merge queue" in stderr_text.lower()
-        ):
-            failure["error_type"] = "queued_branch"
+        error_type = _classify_push_failure(stderr_text, force=force)
+        if error_type is not None:
+            failure["error_type"] = error_type
         return failure
 
     logger.info(

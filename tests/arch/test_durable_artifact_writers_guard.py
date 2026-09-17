@@ -91,7 +91,7 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # Projected SKILL.md documents — not a hook artifact.
         ("workspace/_projected_artifact/_publication.py", "materialize_agent_skill_tree"),
         # Rewritten agent .md frontmatter (MCP tool prefixes) — not a hook artifact.
-        ("workspace/_projected_artifact/_publication.py", "_render_agent_definitions"),
+        ("workspace/_projected_artifact/_publication.py", "_render_agent_definition"),
         # Projection manifest.json (digests only, no hook paths) — not a hook artifact.
         ("workspace/_projected_artifact/_publication.py", "materialize_sanitized_plugin_root"),
         # Verbatim byte-for-byte asset copy — no path is baked into the copy.

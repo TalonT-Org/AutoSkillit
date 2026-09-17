@@ -29,7 +29,6 @@ from autoskillit.core import (
     plugin_launch_binding_scope,
     resolve_project_dir,
 )
-from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -226,7 +225,6 @@ def cook(
         LAUNCH_ID_ENV_VAR,
         PROVIDER_PROFILE_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
-        BareResume,
         ExplorationVectorApplicabilityId,
         ExplorationVectorDisposition,
         FreshLaunch,
@@ -337,15 +335,14 @@ def cook(
             cook_system_prompt,
             managed_home.unavailability_payload,
         )
-        if isinstance(resume_spec, BareResume):
-            try:
-                sweep_orphaned_tethers(default_tether_dir())
-            except Exception:
-                logger.warning("cook_startup_tether_sweep_failed", exc_info=True)
-            backend.recover_cook_history()
+        from autoskillit.cli.session._session_launch_intent import (
+            _run_fresh_launch_ceremony,
+            prepare_resume_housekeeping,
+            resolve_interactive_launch,
+        )
 
-        from autoskillit.cli.session._session_launch_intent import resolve_interactive_launch
-
+        if not isinstance(resume_spec, NoResume):
+            prepare_resume_housekeeping(backend, resume_spec=resume_spec)
         launch = resolve_interactive_launch(
             resume_spec=resume_spec,
             session_type=SESSION_TYPE_COOK,
@@ -367,16 +364,13 @@ def cook(
             )
 
         from autoskillit.cli.session._session_startup_trace import StartupTrace
-        from autoskillit.cli.ui._timed_input import timed_prompt
 
         trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
-        confirm = timed_prompt(
-            "\nLaunch session? [Enter/n]",
-            default="",
-            timeout=120,
+        if not _run_fresh_launch_ceremony(
+            launch=launch,
+            is_tty=sys.stdin.isatty(),
             label="autoskillit cook",
-        )
-        if confirm.lower() in ("n", "no"):
+        ):
             return
         trace.record_launch_anchor()
         write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)

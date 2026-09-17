@@ -162,17 +162,18 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
         writer=(
             "autoskillit.workspace._projected_artifact._hook_repair:"
-            "repair_broken_plugin_cache_hooks"
+            "_repair_hook_payload_under_lease"
         ),
-        artifact="repaired hooks/hooks.json in an installed plugin-cache incarnation",
+        artifact="repaired hooks/hooks.json in an installed or projected plugin incarnation",
         machine_local=False,
         detection=None,
     ),
     DurableArtifactWriterDef(
         writer=(
-            "autoskillit.workspace._projected_artifact._hook_repair:repair_broken_projection_hooks"
+            "autoskillit.workspace._projected_artifact._hook_repair:"
+            "_write_projection_hook_manifest"
         ),
-        artifact="repaired hooks/hooks.json + manifest digest in a plugin-projections incarnation",
+        artifact="refreshed manifest digest after projection-hook repair",
         machine_local=False,
         detection=None,
     ),

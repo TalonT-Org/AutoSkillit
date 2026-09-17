@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import assert_never
 
@@ -17,9 +17,31 @@ from autoskillit.core import (
     ResumeSpec,
     SessionLocator,
     SessionSummary,
+    get_logger,
 )
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
-_Registry = Mapping[str, Mapping[str, object]]
+_Registry = Mapping[str, Mapping[str, object]]  # registry row shape produced by read_registry
+logger = get_logger(__name__)
+
+
+def prepare_resume_housekeeping(backend: CodingAgentBackend, *, resume_spec: ResumeSpec) -> None:
+    """Run the resume-related side effects that previously lived inside resolve_interactive_launch.
+
+    Cook and order invoke this before resolving a launch so the resolver stays pure.
+    The ``resume_spec`` is logged on failure so the launch route that triggered the
+    sweep can be correlated with the diagnostic payload.
+    """
+    try:
+        sweep_orphaned_tethers(default_tether_dir())
+    except (OSError, PermissionError, FileNotFoundError):
+        logger.warning(
+            "interactive_startup_tether_sweep_failed",
+            resume_spec_kind=type(resume_spec).__name__,
+            tether_dir=str(default_tether_dir()),
+            exc_info=True,
+        )
+    backend.recover_cook_history()
 
 
 def resolve_interactive_launch(
@@ -42,6 +64,38 @@ def resolve_interactive_launch(
             return FreshLaunch()
         case _ as unreachable:
             assert_never(unreachable)
+
+
+def _run_fresh_launch_ceremony(
+    *,
+    launch: InteractiveLaunch,
+    is_tty: bool,
+    label: str,
+    before_prompt: Callable[[], None] | None = None,
+    timeout: int = 120,
+) -> bool:
+    """Run the fresh-launch + TTY confirm ceremony shared by cook and order.
+
+    Returns True when the launch should proceed; False when the user cancelled
+    the confirmation prompt. The ceremony is skipped when ``launch`` is not a
+    ``FreshLaunch`` or the TTY is unavailable. ``before_prompt`` is invoked
+    only for fresh launches; it can render previews or warnings.
+    """
+    if not isinstance(launch, FreshLaunch):
+        return True
+    if before_prompt is not None:
+        before_prompt()
+    if not is_tty:
+        return True
+    from autoskillit.cli.ui._timed_input import timed_prompt
+
+    confirm = timed_prompt(
+        "\nLaunch session? [Enter/n]",
+        default="",
+        timeout=timeout,
+        label=label,
+    )
+    return confirm.lower() not in ("n", "no")
 
 
 def pick_session(

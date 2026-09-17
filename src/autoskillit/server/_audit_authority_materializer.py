@@ -22,6 +22,7 @@ from autoskillit.core import (
     AuditCycleHead,
     AuditCycleVerificationError,
     AuditCycleVerifier,
+    AuditDisposition,
     AuditFinalCommitRequest,
     AuditIdentityReservation,
     AuditMaterializationResult,
@@ -37,6 +38,7 @@ from autoskillit.core import (
     canonical_json_bytes,
     compute_bytes_hash,
     compute_canonical_hash,
+    evaluate_rationale_contradiction,
     load_audit_semantic_result,
     parse_plan_paths,
     read_stable_contained_bytes,
@@ -61,6 +63,25 @@ def _verify_semantic_references(
         verifier.verify_artifact_ref(reference)
     if remediation_ref is not None:
         verifier.verify_artifact_ref(remediation_ref)
+
+
+def _validate_semantic_assessment_floor(
+    assessments: tuple[AuditAssessmentRow, ...],
+) -> None:
+    for row in assessments:
+        if row.assessment.disposition is AuditDisposition.PRE_SUBMISSION_ONLY:
+            raise ValueError(f"{row.requirement_id}: {row.assessment.value} is not submittable")
+        finding = evaluate_rationale_contradiction(
+            row.requirement_id,
+            row.requirement_text,
+            row.evidence_summary,
+        )
+        if finding is not None and not row.assessment.blocking:
+            raise ValueError(
+                f"{row.requirement_id}: evidence describes a substitution "
+                f"({finding.matched_marker}) of a prescribed mechanism, but assessment "
+                f"{row.assessment.value} is not blocking"
+            )
 
 
 def normalize_audited_plan_refs(
@@ -277,22 +298,18 @@ class DefaultAuditAuthorityMaterializer:
                     semantic_result_path,
                     reservation.allowed_root,
                 )
-            except AuditSemanticCodecError as exc:
+                if not canonical_full_reference_records_match(
+                    reservation.audited_plan_refs,
+                    semantic.audited_plan_refs,
+                ):
+                    raise ValueError("semantic audited references differ from the reservation")
+                _validate_semantic_assessment_floor(semantic.assessments)
+            except (AuditSemanticCodecError, ValueError) as exc:
                 return self._semantic_rejection(
                     attempt_id=attempt_id,
                     installation_version=installation_version,
                     semantic_digest=semantic_digest,
                     error=str(exc),
-                )
-            if not canonical_full_reference_records_match(
-                reservation.audited_plan_refs,
-                semantic.audited_plan_refs,
-            ):
-                return self._semantic_rejection(
-                    attempt_id=attempt_id,
-                    installation_version=installation_version,
-                    semantic_digest=semantic_digest,
-                    error="semantic audited references differ from the reservation",
                 )
 
             verifier = AuditCycleVerifier(reservation.allowed_root)

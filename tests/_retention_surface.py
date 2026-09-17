@@ -147,6 +147,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/session_skills/_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         ),
+        ("src/autoskillit/workspace/session_skills/_manager.py", "_reclaim_stale_entry"),
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
@@ -160,6 +161,10 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         (
             "src/autoskillit/workspace/_installed/_projection_cache.py",
             "_reconcile_projection_entry",
+        ),
+        (
+            "src/autoskillit/workspace/_installed/_projection_cache.py",
+            "_reconcile_projection_retirement",
         ),
         (
             "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
@@ -182,8 +187,16 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "prune_stale_generations",
         ),
         (
+            "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+            "_collect_stale_generation_candidates",
+        ),
+        (
+            "src/autoskillit/workspace/_projected_artifact/_generation_prune.py",
+            "_reconcile_generation_under_lease",
+        ),
+        (
             "src/autoskillit/workspace/_installed/_state.py",
-            "_enqueue_legacy_installed_plugin_versions",
+            "_enqueue_legacy_installed_plugin_candidate",
         ),
         (
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
@@ -192,6 +205,18 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         (
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
+        ),
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_repair_hook_incarnation",
+        ),
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_hook_repair_needed",
+        ),
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_repair_hook_payload_under_lease",
         ),
         (
             "src/autoskillit/execution/evidence/_session_log_recovery.py",
@@ -280,6 +305,12 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
             "DefaultSessionSkillManager.cleanup_stale",
         )
     ),
+    (
+        "src/autoskillit/workspace/session_skills/_manager.py",
+        "_reclaim_stale_entry",
+    ): _convergence_adapters(
+        ("src/autoskillit/workspace/session_skills/_manager.py", "_reclaim_stale_entry")
+    ),
     ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"): _convergence_adapters(
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates")
     ),
@@ -323,6 +354,15 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         (
             "src/autoskillit/workspace/_installed/_projection_cache.py",
             "_reconcile_projection_entry",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
+        "_reconcile_projection_retirement",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_installed/_projection_cache.py",
+            "_reconcile_projection_retirement",
         )
     ),
     (
@@ -371,12 +411,30 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         )
     ),
     (
+        "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+        "_collect_stale_generation_candidates",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+            "_collect_stale_generation_candidates",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_generation_prune.py",
+        "_reconcile_generation_under_lease",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_generation_prune.py",
+            "_reconcile_generation_under_lease",
+        )
+    ),
+    (
         "src/autoskillit/workspace/_installed/_state.py",
-        "_enqueue_legacy_installed_plugin_versions",
+        "_enqueue_legacy_installed_plugin_candidate",
     ): _convergence_adapters(
         (
             "src/autoskillit/workspace/_installed/_state.py",
-            "_enqueue_legacy_installed_plugin_versions",
+            "_enqueue_legacy_installed_plugin_candidate",
         )
     ),
     (
@@ -395,6 +453,33 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         (
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "_repair_hook_incarnation",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_repair_hook_incarnation",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "_hook_repair_needed",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_hook_repair_needed",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "_repair_hook_payload_under_lease",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "_repair_hook_payload_under_lease",
         )
     ),
     (
@@ -512,16 +597,16 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "GenerationArtifactRetirementOwner.try_reclaim",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/_projected_artifact/_generation_prune.py",
-        "_reconcile_generation_candidate",
-    ): _DELEGATED_MUTATION_REASON,
-    (
         "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
         "_sweep_orphaned_staging",
     ): _DELEGATED_MUTATION_REASON,
     (
         "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
         "_rollback_repair",
+    ): _DELEGATED_MUTATION_REASON,
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "_safe_incarnations",
     ): _DELEGATED_MUTATION_REASON,
     (
         "src/autoskillit/workspace/_installed/_projection_cache.py",
@@ -630,6 +715,7 @@ _CS = (
     "src/autoskillit/workspace/session_skills/_manager.py"
     "::DefaultSessionSkillManager.cleanup_stale"
 )
+_CSE = "src/autoskillit/workspace/session_skills/_manager.py::_reclaim_stale_entry"
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
 _SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
@@ -640,6 +726,9 @@ _ECMR = (
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_installed/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_entry"
+_PRT = (
+    "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_retirement"
+)
 _PC = (
     "src/autoskillit/core/plugins/_plugin_artifact_retirement.py::"
     "PluginArtifactRetirementEngine.try_reclaim"
@@ -655,13 +744,27 @@ _GP = (
     "src/autoskillit/workspace/_projected_artifact/"
     "_generation_publication.py::prune_stale_generations"
 )
-_IL = "src/autoskillit/workspace/_installed/_state.py::_enqueue_legacy_installed_plugin_versions"
+_GPC = (
+    "src/autoskillit/workspace/_projected_artifact/"
+    "_generation_publication.py::_collect_stale_generation_candidates"
+)
+_GPU = (
+    "src/autoskillit/workspace/_projected_artifact/"
+    "_generation_prune.py::_reconcile_generation_under_lease"
+)
+_IL = "src/autoskillit/workspace/_installed/_state.py::_enqueue_legacy_installed_plugin_candidate"
 _HC = (
     "src/autoskillit/workspace/_projected_artifact/"
     "_hook_repair.py::repair_broken_plugin_cache_hooks"
 )
 _HP = (
     "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::repair_broken_projection_hooks"
+)
+_HR = "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::_repair_hook_incarnation"
+_HRP = "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::_hook_repair_needed"
+_HRL = (
+    "src/autoskillit/workspace/_projected_artifact/"
+    "_hook_repair.py::_repair_hook_payload_under_lease"
 )
 _SR = "src/autoskillit/execution/evidence/_session_log_recovery.py::recover_crashed_sessions"
 _SRE = "src/autoskillit/execution/evidence/_session_log_recovery.py::_eligible_enrolled_trace"
@@ -791,29 +894,29 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- workspace.session_skills._manager::cleanup_stale --
-    f"{_CS}::L626": _self_limiting(
+    f"{_CS}::L643": _self_limiting(
         "The candidate root vanished or was replaced before its scan; nothing there to reclaim."
     ),
-    f"{_CS}::L629": _self_limiting(
+    f"{_CS}::L646": _self_limiting(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L631": _self_limiting(
+    f"{_CS}::L648": _self_limiting(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L634": RetentionDecision(
+    f"{_CS}::L651": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L640": RetentionDecision(
+    f"{_CSE}::L82": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L657": RetentionDecision(
+    f"{_CS}::L660": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"
@@ -920,65 +1023,65 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._installed._projection_cache::prune_stale_projections --
-    f"{_PP}::L626": _retries_after_input_changes(
+    f"{_PP}::L699": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L629": _self_limiting(
+    f"{_PP}::L702": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L638": _retries_after_input_changes(
+    f"{_PP}::L711": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),
     # -- workspace._installed._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L417": _retries_after_input_changes(
+    f"{_PRE}::L469": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L420": _retries_after_input_changes(
+    f"{_PRE}::L472": _retries_after_input_changes(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L422": _self_limiting(
+    f"{_PRE}::L474": _self_limiting(
         "A deterministic residue staging entry delegates to its original-key locked "
         "resume transition."
     ),
-    f"{_PRE}::L430": _retries_after_input_changes(
+    f"{_PRE}::L482": _retries_after_input_changes(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L432": _retries_after_input_changes(
+    f"{_PRE}::L484": _retries_after_input_changes(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRE}::L440": RetentionDecision(
+    f"{_PRT}::L513": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRE}::L442": _retries_after_input_changes(
+    f"{_PRT}::L515": _retries_after_input_changes(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRE}::L448": _self_limiting(
+    f"{_PRT}::L521": _self_limiting(
         "A permanently invalid projection delegates to the terminal quarantine transition "
         "under the held lease and lock."
     ),
-    f"{_PRE}::L455": _retries_after_input_changes(
+    f"{_PRT}::L528": _retries_after_input_changes(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRE}::L458": _retries_after_input_changes(
+    f"{_PRT}::L531": _retries_after_input_changes(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRE}::L460": _self_limiting(
+    f"{_PRT}::L533": _self_limiting(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRE}::L461": _self_limiting(
+    f"{_PRT}::L534": _self_limiting(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRE}::L463": _retries_after_input_changes(
+    f"{_PRT}::L536": _retries_after_input_changes(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),
@@ -1102,116 +1205,120 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "liveness evidence."
     ),
     # -- workspace._projected_artifact._generation_publication::prune_stale_generations --
-    f"{_GP}::L529": _self_limiting(
+    f"{_GP}::L561": _self_limiting(
         "The generation store does not exist, so this invocation has no candidates to prune."
     ),
-    f"{_GP}::L542": _self_limiting(
+    f"{_GPC}::L519": _self_limiting(
         "A hidden, symlinked, or non-directory version entry cannot contain a generation "
         "incarnation this reclaimer owns."
     ),
-    f"{_GP}::L550": _self_limiting(
+    f"{_GPC}::L527": _self_limiting(
         "An unmanaged hidden entry is outside the deterministic generation-residue "
         "lifecycle namespace."
     ),
-    f"{_GP}::L552": _self_limiting(
+    f"{_GPC}::L529": _self_limiting(
         "A symlink or non-directory incarnation cannot be a managed generation retirement "
         "candidate."
     ),
-    f"{_GP}::L554": _self_limiting(
+    f"{_GPC}::L531": _self_limiting(
         "The selected generation remains active and is not a stale candidate for this pass."
     ),
-    f"{_GP}::L557": _self_limiting(
+    f"{_GP}::L572": _self_limiting(
         "The generation root or version directory vanished during enumeration, leaving no "
         "stable candidate set for this pass."
     ),
-    f"{_GP}::L560": _self_limiting(
+    f"{_GP}::L575": _self_limiting(
         "Generation enumeration hit an I/O failure, so this fail-open maintenance pass "
         "defers every candidate without making a retention decision."
     ),
-    # -- workspace._installed._state::_enqueue_legacy_installed_plugin_versions --
-    f"{_IL}::L418": _self_limiting(
+    # -- workspace._projected_artifact._generation_prune::_reconcile_generation_under_lease --
+    f"{_GPU}::L302": _retries_after_input_changes(
+        "Post-lease containment or selection revalidation changed, so the candidate remains "
+        "untouched until a later scan sees a stable eligible generation."
+    ),
+    f"{_GPU}::L306": _self_limiting(
+        "A permanently invalid generation delegates to terminal quarantine while the writer "
+        "lease remains held."
+    ),
+    f"{_GPU}::L315": _retries_after_input_changes(
+        "Exact generation identity is temporarily unavailable, an inspection failure rather "
+        "than authority to quarantine or retire the candidate."
+    ),
+    f"{_GPU}::L317": _retries_after_input_changes(
+        "An operational identity read failure leaves the generation retryable on a later pass."
+    ),
+    f"{_GPU}::L320": _retries_after_input_changes(
+        "The retirement queue could not be read to record this generation candidate safely."
+    ),
+    f"{_GPU}::L322": _self_limiting(
+        "A newly created exact retirement record completes this generation's current disposition."
+    ),
+    # -- workspace._installed._state::_enqueue_legacy_installed_plugin_candidate --
+    f"{_IL}::L458": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L421": _self_limiting(
+    f"{_IL}::L461": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L445": _self_limiting(
+    f"{_IL}::L485": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L451": _self_limiting(
+    f"{_IL}::L491": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L453": _resolves_with_contention(
+    f"{_IL}::L493": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --
-    f"{_HC}::L232": _self_limiting(
+    f"{_HC}::L439": _self_limiting(
         "The plugin cache root is absent, leaving no hook incarnation to repair."
     ),
-    f"{_HC}::L247": _self_limiting(
-        "An incarnation without hooks.json has no hook payload this repairer can own."
-    ),
-    f"{_HC}::L244": _self_limiting(
-        "The content-fingerprinted quarantine marker already records this hooks payload's "
-        "terminal result."
-    ),
-    f"{_HC}::L257": _self_limiting(
-        "A valid unbroken hook payload requires no repair or further lifecycle mutation."
-    ),
-    f"{_HC}::L262": _self_limiting(
-        "The payload changed to a marked incarnation before the lease, so its disposition "
-        "is complete."
-    ),
-    f"{_HC}::L276": _self_limiting(
-        "A durable quarantine marker and QUARANTINED outcome complete this invalid payload's "
-        "lifecycle."
-    ),
-    f"{_HC}::L274": _self_limiting(
-        "The hook payload became valid under the lease and no repair remains necessary."
-    ),
-    f"{_HC}::L292": _self_limiting(
-        "Identity validation writes a durable quarantine marker before reporting the terminal "
-        "outcome."
-    ),
-    f"{_HC}::L335": _resolves_with_contention(
-        "An exclusive hook lease is held by another live repairer and will release."
-    ),
-    f"{_HC}::L344": _retries_after_input_changes(
-        "A transient hook read, write, or rollback failure leaves the candidate retryable."
-    ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_projection_hooks --
-    f"{_HP}::L365": _self_limiting(
+    f"{_HP}::L494": _self_limiting(
         "The projections root is absent, leaving no projection hook payload to repair."
     ),
-    f"{_HP}::L379": _self_limiting(
-        "A projection without hooks.json has no hook payload this repairer can own."
+    # -- workspace._projected_artifact._hook_repair::_hook_repair_needed --
+    f"{_HRP}::L272": _self_limiting(
+        "An incarnation without hooks.json has no hook payload this repairer can own."
     ),
-    f"{_HP}::L376": _self_limiting(
+    f"{_HRP}::L275": _self_limiting(
         "The content-fingerprinted quarantine marker already records this hooks payload's "
         "terminal result."
     ),
-    f"{_HP}::L389": _self_limiting(
-        "A valid unbroken projection hook payload requires no repair or lifecycle mutation."
+    f"{_HRP}::L279": _self_limiting(
+        "A malformed preflight payload is routed into the held-lease repair path before any "
+        "durable quarantine decision is made."
     ),
-    f"{_HP}::L394": _self_limiting(
+    # -- workspace._projected_artifact._hook_repair::_repair_hook_incarnation --
+    f"{_HR}::L371": _self_limiting(
+        "The unleased preflight found no relocatable or dispatcher repair work for this payload."
+    ),
+    f"{_HR}::L373": _self_limiting(
+        "The lease-held transaction owns the final repaired, quarantined, or quiet outcome."
+    ),
+    f"{_HR}::L383": _resolves_with_contention(
+        "An exclusive hook lease is held by another live repairer and will release."
+    ),
+    f"{_HR}::L389": _retries_after_input_changes(
+        "A transient hook read, write, or rollback failure leaves the candidate retryable."
+    ),
+    # -- workspace._projected_artifact._hook_repair::_repair_hook_payload_under_lease --
+    f"{_HRL}::L296": _self_limiting(
         "The payload changed to a marked incarnation before the lease, completing its disposition."
     ),
-    f"{_HP}::L408": _self_limiting(
+    f"{_HRL}::L301": _self_limiting(
         "A durable quarantine marker and QUARANTINED outcome complete this invalid payload's "
         "lifecycle."
     ),
-    f"{_HP}::L406": _self_limiting(
+    f"{_HRL}::L307": _self_limiting(
         "The hook payload became valid under the lease and no repair remains necessary."
     ),
-    f"{_HP}::L465": _resolves_with_contention(
-        "An exclusive projection hook lease is held by another live repairer and will release."
-    ),
-    f"{_HP}::L474": _retries_after_input_changes(
-        "A transient projection hook read, write, or rollback failure leaves the candidate "
-        "retryable."
+    f"{_HRL}::L313": _self_limiting(
+        "Identity validation writes a durable quarantine marker before reporting the terminal "
+        "outcome."
     ),
     # -- execution._session_log_recovery crash-recovery helpers --
     # Coordinates include the child-outcome reconciliation pass from issue #4623,

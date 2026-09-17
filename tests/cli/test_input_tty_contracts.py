@@ -129,14 +129,17 @@ def test_prompt_recipe_choice_noninteractive_exits(
     assert exc_info.value.code == 1
 
 
-def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """cook() launch-confirm prompt must raise SystemExit(1) when not interactive."""
+def test_cook_noninteractive_skips_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-interactive cook launch proceeds without asking for confirmation."""
     from contextlib import contextmanager
     from unittest.mock import MagicMock
 
     from autoskillit.cli.session._session_cook import cook
     from autoskillit.core import (
         CompiledSessionSkillCatalogAuthority,
+        FreshLaunch,
         ManagedSessionHome,
         SkillProjectionContextAuthority,
         ValidatedAddDir,
@@ -169,16 +172,30 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_cook.shutil.which",
-        lambda _name: "/usr/bin/claude",
+        lambda _name, **_kwargs: "/usr/bin/claude",
     )
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
-    with pytest.raises(SystemExit) as exc_info:
+    prompt = MagicMock(side_effect=AssertionError("non-interactive cook must not prompt"))
+    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", prompt)
+    captured: list[object] = []
+
+    def _capture_prepare_interactive_launch(*args: object, **kwargs: object) -> None:
+        captured.append(kwargs.get("launch"))
+        raise RuntimeError("launch preparation reached")
+
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_cook.prepare_interactive_launch",
+        _capture_prepare_interactive_launch,
+    )
+    with pytest.raises(RuntimeError, match="launch preparation reached"):
         cook(backend=ClaudeCodeBackend())
-    assert exc_info.value.code == 1
+    prompt.assert_not_called()
+    assert len(captured) == 1
+    assert isinstance(captured[0], FreshLaunch)
 
 
 def test_run_workspace_clean_noninteractive_exits(

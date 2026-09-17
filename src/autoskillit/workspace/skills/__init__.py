@@ -69,6 +69,20 @@ def _dir_mtime(path: Path) -> float:
         return 0.0
 
 
+def _validate_invocation_member(skill: SkillInfo, execution_role: SkillExecutionRole) -> None:
+    if skill.invalidities:
+        raise SkillContractError(
+            f"invalid contract for {skill.name!r}: {render_skill_invalidities(skill.invalidities)}"
+        )
+    if skill.execution_role is not execution_role:
+        actual = skill.execution_role.value if skill.execution_role is not None else "invalid"
+        raise SkillContractError(
+            f"skill {skill.name!r} requires {actual} execution role; "
+            f"invocation requires {execution_role.value}"
+        )
+    validate_skill_capability_roles(skill.uses_capabilities, execution_role)
+
+
 class DefaultSkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""
 
@@ -418,29 +432,11 @@ class DefaultSkillResolver:
                 resolved_by_name[dependency] = member
             return member
 
-        def validate_member(skill: SkillInfo) -> None:
-            if skill.invalidities:
-                raise SkillContractError(
-                    f"invalid contract for {skill.name!r}: "
-                    f"{render_skill_invalidities(skill.invalidities)}"
-                )
-            if skill.execution_role is not execution_role:
-                actual = (
-                    skill.execution_role.value if skill.execution_role is not None else "invalid"
-                )
-                raise SkillContractError(
-                    f"skill {skill.name!r} requires {actual} execution role; "
-                    f"invocation requires {execution_role.value}"
-                )
-            validate_skill_capability_roles(skill.uses_capabilities, execution_role)
-
         def visit(skill: SkillInfo) -> None:
             nonlocal pack_catalog
-            if skill.name in visited:
+            if skill.name in visited or skill.name in visiting:
                 return
-            if skill.name in visiting:
-                return
-            validate_member(skill)
+            _validate_invocation_member(skill, execution_role)
             visiting.add(skill.name)
             closure.append(skill)
             for dependency in skill.activate_deps:

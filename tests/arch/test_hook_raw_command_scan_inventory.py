@@ -238,16 +238,16 @@ def _observed_raw_scans() -> tuple[tuple[str, str, str], ...]:
 _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
     {
         # _classification/_interpreters.py -- the authority's own internal
-        # tokenizer use (all_evaluated_segments/tokenize_shell_payload_segments
-        # feeding each other and the tokenizer facade).
+        # tokenizer use (_iter_evaluated_segments / all_evaluated_segments_with_provenance /
+        # tokenize_shell_payload_segments feeding each other and the tokenizer facade).
         (
             "hooks/_classification/_interpreters.py",
-            "all_evaluated_segments",
+            "_iter_evaluated_segments",
             "tokenize_command_segments",
         ),
         (
             "hooks/_classification/_interpreters.py",
-            "all_evaluated_segments",
+            "_iter_evaluated_segments",
             "tokenize_shell_payload_segments",
         ),
         (

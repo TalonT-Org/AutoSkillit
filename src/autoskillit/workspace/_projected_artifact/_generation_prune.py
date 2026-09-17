@@ -265,40 +265,62 @@ def _reconcile_generation_candidate(
     except (OSError, RuntimeError):
         return _GenerationPruneDisposition.DEFERRED_IO_ERROR
     try:
-        refusal = _revalidate_generation_mutation_target(
+        return _reconcile_generation_under_lease(
             candidate,
             store_root=store_root,
             version_dir=version_dir,
             home=home,
             plugin_ref=plugin_ref,
+            owner=owner,
+            not_before=not_before,
         )
-        if refusal is not None:
-            return refusal
-        try:
-            identity = owner.identity_for_path(candidate)
-        except PluginArtifactValidationError:
-            return _quarantine_invalid_generation(
-                candidate,
-                store_root=store_root,
-                version_dir=version_dir,
-                home=home,
-                plugin_ref=plugin_ref,
-                owner=owner,
-            )
-        except PluginArtifactUnavailableError:
-            return _GenerationPruneDisposition.DEFERRED_UNAVAILABLE
-        except (OSError, RuntimeError):
-            return _GenerationPruneDisposition.DEFERRED_IO_ERROR
-        enqueued = owner.enqueue_retirement(identity, not_before)
-        if enqueued is None:
-            return _GenerationPruneDisposition.DEFERRED_QUEUE_UNREADABLE
-        if enqueued.created:
-            return _GenerationPruneDisposition.QUEUED_FOR_RETIREMENT
-        return _GenerationPruneDisposition.ALREADY_QUEUED
     except (OSError, RuntimeError):
         return _GenerationPruneDisposition.DEFERRED_IO_ERROR
     finally:
         writer.close_preserving()
+
+
+def _reconcile_generation_under_lease(
+    candidate: Path,
+    *,
+    store_root: Path,
+    version_dir: Path,
+    home: ManagedHome,
+    plugin_ref: str,
+    owner: GenerationArtifactRetirementOwner,
+    not_before: datetime,
+) -> _GenerationPruneDisposition:
+    """Revalidate and retire one candidate while its caller owns the writer lease."""
+    refusal = _revalidate_generation_mutation_target(
+        candidate,
+        store_root=store_root,
+        version_dir=version_dir,
+        home=home,
+        plugin_ref=plugin_ref,
+    )
+    if refusal is not None:
+        return refusal
+    try:
+        identity = owner.identity_for_path(candidate)
+    except PluginArtifactValidationError:
+        return _quarantine_invalid_generation(
+            candidate,
+            store_root=store_root,
+            version_dir=version_dir,
+            home=home,
+            plugin_ref=plugin_ref,
+            owner=owner,
+        )
+    except PluginArtifactUnavailableError:
+        return _GenerationPruneDisposition.DEFERRED_UNAVAILABLE
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    enqueued = owner.enqueue_retirement(identity, not_before)
+    if enqueued is None:
+        return _GenerationPruneDisposition.DEFERRED_QUEUE_UNREADABLE
+    if enqueued.created:
+        return _GenerationPruneDisposition.QUEUED_FOR_RETIREMENT
+    return _GenerationPruneDisposition.ALREADY_QUEUED
 
 
 def _log_generation_prune_reconcile(

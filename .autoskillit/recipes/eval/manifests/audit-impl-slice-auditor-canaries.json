@@ -1,0 +1,65 @@
+[
+  {
+    "id": "AS01",
+    "agent_name": "audit-impl-slice-auditor",
+    "prompt_template": "Audit the following requirements slice against its implementation diff. Return findings only in your required output format.\n\n{context}",
+    "prompt_vars": {
+      "context_file": ".autoskillit/recipes/eval/canaries/AS01-context.md"
+    },
+    "reference_path": ".autoskillit/recipes/eval/canaries/AS01-context.md",
+    "reference_type": "patch",
+    "gap_description": "A mocked child-liveness predicate substitutes for REQ-006's prescribed real process behavior.",
+    "detection_criteria": [
+      {
+        "text": "Labels REQ-006 UNPRESCRIBED_SUBSTITUTION rather than COVERED.",
+        "type": "recall"
+      },
+      {
+        "text": "Does not label REQ-006 ODD.",
+        "type": "precision"
+      }
+    ]
+  },
+  {
+    "id": "AS02",
+    "agent_name": "audit-impl-slice-auditor",
+    "prompt_template": "Audit the following requirements slice against its implementation diff. Return findings only in your required output format.\n\n{context}",
+    "prompt_vars": {
+      "context_file": ".autoskillit/recipes/eval/canaries/AS02-context.md"
+    },
+    "reference_path": ".autoskillit/recipes/eval/canaries/AS02-context.md",
+    "reference_type": "patch",
+    "gap_description": "The same child-process requirement is implemented with a real parent, child, and psutil assertion.",
+    "detection_criteria": [
+      {
+        "text": "Labels REQ-006 COVERED.",
+        "type": "recall"
+      },
+      {
+        "text": "Does not report UNPRESCRIBED_SUBSTITUTION.",
+        "type": "precision"
+      }
+    ]
+  },
+  {
+    "id": "AS03",
+    "agent_name": "audit-impl-slice-auditor",
+    "prompt_template": "Audit the following requirements slice against its implementation diff. Return findings only in your required output format.\n\n{context}",
+    "prompt_vars": {
+      "context_file": ".autoskillit/recipes/eval/canaries/AS03-context.md"
+    },
+    "reference_path": ".autoskillit/recipes/eval/canaries/AS03-context.md",
+    "reference_type": "patch",
+    "gap_description": "A pure rename requirement remains covered when its test has unrelated mocks.",
+    "detection_criteria": [
+      {
+        "text": "Labels REQ-011 COVERED.",
+        "type": "recall"
+      },
+      {
+        "text": "Does not report the rename as UNPRESCRIBED_SUBSTITUTION.",
+        "type": "precision"
+      }
+    ]
+  }
+]

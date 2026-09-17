@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         _LITERAL_PATH_CONSTRUCTOR_RE,
         _WRITE_APIS_RE,
         _WRITE_CALL_SITE_RE,
+        EvaluatedSegment,
         StdinLiteral,
         _command_position_candidate_spans,
         _CommandSegment,
@@ -492,10 +493,45 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     return payloads
 
 
-def all_evaluated_segments(
+def _iter_evaluated_segments(
+    command: str, *, include_process_substitutions: bool
+) -> list[tuple[list[str], _CommandSegment | None]] | None:
+    """Yield (tokens, provenance) pairs for every segment that will execute.
+
+    Returns ``None`` when the outer command or any evaluated shell payload
+    cannot be tokenized (fail-open). The pair shape lets both
+    ``all_evaluated_segments_with_provenance`` and ``all_evaluated_segments``
+    project the same iteration without one being a wrapper around the other.
+    """
+    outer = _tokenize_command_segments_with_redirects(command)
+    if not outer and command.strip():
+        return None
+    shell_segments = tokenize_shell_payload_segments(
+        command, include_process_substitutions=include_process_substitutions
+    )
+    if shell_segments is None:
+        return None
+
+    pairs: list[tuple[list[str], _CommandSegment | None]] = [
+        (segment.tokens, segment) for segment in outer
+    ]
+    pairs.extend((tokens, None) for tokens in shell_segments)
+    for payload in evaluated_payloads(command):
+        if payload.kind != StdinConsumer.PYTHON:
+            continue
+        specs, _has_unresolved = _python_program_command_specs(payload.text)
+        for spec in specs:
+            if isinstance(spec.payload, list):
+                pairs.append((spec.payload, None))
+            elif spec.invokes_shell:
+                pairs.extend((tokens, None) for tokens in tokenize_command_segments(spec.payload))
+    return pairs
+
+
+def all_evaluated_segments_with_provenance(
     command: str, *, include_process_substitutions: bool = False
-) -> list[list[str]] | None:
-    """Return every segment that will actually execute, across every consumer.
+) -> list[EvaluatedSegment] | None:
+    """Return evaluated segments with submitted-command provenance when available.
 
     Outer segments, every recursively tokenized SHELL payload, every
     literal-argv Python subprocess spec as its own segment, and every
@@ -509,26 +545,24 @@ def all_evaluated_segments(
     `planner_gh_discovery_guard.py`) that must also see `<(...)`/`>(...)`
     bodies; the default preserves the historic shell-substitution-only reach.
     """
-    outer = tokenize_command_segments(command)
-    if not outer and command.strip():
-        return None
-    shell_segments = tokenize_shell_payload_segments(
+    pairs = _iter_evaluated_segments(
         command, include_process_substitutions=include_process_substitutions
     )
-    if shell_segments is None:
+    if pairs is None:
         return None
+    return [EvaluatedSegment(tokens, provenance) for tokens, provenance in pairs]
 
-    segments: list[list[str]] = [*outer, *shell_segments]
-    for payload in evaluated_payloads(command):
-        if payload.kind != StdinConsumer.PYTHON:
-            continue
-        specs, _has_unresolved = _python_program_command_specs(payload.text)
-        for spec in specs:
-            if isinstance(spec.payload, list):
-                segments.append(spec.payload)
-            elif spec.invokes_shell:
-                segments.extend(tokenize_command_segments(spec.payload))
-    return segments
+
+def all_evaluated_segments(
+    command: str, *, include_process_substitutions: bool = False
+) -> list[list[str]] | None:
+    """Return every segment that will actually execute, across every consumer."""
+    pairs = _iter_evaluated_segments(
+        command, include_process_substitutions=include_process_substitutions
+    )
+    if pairs is None:
+        return None
+    return [tokens for tokens, _ in pairs]
 
 
 def live_command_text(command: str) -> str:
@@ -670,6 +704,7 @@ if not TYPE_CHECKING:
     _LITERAL_PATH_CONSTRUCTOR_RE = _classification._LITERAL_PATH_CONSTRUCTOR_RE
     _WRITE_APIS_RE = _classification._WRITE_APIS_RE
     _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
+    EvaluatedSegment = _classification.EvaluatedSegment
     StdinLiteral = _classification.StdinLiteral
     strip_heredoc_bodies = _classification.strip_heredoc_bodies
     _command_position_candidate_spans = _classification._command_position_candidate_spans

@@ -74,6 +74,10 @@ class RestoreSession:
 
     session_id: str
 
+    def __post_init__(self) -> None:
+        if not self.session_id:
+            raise ValueError("session ID must not be empty")
+
 
 @final
 @dataclass(frozen=True, slots=True)

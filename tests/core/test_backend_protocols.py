@@ -265,6 +265,8 @@ def test_interactive_launch_variants_are_immutable_and_explicit() -> None:
     assert isinstance(briefing, InteractiveLaunch)
     with pytest.raises(dataclasses.FrozenInstanceError):
         fresh.initial_prompt = "mutated"  # type: ignore[misc]
+    with pytest.raises(ValueError, match="session ID must not be empty"):
+        RestoreSession(session_id="")
     with pytest.raises(ValueError, match="briefing must not be empty"):
         ResumeWithBriefing(session_id="thread-123", briefing="")
 

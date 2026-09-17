@@ -1426,12 +1426,29 @@ class TestCommandHasBlockedProtectedPathRead:
 
 _PROTECTED_RECIPE = "src/autoskillit/recipes/foo.yaml"
 _PROTECTED_SKILL = "src/autoskillit/skills/dry-walkthrough/SKILL.md"
+_PROTECTED_AGENT = "src/autoskillit/agents/foo.md"
+_PROTECTED_SKILL_RESOURCE = "src/autoskillit/skill_resources/foo.md"
+
+
+@pytest.mark.parametrize(
+    "protected_path",
+    [
+        pytest.param(_PROTECTED_RECIPE, id="recipe"),
+        pytest.param(_PROTECTED_SKILL, id="skill"),
+        pytest.param(_PROTECTED_AGENT, id="agent"),
+        pytest.param(_PROTECTED_SKILL_RESOURCE, id="skill-resource"),
+    ],
+)
+def test_check_ignore_verbose_is_admitted_for_every_protected_path_category(
+    protected_path: str,
+) -> None:
+    command = f"git check-ignore -v {protected_path}"
+    assert not command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        f"git check-ignore -v {_PROTECTED_RECIPE}",
         f"git check-ignore --verbose --no-index -- {_PROTECTED_SKILL}",
         f"git check-ignore -v {_PROTECTED_RECIPE} {_PROTECTED_SKILL}",
         f"git check-ignore -v {_PROTECTED_RECIPE} || true",
@@ -1519,6 +1536,14 @@ def test_git_metadata_global_controls(command: str, blocked: bool) -> None:
         (f"git add -- {_PROTECTED_RECIPE} 2>/dev/null", "redirect provenance"),
         (f"git status -- ${{P:-{_PROTECTED_RECIPE}}}", "dynamic argv provenance"),
         (f'git status -- "${{P:-{_PROTECTED_RECIPE}}}"', "dynamic argv provenance"),
+        (
+            f"git status -- $(cat {_PROTECTED_RECIPE})",
+            "front-door: _SHELL_SUBSTITUTION_RE.search",
+        ),
+        (
+            f"git status -- {_PROTECTED_RECIPE} && true $PROTECTED_VAR",
+            "front-door: _SHELL_STATE_VAR_RE with len(segments) > 1",
+        ),
         (f"git check-ignore -v {_PROTECTED_RECIPE} --stdin", "check-ignore grammar"),
         (f"git check-ignore -v -z {_PROTECTED_RECIPE}", "check-ignore grammar"),
         (f"git check-ignore -v -q {_PROTECTED_RECIPE}", "check-ignore grammar"),

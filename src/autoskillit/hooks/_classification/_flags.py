@@ -43,6 +43,9 @@ _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
     {"add", "check-ignore", "diff", "status"}
 )
 
+# `-C` remains admissible for add/diff/status because bundled workflows use it
+# with their worktree path. check-ignore has no such caller and rejects `-C`
+# arm-specifically in `_has_forbidden_git_globals`.
 _CONFIG_INJECTING_GIT_GLOBALS: frozenset[str] = frozenset({"-c", "--config-env", "--exec-path"})
 _REPO_REDIRECTING_GIT_GLOBALS: frozenset[str] = frozenset(
     {"--git-dir", "--work-tree", "--bare", "--namespace"}

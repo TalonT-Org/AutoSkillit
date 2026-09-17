@@ -62,15 +62,16 @@ class _Invocation:
     recipe_effects: int
     ceremony: int
     housekeeping: int
+    picker: int
     expected_session_id: str | None
 
 
 _INVOCATIONS = (
-    _Invocation("recipe-fresh", "implementation", None, False, 1, 1, 0, None),
-    _Invocation("recipe-explicit", "implementation", _SESSION_ID, False, 1, 0, 1, _SESSION_ID),
-    _Invocation("recipe-bare-resume", "implementation", None, True, 1, 0, 1, _PICKED_ID),
-    _Invocation("uuid-resume", _SESSION_ID, None, True, 0, 0, 1, _SESSION_ID),
-    _Invocation("bare-resume", None, None, True, 0, 0, 1, _PICKED_ID),
+    _Invocation("recipe-fresh", "implementation", None, False, 1, 1, 0, 0, None),
+    _Invocation("recipe-explicit", "implementation", _SESSION_ID, False, 1, 0, 1, 0, _SESSION_ID),
+    _Invocation("recipe-bare-resume", "implementation", None, True, 1, 0, 1, 1, _PICKED_ID),
+    _Invocation("uuid-resume", _SESSION_ID, None, True, 0, 0, 1, 0, _SESSION_ID),
+    _Invocation("bare-resume", None, None, True, 0, 0, 1, 1, _PICKED_ID),
 )
 
 
@@ -106,6 +107,9 @@ def _install_order_harness(
     monkeypatch.setattr(_order, "render_skill_catalog_exclusions", lambda _items: None)
     monkeypatch.setattr(_order, "_get_ingredients_table", lambda *a, **kw: "ingredients")
     monkeypatch.setattr(_order, "_build_orchestrator_prompt", lambda *a, **kw: "prompt")
+    monkeypatch.setattr(
+        "autoskillit.cli.prompts._build_open_kitchen_prompt", lambda *a, **kw: "prompt"
+    )
     monkeypatch.setattr(_order, "_get_subsets_needed", lambda *a, **kw: frozenset({"github"}))
     monkeypatch.setattr(_order, "_get_packs_needed", lambda *a, **kw: frozenset({"research"}))
 
@@ -182,7 +186,7 @@ def test_order_side_effect_matrix(
     assert events["feature_prompt"] == 2 * invocation.ceremony
     assert events["sweep"] == invocation.housekeeping
     assert events["recover"] == invocation.housekeeping
-    assert picker.call_count == int(invocation.resume and invocation.session_id is None)
+    assert picker.call_count == invocation.picker
     assert len(launches) == 1
 
     launch = launches[0]["launch"]

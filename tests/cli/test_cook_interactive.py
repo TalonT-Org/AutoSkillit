@@ -697,7 +697,7 @@ def test_cook_native_model_restoration_receives_no_cli_override(
 
     cli.cook(backend=backend, session_id="thread-explicit")
 
-    assert backend.build_calls[0]["model"] is None
+    assert backend.build_calls[0].get("model") is None
 
 
 def test_cook_marks_onboarded_only_after_success(

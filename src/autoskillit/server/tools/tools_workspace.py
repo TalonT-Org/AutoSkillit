@@ -514,7 +514,12 @@ async def commit_files(
                         workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
                     )
                 ) is not None:
-                    hook_failure_class = _parse_hook_failure_class(hook_error.pop("failure_class"))
+                    # ``_parse_hook_failure_class`` handles missing/unknown values by
+                    # returning UNHANDLED, so use a default to keep the missing-key
+                    # case routed through the helper's defensive contract.
+                    hook_failure_class = _parse_hook_failure_class(
+                        hook_error.pop("failure_class", None)
+                    )
                     return _finish(hook_error, failure_class=hook_failure_class)
 
                 rc, stdout, stderr = await _run_subprocess(

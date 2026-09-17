@@ -407,11 +407,13 @@ def make_context(
         )
     audit_admission_ledger = DefaultAuditAdmissionLedger(resolved_audit_admission_store_authority)
     child_outcome_log_dir = os.environ.get(CHILD_OUTCOME_LOG_DIR_ENV_VAR)
+    # Resolve both branches through the same `.resolve()` call so the two
+    # code paths use identical normalization (defense#16 / bugs#22).
     shared_outcome_root = (
-        Path(child_outcome_log_dir).resolve()
+        Path(child_outcome_log_dir)
         if child_outcome_log_dir
         else resolve_log_dir(config.linux_tracing.log_dir)
-    )
+    ).resolve()
     workspace_outcome_ledger = DefaultWorkspaceOutcomeLedger(
         shared_outcome_root / "workspace-outcomes"
     )

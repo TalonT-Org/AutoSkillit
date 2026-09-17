@@ -205,7 +205,8 @@ class DefaultWorkspaceOutcomeLedger:
 
         Without this, every write attempt to the same workspace keeps failing
         with the same RuntimeError until the corrupt file is manually removed.
-        The quarantine preserves the bytes for post-mortem inspection.
+        The quarantine preserves the bytes for post-mortem inspection at the
+        ledger root's ``quarantine/`` subdirectory.
         """
         quarantine = self.root / QUARANTINE_DIRNAME
         try:

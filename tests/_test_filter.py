@@ -1073,7 +1073,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # exploration/collectors/_bounded.py imports execution.process (spawn_owned_process)
             # under a documented IL-008 exception — the funnel migration for the tether plan.
             "infra/test_pretty_output_hook_infra.py",
-            # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
+            # file-level: envelope-fit test imports execution.backends.BACKEND_REGISTRY
             "infra/test_pretty_output_recipe.py",
             # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
             # by reflection, so a new command builder must be covered automatically.
@@ -1359,6 +1359,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
             "cli/test_capture_store.py",
+            # file-level: open-kitchen bridge drives the real registry path (no in-memory stub)
+            "cli/test_resume_registry_identity.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",

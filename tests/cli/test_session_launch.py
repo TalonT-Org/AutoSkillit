@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tomllib
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -488,38 +489,58 @@ def test_run_interactive_session_binds_launch_owner_before_wait(
     assert events == [("bind", (tmp_path, "launch-1", 777)), ("wait", None)]
 
 
-def test_run_interactive_session_continues_when_real_owner_binding_refuses_corrupt_registry(
+def test_run_interactive_session_terminates_when_owner_binding_refuses_corrupt_registry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
 ) -> None:
     from autoskillit.core import LAUNCH_ID_ENV_VAR
     from autoskillit.core.runtime.session_registry import registry_path
 
     process = InteractiveProcessStub(pid=888)
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
-    logger = MagicMock()
-    monkeypatch.setattr(_patch_session__session_launch, "logger", logger)
     path = registry_path(tmp_path)
     path.parent.mkdir(parents=True)
     path.write_text("not valid json", encoding="utf-8")
+    _stub_owner_binding(False)
     backend, _captured_kwargs = _make_capturing_backend()
 
-    result = _run_interactive_session(
-        launch=FreshLaunch(system_prompt="test"),
-        extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
-        project_dir=tmp_path,
-        backend=backend,
-    )
+    with pytest.raises(RuntimeError, match="session owner binding refused"):
+        _run_interactive_session(
+            launch=FreshLaunch(system_prompt="test"),
+            extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
+            project_dir=tmp_path,
+            backend=backend,
+        )
 
-    assert result is None
-    assert not process.terminated
-    assert process.returncode == 0
-    logger.warning.assert_called_once_with(
-        "session_owner_binding_refused",
-        launch_id="launch-1",
-        pid=888,
-    )
+    assert process.terminated
     assert path.read_text(encoding="utf-8") == "not valid json"
+
+
+def test_run_interactive_session_terminates_when_owner_binding_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
+) -> None:
+    from autoskillit.core import LAUNCH_ID_ENV_VAR
+
+    process = InteractiveProcessStub(pid=888)
+    expected = OSError("registry write failed")
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
+    _stub_owner_binding(expected)
+    backend, _captured_kwargs = _make_capturing_backend()
+
+    with pytest.raises(OSError) as caught:
+        _run_interactive_session(
+            launch=FreshLaunch(system_prompt="test"),
+            extra_env={LAUNCH_ID_ENV_VAR: "launch-1"},
+            project_dir=tmp_path,
+            backend=backend,
+        )
+
+    assert caught.value is expected
+    assert process.terminated
 
 
 # ---------------------------------------------------------------------------
@@ -1690,6 +1711,58 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     assert result is None
     assert events == ["validated", "spawned"]
     trace.record_attempt_anchor.assert_called_once_with(attempt=1, view_id="launch-id-1")
+
+
+def test_managed_interactive_session_rejects_owner_binding_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    launch_kwargs: dict[str, object],
+    _stub_owner_binding: Callable[[bool | BaseException], None],
+) -> None:
+    """A failed managed owner bind reaches the runner so it can reap the child."""
+    from autoskillit.core import LAUNCH_ID_ENV_VAR, ManagedSessionHome, ValidatedAddDir
+
+    backend, _captured_kwargs = _make_capturing_backend()
+    runner_cleanup: list[str] = []
+
+    def run_attempt(_spec, **kwargs):  # type: ignore[no-untyped-def]
+        try:
+            kwargs["on_spawn"](777, 777)
+        except RuntimeError:
+            runner_cleanup.append("reaped")
+            raise
+        pytest.fail("managed owner binding failure must abort the attempt")
+
+    monkeypatch.setattr(
+        _patch_session__session_process,
+        "run_cook_attempt",
+        run_attempt,
+    )
+    _stub_owner_binding(False)
+    generated_home = tmp_path / "generated"
+    generated_home.mkdir()
+    managed_home = ManagedSessionHome(
+        launch_id="launch-id",
+        generated_home=generated_home,
+        skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
+        pass_fds=(),
+        unavailability_payload={"backend": "claude-code", "unavailable": ()},
+    )
+
+    with pytest.raises(RuntimeError, match="session owner binding refused"):
+        _run_interactive_session(
+            launch=FreshLaunch(system_prompt="test"),
+            backend=backend,
+            project_dir=tmp_path,
+            skill_compilation=launch_kwargs["skill_compilation"],
+            managed_home=managed_home,
+            retained_projection_binding=MagicMock(inherited_fds=()),
+            startup_trace=MagicMock(),
+            attempt=1,
+            extra_env={LAUNCH_ID_ENV_VAR: "launch-id"},
+        )
+
+    assert runner_cleanup == ["reaped"]
 
 
 def test_managed_launch_rejects_executable_drift_before_spawn(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tomllib
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ from autoskillit.core import (
     FreshLaunch,
     HookTrustPolicy,
     ManagedSessionHome,
+    NamedResume,
     PreLaunchReadiness,
     RestoreSession,
     SessionAttemptHandle,
@@ -186,7 +188,14 @@ def _install_harness(
     skills_dir.mkdir(parents=True)
     manager = MagicMock()
     events: list[tuple[object, ...]] = []
-    captured: dict[str, object] = {"events": events, "manager": manager}
+    claims: list[dict[str, object]] = []
+    releases: list[str] = []
+    captured: dict[str, object] = {
+        "events": events,
+        "manager": manager,
+        "claims": claims,
+        "releases": releases,
+    }
 
     @contextmanager
     def managed_session(
@@ -267,6 +276,20 @@ def _install_harness(
         lambda project, launch_id, session_type, session_id: events.append(
             ("registry", launch_id)
         ),
+    )
+
+    def claim_session(project_dir: Path, **kwargs: object) -> str:
+        claims.append({"project_dir": project_dir, **kwargs})
+        events.append(("claim", kwargs["claude_session_id"]))
+        return "0123456789abcdef"
+
+    monkeypatch.setattr(
+        "autoskillit.core.claim_launch_for_session",
+        claim_session,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.release_session_claim",
+        lambda _project, launch_id: releases.append(launch_id),
     )
     monkeypatch.setattr(
         _patch_session__session_process,
@@ -664,6 +687,109 @@ def test_cook_explicit_resume_runs_recovery_without_picker_or_confirmation(
     picker.assert_not_called()
     prompt.assert_not_called()
     assert backend.build_calls[0]["launch"] == RestoreSession("thread-explicit")
+
+
+def test_cook_resume_reuses_claimed_launch_identity_everywhere(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core.runtime.session_registry import (
+        claim_launch_for_session,
+        read_registry,
+        release_session_claim,
+        write_registry_entry,
+    )
+
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path)
+    thread_id = "7c1b6dc2-02c2-47b8-a3af-77b399278c3b"
+    launch_id = "0123456789abcdef"
+    write_registry_entry(
+        tmp_path,
+        launch_id,
+        "cook",
+        None,
+        claude_session_id=thread_id,
+    )
+    assert release_session_claim(tmp_path, launch_id)
+    claims = captured["claims"]
+    releases = captured["releases"]
+    events = captured["events"]
+    assert isinstance(claims, list)
+    assert isinstance(releases, list)
+    assert isinstance(events, list)
+
+    def real_claim(project_dir: Path, **kwargs: object) -> str:
+        claims.append({"project_dir": project_dir, **kwargs})
+        events.append(("claim", kwargs["claude_session_id"]))
+        return claim_launch_for_session(project_dir, **kwargs)  # type: ignore[arg-type]
+
+    def real_release(project_dir: Path, claimed_launch_id: str) -> bool:
+        releases.append(claimed_launch_id)
+        return release_session_claim(project_dir, claimed_launch_id)
+
+    monkeypatch.setattr("autoskillit.core.write_registry_entry", write_registry_entry)
+    monkeypatch.setattr("autoskillit.core.claim_launch_for_session", real_claim)
+    monkeypatch.setattr("autoskillit.core.release_session_claim", real_release)
+
+    cli.cook(backend=backend, session_id=thread_id)
+
+    assert claims == [
+        {
+            "project_dir": tmp_path,
+            "claude_session_id": thread_id,
+            "session_type": "cook",
+            "recipe_name": None,
+        }
+    ]
+    managed_enter = next(event for event in events if event[0] == "managed-enter")
+    assert managed_enter[1] == launch_id
+    assert [event[0] for event in events].index("claim") < [event[0] for event in events].index(
+        "managed-enter"
+    )
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    assert spec.env[LAUNCH_ID_ENV_VAR] == launch_id
+    assert backend.context_calls
+    for context_call in backend.context_calls:
+        assert context_call["launch_id"] == launch_id
+        current_resume_spec = context_call["current_resume_spec"]
+        assert isinstance(current_resume_spec, NamedResume)
+        assert current_resume_spec.session_id == thread_id
+    assert releases == [launch_id]
+    registry = read_registry(tmp_path)
+    assert list(registry) == [launch_id]
+    assert registry[launch_id]["claude_session_id"] == thread_id
+    assert "claimant_pid" not in registry[launch_id]
+
+
+@pytest.mark.parametrize(
+    ("binding_outcome", "error_match"),
+    [
+        pytest.param(False, "session owner binding refused", id="refused"),
+        pytest.param(RuntimeError("registry unavailable"), "registry unavailable", id="raised"),
+    ],
+)
+def test_cook_aborts_when_managed_owner_binding_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    _stub_owner_binding: Callable[[bool | BaseException], None],
+    binding_outcome: bool | RuntimeError,
+    error_match: str,
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path)
+    _stub_owner_binding(binding_outcome)
+
+    with pytest.raises(RuntimeError, match=error_match):
+        cli.cook(backend=backend)
+
+    events = captured["events"]
+    assert isinstance(events, list)
+    managed_launch_id = next(event[1] for event in events if event[0] == "managed-enter")
+    assert events[-1] == ("managed-exit", managed_launch_id)
+    releases = captured["releases"]
+    assert releases == [managed_launch_id]
 
 
 def test_cook_fresh_non_interactive_launches_without_confirmation(

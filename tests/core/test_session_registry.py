@@ -92,7 +92,10 @@ def test_bridge_noop_on_missing_launch_id(tmp_path: Path) -> None:
     assert reg["abc"]["claude_session_id"] is None
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="supported process identity only",
+)
 def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
     write_registry_entry(tmp_path, "abc", "cook", "recipe")
     bridge_claude_session_id(tmp_path, "abc", "claude-session")
@@ -106,6 +109,9 @@ def test_bind_session_owner_preserves_launch_metadata(tmp_path: Path) -> None:
     assert entry["owner_pid"] == os.getpid()
     assert entry["owner_boot_id"]
     assert entry["owner_starttime_ticks"] > 0
+    assert entry["claimant_pid"] == os.getpid()
+    assert entry["claimant_boot_id"]
+    assert entry["claimant_starttime_ticks"] > 0
 
 
 def test_bind_session_owner_returns_false_for_unknown_launch_id(tmp_path: Path) -> None:
@@ -140,7 +146,10 @@ def test_bind_session_owner_returns_false_for_registry_read_errors(
         assert registry_path(tmp_path).read_text(encoding="utf-8") == contents
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux process identity only")
+@pytest.mark.skipif(
+    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
+    reason="supported process identity only",
+)
 def test_bind_session_owner_returns_false_without_linux_identity(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -539,6 +539,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_session_liveness.py",
             "test_session_provenance.py",
             "test_session_registry.py",
+            "test_session_registry_identity.py",
             "test_session_type.py",
             "test_skill_command_parsing.py",
             "test_skill_contract_types.py",

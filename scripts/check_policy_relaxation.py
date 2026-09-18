@@ -90,19 +90,16 @@ def _module_assignment(source: str, symbol: str) -> ast.expr:
             if isinstance(node.target, ast.Name) and node.target.id == symbol:
                 raise UnsupportedSurfaceShape(f"{symbol}: augmented assignment is not readable")
             continue
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            assigned_value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-            assigned_value = node.value
-        else:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
-        if assigned_value is None:
-            continue
-        if len(targets) != 1 or not isinstance(targets[0], ast.Name):
-            continue
-        if targets[0].id != symbol:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        assigned_value = node.value
+        if (
+            assigned_value is None
+            or len(targets) != 1
+            or not isinstance(targets[0], ast.Name)
+            or targets[0].id != symbol
+        ):
             continue
         if value is not None:
             raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")

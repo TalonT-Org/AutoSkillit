@@ -467,23 +467,7 @@ def _candidate_reap_disposition(
     marker = candidate / "owner.json"
     marker_state, owner = _load_owner(marker)
 
-    if marker_state is _OwnerMarkerState.VALID:
-        assert owner is not None
-        if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
-            return True
-        if has_revocable_reference:
-            return True
-        if not _older_than(marker, grace_minutes):
-            return False
-    elif marker_state is _OwnerMarkerState.CORRUPT:
-        # Treated as *valid, dead*: grace-gated and revocable-reference-gated, never
-        # demoted to markerless protection -- a kill mid-write must not weaken a mature,
-        # live-owned generation to relying solely on the instantaneous reference scan.
-        if has_revocable_reference:
-            return True
-        if not _older_than(marker, grace_minutes):
-            return False
-    else:  # ABSENT
+    if marker_state is _OwnerMarkerState.ABSENT:
         if has_revocable_reference or snapshot_referenced(candidate, snapshot_evidence):
             return True
         if not _older_than(candidate, legacy_age_minutes):
@@ -491,6 +475,18 @@ def _candidate_reap_disposition(
             # candidate; it might be another concurrent _setup mid-creation, protected
             # today only by this age gate.
             return True
+        return None
+
+    if marker_state is _OwnerMarkerState.VALID:
+        assert owner is not None
+        if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
+            return True
+    # A corrupt marker is treated as valid-dead: it shares reference and grace rules
+    # with a valid dead owner and never falls through to markerless snapshot evidence.
+    if has_revocable_reference:
+        return True
+    if not _older_than(marker, grace_minutes):
+        return False
     return None
 
 

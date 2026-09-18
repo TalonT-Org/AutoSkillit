@@ -94,6 +94,134 @@ def _stamp_front_matter(content: str, plan_id: str, source_commit: str) -> str:
     return f"---\nplan_id: {plan_id}\nsource_commit: {source_commit}\n---\n\n{content}"
 
 
+def _load_review_assessments(root: Path) -> dict[str, dict]:
+    assessment_path = root / "review_approach_assessment.json"
+    assessment_by_wp_id: dict[str, dict] = {}
+    if assessment_path.exists():
+        try:
+            data = json.loads(assessment_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError(f"Malformed assessment file {assessment_path}: {exc}") from exc
+        for entry in data.get("assessments", []):
+            wp_id = entry.get("wp_id")
+            if wp_id is not None:
+                assessment_by_wp_id[wp_id] = entry
+    return assessment_by_wp_id
+
+
+def _write_issue_files(
+    root: Path,
+    execution_order: list[str],
+    wp_results: dict[str, dict],
+    phase_lookup: dict[int, dict],
+    assign_lookup: dict[tuple[int, int], dict],
+    assessment_by_wp_id: dict[str, dict],
+    plan_id: str,
+    source_commit: str,
+) -> dict[str, str]:
+    issues_dir = root / "issues"
+    issues_dir.mkdir(exist_ok=True)
+
+    issue_paths: dict[str, str] = {}
+    for wp_id in execution_order:
+        wp = wp_results[wp_id]
+        phase_num, assign_num, _ = parse_planner_id(wp_id)
+        if phase_num not in phase_lookup:
+            raise RuntimeError(
+                f"WP {wp_id!r} references phase {phase_num} not in loaded phase results"
+            )
+        phase = phase_lookup[phase_num]
+        if (phase_num, assign_num) not in assign_lookup:
+            raise RuntimeError(
+                f"WP {wp_id!r} references assignment P{phase_num}-A{assign_num}"
+                " not in loaded assignment results"
+            )
+        assignment = assign_lookup[(phase_num, assign_num)]
+        assessment = assessment_by_wp_id.get(wp_id, {})
+        issue_wp = {
+            **wp,
+            **{
+                key: assessment[key]
+                for key in ("review_approach_recommended", "review_approach_reasoning")
+                if key in assessment
+            },
+        }
+        body = _render_issue_body(issue_wp, phase, assignment)
+        if plan_id:
+            body = _stamp_front_matter(body, plan_id, source_commit)
+        issue_path = issues_dir / f"{wp_id}_issue.md"
+        atomic_write(issue_path, body)
+        issue_paths[wp_id] = str(issue_path)
+    return issue_paths
+
+
+def _build_plan_payload(
+    task: str,
+    source_dir: str,
+    phase_results: dict[str, dict],
+    assign_lookup: dict[tuple[int, int], dict],
+    wp_results: dict[str, dict],
+    execution_order: list[str],
+    plan_id: str,
+    source_commit: str,
+) -> dict[str, Any]:
+    phases_nested = []
+    for phase_id in sorted(phase_results, key=lambda key: phase_results[key]["phase_number"]):
+        phase = phase_results[phase_id]
+        phase_num = phase["phase_number"]
+        assignments_nested = []
+        for (phase_number, assignment_number), assignment in sorted(assign_lookup.items()):
+            if phase_number != phase_num:
+                continue
+            work_packages = [
+                wp_results[wp_id]
+                for wp_id in execution_order
+                if wp_id.startswith(f"P{phase_number}-A{assignment_number}-")
+            ]
+            assignments_nested.append({**assignment, "work_packages": work_packages})
+        phases_nested.append({**phase, "assignments": assignments_nested})
+
+    plan_payload: dict[str, Any] = {
+        "task": task,
+        "source_dir": source_dir,
+        "phases": phases_nested,
+        "execution_order": execution_order,
+    }
+    if plan_id:
+        plan_payload["plan_id"] = plan_id
+        plan_payload["source_commit"] = source_commit
+    return plan_payload
+
+
+def _build_plan_markdown(
+    task_label: str,
+    phase_results: dict[str, dict],
+    wp_results: dict[str, dict],
+    execution_order: list[str],
+    plan_id: str,
+    source_commit: str,
+) -> str:
+    md_lines = [f"# Plan: {task_label}", ""]
+    for phase in sorted(phase_results.values(), key=lambda phase: phase["phase_number"]):
+        phase_num = phase["phase_number"]
+        md_lines.append(f"## Phase {phase_num}: {phase['name']}")
+        md_lines.append("")
+        for wp_id in execution_order:
+            wp_phase_num, _, _ = parse_planner_id(wp_id)
+            if wp_phase_num != phase_num:
+                continue
+            wp = wp_results[wp_id]
+            md_lines.append(f"### {wp_id}: {wp.get('name', '')}")
+            md_lines.append("")
+            md_lines.append(wp.get("summary", wp.get("goal", "")))
+            md_lines.append("")
+
+    content = "\n".join(md_lines)
+    if plan_id:
+        return _stamp_front_matter(content, plan_id, source_commit)
+    return content
+
+
 def compile_plan(
     output_dir: str,
     task_file_path: str,
@@ -133,56 +261,22 @@ def compile_plan(
 
     _inject_forward_deps(wp_results, dep_graph)
 
-    assessment_path = root / "review_approach_assessment.json"
-    assessment_by_wp_id: dict[str, dict] = {}
-    if assessment_path.exists():
-        try:
-            data = json.loads(assessment_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            raise RuntimeError(f"Malformed assessment file {assessment_path}: {exc}") from exc
-        for entry in data.get("assessments", []):
-            wp_id = entry.get("wp_id")
-            if wp_id is None:
-                continue
-            assessment_by_wp_id[wp_id] = entry
+    assessment_by_wp_id = _load_review_assessments(root)
 
     execution_order = topological_sort(wp_results)
     phase_lookup = _build_phase_lookup(phase_results)
     assign_lookup = _build_assignment_lookup(assignment_results)
 
-    issues_dir = root / "issues"
-    issues_dir.mkdir(exist_ok=True)
-
-    issue_paths: dict[str, str] = {}
-    for wp_id in execution_order:
-        wp = wp_results[wp_id]
-        phase_num, assign_num, _ = parse_planner_id(wp_id)
-        if phase_num not in phase_lookup:
-            raise RuntimeError(
-                f"WP {wp_id!r} references phase {phase_num} not in loaded phase results"
-            )
-        phase = phase_lookup[phase_num]
-        if (phase_num, assign_num) not in assign_lookup:
-            raise RuntimeError(
-                f"WP {wp_id!r} references assignment P{phase_num}-A{assign_num}"
-                " not in loaded assignment results"
-            )
-        assignment = assign_lookup[(phase_num, assign_num)]
-        if wp_id in assessment_by_wp_id:
-            wp = {
-                **wp,
-                **{
-                    k: assessment_by_wp_id[wp_id][k]
-                    for k in ("review_approach_recommended", "review_approach_reasoning")
-                    if k in assessment_by_wp_id[wp_id]
-                },
-            }
-        body = _render_issue_body(wp, phase, assignment)
-        if plan_id:
-            body = _stamp_front_matter(body, plan_id, source_commit)
-        issue_path = issues_dir / f"{wp_id}_issue.md"
-        atomic_write(issue_path, body)
-        issue_paths[wp_id] = str(issue_path)
+    issue_paths = _write_issue_files(
+        root,
+        execution_order,
+        wp_results,
+        phase_lookup,
+        assign_lookup,
+        assessment_by_wp_id,
+        plan_id,
+        source_commit,
+    )
 
     milestones = [
         {
@@ -195,52 +289,34 @@ def compile_plan(
     milestones_path = root / "milestones.json"
     write_versioned_json(milestones_path, {"milestones": milestones}, schema_version=1)
 
-    phases_nested = []
-    for phase_id in sorted(phase_results, key=lambda k: phase_results[k]["phase_number"]):
-        phase = phase_results[phase_id]
-        phase_num = phase["phase_number"]
-        assignments_nested = []
-        for (pn, an), assign in sorted(assign_lookup.items()):
-            if pn != phase_num:
-                continue
-            wps_in_assign = [
-                wp_results[wid] for wid in execution_order if wid.startswith(f"P{pn}-A{an}-")
-            ]
-            assignments_nested.append({**assign, "work_packages": wps_in_assign})
-        phases_nested.append({**phase, "assignments": assignments_nested})
-
-    plan_payload: dict[str, Any] = {
-        "task": task,
-        "source_dir": source_dir,
-        "phases": phases_nested,
-        "execution_order": execution_order,
-    }
-    if plan_id:
-        plan_payload["plan_id"] = plan_id
-        plan_payload["source_commit"] = source_commit
     plan_json_path = root / "plan.json"
-    write_versioned_json(plan_json_path, plan_payload, schema_version=1)
-
-    md_lines = [f"# Plan: {task_label}", ""]
-    for phase in sorted(phase_results.values(), key=lambda p: p["phase_number"]):
-        phase_num = phase["phase_number"]
-        md_lines.append(f"## Phase {phase_num}: {phase['name']}")
-        md_lines.append("")
-        for wp_id in execution_order:
-            pn, an, _ = parse_planner_id(wp_id)
-            if pn != phase_num:
-                continue
-            wp = wp_results[wp_id]
-            md_lines.append(f"### {wp_id}: {wp.get('name', '')}")
-            md_lines.append("")
-            md_lines.append(wp.get("summary", wp.get("goal", "")))
-            md_lines.append("")
+    write_versioned_json(
+        plan_json_path,
+        _build_plan_payload(
+            task,
+            source_dir,
+            phase_results,
+            assign_lookup,
+            wp_results,
+            execution_order,
+            plan_id,
+            source_commit,
+        ),
+        schema_version=1,
+    )
 
     plan_md_path = root / "plan.md"
-    plan_md_content = "\n".join(md_lines)
-    if plan_id:
-        plan_md_content = _stamp_front_matter(plan_md_content, plan_id, source_commit)
-    atomic_write(plan_md_path, plan_md_content)
+    atomic_write(
+        plan_md_path,
+        _build_plan_markdown(
+            task_label,
+            phase_results,
+            wp_results,
+            execution_order,
+            plan_id,
+            source_commit,
+        ),
+    )
 
     manifest_payload: dict[str, Any] = {
         "task": task,

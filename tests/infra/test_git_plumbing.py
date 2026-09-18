@@ -174,15 +174,20 @@ def test_optional_revision_reader_returns_none_only_after_exact_path_probe(
 def test_optional_revision_reader_rejects_invalid_revision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        git_plumbing,
-        "_git",
-        lambda *_args: _completed(1, stderr=b"fatal: invalid object name"),
-    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_git(_repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+        calls.append(args)
+        if args == ("cat-file", "-e", "bad-ref^{tree}"):
+            return _completed(1, stderr=b"fatal: invalid object name")
+        raise AssertionError(f"revision validation must precede path probe; got {args}")
+
+    monkeypatch.setattr(git_plumbing, "_git", fake_git)
 
     reader = git_plumbing._optional_revision_reader(Path("/repo"), "bad-ref")
     with pytest.raises(git_plumbing.GitFailure, match="invalid object name"):
         reader("src/a.py")
+    assert calls == [("cat-file", "-e", "bad-ref^{tree}")]
 
 
 def test_optional_revision_reader_fails_if_existing_object_cannot_be_read(
@@ -232,17 +237,18 @@ def test_index_reader_validates_context_and_proves_exact_path_absence(
 
 
 @pytest.mark.parametrize(
-    ("failure_at", "stderr"),
+    ("failure_at", "stderr", "expected_command"),
     [
-        ("context", b"fatal: not a git repository"),
-        ("probe", b"fatal: index unavailable"),
-        ("read", b"fatal: index object unreadable"),
+        ("context", b"fatal: not a git repository", "rev-parse --git-dir"),
+        ("probe", b"fatal: index unavailable", "ls-files --stage"),
+        ("read", b"fatal: index object unreadable", "show :"),
     ],
 )
 def test_index_reader_rejects_context_probe_and_read_failures(
     monkeypatch: pytest.MonkeyPatch,
     failure_at: str,
     stderr: bytes,
+    expected_command: str,
 ) -> None:
     def fake_git(_repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
         if args[0] == "rev-parse":
@@ -256,7 +262,7 @@ def test_index_reader_rejects_context_probe_and_read_failures(
     monkeypatch.setattr(git_plumbing, "_git", fake_git)
 
     reader = git_plumbing._index_reader(Path("/repo"))
-    with pytest.raises(git_plumbing.GitFailure, match="fatal"):
+    with pytest.raises(git_plumbing.GitFailure, match=expected_command):
         reader("src/a.py")
 
 

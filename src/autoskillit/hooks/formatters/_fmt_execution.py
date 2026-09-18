@@ -48,6 +48,20 @@ def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = Fa
     lines.append(line)
 
 
+def _maybe_adjudication_lines(data: dict, lines: list[str]) -> None:
+    """Render structured demotion evidence when the response carries it."""
+    verdict = data.get("adjudication_verdict")
+    if isinstance(verdict, dict):
+        lines.append(
+            "adjudication_verdict: " + json.dumps(verdict, sort_keys=True, separators=(",", ":"))
+        )
+    outcome_fields = data.get("outcome_fields")
+    if outcome_fields is not None:
+        lines.append(
+            "outcome_fields: " + json.dumps(outcome_fields, sort_keys=True, separators=(",", ":"))
+        )
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -78,16 +92,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"worktree_path: {worktree}")
     _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
-    if isinstance(data.get("adjudication_verdict"), dict):
-        lines.append(
-            "adjudication_verdict: "
-            + json.dumps(data["adjudication_verdict"], sort_keys=True, separators=(",", ":"))
-        )
-    if data.get("outcome_fields") is not None:
-        lines.append(
-            "outcome_fields: "
-            + json.dumps(data["outcome_fields"], sort_keys=True, separators=(",", ":"))
-        )
+    _maybe_adjudication_lines(data, lines)
 
     if pipeline:
         _maybe_tracker_line(data, lines)

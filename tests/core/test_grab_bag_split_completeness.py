@@ -525,7 +525,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_paths.py",
             "test_pipeline_tracker.py",
             "test_plugin_artifact_identity.py",
-            "test_plugin_cache.py",
+            "test__plugin_cache.py",
             "test_process_cleanup_result.py",
             "test_quota_constraint_fold.py",
             "test_recipe_delivery_contract.py",

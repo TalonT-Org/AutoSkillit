@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Sequence
+from collections import deque
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -315,6 +316,40 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     ]
 
 
+def _iter_shell_payload_segment_groups(
+    command: str,
+    *,
+    include_process_substitutions: bool = False,
+) -> Iterator[tuple[str, list[list[str]] | None]]:
+    seen: set[str] = set()
+    queue = deque([(command, False, False)])
+    while queue:
+        payload, preserve_occurrence, emit = queue.popleft()
+        if emit and not preserve_occurrence and payload in seen:
+            continue
+        if emit and not preserve_occurrence:
+            seen.add(payload)
+        if not payload.strip():
+            continue
+        segments = tokenize_command_segments(payload)
+        if not segments:
+            yield payload, None
+            return
+        yield payload, segments
+        queue.extend(
+            (nested, preserve_occurrence, True)
+            for nested in extract_shell_command_payloads(payload)
+        )
+        if include_process_substitutions:
+            for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
+                payload
+            ):
+                if not balanced:
+                    yield body, None
+                    return
+                queue.append((body, True, True))
+
+
 def tokenize_shell_payload_segments(
     command: str,
     *,
@@ -335,32 +370,16 @@ def tokenize_shell_payload_segments(
     shell payload to traverse.
     """
     result: list[list[str]] = []
-    seen: set[str] = set()
-    queue: list[tuple[str, bool, bool]] = [(command, False, False)]
-    while queue:
-        payload, preserve_occurrence, emit = queue.pop(0)
-        if emit and not preserve_occurrence and payload in seen:
-            continue
-        if emit and not preserve_occurrence:
-            seen.add(payload)
-        if not payload.strip():
-            continue
-        segments = tokenize_command_segments(payload)
-        if not segments and payload.strip():
-            return None
-        if emit:
-            result.extend(segments)
-        queue.extend(
-            (nested, preserve_occurrence, True)
-            for nested in extract_shell_command_payloads(payload)
+    for index, (_payload, segments) in enumerate(
+        _iter_shell_payload_segment_groups(
+            command,
+            include_process_substitutions=include_process_substitutions,
         )
-        if include_process_substitutions:
-            for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
-                payload
-            ):
-                if not balanced:
-                    return None
-                queue.append((body, True, True))
+    ):
+        if segments is None:
+            return None
+        if index:
+            result.extend(segments)
     return result
 
 

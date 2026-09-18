@@ -26,6 +26,12 @@ from autoskillit.migration.loader import applicable_migrations as _applicable
 
 logger = get_logger(__name__)
 
+# Shared shape for any callable that drives a headless skill execution and
+# returns a SkillResult. Defined once so both ``_no_headless_runner`` and the
+# ``run_headless`` parameter at every call site share a precise type instead
+# of falling back to ``Any``.
+HeadlessRunner = Callable[..., Awaitable[SkillResult]]
+
 
 async def _no_headless_runner(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
     """Return the normal engine result when no headless runner is wired in."""
@@ -51,7 +57,7 @@ async def _regenerate_contract_card(
     *,
     name: str,
     recipes_dir: Path,
-    run_headless: Callable[..., Awaitable[SkillResult]],
+    run_headless: HeadlessRunner,
     temp_dir: Path,
 ) -> bool:
     """Regenerate a stale contract card and report whether it succeeded."""
@@ -89,7 +95,7 @@ async def _get_diagram_advisory(
     *,
     name: str,
     recipes_dir: Path,
-    run_headless: Callable[..., Awaitable[SkillResult]],
+    run_headless: HeadlessRunner,
     temp_dir: Path,
 ) -> str | None:
     """Return the advisory for a stale diagram without making it a migration."""
@@ -170,7 +176,7 @@ class DefaultMigrationService:
         self,
         engine: MigrationEngine,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]] | None = None,
+        run_headless: HeadlessRunner | None = None,
         temp_dir: Path | None = None,
     ) -> None:
         self._engine = engine

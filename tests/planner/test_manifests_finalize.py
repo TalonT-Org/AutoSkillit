@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import structlog
 
 import autoskillit.planner.manifests as manifests_module
 from tests.planner.conftest import (
@@ -378,3 +379,91 @@ def test_reconcile_wp_files_no_active_file_returns_early(tmp_path: Path) -> None
     result = reconcile_wp_files(str(tmp_path))
     assert result["archived_count"] == "0"
     assert (wp_dir / "P1-A1-WP1_result.json").exists()
+
+
+def test_reconcile_wp_files_uses_refined_wps_after_malformed_consolidated(
+    tmp_path: Path,
+) -> None:
+    """A malformed consolidated manifest falls through to readable refined WPs."""
+    from autoskillit.planner.manifests import reconcile_wp_files
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
+    (tmp_path / "consolidated_wps.json").write_text('{"work_packages": [')
+    write_json(
+        tmp_path / "refined_wps.json",
+        {"schema_version": 1, "work_packages": [{"id": "P1-A1-WP1"}]},
+    )
+
+    with structlog.testing.capture_logs() as logs:
+        result = reconcile_wp_files(str(tmp_path))
+
+    assert result == {"archived_count": "1", "archived_ids": "P1-A1-WP2"}
+    assert (wp_dir / "P1-A1-WP1_result.json").exists()
+    assert (wp_dir / "archived" / "P1-A1-WP2_result.json").exists()
+    assert not (wp_dir / "P1-A1-WP2_result.json").exists()
+    assert not any(
+        entry["event"] == "reconcile_wp_files: WP files exist but are unreadable" for entry in logs
+    )
+
+
+def test_reconcile_wp_files_prefers_consolidated_wps_over_conflicting_refined(
+    tmp_path: Path,
+) -> None:
+    """Readable consolidated WPs remain authoritative over readable refined WPs."""
+    from autoskillit.planner.manifests import reconcile_wp_files
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
+    write_json(
+        tmp_path / "consolidated_wps.json",
+        {"schema_version": 1, "work_packages": [{"id": "P1-A1-WP1"}]},
+    )
+    write_json(
+        tmp_path / "refined_wps.json",
+        {"schema_version": 1, "work_packages": [{"id": "P1-A1-WP2"}]},
+    )
+
+    result = reconcile_wp_files(str(tmp_path))
+
+    assert result == {"archived_count": "1", "archived_ids": "P1-A1-WP2"}
+    assert (wp_dir / "P1-A1-WP1_result.json").exists()
+    assert (wp_dir / "archived" / "P1-A1-WP2_result.json").exists()
+    assert not (wp_dir / "P1-A1-WP2_result.json").exists()
+
+
+def test_reconcile_wp_files_warns_when_all_present_wp_files_are_unreadable(
+    tmp_path: Path,
+) -> None:
+    """Present malformed WP files retain the fail-closed terminal warning."""
+    from autoskillit.planner.manifests import reconcile_wp_files
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
+    (tmp_path / "consolidated_wps.json").write_text('{"work_packages": [')
+    (tmp_path / "refined_wps.json").write_text('{"work_packages": [')
+
+    with structlog.testing.capture_logs() as logs:
+        result = reconcile_wp_files(str(tmp_path))
+
+    assert result == {"archived_count": "0", "archived_ids": ""}
+    assert (wp_dir / "P1-A1-WP1_result.json").exists()
+    assert (wp_dir / "P1-A1-WP2_result.json").exists()
+    warnings = [
+        entry
+        for entry in logs
+        if entry["event"] == "reconcile_wp_files: WP files exist but are unreadable"
+    ]
+    assert warnings == [
+        {
+            "event": "reconcile_wp_files: WP files exist but are unreadable",
+            "unreadable": ["consolidated_wps.json", "refined_wps.json"],
+            "log_level": "warning",
+        }
+    ]

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 from autoskillit.planner.schema import DELIVERABLE_BOUNDS
 from autoskillit.planner.validation import (
@@ -416,6 +417,36 @@ def test_check_assignment_completeness_all_wps_voided(tmp_path: Path) -> None:
     }
     findings = _check_assignment_completeness(assignment_results, wp_results, lifecycle_registry)
     assert len(findings) == 0
+
+
+def test_check_assignment_completeness_logs_malformed_lifecycle_ids() -> None:
+    """Malformed lifecycle IDs warn with their category-specific event and field."""
+    from autoskillit.planner.validation import _check_assignment_completeness
+
+    malformed_lifecycle_ids = (
+        ("absorbed", "not-an-absorption", "malformed_absorbed_id", "absorbed_id"),
+        ("voided_wps", "not-a-voided-wp", "malformed_voided_wp_id", "voided_wp_id"),
+        (
+            "archived_stubs",
+            "not-an-archived-stub",
+            "malformed_archived_stub_id",
+            "archived_stub_id",
+        ),
+    )
+    lifecycle_registry = {
+        category: {malformed_id: {}} for category, malformed_id, _, _ in malformed_lifecycle_ids
+    }
+
+    with structlog.testing.capture_logs() as logs:
+        findings = _check_assignment_completeness({}, {}, lifecycle_registry)
+
+    assert findings == []
+    assert [
+        (log["event"], field, log[field])
+        for log, (_, _, _, field) in zip(logs, malformed_lifecycle_ids, strict=True)
+    ] == [
+        (event, field, malformed_id) for _, malformed_id, event, field in malformed_lifecycle_ids
+    ]
 
 
 def test_validate_plan_with_voided_wps_passes(tmp_path: Path) -> None:

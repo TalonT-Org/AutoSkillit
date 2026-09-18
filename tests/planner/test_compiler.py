@@ -359,6 +359,48 @@ def test_compile_plan_merges_assessment_when_file_present(tmp_path: Path) -> Non
     assert "Unfamiliar external API integration." in issue_body
 
 
+def test_compile_plan_uses_last_duplicate_assessment_only_for_issue_body(tmp_path: Path) -> None:
+    output_dir = _make_valid_output_dir(
+        tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False
+    )
+    write_json(
+        output_dir / "review_approach_assessment.json",
+        {
+            "schema_version": 1,
+            "assessments": [
+                {
+                    "wp_id": "P1-A1-WP1",
+                    "review_approach_recommended": False,
+                    "review_approach_reasoning": "First assessment.",
+                },
+                {
+                    "wp_id": "P1-A1-WP1",
+                    "review_approach_recommended": True,
+                    "review_approach_reasoning": "Last assessment.",
+                },
+            ],
+        },
+    )
+
+    compile_plan(
+        str(output_dir), task_file_path=write_task_file(output_dir), source_dir=str(tmp_path)
+    )
+
+    issue_body = (output_dir / "issues" / "P1-A1-WP1_issue.md").read_text()
+    plan_json = json.loads((output_dir / "plan.json").read_text())
+    plan_wp = plan_json["phases"][0]["assignments"][0]["work_packages"][0]
+    plan_md = (output_dir / "plan.md").read_text()
+
+    assert "Last assessment." in issue_body
+    assert "First assessment." not in issue_body
+    assert plan_wp["name"] == "WP P1-A1-WP1"
+    assert plan_wp["summary"] == "Summary P1"
+    assert "review_approach_recommended" not in plan_wp
+    assert "review_approach_reasoning" not in plan_wp
+    assert "Last assessment." not in plan_md
+    assert "Summary P1" in plan_md
+
+
 def test_compile_plan_omits_research_when_assessment_file_absent(tmp_path: Path) -> None:
     output_dir = _make_valid_output_dir(
         tmp_path, num_phases=1, with_dep_graph=False, dependency_chain=False

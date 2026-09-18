@@ -109,6 +109,37 @@ def test_merge_technical_steps_concatenated_in_merge_order(tmp_path: Path) -> No
     assert merged["technical_steps"] == ["step B", "step A"]
 
 
+def test_merge_order_permits_known_wp_outside_source_ids(tmp_path: Path) -> None:
+    wp1 = make_wp_result("P1-A1-WP1", technical_steps=["step one"], deliverables=["src/one.py"])
+    wp2 = make_wp_result("P1-A1-WP2", technical_steps=["step two"], deliverables=["src/two.py"])
+    wp3 = make_wp_result(
+        "P1-A1-WP3", technical_steps=["step three"], deliverables=["src/three.py"]
+    )
+    refined_path = make_refined_wps(tmp_path, [wp1, wp2, wp3])
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP3", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    merged = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
+    assert merged["technical_steps"] == ["step one", "step three", "step two"]
+    assert merged["deliverables"] == ["src/one.py", "src/three.py", "src/two.py"]
+    assert "P1-A1-WP3" in {wp["id"] for wp in consolidated["work_packages"]}
+
+
 def test_merge_name_and_goal_from_primary(tmp_path: Path) -> None:
     wp1 = make_wp_result("P1-A1-WP1", name="Primary WP", goal="Primary goal")
     wp2 = make_wp_result("P1-A1-WP2", name="Secondary WP", goal="Secondary goal")
@@ -221,6 +252,47 @@ def test_dep_rewriting_source_to_merged_id(tmp_path: Path) -> None:
     consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
     wp3_out = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP3")
     assert wp3_out["depends_on"] == ["P1-A1-WP1"]
+
+
+def test_duplicate_source_wp_id_across_manifests_uses_last_mapping(tmp_path: Path) -> None:
+    wp1 = make_wp_result("P1-A1-WP1")
+    wp2 = make_wp_result("P1-A1-WP2")
+    wp3 = make_wp_result("P1-A1-WP3")
+    wp4 = make_wp_result("P1-A1-WP4", depends_on=["P1-A1-WP2"])
+    refined_path = make_refined_wps(tmp_path, [wp1, wp2, wp3, wp4])
+    consolidation_dir = tmp_path / "work_packages" / "consolidation"
+    make_manifest(
+        consolidation_dir,
+        "P1",
+        [
+            {
+                "merged_id": "P1-A1-WP1",
+                "source_wp_ids": ["P1-A1-WP1", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP1", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+    make_manifest(
+        consolidation_dir,
+        "P2",
+        [
+            {
+                "merged_id": "P1-A1-WP3",
+                "source_wp_ids": ["P1-A1-WP3", "P1-A1-WP2"],
+                "merge_order": ["P1-A1-WP3", "P1-A1-WP2"],
+                "name": None,
+                "goal": None,
+            }
+        ],
+    )
+
+    consolidate_wps(refined_wps_path=str(refined_path), planner_dir=str(tmp_path))
+
+    consolidated = json.loads((tmp_path / "consolidated_wps.json").read_text())
+    dependent = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP4")
+    assert dependent["depends_on"] == ["P1-A1-WP3"]
 
 
 def test_external_dep_preserved(tmp_path: Path) -> None:

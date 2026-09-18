@@ -78,6 +78,164 @@ class ClassificationResult:
     dispatch_checkpoint: SessionCheckpoint | None  # for finalize resume_checkpoint serialization
 
 
+@dataclass
+class _OutcomeMaterialization:
+    """Parsed outcome inputs resolved from the sidecar and tracker authorities."""
+
+    sidecar_file: Path
+    sidecar_entries: list[Any]
+    dispatch_checkpoint: SessionCheckpoint | None
+    tracker_authority_error: str | None
+    parsed_result: Any
+    extended_chain: list[str]
+
+
+def _materialize_outcome(
+    *,
+    skill_result: SkillResult,
+    spawn_ctx: SpawnContext,
+    tool_ctx: ToolContext,
+    tracker_lease: Any,
+    dispatch_id: str,
+    effective_backend: CodingAgentBackend | None,
+    recipe: str,
+    dispatch_sidecar_path: str,
+    incoming_resume_checkpoint: SessionCheckpoint | None,
+    prior_session_chain: list[str],
+    prior_dispatched_session_id: str | None,
+    resume_session_id: str | None,
+    resume_line_offset: int,
+    prior_dispatch_ids: list[str] | None,
+) -> _OutcomeMaterialization:
+    """Load dispatch progress and materialize the parsed outcome inputs."""
+    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+
+    (
+        sidecar_file,
+        sidecar_entries,
+        loaded_tracker_checkpoint,
+        tracker_authority_error,
+    ) = _facade.load_dispatch_progress(
+        tool_ctx=tool_ctx,
+        dispatch_sidecar_path=dispatch_sidecar_path,
+        dispatch_id=dispatch_id,
+        backend_name=effective_backend.name if effective_backend else "",
+        recipe=recipe,
+        tracker_lease=tracker_lease,
+    )
+    dispatch_checkpoint = (
+        incoming_resume_checkpoint
+        if incoming_resume_checkpoint is not None
+        else loaded_tracker_checkpoint
+    )
+
+    extended_chain = prior_session_chain[:]
+    parsed_result: Any = None
+    if skill_result.subtype != "timeout":
+        if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
+            extended_chain.append(prior_dispatched_session_id)
+
+        locator = effective_backend.session_locator() if effective_backend is not None else None
+        additional_jsonl_paths = [
+            path
+            for session_id in extended_chain
+            if (
+                path := (
+                    locator.session_log_path(str(tool_ctx.project_dir), session_id)
+                    if locator is not None
+                    else None
+                )
+            )
+            is not None
+        ]
+        jsonl_path = (
+            locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+            if locator is not None
+            else None
+        )
+        if resume_line_offset and skill_result.session_id and resume_session_id:
+            if skill_result.session_id != resume_session_id:
+                logger.warning(
+                    "resume_line_offset_invalidated",
+                    resume_session_id=resume_session_id,
+                    actual_session_id=skill_result.session_id,
+                )
+                resume_line_offset = 0
+        parsed_result = _facade.parse_l3_result_block(
+            stdout=skill_result.result or "",
+            expected_dispatch_id=dispatch_id,
+            assistant_messages_path=jsonl_path,
+            prior_dispatch_ids=prior_dispatch_ids or None,
+            additional_jsonl_paths=additional_jsonl_paths or None,
+            resume_line_offset=resume_line_offset,
+        )
+
+        issue_urls = [url.strip() for url in spawn_ctx.issue_urls_raw.split(",") if url.strip()]
+        if (
+            parsed_result is not None
+            and parsed_result.outcome == "no_sentinel"
+            and sidecar_entries
+        ):
+            from autoskillit.fleet._sidecar_synthesis import (  # noqa: PLC0415
+                synthesize_from_sidecar,
+            )
+
+            parsed_result = synthesize_from_sidecar(
+                parsed_result,
+                sidecar_entries,
+                dispatched_issue_count=len(issue_urls),
+            )
+
+    return _OutcomeMaterialization(
+        sidecar_file=sidecar_file,
+        sidecar_entries=sidecar_entries,
+        dispatch_checkpoint=dispatch_checkpoint,
+        tracker_authority_error=tracker_authority_error,
+        parsed_result=parsed_result,
+        extended_chain=extended_chain,
+    )
+
+
+async def _cleanup_non_success_non_resumable_labels(
+    *,
+    final_status: DispatchStatus,
+    sidecar_file: Path,
+    dispatch_id: str,
+    issue_urls_raw: str,
+    tool_ctx: ToolContext,
+    provenance: DispatchProvenanceTracker,
+) -> bool:
+    """Clean labels for terminal unsuccessful outcomes and record the result."""
+    if final_status in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
+        return False
+
+    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+
+    provenance.start(
+        DispatchEffectName.LABEL_CLEANUP,
+        identities={"dispatch_id": dispatch_id},
+    )
+    labels_cleaned = await cleanup_orphaned_labels(
+        str(sidecar_file),
+        tool_ctx.github_client,
+        issue_url=issue_urls_raw,
+    )
+    provenance.record_labels_cleanup(confirmed=labels_cleaned)
+    if labels_cleaned:
+        provenance.confirm(
+            DispatchEffectName.LABEL_CLEANUP,
+            receipt="label cleanup helper confirmed cleanup",
+            identities={"dispatch_id": dispatch_id},
+        )
+    else:
+        provenance.mark_ambiguous(
+            DispatchEffectName.LABEL_CLEANUP,
+            evidence="label cleanup helper did not confirm cleanup",
+            identities={"dispatch_id": dispatch_id},
+        )
+    return labels_cleaned
+
+
 async def run_outcome_classification(
     *,
     skill_result: SkillResult,
@@ -91,98 +249,42 @@ async def run_outcome_classification(
     prior_session_chain: list[str],
     prior_dispatched_session_id: str | None,
     resume_session_id: str | None,
-    dispatch_checkpoint: SessionCheckpoint | None,
+    incoming_resume_checkpoint: SessionCheckpoint | None,
     marker_dir: Path | None,
     effective_backend: CodingAgentBackend | None,
     recipe: str,
     dispatch_sidecar_path: str,
     resume_line_offset: int = 0,
-    prior_ids: list[str] | None = None,
+    prior_dispatch_ids: list[str] | None = None,
 ) -> ClassificationResult:
     """Phase E — classifies the dispatch outcome.
 
     Returns a ``ClassificationResult`` carrying every field the orchestrator's
     finalize shard needs.
     """
-    # Load progress (sidecar + tracker authority).
-    # ``load_dispatch_progress`` is accessed via the public facade
-    # ``autoskillit.fleet._api.load_dispatch_progress`` (lazy import) so
-    # ``monkeypatch.setattr("autoskillit.fleet._api.load_dispatch_progress", ...)``
-    # patches observed by tests reach this call site.
-    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
-
-    (
-        sidecar_file,
-        sidecar_entries,
-        dispatch_checkpoint_loaded,
-        tracker_authority_error,
-    ) = _facade.load_dispatch_progress(
+    materialization = _materialize_outcome(
+        skill_result=skill_result,
+        spawn_ctx=spawn_ctx,
         tool_ctx=tool_ctx,
-        dispatch_sidecar_path=dispatch_sidecar_path,
-        dispatch_id=dispatch_id,
-        backend_name=effective_backend.name if effective_backend else "",
-        recipe=recipe,
         tracker_lease=tracker_lease,
+        dispatch_id=dispatch_id,
+        effective_backend=effective_backend,
+        recipe=recipe,
+        dispatch_sidecar_path=dispatch_sidecar_path,
+        incoming_resume_checkpoint=incoming_resume_checkpoint,
+        prior_session_chain=prior_session_chain,
+        prior_dispatched_session_id=prior_dispatched_session_id,
+        resume_session_id=resume_session_id,
+        resume_line_offset=resume_line_offset,
+        prior_dispatch_ids=prior_dispatch_ids,
     )
-    if dispatch_checkpoint is None:
-        dispatch_checkpoint = dispatch_checkpoint_loaded
-
-    extended_chain = prior_session_chain[:]
-    additional_jsonl_paths: list[Path] = []
-    parsed_result: Any = None
-
-    if skill_result.subtype == "timeout":
-        parsed_result = None
-    else:
-        if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
-            extended_chain.append(prior_dispatched_session_id)
-
-        _locator = effective_backend.session_locator() if effective_backend is not None else None
-        for sid in extended_chain:
-            path = (
-                _locator.session_log_path(str(tool_ctx.project_dir), sid)
-                if _locator is not None
-                else None
-            )
-            if path is not None:
-                additional_jsonl_paths.append(path)
-
-        jsonl_path = (
-            _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-            if _locator is not None
-            else None
-        )
-
-        if resume_line_offset and skill_result.session_id and resume_session_id:
-            if skill_result.session_id != resume_session_id:
-                logger.warning(
-                    "resume_line_offset_invalidated",
-                    resume_session_id=resume_session_id,
-                    actual_session_id=skill_result.session_id,
-                )
-                resume_line_offset = 0
-        parsed_result = _facade.parse_l3_result_block(
-            stdout=skill_result.result or "",
-            expected_dispatch_id=dispatch_id,
-            assistant_messages_path=jsonl_path,
-            prior_dispatch_ids=prior_ids if prior_ids else None,
-            additional_jsonl_paths=additional_jsonl_paths or None,
-            resume_line_offset=resume_line_offset,
-        )
-
+    sidecar_file = materialization.sidecar_file
+    sidecar_entries = materialization.sidecar_entries
+    dispatch_checkpoint = materialization.dispatch_checkpoint
+    tracker_authority_error = materialization.tracker_authority_error
+    parsed_result = materialization.parsed_result
+    extended_chain = materialization.extended_chain
     _issue_urls_raw = spawn_ctx.issue_urls_raw
-    _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
-    dispatched_issue_count = len(_dispatched_issue_list)
-    if parsed_result is not None and parsed_result.outcome == "no_sentinel" and sidecar_entries:
-        from autoskillit.fleet._sidecar_synthesis import (  # noqa: PLC0415
-            synthesize_from_sidecar,
-        )
-
-        parsed_result = synthesize_from_sidecar(
-            parsed_result,
-            sidecar_entries,
-            dispatched_issue_count=dispatched_issue_count,
-        )
 
     final_status, reason = classify_dispatch_outcome(
         parsed_result,
@@ -240,32 +342,14 @@ async def run_outcome_classification(
                     logger.debug("branch_name_extraction_failed", exc_info=True)
                 break
 
-    _labels_cleaned = False
-    if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
-        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
-
-        provenance.start(
-            DispatchEffectName.LABEL_CLEANUP,
-            identities={"dispatch_id": dispatch_id},
-        )
-        _labels_cleaned = await cleanup_orphaned_labels(
-            str(sidecar_file),  # type: ignore[arg-type]
-            tool_ctx.github_client,
-            issue_url=_issue_urls_raw,
-        )
-        provenance.record_labels_cleanup(confirmed=_labels_cleaned)
-        if _labels_cleaned:
-            provenance.confirm(
-                DispatchEffectName.LABEL_CLEANUP,
-                receipt="label cleanup helper confirmed cleanup",
-                identities={"dispatch_id": dispatch_id},
-            )
-        else:
-            provenance.mark_ambiguous(
-                DispatchEffectName.LABEL_CLEANUP,
-                evidence="label cleanup helper did not confirm cleanup",
-                identities={"dispatch_id": dispatch_id},
-            )
+    _labels_cleaned = await _cleanup_non_success_non_resumable_labels(
+        final_status=final_status,
+        sidecar_file=sidecar_file,
+        dispatch_id=dispatch_id,
+        issue_urls_raw=_issue_urls_raw,
+        tool_ctx=tool_ctx,
+        provenance=provenance,
+    )
 
     # The orchestrator threads marker_dir through (resolved from
     # `_locator.project_log_dir` inside run_execution), so we just stringify it.
@@ -335,7 +419,6 @@ async def finalize_state_write(
     managed_lineage_ref: Any,
     provenance: DispatchProvenanceTracker,
     capture: dict[str, CaptureEntrySpec] | None,
-    dispatch_checkpoint: SessionCheckpoint | None,
     started_at: float,
     ended_at: float,
     cache_invalidator: Callable[[str], None] | None,
@@ -352,13 +435,7 @@ async def finalize_state_write(
     extended_chain = classification.extended_chain
     project_log_dir = classification.project_log_dir
     _issue_urls_raw = spawn_ctx.issue_urls_raw
-    # Prefer the loader-emitted checkpoint (carries tracker-file progress
-    # and sidecar entries populated mid-flight) over the lineage-prep input
-    # which only sees the resume_session_id path. Without this fallback the
-    # tracker-bridge resumable flow (test_single_issue_killed_with_tracker_progress_is_resumable)
-    # serializes an empty resume_checkpoint.
-    if dispatch_checkpoint is None:
-        dispatch_checkpoint = classification.dispatch_checkpoint
+    dispatch_checkpoint = classification.dispatch_checkpoint
 
     # Build the DispatchRecord.
     record = DispatchRecord(

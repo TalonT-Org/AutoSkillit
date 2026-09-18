@@ -268,8 +268,10 @@ class TestCaptureChainAcrossResumeBoundary:
 
 class TestSessionChainAccumulatesAcrossResume:
     @pytest.mark.anyio
-    async def test_session_chain_accumulates_across_resume(self, tool_ctx, monkeypatch, tmp_path):
-        """session_chain accumulates prior dispatched_session_id on resume."""
+    async def test_session_chain_accumulates_and_prior_dispatch_id_reaches_parser(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """Session chains stay session-only while the parser receives the prior dispatch ID."""
         from autoskillit.core import (
             ManagedHeadlessSessionKind,
             NativeShellCaptureMode,
@@ -322,6 +324,7 @@ class TestSessionChainAccumulatesAcrossResume:
                 DispatchRecord(
                     name="test-recipe",
                     dispatched_session_id="sess-original",
+                    session_chain=["prior-session-id"],
                     managed_lineage_ref=lineage.reference,
                 )
             ],
@@ -344,7 +347,10 @@ class TestSessionChainAccumulatesAcrossResume:
 
         from autoskillit.fleet.result_parser import L3ParseResult
 
+        parsed_prior_dispatch_ids: list[list[str] | None] = []
+
         def _fake_parse(*args, **kwargs):
+            parsed_prior_dispatch_ids.append(kwargs["prior_dispatch_ids"])
             return L3ParseResult(
                 outcome="completed_clean",
                 payload={"success": True},
@@ -375,6 +381,7 @@ class TestSessionChainAccumulatesAcrossResume:
         from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
 
         assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
+        assert parsed_prior_dispatch_ids == [[prior_id]]
 
         state = read_state(prior_state_path)
         assert state is not None

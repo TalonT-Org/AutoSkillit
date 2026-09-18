@@ -25,6 +25,7 @@ _SHARED_READ_SIDE_VALIDATORS = {
     ),
 }
 _SHARED_READ_SIDE_VALIDATOR_HELPERS = {
+    "read_installed_plugin_artifact_identity": ("_read_installed_plugin_artifact_manifest",),
     "read_projected_plugin_identity": ("_load_canonical_projection_manifest",),
 }
 

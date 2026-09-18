@@ -125,12 +125,8 @@ _REQUIRED_TOP_KEYS = frozenset(
 )
 
 
-def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
-    """Validate raw JSON dict against campaign summary schema v1.
-
-    Returns list of error strings. Empty list = valid.
-    """
-    errors: list[str] = []
+def _validate_top_level(data: dict[str, Any], errors: list[str]) -> None:
+    """Append top-level campaign summary schema errors."""
     for key in _FORBIDDEN_AGGREGATE_KEYS:
         if key in data:
             errors.append(f"Forbidden aggregate field present: {key}")
@@ -142,6 +138,10 @@ def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
         errors.append(f"Missing required fields: {sorted(missing)}")
     if data.get("schema_version") != 1:
         errors.append(f"schema_version must be 1, got {data.get('schema_version')}")
+
+
+def _validate_per_dispatch_entries(data: dict[str, Any], errors: list[str]) -> None:
+    """Append per-dispatch campaign summary schema errors."""
     for i, entry in enumerate(data.get("per_dispatch", [])):
         status = entry.get("status")
         try:
@@ -157,6 +157,16 @@ def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
                     f"per_dispatch[{i}].token_usage must have exactly "
                     f"{sorted(expected)}, got {sorted(tu_keys)}"
                 )
+
+
+def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
+    """Validate raw JSON dict against campaign summary schema v1.
+
+    Returns list of error strings. Empty list = valid.
+    """
+    errors: list[str] = []
+    _validate_top_level(data, errors)
+    _validate_per_dispatch_entries(data, errors)
     return errors
 
 

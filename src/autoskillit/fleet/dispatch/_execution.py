@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -87,6 +87,89 @@ class ExecutionResult:
     marker_dir: Path | None
     dispatch_sidecar_path: str
     spawn_failure_dispatch_result: DispatchResult | None
+    effective_resume_session_id: str | None
+
+
+def _failed_execution_result(
+    *,
+    error_code: FleetErrorCode,
+    message: str,
+    dispatch_status: DispatchStatus,
+    dispatched_session_id: str,
+    dispatch_id: str,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    provenance: DispatchProvenanceTracker,
+    state_path: Path,
+    effective_name: str,
+    tool_ctx: ToolContext,
+    started_at: float,
+    marker_dir: Path | None,
+    dispatch_sidecar_path: str,
+    effective_resume_session_id: str | None,
+) -> ExecutionResult:
+    """Build the fail-closed Phase C result envelope."""
+    return ExecutionResult(
+        skill_result=None,
+        started_at=started_at,
+        ended_at=None,
+        dispatch_completed_normally=False,
+        marker_dir=marker_dir,
+        dispatch_sidecar_path=dispatch_sidecar_path,
+        spawn_failure_dispatch_result=complete_failure_with_state(
+            error_code=error_code,
+            message=message,
+            dispatch_status=dispatch_status,
+            dispatched_session_id=dispatched_session_id,
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        ),
+        effective_resume_session_id=effective_resume_session_id,
+    )
+
+
+def _resolve_resume_log(
+    *,
+    locator: Any,
+    project_dir: str,
+    resume_session_id: str | None,
+    prior_session_chain: list[str],
+    fail_closed: Callable[[str], ExecutionResult],
+) -> str | None | ExecutionResult:
+    """Resolve the resume log, falling back to the newest prior session when present."""
+    if not resume_session_id:
+        return None
+
+    primary_jsonl = (
+        locator.session_log_path(project_dir, resume_session_id) if locator is not None else None
+    )
+    if primary_jsonl is not None and primary_jsonl.exists():
+        return resume_session_id
+
+    logger.warning(
+        "resume_jsonl_missing",
+        resume_session_id=resume_session_id,
+        expected_path=str(primary_jsonl) if primary_jsonl else "none",
+    )
+    fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
+    if fallback_session_id:
+        fallback_jsonl = (
+            locator.session_log_path(project_dir, fallback_session_id)
+            if locator is not None
+            else None
+        )
+        if fallback_jsonl is not None and fallback_jsonl.exists():
+            logger.info(
+                "resume_session_fallback",
+                original_session_id=resume_session_id,
+                fallback_session_id=fallback_session_id,
+            )
+            return fallback_session_id
+
+    return fail_closed(f"JSONL log for session {resume_session_id} not found")
 
 
 async def run_execution(
@@ -179,108 +262,59 @@ async def run_execution(
         upsert_dispatch_record_by_name(state_path, current_record)
     except Exception:
         logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
-        return ExecutionResult(
-            skill_result=None,
+        return _failed_execution_result(
+            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            message="Food-truck dispatch initialization failed.",
+            dispatch_status=DispatchStatus.REFUSED,
+            dispatched_session_id="",
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
             started_at=started_at,
-            ended_at=None,
-            dispatch_completed_normally=False,
             marker_dir=marker_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
-            spawn_failure_dispatch_result=complete_failure_with_state(
-                error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                message="Food-truck dispatch initialization failed.",
-                dispatch_status=DispatchStatus.REFUSED,
-                dispatched_session_id="",
-                dispatch_id=dispatch_id,
-                managed_lineage_ref=managed_lineage_ref,
-                provenance=provenance,
-                state_path=state_path,
-                effective_name=effective_name,
-                tool_ctx=tool_ctx,
-            ),
+            effective_resume_session_id=resume_session_id,
         )
 
-    # Resume JSONL resolution + EFFECTIVE_RESUME_BINDING provenance.
-    if resume_session_id:
-        _primary_jsonl = (
-            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
-            if _locator is not None
-            else None
-        )
-        if _primary_jsonl is None or not _primary_jsonl.exists():
-            logger.warning(
-                "resume_jsonl_missing",
-                resume_session_id=resume_session_id,
-                expected_path=str(_primary_jsonl) if _primary_jsonl else "none",
-            )
-            _fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
-            if _fallback_session_id:
-                _fallback_jsonl = (
-                    _locator.session_log_path(str(tool_ctx.project_dir), _fallback_session_id)
-                    if _locator is not None
-                    else None
-                )
-                if _fallback_jsonl is not None and _fallback_jsonl.exists():
-                    logger.info(
-                        "resume_session_fallback",
-                        original_session_id=resume_session_id,
-                        fallback_session_id=_fallback_session_id,
-                    )
-                    resume_session_id = _fallback_session_id
-                else:
-                    return ExecutionResult(
-                        skill_result=None,
-                        started_at=started_at,
-                        ended_at=None,
-                        dispatch_completed_normally=False,
-                        marker_dir=marker_dir,
-                        dispatch_sidecar_path=dispatch_sidecar_path,
-                        spawn_failure_dispatch_result=complete_failure_with_state(
-                            error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
-                            message=f"JSONL log for session {resume_session_id} not found",
-                            dispatch_status=DispatchStatus.REFUSED,
-                            dispatched_session_id="",
-                            dispatch_id=dispatch_id,
-                            managed_lineage_ref=managed_lineage_ref,
-                            provenance=provenance,
-                            state_path=state_path,
-                            effective_name=effective_name,
-                            tool_ctx=tool_ctx,
-                        ),
-                    )
-            else:
-                return ExecutionResult(
-                    skill_result=None,
-                    started_at=started_at,
-                    ended_at=None,
-                    dispatch_completed_normally=False,
-                    marker_dir=marker_dir,
-                    dispatch_sidecar_path=dispatch_sidecar_path,
-                    spawn_failure_dispatch_result=complete_failure_with_state(
-                        error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
-                        message=f"JSONL log for session {resume_session_id} not found",
-                        dispatch_status=DispatchStatus.REFUSED,
-                        dispatched_session_id="",
-                        dispatch_id=dispatch_id,
-                        managed_lineage_ref=managed_lineage_ref,
-                        provenance=provenance,
-                        state_path=state_path,
-                        effective_name=effective_name,
-                        tool_ctx=tool_ctx,
-                    ),
-                )
+    effective_resume_session_id = _resolve_resume_log(
+        locator=_locator,
+        project_dir=str(tool_ctx.project_dir),
+        resume_session_id=resume_session_id,
+        prior_session_chain=prior_session_chain,
+        fail_closed=lambda message: _failed_execution_result(
+            error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+            message=message,
+            dispatch_status=DispatchStatus.REFUSED,
+            dispatched_session_id="",
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+            started_at=started_at,
+            marker_dir=marker_dir,
+            dispatch_sidecar_path=dispatch_sidecar_path,
+            effective_resume_session_id=resume_session_id,
+        ),
+    )
+    if isinstance(effective_resume_session_id, ExecutionResult):
+        return effective_resume_session_id
 
-    if resume_session_id:
+    if effective_resume_session_id:
         provenance.start(
             DispatchEffectName.EFFECTIVE_RESUME_BINDING,
             retry_relevant=False,
-            identities={"resume_session_id": resume_session_id},
+            identities={"resume_session_id": effective_resume_session_id},
         )
         provenance.confirm(
             DispatchEffectName.EFFECTIVE_RESUME_BINDING,
             receipt="effective resume session resolved",
             retry_relevant=False,
-            identities={"resume_session_id": resume_session_id},
+            identities={"resume_session_id": effective_resume_session_id},
         )
 
     skill_result: SkillResult | None = None
@@ -390,7 +424,7 @@ async def run_execution(
                         prior_completion_markers if prior_completion_markers else None,
                     )
                 ),
-                resume_session_id=resume_session_id,
+                resume_session_id=effective_resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 kitchen_id=tool_ctx.kitchen_id,
                 order_id=dispatch_id,
@@ -443,27 +477,23 @@ async def run_execution(
     # via kill_process_tree), translate it to a structured envelope
     # instead of letting the dispatch proceed on a stale record.
     if spawn_ctx.spawn_error:
-        return ExecutionResult(
-            skill_result=None,
+        return _failed_execution_result(
+            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            message=spawn_ctx.spawn_error[0],
+            dispatch_status=DispatchStatus.FAILURE,
+            dispatched_session_id=(
+                spawn_ctx.dispatched_session_id[0] if spawn_ctx.dispatched_session_id else ""
+            ),
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
             started_at=started_at,
-            ended_at=None,
-            dispatch_completed_normally=False,
             marker_dir=marker_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
-            spawn_failure_dispatch_result=complete_failure_with_state(
-                error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                message=spawn_ctx.spawn_error[0],
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatched_session_id=(
-                    spawn_ctx.dispatched_session_id[0] if spawn_ctx.dispatched_session_id else ""
-                ),
-                dispatch_id=dispatch_id,
-                managed_lineage_ref=managed_lineage_ref,
-                provenance=provenance,
-                state_path=state_path,
-                effective_name=effective_name,
-                tool_ctx=tool_ctx,
-            ),
+            effective_resume_session_id=effective_resume_session_id,
         )
     if (
         skill_result is not None
@@ -482,4 +512,5 @@ async def run_execution(
         marker_dir=marker_dir,
         dispatch_sidecar_path=dispatch_sidecar_path,
         spawn_failure_dispatch_result=None,
+        effective_resume_session_id=effective_resume_session_id,
     )

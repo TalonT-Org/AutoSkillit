@@ -105,14 +105,23 @@ class TestResumeJSONLPreflight:
         assert tool_ctx.executor.dispatch_calls[0].resume_session_id is None
 
     @pytest.mark.anyio
-    async def test_chain_fallback_proceeds_when_primary_missing(
+    async def test_active_resume_fallback_reaches_executor_and_classification(
         self, tool_ctx, monkeypatch, tmp_path
     ):
-        """When primary JSONL is missing but chain entry exists, fallback proceeds dispatch."""
+        """A valid resumed dispatch uses its fallback session consistently after lookup."""
+        import dataclasses
+
+        from autoskillit.core import (
+            ManagedHeadlessSessionKind,
+            NativeShellCaptureMode,
+            new_managed_launch_id,
+            resolve_native_shell_capture_decision,
+        )
         from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
         from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
+        from tests.fakes import _DEFAULT_SKILL_RESULT
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
@@ -120,6 +129,21 @@ class TestResumeJSONLPreflight:
         dispatches_dir.mkdir(parents=True, exist_ok=True)
         prior_id = "00000000-0000-0000-0000-000000000102"
         prev_state_path = dispatches_dir / f"{prior_id}.json"
+        lineage = tool_ctx.managed_headless_session_lineage_store.create(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=new_managed_launch_id(),
+            decision=resolve_native_shell_capture_decision(NativeShellCaptureMode.CAPTURE),
+            backend="mock-backend",
+            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
+            dispatch_id=prior_id,
+        )
+        lineage = tool_ctx.managed_headless_session_lineage_store.bind_final_native_session_id(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=lineage.launch_id,
+            session_id="nonexistent-primary",
+            expected_generation=lineage.generation,
+            expected_record_digest=lineage.record_digest,
+        )
         write_initial_state(
             prev_state_path,
             tool_ctx.kitchen_id,
@@ -132,7 +156,9 @@ class TestResumeJSONLPreflight:
             DispatchRecord(
                 name="test-recipe",
                 status=DispatchStatus.RESUMABLE,
+                dispatched_session_id="nonexistent-primary",
                 session_chain=["chain-session-id"],
+                managed_lineage_ref=lineage.reference,
             ),
         )
 
@@ -155,25 +181,33 @@ class TestResumeJSONLPreflight:
             "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
-
-        result = await execute_dispatch(
-            tool_ctx=tool_ctx,
-            recipe="test-recipe",
-            task="t",
-            ingredients=None,
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=lambda **_: "prompt",
-            quota_refresher=_noop_quota_refresher,
-            resume_session_id="nonexistent-primary",
-            prior_dispatch_id=prior_id,
+        tool_ctx.executor.push(
+            dataclasses.replace(_DEFAULT_SKILL_RESULT, session_id="returned-new-session")
         )
+
+        with structlog.testing.capture_logs() as logs:
+            result = await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients=None,
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=lambda **_: "prompt",
+                quota_refresher=_noop_quota_refresher,
+                resume_session_id="nonexistent-primary",
+                prior_dispatch_id=prior_id,
+            )
 
         assert not isinstance(result.outcome, DispatchRejected), (
             f"Expected dispatch to proceed but got rejection: {result.outcome}"
         )
         assert len(tool_ctx.executor.dispatch_calls) == 1
-        assert tool_ctx.executor.dispatch_calls[0].resume_session_id is None
+        assert tool_ctx.executor.dispatch_calls[0].resume_session_id == "chain-session-id"
+        continuity_logs = [
+            log for log in logs if log.get("event") == "session_id_continuity_mismatch"
+        ]
+        assert continuity_logs[0]["resume_session_id"] == "chain-session-id"
 
 
 class TestSessionChainContinuity:

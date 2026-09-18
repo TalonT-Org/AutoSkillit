@@ -496,6 +496,12 @@ class AdjudicationVerdict:
     outcome_fields: Mapping[str, int | str] | None
     defects: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        if not self.subtype:
+            raise ValueError("AdjudicationVerdict.subtype must be a non-empty string")
+        if not self.detail:
+            raise ValueError("AdjudicationVerdict.detail must be a non-empty string")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "reason_kind": self.reason_kind.value,

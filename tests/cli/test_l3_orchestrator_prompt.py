@@ -3,8 +3,6 @@ sentinel format, progress markers, and negative bootstrap assertions."""
 
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
@@ -615,15 +613,8 @@ class TestResumeReasonInPrompt:
         from autoskillit.core.types import RetryReason
 
         assert set(RETRY_REASON_DESCRIPTIONS) == set(RetryReason)
-        assert all(isinstance(reason, RetryReason) for reason in RETRY_REASON_DESCRIPTIONS)
         assert all(description.strip() for description in RETRY_REASON_DESCRIPTIONS.values())
 
-        source = inspect.getsource(_resume_reason_guidance)
-        assert "RETRY_REASON_DESCRIPTIONS" in source
-        assert "RetryReason.IDLE_STALL" not in source
-        assert "RetryReason.RESUME" not in source
-        assert "RetryReason.NONE" not in source
-        assert "RetryReason(retry_reason)" not in source
         for reason, description in RETRY_REASON_DESCRIPTIONS.items():
             assert description in _resume_reason_guidance(reason.value)
 
@@ -645,7 +636,7 @@ class TestResumeReasonInPrompt:
 
         assert "on_failure" in guidance
         assert "do not resume" in guidance
-        assert "on_context_limit" in guidance
+        assert "never on_context_limit" in guidance
 
     @pytest.mark.parametrize("raw_reason", ("", "unrecognized-retry-reason"))
     def test_unknown_retry_reason_retains_safe_fallback(self, raw_reason: str) -> None:

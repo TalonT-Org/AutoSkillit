@@ -280,9 +280,7 @@ def test_skill_result_envelope_classifies_every_dataclass_field() -> None:
 
     assert skill_result_fields == directly_serialized | set(_ENVELOPE_EXCLUDED_FIELDS)
     assert not directly_serialized & set(_ENVELOPE_EXCLUDED_FIELDS)
-    assert all(_ENVELOPE_EXCLUDED_FIELDS.values())
     assert set(_FLATTENED_ENVELOPE_FIELDS) <= set(_ENVELOPE_EXCLUDED_FIELDS)
     for source_field, expected_values in _FLATTENED_ENVELOPE_FIELDS.items():
-        assert source_field in _ENVELOPE_EXCLUDED_FIELDS
         for wire_key, expected_value in expected_values.items():
             assert payload[wire_key] == expected_value

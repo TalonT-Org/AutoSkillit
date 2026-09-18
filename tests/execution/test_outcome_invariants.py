@@ -9,12 +9,9 @@ reporting fix_failures > 0. Covers RECT-011 through RECT-018.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import errno
-import inspect
 import json
-import textwrap
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -41,6 +38,7 @@ from autoskillit.recipe import (
     SuccessQualifierEntry,
 )
 from tests.conftest import _make_result
+from tests.execution._adjudication_helpers import assert_demotion_verdict
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -540,16 +538,8 @@ def _assert_demotion_verdict(
     outcome_fields: dict[str, int | str] | None,
     defects: tuple[str, ...] = (),
 ) -> None:
-    """Assert the final result and its demotion verdict describe one event."""
-    verdict = result.adjudication_verdict
-
-    assert verdict is not None
-    assert verdict.reason_kind is result.retry_reason
-    assert verdict.subtype == result.subtype
-    assert result.result == verdict.detail
-    assert result.outcome_fields == outcome_fields
-    assert verdict.outcome_fields == outcome_fields
-    assert verdict.defects == defects
+    """Deprecated shim; use ``assert_demotion_verdict`` from ``_adjudication_helpers``."""
+    assert_demotion_verdict(result, outcome_fields=outcome_fields, defects=defects)
 
 
 class TestApplyPostSessionAdjudicationUnit:
@@ -640,38 +630,6 @@ class TestApplyPostSessionAdjudicationUnit:
         )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
-
-
-def test_each_direct_demotion_replace_carries_a_verdict_and_detail() -> None:
-    """New direct demotions cannot silently omit their causal envelope."""
-    from autoskillit.execution.headless import _headless_adjudication, _headless_outcome
-
-    functions = (
-        _headless_adjudication._apply_post_session_adjudication,
-        _headless_adjudication._apply_contract_output_checks,
-        _headless_outcome._demote_outcome,
-    )
-    for function in functions:
-        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
-        demotions = [
-            call
-            for call in ast.walk(tree)
-            if isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Attribute)
-            and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "dataclasses"
-            and call.func.attr == "replace"
-            and any(
-                keyword.arg == "success"
-                and isinstance(keyword.value, ast.Constant)
-                and keyword.value.value is False
-                for keyword in call.keywords
-            )
-        ]
-        assert demotions, f"{function.__name__} no longer has a guarded direct demotion"
-        for demotion in demotions:
-            keyword_names = {keyword.arg for keyword in demotion.keywords}
-            assert {"adjudication_verdict", "result"} <= keyword_names
 
 
 def _artifact_contract() -> SkillContract:

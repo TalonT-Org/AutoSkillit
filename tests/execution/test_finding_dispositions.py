@@ -37,6 +37,7 @@ from autoskillit.recipe.contracts._contracts_types import (
     SuccessQualifierEntry,
 )
 from tests.conftest import _make_result
+from tests.execution._adjudication_helpers import assert_demotion_verdict
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -168,22 +169,6 @@ def _adjudicate(
     )
 
 
-def _assert_demotion_verdict(
-    result: SkillResult,
-    *,
-    defects: tuple[str, ...] = (),
-) -> None:
-    """Assert a reconciliation demotion retains one causal verdict."""
-    verdict = result.adjudication_verdict
-
-    assert verdict is not None
-    assert verdict.reason_kind is result.retry_reason
-    assert verdict.subtype == result.subtype
-    assert result.result == verdict.detail
-    assert verdict.outcome_fields == result.outcome_fields
-    assert verdict.defects == defects
-
-
 def _processed(verdict: str, rows: list[str], *extra: str) -> str:
     return "\n".join(["review_status = processed", f"verdict = {verdict}", *rows, *extra])
 
@@ -311,7 +296,7 @@ def test_lying_model_real_fix_with_fix_failures_demoted(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == "outcome_invariant_violation"
-    _assert_demotion_verdict(result)
+    assert_demotion_verdict(result)
 
 
 def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Path) -> None:
@@ -401,7 +386,7 @@ def test_malformed_reports_have_a_distinct_failure(
     assert result.subtype == "outcome_report_malformed"
     assert expected_detail in result.result
     assert result.outcome_fields is not None
-    _assert_demotion_verdict(result, defects=expected_defects)
+    assert_demotion_verdict(result, defects=expected_defects)
 
 
 @pytest.mark.parametrize(
@@ -445,7 +430,7 @@ def test_processed_review_requires_fresh_green_tests(
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == expected_subtype
     assert result.outcome_fields is not None
-    _assert_demotion_verdict(result)
+    assert_demotion_verdict(result)
 
 
 def test_malformed_workspace_record_timestamps_demote_to_report_malformed(
@@ -468,7 +453,7 @@ def test_malformed_workspace_record_timestamps_demote_to_report_malformed(
     assert result.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
     assert result.subtype == "outcome_report_malformed"
     assert result.outcome_fields is not None
-    _assert_demotion_verdict(result)
+    assert_demotion_verdict(result)
 
 
 class _CorruptedTimestampLedger:
@@ -597,7 +582,7 @@ def test_unreadable_evidence_is_malformed(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
     assert "evidence is incomplete" in result.result
-    _assert_demotion_verdict(
+    assert_demotion_verdict(
         result,
         defects=("workspace outcome evidence is unavailable: evidence is incomplete",),
     )
@@ -620,7 +605,7 @@ def test_missing_review_status_demotes_to_malformed(tmp_path: Path) -> None:
     missing = _adjudicate("verdict = already_green", workspace, None)
 
     assert missing.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
-    _assert_demotion_verdict(missing)
+    assert_demotion_verdict(missing)
 
 
 def test_failed_session_anchor_is_preserved_as_path_contamination(tmp_path: Path) -> None:
@@ -680,7 +665,7 @@ def test_red_test_demotes_on_stall_recovery_path(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == "tests_not_green"
-    _assert_demotion_verdict(result)
+    assert_demotion_verdict(result)
 
 
 def test_parser_reports_duplicate_and_malformed_rows() -> None:

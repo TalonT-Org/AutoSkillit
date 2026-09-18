@@ -23,7 +23,6 @@ from hashlib import sha256
 from typing import NamedTuple
 
 from ._type_constants_durable_writers import *  # noqa: F401, F403
-from ._type_constants_prompts import *  # noqa: F401, F403
 from ._type_constants_retirements import *  # noqa: F401, F403
 from ._type_constants_skill_contract import *  # noqa: F401, F403
 
@@ -43,6 +42,9 @@ __all__ = [
     "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     "ROUTING_AUTHORITY_CLAUSE",
     "STEP_SKIP_SEMANTICS_CLAUSE",
+    "STOP_STEP_EVIDENCE_DOCTRINE",
+    "STOP_STEP_EVIDENCE_DOCTRINE_BULLETS",
+    "STOP_STEP_EVIDENCE_DOCTRINE_INDENTED",
     "ADMIRAL_DISPATCH_SECTIONS",
     "PR_TELEMETRY_SECTIONS",
     "KNOWN_CI_EVENTS",
@@ -254,6 +256,33 @@ STEP SKIP SEMANTICS:
   context value as step_guard_value and never skip a step on your own initiative.
 - When the host returns skipped: true, route only to its next_step bypass target.
 """
+
+
+def _render_stop_step_evidence_doctrine(indent: str = "") -> str:
+    """Render the canonical STOP-STEP EVIDENCE doctrine as bullet points.
+
+    Single source for the LLM-facing doctrine that appears in the orchestrator
+    prompt, the fleet prompt, the api_orchestration stop-step text, and the
+    sous-chef SKILL.md. Each tuple entry becomes one ``- ...`` bullet. Pass
+    ``indent`` to prefix every line (e.g., ``"  "`` to align with H3b's
+    nested bullets under the fleet prompt).
+    """
+    return "\n".join(f"{indent}- {line}" for line in STOP_STEP_EVIDENCE_DOCTRINE_BULLETS)
+
+
+STOP_STEP_EVIDENCE_DOCTRINE_BULLETS: tuple[str, ...] = (
+    "Preserve the original failed run_skill response: use its exact result, reason_kind, "
+    "and outcome_fields verbatim; a diagnostic result is supplemental.",
+    "With no structured original reason, do not infer.",
+    "Use static stop message only when no tool evidence exists.",
+)
+
+# Bullet-rendered text for callers that need a single string with no indent.
+STOP_STEP_EVIDENCE_DOCTRINE: str = _render_stop_step_evidence_doctrine()
+
+# Same text, indented two spaces — used by the fleet prompt where the
+# doctrine sits under an H3b heading as nested bullets.
+STOP_STEP_EVIDENCE_DOCTRINE_INDENTED: str = _render_stop_step_evidence_doctrine("  ")
 
 
 # Strict subset of SOUS_CHEF_MANDATORY_SECTIONS delivered to L3 dispatch sessions.

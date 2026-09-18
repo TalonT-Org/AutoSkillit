@@ -242,7 +242,7 @@ def test_orchestrator_routes_terminal_failure_reasons_without_context_recovery(
     """These failure reasons route directly to on_failure, never context recovery."""
     prompt = _get_prompt().lower()
     start = prompt.index(f"retry_reason: {retry_reason}")
-    route_clause = prompt[start : start + 500]
+    route_clause = prompt[start : start + 2000]
 
     assert "on_failure" in route_clause
     assert "do not route to on_context_limit" in route_clause

@@ -143,7 +143,7 @@ class TestNullHandlerContract:
 class TestConfigureLogging:
     @pytest.fixture(autouse=True)
     def _structlog_to_null(self):
-        """Empty autouse fixture that overrides tests/conftest.py's ``_structlog_to_null``.
+        """Override pattern: empty autouse that shadows tests/conftest.py's ``_structlog_to_null``.
 
         pytest resolves fixtures by name within the test class's MRO. A class-level
         autouse whose name matches a parent fixture in ``tests/conftest.py`` shadows

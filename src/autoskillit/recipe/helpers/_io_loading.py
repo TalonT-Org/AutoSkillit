@@ -125,13 +125,16 @@ def _substitute_recipe_values(
     *,
     temp_dir_relpath: str | None,
 ) -> Any:
+    from ._recipe_note_templates import substitute_recipe_note_placeholders
+
     if isinstance(value, str):
         resolved = (
             substitute_temp_placeholder(value, temp_dir_relpath)
             if temp_dir_relpath is not None
             else value
         )
-        return substitute_scripts_placeholder(resolved)
+        resolved = substitute_scripts_placeholder(resolved)
+        return substitute_recipe_note_placeholders(resolved)
     if isinstance(value, dict):
         return {
             key: _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath)
@@ -141,7 +144,7 @@ def _substitute_recipe_values(
         return [
             _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath) for item in value
         ]
-    return value
+    return substitute_recipe_note_placeholders(value)
 
 
 def load_recipe_dict_with_declarations(

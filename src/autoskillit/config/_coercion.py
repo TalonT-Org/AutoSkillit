@@ -43,7 +43,14 @@ def _field_defaults(cls: type) -> dict[str, Any]:
     return defaults
 
 
-def _coerce_optional(value: Any, args: tuple[type, ...], context: str) -> Any:
+def _coerce_union(value: Any, args: tuple[type, ...], context: str) -> Any:
+    """Coerce a value under a Union/Optional annotation.
+
+    For ``Optional[T]`` (exactly one non-``None`` arm), recurse into the inner
+    type so ``None`` short-circuits. For all other unions (``int | str``,
+    multi-arm unions, etc.) the value is passed through unchanged — those
+    unions are typed but not coerced by the YAML pipeline.
+    """
     non_none = [arg for arg in args if arg is not type(None)]
     if type(None) not in args or len(non_none) != 1:
         return value
@@ -77,16 +84,18 @@ def _coerce_utf8_byte_limit(value: Any, context: str) -> Any:
     return Utf8ByteLimit(coerced)
 
 
-def _coerce_number(value: Any, target_type: type, context: str) -> int | float:
-    if target_type is int:
-        if isinstance(value, bool):
-            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}")
-        if isinstance(value, int):
-            return value
-        try:
-            return int(value)
-        except (TypeError, ValueError) as exc:
-            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
+def _coerce_int(value: Any, context: str) -> int:
+    if isinstance(value, bool):
+        raise ConfigSchemaError(f"{context} must be an integer, got {value!r}")
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
+
+
+def _coerce_float(value: Any, context: str) -> float:
     if isinstance(value, bool):
         raise ConfigSchemaError(f"{context} must be a number, got {value!r}")
     if isinstance(value, (int, float)):
@@ -138,14 +147,16 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     origin = get_origin(target_type)
     args = get_args(target_type)
     if origin is types.UnionType or origin is Union:
-        return _coerce_optional(value, args, context)
+        return _coerce_union(value, args, context)
 
     from autoskillit.core import Utf8ByteLimit
 
     if target_type is Utf8ByteLimit:
         return _coerce_utf8_byte_limit(value, context)
-    if target_type in (int, float):
-        return _coerce_number(value, target_type, context)
+    if target_type is int:
+        return _coerce_int(value, context)
+    if target_type is float:
+        return _coerce_float(value, context)
     if target_type is bool:
         return bool(value)
     if target_type is str:

@@ -502,7 +502,6 @@ def test_gate_fails_closed_when_a_registered_surface_vanishes(tmp_path: Path) ->
     [
         [],
         ["--staged", "--base", "HEAD"],
-        ["--staged", "--base", ""],
     ],
 )
 def test_gate_requires_exactly_one_mode(

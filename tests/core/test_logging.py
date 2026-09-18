@@ -143,7 +143,19 @@ class TestNullHandlerContract:
 class TestConfigureLogging:
     @pytest.fixture(autouse=True)
     def _structlog_to_null(self):
-        """Override the conftest autouse — _reset_structlog manages structlog state here."""
+        """Empty autouse fixture that overrides tests/conftest.py's ``_structlog_to_null``.
+
+        pytest resolves fixtures by name within the test class's MRO. A class-level
+        autouse whose name matches a parent fixture in ``tests/conftest.py`` shadows
+        the parent — that is the override mechanism at work here. The body is empty
+        by design: this class's ``_reset_structlog`` fixture (defined immediately
+        below) performs the targeted ``structlog.reset_defaults()`` +
+        ``_flush_logger_proxy_caches()`` reset before and after each test,
+        which is the reset contract this class needs. The parent fixture's broader
+        reset (which also clears ``bind`` on cached proxies) is intentionally
+        suppressed here because it would discard the proxy state this class's
+        tests deliberately install via ``configure_logging()`` mid-test.
+        """
         yield  # no-op: _reset_structlog handles reset before and after each test
 
     @pytest.fixture(autouse=True)

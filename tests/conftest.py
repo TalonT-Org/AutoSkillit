@@ -280,6 +280,13 @@ def _detect_tmp_git_contamination():
     An empty /tmp/.git directory is harmless — _find_git_ancestor() walks past
     it (no HEAD file).  Only a valid git repo at /tmp contaminates tests that
     use cwd='/tmp'.
+
+    xdist execution model: under ``pytest -n 4`` (xdist, ``--dist load``) this
+    session-scoped fixture runs **once per worker process**, not once for the
+    whole test session. Each worker is a forked pytest process with its own
+    Python interpreter; this is fine for a stateless probe that only inspects
+    a well-known path. Do not rely on per-class or per-test execution from
+    here — use function-scoped fixtures for that.
     """
     tmp_git = _Path("/tmp/.git")
     if tmp_git.is_dir() and (tmp_git / "HEAD").is_file():
@@ -302,6 +309,16 @@ def _structlog_session_init():
 
     Repairs module-level loggers cached at import time (before any fixture ran)
     and collects all BoundLoggerLazyProxy instances for cheap per-test clearing.
+
+    xdist execution model: under ``pytest -n 4`` (xdist, ``--dist load``) this
+    session-scoped fixture runs **once per worker process**. The module-level
+    ``_structlog_proxies`` list at module scope is **per-worker**: worker A's
+    list contains only proxies imported under worker A. Cross-worker state
+    does not leak (each worker is a separate process) but cross-worker code
+    sharing via that list also does not happen — a worker that imports a
+    module after session start must explicitly call ``_collect_structlog_proxies``
+    to repopulate the list, or its proxies will not be cleared by
+    ``_structlog_to_null``.
     """
     import structlog
 

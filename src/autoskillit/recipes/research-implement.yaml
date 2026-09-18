@@ -697,8 +697,8 @@ steps:
       pipeline failed"}'
   implement_complete:
     action: stop
-    message: 'Implementation phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following
-      fields: success=true, worktree_path=${{ context.worktree_path }}, research_dir_rel=${{ inputs.research_dir_rel }}, research_dir=${{
-      inputs.research_dir }}, report_path=${{ context.report_path }}, experiment_results=${{ context.experiment_results }}.
-      Example sentinel: {"success": true, "worktree_path": "<path>", "research_dir_rel": "<rel>", "research_dir": "<path>",
-      "report_path": "<path>", "experiment_results": "<path>"}'
+    message: >-
+      Implementation phase complete. Emit the L3 result sentinel JSON block now.
+      Include success=true and the exact worktree_path, research_dir_rel,
+      research_dir, report_path, and experiment_results values already available
+      from recipe inputs and captured step results.

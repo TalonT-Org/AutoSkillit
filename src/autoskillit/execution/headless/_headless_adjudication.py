@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
+    AdjudicationVerdict,
     ApiFailureOutcome,
     ApiRetryOutcome,
     CliSubtype,
@@ -257,12 +258,21 @@ def _apply_post_session_adjudication(
                 write_behavior.expected_when,
             )
         if write_expected:
+            detail = "expected implementation writes were not observed"
             return dataclasses.replace(
                 sr,
                 success=False,
                 subtype="zero_writes",
                 needs_retry=True,
                 retry_reason=RetryReason.ZERO_WRITES,
+                result=detail,
+                adjudication_verdict=AdjudicationVerdict(
+                    reason_kind=RetryReason.ZERO_WRITES,
+                    subtype="zero_writes",
+                    detail=detail,
+                    outcome_fields=sr.outcome_fields,
+                    defects=(),
+                ),
             )
 
     if skill_contract is None:
@@ -299,7 +309,14 @@ def _apply_contract_output_checks(
                 subtype="outcome_invariant_violation",
                 needs_retry=True,
                 retry_reason=RetryReason.OUTCOME_INVARIANT,
-                outcome_fields=None,
+                result=detail,
+                adjudication_verdict=AdjudicationVerdict(
+                    reason_kind=RetryReason.OUTCOME_INVARIANT,
+                    subtype="outcome_invariant_violation",
+                    detail=detail,
+                    outcome_fields=fields,
+                    defects=(),
+                ),
             )
 
     for output in skill_contract.outputs:
@@ -323,6 +340,13 @@ def _apply_contract_output_checks(
                 retry_reason=retry_reason,
                 result=detail,
                 outcome_fields=None,
+                adjudication_verdict=AdjudicationVerdict(
+                    reason_kind=retry_reason,
+                    subtype=subtype,
+                    detail=detail,
+                    outcome_fields=None,
+                    defects=(),
+                ),
             )
 
     return sr
@@ -636,6 +660,7 @@ def _apply_closure_verification_gate(
             is_error=True,
             subtype="closure_verification_failed",
             result=f"Closure verification failed: {error_detail}",
+            adjudication_verdict=None,
         )
     if sr.retry_reason == RetryReason.EMPTY_OUTPUT:
         return dataclasses.replace(sr, is_error=False)

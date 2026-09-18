@@ -267,6 +267,11 @@ def build_terminal_flush_kwargs(
                 "outcome_fields": skill_result.outcome_fields,
                 "outcome_invariant_violated": skill_result.outcome_invariant_violated,
                 "outcome_qualifier": skill_result.outcome_qualifier,
+                "adjudication_verdict": (
+                    skill_result.adjudication_verdict.to_dict()
+                    if skill_result.adjudication_verdict is not None
+                    else None
+                ),
             }
         )
     return flush_kwargs

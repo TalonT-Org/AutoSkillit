@@ -124,6 +124,8 @@ from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_retirement_backstops import *  # noqa: F401, F403
 from ._type_retirement_backstops import __all__ as _retirement_backstops_all
+from ._type_retry_reason import *  # noqa: F401, F403
+from ._type_retry_reason import __all__ as _retry_reason_all
 from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
 from ._type_skill_contract import *  # noqa: F401, F403
@@ -191,6 +193,7 @@ __all__ = (
     + _protocols_backend_all
     + _results_all
     + _results_execution_all
+    + _retry_reason_all
     + _recipe_binding_all
     + _recipe_execution_all
     + _recipe_delivery_all

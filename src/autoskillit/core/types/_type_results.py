@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -107,6 +108,7 @@ __all__ = [
     "ApiRetryOutcome",
     "CandidatePreSpawnRejection",
     "NdjsonDriftOutcome",
+    "AdjudicationVerdict",
     "SkillResult",
     "CleanupResult",
     "CloneSuccessResult",
@@ -484,6 +486,28 @@ class WriteEvidence:
         return self.write_call_count >= 1 or self.file_changes_count >= 1
 
 
+@dataclass(frozen=True, slots=True)
+class AdjudicationVerdict:
+    """Structured explanation for a post-session success demotion."""
+
+    reason_kind: RetryReason
+    subtype: str
+    detail: str
+    outcome_fields: Mapping[str, int | str] | None
+    defects: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "reason_kind": self.reason_kind.value,
+            "subtype": self.subtype,
+            "detail": self.detail,
+            "outcome_fields": (
+                dict(self.outcome_fields) if self.outcome_fields is not None else None
+            ),
+            "defects": list(self.defects),
+        }
+
+
 @dataclass
 class SkillResult:
     """Typed result returned by _build_skill_result and run_headless_core."""
@@ -536,6 +560,7 @@ class SkillResult:
     outcome_fields: dict[str, int | str] | None = None
     outcome_invariant_violated: bool = False
     outcome_qualifier: str | None = None
+    adjudication_verdict: AdjudicationVerdict | None = None
     execution_identity: ExecutionIdentity = field(default_factory=ExecutionIdentity.empty)
     """Requested launch intent plus backend-owned effective execution evidence."""
 
@@ -561,6 +586,14 @@ class SkillResult:
             "has_progress_evidence": self.has_progress_evidence,
             "has_implementation_progress": self.has_implementation_progress,
             "completion_required": self.completion_required,
+            "outcome_fields": self.outcome_fields,
+            "outcome_invariant_violated": self.outcome_invariant_violated,
+            "outcome_qualifier": self.outcome_qualifier,
+            "adjudication_verdict": (
+                self.adjudication_verdict.to_dict()
+                if self.adjudication_verdict is not None
+                else None
+            ),
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
             "provider_fallback": self.provider.fallback_activated,

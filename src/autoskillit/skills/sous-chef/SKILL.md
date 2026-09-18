@@ -145,6 +145,8 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: outcome_report_malformed`** → fall through to `on_failure`. The
   skill's terminal outcome report could not be parsed. Do not route to
   `on_context_limit` or add a label.
+- **If `retry_reason: cancelled`** → fall through to `on_failure`. The session was
+  cancelled. Do not resume or route to `on_context_limit`.
 - **If `retry_reason: stale`** → decrement the `retries` counter for this step.
   Re-execute the same step if retries remain. If retries are exhausted, fall through
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
@@ -158,6 +160,16 @@ useful — the worktree orphan concern that motivates `retries: 0` does not appl
 This is a one-shot retry: if the retry also goes stale, fall through to `on_failure`.
 Before re-executing, if the stale result captured `worktree_path`, remove the empty
 worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
+
+## STOP-STEP EVIDENCE — MANDATORY
+
+Preserve the original failed run_skill response that caused the failure route. If it
+contains an adjudication verdict, use its exact result as the failure reason and
+reproduce reason_kind and available outcome_fields verbatim. A later diagnostic result
+is supplementary only and must never replace the original failure evidence. If there is
+no structured original reason, state that fact and reproduce only observed tool
+evidence; do not infer a cause. Use the static stop message only when no tool evidence
+exists.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.

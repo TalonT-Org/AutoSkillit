@@ -42,7 +42,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 12
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 13
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,6 +378,7 @@ class SessionIndexEntry(TypedDict):
     outcome_fields: dict[str, int | str] | None
     outcome_invariant_violated: bool
     outcome_qualifier: str | None
+    adjudication_verdict: dict[str, object] | None
     native_shell_capture: dict[str, object] | None
     session_type: str | None
     subagent_model_outcomes: list[SubagentModelOutcomeDict]

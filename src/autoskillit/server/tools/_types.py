@@ -102,6 +102,10 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     has_progress_evidence: bool
     has_implementation_progress: bool
     completion_required: bool
+    adjudication_verdict: dict[str, object] | None
+    outcome_fields: dict[str, int | str] | None
+    outcome_invariant_violated: bool
+    outcome_qualifier: str | None
     audit_status: str | None
     audit_verdict: str | None
     audit_cycle_path: str | None

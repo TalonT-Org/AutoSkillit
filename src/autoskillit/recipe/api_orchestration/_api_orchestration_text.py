@@ -51,13 +51,22 @@ def _build_stop_step_semantics(recipe: Recipe) -> str:
         "- Do NOT call any MCP tools after a stop step.",
         "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
         "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
+        "- Preserve the original failed run_skill response that caused the failure route.",
+        "- When it carries an adjudication verdict, use its exact result as the failure "
+        "reason and reproduce reason_kind and available outcome_fields verbatim.",
+        "- A later diagnostic result is supplementary only and never replaces the original "
+        "failure evidence.",
+        "- With no structured original reason, say so and reproduce only observed tool "
+        "evidence; do not infer a cause.",
+        "- Use the static stop message only when no tool evidence exists.",
     ]
     for name, step in stop_steps.items():
         is_failure = _infer_stop_failure(name, step.message)
         success_val = "false" if is_failure else "true"
         lines.append(
             f"- For stop step '{name}': emit the L3 sentinel block with "
-            f"success={success_val} and reason=<step message>. Then TERMINATE."
+            f"success={success_val} and select reason using the evidence precedence above. "
+            "Then TERMINATE."
         )
         if step.message:
             lines.append(f"  Stop step '{name}' message: {step.message!r}")

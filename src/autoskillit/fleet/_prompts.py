@@ -152,7 +152,13 @@ H3 — AUTO-ACCEPT CONFIRM STEPS:
 
 H3b — STOP STEP SEMANTICS:
   When you reach a step with action: "stop", the pipeline is TERMINATED.
-  Emit the L3 sentinel block with the step's message as the reason field.
+  Preserve the original failed run_skill response that caused the failure route.
+  When it contains an adjudication verdict, put the exact adjudication detail from
+  its result in the reason field and reproduce available reason_kind and
+  outcome_fields verbatim. A later diagnostic_result is supplementary only.
+  reason_kind, outcome_fields, and diagnostic_result are optional evidence fields;
+  include them only when observed and never invent absent evidence. With no tool
+  evidence, use the static step message as the fallback reason.
   Set success=true for completion terminals, success=false for failure/escalation terminals.
   Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
@@ -323,6 +329,14 @@ Fields:
 - reason: "completed", "failed", "quota_exhausted", "timeout",
   "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
 - summary: One-line description of what happened{extra_fields_docs}
+- Failure terminals may also include optional evidence fields reason_kind,
+  outcome_fields, and diagnostic_result. Include only observed values and never invent
+  absent evidence. Preserve the original failed run_skill result as reason; diagnostic
+  evidence is supplementary.
+
+Concrete failure-only example (null means the corresponding evidence was absent):
+{{"success": false, "reason": "observed failure detail", "summary": "pipeline failed",
+"reason_kind": null, "outcome_fields": null, "diagnostic_result": null}}
 
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---
 are parsed by the fleet dispatcher. The %%L3_DONE::{dispatch_id_short}%% marker

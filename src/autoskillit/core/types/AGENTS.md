@@ -75,6 +75,7 @@ Each direct Python file has one responsibility:
 - `_type_results.py` — Core result dataclasses — universal types.
 - `_type_results_execution.py` — Execution-scoped result dataclasses.
 - `_type_results_records.py` — Leaf result and persisted-index record contracts.
+- `_type_retry_reason.py` — Exhaustive human guidance for retry-reason discriminators.
 
 ### Other IL-0 contracts
 

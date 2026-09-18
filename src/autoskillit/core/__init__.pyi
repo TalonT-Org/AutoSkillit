@@ -752,6 +752,7 @@ from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import AbsentBoundValue as AbsentBoundValue
 from .types import AcceptInputEvent as AcceptInputEvent
 from .types import ActiveContextAdmissionState as ActiveContextAdmissionState
+from .types import AdjudicationVerdict as AdjudicationVerdict
 from .types import AdmissionAttemptId as AdmissionAttemptId
 from .types import AdmissionBatch as AdmissionBatch
 from .types import AdmissionBatchId as AdmissionBatchId
@@ -1213,6 +1214,7 @@ from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
 from .types import RetiringCacheRepairResult as RetiringCacheRepairResult
 from .types import RetiringCacheState as RetiringCacheState
+from .types import RETRY_REASON_DESCRIPTIONS as RETRY_REASON_DESCRIPTIONS
 from .types import RetryReason as RetryReason
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
 from .types import ReviewOperationState as ReviewOperationState

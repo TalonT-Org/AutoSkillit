@@ -122,7 +122,7 @@ repos:
         name: Check acceptance-policy relaxation (staged vs HEAD)
         language: system
         entry: python scripts/check_policy_relaxation.py --staged
-        files: ^(tests/arch/|tests/infra/|scripts/check_file_lengths\.py)
+        files: ^(tests/arch/|tests/infra/|scripts/(check_file_lengths|_git_plumbing)\.py)
         pass_filenames: false
 
   - repo: https://github.com/pre-commit/pre-commit-hooks

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import regex as _regex
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS
+from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.core import TokenLog
@@ -25,6 +25,8 @@ _PR_SECTION_RE = _regex.compile(
     + r"(?=\n## |\Z)",
     _regex.DOTALL,
 )
+
+logger = get_logger(__name__)
 
 
 def patch_pr_token_summary(
@@ -152,10 +154,11 @@ def consolidate_health_reports(*, diagnostics_log_dir: str, kitchen_id: str) -> 
     for path in sorted(reports_dir.glob("*_health_report.json")):
         try:
             data = json.loads(path.read_text())
-            if data.get("kitchen_id") == kitchen_id:
-                reports.append(data)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("skipping unreadable health report %s: %s", path, exc)
             continue
+        if data.get("kitchen_id") == kitchen_id:
+            reports.append(data)
 
     if not reports:
         return {"summary": "No health reports found for this campaign."}

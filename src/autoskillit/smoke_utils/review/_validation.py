@@ -8,7 +8,7 @@ import math
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
-from autoskillit.core import AnchorAdmission, DiffAnchorAuthority
+from autoskillit.core import AnchorAdmission, DiffAnchorAuthority, get_logger
 from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
     EXPERIMENTAL_REVIEW_AUDITORS,
@@ -81,6 +81,8 @@ _TERMINAL_FAILURE_REASONS = {
     "interruption",
     "truncation",
 }
+
+logger = get_logger(__name__)
 
 
 def build_malformed_review_envelope(
@@ -331,7 +333,12 @@ def validate_experimental_auditor_outputs(
         else:
             try:
                 raw_output = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "auditor payload was unserializable (%s): %s",
+                    type(payload).__name__,
+                    exc,
+                )
                 raw_output = f"<unserializable {type(payload).__name__}>"
 
         error: str | None = None
@@ -356,7 +363,8 @@ def validate_experimental_auditor_outputs(
         else:
             try:
                 parsed = json.loads(payload) if isinstance(payload, (str, bytes)) else payload
-            except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+            except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as exc:
+                logger.warning("auditor output failed to decode (%s): %s", type(exc).__name__, exc)
                 error = "malformed_json"
             if error is None and not isinstance(parsed, list):
                 error = "non_array"

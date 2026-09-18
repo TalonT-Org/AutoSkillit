@@ -119,7 +119,26 @@ def _reserve_locked(
             authority_id=authority_id,
         )
 
-    attempt_id = AuditAttemptId(slot_row[0])
+    return _reconcile_existing_slot(
+        connection,
+        request=request,
+        slot_key=slot_key,
+        slot_id=slot_id,
+        attempt_id=AuditAttemptId(slot_row[0]),
+        authority_id=authority_id,
+    )
+
+
+def _reconcile_existing_slot(
+    connection: sqlite3.Connection,
+    *,
+    request: AuditReservationRequest,
+    slot_key: AuditSlotKey,
+    slot_id: AuditSlotId,
+    attempt_id: AuditAttemptId,
+    authority_id: str,
+) -> AuditReservationOutcome:
+    """Return the redelivery outcome for a slot's selected current attempt."""
     attempt_row = connection.execute(
         "SELECT lifecycle, semantic_digest, committed_outcome_json, reservation_json "
         "FROM attempts WHERE attempt_id = ?",
@@ -142,7 +161,9 @@ def _reserve_locked(
             request=request,
             slot_id=slot_id,
             predecessor_attempt_id=attempt_id,
-            reservation=reservation,
+            slot_key=reservation.slot_key,
+            audit_round=reservation.audit_round,
+            expected_head=reservation.expected_head,
             authority_id=authority_id,
         )
 
@@ -322,17 +343,19 @@ def _dispatch_correction(
     request: AuditReservationRequest,
     slot_id: AuditSlotId,
     predecessor_attempt_id: AuditAttemptId,
-    reservation: AuditIdentityReservation,
+    slot_key: AuditSlotKey,
+    audit_round: AuditRound,
+    expected_head: AuditCycleHead | None,
     authority_id: str,
 ) -> AuditReservationOutcome:
     attempt_id = AuditAttemptId(secrets.token_hex(16))
     next_reservation = _build_reservation(
         request=request,
         slot_id=slot_id,
-        slot_key=reservation.slot_key,
+        slot_key=slot_key,
         attempt_id=attempt_id,
-        audit_round=reservation.audit_round,
-        current_head=reservation.expected_head,
+        audit_round=audit_round,
+        current_head=expected_head,
     )
     now = _facade_module._now_iso()
     connection.execute(
@@ -356,7 +379,7 @@ def _dispatch_correction(
     handle = _issue_handle(connection, attempt_id, authority_id)
     return AuditReservationOutcome(
         decision=ReservationDecision.DISPATCH_NEW,
-        slot_key=reservation.slot_key,
+        slot_key=slot_key,
         attempt_id=attempt_id,
         reservation=next_reservation,
         reservation_handle=handle,

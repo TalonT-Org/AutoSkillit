@@ -290,6 +290,18 @@ def test_stream_key_decoder_enforces_byte_and_nesting_bounds(
         codec_module._decode_stream_key(deeply_nested)
 
 
+def test_stream_key_json_bounds_ignores_quoted_structural_bytes() -> None:
+    """Quoted closers must not affect depth-tracking.
+
+    Both inputs are well-balanced under the correct implementation, which
+    ignores structural bytes inside a JSON string. A buggy implementation
+    that counted quoted closers as depth-affecting would reject the second
+    input (final depth would drop below zero).
+    """
+    codec_module._validate_stream_key_json_bounds(b'{"literal":"{[ ]}\\""}')
+    codec_module._validate_stream_key_json_bounds(b'{"a":"}}}"}')
+
+
 def test_stream_key_decoder_normalizes_recursive_json_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

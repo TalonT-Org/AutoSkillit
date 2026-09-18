@@ -14,6 +14,7 @@ from autoskillit.core import (
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
     ContextAdmissionEvent,
+    ContextAdmissionReducerDef,
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
@@ -90,375 +91,507 @@ class _LedgerApply(_LedgerInspection):
                 )
             if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                 return self._storage_failure_result(stream_key)
-            connection: sqlite3.Connection | None = None
-            stream_id = _stream_key_bytes(stream_key)
-            stream_exists = False
-            current_state: ContextAdmissionState
-            try:
-                connection = self._connect()
-                connection.execute("BEGIN IMMEDIATE")
-                row = connection.execute(
-                    """
-                    SELECT stream_key, state_envelope, aggregate_revision,
-                           admission_sequence, latest_journal_sequence,
-                           health_status, failure_reason, reason_code,
-                           genesis_envelope
-                    FROM streams WHERE stream_id = ?
-                    """,
-                    (stream_id,),
-                ).fetchone()
-                if row is None:
-                    if not isinstance(event, OpenEpochEvent | AuthorityUnavailableEvent):
-                        _rollback(connection)
-                        return _uninitialized_stream_result(stream_key, event)
-                    current_state = _zero_state(event.protocol_version)
-                    genesis_envelope = _encode_value(
-                        current_state,
-                        protocol_version=event.protocol_version,
-                    )
-                    connection.execute(
-                        """
-                        INSERT INTO streams(
-                            stream_id, stream_key, genesis_envelope, state_envelope,
-                            aggregate_revision, admission_sequence,
-                            latest_journal_sequence, health_status,
-                            failure_reason, reason_code
-                        ) VALUES (?, ?, ?, ?, 0, 0, 0, ?, NULL, NULL)
-                        """,
-                        (
-                            stream_id,
-                            stream_id,
-                            genesis_envelope,
-                            genesis_envelope,
-                            ContextAdmissionStorageHealthStatus.HEALTHY.value,
-                        ),
-                    )
-                    prior_revision = 0
-                    prior_sequence = 0
-                    prior_journal_sequence = 0
-                else:
-                    stream_exists = True
-                    if bytes(row[0]) != stream_id:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
-                            "stream-key-mismatch",
-                        )
-                    persisted_health = _stored_stream_health(
-                        stream_key,
-                        row[5],
-                        row[6],
-                        row[7],
-                        invalid_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                    )
-                    if persisted_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-                        _rollback(connection)
-                        return ContextAdmissionAccountingResult(
-                            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-                            stream_key=stream_key,
-                            failure_reason=persisted_health.failure_reason,
-                            reason_code=persisted_health.reason_code,
-                        )
-                    if persisted_health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "invalid-stream-health",
-                        )
-                    try:
-                        current_state = _decode_state(bytes(row[1]))
-                    except ContextAdmissionValidationError as exc:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "stored-state-decode-failed",
-                        ) from exc
-                    prior_revision = int(row[2])
-                    prior_sequence = int(row[3])
-                    prior_journal_sequence = int(row[4])
-                    if (
-                        current_state.aggregate_revision.value != prior_revision
-                        or current_state.admission_sequence.value != prior_sequence
-                    ):
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "materialized-state-coordinate-mismatch",
-                        )
-                existing = connection.execute(
-                    """
-                    SELECT journal_sequence, event_envelope, decision_envelope
-                    FROM journal_events
-                    WHERE stream_id = ? AND event_id = ?
-                    """,
-                    (stream_id, event.event_id.value),
-                ).fetchone()
-                reducer = context_admission_reducer_for_protocol(event.protocol_version)
-                if current_state.protocol_version != event.protocol_version:
-                    raise _LedgerOpenError(
-                        ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
-                        "stream-protocol-mismatch",
-                    )
-                if existing is not None:
-                    try:
-                        original_event = _decode_event(bytes(existing[1]))
-                        original_decision = _decode_decision(bytes(existing[2]))
-                    except ContextAdmissionValidationError as exc:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "stored-publication-decode-failed",
-                        ) from exc
-                    if original_event != event:
-                        conflict = replace(
-                            original_decision,
-                            kind=AdmissionDecisionKind.CONFLICT,
-                            reason_code="event-id-conflict",
-                        )
-                        transition = AdmissionTransition(
-                            next_state=current_state,
-                            decision=conflict,
-                            effects=(),
-                        )
-                        _rollback(connection)
-                        return ContextAdmissionAccountingResult(
-                            status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
-                            stream_key=stream_key,
-                            transition=transition,
-                            reason_code=conflict.reason_code,
-                        )
-                    if _state_retains_event(current_state, event.event_id.value):
-                        transition = reducer.reduce_transition(current_state, event)
-                        if transition.effects:
-                            raise _LedgerOpenError(
-                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                                "exact-replay-produced-effects",
-                            )
-                    else:
-                        _recover_stream_projection(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            genesis_envelope=bytes(row[8]),
-                            materialized_state_envelope=bytes(row[1]),
-                            aggregate_revision=int(row[2]),
-                            admission_sequence=int(row[3]),
-                            latest_journal_sequence=int(row[4]),
-                            read_budget=_LedgerReadBudget(
-                                "exact-replay-read-limit-exceeded",
-                                max_rows=_MAX_RECOVERY_ROWS,
-                                max_bytes=_MAX_RECOVERY_BYTES,
-                            ),
-                        )
-                        transition = AdmissionTransition(
-                            next_state=current_state,
-                            decision=original_decision,
-                            effects=(),
-                        )
+            return self._apply_connected(stream_key, event)
+
+    def _apply_connected(
+        self,
+        stream_key: ContextAdmissionStreamKey,
+        event: ContextAdmissionEvent,
+    ) -> ContextAdmissionAccountingResult:
+        connection: sqlite3.Connection | None = None
+        stream_id = _stream_key_bytes(stream_key)
+        stream_exists = False
+        try:
+            connection = self._connect()
+            connection.execute("BEGIN IMMEDIATE")
+            row = self._stream_row(connection, stream_id)
+            stream_exists = row is not None
+            if row is None:
+                initialized = self._initialize_stream_if_missing(connection, stream_id, event)
+                if initialized is None:
                     _rollback(connection)
-                    return ContextAdmissionAccountingResult(
-                        status=ContextAdmissionAccountingStatus.EXACT_REPLAY,
-                        stream_key=stream_key,
-                        transition=transition,
-                        journal_sequence=int(existing[0]),
-                        reason_code=transition.decision.reason_code,
-                    )
-                _validate_event_stream_identity(stream_key, event)
-                self._fault_callback(_LedgerFaultPoint.BEFORE_REDUCTION)
-                transition = reducer.reduce_transition(current_state, event)
-                self._fault_callback(_LedgerFaultPoint.AFTER_REDUCTION)
-                journal_sequence = prior_journal_sequence + 1
-                connection.execute(
-                    """
-                    INSERT INTO journal_events(
-                        stream_id, journal_sequence, event_id,
-                        event_envelope, decision_envelope,
-                        expected_revision, prior_aggregate_revision,
-                        prior_admission_sequence, resulting_aggregate_revision,
-                        resulting_admission_sequence
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        stream_id,
-                        journal_sequence,
-                        event.event_id.value,
-                        _encode_value(event, protocol_version=event.protocol_version),
-                        _encode_value(
-                            transition.decision, protocol_version=event.protocol_version
-                        ),
-                        event.expected_aggregate_revision.value,
-                        prior_revision,
-                        prior_sequence,
-                        transition.next_state.aggregate_revision.value,
-                        transition.next_state.admission_sequence.value,
-                    ),
+                    return _uninitialized_stream_result(stream_key, event)
+                current_state, prior_revision, prior_sequence, prior_journal_sequence = initialized
+            else:
+                loaded = self._load_existing_stream_state(stream_id, stream_key, row)
+                if isinstance(loaded, ContextAdmissionAccountingResult):
+                    _rollback(connection)
+                    return loaded
+                current_state, prior_revision, prior_sequence, prior_journal_sequence = loaded
+            existing = self._event_row(connection, stream_id, event)
+            reducer = context_admission_reducer_for_protocol(event.protocol_version)
+            if current_state.protocol_version != event.protocol_version:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
+                    "stream-protocol-mismatch",
                 )
-                self._fault_callback(_LedgerFaultPoint.AFTER_JOURNAL)
-                for ordinal, effect in enumerate(transition.effects):
-                    connection.execute(
-                        """
-                        INSERT INTO effect_outbox(
-                            stream_id, journal_sequence, effect_ordinal,
-                            effect_envelope
-                        ) VALUES (?, ?, ?, ?)
-                        """,
-                        (
-                            stream_id,
-                            journal_sequence,
-                            ordinal,
-                            _encode_value(effect, protocol_version=event.protocol_version),
-                        ),
-                    )
-                    if ordinal == 0:
-                        self._fault_callback(_LedgerFaultPoint.DURING_EFFECTS)
-                shadow = _shadow_record(
+            if existing is not None:
+                assert row is not None
+                result = self._resolve_existing_event(
+                    connection,
+                    stream_id,
                     stream_key,
-                    current_state,
                     event,
-                    transition,
+                    current_state,
+                    reducer,
+                    row,
+                    existing,
+                )
+                _rollback(connection)
+                return result
+            transition, journal_sequence = self._publish_transition(
+                connection,
+                stream_id,
+                stream_key,
+                event,
+                current_state,
+                reducer,
+                prior_revision,
+                prior_sequence,
+                prior_journal_sequence,
+            )
+            self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
+            self._commit_with_busy_retry(connection)
+            self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)
+            self._record_committed_state(stream_key, transition.next_state)
+            return ContextAdmissionAccountingResult(
+                status=_accounting_status(event, transition),
+                stream_key=stream_key,
+                transition=transition,
+                journal_sequence=journal_sequence,
+                reason_code=transition.decision.reason_code,
+            )
+        except _LedgerContended:
+            self._rollback_if_connected(connection)
+            return self._contended_result(stream_key)
+        except _LedgerOpenError as exc:
+            return self._open_error_result(connection, stream_id, stream_key, stream_exists, exc)
+        except ContextAdmissionValidationError as exc:
+            return self._validation_error_result(connection, stream_key, exc)
+        except sqlite3.Error as exc:
+            return self._sqlite_error_result(connection, stream_key, event, exc)
+        except BaseException:
+            self._rollback_if_connected(connection)
+            raise
+        finally:
+            self._close_if_connected(connection)
+
+    @staticmethod
+    def _stream_row(
+        connection: sqlite3.Connection,
+        stream_id: bytes,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT stream_key, state_envelope, aggregate_revision,
+                   admission_sequence, latest_journal_sequence,
+                   health_status, failure_reason, reason_code,
+                   genesis_envelope
+            FROM streams WHERE stream_id = ?
+            """,
+            (stream_id,),
+        ).fetchone()
+
+    @staticmethod
+    def _event_row(
+        connection: sqlite3.Connection,
+        stream_id: bytes,
+        event: ContextAdmissionEvent,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            """
+            SELECT journal_sequence, event_envelope, decision_envelope
+            FROM journal_events
+            WHERE stream_id = ? AND event_id = ?
+            """,
+            (stream_id, event.event_id.value),
+        ).fetchone()
+
+    def _initialize_stream_if_missing(
+        self,
+        connection: sqlite3.Connection,
+        stream_id: bytes,
+        event: ContextAdmissionEvent,
+    ) -> tuple[ContextAdmissionState, int, int, int] | None:
+        """Insert a fresh stream row if the event is permitted to open one.
+
+        Returns the zero-state tuple when the stream is opened, or ``None``
+        when the event cannot open an uninitialized stream (caller should
+        short-circuit with ``_uninitialized_stream_result``).
+        """
+        if not isinstance(event, OpenEpochEvent | AuthorityUnavailableEvent):
+            return None
+        current_state = _zero_state(event.protocol_version)
+        genesis_envelope = _encode_value(
+            current_state,
+            protocol_version=event.protocol_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO streams(
+                stream_id, stream_key, genesis_envelope, state_envelope,
+                aggregate_revision, admission_sequence,
+                latest_journal_sequence, health_status,
+                failure_reason, reason_code
+            ) VALUES (?, ?, ?, ?, 0, 0, 0, ?, NULL, NULL)
+            """,
+            (
+                stream_id,
+                stream_id,
+                genesis_envelope,
+                genesis_envelope,
+                ContextAdmissionStorageHealthStatus.HEALTHY.value,
+            ),
+        )
+        return current_state, 0, 0, 0
+
+    def _load_existing_stream_state(
+        self,
+        stream_id: bytes,
+        stream_key: ContextAdmissionStreamKey,
+        row: sqlite3.Row,
+    ) -> tuple[ContextAdmissionState, int, int, int] | ContextAdmissionAccountingResult:
+        """Validate and decode a pre-existing stream row.
+
+        Returns the state tuple when the row is healthy, or a
+        ``ContextAdmissionAccountingResult`` when the persisted health is
+        ``FAIL_CLOSED`` (caller should short-circuit with that result).
+        """
+        if bytes(row[0]) != stream_id:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                "stream-key-mismatch",
+            )
+        persisted_health = _stored_stream_health(
+            stream_key,
+            row[5],
+            row[6],
+            row[7],
+            invalid_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+        )
+        if persisted_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+                stream_key=stream_key,
+                failure_reason=persisted_health.failure_reason,
+                reason_code=persisted_health.reason_code,
+            )
+        if persisted_health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "invalid-stream-health",
+            )
+        try:
+            current_state = _decode_state(bytes(row[1]))
+        except ContextAdmissionValidationError as exc:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "stored-state-decode-failed",
+            ) from exc
+        prior_revision = int(row[2])
+        prior_sequence = int(row[3])
+        prior_journal_sequence = int(row[4])
+        if (
+            current_state.aggregate_revision.value != prior_revision
+            or current_state.admission_sequence.value != prior_sequence
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "materialized-state-coordinate-mismatch",
+            )
+        return current_state, prior_revision, prior_sequence, prior_journal_sequence
+
+    def _resolve_existing_event(
+        self,
+        connection: sqlite3.Connection,
+        stream_id: bytes,
+        stream_key: ContextAdmissionStreamKey,
+        event: ContextAdmissionEvent,
+        current_state: ContextAdmissionState,
+        reducer: ContextAdmissionReducerDef,
+        stream_row: sqlite3.Row,
+        event_row: sqlite3.Row,
+    ) -> ContextAdmissionAccountingResult:
+        try:
+            original_event = _decode_event(bytes(event_row[1]))
+            original_decision = _decode_decision(bytes(event_row[2]))
+        except ContextAdmissionValidationError as exc:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "stored-publication-decode-failed",
+            ) from exc
+        if original_event != event:
+            conflict = replace(
+                original_decision,
+                kind=AdmissionDecisionKind.CONFLICT,
+                reason_code="event-id-conflict",
+            )
+            transition = AdmissionTransition(
+                next_state=current_state,
+                decision=conflict,
+                effects=(),
+            )
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
+                stream_key=stream_key,
+                transition=transition,
+                reason_code=conflict.reason_code,
+            )
+        if _state_retains_event(current_state, event.event_id.value):
+            transition = reducer.reduce_transition(current_state, event)
+            if transition.effects:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                    "exact-replay-produced-effects",
+                )
+        else:
+            _recover_stream_projection(
+                connection,
+                stream_id,
+                stream_key,
+                genesis_envelope=bytes(stream_row[8]),
+                materialized_state_envelope=bytes(stream_row[1]),
+                aggregate_revision=int(stream_row[2]),
+                admission_sequence=int(stream_row[3]),
+                latest_journal_sequence=int(stream_row[4]),
+                read_budget=_LedgerReadBudget(
+                    "exact-replay-read-limit-exceeded",
+                    max_rows=_MAX_RECOVERY_ROWS,
+                    max_bytes=_MAX_RECOVERY_BYTES,
+                ),
+            )
+            transition = AdmissionTransition(
+                next_state=current_state,
+                decision=original_decision,
+                effects=(),
+            )
+        return ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.EXACT_REPLAY,
+            stream_key=stream_key,
+            transition=transition,
+            journal_sequence=int(event_row[0]),
+            reason_code=transition.decision.reason_code,
+        )
+
+    def _publish_transition(
+        self,
+        connection: sqlite3.Connection,
+        stream_id: bytes,
+        stream_key: ContextAdmissionStreamKey,
+        event: ContextAdmissionEvent,
+        current_state: ContextAdmissionState,
+        reducer: ContextAdmissionReducerDef,
+        prior_revision: int,
+        prior_sequence: int,
+        prior_journal_sequence: int,
+    ) -> tuple[AdmissionTransition, int]:
+        _validate_event_stream_identity(stream_key, event)
+        self._fault_callback(_LedgerFaultPoint.BEFORE_REDUCTION)
+        transition = reducer.reduce_transition(current_state, event)
+        self._fault_callback(_LedgerFaultPoint.AFTER_REDUCTION)
+        journal_sequence = prior_journal_sequence + 1
+        connection.execute(
+            """
+            INSERT INTO journal_events(
+                stream_id, journal_sequence, event_id,
+                event_envelope, decision_envelope,
+                expected_revision, prior_aggregate_revision,
+                prior_admission_sequence, resulting_aggregate_revision,
+                resulting_admission_sequence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stream_id,
+                journal_sequence,
+                event.event_id.value,
+                _encode_value(event, protocol_version=event.protocol_version),
+                _encode_value(transition.decision, protocol_version=event.protocol_version),
+                event.expected_aggregate_revision.value,
+                prior_revision,
+                prior_sequence,
+                transition.next_state.aggregate_revision.value,
+                transition.next_state.admission_sequence.value,
+            ),
+        )
+        self._fault_callback(_LedgerFaultPoint.AFTER_JOURNAL)
+        for ordinal, effect in enumerate(transition.effects):
+            connection.execute(
+                """
+                INSERT INTO effect_outbox(
+                    stream_id, journal_sequence, effect_ordinal,
+                    effect_envelope
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    stream_id,
                     journal_sequence,
-                )
-                connection.execute(
-                    """
-                    INSERT INTO shadow_decisions(
-                        stream_id, journal_sequence, shadow_envelope
-                    ) VALUES (?, ?, ?)
-                    """,
-                    (
-                        stream_id,
-                        journal_sequence,
-                        _encode_value(shadow, protocol_version=event.protocol_version),
-                    ),
-                )
-                self._fault_callback(_LedgerFaultPoint.AFTER_STATE_SHADOW)
-                cursor = connection.execute(
-                    """
-                    UPDATE streams
-                    SET state_envelope = ?, aggregate_revision = ?,
-                        admission_sequence = ?, latest_journal_sequence = ?
-                    WHERE stream_id = ? AND aggregate_revision = ?
-                      AND admission_sequence = ?
-                      AND latest_journal_sequence = ?
-                    """,
-                    (
-                        _encode_value(
-                            transition.next_state,
-                            protocol_version=event.protocol_version,
-                        ),
-                        transition.next_state.aggregate_revision.value,
-                        transition.next_state.admission_sequence.value,
-                        journal_sequence,
-                        stream_id,
-                        prior_revision,
-                        prior_sequence,
-                        prior_journal_sequence,
-                    ),
-                )
-                if cursor.rowcount != 1:
-                    raise _LedgerOpenError(
-                        ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                        "stream-publication-cas-failed",
-                    )
-                self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
-                self._commit_with_busy_retry(connection)
-                self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)
-                self._stream_health[stream_key] = ContextAdmissionStreamHealth(
+                    ordinal,
+                    _encode_value(effect, protocol_version=event.protocol_version),
+                ),
+            )
+            if ordinal == 0:
+                self._fault_callback(_LedgerFaultPoint.DURING_EFFECTS)
+        shadow = _shadow_record(
+            stream_key,
+            current_state,
+            event,
+            transition,
+            journal_sequence,
+        )
+        connection.execute(
+            """
+            INSERT INTO shadow_decisions(
+                stream_id, journal_sequence, shadow_envelope
+            ) VALUES (?, ?, ?)
+            """,
+            (
+                stream_id,
+                journal_sequence,
+                _encode_value(shadow, protocol_version=event.protocol_version),
+            ),
+        )
+        self._fault_callback(_LedgerFaultPoint.AFTER_STATE_SHADOW)
+        cursor = connection.execute(
+            """
+            UPDATE streams
+            SET state_envelope = ?, aggregate_revision = ?,
+                admission_sequence = ?, latest_journal_sequence = ?
+            WHERE stream_id = ? AND aggregate_revision = ?
+              AND admission_sequence = ?
+              AND latest_journal_sequence = ?
+            """,
+            (
+                _encode_value(
+                    transition.next_state,
+                    protocol_version=event.protocol_version,
+                ),
+                transition.next_state.aggregate_revision.value,
+                transition.next_state.admission_sequence.value,
+                journal_sequence,
+                stream_id,
+                prior_revision,
+                prior_sequence,
+                prior_journal_sequence,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "stream-publication-cas-failed",
+            )
+        return transition, journal_sequence
+
+    def _record_committed_state(
+        self,
+        stream_key: ContextAdmissionStreamKey,
+        state: ContextAdmissionState,
+    ) -> None:
+        self._stream_health[stream_key] = ContextAdmissionStreamHealth(
+            stream_key,
+            ContextAdmissionStorageHealthStatus.HEALTHY,
+        )
+        self._unresolved_streams.discard(stream_key)
+        if _state_has_unresolved_work(state):
+            self._unresolved_streams.add(stream_key)
+
+    @staticmethod
+    def _rollback_if_connected(connection: sqlite3.Connection | None) -> None:
+        if connection is not None:
+            _rollback(connection)
+
+    @staticmethod
+    def _close_if_connected(connection: sqlite3.Connection | None) -> None:
+        if connection is not None:
+            connection.close()
+
+    @staticmethod
+    def _contended_result(
+        stream_key: ContextAdmissionStreamKey,
+    ) -> ContextAdmissionAccountingResult:
+        return ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.CONTENDED,
+            stream_key=stream_key,
+            reason_code="busy",
+        )
+
+    def _open_error_result(
+        self,
+        connection: sqlite3.Connection | None,
+        stream_id: bytes,
+        stream_key: ContextAdmissionStreamKey,
+        stream_exists: bool,
+        exc: _LedgerOpenError,
+    ) -> ContextAdmissionAccountingResult:
+        if connection is not None:
+            _rollback(connection)
+            if stream_exists and exc.reason in {
+                ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            }:
+                persisted = self._persist_stream_failure(
+                    connection,
+                    stream_id,
                     stream_key,
-                    ContextAdmissionStorageHealthStatus.HEALTHY,
+                    exc.reason,
+                    exc.reason_code,
                 )
-                self._unresolved_streams.discard(stream_key)
-                if _state_has_unresolved_work(transition.next_state):
-                    self._unresolved_streams.add(stream_key)
-                return ContextAdmissionAccountingResult(
-                    status=_accounting_status(event, transition),
-                    stream_key=stream_key,
-                    transition=transition,
-                    journal_sequence=journal_sequence,
-                    reason_code=transition.decision.reason_code,
-                )
-            except _LedgerContended:
-                if connection is not None:
-                    _rollback(connection)
-                return ContextAdmissionAccountingResult(
-                    status=ContextAdmissionAccountingStatus.CONTENDED,
-                    stream_key=stream_key,
-                    reason_code="busy",
-                )
-            except _LedgerOpenError as exc:
-                if connection is not None:
-                    _rollback(connection)
-                    if stream_exists and exc.reason in {
-                        ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
-                        ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                    }:
-                        persisted = self._persist_stream_failure(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            exc.reason,
-                            exc.reason_code,
-                        )
-                        if not persisted and self._store_health.status is not (
-                            ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                        ):
-                            return ContextAdmissionAccountingResult(
-                                status=ContextAdmissionAccountingStatus.CONTENDED,
-                                stream_key=stream_key,
-                                reason_code="busy",
-                            )
-                else:
-                    self._set_store_failure(exc.reason, exc.reason_code)
-                return ContextAdmissionAccountingResult(
-                    status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-                    stream_key=stream_key,
-                    failure_reason=exc.reason,
-                    reason_code=exc.reason_code,
-                )
-            except ContextAdmissionValidationError as exc:
-                if connection is not None:
-                    _rollback(connection)
-                logger.warning("context-admission apply rejected by validation: %s", exc)
-                return ContextAdmissionAccountingResult(
-                    status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-                    stream_key=stream_key,
-                    failure_reason=ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
-                    reason_code="protocol-validation-failed",
-                )
-            except sqlite3.Error as exc:
-                primary_code = _sqlite_primary_code(exc)
-                if primary_code in _SQLITE_BUSY_CODES:
-                    if connection is not None:
-                        _rollback(connection)
-                    return ContextAdmissionAccountingResult(
-                        status=ContextAdmissionAccountingStatus.CONTENDED,
-                        stream_key=stream_key,
-                        reason_code="busy",
-                    )
-                if connection is not None and primary_code in _SQLITE_RECOVERY_CODES:
-                    return self._recover_sqlite_result(
-                        connection,
-                        stream_key,
-                        event,
-                    )
-                if connection is not None:
-                    _rollback(connection)
-                logger.warning(
-                    "context-admission apply failed with sqlite error code=%s: %s",
-                    primary_code,
-                    exc,
-                )
-                reason = (
-                    ContextAdmissionStorageFailureReason.INTEGRITY
-                    if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
-                    else ContextAdmissionStorageFailureReason.IO
-                )
-                self._set_store_failure(
-                    reason,
-                    f"sqlite-publication-failed:{primary_code}",
-                )
-                return self._storage_failure_result(stream_key)
-            except BaseException:
-                if connection is not None:
-                    _rollback(connection)
-                raise
-            finally:
-                if connection is not None:
-                    connection.close()
+                if not persisted and self._store_health.status is not (
+                    ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                ):
+                    return self._contended_result(stream_key)
+        else:
+            self._set_store_failure(exc.reason, exc.reason_code)
+        return ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+            stream_key=stream_key,
+            failure_reason=exc.reason,
+            reason_code=exc.reason_code,
+        )
+
+    def _validation_error_result(
+        self,
+        connection: sqlite3.Connection | None,
+        stream_key: ContextAdmissionStreamKey,
+        exc: ContextAdmissionValidationError,
+    ) -> ContextAdmissionAccountingResult:
+        self._rollback_if_connected(connection)
+        logger.warning("context-admission apply rejected by validation: %s", exc)
+        return ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+            stream_key=stream_key,
+            failure_reason=ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
+            reason_code="protocol-validation-failed",
+        )
+
+    def _sqlite_error_result(
+        self,
+        connection: sqlite3.Connection | None,
+        stream_key: ContextAdmissionStreamKey,
+        event: ContextAdmissionEvent,
+        exc: sqlite3.Error,
+    ) -> ContextAdmissionAccountingResult:
+        primary_code = _sqlite_primary_code(exc)
+        if primary_code in _SQLITE_BUSY_CODES:
+            self._rollback_if_connected(connection)
+            return self._contended_result(stream_key)
+        if connection is not None and primary_code in _SQLITE_RECOVERY_CODES:
+            return self._recover_sqlite_result(connection, stream_key, event)
+        self._rollback_if_connected(connection)
+        logger.warning(
+            "context-admission apply failed with sqlite error code=%s: %s",
+            primary_code,
+            exc,
+        )
+        reason = (
+            ContextAdmissionStorageFailureReason.INTEGRITY
+            if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
+            else ContextAdmissionStorageFailureReason.IO
+        )
+        self._set_store_failure(
+            reason,
+            f"sqlite-publication-failed:{primary_code}",
+        )
+        return self._storage_failure_result(stream_key)
 
     def reserve(
         self,

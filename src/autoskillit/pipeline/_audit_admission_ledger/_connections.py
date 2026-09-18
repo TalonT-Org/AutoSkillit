@@ -82,8 +82,15 @@ def open(
 
 
 def _validate_database_target(authority: AuditAdmissionStoreAuthority) -> None:
+    _validate_canonical_database_path(authority)
+    _validate_secure_database_parent(authority)
+    _ensure_database_target_file(authority)
+    _validate_strict_database_path(authority)
+    _database_identity(authority)
+
+
+def _validate_canonical_database_path(authority: AuditAdmissionStoreAuthority) -> None:
     path = authority.database_path
-    parent = path.parent
     try:
         resolved_path = path.resolve(strict=False)
     except (OSError, RuntimeError) as exc:
@@ -96,6 +103,10 @@ def _validate_database_target(authority: AuditAdmissionStoreAuthority) -> None:
             AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
             "audit-admission-store-path-traverses-symlink",
         )
+
+
+def _validate_secure_database_parent(authority: AuditAdmissionStoreAuthority) -> None:
+    parent = authority.database_path.parent
     try:
         parent.mkdir(parents=True, mode=_DIRECTORY_MODE, exist_ok=True)
         parent_stat = parent.lstat()
@@ -114,6 +125,9 @@ def _validate_database_target(authority: AuditAdmissionStoreAuthority) -> None:
             "audit-admission-insecure-store-parent",
         )
 
+
+def _ensure_database_target_file(authority: AuditAdmissionStoreAuthority) -> None:
+    path = authority.database_path
     try:
         path.lstat()
     except FileNotFoundError:
@@ -137,6 +151,10 @@ def _validate_database_target(authority: AuditAdmissionStoreAuthority) -> None:
             AuditAdmissionStorageFailureReason.IO,
             "audit-admission-store-target-unavailable",
         ) from exc
+
+
+def _validate_strict_database_path(authority: AuditAdmissionStoreAuthority) -> None:
+    path = authority.database_path
     try:
         if path.resolve(strict=True) != path:
             raise AuditAdmissionStorageError(
@@ -148,7 +166,6 @@ def _validate_database_target(authority: AuditAdmissionStoreAuthority) -> None:
             AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
             "audit-admission-insecure-store-file",
         ) from exc
-    _database_identity(authority)
 
 
 def _database_identity(authority: AuditAdmissionStoreAuthority) -> tuple[int, int]:

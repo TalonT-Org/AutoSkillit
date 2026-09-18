@@ -28,6 +28,43 @@ __all__ = ["FailureRecord", "DefaultAuditLog", "STDERR_MAX_LEN", "COMMAND_MAX_LE
 _CONCRETE_TYPES = (str, int, bool, float)
 
 
+def _parse_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+
+def _matches_session_log_filters(
+    entry: dict[str, Any],
+    cwd_filter: str,
+    kitchen_id_filter: str,
+    campaign_id_filter: str,
+    order_id_filter: str,
+    dispatch_id_filter: str,
+) -> bool:
+    if cwd_filter and entry.get("cwd") != cwd_filter:
+        logger.debug(
+            "session_log_skip_cwd_mismatch",
+            dir_name=entry.get("dir_name", ""),
+            entry_cwd=entry.get("cwd", ""),
+            cwd_filter=cwd_filter,
+        )
+        return False
+
+    if kitchen_id_filter:
+        entry_kitchen_id = entry.get("kitchen_id") or entry.get("pipeline_id", "")
+        if entry_kitchen_id != kitchen_id_filter:
+            return False
+
+    for filter_value, field_name in (
+        (campaign_id_filter, "campaign_id"),
+        (order_id_filter, "order_id"),
+        (dispatch_id_filter, "dispatch_id"),
+    ):
+        if filter_value and entry.get(field_name) != filter_value:
+            return False
+    return True
+
+
 def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
     """Return True if record_dict is structurally valid for FailureRecord construction.
 
@@ -116,9 +153,7 @@ def _iter_session_log_entries(
     since_dt: datetime | None = None
     if since:
         try:
-            since_dt = datetime.fromisoformat(since)
-            if since_dt.tzinfo is None:
-                since_dt = since_dt.replace(tzinfo=UTC)
+            since_dt = _parse_timestamp(since)
         except ValueError:
             pass
 
@@ -133,35 +168,20 @@ def _iter_session_log_entries(
 
         if since_dt:
             try:
-                entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
-                if entry_ts.tzinfo is None:
-                    entry_ts = entry_ts.replace(tzinfo=UTC)
+                entry_ts = _parse_timestamp(idx.get("timestamp", ""))
                 if entry_ts < since_dt:
                     continue
             except (ValueError, TypeError):
                 continue
 
-        if cwd_filter and idx.get("cwd") != cwd_filter:
-            logger.debug(
-                "session_log_skip_cwd_mismatch",
-                dir_name=idx.get("dir_name", ""),
-                entry_cwd=idx.get("cwd", ""),
-                cwd_filter=cwd_filter,
-            )
-            continue
-
-        if kitchen_id_filter:
-            entry_kitchen_id = idx.get("kitchen_id") or idx.get("pipeline_id", "")
-            if entry_kitchen_id != kitchen_id_filter:
-                continue
-
-        if campaign_id_filter and idx.get("campaign_id") != campaign_id_filter:
-            continue
-
-        if order_id_filter and idx.get("order_id") != order_id_filter:
-            continue
-
-        if dispatch_id_filter and idx.get("dispatch_id") != dispatch_id_filter:
+        if not _matches_session_log_filters(
+            idx,
+            cwd_filter,
+            kitchen_id_filter,
+            campaign_id_filter,
+            order_id_filter,
+            dispatch_id_filter,
+        ):
             continue
 
         dir_name = idx.get("dir_name", "")

@@ -53,7 +53,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | No hook tracker writes | `test_tracker_write_provenance.py` | Hook scripts referencing `pipeline_tracker` and performing file writes — step completion is server-authoritative, only `server/tools/` may mutate tracker state |
 | No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `core/pipeline/tool_sequence_analysis.py` |
 | No Path.cwd() in server tools | `test_no_path_cwd_in_tools.py` | `Path.cwd()` in server tool handlers — use injected project path instead |
-| No raw SIGTERM handler | `tests/cli/test_no_raw_signal_handler.py` | `signal.signal(SIGTERM, ...)` in `cli/app.py` — must use `anyio.open_signal_receiver` |
+| No raw SIGTERM handler | `test_no_raw_signal_handler.py` | `signal.signal(SIGTERM, ...)` in `cli/app.py` — must use `anyio.open_signal_receiver` |
 | PTY coherence | `test_pty_coherence.py` | Dispatch paths that allocate PTY without respecting dispatch-type `pty_override=False` |
 | Quota capability isolation | `test_quota_capability_isolation.py` | `BackendCapabilities`, `.capabilities` access in quota modules — must use config string |
 | Registry key casing | `test_registry_key_casing.py` | Uppercase keys in `FEATURE_REGISTRY`, `RETIRED_FEATURES`, or `PACK_REGISTRY` |

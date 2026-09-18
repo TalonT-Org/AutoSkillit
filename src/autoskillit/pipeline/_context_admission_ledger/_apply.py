@@ -122,6 +122,7 @@ class _LedgerApply(_LedgerInspection):
                     "stream-protocol-mismatch",
                 )
             if existing is not None:
+                assert row is not None
                 result = self._resolve_existing_event(
                     connection,
                     stream_id,
@@ -145,6 +146,7 @@ class _LedgerApply(_LedgerInspection):
                 prior_sequence,
                 prior_journal_sequence,
             )
+            self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
             self._commit_with_busy_retry(connection)
             self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)
             self._record_committed_state(stream_key, transition.next_state)
@@ -288,7 +290,7 @@ class _LedgerApply(_LedgerInspection):
         event: ContextAdmissionEvent,
         current_state: ContextAdmissionState,
         reducer: ContextAdmissionReducerDef,
-        stream_row: sqlite3.Row | None,
+        stream_row: sqlite3.Row,
         event_row: sqlite3.Row,
     ) -> ContextAdmissionAccountingResult:
         try:
@@ -324,7 +326,6 @@ class _LedgerApply(_LedgerInspection):
                     "exact-replay-produced-effects",
                 )
         else:
-            assert stream_row is not None
             _recover_stream_projection(
                 connection,
                 stream_id,
@@ -459,7 +460,6 @@ class _LedgerApply(_LedgerInspection):
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
                 "stream-publication-cas-failed",
             )
-        self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
         return transition, journal_sequence
 
     def _record_committed_state(

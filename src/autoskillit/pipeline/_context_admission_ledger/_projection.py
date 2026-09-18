@@ -12,7 +12,7 @@ Wavefront 1 of #4667.
 from __future__ import annotations
 
 import sqlite3
-from typing import Final, cast
+from typing import Final, NamedTuple, cast
 
 from autoskillit.core import (
     AdmissionDecision,
@@ -200,9 +200,16 @@ def _read_ordered_stream_records(
     )
 
 
+class _JournalPublication(NamedTuple):
+    event: ContextAdmissionEvent
+    decision: AdmissionDecision
+    event_protocol_version: int
+    decision_protocol_version: int
+
+
 def _decode_journal_publication(
     row: tuple[int, str, bytes, bytes, int, int, int, int, int],
-) -> tuple[ContextAdmissionEvent, AdmissionDecision, int, int]:
+) -> _JournalPublication:
     event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
     decision_wrapper = decode_stored_context_admission_envelope(bytes(row[3]))
     if not isinstance(event_wrapper.payload, _EVENT_TYPES) or not isinstance(
@@ -210,11 +217,11 @@ def _decode_journal_publication(
         AdmissionDecision,
     ):
         raise ContextAdmissionValidationError("stored_publication_type_mismatch")
-    return (
-        cast(ContextAdmissionEvent, event_wrapper.payload),
-        decision_wrapper.payload,
-        event_wrapper.protocol_version,
-        decision_wrapper.protocol_version,
+    return _JournalPublication(
+        event=cast(ContextAdmissionEvent, event_wrapper.payload),
+        decision=decision_wrapper.payload,
+        event_protocol_version=event_wrapper.protocol_version,
+        decision_protocol_version=decision_wrapper.protocol_version,
     )
 
 
@@ -253,14 +260,20 @@ def _validate_journal_shadow(
         transition,
         journal_sequence,
     )
-    if (
-        shadow_wrapper.protocol_version != protocol_version
-        or not isinstance(
-            shadow_wrapper.payload,
-            ShadowContextAdmissionRecord,
+    if shadow_wrapper.protocol_version != protocol_version:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-shadow-mismatch",
         )
-        or shadow_wrapper.payload != regenerated_shadow
+    if not isinstance(
+        shadow_wrapper.payload,
+        ShadowContextAdmissionRecord,
     ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-shadow-mismatch",
+        )
+    if shadow_wrapper.payload != regenerated_shadow:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
             "journal-shadow-mismatch",
@@ -280,9 +293,11 @@ def _replay_journal_publication(
     replayed_shadows: list[ShadowContextAdmissionRecord],
 ) -> ContextAdmissionState:
     journal_sequence = int(row[0])
-    event, stored_decision, event_protocol_version, decision_protocol_version = (
-        _decode_journal_publication(row)
-    )
+    publication = _decode_journal_publication(row)
+    event = publication.event
+    stored_decision = publication.decision
+    event_protocol_version = publication.event_protocol_version
+    decision_protocol_version = publication.decision_protocol_version
     if str(row[1]) != event.event_id.value:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,

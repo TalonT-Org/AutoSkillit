@@ -195,7 +195,7 @@ class _LedgerRecovery(_LedgerStore):
                         stream_id,
                         stream_key,
                         ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                        "stream-replay-decode-failed",
+                        f"stream-replay-decode-failed:{type(exc).__name__}:{exc}",
                     )
                 )
                 continue

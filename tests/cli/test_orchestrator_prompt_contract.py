@@ -242,10 +242,22 @@ def test_orchestrator_routes_terminal_failure_reasons_without_context_recovery(
     """These failure reasons route directly to on_failure, never context recovery."""
     prompt = _get_prompt().lower()
     start = prompt.index(f"retry_reason: {retry_reason}")
-    route_clause = prompt[start : start + 2000]
+    route_clause = _slice_routing_clause(prompt, start)
 
     assert "on_failure" in route_clause
     assert "do not route to on_context_limit" in route_clause
+
+
+def _slice_routing_clause(prompt: str, start: int) -> str:
+    """Return the routing clause beginning at ``start`` up to the next top-level entry.
+
+    The orchestrator prompt renders each ``retry_reason`` clause as a column-0 bullet
+    (``- When run_skill returns ...``) with indented sub-bullets. Slicing to the next
+    column-0 bullet anchors on structure rather than a fixed character window, so the
+    test still verifies routing even if sub-bullets grow with future prompt edits.
+    """
+    next_entry = prompt.find("\n- ", start + 1)
+    return prompt[start:] if next_entry == -1 else prompt[start:next_entry]
 
 
 def test_unguarded_filesystem_backend_supplement_injected():

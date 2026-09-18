@@ -125,7 +125,20 @@ def test_sous_chef_routes_terminal_failure_reasons_to_on_failure(
     """Cancellation and malformed reports never route through context-limit recovery."""
     content = _read_full_sous_chef().lower()
     start = content.index(f"retry_reason: {retry_reason}")
-    route_clause = content[start : start + 500]
+    route_clause = _slice_routing_clause(content, start)
 
     assert "on_failure" in route_clause
     assert "on_context_limit" in route_clause
+
+
+def _slice_routing_clause(content: str, start: int) -> str:
+    """Return the routing clause beginning at ``start`` up to the next top-level entry.
+
+    Sous-chef renders each ``retry_reason`` clause as a column-0 bullet
+    (``- **If \\`retry_reason: <name>\\` ...**``) with 2-space continuation lines.
+    Slicing to the next column-0 bullet anchors on structure rather than a fixed
+    character window, so the test still verifies routing even if continuation lines
+    grow with future SKILL.md edits.
+    """
+    next_entry = content.find("\n- ", start + 1)
+    return content[start:] if next_entry == -1 else content[start:next_entry]

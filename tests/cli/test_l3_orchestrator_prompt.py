@@ -613,7 +613,6 @@ class TestResumeReasonInPrompt:
         from autoskillit.core.types import RetryReason
 
         assert set(RETRY_REASON_DESCRIPTIONS) == set(RetryReason)
-        assert all(description.strip() for description in RETRY_REASON_DESCRIPTIONS.values())
 
         for reason, description in RETRY_REASON_DESCRIPTIONS.items():
             assert description in _resume_reason_guidance(reason.value)

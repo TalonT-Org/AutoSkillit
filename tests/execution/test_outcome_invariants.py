@@ -532,16 +532,6 @@ def _base_skill_result(*, success: bool = True, result_text: str = "") -> SkillR
     )
 
 
-def _assert_demotion_verdict(
-    result: SkillResult,
-    *,
-    outcome_fields: dict[str, int | str] | None,
-    defects: tuple[str, ...] = (),
-) -> None:
-    """Deprecated shim; use ``assert_demotion_verdict`` from ``_adjudication_helpers``."""
-    assert_demotion_verdict(result, outcome_fields=outcome_fields, defects=defects)
-
-
 class TestApplyPostSessionAdjudicationUnit:
     """Direct unit coverage of _apply_post_session_adjudication."""
 
@@ -590,7 +580,7 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.subtype == "outcome_invariant_violation"
         assert result.needs_retry is True
         assert result.retry_reason == RetryReason.OUTCOME_INVARIANT
-        _assert_demotion_verdict(result, outcome_fields=expected_fields)
+        assert_demotion_verdict(result, outcome_fields=expected_fields)
 
     def test_zero_writes_demotion_carries_parsed_counters_in_verdict(self) -> None:
         expected_fields = {
@@ -617,7 +607,7 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.success is False
         assert result.subtype == "zero_writes"
         assert result.retry_reason is RetryReason.ZERO_WRITES
-        _assert_demotion_verdict(result, outcome_fields=expected_fields)
+        assert_demotion_verdict(result, outcome_fields=expected_fields)
 
     def test_satisfied_invariant_preserves_success(self) -> None:
         sr = _base_skill_result(
@@ -701,7 +691,7 @@ class TestDeclaredArtifactAdjudication:
         assert result.retry_reason is RetryReason.CONTRACT_RECOVERY
         assert result.outcome_fields is None
         assert artifact_name in result.result
-        _assert_demotion_verdict(result, outcome_fields=None)
+        assert_demotion_verdict(result, outcome_fields=None)
 
     def test_symlink_escape_is_producer_failure(self, tmp_path) -> None:
         outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
@@ -773,7 +763,7 @@ class TestDeclaredArtifactAdjudication:
             artifact_name="report.md",
             exc_info=True,
         )
-        _assert_demotion_verdict(result, outcome_fields=None)
+        assert_demotion_verdict(result, outcome_fields=None)
 
     @pytest.mark.parametrize("error_number", [errno.ENOTDIR, errno.ELOOP])
     def test_invalid_artifact_path_is_producer_failure(

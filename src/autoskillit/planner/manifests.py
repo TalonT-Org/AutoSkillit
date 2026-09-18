@@ -4,6 +4,7 @@ import json
 import secrets
 import subprocess
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -556,9 +557,9 @@ def _read_active_wp_ids(planner_path: Path) -> set[str] | None:
     return None
 
 
-def _discover_direct_wp_result_files(wp_dir: Path) -> dict[str, Path]:
+def _discover_direct_wp_result_files(wp_dir: Path, candidates: Iterable[Path]) -> dict[str, Path]:
     disk_ids: dict[str, Path] = {}
-    for f in wp_dir.glob("*_result.json"):
+    for f in candidates:
         if f.parent != wp_dir:
             continue
         stem = f.name.removesuffix("_result.json")
@@ -583,7 +584,7 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
         registry.get("voided_wps", {}).keys()
     )
 
-    disk_ids = _discover_direct_wp_result_files(wp_dir)
+    disk_ids = _discover_direct_wp_result_files(wp_dir, wp_dir.glob("*_result.json"))
 
     orphan_ids = {wid for wid in disk_ids if wid not in active_ids and wid not in excluded_ids}
     if not orphan_ids:

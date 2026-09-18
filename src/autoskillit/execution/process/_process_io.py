@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
+import subprocess
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO, cast
+from typing import IO, Any, cast
+
+import anyio
 
 from autoskillit.core import CapturedStream, LineDriver, SpillSpec, get_logger
 
@@ -24,6 +29,165 @@ class CaptureSetupError(OSError):
 
 class CaptureReadError(OSError):
     """Raised when a capture file cannot be read after execution."""
+
+
+class _CombinedOutputLimiter:
+    """Atomically retain a bounded aggregate of two piped output streams."""
+
+    def __init__(self, max_bytes: int) -> None:
+        self._remaining = max_bytes
+        self._limit_exceeded = False
+        self._lock = threading.Lock()
+
+    def write(self, chunk: bytes, capture_file: IO[bytes]) -> bool:
+        """Write the retained prefix and report this stream's first overflow."""
+        with self._lock:
+            retained = chunk[: self._remaining]
+            self._remaining -= len(retained)
+            if retained:
+                capture_file.write(retained)
+                capture_file.flush()
+            overflowed = len(retained) != len(chunk)
+            first_overflow = overflowed and not self._limit_exceeded
+            self._limit_exceeded = self._limit_exceeded or overflowed
+            return first_overflow
+
+
+def _drain_piped_output(
+    *,
+    stream: IO[bytes],
+    capture_file: IO[bytes],
+    limiter: _CombinedOutputLimiter,
+    on_output_limit: Callable[[], None],
+    done: threading.Event,
+) -> None:
+    """Drain one pipe while retaining no more than the shared byte ceiling."""
+    try:
+        while chunk := cast(io.BufferedReader, stream).read1(_TEE_CHUNK_SIZE):
+            if limiter.write(chunk, capture_file):
+                on_output_limit()
+    finally:
+        done.set()
+
+
+async def drain_piped_output(
+    *,
+    stream: IO[bytes],
+    capture_file: IO[bytes],
+    limiter: _CombinedOutputLimiter,
+    on_output_limit: Callable[[], None],
+    done: threading.Event,
+) -> None:
+    """Run one blocking pipe drainer without blocking the lifecycle task group."""
+    await anyio.to_thread.run_sync(
+        functools.partial(
+            _drain_piped_output,
+            stream=stream,
+            capture_file=capture_file,
+            limiter=limiter,
+            on_output_limit=on_output_limit,
+            done=done,
+        ),
+        abandon_on_cancel=True,
+    )
+
+
+def wait_for_piped_output_drains(
+    done_events: tuple[threading.Event, ...],
+    timeout_seconds: float = 5.0,
+) -> bool:
+    """Wait for all output drainers after the owned process has been settled."""
+    deadline = time.monotonic() + timeout_seconds
+    for done in done_events:
+        if not done.wait(max(0.0, deadline - time.monotonic())):
+            return False
+    return True
+
+
+class _OutputCeilingCapture:
+    """Own the optional dual-pipe capture mode for managed process output."""
+
+    def __init__(
+        self,
+        max_combined_output_bytes: int | None,
+        *,
+        line_driver_enabled: bool,
+    ) -> None:
+        if max_combined_output_bytes is not None and max_combined_output_bytes < 0:
+            raise ValueError("max_combined_output_bytes must be non-negative")
+        if max_combined_output_bytes is not None and line_driver_enabled:
+            raise ValueError("max_combined_output_bytes is incompatible with line_driver")
+        self._limiter = (
+            _CombinedOutputLimiter(max_combined_output_bytes)
+            if max_combined_output_bytes is not None
+            else None
+        )
+        self._done_events: tuple[threading.Event, ...] = ()
+
+    def stdout_target(self, fallback: IO[Any] | int) -> IO[Any] | int:
+        """Return the child stdout target for this capture mode."""
+        return subprocess.PIPE if self._limiter is not None else fallback
+
+    def stderr_target(self, fallback: IO[Any] | int) -> IO[Any] | int:
+        """Return the child stderr target for this capture mode."""
+        return subprocess.PIPE if self._limiter is not None else fallback
+
+    def start(
+        self,
+        tg: Any,
+        *,
+        process: subprocess.Popen[Any],
+        stdout_file: IO[bytes],
+        stderr_file: IO[bytes],
+        race_accumulator: Any,
+        trigger: anyio.Event,
+    ) -> None:
+        """Enroll both drainers and bridge their first overflow into the race."""
+        limiter = self._limiter
+        if limiter is None:
+            return
+        assert process.stdout is not None
+        assert process.stderr is not None
+        self._done_events = (threading.Event(), threading.Event())
+
+        def _mark_output_limit() -> None:
+            race_accumulator.output_limit_exceeded = True
+            trigger.set()
+
+        def _notify_output_limit() -> None:
+            anyio.from_thread.run_sync(_mark_output_limit)
+
+        tg.start_soon(
+            functools.partial(
+                drain_piped_output,
+                stream=process.stdout,
+                capture_file=stdout_file,
+                limiter=limiter,
+                on_output_limit=_notify_output_limit,
+                done=self._done_events[0],
+            )
+        )
+        tg.start_soon(
+            functools.partial(
+                drain_piped_output,
+                stream=process.stderr,
+                capture_file=stderr_file,
+                limiter=limiter,
+                on_output_limit=_notify_output_limit,
+                done=self._done_events[1],
+            )
+        )
+
+    async def settle(self) -> None:
+        """Require pipe drain completion after owned-process termination."""
+        if not self._done_events:
+            return
+        settled = await anyio.to_thread.run_sync(
+            functools.partial(wait_for_piped_output_drains, self._done_events),
+            abandon_on_cancel=False,
+        )
+        if not settled:
+            raise CaptureReadError("piped output drain did not settle after process termination")
 
 
 def _allocate_stream_file(

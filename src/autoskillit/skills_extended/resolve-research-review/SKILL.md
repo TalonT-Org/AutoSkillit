@@ -68,7 +68,8 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Exceed 3 fix-and-retry iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
-- Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
+- Treat dimension grouping as intent-classification-only; Step 4 groups concrete
+  edits by file
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 
@@ -231,7 +232,8 @@ codebase and git history. This analysis phase runs entirely before code changes 
 
 **Dimension grouping:** Group findings by their extracted dimension group key
 (`statistical`, `methodology`, `reproducibility`, `reporting`, `hygiene`, `unknown`).
-This is dimension-based grouping, NOT file-path grouping.
+This is dimension-based grouping for intent classification only. It does not prohibit
+the file grouping required for concrete edits in Step 4.
 
 Launch one parallel subagent via `child delegation under the declared `sonnet` model-class policy` per non-empty dimension
 group. Each subagent receives:
@@ -317,12 +319,17 @@ addressed_thread_ids: list[str] = []
 escalation_records: list = []
 ```
 
-**Processing order** within ACCEPT findings (critical before warning within each tier):
-1. `config_fix` — config YAML, seed, env spec changes
-2. `script_fix` — scripts/*.py, experiment code changes
-3. `report_edit` — research/*.md document changes
+**Edit order for ACCEPT findings:** Treat `rerun_required` and `design_flaw` as
+escalations, not edit candidates. Group all remaining concrete edit strategies by
+path. Define severity rank as `critical=3`, `warning=2`, `info=1`; process contiguous
+file groups by `(-file_max_severity, path, -line, comment_id)`. Within each file group,
+edit in descending-line order. `config_fix`, `script_fix`, and `report_edit` choose
+only the edit route; they must not split a file group.
 
-For each ACCEPT finding, route by `fix_strategy`:
+For each concrete candidate in that order, re-read the live source immediately before
+editing. Use its existing path, line, and diff-hunk context to re-derive the edit from
+the live text; do not edit from a previously read line range. Then route by
+`fix_strategy`:
 
 **`rerun_required` or `design_flaw` → ESCALATE:**
 1. Append to `escalation_records` with full finding details

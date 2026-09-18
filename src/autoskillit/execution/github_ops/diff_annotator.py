@@ -7,6 +7,7 @@ cardinality assertion.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 
 import regex as re
@@ -237,6 +238,77 @@ def build_anchor_authority(
 
 
 _LINE_MARKER = re.compile(r"^\[L(\d+)\]")
+
+
+def normalize_source_line(source_line: str) -> str:
+    """Normalize a live source line for a position-independent anchor digest."""
+    return source_line.rstrip()
+
+
+def hash_source_line(source_line: str) -> str:
+    """Return the digest used to anchor one live source line."""
+    return hashlib.sha256(normalize_source_line(source_line).encode()).hexdigest()
+
+
+def extract_annotated_source_line(
+    annotated_diff: str,
+    file_path: str,
+    line: int,
+) -> str | None:
+    """Extract one source line from an annotated diff anchor.
+
+    The annotation marker and exactly one unified-diff prefix are producer
+    metadata. The returned value is otherwise the original source line.
+    """
+    if type(line) is not int:
+        return None
+    in_file = False
+    matches: list[str] = []
+
+    for raw_line in annotated_diff.splitlines():
+        header_match = _FILE_HEADER.match(raw_line)
+        if header_match:
+            if in_file:
+                break
+            in_file = header_match.group(1) == file_path
+            continue
+        if not in_file:
+            continue
+
+        marker_match = _LINE_MARKER.match(raw_line)
+        if marker_match and int(marker_match.group(1)) == line:
+            matches.append(raw_line)
+
+    if len(matches) != 1:
+        return None
+    marker_match = _LINE_MARKER.match(matches[0])
+    if marker_match is None:  # pragma: no cover - guarded by the collection above
+        return None
+    annotated_source_line = matches[0][marker_match.end() :]
+    if not annotated_source_line.startswith(("+", " ")):
+        return None
+    return annotated_source_line[1:]
+
+
+def validate_anchor(content: str, line: int, anchor_digest: str) -> tuple[str, int | None]:
+    """Resolve a stored anchor against live content without guessing a location."""
+    if type(line) is not int or not anchor_digest:
+        return ("stale", None)
+    source_lines = content.splitlines()
+    if (
+        1 <= line <= len(source_lines)
+        and hash_source_line(source_lines[line - 1]) == anchor_digest
+    ):
+        return ("fresh", line)
+
+    matching_lines = [
+        index
+        for index, source_line in enumerate(source_lines, start=1)
+        if hash_source_line(source_line) == anchor_digest
+    ]
+    if len(matching_lines) == 1:
+        return ("moved", matching_lines[0])
+    return ("stale", None)
 
 
 def extract_code_region(

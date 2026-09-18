@@ -337,6 +337,7 @@ class TerminationReason(StrEnum):
     COMPLETED = "completed"
     STALE = "stale"
     IDLE_STALL = "idle_stall"
+    OUTPUT_LIMIT = "output_limit"
     TIMED_OUT = "timed_out"
     SIGNAL_DEATH = "signal_death"
     HEALTH_INSPECTOR = "health_inspector"

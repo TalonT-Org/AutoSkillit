@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import time
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,11 +25,11 @@ from autoskillit.core import (
     spill_output,
     truncate_text,
 )
-from autoskillit.execution import build_sanitized_env
 from autoskillit.server import mcp
 from autoskillit.server._misc import condense_test_output
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.git import detect_self_reverts, validate_commit_paths
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
@@ -37,14 +37,17 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
     prepare_recipe_segment_delivery,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._commit_outcome import finish_commit_response
 from autoskillit.server.tools._pre_commit_failure import (
     parse_combined_process_output as _combined_process_output,
 )
 from autoskillit.server.tools._pre_commit_failure import (
     parse_hook_failure_class as _parse_hook_failure_class,
 )
-from autoskillit.server.tools._pre_commit_failure import (
-    pre_commit_failure_class as _pre_commit_failure_class,
+from autoskillit.server.tools._pre_commit_transaction import run_pre_commit_transaction
+from autoskillit.server.tools._self_revert import (
+    scan_self_reverts,
+    validate_self_revert_base,
 )
 
 if TYPE_CHECKING:
@@ -118,103 +121,6 @@ def _build_test_check_response(
     if test_result.full_run_reason is not None:
         response["full_run_reason"] = test_result.full_run_reason
     return response
-
-
-async def _run_pre_commit_transaction(
-    cwd: str,
-    paths: list[str],
-    *,
-    workspace_temp_dir: str | None,
-) -> dict[str, object] | None:
-    pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
-    uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
-    hook_cmd: list[str] | None = None
-    if (Path(cwd) / ".pre-commit-config.yaml").exists():
-        if uv_bin and (Path(cwd) / "uv.lock").exists():
-            hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
-        elif pre_commit_bin:
-            hook_cmd = [pre_commit_bin, "run", "--files"] + paths
-        else:
-            return {
-                "success": False,
-                "error": "pre-commit config exists but no pre-commit binary found",
-                "failure_class": CommitFailureClass.TOOLING_MISSING.value,
-            }
-
-    if hook_cmd is not None:
-        uv_cache_dir = resolve_temp_dir(Path(cwd), workspace_temp_dir) / "uv-cache"
-        uv_cache_dir.mkdir(parents=True, exist_ok=True)
-        hook_env = build_sanitized_env()
-        hook_env["UV_CACHE_DIR"] = str(uv_cache_dir)
-        before_rc, before_stdout, _ = await _run_subprocess(
-            ["git", "-C", cwd, "write-tree"], cwd=cwd, timeout=30
-        )
-        rc, stdout, stderr = await _run_subprocess(
-            hook_cmd,
-            cwd=cwd,
-            timeout=120,
-            env=hook_env,
-        )
-        if rc != 0:
-            hook_output = _combined_process_output(
-                stderr,
-                stdout,
-                f"pre-commit exited with status {rc}",
-            )
-            failure_class = _pre_commit_failure_class(hook_output)
-            rc2, readd_stdout, readd_stderr = await _run_subprocess(
-                ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
-            )
-            if rc2 != 0:
-                readd_output = _combined_process_output(
-                    readd_stderr,
-                    readd_stdout,
-                    f"git add exited with status {rc2}",
-                )
-                return {
-                    "success": False,
-                    "error": f"pre-commit re-add failed: {readd_output}",
-                    "failure_class": CommitFailureClass.GIT_ADD_FAILED.value,
-                }
-            after_rc, after_stdout, _ = await _run_subprocess(
-                ["git", "-C", cwd, "write-tree"], cwd=cwd, timeout=30
-            )
-            if (
-                before_rc == 0
-                and after_rc == 0
-                # Skip the staged-tree equality optimization when the before-tree
-                # stdout was empty/whitespace-only (e.g. `git write-tree` on an
-                # empty staging area or a stray `b'\n'`). Without this guard,
-                # the optimization would collapse to False on every empty case
-                # and fall through to a retry that will fail with the same
-                # output, masking the no-op pre-commit failure mode.
-                and bool(before_stdout.strip())
-                and before_stdout.strip() == after_stdout.strip()
-            ):
-                return {
-                    "success": False,
-                    "error": f"pre-commit failed: {hook_output}",
-                    "failure_class": failure_class.value,
-                    "retry_skipped_reason": "staged tree unchanged after pre-commit failure",
-                }
-            rc3, stdout3, stderr3 = await _run_subprocess(
-                hook_cmd,
-                cwd=cwd,
-                timeout=120,
-                env=hook_env,
-            )
-            if rc3 != 0:
-                retry_output = _combined_process_output(
-                    stderr3,
-                    stdout3,
-                    f"pre-commit retry exited with status {rc3}",
-                )
-                return {
-                    "success": False,
-                    "error": f"pre-commit retry failed: {retry_output}",
-                    "failure_class": _pre_commit_failure_class(retry_output).value,
-                }
-    return None
 
 
 @mcp.tool(
@@ -387,6 +293,7 @@ async def commit_files(
     message: str,
     cwd: str,
     step_name: str = "",
+    self_revert_base_sha: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Stage and commit specified files in a worktree via the server process.
@@ -400,6 +307,7 @@ async def commit_files(
         message: Commit message.
         cwd: Absolute path to the git worktree.
         step_name: Optional YAML step key for wall-clock timing accumulation.
+        self_revert_base_sha: Optional ancestor commit from which to scan for inverse hunks.
 
     Never raises.
     """
@@ -419,48 +327,13 @@ async def commit_files(
                 *,
                 failure_class: CommitFailureClass | None = None,
             ) -> str:
-                # Build a fresh envelope so callers can reuse the response dict without
-                # us silently corrupting their copy via .pop() / item assignment.
-                envelope = dict(response)
-                if failure_class is not None:
-                    envelope["failure_class"] = failure_class.value
-                commit_sha = envelope.get("commit_sha")
-                succeeded = envelope.get("success") is True
-                wire_envelope = attach_recipe_segment(
-                    envelope,
-                    prepared_segment,
-                    success=succeeded,
+                return finish_commit_response(
+                    response,
+                    failure_class=failure_class,
+                    tool_ctx=tool_ctx,
+                    workspace=resolved,
+                    prepared_segment=prepared_segment,
                 )
-                try:
-                    tool_ctx.workspace_outcome_ledger.record(
-                        WorkspaceOutcomeRecord(
-                            workspace=resolved,
-                            recorded_at=datetime.now(UTC).isoformat(),
-                            kind=WorkspaceOutcomeKind.COMMIT_ATTEMPT,
-                            succeeded=succeeded,
-                            commit_sha=commit_sha if isinstance(commit_sha, str) else None,
-                            failure_class=None if succeeded else failure_class,
-                        )
-                    )
-                except (OSError, ValueError, RuntimeError) as exc:
-                    logger.error("commit_files outcome recording failed", exc_info=True)
-                    ledger_failure: dict[str, object] = {
-                        "success": False,
-                        "error": (
-                            f"workspace outcome recording failed: {type(exc).__name__}: {exc}"
-                        ),
-                        "failure_class": CommitFailureClass.UNHANDLED.value,
-                    }
-                    if isinstance(commit_sha, str) and commit_sha:
-                        ledger_failure["commit_sha"] = commit_sha
-                    return json.dumps(
-                        attach_recipe_segment(
-                            ledger_failure,
-                            prepared_segment,
-                            success=False,
-                        )
-                    )
-                return json.dumps(wire_envelope)
 
             if not cwd or not os.path.isdir(resolved):
                 return _finish(
@@ -476,13 +349,25 @@ async def commit_files(
                     failure_class=CommitFailureClass.PATH_REJECTED,
                 )
 
-            from autoskillit.server.git import validate_commit_paths  # circular-break
-
             if (path_error := validate_commit_paths(resolved, paths)) is not None:
                 return _finish(
                     {"success": False, "error": path_error},
                     failure_class=CommitFailureClass.PATH_REJECTED,
                 )
+
+            self_revert_base: str | None = None
+            if self_revert_base_sha:
+                self_revert_base, validation_error = await validate_self_revert_base(
+                    partial(_run_subprocess, cwd=resolved, timeout=10),
+                    resolved,
+                    self_revert_base_sha,
+                    _combined_process_output,
+                )
+                if validation_error is not None:
+                    return _finish(
+                        {"success": False, "error": validation_error},
+                        failure_class=CommitFailureClass.SELF_REVERT_BASE_VALIDATION,
+                    )
             _start = time.monotonic()
 
             try:
@@ -508,7 +393,7 @@ async def commit_files(
                     )
 
                 if (
-                    hook_error := await _run_pre_commit_transaction(
+                    hook_error := await run_pre_commit_transaction(
                         resolved,
                         paths,
                         workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
@@ -565,7 +450,19 @@ async def commit_files(
                         failure_class=CommitFailureClass.UNHANDLED,
                     )
 
-                return _finish({"success": True, "commit_sha": commit_sha})
+                response: dict[str, object] = {"success": True, "commit_sha": commit_sha}
+                if self_revert_base is not None:
+                    assert tool_ctx.runner is not None
+                    response.update(
+                        await scan_self_reverts(
+                            detect_self_reverts,
+                            tool_ctx.runner,
+                            resolved,
+                            self_revert_base,
+                            commit_sha,
+                        )
+                    )
+                return _finish(response)
             except Exception as exc:
                 logger.error("commit_files unhandled exception", exc_info=True)
                 return _finish(

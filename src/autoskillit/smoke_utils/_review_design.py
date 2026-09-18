@@ -8,8 +8,10 @@ counter initialization, and verdict scoring.
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC
 from pathlib import Path
+from typing import Any, cast
 
 from autoskillit.core import (
     atomic_write,
@@ -89,58 +91,155 @@ def check_review_loop(
     }
 
 
+def _parse_context_lines(context_lines: str) -> int:
+    try:
+        return int(context_lines) if context_lines else 50
+    except ValueError as exc:
+        raise ValueError(f"context_lines must be numeric, got: {context_lines!r}") from exc
+
+
+def _validate_v1_context_entry(entry: object) -> str | None:
+    if not isinstance(entry, dict):
+        return "invalid_context_entry"
+    if "anchor_digest" in entry:
+        return "unexpected_anchor_digest"
+    if not isinstance(entry.get("path"), str) or not entry["path"]:
+        return "invalid_context_path"
+    if not isinstance(entry.get("code_region"), str):
+        return "invalid_code_region"
+    line = entry.get("line")
+    if line is not None and (type(line) is not int or line < 1):
+        return "invalid_context_line"
+    return None
+
+
+def _load_complete_v1_handoff(handoff_path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not handoff_path.exists():
+        return None, "handoff_not_found"
+    try:
+        handoff = json.loads(handoff_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None, "invalid_handoff"
+    if not isinstance(handoff, dict) or handoff.get("schema_version") != 1:
+        return None, "handoff_not_complete_v1"
+
+    entries = handoff.get("context_entries")
+    if not isinstance(entries, list):
+        return None, "invalid_context_entries"
+    for entry in entries:
+        if reason := _validate_v1_context_entry(entry):
+            return None, reason
+    return handoff, None
+
+
+def _validate_handoff_checkout_head(handoff: dict[str, Any], project_dir: str) -> str | None:
+    expected_head = handoff.get("_head_sha")
+    if expected_head is None or not (Path(project_dir) / ".git").exists():
+        return None
+    if not isinstance(expected_head, str):
+        return "invalid_handoff_head"
+    try:
+        checkout_head = subprocess.run(
+            ["git", "-C", project_dir, "rev-parse", "HEAD"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "checkout_head_unavailable"
+    if checkout_head.returncode != 0:
+        return "checkout_head_unavailable"
+    return "checkout_head_mismatch" if checkout_head.stdout.strip() != expected_head else None
+
+
+def _read_annotated_diff(
+    output_dir: Path,
+    pr_number: str,
+    entries: list[object],
+) -> tuple[str, str | None]:
+    if not any(type(entry.get("line")) is int for entry in entries if isinstance(entry, dict)):
+        return "", None
+    annotated_path = output_dir / f"annotated_diff_{pr_number}.txt"
+    if not annotated_path.exists():
+        return "", "annotated_diff_not_found"
+    return annotated_path.read_text(), None
+
+
+def _build_enriched_handoff(
+    handoff: dict[str, Any],
+    annotated_diff: str,
+    context_lines: int,
+) -> tuple[dict[str, Any] | None, int, str | None]:
+    """Build a v2 replacement in memory, leaving the v1 handoff untouched."""
+    from autoskillit.execution import (  # noqa: PLC0415
+        extract_annotated_source_line,
+        extract_code_region,
+        hash_source_line,
+    )
+
+    enriched_handoff = json.loads(json.dumps(handoff))
+    enriched_entries = cast(list[dict[str, Any]], enriched_handoff["context_entries"])
+    enriched_count = 0
+    for entry in enriched_entries:
+        line = entry["line"]
+        if type(line) is not int:
+            continue
+        source_line = extract_annotated_source_line(annotated_diff, entry["path"], line)
+        if source_line is None:
+            return None, 0, "invalid_context_anchor"
+        entry["anchor_digest"] = hash_source_line(source_line)
+        if not entry["code_region"]:
+            entry["code_region"] = extract_code_region(
+                annotated_diff,
+                entry["path"],
+                line,
+                context_lines=context_lines,
+            )
+            if entry["code_region"]:
+                enriched_count += 1
+
+    enriched_handoff["schema_version"] = 2
+    return enriched_handoff, enriched_count, None
+
+
 def enrich_diff_context(
     pr_number: str,
     project_dir: str,
     output_dir: str,
     context_lines: str = "50",
 ) -> dict[str, str]:
-    """Fill empty code_region fields in the review-pr diff_context handoff.
-
-    Called by run_python from the enrich_diff_context step in implementation.yaml.
-    Reads the existing diff_context_{pr_number}.json and the annotated diff,
-    then uses extract_code_region() to populate any empty code_region entries.
-    Overwrites the handoff file in place.
-    """
-    from autoskillit.execution import extract_code_region  # noqa: PLC0415
-
+    """Atomically enrich a complete v1 diff-context handoff to schema version 2."""
     if not Path(project_dir).is_absolute():
         raise ValueError(f"project_dir must be absolute, got {project_dir!r}")
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
-    try:
-        ctx_lines = int(context_lines) if context_lines else 50
-    except ValueError as exc:
-        raise ValueError(f"context_lines must be numeric, got: {context_lines!r}") from exc
+
+    ctx_lines = _parse_context_lines(context_lines)
     handoff_path = out / f"diff_context_{pr_number}.json"
+    handoff, reason = _load_complete_v1_handoff(handoff_path)
+    if reason:
+        return {"enriched": "false", "reason": reason}
+    assert handoff is not None
 
-    if not handoff_path.exists():
-        return {"enriched": "false", "reason": "handoff_not_found"}
+    if reason := _validate_handoff_checkout_head(handoff, project_dir):
+        return {"enriched": "false", "reason": reason}
+    entries = cast(list[object], handoff["context_entries"])
+    annotated_diff, reason = _read_annotated_diff(out, pr_number, entries)
+    if reason:
+        return {"enriched": "false", "reason": reason}
+    enriched_handoff, enriched_count, reason = _build_enriched_handoff(
+        handoff,
+        annotated_diff,
+        ctx_lines,
+    )
+    if reason:
+        return {"enriched": "false", "reason": reason}
 
-    handoff = json.loads(handoff_path.read_text())
-    entries = handoff.get("context_entries", [])
-
-    annotated_path = out / f"annotated_diff_{pr_number}.txt"
-    if not annotated_path.exists():
-        return {"enriched": "false", "reason": "annotated_diff_not_found"}
-
-    annotated_diff = annotated_path.read_text()
-    enriched_count = 0
-
-    for entry in entries:
-        if not entry.get("code_region"):
-            region = extract_code_region(
-                annotated_diff,
-                entry["path"],
-                entry["line"],
-                context_lines=ctx_lines,
-            )
-            entry["code_region"] = region
-            if region:
-                enriched_count += 1
-
-    atomic_write(handoff_path, json.dumps(handoff, indent=2))
+    assert enriched_handoff is not None
+    atomic_write(handoff_path, json.dumps(enriched_handoff, indent=2))
     return {
         "enriched": "true",
         "enriched_count": str(enriched_count),

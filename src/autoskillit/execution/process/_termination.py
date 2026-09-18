@@ -69,6 +69,7 @@ def decide_termination_action(
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
         case (
             TerminationReason.IDLE_STALL
+            | TerminationReason.OUTPUT_LIMIT
             | TerminationReason.STALE
             | TerminationReason.TIMED_OUT
             | TerminationReason.HEALTH_INSPECTOR

@@ -361,6 +361,9 @@ GATE_REASON_CODE=metrics_missing
 GATE_FAILED=false
 GATE_AUTHORITY='{"state":"degraded","reason_code":"metrics_missing","snapshot":{},"annotation_generation_id":""}'
 STANDARD_RAW_FINDINGS='[]'
+STANDARD_AUDITOR_RAW_FINDINGS='[]'
+DOC_COUNT_FINDINGS='[]'
+DOC_COUNT_PREFLIGHT_OUTPUT=""
 EXPERIMENTAL_CANDIDATES='[]'
 EXPERIMENTAL_AUDIT_STATE=not_eligible
 AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started","reason_code":"not_eligible"},"pr-review-auditor-abstraction-surface":{"status":"not_started","reason_code":"not_eligible"}}'
@@ -783,6 +786,36 @@ standard calls. `deletion_context` remains independently gated. Missing or malfo
 adaptive selection falls back to all six standard agents and never adds a proof-only
 auditor to that fallback.
 
+### Step 2.95: Doc-Count Preflight
+
+Before auditor dispatch, probe the checkout's declared task capability through the
+bounded review command route. Run `task --json --list` with cwd
+`REVIEW_CHECKOUT_ROOT`, a finite 20-second timeout, and one 64 KiB combined
+stdout/stderr ceiling. Parse only its machine-readable task list; do not infer a
+capability from a Taskfile path or execute `scripts/check_doc_counts.py` directly.
+
+- If the probe fails, times out, or reaches the combined-output limit, set the
+  preflight state to `needs_human`, retain the bounded diagnostic, and stop before
+  auditor dispatch/publication.
+- If `check-docs` is absent, record `not_applicable` with the capability reason and
+  continue to Step 3.
+- If `check-docs` is declared, run `task check-docs` in `REVIEW_CHECKOUT_ROOT`
+  through the same bounded command route, with a finite timeout and the same combined
+  output ceiling. Store that bounded combined output in `DOC_COUNT_PREFLIGHT_OUTPUT`.
+  A zero exit is clean and continues to Step 3.
+- For a non-zero exit, accept only deterministic `path:line: message` records. The
+  parser ignores the hook's heading and total line, then creates one review-level
+  finding per diagnostic with `dimension="tests"`, `severity="critical"`, and
+  `requires_decision=false`. Append those exact validated records to
+  `STANDARD_RAW_FINDINGS` before the normal validation and aggregation boundary.
+- A non-zero exit without a parseable `path:line:` diagnostic is `needs_human`;
+  retain the bounded output and stop before auditor dispatch/publication. Never treat
+  an unparseable failure as clean.
+
+Use `_parse_doc_count_preflight_diagnostics` from the installed review validation
+module for this conversion. A doc-count mismatch is intentionally review-level: do
+not fabricate an inline diff anchor for an unchanged documentation line.
+
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
 Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
@@ -963,8 +996,11 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 
 ### Step 4: Aggregate and Deduplicate Findings
 
-Keep `STANDARD_RAW_FINDINGS` separate from `EXPERIMENTAL_CANDIDATES`. Append
-standard and deletion responses only to `STANDARD_RAW_FINDINGS`.
+Keep `STANDARD_AUDITOR_RAW_FINDINGS` separate from `EXPERIMENTAL_CANDIDATES`.
+Append standard and deletion responses only to `STANDARD_AUDITOR_RAW_FINDINGS`, then
+construct `STANDARD_RAW_FINDINGS` as that array plus accepted doc-count preflight
+findings. This keeps the complete raw ledger while allowing doc-count diagnostics to
+use their review-level, non-inline validation path.
 
 Before accepting any experimental item, validate both arrays completely. The exact
 candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
@@ -1056,6 +1092,7 @@ from autoskillit.smoke_utils import (
     render_review_finding_body,
     validate_experimental_auditor_outputs,
 )
+from autoskillit.smoke_utils.review._validation import _parse_doc_count_preflight_diagnostics
 
 ANCHOR_AUTHORITY = (
     DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
@@ -1067,7 +1104,7 @@ ANCHOR_AUTHORITY = (
 
 STANDARD_VALIDATION_ERRORS = []
 try:
-    STANDARD_FINDINGS_DECODED = json.loads(STANDARD_RAW_FINDINGS)
+    STANDARD_FINDINGS_DECODED = json.loads(STANDARD_AUDITOR_RAW_FINDINGS)
 except json.JSONDecodeError:
     STANDARD_FINDINGS = []
     STANDARD_VALIDATION_ERRORS.append("standard findings are not valid JSON")
@@ -1077,6 +1114,8 @@ else:
     else:
         STANDARD_FINDINGS = []
         STANDARD_VALIDATION_ERRORS.append("standard findings must be a JSON array")
+DOC_COUNT_FINDINGS = _parse_doc_count_preflight_diagnostics(DOC_COUNT_PREFLIGHT_OUTPUT)
+STANDARD_RAW_FINDINGS = json.dumps([*STANDARD_FINDINGS, *DOC_COUNT_FINDINGS])
 if GATE_STATE == "valid_true":
     VALIDATION_RESULT = validate_experimental_auditor_outputs(
         outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
@@ -1109,6 +1148,7 @@ if STANDARD_VALIDATION_ERRORS:
         "state": "degraded",
         "survivors": [],
         "unpostable": [],
+        "review_level_findings": [],
         "aggregation_records": [],
         "validation_errors": STANDARD_VALIDATION_ERRORS,
     }
@@ -1118,6 +1158,7 @@ else:
         dispositions=DISPOSITION_RECORDS,
         prior_resolved_findings=prior_resolved_findings,
         standard_findings=STANDARD_FINDINGS,
+        doc_count_findings=DOC_COUNT_FINDINGS,
         anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
         review_root=REVIEW_CHECKOUT_ROOT,
@@ -1130,6 +1171,13 @@ FINAL_REVIEW_FINDINGS = [
 ]
 FILTERED_FINDINGS = FINAL_REVIEW_FINDINGS
 UNPOSTABLE_FINDINGS = AGGREGATION_RESULT["unpostable"]
+REVIEW_LEVEL_FINDINGS = AGGREGATION_RESULT["review_level_findings"]
+REVIEW_LEVEL_CANDIDATE_IDS = {finding["candidate_id"] for finding in REVIEW_LEVEL_FINDINGS}
+INLINE_FINDINGS = [
+    finding
+    for finding in FILTERED_FINDINGS
+    if finding["candidate_id"] not in REVIEW_LEVEL_CANDIDATE_IDS
+]
 all_findings = FILTERED_FINDINGS + UNPOSTABLE_FINDINGS
 AGGREGATION_RECORDS = AGGREGATION_RESULT["aggregation_records"]
 ```
@@ -1147,9 +1195,11 @@ standard/deletion list afterward.
    `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
    For experimental candidates create a linked immutable aggregation record with
    reason `suppressed_prior_thread`; do not mutate the candidate or disposition.
-2. Deduplicate by `(file, line)` after suppression. Rank collisions by severity,
-   then prefer `requires_decision=false`, then fixed source rank and original array
-   index. Create a deterministic `dedup_group_id`; retain every member
+2. Deduplicate diff-anchored findings by `(file, line)` after suppression. Rank
+   collisions by severity, then prefer `requires_decision=false`, then fixed source
+   rank and original array index. A review-level doc-count finding remains in its
+   own candidate-ID partition and never collides with an inline finding at the same
+   path and line. Create a deterministic `dedup_group_id`; retain every member
    `candidate_id`, the winner, and rationale. Losers receive linked
    `duplicate_candidate` aggregation records.
 3. Use the programmatic aggregation partition and preserve authority availability:
@@ -1238,6 +1288,7 @@ if SNAPSHOT_IS_FRESH:
     PUBLICATION_SEED = prepare_experimental_review_publication(
         raw_ledger=RAW_LEDGER,
         survivors=FINAL_REVIEW_FINDINGS,
+        review_level_findings=REVIEW_LEVEL_FINDINGS,
         unpostable=UNPOSTABLE_FINDINGS,
         snapshot=GATE_AUTHORITY["snapshot"],
         annotation_generation_id=ANNOTATION_GENERATION_ID,
@@ -1326,10 +1377,12 @@ contained `batch_review_response_${pr_number}.json` destination under
 `${REVIEW_OUTPUT_DIR}` for this invocation. Reject a logical iteration that does not start
 with `review-pr:`.
 
-Prepare one complete `comments` array from `FILTERED_FINDINGS`, filtering at the publication
+Prepare one complete `comments` array from `INLINE_FINDINGS`, filtering at the publication
 boundary to `severity == "critical"` or `severity == "warning"`. Preserve each validated
 repository-relative `path`, `line`, and `side: "RIGHT"` anchor. Do not place
-`UNPOSTABLE_FINDINGS` in `comments`; summarize those findings in the complete review `body`.
+`UNPOSTABLE_FINDINGS` or `REVIEW_LEVEL_FINDINGS` in `comments`; summarize both partitions
+in the complete review `body`. A doc-count mismatch is rendered as a review-level `tests`
+finding and never attempts inline publication.
 
 Map the verdict to the requested event:
 
@@ -1343,9 +1396,10 @@ Call the structured publication tool once with the already-complete payload:
 Render the unpostable partition into the complete review body before publication:
 
 ```python
-from autoskillit.smoke_utils import render_unpostable_review_section
+from autoskillit.smoke_utils import render_review_finding_body, render_unpostable_review_section
 
 REVIEW_BODY += render_unpostable_review_section(UNPOSTABLE_FINDINGS)
+REVIEW_BODY += "\n".join(render_review_finding_body(finding) for finding in REVIEW_LEVEL_FINDINGS)
 ```
 
 ```text
@@ -1464,6 +1518,7 @@ else:
     PUBLICATION = prepare_experimental_review_publication(
         raw_ledger=RAW_LEDGER,
         survivors=FINAL_REVIEW_FINDINGS,
+        review_level_findings=REVIEW_LEVEL_FINDINGS,
         unpostable=UNPOSTABLE_FINDINGS,
         snapshot=GATE_AUTHORITY["snapshot"],
         annotation_generation_id=ANNOTATION_GENERATION_ID,
@@ -1508,7 +1563,8 @@ After writing the summary file and before emitting the verdict token, write the 
 file for resolve-review's pre-built context. This costs zero additional API calls or file
 reads — all data is already in the session's context.
 
-Do not output prose between iterations. For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
+Do not output prose between iterations. For each non-review-level finding in
+`INLINE_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
 `"critical"` or `"warning"`, build a context entry:
 - `path` — the finding's `file` field (the finding schema uses `file`, not `path`;
   map `finding.file` → `path` in the context entry for resolve-review compatibility)
@@ -1528,12 +1584,13 @@ replace it through the Step 8 same-directory temporary file and atomic rename:
 ```json
 {
   "pr_number": 1234,
-  "schema_version": 1,
+  "schema_version": 2,
   "written_at": "{ISO-8601 timestamp}",
   "context_entries": [
     {
       "path": "src/autoskillit/execution/headless.py",
       "line": 42,
+      "anchor_digest": "sha256 of the normalized annotated target line",
       "severity": "critical",
       "dimension": "arch",
       "message": "...",
@@ -1546,6 +1603,17 @@ replace it through the Step 8 same-directory temporary file and atomic rename:
       "candidate_id": "...",
       "disposition_id": "...",
       "snapshot": {}
+    }
+  ],
+  "review_level_findings": [
+    {
+      "candidate_id": "...",
+      "path": "docs/skills/catalog.md",
+      "line": 17,
+      "severity": "critical",
+      "dimension": "tests",
+      "message": "claims 63 skills, actual is 64",
+      "requires_decision": false
     }
   ],
   "_head_sha": "{METRICS_HEAD_SHA}",
@@ -1563,6 +1631,12 @@ best-effort and its absence is handled gracefully by resolve-review.
 Do not independently render or rename this fixed path: the helper invocation above
 normalizes and publishes it in the same transaction as raw findings and the final
 receipt/local marker.
+
+Version 2 requires a non-empty `anchor_digest` on every context entry whose `line`
+is an integer. For `line: null`, omit the digest and do not manufacture source bytes.
+`review_level_findings` is separate from `context_entries`: it preserves the
+candidate ID, path, diagnostic line, message, severity, dimension, and
+`requires_decision` for accepted doc-count findings, but has no inline anchor.
 
 **Raw Findings JSON schema (published first):**
 

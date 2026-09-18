@@ -56,6 +56,7 @@ from autoskillit.execution.process._lifecycle.runner import (
 from autoskillit.execution.process._process_io import (
     CaptureReadError,
     CaptureSetupError,
+    _OutputCeilingCapture,
     create_temp_io,
     read_temp_output,
     summarize_capture,
@@ -242,6 +243,7 @@ async def run_managed_async(
     on_session_id_resolved: Callable[[str], None] | None = None,
     child_deferral_ceiling: float = 0.0,
     capture_dir: Path | None = None,
+    max_combined_output_bytes: int | None = None,
     backend_resume_session_id: str = "",
     line_driver: LineDriver | None = None,
     lifecycle_observation_enabled: bool = False,
@@ -258,7 +260,15 @@ async def run_managed_async(
     5. async_kill_process_tree on failure/timeout/completion-detection
     6. read_temp_output for results
     7. cleanup temp files via context manager
+
+    A combined output ceiling switches stdout/stderr to piped, concurrently
+    drained capture so the process can be terminated before unbounded output is
+    retained on disk or decoded into the result.
     """
+    output_capture = _OutputCeilingCapture(
+        max_combined_output_bytes,
+        line_driver_enabled=line_driver is not None,
+    )
     line_driver_session = LineDriverSession(line_driver, pty_mode=pty_mode, input_data=input_data)
     lifecycle_observation_enabled = lifecycle_observation_enabled and stream_parser is not None
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
@@ -318,8 +328,10 @@ async def run_managed_async(
                 functools.partial(
                     spawn_owned_process,
                     cmd,
-                    stdout=line_driver_session.spawn_stdout_kwarg(stdout_file),
-                    stderr=stderr_file,
+                    stdout=output_capture.stdout_target(
+                        line_driver_session.spawn_stdout_kwarg(stdout_file)
+                    ),
+                    stderr=output_capture.stderr_target(stderr_file),
                     stdin=line_driver_session.spawn_stdin_kwarg(stdin_handle),
                     cwd=cwd,
                     env=_env,
@@ -446,6 +458,14 @@ async def run_managed_async(
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
             async with anyio.create_task_group() as tg:
+                output_capture.start(
+                    tg,
+                    process=proc,
+                    stdout_file=stdout_file,
+                    stderr_file=stderr_file,
+                    race_accumulator=acc,
+                    trigger=trigger,
+                )
                 tracing_handle = None
                 _enroll_race_watchers(
                     tg,
@@ -577,7 +597,7 @@ async def run_managed_async(
                 snapshots_data = [signals.exit_snapshot]
 
             _timed_out = timeout_scope is not None and timeout_scope.cancelled_caught
-            if _timed_out:
+            if _timed_out and termination is not TerminationReason.OUTPUT_LIMIT:
                 termination = TerminationReason.TIMED_OUT
             action = decide_termination_action(
                 termination,
@@ -595,6 +615,7 @@ async def run_managed_async(
                 process_exited=signals.process_exited,
                 channel_a=signals.channel_a_confirmed,
                 channel_b=signals.channel_b_status,
+                output_limit_exceeded=signals.output_limit_exceeded,
             )
             kill_reason, final_returncode, cleanup_result = await execute_termination_action(
                 action,
@@ -608,6 +629,7 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
+            await output_capture.settle()
             _coalesced_returncode = _coalesce_returncode(final_returncode)
             if cleanup_result.complete and on_process_reaped is not None:
                 reap_callback_attempted = True

@@ -570,14 +570,22 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "GITHUB_EVENT_PATH:" not in workflow_source
 
 
-def test_complexity_gate_step_runs_base_copy_on_general_shard() -> None:
+@pytest.mark.parametrize(
+    ("step_name", "checker"),
+    [
+        ("Policy relaxation gate", "check_policy_relaxation.py"),
+        ("Cyclomatic complexity gate", "check_complexity.py"),
+    ],
+)
+def test_trusted_base_gate_steps_copy_only_same_revision_helper(
+    step_name: str,
+    checker: str,
+) -> None:
     workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
     test_job_steps = workflow["jobs"]["test"]["steps"]
-    complexity_steps = [
-        step for step in test_job_steps if step.get("name") == "Cyclomatic complexity gate"
-    ]
-    assert len(complexity_steps) == 1
-    step = complexity_steps[0]
+    gate_steps = [step for step in test_job_steps if step.get("name") == step_name]
+    assert len(gate_steps) == 1
+    step = gate_steps[0]
     assert step["if"] == (
         "matrix.shard == 'general' && "
         "(github.event_name == 'pull_request' || github.event_name == 'merge_group')"
@@ -587,31 +595,52 @@ def test_complexity_gate_step_runs_base_copy_on_general_shard() -> None:
     run = step["run"]
     cat_file_index = run.index('git cat-file -e "${base}^{commit}"')
     ancestor_index = run.index('git merge-base --is-ancestor "${base}" HEAD')
-    bootstrap_guard_index = run.index('git cat-file -e "${base}:scripts/check_complexity.py"')
+    bootstrap_guard = f'git cat-file -e "${{base}}:scripts/{checker}" 2>/dev/null'
+    bootstrap_guard_index = run.index(bootstrap_guard)
     # Guard-before-execution order: both reachability guards must precede the
     # bootstrap-branching logic entirely, not merely appear somewhere in the script.
     assert cat_file_index < ancestor_index < bootstrap_guard_index
 
-    # The base-copy and bootstrap invocations must live inside their own branch of the
-    # if/else -- not just appear anywhere in the script -- so split on the real keywords.
-    branch_source = run[bootstrap_guard_index:]
-    if_branch, _, remainder = branch_source.partition("else")
-    else_branch, _, _ = remainder.partition("fi")
-
-    assert 'git show "${base}:scripts/check_complexity.py"' in if_branch
-    assert (
-        'uv run python "${RUNNER_TEMP}/check_complexity.py" --base "${base}" '
+    copied_checker = f'git show "${{base}}:scripts/{checker}" > "${{RUNNER_TEMP}}/{checker}"'
+    helper_probe = 'git cat-file -e "${base}:scripts/_git_plumbing.py" 2>/dev/null'
+    copied_helper = (
+        'git show "${base}:scripts/_git_plumbing.py" > "${RUNNER_TEMP}/_git_plumbing.py"'
+    )
+    copied_invocation = (
+        f'uv run python "${{RUNNER_TEMP}}/{checker}" --base "${{base}}" '
         '--repo-root "${GITHUB_WORKSPACE}"'
-    ) in if_branch
-    assert "--repo-root" not in else_branch
-    assert 'uv run python scripts/check_complexity.py --base "${base}"' in else_branch
+    )
+    bootstrap_invocation = f'uv run python scripts/{checker} --base "${{base}}"'
+    nested_contract = (
+        f"if {bootstrap_guard}; then\n"
+        f"  {copied_checker}\n"
+        f"  if {helper_probe}; then\n"
+        f"    {copied_helper}\n"
+        "  fi\n"
+        f"  {copied_invocation}\n"
+        "else\n"
+    )
+    assert nested_contract in run
+    assert bootstrap_invocation in run[run.index(nested_contract) + len(nested_contract) :]
+    assert "${GITHUB_WORKSPACE}/scripts/_git_plumbing.py" not in run
+    assert 'scripts/_git_plumbing.py" > "${RUNNER_TEMP}/_git_plumbing.py"' in run
+
+
+def test_complexity_gate_follows_policy_gate() -> None:
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
+    test_job_steps = workflow["jobs"]["test"]["steps"]
+    complexity_index = next(
+        index
+        for index, candidate in enumerate(test_job_steps)
+        if candidate.get("name") == "Cyclomatic complexity gate"
+    )
 
     relaxation_index = next(
         index
         for index, candidate in enumerate(test_job_steps)
         if candidate.get("name") == "Policy relaxation gate"
     )
-    assert test_job_steps.index(step) == relaxation_index + 1
+    assert complexity_index == relaxation_index + 1
 
 
 def test_workflow_uses_one_explicit_uv_cache_writer() -> None:

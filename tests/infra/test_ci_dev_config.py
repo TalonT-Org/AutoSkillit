@@ -7,6 +7,7 @@ their structural properties. If a gate is deleted from the config, a test fails.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -127,6 +128,18 @@ class TestPreCommitConfig:
         assert hook.get("files") == r"^(src|tests|scripts)/.*\.py$", (
             "check-complexity hook must scope to (src|tests|scripts)/*.py, matching "
             "the checker's own SCAN_ROOTS"
+        )
+        helper_path = "scripts/_git_plumbing.py"
+        assert re.match(hook["files"], helper_path)
+        policy_hooks = [
+            candidate
+            for candidate in hooks
+            if "check_policy_relaxation" in candidate.get("entry", "")
+        ]
+        assert len(policy_hooks) == 1
+        policy_files = policy_hooks[0].get("files", "")
+        assert re.match(policy_files, helper_path), (
+            "check-policy-relaxation must run when the shared Git helper changes"
         )
         assert hook.get("pass_filenames") is False, (
             "check-complexity must select the cached-index paths itself so "

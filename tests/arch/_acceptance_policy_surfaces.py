@@ -199,6 +199,7 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
 
 POLICY_AUTHORITY_PATHS = (
     "tests/arch/_acceptance_policy_surfaces.py",
+    "scripts/_git_plumbing.py",
     "scripts/check_policy_relaxation.py",
     "tests/arch/test_acceptance_policy_relaxation_gate.py",
     "tests/arch/_policy_gate_plumbing.py",

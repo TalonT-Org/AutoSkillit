@@ -20,6 +20,9 @@ def _as_int(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
+_SEVERITY_RANK: dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
+
+
 def aggregate_combined_review_candidates(
     *,
     candidates: Sequence[Mapping[str, object]],
@@ -99,7 +102,6 @@ def aggregate_combined_review_candidates(
         *EXPERIMENTAL_REVIEW_AUDITORS,
     )
     source_rank = {name: rank for rank, name in enumerate(source_names)}
-    severity_rank = {"critical": 0, "warning": 1, "info": 2}
 
     def source_name(finding: Mapping[str, object], default: str) -> str:
         dimension = str(finding.get("dimension", ""))
@@ -207,7 +209,7 @@ def aggregate_combined_review_candidates(
         members = sorted(
             groups[key],
             key=lambda candidate: (
-                severity_rank.get(str(candidate.get("severity")), len(severity_rank)),
+                _SEVERITY_RANK.get(str(candidate.get("severity")), len(_SEVERITY_RANK)),
                 bool(candidate.get("requires_decision")),
                 *rank(candidate),
             ),

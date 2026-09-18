@@ -828,6 +828,10 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A markerless candidate younger than legacy_age_minutes might be another "
         "concurrent _setup mid-creation; never touched by the bound, only by this age gate."
     ),
+    f"{_CRD}::L478": _self_limiting(
+        "A mature unreferenced markerless candidate returns the normal deletion disposition; "
+        "this branch completes eligibility evaluation without deferring reclamation."
+    ),
     f"{_CRD}::L483": RetentionDecision(
         Revocability.REVOCABLE,
         "A live or indeterminate owner is retained unconditionally; only provably dead may "

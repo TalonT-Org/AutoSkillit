@@ -120,8 +120,6 @@ from ._type_recipe_sections import *  # noqa: F401, F403
 from ._type_recipe_sections import __all__ as _recipe_sections_all
 from ._type_results import *  # noqa: F401, F403
 from ._type_results import __all__ as _results_all
-from ._type_results_adjudication import *  # noqa: F401, F403
-from ._type_results_adjudication import __all__ as _results_adjudication_all
 from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_retirement_backstops import *  # noqa: F401, F403
@@ -192,7 +190,6 @@ __all__ = (
     + _protocols_infra_all
     + _protocols_backend_all
     + _results_all
-    + _results_adjudication_all
     + _results_execution_all
     + _recipe_binding_all
     + _recipe_execution_all

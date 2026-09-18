@@ -126,6 +126,12 @@ from ._type_results_execution import *  # noqa: F401, F403
 from ._type_results_execution import __all__ as _results_execution_all
 from ._type_retirement_backstops import *  # noqa: F401, F403
 from ._type_retirement_backstops import __all__ as _retirement_backstops_all
+from ._type_retry_reason_descriptions import (  # noqa: F401, F403
+    RETRY_REASON_DESCRIPTIONS,
+)
+from ._type_retry_reason_descriptions import (
+    __all__ as _retry_reason_descriptions_all,
+)
 from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
 from ._type_skill_contract import *  # noqa: F401, F403
@@ -185,6 +191,7 @@ __all__ = (
     + _persisted_formats_all
     + _plugin_source_all
     + _retirement_backstops_all
+    + _retry_reason_descriptions_all
     + _protocols_logging_all
     + _protocols_execution_all
     + _protocols_github_all

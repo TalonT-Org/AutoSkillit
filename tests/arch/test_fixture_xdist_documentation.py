@@ -16,11 +16,13 @@ TEST_LOGGING = Path(__file__).resolve().parent.parent / "core" / "test_logging.p
 def _fixture_docstring(path: Path, fixture_name: str) -> str | None:
     """Return the docstring of the @pytest.fixture function named ``fixture_name`` in ``path``.
 
-    Walks top-level FunctionDef/AsyncFunctionDef nodes matching the name. Returns
-    None when the fixture is not found (the test then fails with a clear message).
+    Walks every FunctionDef/AsyncFunctionDef in the file (top-level or nested
+    inside a class) so fixtures defined inside test classes are located too.
+    Returns None when the fixture is not found (the test then fails with a
+    clear message).
     """
     tree = ast.parse(path.read_text())
-    for node in ast.iter_child_nodes(tree):
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if node.name != fixture_name:
@@ -32,46 +34,45 @@ def _fixture_docstring(path: Path, fixture_name: str) -> str | None:
     return None
 
 
-def test_detect_tmp_git_contamination_documents_xdist_worker_semantics():
-    """C7.2: conftest._detect_tmp_git_contamination is session-scoped and autouse.
+@pytest.mark.parametrize(
+    ("path", "fixture_name", "required_keywords"),
+    [
+        pytest.param(
+            CONFTEST,
+            "_detect_tmp_git_contamination",
+            ("xdist", "worker"),
+            id="conftest_detect_tmp_git_contamination",
+        ),
+        pytest.param(
+            CONFTEST,
+            "_structlog_session_init",
+            ("xdist", "worker"),
+            id="conftest_structlog_session_init",
+        ),
+        pytest.param(
+            TEST_LOGGING,
+            "_structlog_to_null",
+            ("override",),
+            id="logging_override_structlog_to_null",
+        ),
+    ],
+)
+def test_fixture_documents_required_semantics(
+    path: Path,
+    fixture_name: str,
+    required_keywords: tuple[str, ...],
+) -> None:
+    """C7.2/C7.3: session-scoped and override fixtures must call out their semantics.
 
-    Under pytest -n 4 (xdist, --dist load), session-scoped fixtures run once per
-    worker process, not once for the whole run. The docstring must call this out
-    so future readers do not assume single-execution semantics.
+    Under ``pytest -n 4`` (xdist, ``--dist load``), session-scoped fixtures run
+    once per worker process, not once for the whole run, and class-level
+    autouse fixtures shadow same-named parent fixtures in the test class's MRO.
+    Docstrings must call these mechanisms out so future readers do not assume
+    single-execution semantics or mistake an empty-body override for a bug.
     """
-    doc = _fixture_docstring(CONFTEST, "_detect_tmp_git_contamination")
-    assert doc is not None, "_detect_tmp_git_contamination fixture not found in tests/conftest.py"
-    assert "xdist" in doc or "worker" in doc.lower(), (
-        f"_detect_tmp_git_contamination docstring must mention xdist/worker "
-        f"semantics; got: {doc!r}"
-    )
-
-
-def test_structlog_session_init_documents_xdist_worker_semantics():
-    """C7.2: conftest._structlog_session_init runs once per xdist worker.
-
-    _structlog_proxies is a module-level list populated by this fixture's per-worker
-    invocation; cross-worker state cannot leak because each worker is a separate
-    process. The docstring must call this out explicitly.
-    """
-    doc = _fixture_docstring(CONFTEST, "_structlog_session_init")
-    assert doc is not None, "_structlog_session_init fixture not found in tests/conftest.py"
-    assert "xdist" in doc or "worker" in doc.lower(), (
-        f"_structlog_session_init docstring must mention xdist/worker semantics; got: {doc!r}"
-    )
-
-
-def test_logging_override_structlog_to_null_documents_override_pattern():
-    """C7.3: TestConfigureLogging._structlog_to_null overrides the conftest autouse.
-
-    pytest resolves fixtures by name in the test class's MRO; a class-level
-    autouse with the same name as a parent fixture shadows the parent. The
-    docstring must explain this mechanism so readers do not mistake the empty
-    body for a bug.
-    """
-    doc = _fixture_docstring(TEST_LOGGING, "_structlog_to_null")
-    assert doc is not None, "_structlog_to_null fixture not found in tests/core/test_logging.py"
-    assert "override" in doc.lower(), (
-        f"_structlog_to_null docstring must state it overrides the parent "
-        f"autouse fixture; got: {doc!r}"
+    doc = _fixture_docstring(path, fixture_name)
+    assert doc is not None, f"{fixture_name} fixture not found in {path}"
+    doc_lower = doc.lower()
+    assert any(keyword in doc_lower for keyword in required_keywords), (
+        f"{fixture_name} docstring must mention one of {required_keywords!r}; got: {doc!r}"
     )

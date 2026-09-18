@@ -85,20 +85,28 @@ def _module_assignment(source: str, symbol: str) -> ast.expr:
         raise UnsupportedSurfaceShape(f"{symbol}: source does not parse ({exc})") from exc
     value: ast.expr | None = None
     for node in tree.body:
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            if len(targets) == 1 and isinstance(targets[0], ast.Name) and targets[0].id == symbol:
-                if value is not None:
-                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
-                value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == symbol and node.value:
-                if value is not None:
-                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
-                value = node.value
-        elif isinstance(node, ast.AugAssign):
+        assigned_value: ast.expr | None
+        if isinstance(node, ast.AugAssign):
             if isinstance(node.target, ast.Name) and node.target.id == symbol:
                 raise UnsupportedSurfaceShape(f"{symbol}: augmented assignment is not readable")
+            continue
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            assigned_value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            assigned_value = node.value
+        else:
+            continue
+        if assigned_value is None:
+            continue
+        if len(targets) != 1 or not isinstance(targets[0], ast.Name):
+            continue
+        if targets[0].id != symbol:
+            continue
+        if value is not None:
+            raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
+        value = assigned_value
     if value is not None:
         return value
     raise SurfaceMissing(f"{symbol}: no module-level assignment")
@@ -371,7 +379,7 @@ def classify(
     return relaxations
 
 
-def _classify_entry(
+def _classify_presence_change(
     before: SurfaceValue | None,
     after: SurfaceValue | None,
     surface: PolicySurface,
@@ -393,6 +401,16 @@ def _classify_entry(
         if surface.default > before.limit:
             return "entry removed below default"
         return None
+    raise AssertionError("presence classification requires an absent entry")
+
+
+def _classify_entry(
+    before: SurfaceValue | None,
+    after: SurfaceValue | None,
+    surface: PolicySurface,
+) -> str | None:
+    if before is None or after is None:
+        return _classify_presence_change(before, after, surface)
     if after.limit > before.limit:
         return "limit increased" if surface.kind == "exemption_map" else "value increased"
     if surface.kind == "exemption_map":

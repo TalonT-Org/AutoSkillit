@@ -295,36 +295,12 @@ def _validate_closure_postcondition(closure: dict[str, Any], repo_root: Path) ->
         raise EvidenceValidationError("PR #4259 must be MERGED at closure_pr_merge_sha")
 
 
-def validate_manifest(manifest: dict[str, Any], repo_root: Path, *, mode: str) -> None:
-    """Validate one manifest in incremental or complete mode."""
-    if manifest.get("schema_version") != SCHEMA_VERSION:
-        raise EvidenceValidationError(f"schema_version must be {SCHEMA_VERSION}")
-    if mode not in {"incremental", "complete"}:
-        raise EvidenceValidationError("mode must be incremental or complete")
-
-    _validate_historical_context(manifest)
-    baseline_sha = _require_sha(
-        manifest.get("implementation_baseline_sha"), "implementation_baseline_sha"
-    )
-    baseline = _require_dict(manifest.get("baseline_regression"), "baseline_regression")
-    _require_string(baseline.get("command"), "baseline_regression.command")
-    if baseline.get("status") != "pass":
-        raise EvidenceValidationError("baseline_regression.status must be 'pass'")
-    _require_string(baseline.get("summary"), "baseline_regression.summary")
-    tested_sha = _require_sha(
-        baseline.get("gate_tested_sha"), "baseline_regression.gate_tested_sha"
-    )
-    if tested_sha != baseline_sha:
-        raise EvidenceValidationError(
-            "baseline_regression.gate_tested_sha must equal implementation_baseline_sha"
-        )
-    _require_string(baseline.get("gate_log_path"), "baseline_regression.gate_log_path")
-    _require_digest(baseline.get("gate_log_sha256"), "baseline_regression.gate_log_sha256")
-    phases = _validate_phases(manifest, repo_root)
-    closure = _validate_indexed_closure_artifacts(manifest)
-    if mode == "incremental":
-        return
-
+def _validate_complete_manifest(
+    manifest: dict[str, Any],
+    repo_root: Path,
+    phases: list[dict[str, Any]],
+    closure: dict[str, Any] | None,
+) -> None:
     if len(phases) != len(PHASES):
         raise EvidenceValidationError("complete mode requires all four phases")
     audit_base_sha = _require_sha(manifest.get("audit_base_sha"), "audit_base_sha")
@@ -364,6 +340,38 @@ def validate_manifest(manifest: dict[str, Any], repo_root: Path, *, mode: str) -
     if closure is None:
         raise EvidenceValidationError("complete mode requires closure evidence")
     _validate_closure_postcondition(closure, repo_root)
+
+
+def validate_manifest(manifest: dict[str, Any], repo_root: Path, *, mode: str) -> None:
+    """Validate one manifest in incremental or complete mode."""
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        raise EvidenceValidationError(f"schema_version must be {SCHEMA_VERSION}")
+    if mode not in {"incremental", "complete"}:
+        raise EvidenceValidationError("mode must be incremental or complete")
+
+    _validate_historical_context(manifest)
+    baseline_sha = _require_sha(
+        manifest.get("implementation_baseline_sha"), "implementation_baseline_sha"
+    )
+    baseline = _require_dict(manifest.get("baseline_regression"), "baseline_regression")
+    _require_string(baseline.get("command"), "baseline_regression.command")
+    if baseline.get("status") != "pass":
+        raise EvidenceValidationError("baseline_regression.status must be 'pass'")
+    _require_string(baseline.get("summary"), "baseline_regression.summary")
+    tested_sha = _require_sha(
+        baseline.get("gate_tested_sha"), "baseline_regression.gate_tested_sha"
+    )
+    if tested_sha != baseline_sha:
+        raise EvidenceValidationError(
+            "baseline_regression.gate_tested_sha must equal implementation_baseline_sha"
+        )
+    _require_string(baseline.get("gate_log_path"), "baseline_regression.gate_log_path")
+    _require_digest(baseline.get("gate_log_sha256"), "baseline_regression.gate_log_sha256")
+    phases = _validate_phases(manifest, repo_root)
+    closure = _validate_indexed_closure_artifacts(manifest)
+    if mode == "incremental":
+        return
+    _validate_complete_manifest(manifest, repo_root, phases, closure)
 
 
 def _git_root(manifest_path: Path) -> Path:

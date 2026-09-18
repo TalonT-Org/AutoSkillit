@@ -249,6 +249,36 @@ def test_extract_reads_annotated_assignment() -> None:
     assert values == {None: check.SurfaceValue(limit=156)}
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            'LIMITS = {"execution": 23}\nLIMITS: dict[str, int] = {"execution": 24}',
+            None,
+        ),
+        (
+            'LIMITS: dict[str, int] = {"execution": 23}\nLIMITS = {"execution": 24}',
+            None,
+        ),
+        (
+            'LIMITS: dict[str, int]\nLIMITS = {"execution": 23}',
+            {"execution": check.SurfaceValue(limit=23)},
+        ),
+    ],
+    ids=["ordinary-then-annotated", "annotated-then-ordinary", "valueless-annotation"],
+)
+def test_extract_handles_module_level_policy_assignment_forms(
+    source: str, expected: dict[str, object] | None
+) -> None:
+    if expected is not None:
+        assert check.extract_surface_values(source, _int_map()) == expected
+        return
+
+    with pytest.raises(check.UnsupportedSurfaceShape) as exc_info:
+        check.extract_surface_values(source, _int_map())
+    assert str(exc_info.value) == "LIMITS: multiple module-level assignments"
+
+
 def test_extract_rejects_augmented_reassignment() -> None:
     with pytest.raises(check.UnsupportedSurfaceShape, match="augmented assignment"):
         check.extract_surface_values("BUDGET = 156\nBUDGET += 1", _int_scalar())

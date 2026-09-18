@@ -140,6 +140,40 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset({"free"})
     assert check_doc_counts.count_tools() == (3, 1)
 
 
+def test_doc_count_scan_orders_every_claim_category_and_keeps_existing_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts import check_doc_counts
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "claims.md").write_text(
+        """\
+4 skills, 3 skills, 5 recipes, and 4 tools
+1 gated tools
+Always visible (2 tools)
+autoskillit skills list has 99 skills and 99 recipes
+Tier 2 has 99 skills
+1 skills, 1 recipes, and 1 tools
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_doc_counts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(check_doc_counts, "count_skills", lambda: 5)
+    monkeypatch.setattr(check_doc_counts, "count_recipes", lambda: 6)
+    monkeypatch.setattr(check_doc_counts, "count_tools", lambda: (2, 3))
+
+    assert check_doc_counts.scan_docs() == [
+        "docs/claims.md:1: claims 4 skills, actual is 5",
+        "docs/claims.md:1: claims 3 skills, actual is 5",
+        "docs/claims.md:1: claims 5 recipes, actual is 6",
+        "docs/claims.md:1: claims 4 tools, actual is 5",
+        "docs/claims.md:2: claims 1 gated tools, actual is 2",
+        "docs/claims.md:3: claims 2 ungated tools, actual is 3",
+    ]
+
+
 def _count_skills_total() -> int:
     tier1 = sum(1 for p in (SRC_DIR / "skills").iterdir() if p.is_dir())
     tier23 = sum(1 for p in (SRC_DIR / "skills_extended").iterdir() if p.is_dir())

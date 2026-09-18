@@ -664,7 +664,7 @@ def test_no_registered_surface_relaxed_against_base(resolved_test_base: BaseRefC
     base_rev = git_plumbing.merge_base(REPO_ROOT, base_ref)
     diagnostics = check.evaluate(
         git_plumbing._working_tree_reader(REPO_ROOT),
-        git_plumbing._optional_revision_reader(REPO_ROOT, base_rev),
+        git_plumbing._revision_optional_reader(REPO_ROOT, base_rev),
     )
     assert not diagnostics, "\n".join(diagnostics)
 

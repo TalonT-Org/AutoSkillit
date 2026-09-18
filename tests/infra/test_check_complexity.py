@@ -587,7 +587,7 @@ def test_readers_use_index_and_named_revision(monkeypatch):
     monkeypatch.setattr(git_plumbing, "_git", fake_git)
     git_plumbing._index_reader(Path("/repo"))("src/a.py")
     assert ("show", ":src/a.py") in calls
-    git_plumbing._required_revision_reader(Path("/repo"), "HEAD")("src/a.py")
+    git_plumbing._revision_required_reader(Path("/repo"), "HEAD")("src/a.py")
     assert ("show", "HEAD:src/a.py") in calls
 
 

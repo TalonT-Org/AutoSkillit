@@ -65,7 +65,7 @@ def merge_base(repo_root: Path, ref: str) -> str:
     return resolved
 
 
-def _required_revision_reader(repo_root: Path, rev: str) -> Callable[[str], str | None]:
+def _revision_required_reader(repo_root: Path, rev: str) -> Callable[[str], str | None]:
     """Build a reader for Python sources that must exist at *rev*."""
 
     def read(path: str) -> str:
@@ -78,7 +78,7 @@ def _required_revision_reader(repo_root: Path, rev: str) -> Callable[[str], str 
     return read
 
 
-def _optional_revision_reader(repo_root: Path, rev: str) -> Callable[[str], str | None]:
+def _revision_optional_reader(repo_root: Path, rev: str) -> Callable[[str], str | None]:
     """Build a reader that returns None only for a path absent from a valid revision."""
 
     def read(path: str) -> str | None:

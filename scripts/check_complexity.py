@@ -696,7 +696,7 @@ def _resolve_mode(
 
 def _run(repo_root: Path, *, staged: bool, base: str | None) -> int:
     base_rev, head_source_for = _resolve_mode(repo_root, staged=staged, base=base)
-    base_source_for = _git_plumbing._required_revision_reader(repo_root, base_rev)
+    base_source_for = _git_plumbing._revision_required_reader(repo_root, base_rev)
     policy = load_policy(head_source_for)
     exemption_problems = validate_exemptions(policy, head_source_for)
     if exemption_problems:

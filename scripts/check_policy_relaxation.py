@@ -554,7 +554,7 @@ def main(argv: list[str]) -> int:
             assert args.base is not None
             base_rev = _git_plumbing.merge_base(repo_root, args.base)
             head_source_for = _git_plumbing._working_tree_reader(repo_root)
-        base_source_for = _git_plumbing._optional_revision_reader(repo_root, base_rev)
+        base_source_for = _git_plumbing._revision_optional_reader(repo_root, base_rev)
         diagnostics = evaluate(head_source_for, base_source_for)
     except _git_plumbing.GitFailure as exc:
         print(str(exc), file=sys.stderr)

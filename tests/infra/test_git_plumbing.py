@@ -134,7 +134,7 @@ def test_merge_base_failure_surfaces_replacement_safe_stderr(
     assert "\ufffd" in message
 
 
-def test_required_revision_reader_fails_on_object_read_error(
+def test_revision_required_reader_fails_on_object_read_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -143,12 +143,12 @@ def test_required_revision_reader_fails_on_object_read_error(
         lambda *_args: _completed(1, stderr=b"fatal: object is unreadable"),
     )
 
-    reader = git_plumbing._required_revision_reader(Path("/repo"), "abc123")
+    reader = git_plumbing._revision_required_reader(Path("/repo"), "abc123")
     with pytest.raises(git_plumbing.GitFailure, match="object is unreadable"):
         reader("src/a.py")
 
 
-def test_optional_revision_reader_returns_none_only_after_exact_path_probe(
+def test_revision_optional_reader_returns_none_only_after_exact_path_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, ...]] = []
@@ -163,7 +163,7 @@ def test_optional_revision_reader_returns_none_only_after_exact_path_probe(
 
     monkeypatch.setattr(git_plumbing, "_git", fake_git)
 
-    reader = git_plumbing._optional_revision_reader(Path("/repo"), "abc123")
+    reader = git_plumbing._revision_optional_reader(Path("/repo"), "abc123")
     assert reader("src/missing.py") is None
     assert calls == [
         ("cat-file", "-e", "abc123^{tree}"),
@@ -171,7 +171,7 @@ def test_optional_revision_reader_returns_none_only_after_exact_path_probe(
     ]
 
 
-def test_optional_revision_reader_rejects_invalid_revision(
+def test_revision_optional_reader_rejects_invalid_revision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, ...]] = []
@@ -184,13 +184,13 @@ def test_optional_revision_reader_rejects_invalid_revision(
 
     monkeypatch.setattr(git_plumbing, "_git", fake_git)
 
-    reader = git_plumbing._optional_revision_reader(Path("/repo"), "bad-ref")
+    reader = git_plumbing._revision_optional_reader(Path("/repo"), "bad-ref")
     with pytest.raises(git_plumbing.GitFailure, match="invalid object name"):
         reader("src/a.py")
     assert calls == [("cat-file", "-e", "bad-ref^{tree}")]
 
 
-def test_optional_revision_reader_fails_if_existing_object_cannot_be_read(
+def test_revision_optional_reader_fails_if_existing_object_cannot_be_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, ...]] = []
@@ -203,7 +203,7 @@ def test_optional_revision_reader_fails_if_existing_object_cannot_be_read(
 
     monkeypatch.setattr(git_plumbing, "_git", fake_git)
 
-    reader = git_plumbing._optional_revision_reader(Path("/repo"), "abc123")
+    reader = git_plumbing._revision_optional_reader(Path("/repo"), "abc123")
     with pytest.raises(git_plumbing.GitFailure, match="object read failed"):
         reader("src/a.py")
     assert calls == [
@@ -297,6 +297,6 @@ def test_readers_decode_pep263_source(
         if reader_kind == "index":
             reader = git_plumbing._index_reader(tmp_path)
         else:
-            reader = git_plumbing._optional_revision_reader(tmp_path, "abc123")
+            reader = git_plumbing._revision_optional_reader(tmp_path, "abc123")
 
     assert reader(path) == source

@@ -115,6 +115,6 @@ class TestEvaluateOutcomeExpression:
         from autoskillit.core import evaluate_outcome_expression
 
         fields = {"accept_count": 5, "fix_failures": False}
-        assert evaluate_outcome_expression(
-            "accept_count > 0 and fix_failures == 0", fields
-        ) is None
+        assert (
+            evaluate_outcome_expression("accept_count > 0 and fix_failures == 0", fields) is None
+        )

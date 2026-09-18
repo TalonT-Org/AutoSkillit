@@ -337,56 +337,61 @@ class ToolContext:
     def __post_init__(self) -> None:
         self._baseline_config = deepcopy(self.config)
         self.config = deepcopy(self.config)
-        if self.launch_resolver is _MISSING:
-            raise TypeError(
+        required_dependencies = (
+            (
+                self.launch_resolver,
                 "launch_resolver must be supplied explicitly. "
-                "Use make_context() or pass an isolated resolver directly."
-            )
-        if self.temp_dir is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated resolver directly.",
+            ),
+            (
+                self.temp_dir,
                 "temp_dir must be supplied explicitly — do not rely on defaults. "
-                "Use make_context() or pass temp_dir=<path> directly."
-            )
-        if self.project_dir is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass temp_dir=<path> directly.",
+            ),
+            (
+                self.project_dir,
                 "project_dir must be supplied explicitly — do not rely on defaults. "
-                "Use make_context() or pass project_dir=<path> directly."
-            )
-        if self.skill_session_contract_store is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass project_dir=<path> directly.",
+            ),
+            (
+                self.skill_session_contract_store,
                 "skill_session_contract_store must be supplied explicitly. "
-                "Use make_context() or pass an isolated store directly."
-            )
-        if self.managed_headless_session_lineage_store is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated store directly.",
+            ),
+            (
+                self.managed_headless_session_lineage_store,
                 "managed_headless_session_lineage_store must be supplied explicitly. "
-                "Use make_context() or pass an isolated store directly."
-            )
-        if self.context_admission_ledger is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated store directly.",
+            ),
+            (
+                self.context_admission_ledger,
                 "context_admission_ledger must be supplied explicitly. "
-                "Use make_context() or pass an isolated ledger directly."
-            )
-        if self.audit_admission_ledger is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated ledger directly.",
+            ),
+            (
+                self.audit_admission_ledger,
                 "audit_admission_ledger must be supplied explicitly. "
-                "Use make_context() or pass an isolated ledger directly."
-            )
-        if self.workspace_outcome_ledger is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated ledger directly.",
+            ),
+            (
+                self.workspace_outcome_ledger,
                 "workspace_outcome_ledger must be supplied explicitly. "
-                "Use make_context() or pass an isolated ledger directly."
-            )
-        if self.audit_authority_materializer is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated ledger directly.",
+            ),
+            (
+                self.audit_authority_materializer,
                 "audit_authority_materializer must be supplied explicitly. "
-                "Use make_context() or pass an isolated materializer directly."
-            )
-        if self.committed_disposition_resolver is _MISSING:
-            raise TypeError(
+                "Use make_context() or pass an isolated materializer directly.",
+            ),
+            (
+                self.committed_disposition_resolver,
                 "committed_disposition_resolver must be supplied explicitly. "
-                "Use make_context() or pass an isolated resolver directly."
-            )
+                "Use make_context() or pass an isolated resolver directly.",
+            ),
+        )
+        for value, error_message in required_dependencies:
+            if value is _MISSING:
+                raise TypeError(error_message)
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -29,15 +28,6 @@ def _git_status(worktree: Path) -> bytes:
         capture_output=True,
     )
     return result.stdout
-
-
-def _assert_git_status_converges(worktree: Path, expected: bytes) -> None:
-    deadline = time.monotonic() + 5.0
-    actual = _git_status(worktree)
-    while actual != expected and time.monotonic() < deadline:
-        time.sleep(0.05)
-        actual = _git_status(worktree)
-    assert actual == expected
 
 
 def _write_fixture(project: Path, isolated_home: Path, shim_dir: Path) -> None:
@@ -119,6 +109,6 @@ def test_order_launches_real_cli_without_host_side_effects(tmp_path: Path) -> No
         assert artifact.exists(), (artifact, outcome.output)
         assert any(artifact.resolve().is_relative_to(root) for root in allowed_roots)
 
-    _assert_git_status_converges(worktree, status_before)
+    assert _git_status(worktree) == status_before
     # Default config must not rewrite the developer's own settings.
     assert AGENT_TEAMS_ENV_VAR in (project / ".claude" / "settings.local.json").read_text()

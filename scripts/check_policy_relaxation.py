@@ -375,7 +375,7 @@ def classify(
     return relaxations
 
 
-def _classify_presence_change(
+def _classify_entry(
     before: SurfaceValue | None,
     after: SurfaceValue | None,
     surface: PolicySurface,
@@ -397,16 +397,6 @@ def _classify_presence_change(
         if surface.default > before.limit:
             return "entry removed below default"
         return None
-    raise AssertionError("presence classification requires an absent entry")
-
-
-def _classify_entry(
-    before: SurfaceValue | None,
-    after: SurfaceValue | None,
-    surface: PolicySurface,
-) -> str | None:
-    if before is None or after is None:
-        return _classify_presence_change(before, after, surface)
     if after.limit > before.limit:
         return "limit increased" if surface.kind == "exemption_map" else "value increased"
     if surface.kind == "exemption_map":

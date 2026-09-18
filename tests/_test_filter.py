@@ -1082,6 +1082,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
             # by reflection, so a new command builder must be covered automatically.
             "infra/test_plugin_source_ratchets.py",
+            # file-level: relocated test_conftest exercises autoskillit.execution.quota.logger
+            # directly when asserting output scrubbing captures quota warnings before stdout.
+            "infra/test_conftest.py",
             "_llm_triage",
             "smoke_utils",
         }

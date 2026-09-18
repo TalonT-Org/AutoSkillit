@@ -46,7 +46,7 @@ def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = Fa
     lines.append(line)
 
 
-def _maybe_adjudication_lines(data: dict, lines: list[str]) -> None:
+def _maybe_outcome_evidence_lines(data: dict, lines: list[str]) -> None:
     for name in ("adjudication_verdict", "outcome_fields"):
         value = data.get(name)
         if value is not None:
@@ -83,7 +83,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"worktree_path: {worktree}")
     _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
-    _maybe_adjudication_lines(data, lines)
+    _maybe_outcome_evidence_lines(data, lines)
 
     if pipeline:
         _maybe_tracker_line(data, lines)

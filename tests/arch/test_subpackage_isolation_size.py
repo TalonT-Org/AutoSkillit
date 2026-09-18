@@ -69,6 +69,17 @@ def test_basename_fallback_dead_exemptions_are_retired() -> None:
     assert not stale, f"Retired basename-fallback exemptions reintroduced: {sorted(stale)}"
 
 
+def test_obsolete_hook_line_limit_exemptions_are_deleted() -> None:
+    obsolete = {
+        "hooks/_command_classification.py",
+        "hooks/_capture_lifecycle.py",
+        "hooks/_capture_artifacts.py",
+        "hooks/_capture_contract.py",
+    }
+    stale = obsolete.intersection(_LINE_LIMIT_EXEMPTIONS)
+    assert not stale, f"Obsolete hooks line-limit exemptions remain: {sorted(stale)}"
+
+
 def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> None:
     """The post-#4673 canonical paths stay healthy, so the retirement protection
     in ``test_basename_fallback_dead_exemptions_are_retired`` actually moves with
@@ -197,9 +208,8 @@ def test_exploration_context_facade_re_exports_contract() -> None:
 def test_pipeline_exploration_context_e22_retired() -> None:
     """REQ-CNST-010-E22 (pipeline/exploration_context.py) is retired per #4835.
 
-    A separate hooks/_capture_artifacts.py exemption shares the same rule ID
-    (a pre-existing latent registry violation tracked elsewhere).  This
-    test scopes to the pipeline retirement.
+    This test covers only the independently retired pipeline E22 fact; the hooks
+    exemption retirement is guarded separately.
     """
     exemptions = _LINE_LIMIT_EXEMPTIONS
     assert "pipeline/exploration_context.py" not in exemptions, (

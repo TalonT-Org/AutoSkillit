@@ -42,25 +42,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
         "lifecycle, and strict result validation behind one evidence-reader launch interface",
     ),
-    "hooks/_capture_artifacts.py": LineLimitExemption(
-        1200,
-        "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
-        "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
-        "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
-        "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
-        "can gateway them to cli/ops/_capture_store.py without importing _capture submodules "
-        "directly, which would race the standalone hook scripts' own flat-style bootstrap "
-        "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
-        "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
-    ),
-    "hooks/_capture_contract.py": LineLimitExemption(
-        1100,
-        "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "
-        "CaptureFailureReason wire vocabulary and its (V2 marker) rendering; ADR-0009 "
-        "added the SNAPSHOT_INTEGRITY reason and degraded-delivery envelope fields, "
-        "which must stay co-located with the rest of the envelope schema they extend "
-        "(issue #4479).",
-    ),
     "hooks/guards/git_ops_guard.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E28: Issue #4655's rectify moves this guard's checked-out-ref "

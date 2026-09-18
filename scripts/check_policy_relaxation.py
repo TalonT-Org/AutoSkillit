@@ -85,7 +85,6 @@ def _module_assignment(source: str, symbol: str) -> ast.expr:
         raise UnsupportedSurfaceShape(f"{symbol}: source does not parse ({exc})") from exc
     value: ast.expr | None = None
     for node in tree.body:
-        assigned_value: ast.expr | None
         if isinstance(node, ast.AugAssign):
             if isinstance(node.target, ast.Name) and node.target.id == symbol:
                 raise UnsupportedSurfaceShape(f"{symbol}: augmented assignment is not readable")

@@ -860,6 +860,16 @@ class TestTokenizeShellPayloadSegments:
 
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
 
+    def test_empty_command_returns_empty_list(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        # Empty/whitespace outer is excluded by the wrapper's include_outer=False
+        # contract; an outer-only command (no nested payload) yields no segments.
+        assert tokenize_shell_payload_segments("") == []
+        assert tokenize_shell_payload_segments("   ") == []
+
     def test_process_substitution_traversal_is_opt_in(self):
         from autoskillit.hooks._runtime._command_classification import (
             tokenize_shell_payload_segments,

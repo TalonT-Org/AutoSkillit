@@ -406,6 +406,16 @@ def test_malformed_later_nested_payload_discards_earlier_denial(monkeypatch, tmp
     assert _run_hook(_event(command), monkeypatch) == ""
 
 
+def test_empty_command_does_not_match_payload_scanner(monkeypatch, tmp_path):
+    """An empty outer command yields zero `--body-file` occurrences; the
+    guard's per-payload scanner must not raise, and the hook must fall
+    through with no deny."""
+    monkeypatch.chdir(tmp_path)
+
+    assert _run_hook(_event(""), monkeypatch) == ""
+    assert _run_hook(_event("   "), monkeypatch) == ""
+
+
 def test_hook_registration_shape():
     matching = [
         hook for hook in HOOK_REGISTRY if "guards/compose_pr_body_guard.py" in hook.scripts

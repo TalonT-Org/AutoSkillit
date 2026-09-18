@@ -360,9 +360,9 @@ ACTION: CONFIRM STEP SEMANTICS:
 ACTION: STOP STEP SEMANTICS:
 - When you reach a step with action: "stop", the pipeline is TERMINATED.
 - Preserve the original failed run_skill response: use its exact result, reason_kind,
-  and outcome_fields verbatim; a diagnostic result is supplemental. With no structured
-  original reason, do not infer. Use static stop message only when no tool evidence
-  exists. Do NOT call any MCP tools.
+  and outcome_fields verbatim; a diagnostic result is supplemental.
+- With no structured original reason, do not infer. Use static stop message only when
+  no tool evidence exists. Do NOT call any MCP tools.
 - Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
 - Do NOT reason about what went wrong or try alternative approaches.
 - A stop step is an INTENTIONAL terminus, not an error. Treat it as the recipe's

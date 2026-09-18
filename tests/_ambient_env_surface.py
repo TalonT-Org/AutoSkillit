@@ -3078,6 +3078,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "RETRY_REASON_DESCRIPTIONS": AmbientEnvDisposition(
+        var="RETRY_REASON_DESCRIPTIONS",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase retry-description mapping "
+            "that is never read as an operating-system environment variable."
+        ),
+    ),
     "RIGHT": AmbientEnvDisposition(
         var="RIGHT",
         disposition="scrub",

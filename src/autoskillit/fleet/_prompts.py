@@ -154,9 +154,9 @@ H3b — STOP STEP SEMANTICS:
   When you reach a step with action: "stop", the pipeline is TERMINATED.
   Emit the L3 sentinel. Preserve the original failed run_skill response and put its
   exact adjudication detail in reason. reason_kind, outcome_fields, and
-  diagnostic_result are optional evidence; include observed values verbatim and never
-  invent absent evidence. A diagnostic_result is supplementary. With no tool evidence,
-  use the static step message.
+  diagnostic_result are optional evidence. Include observed values verbatim; never invent
+  absent evidence. A diagnostic_result is supplementary. With no tool evidence, use the
+  static step message.
   Set success=true for completion terminals, success=false for failure/escalation terminals.
   Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.

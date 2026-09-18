@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from _fmt_primitives import (  # type: ignore[import-not-found]
     _CHECK_MARK,
     _CROSS_MARK,
@@ -49,17 +47,10 @@ def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = Fa
 
 
 def _maybe_adjudication_lines(data: dict, lines: list[str]) -> None:
-    """Render structured demotion evidence when the response carries it."""
-    verdict = data.get("adjudication_verdict")
-    if isinstance(verdict, dict):
-        lines.append(
-            "adjudication_verdict: " + json.dumps(verdict, sort_keys=True, separators=(",", ":"))
-        )
-    outcome_fields = data.get("outcome_fields")
-    if outcome_fields is not None:
-        lines.append(
-            "outcome_fields: " + json.dumps(outcome_fields, sort_keys=True, separators=(",", ":"))
-        )
+    for name in ("adjudication_verdict", "outcome_fields"):
+        value = data.get(name)
+        if value is not None:
+            lines.append(f"{name}: {value!r}")
 
 
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:

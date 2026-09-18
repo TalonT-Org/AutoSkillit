@@ -164,8 +164,9 @@ worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
 ## STOP-STEP EVIDENCE — MANDATORY
 
 Preserve the original failed run_skill response: use its exact result, reason_kind, and
-outcome_fields verbatim; a diagnostic result is supplemental. With no structured
-original reason, do not infer. Use static stop message only when no tool evidence exists.
+outcome_fields verbatim; a diagnostic result is supplemental.
+With no structured original reason, do not infer. Use static stop message only when no
+tool evidence exists.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.

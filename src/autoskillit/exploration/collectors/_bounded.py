@@ -148,7 +148,7 @@ def _stable_file_metadata(observation: os.stat_result) -> tuple[int, int, int, i
 def _is_stable_regular_file_observation(
     expected: os.stat_result,
     opened: os.stat_result,
-    path: os.stat_result,
+    path_stat: os.stat_result,
     *,
     metadata_observations: tuple[os.stat_result, ...] = (),
 ) -> bool:
@@ -157,7 +157,7 @@ def _is_stable_regular_file_observation(
     return (
         stat.S_ISREG(opened.st_mode)
         and _same_inode(expected, opened)
-        and _same_inode(opened, path)
+        and _same_inode(opened, path_stat)
         and (
             not metadata_observations
             or len({_stable_file_metadata(item) for item in metadata_observations}) == 1

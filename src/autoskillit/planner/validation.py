@@ -188,39 +188,24 @@ def _check_assignment_completeness(
             )
             continue
         wp_pairs.add((phase_num, assign_num))
-    absorbed_pairs: set[tuple[int, int]] = set()
-    if lifecycle_registry and isinstance(lifecycle_registry.get("absorbed"), dict):
-        for absorbed_id in lifecycle_registry["absorbed"]:
+    exempt_pairs: set[tuple[int, int]] = set()
+    for category, event, field in (
+        ("absorbed", "malformed_absorbed_id", "absorbed_id"),
+        ("voided_wps", "malformed_voided_wp_id", "voided_wp_id"),
+        ("archived_stubs", "malformed_archived_stub_id", "archived_stub_id"),
+    ):
+        entries = (lifecycle_registry or {}).get(category)
+        for wp_id in entries if isinstance(entries, dict) else ():
             try:
-                pn, an = parse_planner_id(absorbed_id)[:2]
-                absorbed_pairs.add((pn, an))
+                phase_num, assign_num = parse_planner_id(wp_id)[:2]
+                exempt_pairs.add((phase_num, assign_num))
             except ValueError:
-                logger.warning("malformed_absorbed_id", absorbed_id=absorbed_id)
-    voided_wp_pairs: set[tuple[int, int]] = set()
-    if lifecycle_registry and isinstance(lifecycle_registry.get("voided_wps"), dict):
-        for voided_id in lifecycle_registry["voided_wps"]:
-            try:
-                pn, an = parse_planner_id(voided_id)[:2]
-                voided_wp_pairs.add((pn, an))
-            except ValueError:
-                logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
-    archived_stub_pairs: set[tuple[int, int]] = set()
-    if lifecycle_registry and isinstance(lifecycle_registry.get("archived_stubs"), dict):
-        for archived_id in lifecycle_registry["archived_stubs"]:
-            try:
-                pn, an = parse_planner_id(archived_id)[:2]
-                archived_stub_pairs.add((pn, an))
-            except ValueError:
-                logger.warning("malformed_archived_stub_id", archived_stub_id=archived_id)
+                logger.warning(event, **{field: wp_id})
     for assign_id, assign in assignment_results.items():
         if assign_id in voided_assign_ids:
             continue
         pair = (assign["phase_number"], assign["assignment_number"])
-        if pair in absorbed_pairs:
-            continue
-        if pair in voided_wp_pairs:
-            continue
-        if pair in archived_stub_pairs:
+        if pair in exempt_pairs:
             continue
         if pair not in wp_pairs:
             findings.append(

@@ -4,6 +4,7 @@ import json
 import secrets
 import subprocess
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -162,6 +163,83 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     return {"manifest_path": str(manifest_path), "total_count": str(len(items))}
 
 
+def _discover_assignment_result_files(assign_path: Path) -> list[Path]:
+    discovery = discover_tier_files(assign_path, ASSIGN_RESULT_FILE_RE)
+    for f in discovery.rejected:
+        logger.warning("assignment file %s does not match assignment naming pattern", f.name)
+    return discovery.accepted
+
+
+def _load_assignment_results(assign_files: list[Path]) -> list[dict]:
+    parsed_assignments: list[dict] = []
+    for f in assign_files:
+        try:
+            raw = json.loads(f.read_text())
+        except VANISHED_ERRORS:
+            continue
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
+            ) from exc
+        try:
+            data = validate_assignment_result(raw)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f"Invalid assignment result in {f}: {exc}") from exc
+        parsed_assignments.append(data)
+    return parsed_assignments
+
+
+def _group_phase_work_packages(assignments: list[dict]) -> dict[int, _PhaseBucket]:
+    phase_buckets: dict[int, _PhaseBucket] = {}
+    for assign_data in sorted(
+        assignments, key=lambda d: (d["phase_number"], d["assignment_number"])
+    ):
+        phase_number = assign_data["phase_number"]
+        assignment_number = assign_data["assignment_number"]
+        if phase_number not in phase_buckets:
+            phase_buckets[phase_number] = _PhaseBucket(
+                id=f"P{phase_number}",
+                name=assign_data.get("phase_name", f"Phase {phase_number}"),
+                wp_ids=[],
+                wp_names=[],
+                wp_scopes=[],
+                wp_estimated_files=[],
+                wp_count=0,
+            )
+        bucket = phase_buckets[phase_number]
+        for wp_sequence, wp in enumerate(assign_data.get("proposed_work_packages", []), start=1):
+            bucket["wp_ids"].append(f"P{phase_number}-A{assignment_number}-WP{wp_sequence}")
+            bucket["wp_names"].append(wp.get("name", ""))
+            bucket["wp_scopes"].append(wp.get("scope", ""))
+            estimated_files = wp.get("estimated_files", [])
+            if not isinstance(estimated_files, list):
+                estimated_files = []
+            bucket["wp_estimated_files"].append(estimated_files)
+            bucket["wp_count"] += 1
+    return phase_buckets
+
+
+def _render_phase_work_package_items(
+    phase_buckets: dict[int, _PhaseBucket],
+) -> list[dict]:
+    return [
+        {
+            "id": bucket["id"],
+            "name": bucket["name"],
+            "status": "pending",
+            "result_path": None,
+            "metadata": {
+                "wp_count": bucket["wp_count"],
+                "wp_ids": bucket["wp_ids"],
+                "wp_names": bucket["wp_names"],
+                "wp_scopes": bucket["wp_scopes"],
+                "wp_estimated_files": bucket["wp_estimated_files"],
+            },
+        }
+        for _, bucket in sorted(phase_buckets.items())
+    ]
+
+
 def build_phase_wp_manifest(
     assignments_dir: str, output_dir: str, work_packages_dir: str = ""
 ) -> dict[str, str]:
@@ -178,68 +256,9 @@ def build_phase_wp_manifest(
         else (out_dir / "work_packages").resolve()
     )
 
-    discovery = discover_tier_files(assign_path, ASSIGN_RESULT_FILE_RE)
-    for f in discovery.rejected:
-        logger.warning("assignment file %s does not match assignment naming pattern", f.name)
-    assign_files = discovery.accepted
-    parsed_assignments: list[dict] = []
-    for f in assign_files:
-        try:
-            raw = json.loads(f.read_text())
-        except VANISHED_ERRORS:
-            continue
-        except json.JSONDecodeError as exc:
-            raise json.JSONDecodeError(
-                f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
-            ) from exc
-        try:
-            data = validate_assignment_result(raw)
-        except (ValueError, KeyError) as exc:
-            raise ValueError(f"Invalid assignment result in {f}: {exc}") from exc
-        parsed_assignments.append(data)
-    parsed_assignments.sort(key=lambda d: (d["phase_number"], d["assignment_number"]))
-
-    phase_buckets: dict[int, dict] = {}
-    for assign_data in parsed_assignments:
-        pn = assign_data["phase_number"]
-        an = assign_data["assignment_number"]
-        if pn not in phase_buckets:
-            phase_buckets[pn] = {
-                "phase_name": assign_data.get("phase_name", f"Phase {pn}"),
-                "phase_id": f"P{pn}",
-                "wp_ids": [],
-                "wp_names": [],
-                "wp_scopes": [],
-                "wp_estimated_files": [],
-            }
-        for wp_seq, wp in enumerate(assign_data.get("proposed_work_packages", []), start=1):
-            wp_id = f"P{pn}-A{an}-WP{wp_seq}"
-            phase_buckets[pn]["wp_ids"].append(wp_id)
-            phase_buckets[pn]["wp_names"].append(wp.get("name", ""))
-            phase_buckets[pn]["wp_scopes"].append(wp.get("scope", ""))
-            est_files = wp.get("estimated_files", [])
-            if not isinstance(est_files, list):
-                est_files = []
-            phase_buckets[pn]["wp_estimated_files"].append(est_files)
-
-    items = []
-    for pn in sorted(phase_buckets):
-        bucket = phase_buckets[pn]
-        items.append(
-            {
-                "id": bucket["phase_id"],
-                "name": bucket["phase_name"],
-                "status": "pending",
-                "result_path": None,
-                "metadata": {
-                    "wp_count": len(bucket["wp_ids"]),
-                    "wp_ids": bucket["wp_ids"],
-                    "wp_names": bucket["wp_names"],
-                    "wp_scopes": bucket["wp_scopes"],
-                    "wp_estimated_files": bucket["wp_estimated_files"],
-                },
-            }
-        )
+    assign_files = _discover_assignment_result_files(assign_path)
+    parsed_assignments = _load_assignment_results(assign_files)
+    items = _render_phase_work_package_items(_group_phase_work_packages(parsed_assignments))
 
     sentinel_dir = _ensure_sentinel_dir(wp_dir, "wp_sentinels")
 
@@ -518,48 +537,58 @@ def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
     return TaskResolutionResult(task_file_path=str(out), task_label=label)
 
 
-def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
-    planner_path = Path(planner_dir)
-    wp_dir = planner_path / "work_packages"
-    if not wp_dir.is_dir():
-        return {"archived_count": "0", "archived_ids": ""}
-
-    active_ids: set[str] = set()
+def _read_active_wp_ids(planner_path: Path) -> set[str] | None:
     found_but_unreadable: list[str] = []
     for candidate in ("consolidated_wps.json", "refined_wps.json"):
         candidate_path = planner_path / candidate
         if candidate_path.exists():
             doc = read_versioned_json(candidate_path, 1)
             if doc:
-                active_ids = {wp["id"] for wp in doc.get("work_packages", [])}
-                break
+                return {wp["id"] for wp in doc.get("work_packages", [])}
             found_but_unreadable.append(candidate)
+
+    if found_but_unreadable:
+        logger.warning(
+            "reconcile_wp_files: WP files exist but are unreadable",
+            unreadable=found_but_unreadable,
+        )
     else:
-        if found_but_unreadable:
-            logger.warning(
-                "reconcile_wp_files: WP files exist but are unreadable",
-                unreadable=found_but_unreadable,
-            )
-        else:
-            logger.warning("reconcile_wp_files: no consolidated or refined WPs file found")
-        return {"archived_count": "0", "archived_ids": ""}
+        logger.warning("reconcile_wp_files: no consolidated or refined WPs file found")
+    return None
+
+
+def _discover_direct_wp_result_files(wp_dir: Path, candidates: Iterable[Path]) -> dict[str, Path]:
+    disk_ids: dict[str, Path] = {}
+    for f in candidates:
+        if f.parent != wp_dir:
+            continue
+        stem = f.name.removesuffix("_result.json")
+        if WP_RESULT_FILE_RE.match(f.name):
+            disk_ids[stem] = f
+    return disk_ids
+
+
+def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
+    planner_path = Path(planner_dir)
+    wp_dir = planner_path / "work_packages"
+    zero_result = {"archived_count": "0", "archived_ids": ""}
+    if not wp_dir.is_dir():
+        return zero_result
+
+    active_ids = _read_active_wp_ids(planner_path)
+    if active_ids is None:
+        return zero_result
 
     registry = load_lifecycle_registry(planner_path)
     excluded_ids = set(registry.get("absorbed", {}).keys()) | set(
         registry.get("voided_wps", {}).keys()
     )
 
-    disk_ids: dict[str, Path] = {}
-    for f in wp_dir.glob("*_result.json"):
-        if f.parent != wp_dir:
-            continue
-        stem = f.name.removesuffix("_result.json")
-        if WP_RESULT_FILE_RE.match(f.name):
-            disk_ids[stem] = f
+    disk_ids = _discover_direct_wp_result_files(wp_dir, wp_dir.glob("*_result.json"))
 
     orphan_ids = {wid for wid in disk_ids if wid not in active_ids and wid not in excluded_ids}
     if not orphan_ids:
-        return {"archived_count": "0", "archived_ids": ""}
+        return zero_result
 
     archived_dir = wp_dir / "archived"
     archived_dir.mkdir(exist_ok=True)
@@ -581,5 +610,5 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
     logger.info("reconcile_wp_files", archived_count=len(moved_ids))
     return {
         "archived_count": str(len(moved_ids)),
-        "archived_ids": ",".join(sorted(moved_ids)),
+        "archived_ids": ",".join(moved_ids),
     }

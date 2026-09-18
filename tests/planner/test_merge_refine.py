@@ -393,6 +393,85 @@ def test_merge_refined_wps_skips_a_vanished_context_result(tmp_path, monkeypatch
     ]
 
 
+@pytest.mark.parametrize(
+    ("merge_func,contexts_dir_name,write_result,items_key,output_key,entity_name,item_factory"),
+    [
+        pytest.param(
+            merge_refined_assignments,
+            "refine_contexts",
+            _write_phase_result,
+            "assignments",
+            "refined_assignments_path",
+            "assignment",
+            lambda phase_id: _make_assignment(
+                f"{phase_id}-A1", phase_id, [f"src/{phase_id.lower()}.py"]
+            ),
+            id="assignments",
+        ),
+        pytest.param(
+            merge_refined_wps,
+            "wp_refine_contexts",
+            _write_wp_phase_result,
+            "work_packages",
+            "refined_wps_path",
+            "wp",
+            lambda phase_id: _make_wp(f"{phase_id}-A1-WP1", phase_id),
+            id="wps",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "invalid_contents,warning_fragment",
+    [
+        pytest.param("{invalid json", "Skipping malformed result file", id="malformed-json"),
+        pytest.param(
+            {"name": "Missing ID"},
+            "skipping {entity_name} with missing id",
+            id="missing-id",
+        ),
+    ],
+)
+def test_merge_refined_skips_and_reports_invalid_discovered_results(
+    tmp_path,
+    merge_func,
+    contexts_dir_name,
+    write_result,
+    items_key,
+    output_key,
+    entity_name,
+    item_factory,
+    invalid_contents,
+    warning_fragment,
+):
+    import structlog.testing
+
+    contexts_dir = tmp_path / contexts_dir_name
+    contexts_dir.mkdir()
+    write_result(contexts_dir, "P1", [item_factory("P1")])
+    invalid_path = contexts_dir / "P2_result.json"
+    if isinstance(invalid_contents, str):
+        invalid_path.write_text(invalid_contents, encoding="utf-8")
+    else:
+        write_result(contexts_dir, "P2", [invalid_contents])
+    write_result(contexts_dir, "P3", [item_factory("P3")])
+
+    with structlog.testing.capture_logs() as captured_logs:
+        result = merge_func(planner_dir=str(tmp_path))
+
+    assert "skipped_result_files" not in result
+    assert [
+        item["id"] for item in json.loads(Path(result[output_key]).read_text())[items_key]
+    ] == [
+        item_factory("P1")["id"],
+        item_factory("P3")["id"],
+    ]
+    warning_entries = [entry for entry in captured_logs if entry.get("log_level") == "warning"]
+    assert any(
+        warning_fragment.format(entity_name=entity_name) in entry.get("event", "")
+        for entry in warning_entries
+    )
+
+
 # --- Step 2b ---
 def test_merge_refined_wps_deliverable_conflict_earlier_wins(tmp_path):
     ctx_dir = tmp_path / "wp_refine_contexts"

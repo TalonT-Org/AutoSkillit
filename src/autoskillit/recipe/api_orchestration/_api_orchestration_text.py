@@ -10,6 +10,7 @@ import json
 from autoskillit.core import (
     ROUTING_AUTHORITY_CLAUSE,
     STEP_SKIP_SEMANTICS_CLAUSE,
+    STOP_STEP_EVIDENCE_DOCTRINE,
     build_parameter_forwarding_rules,
     get_logger,
 )
@@ -51,10 +52,7 @@ def _build_stop_step_semantics(recipe: Recipe) -> str:
         "- Do NOT call any MCP tools after a stop step.",
         "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
         "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
-        "- Preserve the original failed run_skill response: use its exact result, reason_kind, "
-        "and outcome_fields verbatim; a diagnostic result is supplemental. With no structured "
-        "original reason, do not infer. Use static stop message only when no tool evidence "
-        "exists.",
+        STOP_STEP_EVIDENCE_DOCTRINE,
     ]
     for name, step in stop_steps.items():
         is_failure = _infer_stop_failure(name, step.message)

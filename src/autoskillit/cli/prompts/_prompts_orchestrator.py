@@ -15,6 +15,7 @@ from autoskillit.core import (
     INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE,
     ROUTING_AUTHORITY_CLAUSE,
     STEP_SKIP_SEMANTICS_CLAUSE,
+    STOP_STEP_EVIDENCE_DOCTRINE,
     get_logger,
 )
 from autoskillit.execution import codex_recipe_delivery_calling_contract
@@ -259,7 +260,7 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - The skill's terminal outcome report could not be parsed. Always fall through to
     on_failure. Do NOT route to on_context_limit or add a label.
 - When run_skill returns "needs_retry: true" AND "retry_reason: cancelled":
-  - The session was cancelled. Always fall through to on_failure. Do NOT resume or
+  - The session was cancelled. Always fall through to on_failure. Do not resume.
     Do not route to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
   - The model ran to completion and wrote artifacts but the structured output tokens
@@ -359,10 +360,7 @@ ACTION: CONFIRM STEP SEMANTICS:
 
 ACTION: STOP STEP SEMANTICS:
 - When you reach a step with action: "stop", the pipeline is TERMINATED.
-- Preserve the original failed run_skill response: use its exact result, reason_kind,
-  and outcome_fields verbatim; a diagnostic result is supplemental.
-- With no structured original reason, do not infer.
-- Use static stop message only when no tool evidence exists. Do NOT call any MCP tools.
+{STOP_STEP_EVIDENCE_DOCTRINE}
 - Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
 - Do NOT reason about what went wrong or try alternative approaches.
 - A stop step is an INTENTIONAL terminus, not an error. Treat it as the recipe's

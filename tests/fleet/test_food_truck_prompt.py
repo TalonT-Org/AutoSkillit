@@ -116,14 +116,23 @@ def test_failure_sentinel_preserves_optional_grounded_evidence():
     h3b_section = prompt[h3b_start:h3c_start]
     section_8 = prompt[prompt.index("--- SECTION 8:") :]
 
-    assert "exact adjudication detail" in h3b_section.lower()
-    for section in (h3b_section, section_8):
-        lowered = section.lower()
-        for field in ("reason_kind", "outcome_fields", "diagnostic_result"):
-            assert field in section
-        assert "optional" in lowered
-        assert "evidence" in lowered
-        assert "never invent" in lowered
+    h3b_lower = h3b_section.lower()
+    for required in (
+        "preserve the original failed run_skill response",
+        "verbatim",
+        "reason_kind",
+        "outcome_fields",
+        "diagnostic result is supplemental",
+        "do not infer",
+        "static stop message only when no tool evidence exists",
+    ):
+        assert required in h3b_lower, required
+
+    section_8_lower = section_8.lower()
+    for field in ("reason_kind", "outcome_fields", "diagnostic_result"):
+        assert field in section_8_lower
+    assert "optional" in section_8_lower
+    assert "never invent" in section_8_lower
 
 
 def test_fleet_prompt_routes_generic_failed_tool_responses_to_on_failure():

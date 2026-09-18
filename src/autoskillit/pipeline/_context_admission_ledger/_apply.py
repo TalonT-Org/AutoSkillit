@@ -106,14 +106,18 @@ class _LedgerApply(_LedgerInspection):
             connection.execute("BEGIN IMMEDIATE")
             row = self._stream_row(connection, stream_id)
             stream_exists = row is not None
-            prepared = self._prepare_stream(connection, stream_id, stream_key, event, row)
-            if prepared is None:
-                _rollback(connection)
-                return _uninitialized_stream_result(stream_key, event)
-            if isinstance(prepared, ContextAdmissionAccountingResult):
-                _rollback(connection)
-                return prepared
-            current_state, prior_revision, prior_sequence, prior_journal_sequence = prepared
+            if row is None:
+                initialized = self._initialize_stream_if_missing(connection, stream_id, event)
+                if initialized is None:
+                    _rollback(connection)
+                    return _uninitialized_stream_result(stream_key, event)
+                current_state, prior_revision, prior_sequence, prior_journal_sequence = initialized
+            else:
+                loaded = self._load_existing_stream_state(stream_id, stream_key, row)
+                if isinstance(loaded, ContextAdmissionAccountingResult):
+                    _rollback(connection)
+                    return loaded
+                current_state, prior_revision, prior_sequence, prior_journal_sequence = loaded
             existing = self._event_row(connection, stream_id, event)
             reducer = context_admission_reducer_for_protocol(event.protocol_version)
             if current_state.protocol_version != event.protocol_version:
@@ -203,41 +207,56 @@ class _LedgerApply(_LedgerInspection):
             (stream_id, event.event_id.value),
         ).fetchone()
 
-    def _prepare_stream(
+    def _initialize_stream_if_missing(
         self,
         connection: sqlite3.Connection,
         stream_id: bytes,
-        stream_key: ContextAdmissionStreamKey,
         event: ContextAdmissionEvent,
-        row: sqlite3.Row | None,
-    ) -> tuple[ContextAdmissionState, int, int, int] | ContextAdmissionAccountingResult | None:
-        current_state: ContextAdmissionState
-        if row is None:
-            if not isinstance(event, OpenEpochEvent | AuthorityUnavailableEvent):
-                return None
-            current_state = _zero_state(event.protocol_version)
-            genesis_envelope = _encode_value(
-                current_state,
-                protocol_version=event.protocol_version,
-            )
-            connection.execute(
-                """
-                INSERT INTO streams(
-                    stream_id, stream_key, genesis_envelope, state_envelope,
-                    aggregate_revision, admission_sequence,
-                    latest_journal_sequence, health_status,
-                    failure_reason, reason_code
-                ) VALUES (?, ?, ?, ?, 0, 0, 0, ?, NULL, NULL)
-                """,
-                (
-                    stream_id,
-                    stream_id,
-                    genesis_envelope,
-                    genesis_envelope,
-                    ContextAdmissionStorageHealthStatus.HEALTHY.value,
-                ),
-            )
-            return current_state, 0, 0, 0
+    ) -> tuple[ContextAdmissionState, int, int, int] | None:
+        """Insert a fresh stream row if the event is permitted to open one.
+
+        Returns the zero-state tuple when the stream is opened, or ``None``
+        when the event cannot open an uninitialized stream (caller should
+        short-circuit with ``_uninitialized_stream_result``).
+        """
+        if not isinstance(event, OpenEpochEvent | AuthorityUnavailableEvent):
+            return None
+        current_state = _zero_state(event.protocol_version)
+        genesis_envelope = _encode_value(
+            current_state,
+            protocol_version=event.protocol_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO streams(
+                stream_id, stream_key, genesis_envelope, state_envelope,
+                aggregate_revision, admission_sequence,
+                latest_journal_sequence, health_status,
+                failure_reason, reason_code
+            ) VALUES (?, ?, ?, ?, 0, 0, 0, ?, NULL, NULL)
+            """,
+            (
+                stream_id,
+                stream_id,
+                genesis_envelope,
+                genesis_envelope,
+                ContextAdmissionStorageHealthStatus.HEALTHY.value,
+            ),
+        )
+        return current_state, 0, 0, 0
+
+    def _load_existing_stream_state(
+        self,
+        stream_id: bytes,
+        stream_key: ContextAdmissionStreamKey,
+        row: sqlite3.Row,
+    ) -> tuple[ContextAdmissionState, int, int, int] | ContextAdmissionAccountingResult:
+        """Validate and decode a pre-existing stream row.
+
+        Returns the state tuple when the row is healthy, or a
+        ``ContextAdmissionAccountingResult`` when the persisted health is
+        ``FAIL_CLOSED`` (caller should short-circuit with that result).
+        """
         if bytes(row[0]) != stream_id:
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,

@@ -876,8 +876,12 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     f"{_R}::L538": _retries_after_input_changes(
         "A candidate owned by a different uid is out of this reaper's authority to touch."
     ),
+    f"{_R}::L550": _retries_after_input_changes(
+        "The disposition helper retained this candidate under its audited owner, reference, "
+        "or age rule; a later pass can reconsider it only after that input changes."
+    ),
     # -- scripts.pytest_tmp_lifecycle::_safe_candidates --
-    f"{_S}::L397": _retries_after_input_changes(
+    f"{_S}::L405": _retries_after_input_changes(
         "Cannot normalize private-root permissions; the whole private-root scan is skipped "
         "rather than risk enumerating an untrusted-mode directory."
     ),

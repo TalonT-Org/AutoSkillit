@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
@@ -246,25 +249,174 @@ def test_doctor_moved_to_cli_package() -> None:
     assert (SRC_ROOT / "cli" / "doctor" / "__init__.py").exists()
 
 
-def test_test_suite_has_domain_subdirectories():
-    """All 12 domain-aligned test subdirectories exist after groupE reorganization."""
+def test_test_suite_has_domain_subdirectories() -> None:
+    """Every top-level tests/<dir> directory (excluding __pycache__ and fixtures/) exists
+    and is wired up either as a Python package or as a test-collection-only subtree.
+
+    Replaces the prior 12-entry hardcoded subset check (#4600 C6.3): the actual tests/
+    tree carries 24 top-level directories. Each must be wired up either as a Python
+    package (carries __init__.py) or as a test-collection-only subtree (carries
+    test_*.py files). The package-style vs. test-collection-only distinction is
+    enforced separately by test_package_style_domain_subdirectories_carry_init_py.
+    """
     tests_root = SRC_ROOT.parents[1] / "tests"
-    expected = [
-        "core",
-        "config",
-        "pipeline",
-        "execution",
-        "workspace",
-        "recipe",
-        "migration",
-        "server",
-        "cli",
+    excluded = {"__pycache__", "fixtures"}
+    top_level = sorted(
+        p.name for p in tests_root.iterdir() if p.is_dir() and p.name not in excluded
+    )
+    assert top_level, f"No top-level directories found under {tests_root}"
+
+    offenders: list[str] = []
+    for name in top_level:
+        dir_path = tests_root / name
+        has_init = (dir_path / "__init__.py").is_file()
+        has_tests = any(dir_path.glob("test_*.py"))
+        if not (has_init or has_tests):
+            offenders.append(name)
+
+    assert not offenders, (
+        f"Top-level tests/ subdirectory count is {len(top_level)}; "
+        f"directories missing both __init__.py and test_*.py: {offenders}"
+    )
+
+
+def test_test_suite_inventory_docstring_matches_actual_count() -> None:
+    """Top-level tests/ dirs must appear in the tests/AGENTS.md directory inventory (#4600 C6.5).
+
+    Parses the fenced code block in tests/AGENTS.md whose body contains ``tests/`` and
+    verifies the resulting set of ``├── <name>/`` and ``└── <name>/`` entries is a
+    superset of the actual immediate-child directory names (excluding __pycache__ and
+    fixtures/). The numeric-equal-count claim of C6.5 is enforced via this superset
+    relationship; an entry that appears in the inventory but is not on disk (e.g.,
+    the nested ``context_admission_journals/``) does not violate the contract.
+    """
+    tests_root = SRC_ROOT.parents[1] / "tests"
+    agents_md = (tests_root / "AGENTS.md").read_text(encoding="utf-8")
+
+    fence_pattern = re.compile(r"```([^\n]*)\n(.*?)\n```", re.DOTALL)
+    tree_block: str | None = None
+    for match in fence_pattern.finditer(agents_md):
+        body = match.group(2)
+        if re.search(r"^tests/$", body, re.MULTILINE):
+            tree_block = body
+            break
+    assert tree_block is not None, "tests/ directory-tree fence not found in tests/AGENTS.md"
+
+    entry_pattern = re.compile(r"^(?:├── |└── |│   └── )([a-z_]+)/$", re.MULTILINE)
+    listed_dirs = set(entry_pattern.findall(tree_block))
+
+    actual_dirs = {
+        p.name
+        for p in tests_root.iterdir()
+        if p.is_dir() and p.name not in {"__pycache__", "fixtures"}
+    }
+    missing_from_doc = sorted(actual_dirs - listed_dirs)
+
+    assert not missing_from_doc, (
+        f"tests/AGENTS.md directory inventory is incomplete (#4600 C6.5): "
+        f"{missing_from_doc} missing from inventory; "
+        f"actual top-level dirs ({len(actual_dirs)}) vs listed ({len(listed_dirs)})"
+    )
+
+
+def test_test_suite_lists_every_top_level_subdirectory_in_agents_md() -> None:
+    """Every actual top-level tests/ dir appears as a tree entry in tests/AGENTS.md (#4600 C6.5).
+
+    Companion to test_test_suite_inventory_docstring_matches_actual_count: this asserts
+    the explicit set-difference claim of #4600 C6.5 — that the AGENTS.md inventory is
+    missing exactly the directories the filesystem carries. Today this fails with
+    {backend, exploration, report, smoke_utils}.
+    """
+    tests_root = SRC_ROOT.parents[1] / "tests"
+    agents_md = (tests_root / "AGENTS.md").read_text(encoding="utf-8")
+
+    fence_pattern = re.compile(r"```([^\n]*)\n(.*?)\n```", re.DOTALL)
+    tree_block: str | None = None
+    for match in fence_pattern.finditer(agents_md):
+        body = match.group(2)
+        if re.search(r"^tests/$", body, re.MULTILINE):
+            tree_block = body
+            break
+    assert tree_block is not None, "tests/ directory-tree fence not found in tests/AGENTS.md"
+
+    entry_pattern = re.compile(r"^(?:├── |└── |│   └── )([a-z_]+)/$", re.MULTILINE)
+    listed_dirs = set(entry_pattern.findall(tree_block))
+
+    actual_dirs = sorted(
+        p.name
+        for p in tests_root.iterdir()
+        if p.is_dir() and p.name not in {"__pycache__", "fixtures"}
+    )
+    missing = sorted(set(actual_dirs) - listed_dirs)
+
+    assert not missing, (
+        f"tests/AGENTS.md missing tree entries for: {missing}; "
+        f"actual top-level dirs: {actual_dirs}, listed: {sorted(listed_dirs)}"
+    )
+
+
+def test_no_stale_smoke_utils_exemption_rationale() -> None:
+    """REQ-CNST-004-E1 retirement guard (#4600 C6.4): the historical 'Exempt at 1348 lines'
+    rationale that justified keeping tests/test_smoke_utils.py as a monolith must stay gone.
+
+    Commit 89236acd8 split the monolith into tests/smoke_utils/ shards and dropped the
+    exemption; this guard prevents either the rationale or the bare-monolith file from
+    silently returning under the same REQ-CNST-004-E1 label.
+    """
+    arch_root = Path(__file__).resolve().parent
+    forbidden_substrings = ("REQ-CNST-004-E1", "Exempt at 1348 lines", "tests/test_smoke_utils.py")
+    offenders: list[tuple[str, str]] = []
+    for py_file in sorted(arch_root.rglob("*.py")):
+        text = py_file.read_text(encoding="utf-8")
+        for needle in forbidden_substrings:
+            if needle in text:
+                offenders.append((str(py_file.relative_to(arch_root)), needle))
+    assert not offenders, (
+        "Stale REQ-CNST-004-E1 / 1348-line exemption rationale reappeared (#4600 C6.4):\n  "
+        + "\n  ".join(f"{path}: {needle}" for path, needle in offenders)
+    )
+
+
+def test_package_style_domain_subdirectories_carry_init_py() -> None:
+    """The 22 package-style test subdirectories each carry __init__.py.
+
+    Splits test_test_suite_has_domain_subdirectories' conflated "all dirs must be
+    packages" claim: exploration/ and report/ are intentionally package-less data
+    subtrees; the 22 dirs that are Python packages stay that way. The two newest
+    additions (``backend/`` and ``smoke_utils/``) are also package-style, so they
+    appear in this set alongside the 20 historically package-style dirs.
+    """
+    package_style = {
         "arch",
+        "assets",
+        "backend",
+        "cli",
+        "config",
         "contracts",
+        "core",
+        "docs",
+        "execution",
+        "fleet",
+        "hooks",
         "infra",
-    ]
-    missing = [d for d in expected if not (tests_root / d / "__init__.py").exists()]
-    assert not missing, f"Missing test subdirectories (run groupE): {missing}"
+        "integration",
+        "migration",
+        "pipeline",
+        "planner",
+        "recipe",
+        "server",
+        "skills",
+        "skills_extended",
+        "smoke_utils",
+        "workspace",
+    }
+    tests_root = SRC_ROOT.parents[1] / "tests"
+    missing_init = sorted(
+        name for name in package_style if not (tests_root / name / "__init__.py").is_file()
+    )
+    assert not missing_init, (
+        f"Package-style test subdirectories lost their __init__.py: {missing_init}"
+    )
 
 
 def test_smoke_utils_suite_is_split() -> None:

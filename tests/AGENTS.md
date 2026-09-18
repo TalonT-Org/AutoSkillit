@@ -239,12 +239,14 @@ and degrade the check to its operational-error path. Refresh cadence:
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
 ├── assets/                              # Vendored asset integrity tests
+├── backend/                             # MCP backend round-trip + guard-script tests
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
 ├── config/                              # Config loading tests
 ├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/AGENTS.md)
 ├── core/                                # Core layer tests (see core/AGENTS.md)
 ├── docs/                                # Documentation integrity tests
 ├── execution/                           # Subprocess integration + session tests (see execution/AGENTS.md)
+├── exploration/                         # Repository-impact + deterministic-snapshot tests (no __init__.py)
 ├── fleet/                               # Fleet campaign + dispatch tests (see fleet/AGENTS.md)
 ├── hooks/                               # Hook script tests (see hooks/AGENTS.md)
 ├── infra/                               # CI/CD and security configuration tests (see infra/AGENTS.md)
@@ -256,9 +258,11 @@ tests/
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/AGENTS.md)
 ├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/AGENTS.md)
 │   └── fixtures/                        # YAML test data: sample recipes, expected diagram output
+├── report/                              # Test-result renderer tests (no __init__.py)
 ├── server/                              # Server unit tests — tool handlers (see server/AGENTS.md)
 ├── skills/                              # Skill contract and compliance tests (see skills/AGENTS.md)
 ├── skills_extended/                     # Extended skill tests
+├── smoke_utils/                         # Smoke-test facade + per-shard test modules
 └── workspace/                           # Workspace and clone tests (see workspace/AGENTS.md)
 
 temp/                        # Temporary/working files (gitignored)

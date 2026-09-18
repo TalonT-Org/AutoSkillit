@@ -189,13 +189,20 @@ class _LedgerRecovery(_LedgerStore):
                     read_budget=read_budget,
                 )[0]
             except ContextAdmissionValidationError as exc:
-                logger.debug("context-admission replay decode failed: %s", exc)
+                logger.warning(
+                    "context-admission replay decode failed: stream_id=%s "
+                    "stream_key=%s exc_type=%s exc=%s",
+                    stream_id,
+                    stream_key,
+                    type(exc).__name__,
+                    exc,
+                )
                 pending_stream_failures.append(
                     (
                         stream_id,
                         stream_key,
                         ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                        f"stream-replay-decode-failed:{type(exc).__name__}:{exc}",
+                        "stream-replay-decode-failed",
                     )
                 )
                 continue

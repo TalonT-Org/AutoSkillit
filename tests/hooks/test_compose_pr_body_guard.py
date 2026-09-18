@@ -399,6 +399,13 @@ def test_conflicting_outer_and_nested_body_assignments_use_own_payload_scope(
     assert _run_hook(_event(command), monkeypatch) == ""
 
 
+def test_malformed_later_nested_payload_discards_earlier_denial(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    command = "bash -c 'gh pr create --body-file /does/not/exist.md' && bash -c 'echo \"unclosed'"
+
+    assert _run_hook(_event(command), monkeypatch) == ""
+
+
 def test_hook_registration_shape():
     matching = [
         hook for hook in HOOK_REGISTRY if "guards/compose_pr_body_guard.py" in hook.scripts

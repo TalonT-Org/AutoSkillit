@@ -841,7 +841,7 @@ class TestTokenizeShellPayloadSegments:
             tokenize_shell_payload_segments,
         )
 
-        result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
+        result = tokenize_shell_payload_segments("""bash -c 'bash -c "echo \\"unclosed"'""")
         assert result is None
 
     def test_quoted_close_paren_does_not_truncate_substitution(self):
@@ -872,6 +872,30 @@ class TestTokenizeShellPayloadSegments:
             command,
             include_process_substitutions=True,
         ) == [["gh", "pr", "view", "7", "--json", "number"]]
+
+    def test_identical_process_substitution_occurrences_are_preserved(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        result = tokenize_shell_payload_segments(
+            "cat <(gh pr view 7) <(gh pr view 7)",
+            include_process_substitutions=True,
+        )
+
+        assert result == [["gh", "pr", "view", "7"], ["gh", "pr", "view", "7"]]
+
+    def test_unbalanced_process_substitution_returns_none(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        result = tokenize_shell_payload_segments(
+            "cat <(gh pr view 7",
+            include_process_substitutions=True,
+        )
+
+        assert result is None
 
 
 class TestProcessSubstitutionExtraction:

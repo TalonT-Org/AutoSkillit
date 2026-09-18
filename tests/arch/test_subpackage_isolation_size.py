@@ -69,7 +69,7 @@ def test_basename_fallback_dead_exemptions_are_retired() -> None:
     assert not stale, f"Retired basename-fallback exemptions reintroduced: {sorted(stale)}"
 
 
-def test_obsolete_hook_line_limit_exemptions_are_deleted() -> None:
+def test_dead_hook_line_limit_exemptions_are_retired() -> None:
     obsolete = {
         "hooks/_command_classification.py",
         "hooks/_capture_lifecycle.py",
@@ -77,7 +77,7 @@ def test_obsolete_hook_line_limit_exemptions_are_deleted() -> None:
         "hooks/_capture_contract.py",
     }
     stale = obsolete.intersection(_LINE_LIMIT_EXEMPTIONS)
-    assert not stale, f"Obsolete hooks line-limit exemptions remain: {sorted(stale)}"
+    assert not stale, f"Dead hook line-limit exemptions reintroduced: {sorted(stale)}"
 
 
 def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> None:
@@ -209,7 +209,8 @@ def test_pipeline_exploration_context_e22_retired() -> None:
     """REQ-CNST-010-E22 (pipeline/exploration_context.py) is retired per #4835.
 
     This test covers only the independently retired pipeline E22 fact; the hooks
-    exemption retirement is guarded separately.
+    exemption retirement is guarded separately by
+    ``test_dead_hook_line_limit_exemptions_are_retired``.
     """
     exemptions = _LINE_LIMIT_EXEMPTIONS
     assert "pipeline/exploration_context.py" not in exemptions, (

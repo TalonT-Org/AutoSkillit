@@ -9,7 +9,7 @@ from autoskillit.cli.prompts._prompts import (
     _backend_supplement,
     _ingredient_table_display_instruction,
 )
-from autoskillit.core import RETRY_REASON_DESCRIPTIONS, ROUTING_AUTHORITY_CLAUSE
+from autoskillit.core import RETRY_REASON_DESCRIPTIONS, ROUTING_AUTHORITY_CLAUSE, RetryReason
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -94,12 +94,25 @@ Apply the same failure rules as static dispatches. On any food truck failure:
 """
 
 
-def _resume_reason_guidance(retry_reason: str) -> str:
-    """Return reason-specific resume guidance for the L3 campaign dispatcher."""
-    for reason, description in RETRY_REASON_DESCRIPTIONS.items():
-        if reason.value == retry_reason:
-            return f"Retry reason: {description}."
-    return "Retry reason: unknown. Resume with standard recovery."
+def _resume_reason_guidance(retry_reason: str | RetryReason) -> str:
+    """Return reason-specific resume guidance for the L3 campaign dispatcher.
+
+    Accepts either a ``RetryReason`` enum member or the legacy string form so
+    internal callers (who already have the enum) reach the typed branch and
+    external callers passing an opaque string still resolve sensibly — typos
+    hit the fallback instead of silently mismatching.
+    """
+    if isinstance(retry_reason, RetryReason):
+        reason = retry_reason
+    else:
+        try:
+            reason = RetryReason(retry_reason)
+        except ValueError:
+            return "Retry reason: unknown. Resume with standard recovery."
+    description = RETRY_REASON_DESCRIPTIONS.get(reason)
+    if description is None:
+        return "Retry reason: unknown. Resume with standard recovery."
+    return f"Retry reason: {description}."
 
 
 def _build_fleet_campaign_prompt(

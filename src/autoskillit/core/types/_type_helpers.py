@@ -44,17 +44,22 @@ __all__ = [
     "evaluate_outcome_expression",
     "parse_outcome_expression",
     "RETRY_REASON_DESCRIPTIONS",
+    "TERMINAL_FAILURE_POLICY",
 ]
 
 
-def _terminal_retry_description(reason_text: str) -> str:
-    """Render a description for a retry reason that always routes to on_failure.
+# Trailing clause shared by every terminal-failure retry reason. Centralizes
+# the routing policy that BUDGET_EXHAUSTED, CANCELLED, OUTCOME_INVARIANT,
+# OUTCOME_REPORT_MALFORMED, and CONTEXT_EXHAUSTED all share — none of those
+# reasons is resumable and none should route to on_context_limit. The
+# orchestrator prompt renders the same policy as a bullet; keep both surfaces
+# anchored on this single source so a policy edit only lands once.
+TERMINAL_FAILURE_POLICY: str = "route on_failure, never on_context_limit, and do not resume"
 
-    Centralizes the trailing policy clause shared by BUDGET_EXHAUSTED, CANCELLED,
-    OUTCOME_INVARIANT, OUTCOME_REPORT_MALFORMED, and CONTEXT_EXHAUSTED — none of
-    those reasons are resumable and none should route to on_context_limit.
-    """
-    return reason_text + "; route on_failure, never on_context_limit, and do not resume"
+
+def _terminal_retry_description(reason_text: str) -> str:
+    """Render a description for a retry reason that always routes to on_failure."""
+    return f"{reason_text}; {TERMINAL_FAILURE_POLICY}"
 
 
 RETRY_REASON_DESCRIPTIONS: dict[RetryReason, str] = {

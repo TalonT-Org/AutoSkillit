@@ -458,6 +458,8 @@ def _resolve_channel_confirmation(signals: RaceSignals) -> ChannelConfirmation:
 
 def resolve_termination(
     signals: RaceSignals,
+    *,
+    timeout_fired: bool = False,
 ) -> tuple[TerminationReason, ChannelConfirmation]:
     """Determine termination and channel from accumulated signals.
 
@@ -465,7 +467,8 @@ def resolve_termination(
     reason are resolved independently so that simultaneous task completion
     never discards a channel signal.
 
-    Priority for termination: process exit > idle stall > stale > channel win.
+    Priority for termination: output ceiling > timeout > process exit > idle stall
+    > stale > channel win.
     Channel confirmation is independent of termination.
 
     Exhaustive match over ChannelBStatus ensures mypy flags any new member
@@ -478,6 +481,8 @@ def resolve_termination(
     # exits in the same scheduling window.
     if signals.output_limit_exceeded:
         termination = TerminationReason.OUTPUT_LIMIT
+    elif timeout_fired:
+        termination = TerminationReason.TIMED_OUT
     elif signals.process_exited:
         if signals.process_returncode is not None and is_signal_death_code(
             signals.process_returncode
@@ -507,6 +512,7 @@ def resolve_termination(
         channel_b_session_id=signals.channel_b_session_id,
         idle_stall=signals.idle_stall,
         output_limit_exceeded=signals.output_limit_exceeded,
+        timeout_fired=timeout_fired,
         resolved_termination=str(termination),
         resolved_channel=str(channel),
     )

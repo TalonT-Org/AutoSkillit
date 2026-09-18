@@ -584,8 +584,11 @@ async def run_managed_async(
                 acc.process_exited = True
                 acc.process_returncode = final_observed_returncode
                 acc.process_exited_event.set()
+            _timed_out = timeout_scope is not None and timeout_scope.cancelled_caught
             signals = acc.to_race_signals()
-            termination, _channel_confirmation = resolve_termination(signals)
+            termination, _channel_confirmation = resolve_termination(
+                signals, timeout_fired=_timed_out
+            )
 
             snapshots_data: list[dict[str, object]] | None = None
             if tracing_handle is not None:
@@ -596,9 +599,6 @@ async def run_managed_async(
             elif signals.exit_snapshot is not None:
                 snapshots_data = [signals.exit_snapshot]
 
-            _timed_out = timeout_scope is not None and timeout_scope.cancelled_caught
-            if _timed_out and termination is not TerminationReason.OUTPUT_LIMIT:
-                termination = TerminationReason.TIMED_OUT
             action = decide_termination_action(
                 termination,
                 timeout_fired=_timed_out or line_driver_session.failed,
@@ -629,7 +629,7 @@ async def run_managed_async(
                 child_deferral_ceiling=child_deferral_ceiling,
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
-            await output_capture.settle()
+            await output_capture.wait_for_drains()
             _coalesced_returncode = _coalesce_returncode(final_returncode)
             if cleanup_result.complete and on_process_reaped is not None:
                 reap_callback_attempted = True

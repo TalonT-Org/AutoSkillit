@@ -319,12 +319,14 @@ addressed_thread_ids: list[str] = []
 escalation_records: list = []
 ```
 
-**Edit order for ACCEPT findings:** Treat `rerun_required` and `design_flaw` as
-escalations, not edit candidates. Group all remaining concrete edit strategies by
-path. Define severity rank as `critical=3`, `warning=2`, `info=1`; process contiguous
-file groups by `(-file_max_severity, path, -line, comment_id)`. Within each file group,
-edit in descending-line order. `config_fix`, `script_fix`, and `report_edit` choose
-only the edit route; they must not split a file group.
+**Edit order for ACCEPT findings:** `rerun_required` and `design_flaw` → ESCALATE:
+append their full details to `escalation_records`, do NOT add them to
+`addressed_thread_ids`, and continue with exit code 0. They are not edit candidates.
+Group all remaining concrete edit strategies by path. Define severity rank as
+`critical=3`, `warning=2`, `info=1`; process contiguous file groups by
+`(-file_max_severity, path, -line, comment_id)`. Within each file group, edit in
+descending-line order. `config_fix`, `script_fix`, and `report_edit` choose only the
+edit route; they must not split a file group.
 
 For each concrete candidate in that order, re-read the live source immediately before
 editing. Use its existing path, line, and diff-hunk context to re-derive the edit from

@@ -512,6 +512,7 @@ class TestGroupDApiContractPreservation:
             "on_session_id_resolved",
             "child_deferral_ceiling",
             "capture_dir",
+            "max_combined_output_bytes",
             "pass_fds",
             "backend_resume_session_id",
             "line_driver",
@@ -595,6 +596,7 @@ class TestGroupDApiContractPreservation:
             "on_session_id_resolved",
             "child_deferral_ceiling",
             "capture_dir",
+            "max_combined_output_bytes",
             "pass_fds",
             "backend_resume_session_id",
             "line_driver",
@@ -833,7 +835,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_006_termination_reason_members(self):
-        """TerminationReason must have exactly the 7 canonical values."""
+        """TerminationReason must have exactly the 8 canonical values."""
         from autoskillit.core.types import TerminationReason
 
         assert set(TerminationReason) == {
@@ -841,6 +843,7 @@ class TestGroupDApiContractPreservation:
             TerminationReason.COMPLETED,
             TerminationReason.STALE,
             TerminationReason.IDLE_STALL,
+            TerminationReason.OUTPUT_LIMIT,
             TerminationReason.TIMED_OUT,
             TerminationReason.SIGNAL_DEATH,
             TerminationReason.HEALTH_INSPECTOR,
@@ -854,6 +857,7 @@ class TestGroupDApiContractPreservation:
         assert TerminationReason.COMPLETED == "completed"
         assert TerminationReason.STALE == "stale"
         assert TerminationReason.IDLE_STALL == "idle_stall"
+        assert TerminationReason.OUTPUT_LIMIT == "output_limit"
         assert TerminationReason.TIMED_OUT == "timed_out"
 
     def test_req_api_006_channel_confirmation_members(self):

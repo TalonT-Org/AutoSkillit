@@ -631,16 +631,15 @@ assume a helper script exists in the target checkout.
 For every candidate in that order:
 
 1. Use a pre-built `diff_context_map` `code_region` only for initial understanding;
-   skip the ±20 line understanding read when it is present. Before each edit, still
-   re-read the live source file — the handoff context never authorizes an edit by
-   itself.
+   skip the ±20 line understanding read when it is present. Before each edit, still read
+   the file from live source — the handoff context never authorizes an edit by itself.
 2. For a v2 context entry, call the installed `validate_anchor(live_content, line,
    anchor_digest)` helper. Set `effective_line` only when the result is `fresh` or a
    uniquely `moved` line, and use `effective_line` for both the edit and accepted-fix
    range. Retain the original review coordinates for reporting and thread identity.
    A `stale` result is skipped and recorded, or is fully reclassified from live
    source and review-comment context; never derive an edit from a guessed anchor.
-3. Apply the concrete fix at `effective_line`, then stage and commit it:
+3. Apply the fix at `effective_line`, then stage and commit it:
    ```
    commit_files(paths=["{file}"], message="fix(review): {brief description of reviewer's request}", cwd="{work_dir}", self_revert_base_sha=fix_loop_base_sha)
    ```
@@ -705,6 +704,10 @@ the configured test command directly in the shell.
 **MODE BRANCHING:**
 
 **When `mode=github`:** Execute the following thread resolution steps (current behavior unchanged).
+
+Populate `addressed_thread_ids` only after a successful ACCEPT fix with a non-null
+`thread_node_id`. Before batching, exclude every skipped or stale finding and every
+review-level finding (`thread_node_id=None`); none of those entries may be resolved.
 
 Batch all thread resolutions into a single GraphQL request using aliased mutations.
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).

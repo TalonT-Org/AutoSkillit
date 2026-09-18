@@ -178,7 +178,7 @@ class _OutputCeilingCapture:
             )
         )
 
-    async def settle(self) -> None:
+    async def wait_for_drains(self) -> None:
         """Require pipe drain completion after owned-process termination."""
         if not self._done_events:
             return

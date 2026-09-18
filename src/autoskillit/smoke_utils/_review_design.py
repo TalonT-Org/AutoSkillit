@@ -113,11 +113,11 @@ def _validate_v1_context_entry(entry: object) -> str | None:
     return None
 
 
-def _load_complete_v1_handoff(handoff_path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    if not handoff_path.exists():
+def _load_complete_v1_handoff(handoff_target: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not handoff_target.exists():
         return None, "handoff_not_found"
     try:
-        handoff = json.loads(handoff_path.read_text())
+        handoff = json.loads(handoff_target.read_text())
     except (OSError, json.JSONDecodeError):
         return None, "invalid_handoff"
     if not isinstance(handoff, dict) or handoff.get("schema_version") != 1:
@@ -133,6 +133,8 @@ def _load_complete_v1_handoff(handoff_path: Path) -> tuple[dict[str, Any] | None
 
 
 def _validate_handoff_checkout_head(handoff: dict[str, Any], project_dir: str) -> str | None:
+    if not Path(project_dir).is_absolute():
+        raise ValueError(f"project_dir must be absolute, got {project_dir!r}")
     expected_head = handoff.get("_head_sha")
     if expected_head is None or not (Path(project_dir) / ".git").exists():
         return None
@@ -159,6 +161,8 @@ def _read_annotated_diff(
     pr_number: str,
     entries: list[object],
 ) -> tuple[str, str | None]:
+    if not output_dir.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     if not any(type(entry.get("line")) is int for entry in entries if isinstance(entry, dict)):
         return "", None
     annotated_path = output_dir / f"annotated_diff_{pr_number}.txt"

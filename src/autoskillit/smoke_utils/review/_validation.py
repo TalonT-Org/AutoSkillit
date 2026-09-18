@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import TypeGuard
+
+import regex as re
 
 from autoskillit.core import AnchorAdmission, DiffAnchorAuthority, get_logger
 from autoskillit.smoke_utils._review_contracts import (

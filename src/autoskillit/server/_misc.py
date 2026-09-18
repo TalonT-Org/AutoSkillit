@@ -268,8 +268,11 @@ async def _prime_quota_cache(*, supports_quota_check: bool) -> None:
 
     try:
         _ctx = _ctx_fn()
+        diagnostic_log_dir = _ctx.config.linux_tracing.log_dir
+        if not isinstance(diagnostic_log_dir, str):
+            raise TypeError("linux tracing log_dir must be a string")
         with ArtifactLease.acquire_shared(
-            oauth_admission_lock_path(resolve_log_dir(_ctx.config.linux_tracing.log_dir)),
+            oauth_admission_lock_path(resolve_log_dir(diagnostic_log_dir)),
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
         ):
             await check_and_sleep_if_needed(

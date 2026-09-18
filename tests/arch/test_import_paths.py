@@ -248,6 +248,10 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
             # git.py needs it to strip progress noise from test gate output,
             # matching the pattern in tools_workspace.py.
             "autoskillit.server._misc",
+            # _self_revert owns the injected-runner, bounded first-parent scan;
+            # git.py retains its public detector import without absorbing the
+            # parsing implementation into the merge workflow.
+            "autoskillit.server._self_revert",
             # workspace is IL-1; git.py delegates worktree removal to the
             # single IL-1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",

@@ -97,7 +97,22 @@ class TestChannelBStatusExhaustiveCoverage:
 
 
 class TestResolveTerminationPriority:
-    """Verify priority ordering: process exit > stale > channel win."""
+    """Verify priority ordering for competing managed-process signals."""
+
+    def test_output_limit_overrides_timeout_and_process_exit(self) -> None:
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=True,
+            channel_b_status=ChannelBStatus.COMPLETION,
+            channel_b_session_id="s1",
+            stdout_session_id=None,
+            output_limit_exceeded=True,
+        )
+
+        termination, _ = resolve_termination(signals, timeout_fired=True)
+
+        assert termination is TerminationReason.OUTPUT_LIMIT
 
     def test_process_exit_overrides_channel_b_completion(self) -> None:
         signals = RaceSignals(
@@ -258,8 +273,8 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 17, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 17). "
+        assert len(dataclasses.fields(RaceSignals)) == 18, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 18). "
             "Update tests to cover the new field."
         )
 
@@ -291,8 +306,8 @@ class TestRaceAccumulatorFieldCount:
 
     def test_race_accumulator_field_count(self) -> None:
         n = len(dataclasses.fields(RaceAccumulator))
-        assert n == 23, (
-            f"RaceAccumulator has {n} fields (expected 23). Update tests for new fields."
+        assert n == 24, (
+            f"RaceAccumulator has {n} fields (expected 24). Update tests for new fields."
         )
 
 

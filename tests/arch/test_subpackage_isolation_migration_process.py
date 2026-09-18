@@ -100,6 +100,7 @@ class TestGroupCMigration:
             "channel_b_session_id",
             "stdout_session_id",
             "idle_stall",
+            "output_limit_exceeded",
             "process_exited_event",
             "channel_b_orphaned_tool_result",
             "exit_snapshot",

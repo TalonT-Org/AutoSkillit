@@ -11,17 +11,11 @@ from dataclasses import dataclass, field
 
 import regex as re
 
-_HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+from autoskillit.core import DiffAnchorAuthority
+
+_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+_OLD_FILE_HEADER = re.compile(r"^--- a/(.+)$")
 _FILE_HEADER = re.compile(r"^\+\+\+ b/(.+)$")
-
-
-@dataclass
-class FilterResult:
-    """Result of partitioning findings against valid line ranges."""
-
-    filtered: list[dict] = field(default_factory=list)
-    unpostable: list[dict] = field(default_factory=list)
-    all_unpostable: bool = False
 
 
 @dataclass
@@ -114,8 +108,8 @@ def parse_hunk_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
 
         hunk_match = _HUNK_HEADER.match(line)
         if hunk_match and current_file is not None:
-            start = int(hunk_match.group(1))
-            count_str = hunk_match.group(2)
+            start = int(hunk_match.group(3))
+            count_str = hunk_match.group(4)
             count = int(count_str) if count_str is not None else 1
             if count == 0:
                 continue  # pure deletion hunk
@@ -143,7 +137,7 @@ def annotate_diff(diff_text: str) -> str:
 
         hunk_match = _HUNK_HEADER.match(line)
         if hunk_match:
-            current_line = int(hunk_match.group(1))
+            current_line = int(hunk_match.group(3))
             in_hunk = True
             output_lines.append(line)
             continue
@@ -163,93 +157,82 @@ def annotate_diff(diff_text: str) -> str:
     return "\n".join(output_lines)
 
 
-def extract_valid_lines(diff_text: str) -> dict[str, list[int]]:
-    """Extract the exact set of new-file line numbers present in the diff.
-
-    Returns {filepath: sorted_line_numbers} where each line number corresponds
-    to a + or context line in the diff body — the same lines annotate_diff
-    marks with [LNNN]. This is a strict subset of (or equal to) the hunk spans
-    returned by parse_hunk_ranges.
-    """
-    result: dict[str, list[int]] = {}
-    current_file: str | None = None
-    current_line = 0
+def extract_valid_lines(
+    diff_text: str,
+) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+    """Extract exact old-file (LEFT) and new-file (RIGHT) line authorities."""
+    left: dict[str, list[int]] = {}
+    right: dict[str, list[int]] = {}
+    old_file: str | None = None
+    new_file: str | None = None
+    old_line = 0
+    new_line = 0
     in_hunk = False
 
     for line in diff_text.splitlines():
-        file_match = _FILE_HEADER.match(line)
-        if file_match:
-            current_file = file_match.group(1)
+        if line.startswith("diff --git "):
+            old_file = None
+            new_file = None
             in_hunk = False
+            continue
+        old_match = _OLD_FILE_HEADER.match(line)
+        if old_match:
+            old_file = old_match.group(1)
+            continue
+        new_match = _FILE_HEADER.match(line)
+        if new_match:
+            new_file = new_match.group(1)
             continue
 
         hunk_match = _HUNK_HEADER.match(line)
         if hunk_match:
-            current_line = int(hunk_match.group(1))
+            old_line = int(hunk_match.group(1))
+            new_line = int(hunk_match.group(3))
             in_hunk = True
             continue
 
-        if not in_hunk or current_file is None:
+        if not in_hunk:
             continue
 
         if line.startswith("-"):
-            pass
-        elif line.startswith("+") or line.startswith(" "):
-            result.setdefault(current_file, []).append(current_line)
-            current_line += 1
+            if old_file is not None:
+                left.setdefault(old_file, []).append(old_line)
+            old_line += 1
+        elif line.startswith("+"):
+            if new_file is not None:
+                right.setdefault(new_file, []).append(new_line)
+            new_line += 1
+        elif line.startswith(" "):
+            if old_file is not None:
+                left.setdefault(old_file, []).append(old_line)
+            if new_file is not None:
+                right.setdefault(new_file, []).append(new_line)
+            old_line += 1
+            new_line += 1
 
-    return {k: sorted(v) for k, v in result.items()}
+    return (
+        {path: sorted(lines) for path, lines in left.items()},
+        {path: sorted(lines) for path, lines in right.items()},
+    )
 
 
-def filter_findings(
-    findings: list[dict],
-    valid_ranges: dict[str, list[tuple[int, int]]],
-    valid_lines: dict[str, list[int]] | None = None,
-) -> FilterResult:
-    """Partition findings into filtered (in-range) and unpostable (out-of-range).
-
-    When valid_lines is provided, uses exact set-membership for validation instead
-    of hunk-span interval checking. When both are absent, all findings pass through
-    except those with null/zero line numbers, which route to unpostable.
-    Sets all_unpostable=True when total findings > 0 and filtered is empty.
-    """
-    if not findings:
-        return FilterResult()
-
-    if not valid_ranges and valid_lines is None:
-        good = [f for f in findings if f.get("line") and f["line"] != 0]
-        bad = [f for f in findings if not f.get("line") or f["line"] == 0]
-        if bad:
-            return FilterResult(filtered=good, unpostable=bad, all_unpostable=not good)
-        return FilterResult(filtered=list(findings))
-
-    filtered: list[dict] = []
-    unpostable: list[dict] = []
-
-    for finding in findings:
-        file_path = finding.get("file", "")
-        line_num = finding.get("line") or 0
-        if line_num == 0:
-            unpostable.append(finding)
-            continue
-
-        if valid_lines is not None:
-            valid_set = set(valid_lines.get(file_path, []))
-            if line_num in valid_set:
-                filtered.append(finding)
-            else:
-                unpostable.append(finding)
-        else:
-            file_ranges = valid_ranges.get(file_path, [])
-            if any(start <= line_num <= end for start, end in file_ranges):
-                filtered.append(finding)
-            else:
-                unpostable.append(finding)
-
-    return FilterResult(
-        filtered=filtered,
-        unpostable=unpostable,
-        all_unpostable=len(findings) > 0 and len(filtered) == 0,
+def build_anchor_authority(
+    diff_text: str,
+    *,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    generation_id: str,
+) -> DiffAnchorAuthority:
+    """Build the immutable anchor authority produced by one diff generation."""
+    left_lines, right_lines = extract_valid_lines(diff_text)
+    return DiffAnchorAuthority.authoritative(
+        repository=repository,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        generation_id=generation_id,
+        right_side_lines=right_lines,
+        left_side_lines=left_lines,
     )
 
 

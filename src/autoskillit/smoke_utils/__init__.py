@@ -43,7 +43,6 @@ from autoskillit.smoke_utils._review_design import (
     LOCAL_ROUND_EXEMPT_VERDICTS,
     aggregate_review_verdict,
     check_review_loop,
-    check_review_posted,
     clear_review_annotation_context,
     enrich_diff_context,
     init_counter,
@@ -60,6 +59,7 @@ from autoskillit.smoke_utils.review import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
     render_review_finding_body,
+    render_unpostable_review_section,
     validate_experimental_auditor_outputs,
 )
 
@@ -82,7 +82,6 @@ __all__ = [
     "check_ref_state",
     "check_loop_with_progress",
     "check_review_loop",
-    "check_review_posted",
     "clear_review_annotation_context",
     "close_issue_already_done",
     "consolidate_health_reports",
@@ -105,6 +104,7 @@ __all__ = [
     "probe_audit_substitutions",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
+    "render_unpostable_review_section",
     "review_handoff_pair_error",
     "run_cross_interpreter_upgrade_smoke",
     "select_experimental_review_dispatch",

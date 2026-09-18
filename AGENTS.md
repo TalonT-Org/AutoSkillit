@@ -41,7 +41,7 @@ The assigned issue or ticket is the source of truth; do not work on unassigned f
 
 ### **3.3. GitHub API Call Discipline**
 
-  * **Batch inline review comments** via `POST /pulls/{N}/reviews` with `comments[]` array — never post comments individually unless the batch call fails.
+  * **Batch-only review findings**: publish the complete inline comment set via `POST /pulls/{N}/reviews` with a `comments[]` array. Never post findings individually or split a failed batch into per-finding requests; a batch of one is not a permitted workaround. Findings without an admitted diff anchor belong in the review body, never a file-level comment fallback.
   * **Batch GraphQL mutations** via aliases (N mutations in 1 request = 5 pts total, not N × 5 pts). Use for thread resolution, bulk PR queries, and any operation touching multiple entities.
   * **Delay 1s between POST/PATCH/PUT/DELETE calls** — add `sleep 1` (in shell) or `await asyncio.sleep(1)` (in Python) between consecutive mutating GitHub API calls.
   * **Pre-fetch entity lists** upfront in a single call; pass results via manifest files or variables rather than querying per-entity.

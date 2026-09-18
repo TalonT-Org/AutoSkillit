@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 77 MCP tools across overlapping visibility surfaces that control which
+AutoSkillit provides 78 MCP tools across overlapping visibility surfaces that control which
 session types can see each tool. Visibility determines addressability; each tool still enforces
 its own authority contract.
 
@@ -148,7 +148,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 77 tools with their access level, tags, source file, and functional category.
+All 78 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,

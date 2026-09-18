@@ -43,6 +43,11 @@ for actionable findings, commit each fix, and verify tests still pass.
 
 ## Arguments
 
+- **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
+  bound to repository, PR, and head SHA. Required for inline comments; when absent,
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
+
 `/autoskillit:resolve-review <feature_branch> <base_branch> [mode=<local|github>]`
 
 - `feature_branch` — The PR's head branch (used to find the open PR)
@@ -170,9 +175,10 @@ If the file exists and contains entries:
    boundary independently excludes info observations.
 2. Preserve each observation's `severity` and `dimension` in
    `<!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->`.
-3. Build one complete `comments` array. Include positive numeric `line` anchors; keep
-   observations whose line is null in the complete review `body` instead of inventing an
-   anchor.
+3. Build one complete `comments` array from observations with exact anchors admitted
+   by `anchor_authority_path`. Keep rejected or missing anchors in the complete review
+   `body`. Unavailable or available-empty authority permits body-only publication;
+   never fall back to individual or file-level comment requests.
 4. Resolve `repository` from the canonical caller-supplied `nameWithOwner`, require a
    positive caller-supplied `pr_number`, and validate the caller-supplied `pr_head_sha` against
    `^[0-9a-f]{40}$`.
@@ -185,6 +191,7 @@ If the file exists and contains entries:
 post_pr_review(
   cwd: "$PWD",
   receipt_path: "$receipt_path",
+  anchor_authority_path: "$anchor_authority_path",
   repository: "$repository",
   pr_number: "$pr_number",
   head_sha: "$pr_head_sha",

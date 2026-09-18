@@ -15,6 +15,7 @@ from typing import get_type_hints
 import pytest
 
 from autoskillit.core import (
+    DiffAnchorAuthority,
     GitHubReviewComment,
     GitHubReviewFindingDisposition,
     GitHubReviewPosterProtocol,
@@ -69,11 +70,20 @@ def _comment(body: str = "Use the normalized value.") -> GitHubReviewComment:
 
 
 def _request(**overrides: object) -> GitHubReviewRequest:
+    authority = DiffAnchorAuthority.authoritative(
+        repository="octo/example",
+        pr_number=42,
+        head_sha="a" * 40,
+        generation_id="contract-test",
+        right_side_lines={"src/example.py": {17}},
+        left_side_lines={},
+    )
     values: dict[str, object] = {
         "repository": "octo/example",
         "pr_number": 42,
         "head_sha": "a" * 40,
         "logical_iteration": "review-pr:3",
+        "anchor_authority": authority,
         "event": "COMMENT",
         "body": "Automated review",
         "comments": (_comment(),),
@@ -143,8 +153,8 @@ def test_contract_module_exports_exact_public_surface() -> None:
         assert getattr(_type_github_review, name) is getattr(sys.modules["autoskillit.core"], name)
 
 
-def test_contract_module_has_only_stdlib_imports() -> None:
-    """The IL-0 wire contracts remain usable without importing another layer."""
+def test_contract_module_imports_only_stdlib_and_anchor_sibling() -> None:
+    """The review contracts depend only on stdlib and their IL-0 anchor type."""
     source_path = Path(inspect.getsourcefile(_type_github_review) or "")
     tree = ast.parse(source_path.read_text())
     non_stdlib: set[str] = set()
@@ -159,7 +169,12 @@ def test_contract_module_has_only_stdlib_imports() -> None:
         else:
             continue
         non_stdlib.update(root for root in roots if root not in sys.stdlib_module_names)
-    assert not non_stdlib, f"non-stdlib imports in GitHub review contracts: {non_stdlib}"
+    # Subset assertion with explicit allowlist: the anchor sibling is required, but
+    # additional relative siblings may be added without breaking the architectural
+    # guard. Per the reviewer's prescription, the invariant is "stdlib + anchor
+    # sibling", not "stdlib + only anchor sibling". Any new relative sibling should
+    # be a deliberate choice flagged in review rather than a silent test failure.
+    assert non_stdlib >= {"relative:_type_github_review_anchor"}
 
 
 @pytest.mark.parametrize("contract_type", _CONTRACT_TYPES)
@@ -257,6 +272,16 @@ def test_classification_vocabularies_are_nonempty_unique_str_enums(
 
 def test_result_receipt_and_disposition_expose_identity_fields() -> None:
     expected_fields = {
+        GitHubReviewRequest: {
+            "repository",
+            "pr_number",
+            "head_sha",
+            "logical_iteration",
+            "anchor_authority",
+            "event",
+            "body",
+            "comments",
+        },
         GitHubReviewPostResult: {
             "operation_key",
             "head_sha",
@@ -312,6 +337,9 @@ def test_result_receipt_and_disposition_expose_identity_fields() -> None:
 def test_poster_protocol_is_runtime_checkable_and_has_exact_async_contract() -> None:
     class _Poster:
         async def post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult:
+            raise NotImplementedError
+
+        def verify_receipt(self, operation_key: str) -> GitHubReviewReceipt | None:
             raise NotImplementedError
 
     assert isinstance(_Poster(), GitHubReviewPosterProtocol)

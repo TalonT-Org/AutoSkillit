@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from ._tool_registry_builders import _run_skill, _tool
+from ._tool_registry_builders import _run_skill, _tool, _verify_review_receipt
 from .audit.closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import (
@@ -497,11 +497,13 @@ _TOOL_DEFS = (
     _tool("reload_session"),
     _tool("record_pipeline_step", ("pipeline_id", "op", "dependencies", "step_name")),
     _tool("get_pr_reviews", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),
+    _verify_review_receipt(),
     _tool(
         "post_pr_review",
         (
             "cwd",
             "receipt_path",
+            "anchor_authority_path",
             "repository",
             "pr_number",
             "head_sha",
@@ -514,6 +516,7 @@ _TOOL_DEFS = (
         required=(
             "cwd",
             "receipt_path",
+            "anchor_authority_path",
             "repository",
             "pr_number",
             "head_sha",
@@ -526,6 +529,7 @@ _TOOL_DEFS = (
         wire_types={
             "cwd": ToolWireType.STRING,
             "receipt_path": ToolWireType.STRING,
+            "anchor_authority_path": ToolWireType.STRING,
             "repository": ToolWireType.STRING,
             "pr_number": ToolWireType.INTEGER,
             "head_sha": ToolWireType.STRING,

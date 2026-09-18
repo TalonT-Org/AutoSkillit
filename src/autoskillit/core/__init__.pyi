@@ -775,10 +775,13 @@ from .types import AdmissionStatus as AdmissionStatus
 from .types import AdmissionTransition as AdmissionTransition
 from .types import AdmissionWitness as AdmissionWitness
 from .types import AdmissionWitnessId as AdmissionWitnessId
+from .types import AdmittedAnchor as AdmittedAnchor
 from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import AnchorAdmission as AnchorAdmission
+from .types import AnchorAuthorityAvailability as AnchorAuthorityAvailability
 from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
@@ -939,6 +942,7 @@ from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
+from .types import DiffAnchorAuthority as DiffAnchorAuthority
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
@@ -1324,6 +1328,7 @@ from .types import WorkspaceOutcomeRecord as WorkspaceOutcomeRecord
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
+from .types import admit_anchor as admit_anchor
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,

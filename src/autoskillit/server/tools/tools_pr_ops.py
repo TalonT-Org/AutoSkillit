@@ -8,12 +8,15 @@ import os
 import time
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    ContainmentError,
+    DiffAnchorAuthority,
     GitHubReviewComment,
     GitHubReviewPostResult,
     GitHubReviewRequest,
@@ -22,6 +25,12 @@ from autoskillit.core import (
     atomic_write,
     destination_location,
     get_logger,
+    is_final_github_review_state,
+    is_valid_github_review_head_sha,
+    is_valid_github_review_logical_iteration,
+    is_valid_github_review_operation_key,
+    is_valid_github_review_repository,
+    read_stable_contained_bytes,
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import _notify, track_response_size
@@ -78,6 +87,25 @@ def _map_pr_view_reviews(data: dict) -> list:
         }
         for r in data.get("reviews", [])
     ]
+
+
+def _load_unique_json_object(data: bytes) -> dict[str, object]:
+    def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key!r}")
+            result[key] = value
+        return result
+
+    value = json.loads(data, object_pairs_hook=_unique_object)
+    if not isinstance(value, dict):
+        raise TypeError("review receipt must be a JSON object")
+    return value
+
+
+def _review_verification_result(success: bool) -> str:
+    return json.dumps({"reviews_posted": "true" if success else "false"})
 
 
 async def _close_issues_sequentially(
@@ -208,12 +236,101 @@ async def get_pr_reviews(
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("verify_review_receipt")
+async def verify_review_receipt(
+    cwd: str,
+    receipt_path: str,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    logical_iteration: str,
+    mode: str,
+    post_state: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Verify a review effect against the server-owned publication ledger.
+
+    Never raises.
+    """
+
+    try:
+        if (gate := _require_enabled()) is not None:
+            return gate
+        if mode == "local":
+            return _review_verification_result(post_state == "LOCAL")
+        if mode != "github":
+            return _review_verification_result(False)
+        if (
+            not Path(cwd).is_absolute()
+            or not os.path.isdir(cwd)
+            or not is_valid_github_review_repository(repository)
+            or not isinstance(pr_number, int)
+            or isinstance(pr_number, bool)
+            or pr_number <= 0
+            or not is_valid_github_review_head_sha(head_sha)
+            or not is_valid_github_review_logical_iteration(logical_iteration)
+            or not is_final_github_review_state(post_state)
+        ):
+            return _review_verification_result(False)
+        receipt = Path(receipt_path)
+        if not receipt.is_absolute() or receipt.name != f"batch_review_response_{pr_number}.json":
+            return _review_verification_result(False)
+        root = Path(cwd) / ".autoskillit" / "temp"
+        _, receipt_bytes = read_stable_contained_bytes(
+            receipt,
+            root,
+            max_size_bytes=1_000_000,
+        )
+        payload = _load_unique_json_object(receipt_bytes)
+        operation_key = payload.get("operation_key")
+        if not is_valid_github_review_operation_key(operation_key):
+            return _review_verification_result(False)
+
+        poster = _get_ctx().github_review_poster
+        if poster is None:
+            return _review_verification_result(False)
+        authoritative = poster.verify_receipt(operation_key)
+        if authoritative is None:
+            return _review_verification_result(False)
+        artifact_wire = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        authoritative_wire = json.dumps(
+            authoritative.to_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        identity_matches = (
+            authoritative.repository.casefold() == repository.casefold()
+            and authoritative.pr_number == pr_number
+            and authoritative.head_sha == head_sha
+            and authoritative.logical_iteration == logical_iteration
+            and authoritative.state.value == post_state
+        )
+        return _review_verification_result(
+            identity_matches and artifact_wire == authoritative_wire
+        )
+    except Exception:
+        logger.error("verify_review_receipt unhandled exception", exc_info=True)
+        return _review_verification_result(False)
+
+
 @mcp.tool(tags={"autoskillit", "headless", "github"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("post_pr_review")
 async def post_pr_review(
     cwd: str,
     receipt_path: str,
+    anchor_authority_path: str,
     repository: str,
     pr_number: int,
     head_sha: str,
@@ -268,6 +385,80 @@ async def post_pr_review(
                     state=ReviewOperationState.TERMINAL,
                     response_class=ReviewResponseClass.CLIENT_ERROR,
                 )
+            authority_path = Path(anchor_authority_path)
+            if (
+                not authority_path.is_absolute()
+                or not authority_path.is_relative_to(root)
+                or ".." in authority_path.parts
+                or authority_path.name != f"anchor_authority_{pr_number}.json"
+            ):
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=(
+                        "anchor_authority_path must be an absolute contained path under "
+                        f"{root} named anchor_authority_{pr_number}.json"
+                    ),
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
+            try:
+                authority_path.lstat()
+            except FileNotFoundError:
+                try:
+                    authority = DiffAnchorAuthority.unavailable(
+                        repository=repository,
+                        pr_number=pr_number,
+                        head_sha=head_sha,
+                    )
+                except (TypeError, ValueError) as exc:
+                    return _review_post_error(
+                        head_sha=head_sha,
+                        error=f"invalid review identity: {exc}",
+                        state=ReviewOperationState.TERMINAL,
+                        response_class=ReviewResponseClass.CLIENT_ERROR,
+                    )
+            except OSError as exc:
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=f"invalid anchor authority path: {exc}",
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
+            else:
+                try:
+                    _, authority_bytes = read_stable_contained_bytes(
+                        authority_path,
+                        root,
+                        max_size_bytes=1_000_000,
+                    )
+                    authority = DiffAnchorAuthority.from_wire(
+                        _load_unique_json_object(authority_bytes)
+                    )
+                except (ContainmentError, OSError) as exc:
+                    return _review_post_error(
+                        head_sha=head_sha,
+                        error=f"invalid anchor authority path: {exc}",
+                        state=ReviewOperationState.TERMINAL,
+                        response_class=ReviewResponseClass.CLIENT_ERROR,
+                    )
+                except (TypeError, UnicodeDecodeError, ValueError) as exc:
+                    return _review_post_error(
+                        head_sha=head_sha,
+                        error=f"invalid anchor authority artifact: {exc}",
+                        state=ReviewOperationState.TERMINAL,
+                        response_class=ReviewResponseClass.CLIENT_ERROR,
+                    )
+                if (
+                    authority.repository != repository.casefold()
+                    or authority.pr_number != pr_number
+                    or authority.head_sha != head_sha
+                ):
+                    return _review_post_error(
+                        head_sha=head_sha,
+                        error="anchor authority identity does not match the review request",
+                        state=ReviewOperationState.TERMINAL,
+                        response_class=ReviewResponseClass.CLIENT_ERROR,
+                    )
             try:
                 typed_comments = tuple(map(GitHubReviewComment.from_wire, comments))
             except (KeyError, TypeError, ValueError) as exc:
@@ -284,6 +475,7 @@ async def post_pr_review(
                 pr_number=pr_number,
                 head_sha=head_sha,
                 logical_iteration=logical_iteration,
+                anchor_authority=authority,
                 event=event,
                 body=body,
                 comments=typed_comments,

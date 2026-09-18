@@ -23,6 +23,7 @@ from autoskillit.core import (
 )
 
 from . import _poster_retry, _poster_support
+from .canonical import AdmittedFinding
 from .gateway import CredentialScopeMaterial
 from .ledger import ReviewAttemptRecord
 
@@ -90,7 +91,7 @@ async def reconcile_latest_attempt(
     *,
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
 ) -> GitHubReviewPostResult | None:
     attempts = poster.ledger.load_attempts(operation_key)
     if not attempts:
@@ -109,7 +110,7 @@ async def reconcile_existing(
     *,
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[_poster_support.CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
     attempt: ReviewAttemptRecord,
 ) -> GitHubReviewPostResult:
     """Reconcile a persisted review attempt against live GitHub state.

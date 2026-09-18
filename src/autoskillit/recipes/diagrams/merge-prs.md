@@ -1,28 +1,34 @@
-<!-- autoskillit-recipe-hash: sha256:17c7563c919f74dd0a4b8e8dec8d6ffd0cb5499238620576e579e616472fa5ca -->
+<!-- autoskillit-recipe-hash: sha256:35d9686027846761ce5993d6909e84aff8cff9108bbae9afd706c9113f6d2eca -->
 <!-- autoskillit-diagram-format: v7 -->
 ## merge-prs
+Merge multiple PRs into an integration branch with conflict resolution and CI gates.
 
-```text
-analyze-prs
-    |
-    +-- [queue mode]
-    |       make-plan -> resolve-merge-conflicts
-    |
-    +-- [integration mode]
-            +----+ FOR EACH PR:
-            |    merge-pr
-            |        |
-            |     make-plan
-            |        |
-            |     dry-walkthrough
-            |        |
-            |     implement
-            |        |
-            |       test <-> [x fail -> fix]
-            +----+
-                 |
-                 +-- [audit] (optional)
-                 |      x fail [-> make-plan]
-                 |
-               open-pr
-```
+### Graph
+clone → setup_remote → check_repo_ci_event
+|
+check_integration_exists → confirm_create_integration (optional)
+|
+fetch_merge_queue_data → analyze_prs → route_by_queue_mode
+|
++-- [queue mode]:
+|     enqueue → wait → advance → next PR
+|     → resolve ejected conflicts on failure
+|
++-- [integration mode]:
+|     create_batch_branch → publish → check_pr_merge_loop
+|     |
+|     ┌────┤ FOR EACH PR:
+|     │    merge_pr → plan → verify → implement → test
+|     │    → merge → push → next_or_done
+|     └────┘
+|     |
+|     audit_impl → remediate (optional)
+|     |
+|     open_integration_pr → ci_watch → review
+|
++-- diagnose_ci → resolve_ci (on CI failure)
+|
+patch_token_summary (optional)
+─────────────────────────────────────
+done  "Complete."
+escalate_stop  "Failed."

@@ -17,6 +17,7 @@ from autoskillit.core import (
     ContextAdmissionStoreAuthority,
     GitHubFetcher,
     GitHubReviewPosterProtocol,
+    GitHubReviewReceipt,
 )
 from autoskillit.pipeline import DefaultWorkspaceOutcomeLedger
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
@@ -354,6 +355,9 @@ def test_toolcontext_github_review_poster_is_injectable_and_protocol_typed(tmp_p
     class _Poster:
         async def post(self, request):
             raise AssertionError(f"unexpected review publication: {request!r}")
+
+        def verify_receipt(self, operation_key: str) -> GitHubReviewReceipt | None:
+            return None
 
     poster = _Poster()
     ctx = dataclasses.replace(_make_ctx(tmp_path), github_review_poster=poster)

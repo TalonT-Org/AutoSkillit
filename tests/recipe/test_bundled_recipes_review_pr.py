@@ -537,6 +537,7 @@ def test_every_annotation_attempt_crosses_context_invalidation(
     assert clear_step.on_success == "annotate_pr_diff"
     assert clear_step.on_failure == "annotate_pr_diff"
     expected_capture = {
+        "anchor_authority_path",
         "annotated_diff_path",
         "hunk_ranges_path",
         "valid_lines_path",

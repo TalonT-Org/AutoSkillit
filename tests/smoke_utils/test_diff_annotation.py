@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core import DiffAnchorAuthority
 from autoskillit.smoke_utils import (
     annotate_pr_diff,
 )
@@ -39,12 +40,13 @@ def _annotation_run_side_effect(
             assert re.fullmatch(r"repos/\{owner\}/\{repo\}/pulls/\d+", args[2])
             assert args[3:] == [
                 "--jq",
-                "{headRefOid: .head.sha, baseRefOid: .base.sha}",
+                "{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}",
             ]
             payload = json.dumps(
                 {
                     "headRefOid": head_sha,
                     "baseRefOid": live_base_sha or base_sha,
+                    "baseRepoFullName": "Acme/Base",
                 }
             )
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
@@ -341,7 +343,7 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
     vl_path = Path(result["valid_lines_path"])
     assert vl_path.exists()
     content = json.loads(vl_path.read_text())
-    expected = extract_valid_lines(_DIFF_OUTPUT)
+    _left, expected = extract_valid_lines(_DIFF_OUTPUT)
     assert content == expected
 
 
@@ -433,13 +435,19 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(
         "annotated_diff_92.txt",
         "hunk_ranges_92.json",
         "valid_lines_92.json",
+        "anchor_authority_92.json",
         "metrics_92.json",
     ]
 
 
 @pytest.mark.parametrize(
     "failure_name",
-    ["annotated_diff_94.txt", "hunk_ranges_94.json", "valid_lines_94.json"],
+    [
+        "annotated_diff_94.txt",
+        "hunk_ranges_94.json",
+        "valid_lines_94.json",
+        "anchor_authority_94.json",
+    ],
 )
 @patch("subprocess.run")
 def test_annotate_pr_diff_never_publishes_manifest_after_sidecar_failure(
@@ -480,7 +488,13 @@ def test_annotate_pr_diff_preserves_stderr_bytes_when_diff_fails(mock_run, tmp_p
 
     def fail_diff(args, **_kwargs):
         if args[:2] == ["gh", "api"]:
-            payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
+            payload = json.dumps(
+                {
+                    "headRefOid": _SHA,
+                    "baseRefOid": _BASE_SHA,
+                    "baseRepoFullName": "Acme/Base",
+                }
+            )
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
             return subprocess.CompletedProcess(args, 1, b"", b"diff failed: \xff")
@@ -565,7 +579,13 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
         if args[:2] == ["gh", "api"]:
             ref_reads += 1
             head = _SHA if ref_reads == 1 else "d" * 40
-            payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
+            payload = json.dumps(
+                {
+                    "headRefOid": head,
+                    "baseRefOid": _BASE_SHA,
+                    "baseRepoFullName": "Acme/Base",
+                }
+            )
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
             return subprocess.CompletedProcess(args, 0, _DIFF_OUTPUT.encode(), b"")
@@ -801,4 +821,27 @@ def test_annotate_pr_diff_valid_lines_flat_schema(mock_run, tmp_path: Path) -> N
     assert "_head_sha" not in data, (
         "valid_lines must not contain _head_sha — breaks SKILL.md Step 4"
     )
+    assert all(isinstance(key, str) for key in data)
     assert all(isinstance(v, list) for v in data.values()), "values must be lists of line numbers"
+    assert all(type(line) is int for lines in data.values() for line in lines)
+
+
+@patch("subprocess.run")
+def test_anchor_authority_artifact_is_written_and_digested(mock_run, tmp_path: Path) -> None:
+    mock_run.side_effect = _annotation_run_side_effect()
+
+    result = annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
+
+    authority_path = Path(result["anchor_authority_path"])
+    authority = DiffAnchorAuthority.from_wire(json.loads(authority_path.read_text()))
+    assert authority.repository == "acme/base"
+    assert authority.pr_number == 999
+    assert authority.head_sha == _SHA
+    metrics = json.loads((tmp_path / "metrics_999.json").read_text())
+    record = metrics["artifacts"]["anchor_authority"]
+    content = authority_path.read_bytes()
+    assert record == {
+        "basename": "anchor_authority_999.json",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "byte_length": len(content),
+    }

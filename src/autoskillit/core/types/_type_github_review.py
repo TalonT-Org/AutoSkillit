@@ -9,6 +9,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeGuard
 
+from ._type_github_review_anchor import DiffAnchorAuthority
+
 __all__ = [
     "GitHubReviewComment",
     "GitHubReviewFindingDisposition",
@@ -38,7 +40,7 @@ _REPOSITORY_RE = re.compile(
 )
 
 
-def is_valid_github_review_head_sha(value: object) -> bool:
+def is_valid_github_review_head_sha(value: object) -> TypeGuard[str]:
     """Return whether a value is a canonical full lowercase Git commit SHA."""
     return isinstance(value, str) and _HEAD_SHA_RE.fullmatch(value) is not None
 
@@ -135,12 +137,26 @@ class GitHubReviewRequest:
     pr_number: int
     head_sha: str
     logical_iteration: str
+    anchor_authority: DiffAnchorAuthority
     event: str
     body: str
     comments: tuple[GitHubReviewComment, ...] = ()
     cwd: str = ""
     receipt_path: Path | str | None = None
     dry_run: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.repository, str):
+            raise TypeError("repository must be a string")
+        authority = self.anchor_authority
+        if not isinstance(authority, DiffAnchorAuthority):
+            raise TypeError("anchor_authority must be a DiffAnchorAuthority")
+        if (
+            authority.repository != self.repository.casefold()
+            or authority.pr_number != self.pr_number
+            or authority.head_sha != self.head_sha
+        ):
+            raise ValueError("anchor authority identity must match the review request")
 
 
 @dataclass(frozen=True, slots=True)

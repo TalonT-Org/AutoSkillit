@@ -26,6 +26,9 @@ __all__ = [
     "FinalizedRecipeStep",
     "FinalizedRecipeSegment",
     "FinalizedRecipeProjection",
+    "PhoropterPrescription",
+    "ReadingToken",
+    "READING_TOKEN_PATTERN",
     "RECIPE_TERMINAL_TARGETS",
     "RecipeStepGuard",
     "RecipeBindingProjection",
@@ -38,6 +41,22 @@ __all__ = [
     "ToolParamRole",
     "ToolWireType",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class PhoropterPrescription:
+    selected_lenses: str
+    lens_context_paths: str
+    failure_mode: str = "continue"
+
+
+@dataclass(frozen=True, slots=True)
+class ReadingToken:
+    output_prefix: str
+    path_value: str
+
+
+READING_TOKEN_PATTERN: str = r"^(?P<prefix>\w+) = (?P<path>/.+)$"
 
 
 BoundScalar: TypeAlias = str | int | bool

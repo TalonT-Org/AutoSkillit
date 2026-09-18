@@ -841,7 +841,7 @@ class TestTokenizeShellPayloadSegments:
             tokenize_shell_payload_segments,
         )
 
-        result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
+        result = tokenize_shell_payload_segments("""bash -c 'bash -c "echo \\"unclosed"'""")
         assert result is None
 
     def test_quoted_close_paren_does_not_truncate_substitution(self):
@@ -860,6 +860,32 @@ class TestTokenizeShellPayloadSegments:
 
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
 
+    def test_empty_command_returns_empty_list(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        # Empty/whitespace outer is excluded by the wrapper's include_outer=False
+        # contract; an outer-only command (no nested payload) yields no segments.
+        assert tokenize_shell_payload_segments("") == []
+        assert tokenize_shell_payload_segments("   ") == []
+
+    def test_iterator_yields_empty_outer_for_include_outer_true(self):
+        # Direct coverage of the iterator's `include_outer=True` empty-outer
+        # branch: an empty/whitespace command must yield `[]` as the first
+        # entry so consumers relying on "outer is always the first yield"
+        # (e.g. `_iter_evaluated_payload_segments`) see one entry, not zero.
+        from autoskillit.hooks._classification._interpreters import (
+            _iter_shell_payload_segment_groups,
+        )
+
+        assert list(_iter_shell_payload_segment_groups("")) == [[]]
+        assert list(_iter_shell_payload_segment_groups("   ")) == [[]]
+        # With include_outer=False, the empty outer is processed for nested
+        # discovery but not yielded.
+        assert list(_iter_shell_payload_segment_groups("", include_outer=False)) == []
+        assert list(_iter_shell_payload_segment_groups("   ", include_outer=False)) == []
+
     def test_process_substitution_traversal_is_opt_in(self):
         from autoskillit.hooks._runtime._command_classification import (
             tokenize_shell_payload_segments,
@@ -872,6 +898,30 @@ class TestTokenizeShellPayloadSegments:
             command,
             include_process_substitutions=True,
         ) == [["gh", "pr", "view", "7", "--json", "number"]]
+
+    def test_identical_process_substitution_occurrences_are_preserved(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        result = tokenize_shell_payload_segments(
+            "cat <(gh pr view 7) <(gh pr view 7)",
+            include_process_substitutions=True,
+        )
+
+        assert result == [["gh", "pr", "view", "7"], ["gh", "pr", "view", "7"]]
+
+    def test_unbalanced_process_substitution_returns_none(self):
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        result = tokenize_shell_payload_segments(
+            "cat <(gh pr view 7",
+            include_process_substitutions=True,
+        )
+
+        assert result is None
 
 
 class TestProcessSubstitutionExtraction:

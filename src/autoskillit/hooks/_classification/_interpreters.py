@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Sequence
+from collections import deque
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -315,41 +316,48 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     ]
 
 
-def tokenize_shell_payload_segments(
+def _iter_shell_payload_segment_groups(
     command: str,
     *,
     include_process_substitutions: bool = False,
-) -> list[list[str]] | None:
-    """Return tokenized segments for every evaluated shell payload in *command*.
+    include_outer: bool = True,
+) -> Iterator[list[list[str]] | None]:
+    """Yield tokenized segments for each evaluated shell payload in *command*.
 
-    Walks the outer command and every distinct extracted payload recursively.
-    Each successfully parsed segment of every payload is appended to the
-    result so callers can apply verb-position policies like
-    ``command_verb_and_args`` to each segment. Process-substitution bodies
-    are traversed only when ``include_process_substitutions`` is true; the
-    default preserves the historic shell-command-substitution-only behavior.
+    The outer command is processed first (its nested payloads are extracted
+    from it), and distinct nested payloads are walked recursively in BFS
+    order. Process-substitution bodies are traversed only when
+    ``include_process_substitutions`` is true; the default preserves the
+    historic shell-command-substitution-only behavior.
 
-    Returns ``None`` when the outer command or any non-empty evaluated
-    payload cannot be tokenized; callers interpret ``None`` as no deny
-    match (fail-open). Returns ``[]`` when the command has no evaluated
-    shell payload to traverse.
+    When ``include_outer`` is true (default), the outer command's tokenized
+    segments are yielded first -- as ``[]`` for an empty/whitespace outer
+    so consumers can rely on "outer is always the first yield". When
+    false, the outer is processed only to drive nested-payload discovery
+    and is not yielded.
+
+    Yields ``None`` (and terminates) when any emitted payload cannot be
+    tokenized, so callers can fail-open uniformly.
     """
-    result: list[list[str]] = []
     seen: set[str] = set()
-    queue: list[tuple[str, bool, bool]] = [(command, False, False)]
+    queue = deque([(command, False, False)])
     while queue:
-        payload, preserve_occurrence, emit = queue.pop(0)
+        payload, preserve_occurrence, emit = queue.popleft()
+        is_outer = not emit
         if emit and not preserve_occurrence and payload in seen:
             continue
         if emit and not preserve_occurrence:
             seen.add(payload)
         if not payload.strip():
+            if is_outer and include_outer:
+                yield []
             continue
         segments = tokenize_command_segments(payload)
-        if not segments and payload.strip():
-            return None
-        if emit:
-            result.extend(segments)
+        if not segments:
+            yield None
+            return
+        if include_outer or not is_outer:
+            yield segments
         queue.extend(
             (nested, preserve_occurrence, True)
             for nested in extract_shell_command_payloads(payload)
@@ -359,8 +367,39 @@ def tokenize_shell_payload_segments(
                 payload
             ):
                 if not balanced:
-                    return None
+                    yield None
+                    return
                 queue.append((body, True, True))
+
+
+def tokenize_shell_payload_segments(
+    command: str,
+    *,
+    include_process_substitutions: bool = False,
+) -> list[list[str]] | None:
+    """Return tokenized segments for every evaluated shell payload in *command*.
+
+    Walks every distinct extracted payload recursively; the outer command's
+    own segments are intentionally excluded -- callers wanting the outer
+    segments should use ``tokenize_command_segments(command)`` directly and
+    pair them with this result. Process-substitution bodies are traversed
+    only when ``include_process_substitutions`` is true; the default
+    preserves the historic shell-command-substitution-only behavior.
+
+    Returns ``None`` when the outer command or any non-empty evaluated
+    payload cannot be tokenized; callers interpret ``None`` as no deny
+    match (fail-open). Returns ``[]`` when the command has no evaluated
+    shell payload to traverse.
+    """
+    result: list[list[str]] = []
+    for segments in _iter_shell_payload_segment_groups(
+        command,
+        include_process_substitutions=include_process_substitutions,
+        include_outer=False,
+    ):
+        if segments is None:
+            return None
+        result.extend(segments)
     return result
 
 

@@ -53,6 +53,7 @@ _RE_METHODS = frozenset({"search", "match", "sub", "subn", "finditer", "fullmatc
 # is exactly the escape hatch a private per-guard parser would otherwise use.
 _HELPER_INDIRECTION_CALLS = frozenset(
     {
+        "_iter_shell_payload_segment_groups",
         "tokenize_shell_payload_segments",
         "has_interpreter_wrapped_command",
         "extract_shell_command_payloads",
@@ -232,14 +233,14 @@ def _observed_raw_scans() -> tuple[tuple[str, str, str], ...]:
 # (1) `_classification/_tokenizer.py`'s own sites (the sole general parsing
 # authority for command text) and `_interpreters.py`'s own internal
 # tokenizer use in building that authority, and (2) `compose_pr_body_guard.py`'s
-# private per-evaluated-payload segmentation walk, needed because
+# grouped projection of the shared per-evaluated-payload walk, needed because
 # `all_evaluated_segments` flattens across payloads while `$VAR` resolution
 # must stay scoped to the one payload that defines it.
 _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
     {
         # _classification/_interpreters.py -- the authority's own internal
         # tokenizer use (_iter_evaluated_segments / all_evaluated_segments_with_provenance /
-        # tokenize_shell_payload_segments feeding each other and the tokenizer facade).
+        # the grouped shell-payload walk feeding each other and the tokenizer facade).
         (
             "hooks/_classification/_interpreters.py",
             "_iter_evaluated_segments",
@@ -252,13 +253,18 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
         ),
         (
             "hooks/_classification/_interpreters.py",
-            "tokenize_shell_payload_segments",
+            "_iter_shell_payload_segment_groups",
             "extract_shell_command_payloads",
         ),
         (
             "hooks/_classification/_interpreters.py",
-            "tokenize_shell_payload_segments",
+            "_iter_shell_payload_segment_groups",
             "tokenize_command_segments",
+        ),
+        (
+            "hooks/_classification/_interpreters.py",
+            "tokenize_shell_payload_segments",
+            "_iter_shell_payload_segment_groups",
         ),
         (
             "hooks/_classification/_interpreters.py",
@@ -285,17 +291,12 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
         # segments into one list, losing which segments belong to which
         # payload; a $VAR lookup for a nested bash -c/heredoc/pipe body's
         # `gh pr create` must resolve only from that same payload's own
-        # assignments, so this guard tokenizes each evaluated payload
-        # independently rather than consuming the shared authority.
+        # assignments, so this guard consumes the shared authority's grouped
+        # projection rather than the flattened public wrapper.
         (
             "hooks/guards/compose_pr_body_guard.py",
             "_iter_evaluated_payload_segments",
-            "extract_shell_command_payloads",
-        ),
-        (
-            "hooks/guards/compose_pr_body_guard.py",
-            "_iter_evaluated_payload_segments",
-            "tokenize_command_segments",
+            "_iter_shell_payload_segment_groups",
         ),
     }
 )

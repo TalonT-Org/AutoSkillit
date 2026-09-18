@@ -24,11 +24,12 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _classification._interpreters import (  # noqa: E402
+    _iter_shell_payload_segment_groups,
+)
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _command_position_candidate_spans,
     command_verb_and_args,
-    extract_shell_command_payloads,
-    tokenize_command_segments,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
@@ -155,23 +156,15 @@ def _iter_evaluated_payload_segments(command: str) -> list[list[list[str]]] | No
     and so is never visited here, closing the false positive where the
     old newline-rewriting pre-pass corrupted an inert body's own newlines
     into command boundaries and scanned its prose as real commands.
-    Returns `None` when the outer command cannot be tokenized (fail-open,
-    matching the historic `shlex.ValueError -> None` contract).
+    Returns `None` when the outer command or any nested payload cannot be
+    tokenized (fail-open, matching the historic `shlex.ValueError -> None`
+    contract).
     """
-    outer_segments = tokenize_command_segments(command)
-    if not outer_segments and command.strip():
-        return None
-
-    payload_segment_lists: list[list[list[str]]] = [outer_segments]
-    seen: set[str] = {command}
-    queue: list[str] = list(extract_shell_command_payloads(command))
-    while queue:
-        payload = queue.pop(0)
-        if payload in seen:
-            continue
-        seen.add(payload)
-        payload_segment_lists.append(tokenize_command_segments(payload))
-        queue.extend(extract_shell_command_payloads(payload))
+    payload_segment_lists: list[list[list[str]]] = []
+    for segments in _iter_shell_payload_segment_groups(command):
+        if segments is None:
+            return None
+        payload_segment_lists.append(segments)
     return payload_segment_lists
 
 
@@ -206,8 +199,8 @@ def _extract_create_body_paths(cmd: str) -> list[str | None] | None:
     evaluated payload is tokenized independently, so a $VAR lookup for one
     payload's occurrence is resolved only from that same payload's own
     assignments -- never a sibling payload's, even one that runs earlier in
-    the outer command. `None` propagates when the outer command cannot be
-    tokenized (fail-open, unchanged contract).
+    the outer command. `None` propagates when the outer command or any nested
+    payload cannot be tokenized (fail-open).
     """
     payload_segment_lists = _iter_evaluated_payload_segments(cmd)
     if payload_segment_lists is None:

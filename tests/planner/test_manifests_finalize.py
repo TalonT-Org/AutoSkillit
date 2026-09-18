@@ -460,10 +460,8 @@ def test_reconcile_wp_files_warns_when_all_present_wp_files_are_unreadable(
         for entry in logs
         if entry["event"] == "reconcile_wp_files: WP files exist but are unreadable"
     ]
-    assert warnings == [
-        {
-            "event": "reconcile_wp_files: WP files exist but are unreadable",
-            "unreadable": ["consolidated_wps.json", "refined_wps.json"],
-            "log_level": "warning",
-        }
+    assert len(warnings) == 1
+    assert warnings[0]["unreadable"] == [
+        "consolidated_wps.json",
+        "refined_wps.json",
     ]

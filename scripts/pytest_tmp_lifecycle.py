@@ -305,6 +305,14 @@ def _owner_liveness(owner: dict[str, object], proc_root: Path) -> _OwnerLiveness
     except OSError:
         pass  # EPERM (or other) -- kill() can't tell us; the /proc identity check below can.
 
+    return _platform_owner_liveness(pid, owner, proc_root)
+
+
+def _platform_owner_liveness(
+    pid: int, owner: dict[str, object], proc_root: Path
+) -> _OwnerLiveness:
+    """Refine an existing process identity using platform-specific evidence."""
+
     if sys.platform == "linux":
         if is_pid_zombie(pid, proc_root=proc_root):
             return _OwnerLiveness.DEAD
@@ -445,6 +453,47 @@ def _bounded_candidate(
     )
 
 
+def _candidate_reap_disposition(
+    candidate: Path,
+    *,
+    proc_root: Path,
+    revocable_paths: frozenset[Path],
+    snapshot_evidence: Sequence[PathEvidence],
+    grace_minutes: float,
+    legacy_age_minutes: float,
+) -> bool | None:
+    """Return survivor protection, or None when the candidate may be deleted."""
+    has_revocable_reference = _contains_reference(candidate, revocable_paths)
+    marker = candidate / "owner.json"
+    marker_state, owner = _load_owner(marker)
+
+    if marker_state is _OwnerMarkerState.VALID:
+        assert owner is not None
+        if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
+            return True
+        if has_revocable_reference:
+            return True
+        if not _older_than(marker, grace_minutes):
+            return False
+    elif marker_state is _OwnerMarkerState.CORRUPT:
+        # Treated as *valid, dead*: grace-gated and revocable-reference-gated, never
+        # demoted to markerless protection -- a kill mid-write must not weaken a mature,
+        # live-owned generation to relying solely on the instantaneous reference scan.
+        if has_revocable_reference:
+            return True
+        if not _older_than(marker, grace_minutes):
+            return False
+    else:  # ABSENT
+        if has_revocable_reference or snapshot_referenced(candidate, snapshot_evidence):
+            return True
+        if not _older_than(candidate, legacy_age_minutes):
+            # No owner marker to prove dead -- the bound must never touch a markerless
+            # candidate; it might be another concurrent _setup mid-creation, protected
+            # today only by this age gate.
+            return True
+    return None
+
+
 def _reap(
     platform_root: Path,
     *,
@@ -488,44 +537,17 @@ def _reap(
             _log(f"skipping candidate owned by uid {candidate_stat.st_uid}: {candidate}")
             continue
 
-        has_revocable_reference = _contains_reference(candidate, revocable_paths)
-        marker = candidate / "owner.json"
-        marker_state, owner = _load_owner(marker)
-
-        if marker_state is _OwnerMarkerState.VALID:
-            assert owner is not None
-            if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
-                continue
-            if has_revocable_reference:
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
-                continue
-            if not _older_than(marker, grace_minutes):
-                # provably dead, no revocable reference, still within grace: normal reap
-                # retains it, but this is exactly select_overflow's eligibility criterion --
-                # the bound MAY reclaim it early under capacity pressure.
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=False))
-                continue
-        elif marker_state is _OwnerMarkerState.CORRUPT:
-            # Treated as *valid, dead*: grace-gated and revocable-reference-gated, never
-            # demoted to markerless protection -- a kill mid-write must not weaken a mature,
-            # live-owned generation to relying solely on the instantaneous reference scan.
-            if has_revocable_reference:
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
-                continue
-            if not _older_than(marker, grace_minutes):
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=False))
-                continue
-        else:  # ABSENT
-            if has_revocable_reference or snapshot_referenced(candidate, snapshot_evidence):
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
-                continue
-            if not _older_than(candidate, legacy_age_minutes):
-                # No owner marker to prove dead -- the bound must never touch a markerless
-                # candidate; it might be another concurrent _setup mid-creation, protected
-                # today only by this age gate.
-                survivors.append(_bounded_candidate(candidate, candidate_stat, protected=True))
-                continue
+        disposition = _candidate_reap_disposition(
+            candidate,
+            proc_root=proc_root,
+            revocable_paths=revocable_paths,
+            snapshot_evidence=snapshot_evidence,
+            grace_minutes=grace_minutes,
+            legacy_age_minutes=legacy_age_minutes,
+        )
+        if disposition is not None:
+            survivors.append(_bounded_candidate(candidate, candidate_stat, protected=disposition))
+            continue
         _remove_candidate(candidate)
     return survivors
 

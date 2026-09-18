@@ -136,6 +136,7 @@ ConvergenceAdapter: TypeAlias = Callable[[ConvergenceOperation], object]
 #: Target reclaimer functions the scanner walks: ``(repo-relative path, qualified name)``.
 RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
     {
+        ("scripts/pytest_tmp_lifecycle.py", "_candidate_reap_disposition"),
         ("scripts/pytest_tmp_lifecycle.py", "_reap"),
         ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates"),
         (
@@ -285,6 +286,10 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
     ReclaimerTarget,
     tuple[ConvergenceAdapter, ConvergenceAdapter],
 ] = {
+    (
+        "scripts/pytest_tmp_lifecycle.py",
+        "_candidate_reap_disposition",
+    ): _convergence_adapters(("scripts/pytest_tmp_lifecycle.py", "_candidate_reap_disposition")),
     ("scripts/pytest_tmp_lifecycle.py", "_reap"): _convergence_adapters(
         ("scripts/pytest_tmp_lifecycle.py", "_reap")
     ),
@@ -742,6 +747,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
 }
 
 
+_CRD = "scripts/pytest_tmp_lifecycle.py::_candidate_reap_disposition"
 _R = "scripts/pytest_tmp_lifecycle.py::_reap"
 _S = "scripts/pytest_tmp_lifecycle.py::_safe_candidates"
 _D = "src/autoskillit/fleet/_dispatch_reaper.py::reap_stale_dispatches"
@@ -810,64 +816,65 @@ _SRD = "src/autoskillit/execution/evidence/_session_log_recovery.py::_decode_enr
 _SRF = "src/autoskillit/execution/evidence/_session_log_recovery.py::_finalize_crashed_trace"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
-    # -- scripts.pytest_tmp_lifecycle::_reap --
-    f"{_R}::L469": _retries_after_input_changes(
-        "Scan-level failure retains every candidate rather than treating an empty result "
-        "as absence of evidence; the fail-closed contract tests/AGENTS.md documents."
-    ),
-    f"{_R}::L476": _self_limiting(
-        "The generation _setup is currently claiming is excluded from its own reap pass."
-    ),
-    f"{_R}::L480": _self_limiting(
-        "FileNotFoundError on lstat means the candidate is already gone; nothing to reclaim."
-    ),
-    f"{_R}::L483": _retries_after_input_changes(
-        "An OSError inspecting the candidate is an inspection failure, not eligibility evidence."
-    ),
-    f"{_R}::L486": _retries_after_input_changes(
-        "A symlink or non-directory entry under the platform root is a safety exclusion, "
-        "never a reclamation candidate regardless of any evidence."
-    ),
-    f"{_R}::L489": _retries_after_input_changes(
-        "A candidate owned by a different uid is out of this reaper's authority to touch."
-    ),
-    f"{_R}::L499": RetentionDecision(
+    # -- scripts.pytest_tmp_lifecycle::_candidate_reap_disposition --
+    f"{_CRD}::L473": RetentionDecision(
         Revocability.REVOCABLE,
         "A live or indeterminate owner is retained unconditionally; only provably dead may "
         "ever be reclaimed, per the three-outcome liveness contract.",
     ),
-    f"{_R}::L502": RetentionDecision(
+    f"{_CRD}::L475": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead-owner generation still holding a revocable kernel reference (cwd/fd/maps) "
         "is retained -- proof of present use overrides a dead owner marker.",
     ),
-    f"{_R}::L508": RetentionDecision(
+    f"{_CRD}::L477": RetentionDecision(
         Revocability.REVOCABLE,
         "A dead owner within the grace window is retained by the normal reap pass, but is "
         "eligible for early reclamation under capacity pressure.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L515": RetentionDecision(
+    f"{_CRD}::L483": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker treated as valid-dead is still retained under a revocable "
         "reference, exactly like a parseable marker would be.",
     ),
-    f"{_R}::L518": RetentionDecision(
+    f"{_CRD}::L485": RetentionDecision(
         Revocability.REVOCABLE,
         "A corrupt marker is grace-gated on its own mtime, never demoted to the weaker "
         "markerless/legacy-age path, matching a valid dead marker within grace.",
         bounded_by="ReclamationBound (select_overflow eligibility)",
     ),
-    f"{_R}::L522": RetentionDecision(
+    f"{_CRD}::L488": RetentionDecision(
         Revocability.MONOTONIC,
         "A markerless candidate is retained by either a revocable reference or a monotonic "
         "snapshot reference -- the only branch where monotonic evidence may protect, since "
         "there is no owner marker to supply a sound liveness proof instead.",
         bounded_by="never bound-reclaimable (no owner to prove provably dead)",
     ),
-    f"{_R}::L528": _self_limiting(
+    f"{_CRD}::L493": _self_limiting(
         "A markerless candidate younger than legacy_age_minutes might be another "
         "concurrent _setup mid-creation; never touched by the bound, only by this age gate."
+    ),
+    # -- scripts.pytest_tmp_lifecycle::_reap --
+    f"{_R}::L518": _retries_after_input_changes(
+        "Scan-level failure retains every candidate rather than treating an empty result "
+        "as absence of evidence; the fail-closed contract tests/AGENTS.md documents."
+    ),
+    f"{_R}::L525": _self_limiting(
+        "The generation _setup is currently claiming is excluded from its own reap pass."
+    ),
+    f"{_R}::L529": _self_limiting(
+        "FileNotFoundError on lstat means the candidate is already gone; nothing to reclaim."
+    ),
+    f"{_R}::L532": _retries_after_input_changes(
+        "An OSError inspecting the candidate is an inspection failure, not eligibility evidence."
+    ),
+    f"{_R}::L535": _retries_after_input_changes(
+        "A symlink or non-directory entry under the platform root is a safety exclusion, "
+        "never a reclamation candidate regardless of any evidence."
+    ),
+    f"{_R}::L538": _retries_after_input_changes(
+        "A candidate owned by a different uid is out of this reaper's authority to touch."
     ),
     # -- scripts.pytest_tmp_lifecycle::_safe_candidates --
     f"{_S}::L397": _retries_after_input_changes(

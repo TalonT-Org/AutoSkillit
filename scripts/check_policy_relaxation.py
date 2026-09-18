@@ -16,15 +16,15 @@ from __future__ import annotations
 import argparse
 import ast
 import dataclasses
-import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+import _git_plumbing
+
 SURFACES_PATH = "tests/arch/_acceptance_policy_surfaces.py"
 HUMAN_REQUIRED_MARKER = "AUTOSKILLIT_HUMAN_REQUIRED:"
 _SURFACE_KINDS = ("int_scalar", "int_map", "exemption_map")
-_GIT_TIMEOUT_SECONDS = 10
 
 
 class UnsupportedSurfaceShape(Exception):
@@ -434,30 +434,6 @@ def unapproved(
     ]
 
 
-def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=str(repo_root),
-        capture_output=True,
-        encoding="utf-8",
-        text=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
-        check=False,
-    )
-
-
-def git_show(repo_root: Path, rev: str, path: str) -> str | None:
-    """Return one file's content at *rev*, or None when it does not exist there."""
-    result = _git(repo_root, "show", f"{rev}:{path}")
-    return result.stdout if result.returncode == 0 else None
-
-
-def merge_base(repo_root: Path, ref: str) -> str | None:
-    """Return the merge base of HEAD and *ref*, or None when git cannot resolve it."""
-    result = _git(repo_root, "merge-base", "HEAD", ref)
-    return result.stdout.strip() or None if result.returncode == 0 else None
-
-
 def _diagnostic(relaxation: Relaxation) -> str:
     location = f"{relaxation.path}::{relaxation.symbol}"
     if relaxation.key is not None:
@@ -473,15 +449,14 @@ def _diagnostic(relaxation: Relaxation) -> str:
 
 
 def evaluate(
-    repo_root: Path,
-    base_rev: str,
     head_source_for: Callable[[str], str | None],
+    base_source_for: Callable[[str], str | None],
 ) -> list[str]:
     """Return one diagnostic per unapproved relaxation, or per fail-closed condition."""
     head_surfaces_source = head_source_for(SURFACES_PATH)
     if head_surfaces_source is None:
         return [f"{HUMAN_REQUIRED_MARKER} {SURFACES_PATH} is missing at HEAD."]
-    base_surfaces_source = git_show(repo_root, base_rev, SURFACES_PATH)
+    base_surfaces_source = base_source_for(SURFACES_PATH)
     try:
         head_registry = extract_registry(head_surfaces_source)
         base_registry = (
@@ -500,7 +475,7 @@ def evaluate(
     diagnostics: list[str] = []
     for surface in _surfaces_to_check(base_registry, head_registry):
         surface_relaxations, surface_diagnostics = _check_surface(
-            repo_root, base_rev, surface, head_source_for
+            surface, head_source_for, base_source_for
         )
         relaxations.extend(surface_relaxations)
         diagnostics.extend(surface_diagnostics)
@@ -523,16 +498,15 @@ def _surfaces_to_check(
 
 
 def _check_surface(
-    repo_root: Path,
-    base_rev: str,
     surface: PolicySurface,
     head_source_for: Callable[[str], str | None],
+    base_source_for: Callable[[str], str | None],
 ) -> tuple[list[Relaxation], list[str]]:
     location = f"{surface.path}::{surface.symbol}"
     head_source = head_source_for(surface.path)
     if head_source is None:
         return [], [f"{HUMAN_REQUIRED_MARKER} registered surface {location} is missing at HEAD."]
-    base_source = git_show(repo_root, base_rev, surface.path)
+    base_source = base_source_for(surface.path)
     try:
         head_values = extract_surface_values(head_source, surface)
     except SurfaceMissing:
@@ -553,24 +527,6 @@ def _check_surface(
     return classify(base_values, head_values, surface), []
 
 
-def _working_tree_reader(repo_root: Path) -> Callable[[str], str | None]:
-    def read(path: str) -> str | None:
-        candidate = repo_root / path
-        if not candidate.is_file():
-            return None
-        return candidate.read_text(encoding="utf-8")
-
-    return read
-
-
-def _index_reader(repo_root: Path) -> Callable[[str], str | None]:
-    def read(path: str) -> str | None:
-        result = _git(repo_root, "show", f":{path}")
-        return result.stdout if result.returncode == 0 else None
-
-    return read
-
-
 def main(argv: list[str]) -> int:
     """Check the candidate against its base and return a shell-compatible status."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -586,27 +542,23 @@ def main(argv: list[str]) -> int:
         help="Repository to check; required when this script runs from a copy outside it.",
     )
     args = parser.parse_args(argv)
-    repo_root = Path(args.repo_root).resolve()
-
-    if args.staged:
-        base_rev: str | None = "HEAD"
-        head_source_for = _index_reader(repo_root)
-    elif args.base:
-        base_rev = merge_base(repo_root, args.base)
-        head_source_for = _working_tree_reader(repo_root)
-    else:
-        print("Specify --base REF or --staged.", file=sys.stderr)
-        return 1
-
-    if base_rev is None:
-        print(f"Unable to resolve a base revision from {args.base!r}.", file=sys.stderr)
-        return 1
-
+    if args.staged == (args.base is not None):
+        print("Specify exactly one of --staged or --base REF.", file=sys.stderr)
+        return 2
     try:
-        diagnostics = evaluate(repo_root, base_rev, head_source_for)
-    except subprocess.TimeoutExpired:
-        print("git timed out while reading the base revision.", file=sys.stderr)
-        return 1
+        repo_root = Path(args.repo_root).resolve()
+        if args.staged:
+            base_rev = "HEAD"
+            head_source_for = _git_plumbing._index_reader(repo_root)
+        else:
+            assert args.base is not None
+            base_rev = _git_plumbing.merge_base(repo_root, args.base)
+            head_source_for = _git_plumbing._working_tree_reader(repo_root)
+        base_source_for = _git_plumbing._optional_revision_reader(repo_root, base_rev)
+        diagnostics = evaluate(head_source_for, base_source_for)
+    except _git_plumbing.GitFailure as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if diagnostics:
         print("Acceptance-policy relaxations require human approval:\n")
         for diagnostic in diagnostics:

@@ -99,7 +99,7 @@ class TestDispatchStatusEnvelopeField:
             lambda **_: L3ParseResult(
                 outcome="completed_clean",
                 payload=payload,
-                raw_body=json.dumps(payload),
+                raw_body=None,
                 parse_error=None,
                 source="stdout",
             ),

@@ -219,19 +219,11 @@ def test_orchestrator_prompt_has_universal_raw_file_prohibition():
 
 def test_orchestrator_stop_doctrine_uses_grounded_failure_evidence() -> None:
     """The CLI prompt preserves a failed run_skill result through diagnostics and stop."""
+    from tests.cli._routing_test_helpers import STOP_STEP_DOCTRINE_KEY_PHRASES
+
     prompt = _get_prompt().lower()
 
-    for required in (
-        "original failed run_skill response",
-        "exact result",
-        "reason_kind",
-        "outcome_fields",
-        "verbatim",
-        "diagnostic result",
-        "no structured original reason",
-        "do not infer",
-        "static stop message only when no tool evidence exists",
-    ):
+    for required in STOP_STEP_DOCTRINE_KEY_PHRASES:
         assert required in prompt, required
 
 
@@ -240,24 +232,14 @@ def test_orchestrator_routes_terminal_failure_reasons_without_context_recovery(
     retry_reason: str,
 ) -> None:
     """These failure reasons route directly to on_failure, never context recovery."""
+    from tests.cli._routing_test_helpers import slice_routing_clause
+
     prompt = _get_prompt().lower()
     start = prompt.index(f"retry_reason: {retry_reason}")
-    route_clause = _slice_routing_clause(prompt, start)
+    route_clause = slice_routing_clause(prompt, start)
 
     assert "on_failure" in route_clause
     assert "do not route to on_context_limit" in route_clause
-
-
-def _slice_routing_clause(prompt: str, start: int) -> str:
-    """Return the routing clause beginning at ``start`` up to the next top-level entry.
-
-    The orchestrator prompt renders each ``retry_reason`` clause as a column-0 bullet
-    (``- When run_skill returns ...``) with indented sub-bullets. Slicing to the next
-    column-0 bullet anchors on structure rather than a fixed character window, so the
-    test still verifies routing even if sub-bullets grow with future prompt edits.
-    """
-    next_entry = prompt.find("\n- ", start + 1)
-    return prompt[start:] if next_entry == -1 else prompt[start:next_entry]
 
 
 def test_unguarded_filesystem_backend_supplement_injected():

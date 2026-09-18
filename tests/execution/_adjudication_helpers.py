@@ -7,15 +7,22 @@ doctrinal change to the demotion-verdict contract lands once.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from autoskillit.core import SkillResult
 
 __all__ = ["assert_demotion_verdict"]
+
+# Public sentinel for the "do not assert a specific value; only check that
+# the two halves of the demotion agree" mode. A named constant is easier to
+# discover at call sites than the bare ``...`` ellipsis singleton.
+AUTO: Literal["auto"] = "auto"
 
 
 def assert_demotion_verdict(
     result: SkillResult,
     *,
-    outcome_fields: object = ...,
+    outcome_fields: object = AUTO,
     defects: tuple[str, ...] = (),
 ) -> None:
     """Assert a reconciliation demotion retains one causal verdict.
@@ -23,7 +30,7 @@ def assert_demotion_verdict(
     The verdict must agree with the SkillResult on reason_kind, subtype,
     and detail (carried as result.result). Pass ``outcome_fields`` to
     assert a specific expected value on both ``result.outcome_fields`` and
-    ``verdict.outcome_fields``; omit it (or pass the sentinel ``...``) to
+    ``verdict.outcome_fields``; omit it (or pass the ``AUTO`` sentinel) to
     only assert that the two agree with each other. ``defects`` is
     caller-controlled because different failure paths emit different defects.
     """
@@ -33,7 +40,7 @@ def assert_demotion_verdict(
     assert verdict.reason_kind is result.retry_reason
     assert verdict.subtype == result.subtype
     assert result.result == verdict.detail
-    if outcome_fields is ...:
+    if outcome_fields is AUTO:
         assert verdict.outcome_fields == result.outcome_fields
     else:
         assert result.outcome_fields == outcome_fields

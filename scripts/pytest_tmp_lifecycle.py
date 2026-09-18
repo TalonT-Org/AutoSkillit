@@ -147,6 +147,20 @@ class _OwnerLiveness(StrEnum):
     INDETERMINATE = "indeterminate"
 
 
+class _ReapDisposition(StrEnum):
+    """The three outcomes _candidate_reap_disposition can produce.
+
+    PROTECTED means a revocable/owner/snapshot reference vetoes reclamation; the bound must
+    never select it. KEPT means an age gate vetoes normal reaping but the bound may still
+    reclaim it under pressure (so it remains selectable for overflow). DELETE means the
+    candidate is eligible for normal reaping.
+    """
+
+    PROTECTED = "protected"
+    KEPT = "kept"
+    DELETE = "delete"
+
+
 def _log(message: str) -> None:
     print(f"pytest tmp lifecycle: {message}", file=sys.stderr)
 
@@ -461,33 +475,33 @@ def _candidate_reap_disposition(
     snapshot_evidence: Sequence[PathEvidence],
     grace_minutes: float,
     legacy_age_minutes: float,
-) -> bool | None:
-    """Return survivor protection, or None when the candidate may be deleted."""
+) -> _ReapDisposition:
+    """Classify the candidate for the reaper (PROTECTED/KEPT/DELETE)."""
     has_revocable_reference = _contains_reference(candidate, revocable_paths)
     marker = candidate / "owner.json"
     marker_state, owner = _load_owner(marker)
 
     if marker_state is _OwnerMarkerState.ABSENT:
         if has_revocable_reference or snapshot_referenced(candidate, snapshot_evidence):
-            return True
+            return _ReapDisposition.PROTECTED
         if not _older_than(candidate, legacy_age_minutes):
             # No owner marker to prove dead -- the bound must never touch a markerless
             # candidate; it might be another concurrent _setup mid-creation, protected
             # today only by this age gate.
-            return True
-        return None
+            return _ReapDisposition.PROTECTED
+        return _ReapDisposition.DELETE
 
     if marker_state is _OwnerMarkerState.VALID:
         assert owner is not None
         if _owner_liveness(owner, proc_root) is not _OwnerLiveness.DEAD:
-            return True
+            return _ReapDisposition.PROTECTED
     # A corrupt marker is treated as valid-dead: it shares reference and grace rules
     # with a valid dead owner and never falls through to markerless snapshot evidence.
     if has_revocable_reference:
-        return True
+        return _ReapDisposition.PROTECTED
     if not _older_than(marker, grace_minutes):
-        return False
-    return None
+        return _ReapDisposition.KEPT
+    return _ReapDisposition.DELETE
 
 
 def _reap(
@@ -541,10 +555,16 @@ def _reap(
             grace_minutes=grace_minutes,
             legacy_age_minutes=legacy_age_minutes,
         )
-        if disposition is not None:
-            survivors.append(_bounded_candidate(candidate, candidate_stat, protected=disposition))
+        if disposition is _ReapDisposition.DELETE:
+            _remove_candidate(candidate)
             continue
-        _remove_candidate(candidate)
+        survivors.append(
+            _bounded_candidate(
+                candidate,
+                candidate_stat,
+                protected=disposition is _ReapDisposition.PROTECTED,
+            )
+        )
     return survivors
 
 

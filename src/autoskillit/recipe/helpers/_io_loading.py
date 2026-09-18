@@ -43,11 +43,7 @@ _RECIPE_NOTE_TABLE: dict[str, str] = {
 
 
 def _substitute_recipe_note_placeholders(value: Any) -> Any:
-    """Recursively substitute recipe note placeholders inside any nested structure."""
-    if isinstance(value, dict):
-        return {k: _substitute_recipe_note_placeholders(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_substitute_recipe_note_placeholders(item) for item in value]
+    """Substitute recipe note placeholders. Only strings reach this layer."""
     if isinstance(value, str):
         return _RECIPE_NOTE_TABLE.get(value, value)
     return value

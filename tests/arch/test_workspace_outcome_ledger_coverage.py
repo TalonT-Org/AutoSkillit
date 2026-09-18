@@ -39,7 +39,7 @@ _EXPECTED_INVENTORIES = {
     ),
     "commit_files": _ReturnInventory(
         helpers=1,
-        outer_finish=9,
+        outer_finish=10,
         outer_unavailable=1,
         helper_returns=2,
         ledger_record_calls=1,

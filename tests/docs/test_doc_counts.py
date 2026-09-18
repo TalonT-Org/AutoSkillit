@@ -174,6 +174,12 @@ Tier 2 has 99 skills
     ]
 
 
+def test_doc_count_script_reports_no_drift_in_repository_docs() -> None:
+    from scripts import check_doc_counts
+
+    assert check_doc_counts.scan_docs() == []
+
+
 def _count_skills_total() -> int:
     tier1 = sum(1 for p in (SRC_DIR / "skills").iterdir() if p.is_dir())
     tier23 = sum(1 for p in (SRC_DIR / "skills_extended").iterdir() if p.is_dir())

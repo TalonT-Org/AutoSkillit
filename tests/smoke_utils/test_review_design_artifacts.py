@@ -27,12 +27,17 @@ _ANNOTATED_DIFF_CONTENT = (
 )
 
 
-def _setup_handoff(tmp_path: Path, entries: list[dict]) -> None:
+def _setup_handoff(
+    tmp_path: Path,
+    entries: list[dict],
+    *,
+    annotated_diff: str = _ANNOTATED_DIFF_CONTENT,
+) -> None:
     review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
     review_dir.mkdir(parents=True)
     handoff = {"schema_version": 1, "context_entries": entries}
     (review_dir / "diff_context_123.json").write_text(json.dumps(handoff))
-    (review_dir / "annotated_diff_123.txt").write_text(_ANNOTATED_DIFF_CONTENT)
+    (review_dir / "annotated_diff_123.txt").write_text(annotated_diff)
 
 
 def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
@@ -53,6 +58,69 @@ def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
     handoff_path = review_dir / "diff_context_123.json"
     handoff = json.loads(handoff_path.read_text())
     assert "[L42]" in handoff["context_entries"][0]["code_region"]
+
+
+def test_enrich_diff_context_atomically_upgrades_v1_entries_with_digests(
+    tmp_path: Path,
+) -> None:
+    """A complete v1 handoff becomes v2 only after all eligible anchors resolve."""
+    _setup_handoff(
+        tmp_path,
+        [
+            {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
+            {
+                "path": "src/app.py",
+                "line": 43,
+                "severity": "warning",
+                "code_region": "pre-existing",
+            },
+            {"path": "src/app.py", "line": None, "severity": "info", "code_region": ""},
+        ],
+    )
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+
+    enrich_diff_context(pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir))
+
+    handoff = json.loads((review_dir / "diff_context_123.json").read_text())
+    assert handoff["schema_version"] == 2
+    integer_line_entries = [
+        entry for entry in handoff["context_entries"] if type(entry["line"]) is int
+    ]
+    assert all(entry["anchor_digest"] for entry in integer_line_entries)
+    assert "[L42]" in integer_line_entries[0]["code_region"]
+    assert integer_line_entries[1]["code_region"] == "pre-existing"
+    no_line_entry = handoff["context_entries"][2]
+    assert no_line_entry["code_region"] == ""
+    assert "anchor_digest" not in no_line_entry
+
+
+@pytest.mark.parametrize(
+    ("line", "annotated_diff"),
+    [
+        (999, _ANNOTATED_DIFF_CONTENT),
+        (42, _ANNOTATED_DIFF_CONTENT + "[L42] duplicate_42\n"),
+        (42, "+++ b/src/app.py\n@@ -42 +42 @@\n[L42]\n"),
+    ],
+    ids=["missing", "ambiguous", "malformed"],
+)
+def test_enrich_diff_context_keeps_v1_handoff_when_an_integer_anchor_is_invalid(
+    tmp_path: Path,
+    line: int,
+    annotated_diff: str,
+) -> None:
+    """Failed integer anchor extraction must not publish a partial v2 handoff."""
+    _setup_handoff(
+        tmp_path,
+        [{"path": "src/app.py", "line": line, "severity": "critical", "code_region": ""}],
+        annotated_diff=annotated_diff,
+    )
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    handoff_path = review_dir / "diff_context_123.json"
+    original = handoff_path.read_bytes()
+
+    enrich_diff_context(pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir))
+
+    assert handoff_path.read_bytes() == original
 
 
 def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> None:
@@ -112,7 +180,7 @@ def test_enrich_diff_context_preserves_experimental_provenance(tmp_path: Path) -
         "opaque_future_field": {"preserve": True},
     }
     handoff = {
-        "schema_version": 2,
+        "schema_version": 1,
         "_head_sha": "head",
         "_base_sha": "base",
         "_merge_base_sha": "merge-base",
@@ -130,7 +198,11 @@ def test_enrich_diff_context_preserves_experimental_provenance(tmp_path: Path) -
     assert result["enriched"] == "true"
     enriched = json.loads((review_dir / "diff_context_123.json").read_text())
     expected = json.loads(json.dumps(handoff))
+    expected["schema_version"] = 2
     expected["context_entries"][0]["code_region"] = enriched["context_entries"][0]["code_region"]
+    expected["context_entries"][0]["anchor_digest"] = enriched["context_entries"][0][
+        "anchor_digest"
+    ]
     assert "[L42]" in enriched["context_entries"][0]["code_region"]
     assert enriched == expected
 

@@ -11,6 +11,7 @@ import pytest
 
 from autoskillit.core import CommitFailureClass, WorkspaceOutcomeKind
 from autoskillit.server.git import validate_commit_paths
+from autoskillit.server.tools import tools_workspace
 from autoskillit.server.tools.tools_workspace import commit_files
 from tests.conftest import _make_result
 from tests.server._outcome_ledger_fakes import _FailingLedger, _RecordingLedger
@@ -604,6 +605,104 @@ class TestCommitFilesEnvelopeShape:
         assert set(result.keys()) == {"success", "error", "failure_class"}
         assert result["success"] is False
         assert isinstance(result["error"], str)
+
+
+class TestCommitFilesSelfRevertScan:
+    @pytest.mark.anyio
+    async def test_invalid_self_revert_base_stops_before_mutating(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        tool_ctx.runner.push(_make_result(1, "", "unknown revision"))
+
+        result = json.loads(
+            await commit_files(
+                paths=["a.py"],
+                message="msg",
+                cwd=str(wt),
+                self_revert_base_sha="missing-base",
+            )
+        )
+
+        assert result["success"] is False
+        assert result["failure_class"] == "self_revert_base_validation"
+        assert "base" in result["error"].lower()
+        assert tool_ctx.runner.call_args_list == [
+            (["git", "-C", str(wt), "rev-parse", "missing-base^{commit}"],)
+        ]
+
+    @pytest.mark.anyio
+    async def test_non_ancestor_self_revert_base_stops_before_git_add(self, tool_ctx, tmp_path):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        tool_ctx.runner.push(_make_result(0, "base-oid\n", ""))
+        tool_ctx.runner.push(_make_result(1, "", ""))
+
+        result = json.loads(
+            await commit_files(
+                paths=["a.py"],
+                message="msg",
+                cwd=str(wt),
+                self_revert_base_sha="base",
+            )
+        )
+
+        assert result["success"] is False
+        assert result["failure_class"] == "self_revert_base_validation"
+        assert [call[0] for call in tool_ctx.runner.call_args_list] == [
+            ["git", "-C", str(wt), "rev-parse", "base^{commit}"],
+            ["git", "-C", str(wt), "merge-base", "--is-ancestor", "base-oid", "HEAD"],
+        ]
+
+    @pytest.mark.anyio
+    async def test_landed_commit_reports_incomplete_scan_without_becoming_a_failure(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        observed: dict[str, object] = {}
+
+        async def incomplete_scan(runner, cwd, base_ref, head_ref):
+            observed.update(
+                runner=runner,
+                cwd=cwd,
+                base_ref=base_ref,
+                head_ref=head_ref,
+            )
+            return {
+                "pairs": [],
+                "complete": False,
+                "scan_error": "self-revert scan reached its output limit",
+            }
+
+        monkeypatch.setattr(tools_workspace, "detect_self_reverts", incomplete_scan, raising=False)
+        tool_ctx.runner.push(_make_result(0, "base-oid\n", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "landed-sha\n", ""))
+
+        result = json.loads(
+            await commit_files(
+                paths=["a.py"],
+                message="msg",
+                cwd=str(wt),
+                self_revert_base_sha="base",
+            )
+        )
+
+        assert result == {
+            "success": True,
+            "commit_sha": "landed-sha",
+            "pairs": [],
+            "complete": False,
+            "scan_error": "self-revert scan reached its output limit",
+        }
+        assert observed == {
+            "runner": tool_ctx.runner,
+            "cwd": str(wt),
+            "base_ref": "base-oid",
+            "head_ref": "landed-sha",
+        }
 
     @pytest.mark.anyio
     async def test_validation_failure_envelope_matches_shape(self, tool_ctx, tmp_path):

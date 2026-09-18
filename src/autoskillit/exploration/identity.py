@@ -190,6 +190,53 @@ def _canonical_declaration_payload(raw: dict[str, object]) -> bytes:
     return canonical_json(payload).encode("ascii")
 
 
+def _match_offline_markers(
+    root: Path,
+    required_markers: dict[str, str],
+    quorum_markers: dict[str, str],
+) -> tuple[int, int, tuple[IdentityEvidence, ...]]:
+    """Match authenticated offline declaration markers in their fixed order."""
+
+    marker_evidence: list[IdentityEvidence] = []
+    match_counts: list[int] = []
+    for marker_paths, declared_markers, source in (
+        (OFFLINE_REQUIRED_MARKER_PATHS, required_markers, "offline_required_marker"),
+        (OFFLINE_QUORUM_MARKER_PATHS, quorum_markers, "offline_quorum_marker"),
+    ):
+        matched = 0
+        for marker_path in marker_paths:
+            marker = root / marker_path
+            if marker.is_symlink() or not marker.is_file():
+                accepted = False
+                diagnostic = "missing"
+            else:
+                try:
+                    digest = f"sha256:{hashlib.sha256(marker.read_bytes()).hexdigest()}"
+                except OSError as exc:
+                    accepted = False
+                    diagnostic = f"unreadable:{type(exc).__name__}"
+                else:
+                    expected_digest = declared_markers.get(marker_path)
+                    if expected_digest is None:
+                        accepted = False
+                        diagnostic = "undeclared_marker_path"
+                    else:
+                        accepted = digest == expected_digest
+                        diagnostic = "digest_match" if accepted else "digest_mismatch"
+            marker_evidence.append(
+                IdentityEvidence(
+                    source=source,
+                    value=marker_path,
+                    accepted=accepted,
+                    diagnostic=diagnostic,
+                )
+            )
+            matched += accepted
+        match_counts.append(matched)
+    required_matched, quorum_matched = match_counts
+    return required_matched, quorum_matched, tuple(marker_evidence)
+
+
 def _validate_offline_declaration(root: Path) -> tuple[bool, tuple[IdentityEvidence, ...]]:
     declaration_path = root / OFFLINE_DECLARATION_PATH
     try:
@@ -276,39 +323,10 @@ def _validate_offline_declaration(root: Path) -> tuple[bool, tuple[IdentityEvide
             ),
         )
 
-    marker_evidence: list[IdentityEvidence] = []
-
-    def marker_matches(marker_path: str, declared_digest: str, source: str) -> bool:
-        marker = root / marker_path
-        if marker.is_symlink() or not marker.is_file():
-            accepted = False
-            diagnostic = "missing"
-        else:
-            try:
-                digest = f"sha256:{hashlib.sha256(marker.read_bytes()).hexdigest()}"
-            except OSError as exc:
-                accepted = False
-                diagnostic = f"unreadable:{type(exc).__name__}"
-            else:
-                accepted = digest == declared_digest
-                diagnostic = "digest_match" if accepted else "digest_mismatch"
-        marker_evidence.append(
-            IdentityEvidence(
-                source=source,
-                value=marker_path,
-                accepted=accepted,
-                diagnostic=diagnostic,
-            )
-        )
-        return accepted
-
-    required_matched = sum(
-        marker_matches(path, required_markers[path], "offline_required_marker")
-        for path in OFFLINE_REQUIRED_MARKER_PATHS
-    )
-    quorum_matched = sum(
-        marker_matches(path, quorum_markers[path], "offline_quorum_marker")
-        for path in OFFLINE_QUORUM_MARKER_PATHS
+    required_matched, quorum_matched, marker_evidence = _match_offline_markers(
+        root,
+        required_markers,
+        quorum_markers,
     )
     declaration_accepted = (
         required_matched == len(OFFLINE_REQUIRED_MARKER_PATHS)

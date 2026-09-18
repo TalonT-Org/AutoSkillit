@@ -11,6 +11,7 @@ Also owns the ``RETIRED_PROFILE_KEYS`` registry.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from autoskillit.core import KNOWN_BACKEND_NAMES, get_logger
@@ -28,6 +29,15 @@ RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
 )
 
 
+def _normalize_recipe_overrides(
+    recipe_overrides: Mapping[str, dict[str, str] | None],
+) -> dict[str, dict[str, str]]:
+    return {
+        recipe: (overrides if overrides is not None else {})
+        for recipe, overrides in recipe_overrides.items()
+    }
+
+
 @dataclass
 class CoreRunConfig:
     default_model: str = "sonnet"
@@ -39,15 +49,7 @@ class CoreRunConfig:
     def __post_init__(self) -> None:
         if not self.default_model:
             raise ValueError("CoreRunConfig.default_model must not be empty")
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
+        self.recipe_overrides = _normalize_recipe_overrides(self.recipe_overrides)
         for step, model_val in self.step_overrides.items():
             if not isinstance(model_val, str):
                 raise ValueError(
@@ -126,6 +128,14 @@ class ProvidersConfig:
     def __post_init__(self) -> None:
         if self.provider_retry_limit < 1:
             raise ValueError(f"provider_retry_limit must be >= 1, got {self.provider_retry_limit}")
+        self._validate_execution_candidates()
+        self._validate_profiles()
+        self.recipe_overrides = _normalize_recipe_overrides(self.recipe_overrides)
+        self._validate_recipe_overrides()
+        self._validate_model_overrides()
+        self._warn_unknown_profiles()
+
+    def _validate_execution_candidates(self) -> None:
         if not isinstance(self.execution_candidates, list):
             raise ValueError("execution_candidates must be a list")
         for index, candidate in enumerate(self.execution_candidates):
@@ -134,6 +144,8 @@ class ProvidersConfig:
                     f"execution_candidates[{index}] must be an ExecutionCandidateSpec, "
                     f"got {type(candidate).__name__!r}"
                 )
+
+    def _validate_profiles(self) -> None:
         for name, profile in self.profiles.items():
             for k, v in profile.items():
                 if v is not None and not isinstance(v, str):
@@ -141,15 +153,8 @@ class ProvidersConfig:
                         f"profiles[{name!r}][{k!r}] must be a string or null, "
                         f"got {type(v).__name__!r}"
                     )
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
+
+    def _validate_recipe_overrides(self) -> None:
         for recipe, overrides in self.recipe_overrides.items():
             if not isinstance(overrides, dict):
                 raise ValueError(
@@ -162,6 +167,8 @@ class ProvidersConfig:
                         f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
                         f"got {type(provider).__name__!r}"
                     )
+
+    def _validate_model_overrides(self) -> None:
         for recipe, overrides in self.model_overrides.items():
             if not isinstance(overrides, dict):
                 raise ValueError(
@@ -173,6 +180,8 @@ class ProvidersConfig:
                         f"model_overrides[{recipe!r}][{step!r}] must be a string, "
                         f"got {type(model_val).__name__!r}"
                     )
+
+    def _warn_unknown_profiles(self) -> None:
         known = set(self.profiles.keys()) | {"anthropic"}
         for step, profile_name in self.step_overrides.items():
             if profile_name not in known:
@@ -237,6 +246,12 @@ class AgentBackendConfig:
     auto_provision_exploration: bool = False
 
     def __post_init__(self) -> None:
+        self._validate_backend()
+        self._validate_step_overrides()
+        self.recipe_overrides = _normalize_recipe_overrides(self.recipe_overrides)
+        self._validate_recipe_overrides()
+
+    def _validate_backend(self) -> None:
         if not self.backend:
             raise ValueError("backend must not be empty")
         elif self.backend not in KNOWN_BACKEND_NAMES:
@@ -246,7 +261,7 @@ class AgentBackendConfig:
                 valid_names=sorted(KNOWN_BACKEND_NAMES),
             )
 
-        # Validate step_overrides shape: values must be strings.
+    def _validate_step_overrides(self) -> None:
         for step_name, override_backend in self.step_overrides.items():
             if not isinstance(step_name, str):
                 raise ValueError(
@@ -266,17 +281,7 @@ class AgentBackendConfig:
                     valid_names=sorted(KNOWN_BACKEND_NAMES),
                 )
 
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
-
-        # Validate recipe_overrides shape: outer values are dicts, inner values are strings.
+    def _validate_recipe_overrides(self) -> None:
         for recipe_name, recipe_map in self.recipe_overrides.items():
             if not isinstance(recipe_name, str):
                 raise ValueError(

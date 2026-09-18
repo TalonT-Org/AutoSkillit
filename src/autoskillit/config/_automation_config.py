@@ -93,6 +93,76 @@ if TYPE_CHECKING:
 _UNSET = object()
 
 
+def _resolve_experimental_enabled(raw: dict[str, Any]) -> bool:
+    raw_experimental = raw.pop("experimental_enabled", _UNSET)
+    if raw_experimental is _UNSET:
+        raw_experimental = raw.pop("EXPERIMENTAL_ENABLED", _UNSET)
+    if raw_experimental is _UNSET:
+        return is_dev_install()
+    if not isinstance(raw_experimental, bool):
+        raise ConfigSchemaError(
+            f"features.experimental_enabled must be a bool, "
+            f"got {type(raw_experimental).__name__!r}: {raw_experimental!r}"
+        )
+    return raw_experimental
+
+
+def _normalize_feature_overrides(raw: dict[str, Any]) -> dict[str, bool]:
+    result: dict[str, bool] = {}
+    for name, value in raw.items():
+        if not isinstance(name, str):
+            raise ConfigSchemaError(
+                f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
+            )
+        name = name.lower()
+        if name not in FEATURE_REGISTRY:
+            known = sorted(FEATURE_REGISTRY.keys())
+            raise ConfigSchemaError(
+                f"Unknown feature {name!r} in features config. Known features: {known}"
+            )
+        if not isinstance(value, bool):
+            raise ConfigSchemaError(
+                f"Feature {name!r} value must be a bool, got {type(value).__name__!r}: {value!r}"
+            )
+        if value is True:
+            definition = FEATURE_REGISTRY[name]
+            if definition.lifecycle == FeatureLifecycle.DISABLED:
+                raise ConfigSchemaError(
+                    f"Feature {name!r} has lifecycle DISABLED and cannot be explicitly enabled."
+                )
+            if definition.lifecycle == FeatureLifecycle.DEPRECATED:
+                warnings.warn(
+                    f"Feature {name!r} has lifecycle DEPRECATED"
+                    f" (sunset: {definition.sunset_date}). "
+                    "Consider removing this override before the sunset date.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+        result[name] = value
+    return result
+
+
+def _validate_enabled_feature_dependencies(features: dict[str, bool]) -> None:
+    for name, enabled in features.items():
+        if not enabled:
+            continue
+        definition = FEATURE_REGISTRY[name]
+        for dependency in definition.depends_on:
+            try:
+                dependency_default = FEATURE_REGISTRY[dependency].default_enabled
+            except KeyError:
+                raise ConfigSchemaError(
+                    f"Feature {name!r} depends_on {dependency!r}, which is not in "
+                    "FEATURE_REGISTRY. "
+                    "This is a bug in the FeatureDef definition."
+                )
+            if not features.get(dependency, dependency_default):
+                raise ConfigSchemaError(
+                    f"Feature {name!r} is enabled but its dependency {dependency!r} is disabled. "
+                    f"Enable {dependency!r} first."
+                )
+
+
 @dataclass
 class AutomationConfig:
     """Root configuration dataclass for AutoSkillit.
@@ -169,75 +239,10 @@ class AutomationConfig:
 
         Coerces all values to bool.
         """
-        raw = dict(raw)  # copy to avoid mutating caller's dict
-        _raw_exp = raw.pop("experimental_enabled", _UNSET)
-        if _raw_exp is _UNSET:
-            _raw_exp = raw.pop("EXPERIMENTAL_ENABLED", _UNSET)
-        if _raw_exp is _UNSET:
-            experimental_enabled: bool = is_dev_install()
-        else:
-            # Strict validation mirrors the per-feature bool check below — a
-            # user writing `experimental_enabled: "false"` (a truthy string)
-            # must NOT silently become True via `bool()` coercion.
-            if not isinstance(_raw_exp, bool):
-                raise ConfigSchemaError(
-                    f"features.experimental_enabled must be a bool, "
-                    f"got {type(_raw_exp).__name__!r}: {_raw_exp!r}"
-                )
-            experimental_enabled = _raw_exp
-        result: dict[str, bool] = {}
-        for name, value in raw.items():
-            if not isinstance(name, str):
-                raise ConfigSchemaError(
-                    f"Feature key must be a string, got {type(name).__name__!r}: {name!r}"
-                )
-            name = name.lower()
-            if name not in FEATURE_REGISTRY:
-                known = sorted(FEATURE_REGISTRY.keys())
-                raise ConfigSchemaError(
-                    f"Unknown feature {name!r} in features config. Known features: {known}"
-                )
-            if not isinstance(value, bool):
-                raise ConfigSchemaError(
-                    f"Feature {name!r} value must be a bool, "
-                    f"got {type(value).__name__!r}: {value!r}"
-                )
-            if value is True:
-                if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DISABLED:
-                    raise ConfigSchemaError(
-                        f"Feature {name!r} has lifecycle DISABLED"
-                        " and cannot be explicitly enabled."
-                    )
-                if FEATURE_REGISTRY[name].lifecycle == FeatureLifecycle.DEPRECATED:
-                    warnings.warn(
-                        f"Feature {name!r} has lifecycle DEPRECATED"
-                        f" (sunset: {FEATURE_REGISTRY[name].sunset_date}). "
-                        "Consider removing this override before the sunset date.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
-            result[name] = value
-
-        # Dependency validation
-        for name, enabled in result.items():
-            if not enabled:
-                continue
-            defn = FEATURE_REGISTRY[name]
-            for dep in defn.depends_on:
-                try:
-                    dep_default = FEATURE_REGISTRY[dep].default_enabled
-                except KeyError:
-                    raise ConfigSchemaError(
-                        f"Feature {name!r} depends_on {dep!r}, which is not in FEATURE_REGISTRY. "
-                        f"This is a bug in the FeatureDef definition."
-                    )
-                dep_enabled = result.get(dep, dep_default)
-                if not dep_enabled:
-                    raise ConfigSchemaError(
-                        f"Feature {name!r} is enabled but its dependency {dep!r} is disabled. "
-                        f"Enable {dep!r} first."
-                    )
-
+        raw = dict(raw)
+        experimental_enabled = _resolve_experimental_enabled(raw)
+        result = _normalize_feature_overrides(raw)
+        _validate_enabled_feature_dependencies(result)
         return result, experimental_enabled
 
     @classmethod

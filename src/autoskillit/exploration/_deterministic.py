@@ -49,6 +49,36 @@ def stable_digest(value: object) -> str:
     return hashlib.sha256(canonical_json(value).encode("ascii")).hexdigest()
 
 
+def _build_closed_dependency_graph(
+    items: Iterable[ItemT],
+    *,
+    key: Callable[[ItemT], KeyT],
+    dependencies: Callable[[ItemT], Iterable[KeyT]],
+) -> tuple[dict[KeyT, ItemT], dict[KeyT, set[KeyT]], defaultdict[KeyT, set[KeyT]]]:
+    by_key: dict[KeyT, ItemT] = {}
+    for item in items:
+        item_key = key(item)
+        if item_key in by_key:
+            raise DeterministicGraphError(f"duplicate graph key: {item_key!r}")
+        by_key[item_key] = item
+
+    dependency_sets: dict[KeyT, set[KeyT]] = {}
+    dependents: defaultdict[KeyT, set[KeyT]] = defaultdict(set)
+    for item_key, item in by_key.items():
+        item_dependencies = set(dependencies(item))
+        missing = item_dependencies.difference(by_key)
+        if missing:
+            raise DeterministicGraphError(
+                f"unknown dependencies for {item_key!r}: {sorted(missing, key=repr)!r}"
+            )
+        if item_key in item_dependencies:
+            raise DeterministicGraphError(f"self dependency: {item_key!r}")
+        dependency_sets[item_key] = item_dependencies
+        for dependency in item_dependencies:
+            dependents[dependency].add(item_key)
+    return by_key, dependency_sets, dependents
+
+
 def stable_kahn_waves(
     items: Iterable[ItemT],
     *,
@@ -64,27 +94,9 @@ def stable_kahn_waves(
     conflict as an ordering edge.
     """
 
-    by_key: dict[KeyT, ItemT] = {}
-    for item in items:
-        item_key = key(item)
-        if item_key in by_key:
-            raise DeterministicGraphError(f"duplicate graph key: {item_key!r}")
-        by_key[item_key] = item
-
-    dependency_sets: dict[KeyT, set[KeyT]] = {}
-    dependents: dict[KeyT, set[KeyT]] = defaultdict(set)
-    for item_key, item in by_key.items():
-        item_dependencies = set(dependencies(item))
-        missing = item_dependencies.difference(by_key)
-        if missing:
-            raise DeterministicGraphError(
-                f"unknown dependencies for {item_key!r}: {sorted(missing, key=repr)!r}"
-            )
-        if item_key in item_dependencies:
-            raise DeterministicGraphError(f"self dependency: {item_key!r}")
-        dependency_sets[item_key] = item_dependencies
-        for dependency in item_dependencies:
-            dependents[dependency].add(item_key)
+    by_key, dependency_sets, dependents = _build_closed_dependency_graph(
+        items, key=key, dependencies=dependencies
+    )
 
     remaining = {
         item_key: len(item_dependencies) for item_key, item_dependencies in dependency_sets.items()

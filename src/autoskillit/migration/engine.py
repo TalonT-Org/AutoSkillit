@@ -25,6 +25,12 @@ MIGRATE_RECIPES_MAX_RETRIES: int = 3
 """Max validation-retry attempts for LLM-driven recipe migration (matches SKILL.md)."""
 
 
+# Shared shape for any callable that drives a headless skill execution and
+# returns a SkillResult. Centralized here (engine) so the abstract contract,
+# the concrete engine, and every adapter share one canonical name.
+HeadlessRunner = Callable[..., Awaitable[SkillResult]]
+
+
 @dataclass
 class MigrationFile:
     name: str  # recipe or contract stem
@@ -83,7 +89,7 @@ class HeadlessMigrationAdapter(MigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
+        run_headless: HeadlessRunner,
         temp_dir: Path,
     ) -> MigrationResult:
         """Apply migration via run_headless; write-back handled by MigrationEngine."""
@@ -127,7 +133,7 @@ class MigrationEngine:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
+        run_headless: HeadlessRunner,
         temp_dir: Path,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)

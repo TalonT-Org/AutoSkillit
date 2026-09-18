@@ -43,113 +43,132 @@ def _field_defaults(cls: type) -> dict[str, Any]:
     return defaults
 
 
-def _coerce_value(value: Any, target_type: type, context: str) -> Any:
-    """Coerce a raw config value to target_type based on its type annotation.
+def _coerce_union(value: Any, args: tuple[type, ...], context: str) -> Any:
+    """Coerce a value under a Union/Optional annotation.
 
-    Raises ConfigSchemaError for int/float conversion failures, including context.
+    For ``Optional[T]`` (exactly one non-``None`` arm), recurse into the inner
+    type so ``None`` short-circuits. For all other unions (``int | str``,
+    multi-arm unions, etc.) the value is passed through unchanged — those
+    unions are typed but not coerced by the YAML pipeline.
     """
+    non_none = [arg for arg in args if arg is not type(None)]
+    if type(None) not in args or len(non_none) != 1:
+        return value
+    inner = non_none[0]
+    if inner is bool:
+        return bool(value) if value is not None else None
+    if inner in (int, float):
+        return _coerce_value(value, inner, context) if value is not None else None
+    if value is None or not value:
+        return None
+    return _coerce_value(value, inner, context)
+
+
+def _coerce_utf8_byte_limit(value: Any, context: str) -> Any:
+    from autoskillit.core import Utf8ByteLimit
+
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ConfigSchemaError(
+            f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+        )
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(
+            f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+        ) from exc
+    if coerced <= 0:
+        raise ConfigSchemaError(
+            f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+        )
+    return Utf8ByteLimit(coerced)
+
+
+def _coerce_int(value: Any, context: str) -> int:
+    if isinstance(value, bool):
+        raise ConfigSchemaError(f"{context} must be an integer, got {value!r}")
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
+
+
+def _coerce_float(value: Any, context: str) -> float:
+    if isinstance(value, bool):
+        raise ConfigSchemaError(f"{context} must be a number, got {value!r}")
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"{context} must be a number, got {value!r}") from exc
+
+
+def _coerce_list(value: Any, element_type: type, context: str) -> list[Any]:
+    if not isinstance(value, list):
+        try:
+            value = list(value)
+        except TypeError as exc:
+            raise ConfigSchemaError(f"{context} must be iterable for list, got {value!r}") from exc
+    return [
+        _coerce_value(element, element_type, f"{context}[{index}]")
+        for index, element in enumerate(value)
+    ]
+
+
+def _coerce_set(value: Any, context: str) -> set[Any]:
+    try:
+        return set(value)
+    except TypeError as exc:
+        raise ConfigSchemaError(f"{context} must be iterable for set, got {value!r}") from exc
+
+
+def _coerce_dataclass(value: Any, target_type: type, context: str) -> Any:
+    if not isinstance(value, dict):
+        raise ConfigSchemaError(f"{context} must be a mapping, got {type(value).__name__!r}")
+    field_names = {field.name for field in dataclasses.fields(target_type)}
+    unexpected = sorted(set(value) - field_names)
+    if unexpected:
+        raise ConfigSchemaError(f"{context} contains unexpected key(s): {', '.join(unexpected)}")
+    hints = get_type_hints(target_type)
+    kwargs = {
+        name: _coerce_value(raw, hints[name], f"{context}.{name}") for name, raw in value.items()
+    }
+    try:
+        return target_type(**kwargs)
+    except (TypeError, ValueError) as exc:
+        raise ConfigSchemaError(f"invalid {context}: {exc}") from exc
+
+
+def _coerce_value(value: Any, target_type: type, context: str) -> Any:
+    """Coerce a raw config value to target_type based on its type annotation."""
     origin = get_origin(target_type)
     args = get_args(target_type)
-
     if origin is types.UnionType or origin is Union:
-        non_none = [a for a in args if a is not type(None)]
-        if type(None) in args and len(non_none) == 1:
-            inner = non_none[0]
-            if inner is bool:
-                return bool(value) if value is not None else None
-            if inner in (int, float):
-                return _coerce_value(value, inner, context) if value is not None else None
-            if value is None:
-                return None
-            if not value:
-                return None
-            return _coerce_value(value, inner, context)
-        return value
+        return _coerce_union(value, args, context)
 
-    # Dimensional wrapper types (Utf8ByteLimit, etc.): bless raw YAML
-    # integers into typed wrappers exactly once at the config boundary.
     from autoskillit.core import Utf8ByteLimit
 
     if target_type is Utf8ByteLimit:
-        if isinstance(value, bool):
-            raise ConfigSchemaError(
-                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
-            )
-        if isinstance(value, float) and not value.is_integer():
-            raise ConfigSchemaError(
-                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
-            )
-        try:
-            coerced = int(value)
-        except (TypeError, ValueError) as exc:
-            raise ConfigSchemaError(
-                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
-            ) from exc
-        if coerced <= 0:
-            raise ConfigSchemaError(
-                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
-            )
-        return Utf8ByteLimit(coerced)
+        return _coerce_utf8_byte_limit(value, context)
     if target_type is int:
-        if isinstance(value, bool):
-            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}")
-        if isinstance(value, int):
-            return value
-        try:
-            return int(value)
-        except (TypeError, ValueError) as exc:
-            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
+        return _coerce_int(value, context)
     if target_type is float:
-        if isinstance(value, bool):
-            raise ConfigSchemaError(f"{context} must be a number, got {value!r}")
-        if isinstance(value, (int, float)):
-            return float(value)
-        try:
-            return float(value)
-        except (TypeError, ValueError) as exc:
-            raise ConfigSchemaError(f"{context} must be a number, got {value!r}") from exc
+        return _coerce_float(value, context)
     if target_type is bool:
         return bool(value)
     if target_type is str:
         return str(value)
     if origin is list:
-        if not isinstance(value, list):
-            try:
-                value = list(value)
-            except TypeError as exc:
-                raise ConfigSchemaError(
-                    f"{context} must be iterable for list, got {value!r}"
-                ) from exc
-        element_type = args[0] if args else Any
-        return [
-            _coerce_value(element, element_type, f"{context}[{index}]")
-            for index, element in enumerate(value)
-        ]
+        return _coerce_list(value, args[0] if args else Any, context)
     if origin is set:
-        try:
-            return set(value)
-        except TypeError as exc:
-            raise ConfigSchemaError(f"{context} must be iterable for set, got {value!r}") from exc
+        return _coerce_set(value, context)
     if origin is dict:
         return value
     if isinstance(target_type, type) and dataclasses.is_dataclass(target_type):
-        if not isinstance(value, dict):
-            raise ConfigSchemaError(f"{context} must be a mapping, got {type(value).__name__!r}")
-        field_names = {field.name for field in dataclasses.fields(target_type)}
-        unexpected = sorted(set(value) - field_names)
-        if unexpected:
-            raise ConfigSchemaError(
-                f"{context} contains unexpected key(s): {', '.join(unexpected)}"
-            )
-        hints = get_type_hints(target_type)
-        kwargs = {
-            name: _coerce_value(raw, hints[name], f"{context}.{name}")
-            for name, raw in value.items()
-        }
-        try:
-            return target_type(**kwargs)
-        except (TypeError, ValueError) as exc:
-            raise ConfigSchemaError(f"invalid {context}: {exc}") from exc
+        return _coerce_dataclass(value, target_type, context)
     return value
 
 

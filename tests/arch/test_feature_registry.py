@@ -530,6 +530,16 @@ def test_build_features_dict_extracts_experimental_enabled():
     assert "experimental_enabled" not in result
 
 
+def test_build_features_dict_rejects_remaining_uppercase_experimental_enabled():
+    """Lowercase extraction leaves the duplicate Dynaconf spelling as an unknown feature."""
+    from autoskillit.config.settings import AutomationConfig, ConfigSchemaError
+
+    with pytest.raises(ConfigSchemaError, match="Unknown feature 'experimental_enabled'"):
+        AutomationConfig._build_features_dict(
+            {"experimental_enabled": False, "EXPERIMENTAL_ENABLED": True}
+        )
+
+
 def test_build_features_dict_absent_experimental_enabled_auto_detects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

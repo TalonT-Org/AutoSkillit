@@ -145,6 +145,26 @@ def _stable_file_metadata(observation: os.stat_result) -> tuple[int, int, int, i
     )
 
 
+def _is_stable_regular_file_observation(
+    expected: os.stat_result,
+    opened: os.stat_result,
+    path_stat: os.stat_result,
+    *,
+    metadata_observations: tuple[os.stat_result, ...] = (),
+) -> bool:
+    """Return whether descriptor and pathname observations remain stable."""
+
+    return (
+        stat.S_ISREG(opened.st_mode)
+        and _same_inode(expected, opened)
+        and _same_inode(opened, path_stat)
+        and (
+            not metadata_observations
+            or len({_stable_file_metadata(item) for item in metadata_observations}) == 1
+        )
+    )
+
+
 def _require_directory_descriptor_support(*, scanning: bool = False) -> None:
     supported = _SUPPORTS_NOFOLLOW_DIRECTORY_OPEN
     if scanning:
@@ -372,11 +392,7 @@ def read_stable_contained_file(
         file_fd = _open(name, _OPEN_REGULAR_FLAGS, dir_fd=parent_fd)
         opened_before = os.fstat(file_fd)
         path_opened = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        if (
-            not stat.S_ISREG(opened_before.st_mode)
-            or not _same_inode(before, opened_before)
-            or not _same_inode(opened_before, path_opened)
-        ):
+        if not _is_stable_regular_file_observation(before, opened_before, path_opened):
             raise CollectorMutationError("requested artifact changed while opening")
         if opened_before.st_size > max_bytes:
             raise CollectorByteLimitError("requested artifact exceeds collector byte limit")
@@ -393,14 +409,17 @@ def read_stable_contained_file(
         opened_after = os.fstat(file_fd)
         path_after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (
-            not _same_inode(opened_before, opened_after)
-            or not _same_inode(opened_after, path_after)
-            or not (
-                _stable_file_metadata(before)
-                == _stable_file_metadata(opened_before)
-                == _stable_file_metadata(path_opened)
-                == _stable_file_metadata(opened_after)
-                == _stable_file_metadata(path_after)
+            not _is_stable_regular_file_observation(
+                opened_before,
+                opened_after,
+                path_after,
+                metadata_observations=(
+                    before,
+                    opened_before,
+                    path_opened,
+                    opened_after,
+                    path_after,
+                ),
             )
             or len(payload) != opened_after.st_size
         ):
@@ -428,6 +447,75 @@ def read_stable_contained_file(
         os.close(parent_fd)
 
 
+def _require_within_limit(value: int, limit: int, message: str) -> None:
+    if value > limit:
+        raise CollectorSafetyError(message)
+
+
+def _enumerate_contained_directory(
+    root_fd: int,
+    directory_chain: tuple[tuple[str, os.stat_result], ...],
+    *,
+    inspected_entries: int,
+    file_count: int,
+    max_files: int,
+) -> tuple[
+    int,
+    int,
+    tuple[str, ...],
+    tuple[tuple[tuple[str, os.stat_result], ...], ...],
+]:
+    """Scan one reopened directory chain without taking ownership of ``root_fd``."""
+
+    directory_fd = root_fd
+    owns_directory_fd = False
+    regular_file_paths: list[str] = []
+    child_chains: list[tuple[tuple[str, os.stat_result], ...]] = []
+    try:
+        for component, expected in directory_chain:
+            child_fd = _open_verified_directory_at(
+                directory_fd,
+                component,
+                expected=expected,
+                invalid_message="collector entry cannot be inspected",
+                changed_message="collector entry cannot be inspected",
+            )
+            previous_fd = directory_fd
+            previous_fd_was_owned = owns_directory_fd
+            directory_fd = child_fd
+            owns_directory_fd = True
+            if previous_fd_was_owned:
+                os.close(previous_fd)
+
+        try:
+            with os.scandir(directory_fd) as scanner:
+                entries = sorted(scanner, key=lambda entry: entry.name, reverse=True)
+        except OSError as exc:
+            raise CollectorSafetyError("collector root cannot be enumerated") from exc
+
+        parent_parts = tuple(component for component, _expected in directory_chain)
+        for entry in entries:
+            inspected_entries += 1
+            _require_within_limit(inspected_entries, max_files, "collector entry limit exceeded")
+            try:
+                entry_stat = entry.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise CollectorSafetyError("collector entry cannot be inspected") from exc
+            relative_parts = (*parent_parts, entry.name)
+            if stat.S_ISDIR(entry_stat.st_mode):
+                child_chains.append((*directory_chain, (entry.name, entry_stat)))
+            elif stat.S_ISREG(entry_stat.st_mode):
+                regular_file_paths.append(PurePosixPath(*relative_parts).as_posix())
+                file_count += 1
+                _require_within_limit(file_count, max_files, "collector file limit exceeded")
+    except OSError as exc:
+        raise CollectorSafetyError("collector entry cannot be inspected") from exc
+    finally:
+        if owns_directory_fd:
+            os.close(directory_fd)
+    return inspected_entries, file_count, tuple(regular_file_paths), tuple(child_chains)
+
+
 def list_contained_files(root: Path, limits: CollectorLimits) -> tuple[str, ...]:
     """List regular non-symlink files beneath ``root`` in deterministic order."""
 
@@ -435,57 +523,21 @@ def list_contained_files(root: Path, limits: CollectorLimits) -> tuple[str, ...]
     files: list[str] = []
     pending: list[tuple[tuple[str, os.stat_result], ...]] = [()]
     inspected_entries = 0
+    file_count = 0
     try:
         while pending:
             directory_chain = pending.pop()
-            directory_fd = root_fd
-            owns_directory_fd = False
-            try:
-                for component, expected in directory_chain:
-                    child_fd = _open_verified_directory_at(
-                        directory_fd,
-                        component,
-                        expected=expected,
-                        invalid_message="collector entry cannot be inspected",
-                        changed_message="collector entry cannot be inspected",
-                    )
-                    previous_fd = directory_fd
-                    previous_fd_was_owned = owns_directory_fd
-                    directory_fd = child_fd
-                    owns_directory_fd = True
-                    if previous_fd_was_owned:
-                        os.close(previous_fd)
-
-                try:
-                    with os.scandir(directory_fd) as scanner:
-                        entries = sorted(scanner, key=lambda entry: entry.name, reverse=True)
-                except OSError as exc:
-                    raise CollectorSafetyError("collector root cannot be enumerated") from exc
-
-                for entry in entries:
-                    inspected_entries += 1
-                    if inspected_entries > limits.max_files:
-                        raise CollectorSafetyError("collector entry limit exceeded")
-                    try:
-                        entry_stat = entry.stat(follow_symlinks=False)
-                    except OSError as exc:
-                        raise CollectorSafetyError("collector entry cannot be inspected") from exc
-                    if stat.S_ISLNK(entry_stat.st_mode):
-                        continue
-                    relative_parts = tuple(
-                        component for component, _expected in directory_chain
-                    ) + (entry.name,)
-                    if stat.S_ISDIR(entry_stat.st_mode):
-                        pending.append((*directory_chain, (entry.name, entry_stat)))
-                    elif stat.S_ISREG(entry_stat.st_mode):
-                        files.append(PurePosixPath(*relative_parts).as_posix())
-                        if len(files) > limits.max_files:
-                            raise CollectorSafetyError("collector file limit exceeded")
-            except OSError as exc:
-                raise CollectorSafetyError("collector entry cannot be inspected") from exc
-            finally:
-                if owns_directory_fd:
-                    os.close(directory_fd)
+            inspected_entries, file_count, regular_file_paths, child_chains = (
+                _enumerate_contained_directory(
+                    root_fd,
+                    directory_chain,
+                    inspected_entries=inspected_entries,
+                    file_count=file_count,
+                    max_files=limits.max_files,
+                )
+            )
+            files.extend(regular_file_paths)
+            pending.extend(child_chains)
     finally:
         os.close(root_fd)
     return tuple(sorted(files))

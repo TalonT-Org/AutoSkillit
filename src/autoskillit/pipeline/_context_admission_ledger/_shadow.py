@@ -125,19 +125,25 @@ if _CONTEXT_ADMISSION_SHADOW_PROJECTORS.keys() != CONTEXT_ADMISSION_REDUCER_REGI
     raise RuntimeError("incomplete_context_admission_protocol_registry")
 
 
+def _reserve_request_metadata(
+    event: ContextAdmissionEvent,
+) -> tuple[
+    AdmissionBatch | None,
+    AdmissionReservation | None,
+    GenerationReservationRecord | None,
+]:
+    if isinstance(event, ReserveRequestEvent):
+        return event.batch, event.input_reservations[0], event.generation_reservation
+    return None, None, None
+
+
 def _shadow_targets(
     prior_state: ContextAdmissionState,
     event: ContextAdmissionEvent,
     next_state: ContextAdmissionState,
 ) -> tuple[ShadowContextAdmissionTargetRecord, ...]:
     batch_ids, generation_ids = _shadow_target_ids(prior_state, event)
-    event_batch: AdmissionBatch | None = None
-    event_reservation: AdmissionReservation | None = None
-    event_generation: GenerationReservationRecord | None = None
-    if isinstance(event, ReserveRequestEvent):
-        event_batch = event.batch
-        event_reservation = event.input_reservations[0]
-        event_generation = event.generation_reservation
+    event_batch, event_reservation, event_generation = _reserve_request_metadata(event)
     targets: list[ShadowContextAdmissionTargetRecord] = []
     for batch_id in sorted(batch_ids, key=lambda item: item.value):
         target = _input_shadow_target(

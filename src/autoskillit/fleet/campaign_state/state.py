@@ -554,6 +554,53 @@ def append_dispatch_record(
         m.mark_dirty()
 
 
+def _snapshot_prior_failure(dispatch: DispatchRecord) -> dict[str, Any]:
+    """Capture retry-relevant diagnostics before replacing a failed record."""
+    snapshot: dict[str, Any] = {}
+    for field in dataclasses.fields(dispatch):
+        if field.name in _RETRY_IDENTITY_FIELDS:
+            continue
+        value = getattr(dispatch, field.name)
+        if field.name == "status":
+            snapshot[field.name] = str(value)
+        elif isinstance(value, dict):
+            snapshot[field.name] = dict(value)
+        elif isinstance(value, list):
+            snapshot[field.name] = list(value)
+        else:
+            snapshot[field.name] = value
+    return snapshot
+
+
+def _merge_upsert_dispatch_record(existing: DispatchRecord, incoming: DispatchRecord) -> None:
+    """Apply protected replacement and diagnostic inheritance to an incoming record."""
+    if existing.status == DispatchStatus.FAILURE and incoming.status == DispatchStatus.SUCCESS:
+        raise ValueError(
+            f"Cannot overwrite FAILURE dispatch {incoming.name!r} with SUCCESS — "
+            f"use mark_dispatch_* state machine methods for valid transitions"
+        )
+    if existing.status == DispatchStatus.SUCCESS and incoming.status != DispatchStatus.SUCCESS:
+        raise ValueError(
+            f"Cannot overwrite SUCCESS dispatch {incoming.name!r} "
+            f"with {incoming.status!r} — "
+            f"use mark_dispatch_* state machine methods for valid transitions"
+        )
+    if (
+        existing.status == DispatchStatus.FAILURE
+        and incoming.status == DispatchStatus.FAILURE
+        and existing.reason
+    ):
+        incoming.attempt_history = [_snapshot_prior_failure(existing)] + list(
+            incoming.attempt_history
+        )
+    if existing.reaper_reason and not incoming.reaper_reason:
+        incoming.reaper_reason = existing.reaper_reason
+    if existing.reaper_dispatch_id and not incoming.reaper_dispatch_id:
+        incoming.reaper_dispatch_id = existing.reaper_dispatch_id
+    if incoming.managed_lineage_ref is None:
+        incoming.managed_lineage_ref = existing.managed_lineage_ref
+
+
 def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> None:
     """Upsert a dispatch record by name without transition validation.
 
@@ -570,44 +617,7 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
             return
         for i, d in enumerate(m.state.dispatches):
             if d.name == record.name:
-                # Block terminal-status overwrites in both directions
-                if d.status == DispatchStatus.FAILURE and record.status == DispatchStatus.SUCCESS:
-                    raise ValueError(
-                        f"Cannot overwrite FAILURE dispatch {record.name!r} with SUCCESS — "
-                        f"use mark_dispatch_* state machine methods for valid transitions"
-                    )
-                if d.status == DispatchStatus.SUCCESS and record.status != DispatchStatus.SUCCESS:
-                    raise ValueError(
-                        f"Cannot overwrite SUCCESS dispatch {record.name!r} "
-                        f"with {record.status!r} — "
-                        f"use mark_dispatch_* state machine methods for valid transitions"
-                    )
-                # FAILURE-to-FAILURE: snapshot prior failure diagnostics before overwrite
-                if (
-                    d.status == DispatchStatus.FAILURE
-                    and record.status == DispatchStatus.FAILURE
-                    and d.reason
-                ):
-                    snapshot: dict[str, Any] = {}
-                    for f in dataclasses.fields(d):
-                        if f.name in _RETRY_IDENTITY_FIELDS:
-                            continue
-                        val = getattr(d, f.name)
-                        if f.name == "status":
-                            snapshot[f.name] = str(val)
-                        elif isinstance(val, dict):
-                            snapshot[f.name] = dict(val)
-                        elif isinstance(val, list):
-                            snapshot[f.name] = list(val)
-                        else:
-                            snapshot[f.name] = val
-                    record.attempt_history = [snapshot] + list(record.attempt_history)
-                if d.reaper_reason and not record.reaper_reason:
-                    record.reaper_reason = d.reaper_reason
-                if d.reaper_dispatch_id and not record.reaper_dispatch_id:
-                    record.reaper_dispatch_id = d.reaper_dispatch_id
-                if record.managed_lineage_ref is None:
-                    record.managed_lineage_ref = d.managed_lineage_ref
+                _merge_upsert_dispatch_record(d, record)
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

@@ -102,6 +102,7 @@ class TestToolRegistration:
             "check_pr_mergeable",
             "write_telemetry_files",
             "get_pr_reviews",
+            "verify_review_receipt",
             "post_pr_review",
             "bulk_close_issues",
             "set_commit_status",

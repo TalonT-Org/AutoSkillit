@@ -6,12 +6,11 @@ Re-exports the full public surface of the six moved modules.
 from autoskillit.execution.github_ops.ci import DefaultCIWatcher
 from autoskillit.execution.github_ops.diff_annotator import (
     DiffMetrics,
-    FilterResult,
     annotate_diff,
+    build_anchor_authority,
     compute_diff_metrics,
     extract_code_region,
     extract_valid_lines,
-    filter_findings,
     parse_hunk_ranges,
     select_review_agents,
 )
@@ -41,12 +40,11 @@ __all__ = [
     "resolve_remote_repo",
     # diff_annotator
     "DiffMetrics",
-    "FilterResult",
     "annotate_diff",
+    "build_anchor_authority",
     "compute_diff_metrics",
     "extract_code_region",
     "extract_valid_lines",
-    "filter_findings",
     "parse_hunk_ranges",
     "select_review_agents",
     # github

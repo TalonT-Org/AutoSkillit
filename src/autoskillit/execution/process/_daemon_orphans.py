@@ -20,7 +20,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
     get_logger,
-    is_pid_zombie,
+    owner_liveness,
     read_boot_id,
     read_registry,
     read_starttime_ticks,
@@ -123,22 +123,11 @@ def _owner_is_dead(owner_pid: int, boot_id: str, starttime_ticks: int) -> bool |
     """Return True for affirmative death, False for a live match, None if unknown."""
     if owner_pid <= 0 or _BOOT_ID_RE.fullmatch(boot_id) is None or starttime_ticks <= 0:
         return None
-    current_boot_id = read_boot_id()
-    if current_boot_id is None or _BOOT_ID_RE.fullmatch(current_boot_id) is None:
-        return None
-    if current_boot_id != boot_id:
+    liveness = owner_liveness(owner_pid, boot_id, starttime_ticks)
+    if liveness is False:
         return True
-    current_ticks = read_starttime_ticks(owner_pid)
-    if current_ticks is not None:
-        if current_ticks != starttime_ticks:
-            return True
-        return is_pid_zombie(owner_pid)
-    try:
-        os.kill(owner_pid, 0)
-    except ProcessLookupError:
-        return True
-    except (PermissionError, OSError):
-        return None
+    if liveness is True:
+        return False
     return None
 
 

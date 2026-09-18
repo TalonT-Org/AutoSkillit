@@ -68,6 +68,21 @@ def render_review_finding_body(finding: Mapping[str, object]) -> str:
     return _bounded_utf8(body, body_budget) + provenance
 
 
+def render_unpostable_review_section(
+    unpostable: Sequence[Mapping[str, object]],
+) -> str:
+    """Render body-only findings with their explicit admission reasons."""
+    if not unpostable:
+        return ""
+    lines = ["## Outside Diff Range"]
+    for finding in unpostable:
+        path = _bounded_utf8(str(finding.get("file", "")), _MAX_REVIEW_PATH_BYTES)
+        line = finding.get("line", "")
+        reason = _bounded_utf8(str(finding.get("admission_reason", "")), 256)
+        lines.append(f"- `{path}:{line}` ({reason}) — {render_review_finding_body(finding)}")
+    return _bounded_utf8("\n".join(lines), _MAX_GITHUB_REVIEW_BODY_BYTES)
+
+
 def normalize_local_review_finding(finding: Mapping[str, object]) -> dict[str, object]:
     """Copy a local review finding and add the canonical path/body aliases."""
     normalized = dict(finding)
@@ -96,6 +111,7 @@ def prepare_experimental_review_publication(
     snapshot_is_fresh: bool,
     handoff_metadata: Mapping[str, object] | None = None,
     receipt: Mapping[str, object] | None = None,
+    unpostable: Sequence[Mapping[str, object]] = (),
 ) -> dict[str, object]:
     """Build one immutable publication generation or suppress stale effects."""
     if mode not in {"github", "local"}:
@@ -110,7 +126,15 @@ def prepare_experimental_review_publication(
     normalized_survivors = json.loads(
         json.dumps(normalized_survivors, sort_keys=True, separators=(",", ":"))
     )
+    normalized_unpostable = json.loads(
+        json.dumps(
+            [_normalize_handoff_finding(finding) for finding in unpostable],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
     effective_survivors = normalized_survivors if snapshot_is_fresh else []
+    effective_unpostable = normalized_unpostable if snapshot_is_fresh else []
     metadata = json.loads(
         json.dumps(dict(handoff_metadata or {}), sort_keys=True, separators=(",", ":"))
     )
@@ -123,6 +147,7 @@ def prepare_experimental_review_publication(
             "snapshot": dict(snapshot),
             "snapshot_is_fresh": snapshot_is_fresh,
             "survivors": effective_survivors,
+            "unpostable": effective_unpostable,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -143,6 +168,8 @@ def prepare_experimental_review_publication(
         **identity,
         "state": "complete" if snapshot_is_fresh else "stale_snapshot",
         "survivors": effective_survivors,
+        "unpostable": effective_unpostable,
+        "outside_diff_range": render_unpostable_review_section(effective_unpostable),
     }
     if not snapshot_is_fresh:
         return {
@@ -151,14 +178,24 @@ def prepare_experimental_review_publication(
             "artifacts": {"raw_findings": raw_findings},
         }
 
-    diff_context = {**metadata, **identity, "context_entries": normalized_survivors}
+    diff_context = {
+        **metadata,
+        **identity,
+        "context_entries": normalized_survivors,
+        "unpostable": normalized_unpostable,
+    }
     artifacts: dict[str, object] = {
         "raw_findings": raw_findings,
         "diff_context": diff_context,
     }
     artifact_order = ["raw_findings", "diff_context"]
     if mode == "local":
-        local_findings = {**metadata, **identity, "findings": normalized_survivors}
+        local_findings = {
+            **metadata,
+            **identity,
+            "findings": normalized_survivors,
+            "unpostable": normalized_unpostable,
+        }
         artifacts["local_findings"] = local_findings
         artifact_order.append("local_findings")
     elif receipt is not None:

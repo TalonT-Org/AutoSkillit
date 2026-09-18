@@ -10,6 +10,7 @@ from ._linux_proc import (
     is_pid_alive,
     is_pid_zombie,
     is_session_alive,
+    owner_liveness,
     read_boot_id,
     read_process_state,
     read_starttime_ticks,
@@ -80,8 +81,10 @@ from .session_provenance import (
 from .session_registry import (
     bind_session_owner,
     bridge_claude_session_id,
+    claim_launch_for_session,
     read_registry,
     registry_path,
+    release_session_claim,
     write_registry_entry,
 )
 from .worktree_gate_lease import WorktreeGateContention, WorktreeGateLease
@@ -113,9 +116,11 @@ __all__ = [
     "is_pid_alive",
     "is_pid_zombie",
     "is_session_alive",
+    "owner_liveness",
     "KitchenMarker",
     "bind_session_owner",
     "bridge_claude_session_id",
+    "claim_launch_for_session",
     "cleanup_readiness_sentinel",
     "find_caller_session_id",
     "get_state_dir",
@@ -132,6 +137,7 @@ __all__ = [
     "resolve_kitchen_id",
     "read_provenance_for_session",
     "read_registry",
+    "release_session_claim",
     "read_starttime_ticks",
     "readiness_sentinel_path",
     "resolve_executable_launch_binding",

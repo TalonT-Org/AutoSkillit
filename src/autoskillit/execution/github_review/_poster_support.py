@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from autoskillit.core import (
+    GitHubReviewFindingDisposition,
     GitHubReviewPostResult,
     GitHubReviewReceipt,
     GitHubReviewRequest,
@@ -18,19 +19,11 @@ from autoskillit.core import (
     ReviewResponseClass,
 )
 
-from .canonical import canonical_comment_records
+from .canonical import AdmittedFinding, CanonicalFinding
 from .gateway import GatewayResult
 
 OPERATION_MARKER = "<!-- autoskillit-review-operation:{key} -->"
 FINDING_MARKER = "<!-- autoskillit-review-finding:{digest} -->"
-
-
-@dataclass(frozen=True, slots=True)
-class CanonicalFinding:
-    canonical_index: int
-    original_index: int
-    digest: str
-    wire: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,31 +41,18 @@ class RemoteFindingScan:
     error: str | None = None
 
 
-def canonical_findings(
-    request: GitHubReviewRequest,
-) -> tuple[CanonicalFinding, ...]:
-    return tuple(
-        CanonicalFinding(
-            canonical_index=canonical_index,
-            original_index=original_index,
-            digest=hashlib.sha256(canonical_json(wire)).hexdigest(),
-            wire=wire,
-        )
-        for canonical_index, (original_index, wire) in enumerate(
-            canonical_comment_records(request)
-        )
-    )
-
-
 def payload(
     *,
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
+    omitted: tuple[GitHubReviewFindingDisposition, ...],
     event: str,
 ) -> dict[str, Any]:
     comments: list[dict[str, Any]] = []
     for finding in findings:
+        if not isinstance(finding, AdmittedFinding):
+            raise TypeError("review payload requires admitted findings")
         item = {
             key: value
             for key, value in finding.wire.items()
@@ -85,9 +65,27 @@ def payload(
             FINDING_MARKER.format(digest=finding.digest),
         )
         comments.append(item)
+    body = normalize_text(request.body)
+    entries = []
+    for disposition in omitted:
+        if disposition.kind is ReviewFindingDispositionKind.OMITTED_INVALID:
+            if not 0 <= disposition.original_index < len(request.comments):
+                raise ValueError(
+                    f"omitted disposition original_index {disposition.original_index} "
+                    f"out of range for request with {len(request.comments)} comments"
+                )
+            comment = request.comments[disposition.original_index]
+            entries.append(
+                f"- `{comment.path}:{comment.line}` ({comment.side}): "
+                f"{normalize_text(comment.body)}\n  Reason: {disposition.reason}"
+            )
+    if entries:
+        body += "\n\n## Outside Diff Range\n\n" + "\n\n".join(entries)
+    if len(body) > 60000:
+        raise ValueError("review body including omitted findings exceeds 60000 characters")
     return {
         "body": append_marker(
-            normalize_text(request.body),
+            body,
             OPERATION_MARKER.format(key=operation_key),
         ),
         "commit_id": request.head_sha,
@@ -135,9 +133,16 @@ def structured_invalid_comment_index(
         return None
     data = response.data if isinstance(response.data, Mapping) else {}
     errors = data.get("errors")
-    if not isinstance(errors, list) or len(errors) != 1:
+    if not isinstance(errors, list):
         return None
-    item = errors[0]
+    anchor_errors = [
+        item
+        for item in errors
+        if isinstance(item, Mapping) and str(item.get("field", "")).startswith("comments[")
+    ]
+    if len(anchor_errors) != 1:
+        return None
+    item = anchor_errors[0]
     if not isinstance(item, Mapping) or item.get("code") != "invalid":
         return None
     message = str(item.get("message", "")).casefold()
@@ -247,8 +252,9 @@ def text_digest(value: str) -> str:
 def effective_body_digest(
     request: GitHubReviewRequest,
     operation_key: str,
-    findings: tuple[CanonicalFinding, ...],
+    findings: tuple[AdmittedFinding, ...],
     event: str,
+    omitted: tuple[GitHubReviewFindingDisposition, ...],
 ) -> str:
     """Digest the exact top-level body sent to GitHub for one attempt."""
     return text_digest(
@@ -257,6 +263,7 @@ def effective_body_digest(
                 request=request,
                 operation_key=operation_key,
                 findings=findings,
+                omitted=omitted,
                 event=event,
             )["body"]
         )
@@ -264,7 +271,7 @@ def effective_body_digest(
 
 
 def finding_set_digest(findings: tuple[CanonicalFinding, ...]) -> str:
-    return hashlib.sha256(canonical_json([finding.wire for finding in findings])).hexdigest()
+    return hashlib.sha256(canonical_json([dict(finding.wire) for finding in findings])).hexdigest()
 
 
 def append_marker(body: str, marker: str) -> str:

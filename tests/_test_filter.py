@@ -514,6 +514,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
+    "_type_github_review_anchor": frozenset(
+        {"core", "execution", "pipeline", "server", "smoke_utils"}
+    ),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli", "fleet", "server"}),
@@ -564,7 +567,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
     ),
-    "_type_phoropter": frozenset({"core"}),
     "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
@@ -1073,7 +1075,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # exploration/collectors/_bounded.py imports execution.process (spawn_owned_process)
             # under a documented IL-008 exception — the funnel migration for the tether plan.
             "infra/test_pretty_output_hook_infra.py",
-            # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
+            # file-level: envelope-fit test imports execution.backends.BACKEND_REGISTRY
             "infra/test_pretty_output_recipe.py",
             # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
             # by reflection, so a new command builder must be covered automatically.
@@ -1263,6 +1265,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_zero_write_detection.py",
             "execution/test_smoke_codex.py",
             "execution/test_outcome_invariants.py",
+            "execution/test_finding_dispositions.py",
             "execution/test_headless_enum_recovery.py",
             # Fleet file-level entries (9 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
@@ -1359,6 +1362,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
             "cli/test_capture_store.py",
+            # file-level: open-kitchen bridge drives the real registry path (no in-memory stub)
+            "cli/test_resume_registry_identity.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",

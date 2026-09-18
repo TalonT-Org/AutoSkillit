@@ -65,7 +65,7 @@ Each direct Python file has one responsibility:
 
 ### Recipe contracts
 
-- `_type_recipe_binding.py` — Frozen value objects for canonical recipe-step binding.
+- `_type_recipe_binding.py` — Frozen recipe-step binding and phoropter value objects.
 - `_type_recipe_delivery.py` — Typed recipe-delivery budget, provenance, and decision contracts.
 - `_type_recipe_execution.py` — Immutable recipe-execution attestation and admission contracts.
 - `_type_recipe_sections.py` — Recipe-section schema validation and canonical digest helpers.
@@ -91,6 +91,7 @@ Each direct Python file has one responsibility:
 - `_type_exploration.py` — Immutable, deterministic contracts for read-only repository exploration.
 - `_type_figure_spec.py` — Figure specification fields and required producer/consumer schema fields.
 - `_type_github_review.py` — Immutable contracts for authoritative GitHub pull-request reviews.
+- `_type_github_review_anchor.py` — Immutable, diff-bound inline review anchor authority.
 - `_type_helpers.py` — Core skill name resolution and text-processing helpers.
 - `_type_inspector.py` — Health Inspector types.
 - `_type_install.py` — Typed maintenance-install subprocess boundary shared across package layers.
@@ -104,7 +105,6 @@ Each direct Python file has one responsibility:
 - `_type_native_shell_capture.py` — Closed launch-control and managed headless lineage contracts.
 - `_type_orchestrator_instruction_surfaces.py` — Orchestrator-facing instruction surface definitions and registry.
 - `_type_persisted_formats.py` — Ledger of enums embedded in versioned persisted formats.
-- `_type_phoropter.py` — Phoropter family and phase types.
 - `_type_plugin_source.py` — Import-layer-safe plugin artifact lifecycle value objects.
 - `_type_retirement_backstops.py` — Declared safety backstops for destructive plugin-artifact retirement.
 - `_type_session_env.py` — Typed env specs for session launch boundaries.

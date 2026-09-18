@@ -115,6 +115,7 @@ def test_recipe_delivery_tool_classifications_are_exact() -> None:
         "create_and_publish_branch",
         "release_issue",
         "run_cmd",
+        "verify_review_receipt",
     }
 
     actual_automatic = {
@@ -133,6 +134,20 @@ def test_recipe_delivery_tool_classifications_are_exact() -> None:
     [
         ("run_python", ("callable", "args", "timeout", "work_dir", "step_name")),
         ("check_pr_mergeable", ("pr_number", "cwd", "repo", "step_name")),
+        (
+            "verify_review_receipt",
+            (
+                "cwd",
+                "receipt_path",
+                "repository",
+                "pr_number",
+                "head_sha",
+                "logical_iteration",
+                "mode",
+                "post_state",
+                "step_name",
+            ),
+        ),
         (
             "claim_and_resolve_issue",
             ("issue_url", "label", "allow_reentry", "step_name"),
@@ -200,6 +215,7 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
         "post_pr_review": {
             "cwd": ToolWireType.STRING,
             "receipt_path": ToolWireType.STRING,
+            "anchor_authority_path": ToolWireType.STRING,
             "repository": ToolWireType.STRING,
             "pr_number": ToolWireType.INTEGER,
             "head_sha": ToolWireType.STRING,
@@ -208,6 +224,17 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             "body": ToolWireType.STRING,
             "comments": ToolWireType.ARRAY,
             "dry_run": ToolWireType.BOOLEAN,
+        },
+        "verify_review_receipt": {
+            "cwd": ToolWireType.STRING,
+            "receipt_path": ToolWireType.STRING,
+            "repository": ToolWireType.STRING,
+            "pr_number": ToolWireType.INTEGER,
+            "head_sha": ToolWireType.STRING,
+            "logical_iteration": ToolWireType.STRING,
+            "mode": ToolWireType.STRING,
+            "post_state": ToolWireType.STRING,
+            "step_name": ToolWireType.STRING,
         },
     }
 
@@ -355,6 +382,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "get_issue_title",
             "get_pipeline_report",
             "get_pr_reviews",
+            "verify_review_receipt",
             "get_quota_events",
             "get_timing_summary",
             "get_token_summary",

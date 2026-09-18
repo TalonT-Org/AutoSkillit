@@ -38,7 +38,12 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 
 ## Arguments
 
-`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>]`
+- **anchor_authority_path** (optional) — caller-supplied annotation authority artifact,
+  bound to repository, PR, and head SHA. Required for inline comments; when absent,
+  publish findings in the review body only. Pass the path unchanged to the guarded
+  publication call.
+
+`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [anchor_authority_path=<path>]`
 
 - **worktree-path-or-feature-branch** — Either an absolute path to the research worktree
   (preferred; skill derives the feature branch from `git rev-parse --abbrev-ref HEAD`)
@@ -46,7 +51,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided, loaded in Step 2.7 instead of parsing from the diff inline.
-- **valid_lines_path** (optional) — absolute path to a pre-computed valid lines JSON file (produced by `annotate_pr_diff` run_python step). Contains exact `{filepath: [line_numbers]}` set. When provided, enables exact set-membership validation in Step 4.
+- **valid_lines_path** (optional) — absolute path to the right-side valid-line annotation JSON produced by `annotate_pr_diff`. Retained as analysis evidence; inline admission uses the authority artifact.
 
 ## When to Use
 
@@ -146,8 +151,8 @@ fi
 ```
 
 `VALID_DIFF_LINES` is a JSON mapping `{filepath: [line_numbers]}` containing the exact set of
-new-file line numbers present in the diff. When available, Step 4 uses set-membership for
-validation. `VALID_LINE_RANGES` is used as fallback for interval checking.
+new-file line numbers present in the diff. These sidecars support analysis;
+Step 4 uses the authority artifact for inline admission, never interval fallback.
 
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
@@ -257,22 +262,61 @@ context" instead of emitting a reference to a nonexistent path.
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition findings using exact line validation when available:
-   - When `VALID_DIFF_LINES` is non-empty (loaded in Step 2.7), use **set-membership**:
-     a finding is postable if its `line` exists in `VALID_DIFF_LINES[file]`.
-   - When `VALID_DIFF_LINES` is empty but `VALID_LINE_RANGES` is non-empty, fall back to
-     **hunk-span interval checking**.
-   - `FILTERED_FINDINGS`: findings that pass validation.
-   - `UNPOSTABLE_FINDINGS`: findings that fail validation.
-     Log a warning for each. Critical-severity unpostable findings are posted as
-     file-level comments in Step 6. All unpostable findings appear in the Step 7 body.
-   - If both `VALID_DIFF_LINES` and `VALID_LINE_RANGES` are empty, all findings are `FILTERED_FINDINGS`.
+3. Partition findings with `aggregate_combined_review_candidates`, using the
+   deserialized `anchor_authority_path` artifact. `FILTERED_FINDINGS` are its
+   `survivors`; `UNPOSTABLE_FINDINGS` are its `unpostable` partition, including
+   admission reasons. Authority is unavailable, available-empty, or available
+   with exact valid lines. The first two states admit no inline findings; never
+   substitute hunk intervals or treat empty authority as permission.
+   Missing authority permits body-only publication. All unpostable findings belong
+   in the review body's "Outside Diff Range" section; never use file-level or
+   individual-comment fallback requests.
 4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the verdict.
 5. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
+
+Before computing the verdict, run the shared programmatic partition below. Use the
+absolute review checkout for `REVIEW_ROOT`; capture `REVIEW_SNAPSHOT` from the
+reviewed head and base commits as `{"head_sha": pr_head_sha, "base_sha": base_sha}`.
+An invalid supplied artifact stops publication; absence creates explicit unavailable
+authority. Do not replace a failed artifact read with permissive line ranges.
+
+```python
+import json
+from pathlib import Path
+
+from autoskillit.core import DiffAnchorAuthority
+from autoskillit.smoke_utils import aggregate_combined_review_candidates
+
+ANCHOR_AUTHORITY = (
+    DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
+    if anchor_authority_path
+    else DiffAnchorAuthority.unavailable(
+        repository=repository, pr_number=int(pr_number), head_sha=pr_head_sha
+    )
+)
+AGGREGATION_RESULT = aggregate_combined_review_candidates(
+    candidates=[],
+    dispositions=[],
+    prior_resolved_findings=[],
+    standard_findings=FINDINGS,
+    allowed_dimensions={
+        "methodology", "reproducibility", "report-quality", "statistical-rigor",
+        "isolation", "data-integrity", "slop", "data-scope",
+    },
+    anchor_authority=ANCHOR_AUTHORITY,
+    snapshot=REVIEW_SNAPSHOT,
+    review_root=REVIEW_ROOT,
+)
+FILTERED_FINDINGS = AGGREGATION_RESULT["survivors"]
+UNPOSTABLE_FINDINGS = AGGREGATION_RESULT["unpostable"]
+```
+
+If aggregation is degraded by malformed findings, stop publication and report
+`needs_human`. Anchor rejection alone does not degrade the audit.
 
 ### Step 4.5: Echo Primary Obligation
 
@@ -323,10 +367,19 @@ boundary to `severity == "critical"` or `severity == "warning"`. Preserve every 
 Map `approved` to `APPROVE`, `needs_human` to `COMMENT`, and `changes_requested` to
 `REQUEST_CHANGES`. Then call the structured publication tool once:
 
+Render the unpostable partition into the complete review body before publication:
+
+```python
+from autoskillit.smoke_utils import render_unpostable_review_section
+
+REVIEW_BODY += render_unpostable_review_section(UNPOSTABLE_FINDINGS)
+```
+
 ```text
 post_pr_review(
   cwd: "$PWD",
   receipt_path: "$receipt_path",
+  anchor_authority_path: "$anchor_authority_path",
   repository: "$repository",
   pr_number: "$pr_number",
   head_sha: "$pr_head_sha",

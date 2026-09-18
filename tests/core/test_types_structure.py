@@ -652,9 +652,12 @@ def test_phoropter_symbols_importable_from_core_gateway() -> None:
 
 
 def test_phoropter_all_in_types_all() -> None:
-    """Every _type_phoropter.__all__ member must appear in core.types.__all__."""
+    """Every consolidated phoropter symbol must appear in core.types.__all__."""
     from autoskillit.core.types import __all__ as types_all
-    from autoskillit.core.types._type_phoropter import __all__ as phoropter_all
 
-    missing = set(phoropter_all) - set(types_all)
+    missing = {
+        "PhoropterPrescription",
+        "ReadingToken",
+        "READING_TOKEN_PATTERN",
+    } - set(types_all)
     assert not missing, f"Missing from core.types.__all__: {missing}"

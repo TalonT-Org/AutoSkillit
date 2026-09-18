@@ -151,6 +151,21 @@ def test_sidechain_sessions_excluded(tmp_path: Path) -> None:
     assert result is None
 
 
+def test_picker_propagates_locator_registry_corruption(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    corruption_error = ValueError("Session registry corruption")
+
+    class _CorruptRegistryLocator:
+        def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
+            raise corruption_error
+
+    with pytest.raises(ValueError) as error:
+        pick_session("cook", project_dir, _CorruptRegistryLocator())
+
+    assert error.value is corruption_error
+
+
 def test_user_selects_numbered_session(monkeypatch: pytest.MonkeyPatch) -> None:
     sessions = [
         _summary("uuid-1"),

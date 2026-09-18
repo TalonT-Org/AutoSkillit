@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    DiffAnchorAuthority,
     GitHubReviewComment,
+    GitHubReviewRequest,
     ReviewFindingDispositionKind,
     ReviewOperationState,
     ReviewReconciliationResult,
@@ -15,6 +17,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution import GitHubReviewLedger, compute_review_operation_key
 from autoskillit.execution.github_review import _poster_support
+from autoskillit.execution.github_review.canonical import admit_findings, canonical_findings
 from autoskillit.execution.github_review.gateway import GatewayResult
 
 from .fakes import (
@@ -26,6 +29,66 @@ from .fakes import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "guard,error",
+    [
+        ("RETRY_STALE", "no longer pending"),
+        ("RETRY_CONTENDED", "claimed by another poster"),
+        ("SLOT_BLOCKED", "blocks this rate scope"),
+    ],
+)
+async def test_pre_gateway_guard_returns_are_classified_outcomes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    guard: str,
+    error: str,
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from autoskillit.execution.github_review.poster import ReviewAttemptOutcome
+
+    outcome = ReviewAttemptOutcome[guard]
+    request = _request(tmp_path)
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock)
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+    monkeypatch.setattr(
+        poster.ledger,
+        "begin_attempt",
+        lambda **kwargs: SimpleNamespace(
+            state=(
+                ReviewOperationState.SUCCEEDED.value
+                if outcome is ReviewAttemptOutcome.RETRY_STALE
+                else ReviewOperationState.RETRY_PENDING.value
+            )
+        ),
+    )
+    monkeypatch.setattr(poster.ledger, "claim_retry_attempt", lambda **kwargs: False)
+    monkeypatch.setattr(poster.ledger, "complete_attempt", lambda **kwargs: None)
+    monkeypatch.setattr(
+        poster.coordinator,
+        "acquire",
+        AsyncMock(return_value=SimpleNamespace(blocked_operation_key="other")),
+    )
+    result = await poster._attempt(
+        request=request,
+        operation_key=compute_review_operation_key(request),
+        scope_id="scope",
+        findings=admit_findings(canonical_findings(request), request.anchor_authority).admitted,
+        effective_event="COMMENT",
+        attempt_number=2,
+        omitted=(),
+        authenticated_login="bot",
+        pr_author_login="author",
+        resume_pending=outcome is not ReviewAttemptOutcome.SLOT_BLOCKED,
+    )
+    assert result.state is ReviewOperationState.AMBIGUOUS
+    assert error in result.error
+    assert gateway.create_calls == []
 
 
 def _validation_error(index: int) -> dict[str, object]:
@@ -98,6 +161,203 @@ def _self_review_error() -> dict[str, object]:
             }
         ],
     }
+
+
+@pytest.mark.anyio
+async def test_combined_self_review_and_anchor_422_does_not_retry_unreduced(
+    tmp_path: Path,
+) -> None:
+    combined = _validation_error(0)
+    combined["errors"] += _self_review_error()["errors"]
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="author",
+        pr_author_login="author",
+        outcomes=[CreateOutcome(422, data=combined), CreateOutcome(200, commit=True)],
+    )
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
+        _request(
+            tmp_path,
+            event="REQUEST_CHANGES",
+            comments=(
+                GitHubReviewComment(path="src/a.py", line=10, body="Reject"),
+                GitHubReviewComment(path="src/b.py", line=20, body="Keep"),
+            ),
+        )
+    )
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert [len(call["comments"]) for call in gateway.create_calls] == [2, 1]
+    assert gateway.create_calls[1]["event"] == "COMMENT"
+    assert "Reject" in gateway.create_calls[1]["body"]
+    assert gateway.call_trace[:2] == ["create_review", "list_reviews"]
+
+
+@pytest.mark.anyio
+async def test_self_review_retry_reconciles_before_mutating(tmp_path: Path) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="author",
+        pr_author_login="author",
+        outcomes=[CreateOutcome(422, data=_self_review_error()), CreateOutcome(200, commit=True)],
+    )
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
+        _request(tmp_path, event="REQUEST_CHANGES")
+    )
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert gateway.call_trace == ["create_review", "list_reviews", "create_review", "list_reviews"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("second,fail_reads", [(False, True), (True, True), (True, False)])
+async def test_generic_and_second_422_reconcile_before_terminal(
+    tmp_path: Path,
+    second: bool,
+    fail_reads: bool,
+) -> None:
+    clock = ManualClock()
+    outcomes = [CreateOutcome(422, data=_self_review_error())] if second else []
+    outcomes.append(
+        CreateOutcome(
+            422,
+            data=_validation_error(0) if second else {"message": "invalid"},
+            fail_reads_after=fail_reads,
+        )
+    )
+    gateway = StatefulReviewGateway(
+        clock=clock, authenticated_login="author", pr_author_login="author", outcomes=outcomes
+    )
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
+        _request(tmp_path, event="REQUEST_CHANGES")
+    )
+    assert result.state is (
+        ReviewOperationState.AMBIGUOUS if fail_reads else ReviewOperationState.TERMINAL
+    )
+    assert len(gateway.create_calls) == (2 if second else 1)
+    assert gateway.call_trace[-2:] == ["create_review", "list_reviews"]
+
+
+@pytest.mark.anyio
+async def test_second_422_after_corrected_retry_terminates_without_third_attempt(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "ledger.sqlite3"
+    request = _request(tmp_path, event="REQUEST_CHANGES")
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="author",
+        pr_author_login="author",
+        outcomes=[
+            CreateOutcome(422, data=_self_review_error()),
+            CreateOutcome(422, data=_validation_error(0)),
+        ],
+    )
+
+    result = await _poster(database_path, gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.TERMINAL
+    assert len(gateway.create_calls) == 2
+    assert gateway.call_trace == [
+        "create_review",
+        "list_reviews",
+        "create_review",
+        "list_reviews",
+    ]
+    attempts = GitHubReviewLedger(database_path).load_attempts(
+        compute_review_operation_key(request)
+    )
+    assert [attempt.attempt_number for attempt in attempts] == [1, 2]
+
+
+def _request_with_initial_and_retry_omissions(tmp_path: Path) -> GitHubReviewRequest:
+    comments = (
+        GitHubReviewComment(path="src/a.py", line=10, body="Keep A"),
+        GitHubReviewComment(path="src/b.py", line=20, body="Dropped by retry"),
+        GitHubReviewComment(path="src/c.py", line=30, body="Rejected before POST"),
+    )
+    authority = DiffAnchorAuthority.authoritative(
+        repository="octo/example",
+        pr_number=42,
+        head_sha="a" * 40,
+        generation_id="mixed-omissions",
+        right_side_lines={"src/a.py": {10}, "src/b.py": {20}},
+        left_side_lines={},
+    )
+    return _request(tmp_path, comments=comments, anchor_authority=authority)
+
+
+@pytest.mark.anyio
+async def test_corrected_retry_body_names_every_omitted_finding(tmp_path: Path) -> None:
+    request = _request_with_initial_and_retry_omissions(tmp_path)
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    retry_body = gateway.create_calls[-1]["body"]
+    assert "Outside Diff Range" in retry_body
+    assert "Dropped by retry" in retry_body
+    assert "Rejected before POST" in retry_body
+
+
+@pytest.mark.anyio
+async def test_receipt_disposition_count_matches_body_entries(tmp_path: Path) -> None:
+    request = _request_with_initial_and_retry_omissions(tmp_path)
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.receipt is not None
+    omitted_count = sum(
+        item.kind is ReviewFindingDispositionKind.OMITTED_INVALID
+        for item in result.receipt.finding_dispositions
+    )
+    outside_diff = gateway.create_calls[-1]["body"].split("## Outside Diff Range", 1)[1]
+    body_count = outside_diff.count("\n- `")
+    assert omitted_count == body_count, (
+        f"disposition count {omitted_count} must match body entry count {body_count}"
+    )
+    # Fixture-encoded expectation: _request_with_initial_and_retry_omissions defines
+    # exactly two omitted findings (one dropped by retry, one rejected before POST).
+    # This guards against silent fixture growth that would otherwise pass the body
+    # consistency check above.
+    assert omitted_count == 2, f"expected exactly 2 omitted findings, got {omitted_count}"
+
+
+@pytest.mark.anyio
+async def test_over_reduction_publishes_body_only_rather_than_terminal(tmp_path: Path) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[CreateOutcome(422, data=_validation_error(0)), CreateOutcome(200, commit=True)],
+    )
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(_request(tmp_path))
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert len(gateway.create_calls) == 2
+    assert gateway.create_calls[1]["comments"] == []
+    assert "Normalize this value." in gateway.create_calls[1]["body"]
+    assert "Outside Diff Range" in gateway.create_calls[1]["body"]
+    assert result.receipt is not None
+    assert len(result.receipt.finding_dispositions) == 1
+    assert (
+        result.receipt.finding_dispositions[0].kind is ReviewFindingDispositionKind.OMITTED_INVALID
+    )
 
 
 @pytest.mark.anyio
@@ -192,6 +452,8 @@ async def test_exact_structured_422_retries_one_strict_subset_and_accounts_findi
     ]
     assert first_bodies == ["Keep A", "Reject B", "Keep C"]
     assert second_bodies == ["Keep A", "Keep C"]
+    assert "Outside Diff Range" in gateway.create_calls[1]["body"]
+    assert "Reject B" in gateway.create_calls[1]["body"]
     assert result.receipt is not None
     assert len(result.receipt.finding_dispositions) == 3
     rejected = next(
@@ -262,6 +524,8 @@ async def test_crash_before_reduced_retry_claim_resumes_persisted_intent(
     assert recovered.state is ReviewOperationState.SUCCEEDED
     assert recovered.executed_mutation_count == 2
     assert len(gateway.create_calls) == 2
+    assert "Outside Diff Range" in gateway.create_calls[1]["body"]
+    assert "Reject B" in gateway.create_calls[1]["body"]
     second_bodies = [
         item["body"].split("\n\n", 1)[0] for item in gateway.create_calls[1]["comments"]
     ]
@@ -346,12 +610,13 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
             ),
         ],
     )
-    findings = _poster_support.canonical_findings(request)
+    findings = admit_findings(canonical_findings(request), request.anchor_authority).admitted
     gateway._commit(
         _poster_support.payload(
             request=request,
             operation_key="preexisting-operation",
             findings=(findings[0],),
+            omitted=(),
             event="COMMENT",
         )
     )
@@ -375,8 +640,8 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
     final_attempt = GitHubReviewLedger(database_path).load_attempts(recovered.operation_key)[-1]
     assert final_attempt.state == ReviewOperationState.RECONCILED.value
     assert final_attempt.omitted_dispositions == (
-        dispositions[1],
         dispositions[0],
+        dispositions[1],
     )
 
 

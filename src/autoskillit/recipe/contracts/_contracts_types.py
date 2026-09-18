@@ -70,6 +70,10 @@ class SkillOutput:
     type: str
     allowed_values: list[str] = dataclasses.field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.type == "dispositions" and self.name != "finding_disposition":
+            raise ValueError("dispositions output type is reserved for 'finding_disposition'")
+
 
 class AuditOutputMode(StrEnum):
     ATTESTED = "attested"

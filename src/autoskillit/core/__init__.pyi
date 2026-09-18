@@ -334,6 +334,7 @@ from .plugins.agent_definition import normalize_codex_cli_version as normalize_c
 from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
+from .runtime._linux_proc import owner_liveness as owner_liveness
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_pid_namespace_inode as read_pid_namespace_inode
 from .runtime._linux_proc import read_process_state as read_process_state
@@ -403,8 +404,10 @@ from .runtime.session_provenance import (
 from .runtime.session_provenance import write_provenance_record as write_provenance_record
 from .runtime.session_registry import bind_session_owner as bind_session_owner
 from .runtime.session_registry import bridge_claude_session_id as bridge_claude_session_id
+from .runtime.session_registry import claim_launch_for_session as claim_launch_for_session
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
+from .runtime.session_registry import release_session_claim as release_session_claim
 from .runtime.session_registry import write_registry_entry as write_registry_entry
 from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
 from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease
@@ -772,10 +775,13 @@ from .types import AdmissionStatus as AdmissionStatus
 from .types import AdmissionTransition as AdmissionTransition
 from .types import AdmissionWitness as AdmissionWitness
 from .types import AdmissionWitnessId as AdmissionWitnessId
+from .types import AdmittedAnchor as AdmittedAnchor
 from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import AnchorAdmission as AnchorAdmission
+from .types import AnchorAuthorityAvailability as AnchorAuthorityAvailability
 from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
@@ -936,6 +942,7 @@ from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
+from .types import DiffAnchorAuthority as DiffAnchorAuthority
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
@@ -1084,6 +1091,7 @@ from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OrchestratorSurfaceDef as OrchestratorSurfaceDef
+from .types import OutcomeComparison as OutcomeComparison
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
@@ -1320,6 +1328,7 @@ from .types import WorkspaceOutcomeRecord as WorkspaceOutcomeRecord
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
+from .types import admit_anchor as admit_anchor
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,
@@ -1349,6 +1358,7 @@ from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
 )
+from .types import evaluate_outcome_expression as evaluate_outcome_expression
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
@@ -1384,6 +1394,7 @@ from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_inc
 from .types import normalize_declared_truth as normalize_declared_truth
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
+from .types import parse_outcome_expression as parse_outcome_expression
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (
     pop_native_shell_capture_decision as pop_native_shell_capture_decision,

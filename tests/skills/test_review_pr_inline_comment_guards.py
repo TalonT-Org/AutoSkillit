@@ -42,7 +42,7 @@ def _skill_text(skill_name: str) -> str:
 
 
 def _publication_section(text: str) -> str:
-    call_idx = text.find("post_pr_review")
+    call_idx = text.find("post_pr_review(")
     assert call_idx >= 0, "canonical review writer must call post_pr_review"
     section_start = text.rfind("\n### ", 0, call_idx)
     section_end = text.find("\n### ", call_idx)
@@ -63,8 +63,13 @@ def _parameter_line(section: str, name: str) -> str:
     return next(line for line in section.splitlines() if pattern.search(line))
 
 
-def _fenced_blocks(text: str) -> list[str]:
-    return _FENCED_BLOCK_RE.findall(text)
+def _publication_call_blocks(text: str) -> list[str]:
+    section = _publication_section(text)
+    return [
+        block
+        for block in _FENCED_BLOCK_RE.findall(section)
+        if "post_pr_review(" in block or ("gh api" in block and _POST_RE.search(block) is not None)
+    ]
 
 
 def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
@@ -130,6 +135,23 @@ def test_post_pr_review_receives_canonical_identity_and_head(
 
 
 @pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_post_pr_review_receives_annotation_authority(
+    skill_name: str,
+    iteration_namespace: str,
+) -> None:
+    del iteration_namespace
+    section = _publication_section(_skill_text(skill_name))
+
+    assert _parameter_is_present(section, "anchor_authority_path"), (
+        f"{skill_name}/SKILL.md post_pr_review call must pass anchor_authority_path"
+    )
+    authority_line = _parameter_line(section, "anchor_authority_path")
+    assert authority_line.count("anchor_authority_path") >= 2, (
+        f"{skill_name}/SKILL.md must pass the supplied anchor authority, not synthesize one"
+    )
+
+
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
 def test_post_pr_review_receives_complete_review_and_contained_receipt(
     skill_name: str,
     iteration_namespace: str,
@@ -176,7 +198,7 @@ def test_writer_captures_receipt_state_before_preserving_verdict(
 ) -> None:
     del iteration_namespace
     text = _skill_text(skill_name)
-    call_idx = text.find("post_pr_review")
+    call_idx = text.find("post_pr_review(")
     tail = text[call_idx:]
 
     for field in _CAPTURED_RECEIPT_FIELDS:
@@ -196,16 +218,24 @@ def test_writer_contains_no_raw_or_fallback_review_mutations(
     del iteration_namespace
     text = _skill_text(skill_name)
     publication_section = _publication_section(text)
+    call_blocks = _publication_call_blocks(text)
+    assert call_blocks, f"{skill_name}/SKILL.md must have a concrete publication call block"
 
-    for block in _fenced_blocks(text):
-        if "gh api" not in block or not _POST_RE.search(block):
-            continue
+    for block in call_blocks:
         assert not _RAW_REVIEW_ENDPOINT_RE.search(block), (
             f"{skill_name}/SKILL.md must not issue a raw Reviews API mutation"
         )
         assert not _RAW_COMMENT_ENDPOINT_RE.search(block), (
             f"{skill_name}/SKILL.md must not issue individual review-comment mutations"
         )
+        assert "subject_type" not in block, (
+            f"{skill_name}/SKILL.md must not synthesize file-level fallback comments"
+        )
+        assert not re.search(
+            r"\bfor\s+\w+\s+in\s+[^\n]*(?:finding|comment)",
+            block,
+            re.IGNORECASE,
+        ), f"{skill_name}/SKILL.md must not publish findings in a per-finding loop"
 
     forbidden_fallbacks = (
         "tier 1 fallback",
@@ -223,16 +253,13 @@ def test_writer_contains_no_raw_or_fallback_review_mutations(
         "second summary review",
         "summary-only review",
     )
-    lower = text.lower()
+    lower = publication_section.lower()
     for phrase in forbidden_fallbacks:
         assert phrase not in lower, (
             f"{skill_name}/SKILL.md must delegate mutation policy to post_pr_review; "
             f"found forbidden prompt fallback {phrase!r}"
         )
 
-    assert "subject_type" not in publication_section, (
-        f"{skill_name}/SKILL.md must not synthesize file-level fallback comments"
-    )
     assert not re.search(r"\bself[- ]review\b", publication_section, re.IGNORECASE), (
         f"{skill_name}/SKILL.md must not perform prompt-level self-review transformation"
     )
@@ -244,6 +271,17 @@ def test_writer_contains_no_raw_or_fallback_review_mutations(
     assert not re.search(r"\bsleep(?:\s+\d+|\s*\()", publication_section, re.IGNORECASE), (
         f"{skill_name}/SKILL.md must not pace post_pr_review mutations in the prompt"
     )
+
+
+def test_audit_claims_publishes_only_filtered_findings() -> None:
+    section = _publication_section(_skill_text("audit-claims"))
+    preparation = next(
+        line for line in section.splitlines() if "Prepare one complete `comments` array" in line
+    )
+
+    assert "`FILTERED_FINDINGS`" in preparation
+    assert "from `FINDINGS`" not in preparation
+    assert "COMMENTS_JSON" in _parameter_line(section, "comments")
 
 
 @pytest.mark.parametrize(

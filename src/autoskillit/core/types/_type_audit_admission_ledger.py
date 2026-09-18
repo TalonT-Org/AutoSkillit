@@ -260,42 +260,56 @@ class AuditReservationOutcome:
             raise ValueError("AuditReservationOutcome.slot_key has the wrong type")
         if not isinstance(self.attempt_id, AuditAttemptId):
             raise ValueError("AuditReservationOutcome.attempt_id has the wrong type")
-        dispatchable = {
+        if self.decision in {
             ReservationDecision.DISPATCH_NEW,
             ReservationDecision.REDISPATCH_OPEN,
-        }
-        resumable = {
+        }:
+            _validate_dispatch_reservation_outcome(self)
+        elif self.decision in {
             ReservationDecision.RESUME_PREPARED,
             ReservationDecision.PUBLISHED_PENDING_FINALIZATION,
-        }
-        if self.decision in dispatchable:
-            if self.reservation is None or not self.reservation_handle:
-                raise ValueError("a dispatch decision requires a reservation and handle")
-            if self.replay_outcome is not None or self.conflict_detail is not None:
-                raise ValueError("a dispatch decision cannot carry replay or conflict payload")
-        elif self.decision in resumable:
-            if self.reservation is None:
-                raise ValueError("a resume decision requires a reservation")
-            if self.reservation_handle is not None:
-                raise ValueError("a resume decision never reissues a handle")
-            if self.replay_outcome is not None or self.conflict_detail is not None:
-                raise ValueError("a resume decision cannot carry replay or conflict payload")
+        }:
+            _validate_resume_reservation_outcome(self)
         elif self.decision is ReservationDecision.EXACT_REPLAY:
-            if self.replay_outcome is None:
-                raise ValueError("EXACT_REPLAY requires replay_outcome")
-            if self.reservation is not None or self.reservation_handle is not None:
-                raise ValueError("EXACT_REPLAY never dispatches a child")
-            if self.conflict_detail is not None:
-                raise ValueError("EXACT_REPLAY cannot carry conflict_detail")
+            _validate_replay_reservation_outcome(self)
         else:
-            if not self.conflict_detail:
-                raise ValueError("CONFLICT requires conflict_detail")
-            if (
-                self.reservation is not None
-                or self.reservation_handle is not None
-                or self.replay_outcome is not None
-            ):
-                raise ValueError("CONFLICT cannot carry reservation, handle, or replay payload")
+            _validate_conflict_reservation_outcome(self)
+
+
+def _validate_dispatch_reservation_outcome(outcome: AuditReservationOutcome) -> None:
+    if outcome.reservation is None or not outcome.reservation_handle:
+        raise ValueError("a dispatch decision requires a reservation and handle")
+    if outcome.replay_outcome is not None or outcome.conflict_detail is not None:
+        raise ValueError("a dispatch decision cannot carry replay or conflict payload")
+
+
+def _validate_resume_reservation_outcome(outcome: AuditReservationOutcome) -> None:
+    if outcome.reservation is None:
+        raise ValueError("a resume decision requires a reservation")
+    if outcome.reservation_handle is not None:
+        raise ValueError("a resume decision never reissues a handle")
+    if outcome.replay_outcome is not None or outcome.conflict_detail is not None:
+        raise ValueError("a resume decision cannot carry replay or conflict payload")
+
+
+def _validate_replay_reservation_outcome(outcome: AuditReservationOutcome) -> None:
+    if outcome.replay_outcome is None:
+        raise ValueError("EXACT_REPLAY requires replay_outcome")
+    if outcome.reservation is not None or outcome.reservation_handle is not None:
+        raise ValueError("EXACT_REPLAY never dispatches a child")
+    if outcome.conflict_detail is not None:
+        raise ValueError("EXACT_REPLAY cannot carry conflict_detail")
+
+
+def _validate_conflict_reservation_outcome(outcome: AuditReservationOutcome) -> None:
+    if not outcome.conflict_detail:
+        raise ValueError("CONFLICT requires conflict_detail")
+    if (
+        outcome.reservation is not None
+        or outcome.reservation_handle is not None
+        or outcome.replay_outcome is not None
+    ):
+        raise ValueError("CONFLICT cannot carry reservation, handle, or replay payload")
 
 
 @dataclass(frozen=True, slots=True)

@@ -252,9 +252,9 @@ def _count_semantic_rule_files() -> int:
 # ----- tests ------------------------------------------------------------------
 
 
-def test_kitchen_tagged_tool_count_is_53() -> None:
+def test_kitchen_tagged_tool_count_is_54() -> None:
     count = _count_kitchen_tools()
-    assert count == 53, f"Expected 53 kitchen-tagged tools; found {count}"
+    assert count == 54, f"Expected 54 kitchen-tagged tools; found {count}"
 
 
 def test_free_range_tool_count_is_22() -> None:
@@ -317,9 +317,9 @@ def test_bundled_recipe_count_is_15() -> None:
     assert recipes == expected, f"Recipes drifted: {recipes}"
 
 
-def test_retry_reason_value_count_is_19() -> None:
+def test_retry_reason_value_count_is_20() -> None:
     values = _retry_reason_values()
-    assert len(values) == 19, f"RetryReason has {len(values)} values: {values}"
+    assert len(values) == 20, f"RetryReason has {len(values)} values: {values}"
 
 
 def test_semantic_rule_family_count_is_current() -> None:
@@ -426,8 +426,8 @@ def test_recipes_overview_states_6_recipes() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
 
 
-def test_orchestration_states_19_retry_reasons() -> None:
-    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 19)
+def test_orchestration_states_20_retry_reasons() -> None:
+    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 20)
 
 
 def test_architecture_doc_names_declared_interactive_discovery_route() -> None:

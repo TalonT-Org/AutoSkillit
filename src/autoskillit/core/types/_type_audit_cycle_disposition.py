@@ -317,6 +317,22 @@ class PlanDispositionReport:
             raise ValueError(f"invalid PlanDispositionReport: {exc}") from exc
 
 
+def _validate_admission_reason(status: AdmissionStatus, reason: AdmissionReason) -> None:
+    omit_reasons = {
+        AdmissionReason.NO_AUTHORITY,
+        AdmissionReason.TRUSTED_GO,
+        AdmissionReason.TRUSTED_GO_SUCCESSOR,
+    }
+    if status is AdmissionStatus.OMIT and reason not in omit_reasons:
+        raise ValueError("OMIT admission requires an omission reason")
+    if status is AdmissionStatus.PASS and reason is not AdmissionReason.ADMITTED:
+        raise ValueError("PASS admission requires the admitted reason")
+    if status is AdmissionStatus.REJECT and (
+        reason is AdmissionReason.ADMITTED or reason in omit_reasons
+    ):
+        raise ValueError("REJECT admission requires a rejection reason")
+
+
 @dataclass(frozen=True, slots=True)
 class InventoryAdmissionDecision:
     status: AdmissionStatus
@@ -347,24 +363,14 @@ class InventoryAdmissionDecision:
             raise ValueError("InventoryAdmissionDecision.status must be an AdmissionStatus")
         if not isinstance(self.reason, AdmissionReason):
             raise ValueError("InventoryAdmissionDecision.reason must be an AdmissionReason")
-        omit_reasons = {
-            AdmissionReason.NO_AUTHORITY,
-            AdmissionReason.TRUSTED_GO,
-            AdmissionReason.TRUSTED_GO_SUCCESSOR,
-        }
+        _validate_admission_reason(self.status, self.reason)
         if self.status is AdmissionStatus.OMIT:
-            if self.reason not in omit_reasons:
-                raise ValueError("OMIT admission requires an omission reason")
             if self.dispositions or self.details:
                 raise ValueError("OMIT admission cannot carry payload")
         elif self.status is AdmissionStatus.PASS:
-            if self.reason is not AdmissionReason.ADMITTED:
-                raise ValueError("PASS admission requires the admitted reason")
             if self.details:
                 raise ValueError("PASS admission cannot carry rejection details")
         else:
-            if self.reason is AdmissionReason.ADMITTED or self.reason in omit_reasons:
-                raise ValueError("REJECT admission requires a rejection reason")
             if self.dispositions:
                 raise ValueError("REJECT admission cannot carry disposition rows")
             if not self.details or any(

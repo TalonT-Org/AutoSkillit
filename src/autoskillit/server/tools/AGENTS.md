@@ -45,7 +45,7 @@ Files with no registration support their folder; files with several registration
 - `tools_git.py` — Groups 5 registrations: MCP tool handlers for merge, branch creation, and fix classification.
 - `tools_github.py` — Groups 3 registrations: MCP tool handlers: fetch_github_issue, get_issue_title, report_bug.
 - `tools_issue_labels.py` — Groups 2 registrations: MCP tool handlers: claim_issue, release_issue (GitHub label management).
-- `tools_pr_ops.py` — Groups 3 registrations: MCP tool handlers: PR review reads, authoritative writes, and issue closure.
+- `tools_pr_ops.py` — Groups 4 registrations: MCP tool handlers: PR review reads, receipt verification, authoritative writes, and issue closure.
 - `tools_recipe.py` — Groups 5 registrations: MCP tool handlers: load_recipe, list_recipes, validate_recipe, migrate_recipe.
 - `tools_status.py` — Groups 8 registrations: MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary, get_timing_summary, read_db.
 - `tools_workspace.py` — Groups 4 registrations: MCP tool handlers for worktree testing, commits, and workspace reset.

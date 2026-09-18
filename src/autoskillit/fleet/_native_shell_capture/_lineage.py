@@ -149,6 +149,29 @@ def _verify_resume_lineage(
     return lineage, ManagedHeadlessSessionLineageStatus.VALID
 
 
+def _create_food_truck_lineage(
+    *,
+    tool_ctx: ToolContext,
+    lineage_anchor: Path,
+    capture_decision: NativeShellCaptureDecision,
+    lineage_backend_name: str,
+    dispatch_id: str,
+) -> ManagedHeadlessSessionLineage:
+    """Create the durable FOOD_TRUCK lineage or raise the public sentinel."""
+    try:
+        return tool_ctx.managed_headless_session_lineage_store.create(
+            lineage_anchor=lineage_anchor,
+            launch_id=new_managed_launch_id(),
+            decision=capture_decision,
+            backend=lineage_backend_name,
+            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
+            dispatch_id=dispatch_id,
+        )
+    except Exception as exc:
+        logger.warning("managed_food_truck_lineage_create_failed", exc_info=True)
+        raise FoodTruckLineageInitializationError from exc
+
+
 def set_lineage_terminal_state(
     tool_ctx: ToolContext,
     reference: ManagedHeadlessSessionLineageRef,
@@ -330,18 +353,13 @@ def prepare_food_truck_lineage(
         capture_decision = resolve_native_shell_capture_decision(native_shell_capture_mode)
 
     if managed_lineage is None:
-        try:
-            managed_lineage = tool_ctx.managed_headless_session_lineage_store.create(
-                lineage_anchor=lineage_anchor,
-                launch_id=new_managed_launch_id(),
-                decision=capture_decision,
-                backend=lineage_backend_name,
-                session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
-                dispatch_id=dispatch_id,
-            )
-        except Exception as exc:
-            logger.warning("managed_food_truck_lineage_create_failed", exc_info=True)
-            raise FoodTruckLineageInitializationError from exc
+        managed_lineage = _create_food_truck_lineage(
+            tool_ctx=tool_ctx,
+            lineage_anchor=lineage_anchor,
+            capture_decision=capture_decision,
+            lineage_backend_name=lineage_backend_name,
+            dispatch_id=dispatch_id,
+        )
         managed_lineage_ref = managed_lineage.reference
     if managed_lineage_ref is None:
         raise FoodTruckLineageInitializationError

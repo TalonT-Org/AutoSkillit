@@ -9,9 +9,9 @@ import pytest
 from autoskillit.execution.github_ops.diff_annotator import (
     DiffMetrics,
     annotate_diff,
+    build_anchor_authority,
     compute_diff_metrics,
     extract_valid_lines,
-    filter_findings,
     parse_hunk_ranges,
     select_review_agents,
 )
@@ -146,115 +146,12 @@ class TestAnnotateDiff:
         assert "@@ -10,3 +10,4 @@" in result
 
 
-# --- filter_findings ---
-
-
-class TestFilterFindings:
-    def test_correct_partition(self):
-        """Findings in range are filtered; out of range are unpostable."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [
-            {"file": "f.py", "line": 15, "message": "ok"},
-            {"file": "f.py", "line": 500, "message": "bad"},
-        ]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 1
-        assert len(result.unpostable) == 1
-
-    def test_boundary_inclusive(self):
-        """Lines at exact start and end of range are FILTERED."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [
-            {"file": "f.py", "line": 10, "message": "start"},
-            {"file": "f.py", "line": 20, "message": "end"},
-        ]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 2
-        assert len(result.unpostable) == 0
-
-    def test_all_unpostable_signals_failure(self):
-        """When all findings are unpostable (total > 0), result.all_unpostable is True."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [{"file": "f.py", "line": 500, "message": "bad"}]
-        result = filter_findings(findings, ranges)
-        assert result.all_unpostable is True
-
-    def test_empty_ranges_passes_all(self):
-        """When VALID_LINE_RANGES is empty, all findings pass (no filtering possible)."""
-        findings = [{"file": "f.py", "line": 999, "message": "ok"}]
-        result = filter_findings(findings, {})
-        assert len(result.filtered) == 1
-        assert result.all_unpostable is False
-
-    def test_no_findings_no_failure(self):
-        """Zero findings produces all_unpostable=False (nothing to post is not a failure)."""
-        result = filter_findings([], {"f.py": [(10, 20)]})
-        assert result.all_unpostable is False
-
-    def test_filter_findings_null_line_routes_to_unpostable(self):
-        """A finding with `"line": None` goes to `unpostable` and does not raise
-        (with non-empty `valid_ranges`)."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [{"file": "f.py", "line": None, "message": "null line"}]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 0
-        assert len(result.unpostable) == 1
-        assert result.unpostable[0]["line"] is None
-        assert result.all_unpostable is True
-
-    def test_filter_findings_missing_line_key_routes_to_unpostable(self):
-        """A finding without a `line` key goes to `unpostable`."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [{"file": "f.py", "message": "missing line"}]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 0
-        assert len(result.unpostable) == 1
-        assert "line" not in result.unpostable[0]
-
-    def test_filter_findings_zero_line_routes_to_unpostable(self):
-        """A finding with `"line": 0` goes to `unpostable` (valid lines start at 1)."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [{"file": "f.py", "line": 0, "message": "zero line"}]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 0
-        assert len(result.unpostable) == 1
-        assert result.unpostable[0]["line"] == 0
-
-    def test_filter_findings_null_line_not_in_filtered_when_validation_absent(self):
-        """A finding with `"line": None` is NOT placed in `filtered` even when both
-        `valid_ranges={}` and `valid_lines=None` (the early-return branch)."""
-        findings = [
-            {"file": "f.py", "line": None, "message": "null line"},
-            {"file": "f.py", "line": 15, "message": "valid"},
-        ]
-        result = filter_findings(findings, {})
-        assert len(result.filtered) == 1
-        assert result.filtered[0]["line"] == 15
-        assert len(result.unpostable) == 1
-        assert result.unpostable[0]["line"] is None
-        assert result.all_unpostable is False
-
-    def test_filter_findings_null_line_hunk_range_branch_no_typeerror(self):
-        """A finding with `"line": None` against the hunk-range interval branch
-        (`valid_ranges={"f.py": [(10, 20)]}`, `valid_lines=None`) routes to
-        `unpostable` without raising `TypeError`. Exercises the
-        `start <= line_num <= end` comparison path that previously crashed on
-        `None`."""
-        ranges = {"f.py": [(10, 20)]}
-        findings = [{"file": "f.py", "line": None, "message": "null line"}]
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 0
-        assert len(result.unpostable) == 1
-        assert result.unpostable[0]["line"] is None
-
-
 # --- End-to-end ---
 
 
 class TestEndToEnd:
-    def test_annotate_and_filter(self):
-        """Parse a realistic multi-file diff, annotate it, simulate findings
-        with correct [LNNN] numbers, and verify they pass the filter."""
+    def test_parse_and_annotate(self):
+        """Parse and annotate a realistic multi-file diff."""
         diff = (
             "diff --git a/src/app.py b/src/app.py\n"
             "--- a/src/app.py\n"
@@ -294,20 +191,6 @@ class TestEndToEnd:
         assert "[L53]+added_call" in annotated
         assert "[L1] import pytest" in annotated
         assert "[L2]+from app import main" in annotated
-
-        # Simulate findings using [LNNN] numbers (correct) vs stream offsets (wrong)
-        findings = [
-            {"file": "src/app.py", "line": 11, "message": "correct marker"},
-            {"file": "src/app.py", "line": 53, "message": "correct marker"},
-            {"file": "tests/test_app.py", "line": 2, "message": "correct marker"},
-            {"file": "src/app.py", "line": 9999, "message": "stream offset"},
-        ]
-
-        result = filter_findings(findings, ranges)
-        assert len(result.filtered) == 3
-        assert len(result.unpostable) == 1
-        assert result.unpostable[0]["message"] == "stream offset"
-        assert result.all_unpostable is False
 
 
 # --- compute_diff_metrics ---
@@ -601,7 +484,7 @@ class TestExtractValidLines:
             "+from app import helper\n"
             " \n"
         )
-        valid = extract_valid_lines(diff)
+        _left, right = extract_valid_lines(diff)
         annotated = annotate_diff(diff)
         marker_lines: dict[str, set[int]] = {}
         current_file = None
@@ -611,8 +494,8 @@ class TestExtractValidLines:
             m = _MARKER_RE.match(line)
             if m and current_file:
                 marker_lines.setdefault(current_file, set()).add(int(m.group(1)))
-        for filepath in valid:
-            assert set(valid[filepath]) == marker_lines.get(filepath, set())
+        for filepath in right:
+            assert set(right[filepath]) == marker_lines.get(filepath, set())
 
     def test_subset_of_hunk_spans(self):
         diff = (
@@ -627,13 +510,13 @@ class TestExtractValidLines:
             " line13\n"
             " line14\n"
         )
-        valid = extract_valid_lines(diff)
+        _left, right = extract_valid_lines(diff)
         ranges = parse_hunk_ranges(diff)
-        for filepath, lines in valid.items():
+        for filepath, lines in right.items():
             for line_num in lines:
                 assert any(start <= line_num <= end for start, end in ranges.get(filepath, []))
 
-    def test_filter_findings_with_exact_lines_rejects_fabricated_line(self):
+    def test_extracts_both_sides_with_independent_numbering(self):
         diff = (
             "diff --git a/foo.py b/foo.py\n"
             "--- a/foo.py\n"
@@ -645,21 +528,42 @@ class TestExtractValidLines:
             " line12\n"
             "+line13\n"
         )
-        valid = extract_valid_lines(diff)
-        ranges = parse_hunk_ranges(diff)
-        assert ranges == {"foo.py": [(10, 13)]}
-        fabricated_line = 14
-        assert fabricated_line not in set(valid.get("foo.py", []))
-        finding_at_14 = [{"file": "foo.py", "line": fabricated_line, "message": "fabricated"}]
-        result_old = filter_findings(finding_at_14, ranges)
-        assert len(result_old.filtered) == 0
-        result_new = filter_findings(finding_at_14, {}, valid_lines=valid)
-        assert len(result_new.unpostable) == 1
-        assert result_new.unpostable[0]["line"] == fabricated_line
+        left, right = extract_valid_lines(diff)
+        assert left == {"foo.py": [10, 11, 12]}
+        assert right == {"foo.py": [10, 11, 12, 13]}
 
-    def test_filter_findings_valid_lines_not_bypassed_by_empty_ranges(self):
-        valid = {"foo.py": [10, 11]}
-        findings = [{"file": "foo.py", "line": 12, "message": "out of set"}]
-        result = filter_findings(findings, {}, valid_lines=valid)
-        assert len(result.unpostable) == 1
-        assert len(result.filtered) == 0
+    def test_deletion_only_file_retains_left_path(self):
+        diff = (
+            "diff --git a/removed.py b/removed.py\n"
+            "--- a/removed.py\n"
+            "+++ /dev/null\n"
+            "@@ -7,2 +0,0 @@\n"
+            "-old seven\n"
+            "-old eight\n"
+        )
+        assert extract_valid_lines(diff) == ({"removed.py": [7, 8]}, {})
+
+    def test_context_lines_belong_to_both_sides(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -5,2 +9,2 @@\n"
+            " context\n"
+            "-old\n"
+            "+new\n"
+        )
+        assert extract_valid_lines(diff) == ({"f.py": [5, 6]}, {"f.py": [9, 10]})
+
+    def test_build_anchor_authority_binds_diff_identity(self):
+        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-old\n+new\n"
+        authority = build_anchor_authority(
+            diff,
+            repository="Octo/Example",
+            pr_number=42,
+            head_sha="a" * 40,
+            generation_id="generation-1",
+        )
+        assert authority.repository == "octo/example"
+        assert authority.left_side_lines == {"f.py": frozenset({1})}
+        assert authority.right_side_lines == {"f.py": frozenset({1})}

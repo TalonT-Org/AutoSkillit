@@ -67,9 +67,12 @@ from autoskillit.fleet.sidecar import sidecar_path
 if TYPE_CHECKING:
     from autoskillit.core import (
         CodingAgentBackend,
+        ManagedWorkerCapacity,
+        ManagedWorkerPermit,
         NativeShellCaptureMode,
         SessionCheckpoint,
     )
+    from autoskillit.fleet.dispatch._lineage import ReadyLineage
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -92,6 +95,185 @@ class DispatchSpawnFailed(RuntimeError):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
+
+
+def _build_dispatch_rejection(
+    *,
+    provenance: DispatchProvenanceTracker,
+    error_code: FleetErrorCode,
+    message: str,
+    **kwargs: Any,
+) -> DispatchResult:
+    """Build a pre-lock rejection with no per-dispatch state file."""
+    rejection = DispatchRejected(
+        error_code=error_code,
+        message=message,
+        effect_provenance=provenance.snapshot(),
+        **kwargs,
+    )
+    return DispatchResult(rejection, per_dispatch_state_path=None)
+
+
+def _validate_dispatch_admission(
+    *,
+    tool_ctx: ToolContext,
+    ingredients: dict[str, str] | None,
+    provenance: DispatchProvenanceTracker,
+) -> DispatchResult | None:
+    """Return the existing pre-lock refusal for invalid dispatch admission."""
+    if ingredients is not None:
+        bad_vals = [key for key, value in ingredients.items() if not isinstance(value, str)]
+        if bad_vals:
+            return _build_dispatch_rejection(
+                provenance=provenance,
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=f"Ingredient values must be strings. Non-string keys: {bad_vals}",
+            )
+
+    capacity = tool_ctx.worker_capacity
+    if capacity is None:
+        return _build_dispatch_rejection(
+            provenance=provenance,
+            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
+            message="Managed worker capacity is not initialized — open_kitchen with fleet mode.",
+        )
+    if capacity.at_capacity():
+        return _build_dispatch_rejection(
+            provenance=provenance,
+            error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
+            message=(
+                f"Managed worker capacity exhausted "
+                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
+            ),
+        )
+    return None
+
+
+def _build_dispatch_crash_result(
+    *,
+    exc: Exception,
+    effective_name: str,
+    provenance: DispatchProvenanceTracker,
+) -> DispatchResult:
+    """Convert a crash after admission into the existing dispatch result envelope."""
+    underlying = _unwrap_dispatch_exception(exc)
+    failure_text = f"{type(underlying).__name__}: {underlying}"
+    sanitized_failure_text = _sanitize_managed_capture_diagnostics(failure_text)
+    snapshot = provenance.snapshot()
+    if snapshot.aggregate_phase != DispatchAggregatePhase.NOT_STARTED:
+        identities = {
+            key: value
+            for effect in snapshot.effects
+            for key, value in effect.known_downstream_identities
+        }
+        diagnostic_message = (
+            sanitized_failure_text
+            if sanitized_failure_text
+            else "Food-truck dispatch failed during startup."
+        )
+        failure_status = DispatchStatus.FAILURE
+        state_path_obj = Path(identities["state_path"]) if identities.get("state_path") else None
+        if state_path_obj is not None:
+            try:
+                _fleet_state.append_dispatch_record(
+                    state_path_obj,
+                    DispatchRecord(
+                        name=effective_name,
+                        status=failure_status,
+                        dispatch_id=identities.get("dispatch_id", ""),
+                        dispatched_session_id=identities.get("dispatched_session_id", ""),
+                        reason=str(FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH),
+                        diagnostic_message=diagnostic_message,
+                        effect_provenance=snapshot.to_dict(),
+                    ),
+                )
+            except Exception:
+                state_path_obj = None
+                logger.warning(
+                    "execute_dispatch crash-state persistence failed",
+                    exc_info=True,
+                )
+        return DispatchResult(
+            DispatchCompleted(
+                success=False,
+                dispatch_status=failure_status,
+                dispatch_id=identities.get("dispatch_id", ""),
+                dispatched_session_id=identities.get("dispatched_session_id", ""),
+                reason=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                diagnostic_message=diagnostic_message,
+                effect_provenance=snapshot,
+            ),
+            per_dispatch_state_path=state_path_obj,
+        )
+    return _build_dispatch_rejection(
+        provenance=provenance,
+        error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+        message=(
+            sanitized_failure_text
+            if sanitized_failure_text
+            else "Food-truck dispatch failed during startup."
+        ),
+    )
+
+
+def _unwrap_dispatch_exception(exc: Exception) -> BaseException:
+    if isinstance(exc, ExceptionGroup) and len(exc.exceptions) == 1:
+        return exc.exceptions[0]
+    return exc
+
+
+async def _acquire_dispatch_capacity(
+    *,
+    tool_ctx: ToolContext,
+    capacity: ManagedWorkerCapacity | None,
+    ready: ReadyLineage,
+    effective_name: str,
+    provenance: DispatchProvenanceTracker,
+) -> ManagedWorkerPermit | DispatchResult:
+    """Acquire the durable dispatch's permit or return its stateful failure result."""
+    if capacity is None:
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
+            message="Managed worker capacity is not initialized.",
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        )
+    try:
+        return await capacity.acquire(ready.dispatch_id)
+    except TimeoutError:
+        timeout = capacity.timeout
+        wait_description = f"{timeout}s" if timeout is not None else "an unbounded wait"
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+            message=(
+                f"Timed out waiting for managed worker capacity after {wait_description} "
+                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
+            ),
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        )
+    except ManagedWorkerCapacityError as exc:
+        # Invalid or duplicate owner claims are hard refusals, not capacity timeouts.
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
+            message=str(exc),
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        )
+    except asyncio.CancelledError:
+        raise
 
 
 async def execute_dispatch(
@@ -128,38 +310,13 @@ async def execute_dispatch(
     effective_name = dispatch_name or recipe
     provenance = provenance or DispatchProvenanceTracker()
 
-    def _reject(error_code: FleetErrorCode, message: str, **kwargs: Any) -> DispatchResult:
-        """Pre-lock, pre-dispatch-id rejection path — no per-dispatch state file exists yet."""
-        rejection = DispatchRejected(
-            error_code=error_code,
-            message=message,
-            effect_provenance=provenance.snapshot(),
-            **kwargs,
-        )
-        return DispatchResult(rejection, per_dispatch_state_path=None)
-
-    if ingredients is not None:
-        bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
-        if bad_vals:
-            return _reject(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                f"Ingredient values must be strings. Non-string keys: {bad_vals}",
-            )
-
-    capacity = tool_ctx.worker_capacity
-    if capacity is None:
-        return _reject(
-            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
-            message="Managed worker capacity is not initialized — open_kitchen with fleet mode.",
-        )
-    if capacity.at_capacity():
-        return _reject(
-            error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
-            message=(
-                f"Managed worker capacity exhausted "
-                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
-            ),
-        )
+    admission_failure = _validate_dispatch_admission(
+        tool_ctx=tool_ctx,
+        ingredients=ingredients,
+        provenance=provenance,
+    )
+    if admission_failure is not None:
+        return admission_failure
 
     try:
         # Call ``_run_dispatch`` through the public facade so that
@@ -193,73 +350,17 @@ async def execute_dispatch(
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        # Unwrap ExceptionGroup from anyio task-group wrapping
-        underlying: BaseException = exc
-        if isinstance(exc, ExceptionGroup) and len(exc.exceptions) == 1:
-            underlying = exc.exceptions[0]
+        underlying = _unwrap_dispatch_exception(exc)
         logger.warning(
             "execute_dispatch crashed before dispatch completion",
             exc_type=type(underlying).__name__,
             dispatch_name=effective_name,
             exc_info=True,
         )
-        failure_text = f"{type(underlying).__name__}: {underlying}"
-        sanitized_failure_text = _sanitize_managed_capture_diagnostics(failure_text)
-        snapshot = provenance.snapshot()
-        if snapshot.aggregate_phase != DispatchAggregatePhase.NOT_STARTED:
-            identities = {
-                key: value
-                for effect in snapshot.effects
-                for key, value in effect.known_downstream_identities
-            }
-            diagnostic_message = (
-                sanitized_failure_text
-                if sanitized_failure_text
-                else "Food-truck dispatch failed during startup."
-            )
-            failure_status = DispatchStatus.FAILURE
-            state_path_obj = (
-                Path(identities["state_path"]) if identities.get("state_path") else None
-            )
-            if state_path_obj is not None:
-                try:
-                    _fleet_state.append_dispatch_record(
-                        state_path_obj,
-                        DispatchRecord(
-                            name=effective_name,
-                            status=failure_status,
-                            dispatch_id=identities.get("dispatch_id", ""),
-                            dispatched_session_id=identities.get("dispatched_session_id", ""),
-                            reason=str(FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH),
-                            diagnostic_message=diagnostic_message,
-                            effect_provenance=snapshot.to_dict(),
-                        ),
-                    )
-                except Exception:
-                    state_path_obj = None
-                    logger.warning(
-                        "execute_dispatch crash-state persistence failed",
-                        exc_info=True,
-                    )
-            return DispatchResult(
-                DispatchCompleted(
-                    success=False,
-                    dispatch_status=failure_status,
-                    dispatch_id=identities.get("dispatch_id", ""),
-                    dispatched_session_id=identities.get("dispatched_session_id", ""),
-                    reason=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                    diagnostic_message=diagnostic_message,
-                    effect_provenance=snapshot,
-                ),
-                per_dispatch_state_path=state_path_obj,
-            )
-        return _reject(
-            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            message=(
-                sanitized_failure_text
-                if sanitized_failure_text
-                else "Food-truck dispatch failed during startup."
-            ),
+        return _build_dispatch_crash_result(
+            exc=exc,
+            effective_name=effective_name,
+            provenance=provenance,
         )
 
 
@@ -382,49 +483,17 @@ async def _run_dispatch(
     )
 
     capacity = tool_ctx.worker_capacity
-    if capacity is None:
-        return complete_failure_with_state(
-            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
-            message="Managed worker capacity is not initialized.",
-            dispatch_id=ready.dispatch_id,
-            managed_lineage_ref=ready.managed_lineage_ref,
-            provenance=provenance,
-            state_path=ready.state_path,
-            effective_name=recipe_ctx.effective_name,
-            tool_ctx=tool_ctx,
-        )
-    try:
-        permit = await capacity.acquire(ready.dispatch_id)
-    except TimeoutError:
-        timeout = capacity.timeout
-        wait_description = f"{timeout}s" if timeout is not None else "an unbounded wait"
-        return complete_failure_with_state(
-            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
-            message=(
-                f"Timed out waiting for managed worker capacity after {wait_description} "
-                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
-            ),
-            dispatch_id=ready.dispatch_id,
-            managed_lineage_ref=ready.managed_lineage_ref,
-            provenance=provenance,
-            state_path=ready.state_path,
-            effective_name=recipe_ctx.effective_name,
-            tool_ctx=tool_ctx,
-        )
-    except ManagedWorkerCapacityError as exc:
-        # Invalid or duplicate owner claims are hard refusals, not capacity timeouts.
-        return complete_failure_with_state(
-            error_code=FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
-            message=str(exc),
-            dispatch_id=ready.dispatch_id,
-            managed_lineage_ref=ready.managed_lineage_ref,
-            provenance=provenance,
-            state_path=ready.state_path,
-            effective_name=recipe_ctx.effective_name,
-            tool_ctx=tool_ctx,
-        )
-    except asyncio.CancelledError:
-        raise
+    permit_or_failure = await _acquire_dispatch_capacity(
+        tool_ctx=tool_ctx,
+        capacity=capacity,
+        ready=ready,
+        effective_name=recipe_ctx.effective_name,
+        provenance=provenance,
+    )
+    if isinstance(permit_or_failure, DispatchResult):
+        return permit_or_failure
+    permit = permit_or_failure
+    assert capacity is not None
 
     # --- Phase C + Phase D + Phase E in outer try/except/finally ---
     # ``execution`` is bound to ``None`` before the try block so the finally
@@ -495,11 +564,12 @@ async def _run_dispatch(
             recipe=recipe,
             prior_session_chain=ready.prior_session_chain,
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
-            resume_session_id=ready.resume_session_id,
-            dispatch_checkpoint=ready.resume_checkpoint,
+            resume_session_id=execution_result.effective_resume_session_id,
+            incoming_resume_checkpoint=ready.resume_checkpoint,
             marker_dir=execution_result.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
             dispatch_sidecar_path=execution_result.dispatch_sidecar_path,
+            prior_dispatch_ids=[prior_dispatch_id] if prior_dispatch_id else None,
         )
         result = await finalize_state_write(
             classification=classification,
@@ -514,7 +584,6 @@ async def _run_dispatch(
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
             capture=capture,
-            dispatch_checkpoint=ready.resume_checkpoint,
             started_at=execution_result.started_at,
             ended_at=ended_at or time.time(),
             cache_invalidator=cache_invalidator,

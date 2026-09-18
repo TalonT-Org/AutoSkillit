@@ -182,6 +182,78 @@ def prepare_launch(
     )
 
 
+def _validate_and_materialize_ingredients(
+    *,
+    effective_ingredients: dict[str, str],
+    full_recipe: Recipe,
+    dispatches_dir: Path,
+    campaign_id: str,
+    dispatch_id: str,
+    provenance: DispatchProvenanceTracker,
+    state_path: Path,
+    effective_name: str,
+    tool_ctx: ToolContext,
+) -> dict[str, str] | DispatchResult:
+    """Validate supplied ingredients and resolve campaign references for launch."""
+    materialized_ingredients = dict(effective_ingredients)
+    if materialized_ingredients:
+        unknown = set(materialized_ingredients) - set(full_recipe.ingredients)
+        if unknown:
+            return complete_failure_with_state(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=(
+                    f"Unknown ingredient keys: {sorted(unknown)}. "
+                    f"Valid keys: {sorted(full_recipe.ingredients.keys())}"
+                ),
+                dispatch_id=dispatch_id,
+                managed_lineage_ref=None,
+                provenance=provenance,
+                state_path=state_path,
+                effective_name=effective_name,
+                tool_ctx=tool_ctx,
+            )
+
+    missing_required = [
+        key
+        for key, ingredient in full_recipe.ingredients.items()
+        if getattr(ingredient, "required", False)
+        and getattr(ingredient, "default", None) is None
+        and key not in materialized_ingredients
+    ]
+    if missing_required:
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_MISSING_INGREDIENT,
+            message=(
+                f"Missing required ingredients: {sorted(missing_required)}. "
+                f"These have no default and must be supplied."
+            ),
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=None,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        )
+
+    accumulated_captures = read_all_campaign_captures(dispatches_dir, campaign_id)
+    if not any(_CAMPAIGN_REF_RE.search(value) for value in materialized_ingredients.values()):
+        return materialized_ingredients
+    try:
+        return _interpolate_campaign_refs(materialized_ingredients, accumulated_captures)
+    except ValueError as exc:
+        logger.warning("ingredient interpolation failed", exc_info=True)
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+            message=str(exc),
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=None,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
+        )
+
+
 async def run_lineage_preparation(
     *,
     tool_ctx: ToolContext,
@@ -347,68 +419,21 @@ async def run_lineage_preparation(
                 "dispatch_id": dispatch_id,
             },
         )
+    ingredient_materialization = _validate_and_materialize_ingredients(
+        effective_ingredients=effective_ingredients,
+        full_recipe=full_recipe,
+        dispatches_dir=dispatches_dir,
+        campaign_id=campaign_id,
+        dispatch_id=dispatch_id,
+        provenance=provenance,
+        state_path=state_path,
+        effective_name=effective_name,
+        tool_ctx=tool_ctx,
+    )
+    if isinstance(ingredient_materialization, DispatchResult):
+        return ingredient_materialization
+    effective_ingredients = ingredient_materialization
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
-
-    if effective_ingredients:
-        unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
-        if unknown:
-            return complete_failure_with_state(
-                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                message=(
-                    f"Unknown ingredient keys: {sorted(unknown)}. "
-                    f"Valid keys: {sorted(full_recipe.ingredients.keys())}"
-                ),
-                dispatch_id=dispatch_id,
-                managed_lineage_ref=managed_lineage_ref,
-                provenance=provenance,
-                state_path=state_path,
-                effective_name=effective_name,
-                tool_ctx=tool_ctx,
-            )
-
-    missing_required = [
-        key
-        for key, ing in full_recipe.ingredients.items()
-        if getattr(ing, "required", False)
-        and getattr(ing, "default", None) is None
-        and key not in effective_ingredients
-    ]
-    if missing_required:
-        return complete_failure_with_state(
-            error_code=FleetErrorCode.FLEET_MISSING_INGREDIENT,
-            message=(
-                f"Missing required ingredients: {sorted(missing_required)}. "
-                f"These have no default and must be supplied."
-            ),
-            dispatch_id=dispatch_id,
-            managed_lineage_ref=managed_lineage_ref,
-            provenance=provenance,
-            state_path=state_path,
-            effective_name=effective_name,
-            tool_ctx=tool_ctx,
-        )
-
-    dispatches_dir = tool_ctx.temp_dir / "dispatches"
-    accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
-
-    _has_campaign_refs = any(_CAMPAIGN_REF_RE.search(v) for v in effective_ingredients.values())
-    if _has_campaign_refs:
-        try:
-            effective_ingredients = _interpolate_campaign_refs(
-                effective_ingredients, accumulated_captures
-            )
-        except ValueError as exc:
-            logger.warning("ingredient interpolation failed", exc_info=True)
-            return complete_failure_with_state(
-                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                message=str(exc),
-                dispatch_id=dispatch_id,
-                managed_lineage_ref=managed_lineage_ref,
-                provenance=provenance,
-                state_path=state_path,
-                effective_name=effective_name,
-                tool_ctx=tool_ctx,
-            )
 
     resolved_timeout = resolve_dispatch_timeout(
         timeout_sec, tool_ctx.config.fleet.default_timeout_sec

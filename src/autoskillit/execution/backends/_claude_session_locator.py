@@ -64,15 +64,23 @@ class ClaudeSessionLocator(SessionLocator):
         if not isinstance(entries, list):
             return ()
 
-        launch_ids_by_session_id = {
-            claude_session_id: launch_id
-            for launch_id, registry_entry in read_registry(Path(normalized_cwd)).items()
-            if isinstance(registry_entry, Mapping)
-            and isinstance(
-                claude_session_id := registry_entry.get("claude_session_id"),
-                str,
-            )
-        }
+        launch_ids_by_session_id: dict[str, str] = {}
+        for launch_id, registry_entry in read_registry(Path(normalized_cwd)).items():
+            if not isinstance(registry_entry, Mapping):
+                continue
+            claude_session_id = registry_entry.get("claude_session_id")
+            if not isinstance(claude_session_id, str):
+                continue
+            if claude_session_id in launch_ids_by_session_id:
+                previous_launch_id = launch_ids_by_session_id[claude_session_id]
+                raise ValueError(
+                    "Session registry corruption: Claude conversation ID "
+                    f"{claude_session_id!r} is associated with both launch IDs "
+                    f"{previous_launch_id!r} and {launch_id!r}. Repair "
+                    "session_registry.json by removing one duplicate mapping before "
+                    "retrying."
+                )
+            launch_ids_by_session_id[claude_session_id] = launch_id
         summaries: list[SessionSummary] = []
         for entry in entries:
             if not isinstance(entry, dict) or entry.get("isSidechain"):

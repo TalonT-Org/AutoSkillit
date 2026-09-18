@@ -126,20 +126,42 @@ def test_review_research_pr_hunk_ranges_in_contract() -> None:
     )
 
 
-def test_review_skills_valid_lines_in_contract() -> None:
-    """review-pr and review-research-pr contracts must declare valid_lines_path input."""
+def test_review_writers_have_anchor_inputs_in_contract() -> None:
+    """Every review writer receives the server-produced anchor authority."""
     raw = load_yaml(_CONTRACTS_YAML)
-    for skill_name in ("review-pr", "review-research-pr"):
+    for skill_name in (
+        "review-pr",
+        "review-research-pr",
+        "audit-claims",
+        "resolve-review",
+    ):
+        inputs = raw.get("skills", {}).get(skill_name, {}).get("inputs", [])
+        names = [inp["name"] for inp in inputs]
+        assert "anchor_authority_path" in names, (
+            f"{skill_name} contract must have an anchor_authority_path input entry"
+        )
+
+
+def test_anchor_validating_review_skills_have_valid_lines_in_contract() -> None:
+    raw = load_yaml(_CONTRACTS_YAML)
+    for skill_name in ("review-pr", "review-research-pr", "audit-claims"):
         inputs = raw.get("skills", {}).get(skill_name, {}).get("inputs", [])
         names = [inp["name"] for inp in inputs]
         assert "valid_lines_path" in names, (
             f"{skill_name} contract must have a valid_lines_path input entry"
         )
-    audit_inputs = raw.get("skills", {}).get("audit-claims", {}).get("inputs", [])
-    audit_names = [inp["name"] for inp in audit_inputs]
-    assert "valid_lines_path" not in audit_names, (
-        "audit-claims must NOT have valid_lines_path — it uses section-level line numbers"
+
+
+def test_annotate_pr_diff_contract_publishes_anchor_authority_path() -> None:
+    raw = load_yaml(_CONTRACTS_YAML)
+    outputs = (
+        raw.get("callable_contracts", {})
+        .get("autoskillit.smoke_utils.annotate_pr_diff", {})
+        .get("outputs", [])
     )
+    names = [output["name"] for output in outputs]
+
+    assert "anchor_authority_path" in names
 
 
 def test_annotate_pr_diff_callable_contract_has_valid_lines_path() -> None:
@@ -246,7 +268,7 @@ _SKILL_TOOLS = frozenset({"run_skill", "run_skill_on_context_limit"})
 def test_review_skill_command_passes_diff_annotation_paths(
     skill_name: str, recipe_name: str
 ) -> None:
-    """Skill invocation must bind hunk and valid-line artifacts."""
+    """Skill invocation must bind its diff artifacts and anchor authority."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     review_steps = [
         (name, step)
@@ -263,6 +285,12 @@ def test_review_skill_command_passes_diff_annotation_paths(
         assert skill_inputs.get("valid_lines_path") == "${{ context.valid_lines_path }}", (
             f"{recipe_name}.yaml step '{step_name}' must bind valid_lines_path "
             "to context.valid_lines_path"
+        )
+        assert skill_inputs.get("anchor_authority_path") == (
+            "${{ context.anchor_authority_path }}"
+        ), (
+            f"{recipe_name}.yaml step '{step_name}' must bind anchor_authority_path "
+            "to context.anchor_authority_path"
         )
 
 

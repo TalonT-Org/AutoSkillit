@@ -9,6 +9,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeGuard
 
+from ._type_github_review_anchor import DiffAnchorAuthority
+
 __all__ = [
     "GitHubReviewComment",
     "GitHubReviewFindingDisposition",
@@ -38,7 +40,7 @@ _REPOSITORY_RE = re.compile(
 )
 
 
-def is_valid_github_review_head_sha(value: object) -> bool:
+def is_valid_github_review_head_sha(value: object) -> TypeGuard[str]:
     """Return whether a value is a canonical full lowercase Git commit SHA."""
     return isinstance(value, str) and _HEAD_SHA_RE.fullmatch(value) is not None
 
@@ -135,12 +137,26 @@ class GitHubReviewRequest:
     pr_number: int
     head_sha: str
     logical_iteration: str
+    anchor_authority: DiffAnchorAuthority
     event: str
     body: str
     comments: tuple[GitHubReviewComment, ...] = ()
     cwd: str = ""
     receipt_path: Path | str | None = None
     dry_run: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.repository, str):
+            raise TypeError("repository must be a string")
+        authority = self.anchor_authority
+        if not isinstance(authority, DiffAnchorAuthority):
+            raise TypeError("anchor_authority must be a DiffAnchorAuthority")
+        if (
+            authority.repository != self.repository.casefold()
+            or authority.pr_number != self.pr_number
+            or authority.head_sha != self.head_sha
+        ):
+            raise ValueError("anchor authority identity must match the review request")
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +266,50 @@ class GitHubReviewPostResult:
         return _wire(asdict(self))
 
 
+def _check_complete_finding_accounting(
+    comment_ids: list[object],
+    dispositions: list[object],
+    count: int,
+) -> bool:
+    indexes: set[int] = set()
+    disposition_remote_ids: set[int] = set()
+    remote_kinds = {
+        ReviewFindingDispositionKind.POSTED.value,
+        ReviewFindingDispositionKind.ALREADY_PRESENT.value,
+    }
+    for disposition in dispositions:
+        if not isinstance(disposition, Mapping):
+            return False
+        original_index = disposition.get("original_index")
+        kind = disposition.get("kind")
+        if (
+            not isinstance(original_index, int)
+            or isinstance(original_index, bool)
+            or original_index < 0
+            or original_index >= count
+            or original_index in indexes
+            or not isinstance(kind, str)
+            or kind not in remote_kinds | {ReviewFindingDispositionKind.OMITTED_INVALID.value}
+        ):
+            return False
+        indexes.add(original_index)
+        remote_comment_id = disposition.get("remote_comment_id")
+        if kind in remote_kinds:
+            if (
+                not _is_positive_int(remote_comment_id)
+                or remote_comment_id in disposition_remote_ids
+            ):
+                return False
+            disposition_remote_ids.add(remote_comment_id)
+        elif (
+            remote_comment_id is not None
+            or not isinstance(disposition.get("reason"), str)
+            or not str(disposition["reason"]).strip()
+        ):
+            return False
+    return indexes == set(range(count)) and disposition_remote_ids == set(comment_ids)
+
+
 def review_receipt_validation_error(
     payload: Mapping[str, object],
     *,
@@ -312,44 +372,7 @@ def review_receipt_validation_error(
     ):
         return "incomplete_finding_accounting"
 
-    indexes: set[int] = set()
-    disposition_remote_ids: set[int] = set()
-    remote_kinds = {
-        ReviewFindingDispositionKind.POSTED.value,
-        ReviewFindingDispositionKind.ALREADY_PRESENT.value,
-    }
-    for disposition in dispositions:
-        if not isinstance(disposition, Mapping):
-            return "incomplete_finding_accounting"
-        original_index = disposition.get("original_index")
-        kind = disposition.get("kind")
-        if (
-            not isinstance(original_index, int)
-            or isinstance(original_index, bool)
-            or original_index < 0
-            or original_index >= count
-            or original_index in indexes
-            or not isinstance(kind, str)
-            or kind not in remote_kinds | {ReviewFindingDispositionKind.OMITTED_INVALID.value}
-        ):
-            return "incomplete_finding_accounting"
-        indexes.add(original_index)
-        remote_comment_id = disposition.get("remote_comment_id")
-        if kind in remote_kinds:
-            if (
-                not _is_positive_int(remote_comment_id)
-                or remote_comment_id in disposition_remote_ids
-            ):
-                return "incomplete_finding_accounting"
-            disposition_remote_ids.add(remote_comment_id)
-        elif (
-            remote_comment_id is not None
-            or not isinstance(disposition.get("reason"), str)
-            or not str(disposition["reason"]).strip()
-        ):
-            return "incomplete_finding_accounting"
-
-    if indexes != set(range(count)) or disposition_remote_ids != set(comment_ids):
+    if not _check_complete_finding_accounting(comment_ids, dispositions, count):
         return "incomplete_finding_accounting"
     return None
 

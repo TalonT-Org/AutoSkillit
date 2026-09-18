@@ -7,7 +7,10 @@ from pathlib import Path
 
 import regex as re
 
+from autoskillit.core import get_logger
 from autoskillit.smoke_utils._helpers import _load_json, try_load_json
+
+logger = get_logger(__name__)
 
 VALID_CRITERION_TYPES: frozenset[str] = frozenset({"precision", "recall", "recognition"})
 REQUIRED_CRITERION_KEYS: frozenset[str] = frozenset({"text", "type"})
@@ -447,7 +450,13 @@ def compile_eval_scorecard(
         verdict_data: dict | None = None
         try:
             verdict_data = json.loads(verdict_path.read_text())
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "skipping unreadable verdict file %s for canary %s: %s",
+                verdict_path,
+                cid,
+                exc,
+            )
             pass
 
         for variant in variants:

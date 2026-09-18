@@ -69,9 +69,6 @@ def annotate_pr_diff(
     derived_review_mode = "local" if local_rounds > 0 and iteration < local_rounds else "github"
     selected_review_mode = mode if mode is not None else derived_review_mode
 
-    def _stdout_bytes(result: subprocess.CompletedProcess[bytes]) -> bytes:
-        return result.stdout
-
     def _run(
         args: list[str], *, timeout: int, ok_returncodes: frozenset[int] = frozenset({0})
     ) -> subprocess.CompletedProcess[bytes]:
@@ -90,8 +87,19 @@ def annotate_pr_diff(
             )
         return result
 
+    def _decode_annotation_payload(
+        result: subprocess.CompletedProcess[bytes], *, malformed_message: str
+    ) -> dict[str, object]:
+        try:
+            payload = json.loads(result.stdout.decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(malformed_message) from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(malformed_message)
+        return payload
+
     def _required_scalar(args: list[str], *, timeout: int) -> str:
-        value = _stdout_bytes(_run(args, timeout=timeout)).decode("utf-8", errors="strict").strip()
+        value = _run(args, timeout=timeout).stdout.decode("utf-8", errors="strict").strip()
         if not is_valid_github_review_head_sha(value):
             raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
         return value
@@ -116,12 +124,9 @@ def annotate_pr_diff(
         )
         if result.returncode != 0:
             raise RuntimeError("unable to resolve live PR head/base refs")
-        try:
-            payload = json.loads(_stdout_bytes(result).decode("utf-8", errors="strict"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("live PR head/base refs were malformed") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError("live PR head/base refs were malformed")
+        payload = _decode_annotation_payload(
+            result, malformed_message="live PR head/base refs were malformed"
+        )
         head_sha = payload.get("headRefOid")
         base_sha = payload.get("baseRefOid")
         base_repo_full_name = payload.get("baseRepoFullName")
@@ -149,12 +154,9 @@ def annotate_pr_diff(
             ],
             timeout=30,
         )
-        try:
-            payload = json.loads(_stdout_bytes(result).decode("utf-8", errors="strict"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("provider PR authority was malformed") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError("provider PR authority was malformed")
+        payload = _decode_annotation_payload(
+            result, malformed_message="provider PR authority was malformed"
+        )
         provider_head_sha = payload.get("headRefOid")
         provider_base_snapshot_sha = payload.get("baseRefOid")
         provider_base_repo_full_name = payload.get("baseRepoFullName")
@@ -186,13 +188,10 @@ def annotate_pr_diff(
             ],
             timeout=30,
         )
-        try:
-            compare_payload = json.loads(_stdout_bytes(compare).decode("utf-8", errors="strict"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("provider merge base authority was malformed") from exc
-        provider_merge_base_sha = (
-            compare_payload.get("mergeBaseOid") if isinstance(compare_payload, dict) else None
+        compare_payload = _decode_annotation_payload(
+            compare, malformed_message="provider merge base authority was malformed"
         )
+        provider_merge_base_sha = compare_payload.get("mergeBaseOid")
         if not isinstance(provider_merge_base_sha, str) or not is_valid_github_review_head_sha(
             provider_merge_base_sha.strip()
         ):
@@ -206,9 +205,8 @@ def annotate_pr_diff(
 
     def _ensure_provider_objects(shas: tuple[str, ...], repository: str) -> None:
         missing: list[str] = []
-        # dict.fromkeys preserves order while deduping; iteration order matters
-        # because we want the first occurrence of each sha to drive the
-        # fetch loop below (avoiding duplicate fetch invocations).
+        # iteration order matters: we want the first occurrence of each sha to
+        # drive the fetch loop below (avoiding duplicate fetch invocations).
         for sha in dict.fromkeys(shas):
             try:
                 _run(
@@ -219,17 +217,15 @@ def annotate_pr_diff(
                 missing.append(sha)
         if not missing:
             return
-        remote_names = _stdout_bytes(_run(["git", "remote"], timeout=10)).decode(
-            "utf-8", errors="strict"
-        )
+        remote_names = _run(["git", "remote"], timeout=10).stdout.decode("utf-8", errors="strict")
         matches: list[str] = []
         for remote_name in remote_names.splitlines():
             remote_name = remote_name.strip()
             if not remote_name:
                 continue
             remote_url = (
-                _stdout_bytes(_run(["git", "remote", "get-url", remote_name], timeout=10))
-                .decode("utf-8", errors="strict")
+                _run(["git", "remote", "get-url", remote_name], timeout=10)
+                .stdout.decode("utf-8", errors="strict")
                 .strip()
             )
             parsed_repository = parse_github_repo(remote_url)
@@ -286,7 +282,7 @@ def annotate_pr_diff(
             merge_base_sha,
             checkout_head_sha,
         ]
-        diff_bytes = _stdout_bytes(_run(diff_args, timeout=60))
+        diff_bytes = _run(diff_args, timeout=60).stdout
         if _read_provider_authority() != provider_authority:
             raise RuntimeError("provider PR authority moved during diff acquisition")
         profile_id = "local_git_pinned_v1"
@@ -302,7 +298,7 @@ def annotate_pr_diff(
     else:
         refs_before = _read_pr_refs()
         head_sha, base_sha, provider_base_repo_full_name = refs_before
-        diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
+        diff_bytes = _run(["gh", "pr", "diff", str(pr_number)], timeout=60).stdout
         refs_after = _read_pr_refs()
         if refs_after != refs_before:
             raise RuntimeError("live PR head/base refs moved during diff acquisition")

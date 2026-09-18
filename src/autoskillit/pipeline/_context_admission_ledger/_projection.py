@@ -17,6 +17,7 @@ from typing import Final, cast
 from autoskillit.core import (
     AdmissionDecision,
     AdmissionEffect,
+    AdmissionTransition,
     AuthorityUnavailableEvent,
     ContextAdmissionEvent,
     ContextAdmissionState,
@@ -85,24 +86,10 @@ def _stored_stream_health(
         ) from exc
 
 
-def _recover_stream_projection(
-    connection: sqlite3.Connection,
-    stream_id: bytes,
-    stream_key: ContextAdmissionStreamKey,
-    *,
+def _validate_stream_genesis(
     genesis_envelope: bytes,
-    materialized_state_envelope: bytes,
-    aggregate_revision: int,
-    admission_sequence: int,
     latest_journal_sequence: int,
-    read_budget: _LedgerReadBudget,
-) -> tuple[
-    ContextAdmissionState,
-    tuple[ContextAdmissionEvent, ...],
-    tuple[AdmissionDecision, ...],
-    tuple[tuple[AdmissionEffect, ...], ...],
-    tuple[ShadowContextAdmissionRecord, ...],
-]:
+) -> UninitializedContextAdmissionState:
     genesis_wrapper = decode_stored_context_admission_envelope(genesis_envelope)
     if not isinstance(genesis_wrapper.payload, UninitializedContextAdmissionState):
         raise _LedgerOpenError(
@@ -122,6 +109,20 @@ def _recover_stream_projection(
             ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
             "empty-bound-stream",
         )
+    return genesis
+
+
+def _read_ordered_stream_records(
+    connection: sqlite3.Connection,
+    stream_id: bytes,
+    *,
+    latest_journal_sequence: int,
+    read_budget: _LedgerReadBudget,
+) -> tuple[
+    tuple[tuple[int, str, bytes, bytes, int, int, int, int, int], ...],
+    dict[int, list[bytes]],
+    dict[int, bytes],
+]:
     journal_rows = cast(
         tuple[tuple[int, str, bytes, bytes, int, int, int, int, int], ...],
         _read_bounded_rows(
@@ -192,114 +193,175 @@ def _recover_stream_projection(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
             "shadow-sequence-gap",
         )
-    shadow_by_sequence = {int(sequence): bytes(envelope) for sequence, envelope in shadow_rows}
-    state: ContextAdmissionState = genesis
-    events: list[ContextAdmissionEvent] = []
-    replayed_decisions: list[AdmissionDecision] = []
-    replayed_effects: list[tuple[AdmissionEffect, ...]] = []
-    replayed_shadows: list[ShadowContextAdmissionRecord] = []
-    for row in journal_rows:
-        journal_sequence = int(row[0])
-        event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
-        decision_wrapper = decode_stored_context_admission_envelope(bytes(row[3]))
-        if not isinstance(event_wrapper.payload, _EVENT_TYPES) or not isinstance(
-            decision_wrapper.payload,
-            AdmissionDecision,
-        ):
-            raise ContextAdmissionValidationError("stored_publication_type_mismatch")
-        event = cast(ContextAdmissionEvent, event_wrapper.payload)
-        stored_decision = decision_wrapper.payload
-        if str(row[1]) != event.event_id.value:
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-event-identity-mismatch",
-            )
-        if journal_sequence == 1 and not isinstance(
-            event,
-            OpenEpochEvent | AuthorityUnavailableEvent,
-        ):
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "invalid-initial-event",
-            )
-        protocol_version = event.protocol_version
-        if (
-            event_wrapper.protocol_version != protocol_version
-            or decision_wrapper.protocol_version != protocol_version
-            or state.protocol_version != protocol_version
-        ):
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "publication-protocol-mismatch",
-            )
-        _validate_event_stream_identity(stream_key, event)
-        if (
-            int(row[4]) != event.expected_aggregate_revision.value
-            or int(row[5]) != state.aggregate_revision.value
-            or int(row[6]) != state.admission_sequence.value
+    return (
+        journal_rows,
+        effects_by_sequence,
+        {int(sequence): bytes(envelope) for sequence, envelope in shadow_rows},
+    )
+
+
+def _decode_journal_publication(
+    row: tuple[int, str, bytes, bytes, int, int, int, int, int],
+) -> tuple[ContextAdmissionEvent, AdmissionDecision, int, int]:
+    event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
+    decision_wrapper = decode_stored_context_admission_envelope(bytes(row[3]))
+    if not isinstance(event_wrapper.payload, _EVENT_TYPES) or not isinstance(
+        decision_wrapper.payload,
+        AdmissionDecision,
+    ):
+        raise ContextAdmissionValidationError("stored_publication_type_mismatch")
+    return (
+        cast(ContextAdmissionEvent, event_wrapper.payload),
+        decision_wrapper.payload,
+        event_wrapper.protocol_version,
+        decision_wrapper.protocol_version,
+    )
+
+
+def _decode_journal_effects(
+    encoded_effects: list[bytes],
+    protocol_version: int,
+) -> tuple[AdmissionEffect, ...]:
+    stored_effects: list[AdmissionEffect] = []
+    for encoded_effect in encoded_effects:
+        effect_wrapper = decode_stored_context_admission_envelope(encoded_effect)
+        if effect_wrapper.protocol_version != protocol_version or not isinstance(
+            effect_wrapper.payload, _EFFECT_TYPES
         ):
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-prior-coordinate-mismatch",
+                "effect-protocol-mismatch",
             )
-        reducer = context_admission_reducer_for_protocol(protocol_version)
-        transition = reducer.reduce_transition(state, event)
-        events.append(event)
-        if stored_decision != transition.decision:
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-decision-mismatch",
-            )
-        replayed_decisions.append(stored_decision)
-        stored_effects: list[AdmissionEffect] = []
-        for encoded_effect in effects_by_sequence[journal_sequence]:
-            effect_wrapper = decode_stored_context_admission_envelope(encoded_effect)
-            if effect_wrapper.protocol_version != protocol_version or not isinstance(
-                effect_wrapper.payload, _EFFECT_TYPES
-            ):
-                raise _LedgerOpenError(
-                    ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                    "effect-protocol-mismatch",
-                )
-            stored_effects.append(cast(AdmissionEffect, effect_wrapper.payload))
-        if tuple(stored_effects) != transition.effects:
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-effects-mismatch",
-            )
-        replayed_effects.append(tuple(stored_effects))
-        if (
-            int(row[7]) != transition.next_state.aggregate_revision.value
-            or int(row[8]) != transition.next_state.admission_sequence.value
-        ):
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-result-coordinate-mismatch",
-            )
-        shadow_wrapper = decode_stored_context_admission_envelope(
-            shadow_by_sequence[journal_sequence]
+        stored_effects.append(cast(AdmissionEffect, effect_wrapper.payload))
+    return tuple(stored_effects)
+
+
+def _validate_journal_shadow(
+    stream_key: ContextAdmissionStreamKey,
+    prior_state: ContextAdmissionState,
+    event: ContextAdmissionEvent,
+    transition: AdmissionTransition,
+    journal_sequence: int,
+    encoded_shadow: bytes,
+    protocol_version: int,
+) -> ShadowContextAdmissionRecord:
+    shadow_wrapper = decode_stored_context_admission_envelope(encoded_shadow)
+    regenerated_shadow = _shadow_record(
+        stream_key,
+        prior_state,
+        event,
+        transition,
+        journal_sequence,
+    )
+    if (
+        shadow_wrapper.protocol_version != protocol_version
+        or not isinstance(
+            shadow_wrapper.payload,
+            ShadowContextAdmissionRecord,
         )
-        regenerated_shadow = _shadow_record(
+        or shadow_wrapper.payload != regenerated_shadow
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-shadow-mismatch",
+        )
+    return shadow_wrapper.payload
+
+
+def _replay_journal_publication(
+    stream_key: ContextAdmissionStreamKey,
+    prior_state: ContextAdmissionState,
+    row: tuple[int, str, bytes, bytes, int, int, int, int, int],
+    encoded_effects: list[bytes],
+    encoded_shadow: bytes,
+    events: list[ContextAdmissionEvent],
+    replayed_decisions: list[AdmissionDecision],
+    replayed_effects: list[tuple[AdmissionEffect, ...]],
+    replayed_shadows: list[ShadowContextAdmissionRecord],
+) -> ContextAdmissionState:
+    journal_sequence = int(row[0])
+    event, stored_decision, event_protocol_version, decision_protocol_version = (
+        _decode_journal_publication(row)
+    )
+    if str(row[1]) != event.event_id.value:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-event-identity-mismatch",
+        )
+    if journal_sequence == 1 and not isinstance(
+        event,
+        OpenEpochEvent | AuthorityUnavailableEvent,
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "invalid-initial-event",
+        )
+    protocol_version = event.protocol_version
+    if (
+        event_protocol_version != protocol_version
+        or decision_protocol_version != protocol_version
+        or prior_state.protocol_version != protocol_version
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "publication-protocol-mismatch",
+        )
+    _validate_event_stream_identity(stream_key, event)
+    if (
+        int(row[4]) != event.expected_aggregate_revision.value
+        or int(row[5]) != prior_state.aggregate_revision.value
+        or int(row[6]) != prior_state.admission_sequence.value
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-prior-coordinate-mismatch",
+        )
+    reducer = context_admission_reducer_for_protocol(protocol_version)
+    transition = reducer.reduce_transition(prior_state, event)
+    events.append(event)
+    if stored_decision != transition.decision:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-decision-mismatch",
+        )
+    replayed_decisions.append(stored_decision)
+    stored_effects = _decode_journal_effects(encoded_effects, protocol_version)
+    if stored_effects != transition.effects:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-effects-mismatch",
+        )
+    replayed_effects.append(stored_effects)
+    if (
+        int(row[7]) != transition.next_state.aggregate_revision.value
+        or int(row[8]) != transition.next_state.admission_sequence.value
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-result-coordinate-mismatch",
+        )
+    replayed_shadows.append(
+        _validate_journal_shadow(
             stream_key,
-            state,
+            prior_state,
             event,
             transition,
             journal_sequence,
+            encoded_shadow,
+            protocol_version,
         )
-        if (
-            shadow_wrapper.protocol_version != protocol_version
-            or not isinstance(
-                shadow_wrapper.payload,
-                ShadowContextAdmissionRecord,
-            )
-            or shadow_wrapper.payload != regenerated_shadow
-        ):
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                "journal-shadow-mismatch",
-            )
-        replayed_shadows.append(shadow_wrapper.payload)
-        state = transition.next_state
+    )
+    return transition.next_state
+
+
+def _validate_projection_agreement(
+    genesis: UninitializedContextAdmissionState,
+    events: list[ContextAdmissionEvent],
+    state: ContextAdmissionState,
+    materialized_state_envelope: bytes,
+    aggregate_revision: int,
+    admission_sequence: int,
+) -> None:
     replay = context_admission_reducer_for_protocol(genesis.protocol_version).replay_stream(
         genesis,
         tuple(events),
@@ -321,6 +383,59 @@ def _recover_stream_projection(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
             "materialized-state-mismatch",
         )
+
+
+def _recover_stream_projection(
+    connection: sqlite3.Connection,
+    stream_id: bytes,
+    stream_key: ContextAdmissionStreamKey,
+    *,
+    genesis_envelope: bytes,
+    materialized_state_envelope: bytes,
+    aggregate_revision: int,
+    admission_sequence: int,
+    latest_journal_sequence: int,
+    read_budget: _LedgerReadBudget,
+) -> tuple[
+    ContextAdmissionState,
+    tuple[ContextAdmissionEvent, ...],
+    tuple[AdmissionDecision, ...],
+    tuple[tuple[AdmissionEffect, ...], ...],
+    tuple[ShadowContextAdmissionRecord, ...],
+]:
+    genesis = _validate_stream_genesis(genesis_envelope, latest_journal_sequence)
+    journal_rows, effects_by_sequence, shadow_by_sequence = _read_ordered_stream_records(
+        connection,
+        stream_id,
+        latest_journal_sequence=latest_journal_sequence,
+        read_budget=read_budget,
+    )
+    state: ContextAdmissionState = genesis
+    events: list[ContextAdmissionEvent] = []
+    replayed_decisions: list[AdmissionDecision] = []
+    replayed_effects: list[tuple[AdmissionEffect, ...]] = []
+    replayed_shadows: list[ShadowContextAdmissionRecord] = []
+    for row in journal_rows:
+        journal_sequence = int(row[0])
+        state = _replay_journal_publication(
+            stream_key,
+            state,
+            row,
+            effects_by_sequence[journal_sequence],
+            shadow_by_sequence[journal_sequence],
+            events,
+            replayed_decisions,
+            replayed_effects,
+            replayed_shadows,
+        )
+    _validate_projection_agreement(
+        genesis,
+        events,
+        state,
+        materialized_state_envelope,
+        aggregate_revision,
+        admission_sequence,
+    )
     return (
         state,
         tuple(events),

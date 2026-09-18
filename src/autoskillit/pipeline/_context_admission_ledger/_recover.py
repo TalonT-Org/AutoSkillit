@@ -49,110 +49,13 @@ class _LedgerRecovery(_LedgerStore):
             if self._recovered:
                 return self._recovery_result()
             connection: sqlite3.Connection | None = None
-            pending_stream_failures: list[
-                tuple[
-                    bytes,
-                    ContextAdmissionStreamKey,
-                    ContextAdmissionStorageFailureReason,
-                    str,
-                ]
-            ] = []
             try:
                 connection, read_budget = _LedgerRecovery._prepare_recovery_state(self)
-                self._stream_health.clear()
-                self._unresolved_streams.clear()
-                stream_rows = cast(
-                    tuple[
-                        tuple[
-                            bytes,
-                            bytes,
-                            bytes,
-                            bytes,
-                            int,
-                            int,
-                            int,
-                            str,
-                            str | None,
-                            str | None,
-                        ],
-                        ...,
-                    ],
-                    _read_bounded_rows(
-                        connection.execute(
-                            """
-                            SELECT stream_id, stream_key, genesis_envelope, state_envelope,
-                                   aggregate_revision, admission_sequence,
-                                   latest_journal_sequence, health_status,
-                                   failure_reason, reason_code
-                            FROM streams
-                            ORDER BY stream_id
-                            """
-                        ),
-                        read_budget,
-                    ),
+                self._reset_transient_recovery_state()
+                pending_stream_failures = self._recover_stream_rows(
+                    connection,
+                    read_budget,
                 )
-
-                for row in stream_rows:
-                    stream_id = bytes(row[0])
-                    stream_key = _decode_stream_key(bytes(row[1]))
-                    if stream_id != bytes(row[1]) or stream_id != _stream_key_bytes(stream_key):
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
-                            "stream-key-mismatch",
-                        )
-                    health = _stored_stream_health(stream_key, row[7], row[8], row[9])
-                    if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-                        self._stream_health[stream_key] = health
-                        continue
-                    if health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                                "invalid-stream-health",
-                            )
-                        )
-                        continue
-                    try:
-                        recovered_state = _recover_stream_projection(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            genesis_envelope=bytes(row[2]),
-                            materialized_state_envelope=bytes(row[3]),
-                            aggregate_revision=int(row[4]),
-                            admission_sequence=int(row[5]),
-                            latest_journal_sequence=int(row[6]),
-                            read_budget=read_budget,
-                        )[0]
-                    except ContextAdmissionValidationError as exc:
-                        logger.debug("context-admission replay decode failed: %s", exc)
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                                "stream-replay-decode-failed",
-                            )
-                        )
-                        continue
-                    except _LedgerOpenError as exc:
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                exc.reason,
-                                exc.reason_code,
-                            )
-                        )
-                        continue
-                    self._stream_health[stream_key] = ContextAdmissionStreamHealth(
-                        stream_key,
-                        ContextAdmissionStorageHealthStatus.HEALTHY,
-                    )
-                    if _state_has_unresolved_work(recovered_state):
-                        self._unresolved_streams.add(stream_key)
                 _LedgerRecovery._commit_recovery(
                     self,
                     connection,
@@ -160,8 +63,7 @@ class _LedgerRecovery(_LedgerStore):
                 )
             except _LedgerContended as exc:
                 logger.debug("context-admission recovery contended: %s", exc)
-                self._stream_health.clear()
-                self._unresolved_streams.clear()
+                self._reset_transient_recovery_state()
                 return ContextAdmissionRecoveryResult(
                     status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
                     store_health=self._store_health,
@@ -176,8 +78,7 @@ class _LedgerRecovery(_LedgerStore):
                 if primary_code in _SQLITE_BUSY_CODES:
                     if connection is not None:
                         _rollback(connection)
-                    self._stream_health.clear()
-                    self._unresolved_streams.clear()
+                    self._reset_transient_recovery_state()
                     return ContextAdmissionRecoveryResult(
                         status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
                         store_health=self._store_health,
@@ -201,6 +102,125 @@ class _LedgerRecovery(_LedgerStore):
                 if connection is not None:
                     connection.close()
             return self._recovery_result()
+
+    def _recover_stream_rows(
+        self,
+        connection: sqlite3.Connection,
+        read_budget: _LedgerReadBudget,
+    ) -> list[
+        tuple[
+            bytes,
+            ContextAdmissionStreamKey,
+            ContextAdmissionStorageFailureReason,
+            str,
+        ]
+    ]:
+        pending_stream_failures: list[
+            tuple[
+                bytes,
+                ContextAdmissionStreamKey,
+                ContextAdmissionStorageFailureReason,
+                str,
+            ]
+        ] = []
+        stream_rows = cast(
+            tuple[
+                tuple[
+                    bytes,
+                    bytes,
+                    bytes,
+                    bytes,
+                    int,
+                    int,
+                    int,
+                    str,
+                    str | None,
+                    str | None,
+                ],
+                ...,
+            ],
+            _read_bounded_rows(
+                connection.execute(
+                    """
+                    SELECT stream_id, stream_key, genesis_envelope, state_envelope,
+                           aggregate_revision, admission_sequence,
+                           latest_journal_sequence, health_status,
+                           failure_reason, reason_code
+                    FROM streams
+                    ORDER BY stream_id
+                    """
+                ),
+                read_budget,
+            ),
+        )
+
+        for row in stream_rows:
+            stream_id = bytes(row[0])
+            stream_key = _decode_stream_key(bytes(row[1]))
+            if stream_id != bytes(row[1]) or stream_id != _stream_key_bytes(stream_key):
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                    "stream-key-mismatch",
+                )
+            health = _stored_stream_health(stream_key, row[7], row[8], row[9])
+            if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+                self._stream_health[stream_key] = health
+                continue
+            if health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
+                pending_stream_failures.append(
+                    (
+                        stream_id,
+                        stream_key,
+                        ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                        "invalid-stream-health",
+                    )
+                )
+                continue
+            try:
+                recovered_state = _recover_stream_projection(
+                    connection,
+                    stream_id,
+                    stream_key,
+                    genesis_envelope=bytes(row[2]),
+                    materialized_state_envelope=bytes(row[3]),
+                    aggregate_revision=int(row[4]),
+                    admission_sequence=int(row[5]),
+                    latest_journal_sequence=int(row[6]),
+                    read_budget=read_budget,
+                )[0]
+            except ContextAdmissionValidationError as exc:
+                logger.debug("context-admission replay decode failed: %s", exc)
+                pending_stream_failures.append(
+                    (
+                        stream_id,
+                        stream_key,
+                        ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                        "stream-replay-decode-failed",
+                    )
+                )
+                continue
+            except _LedgerOpenError as exc:
+                pending_stream_failures.append(
+                    (
+                        stream_id,
+                        stream_key,
+                        exc.reason,
+                        exc.reason_code,
+                    )
+                )
+                continue
+            self._stream_health[stream_key] = ContextAdmissionStreamHealth(
+                stream_key,
+                ContextAdmissionStorageHealthStatus.HEALTHY,
+            )
+            if _state_has_unresolved_work(recovered_state):
+                self._unresolved_streams.add(stream_key)
+        return pending_stream_failures
+
+    def _reset_transient_recovery_state(self) -> None:
+        self._stream_health.clear()
+        self._unresolved_streams.clear()
+        self._recovered = False
 
     def recover(
         self,

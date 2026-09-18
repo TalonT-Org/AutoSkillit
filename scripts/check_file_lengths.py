@@ -96,33 +96,40 @@ def check_file(path: Path) -> str | None:
     return None
 
 
+def _staged_source_paths() -> list[Path] | None:
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "git diff --cached failed without a diagnostic"
+        print(f"Unable to select staged files: {detail}", file=sys.stderr)
+        return None
+
+    source_root = SRC_ROOT.resolve()
+    paths: list[Path] = []
+    for name in result.stdout.split("\0"):
+        if not name:
+            continue
+        path = (PROJECT_ROOT / name).resolve()
+        try:
+            path.relative_to(source_root)
+        except ValueError:
+            continue
+        if path.suffix == ".py":
+            paths.append(path)
+    return paths
+
+
 def main(argv: list[str]) -> int:
     """Check the supplied files and return a shell-compatible status code."""
     if "--staged" in argv:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            detail = result.stderr.strip() or "git diff --cached failed without a diagnostic"
-            print(f"Unable to select staged files: {detail}", file=sys.stderr)
+        paths = _staged_source_paths()
+        if paths is None:
             return 1
-
-        source_root = SRC_ROOT.resolve()
-        paths: list[Path] = []
-        for name in result.stdout.split("\0"):
-            if not name:
-                continue
-            path = (PROJECT_ROOT / name).resolve()
-            try:
-                path.relative_to(source_root)
-            except ValueError:
-                continue
-            if path.suffix == ".py":
-                paths.append(path)
         argv = [str(path) for path in paths]
 
     violations: list[str] = []

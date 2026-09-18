@@ -119,6 +119,13 @@ def scan_docs() -> list[str]:
     actual_recipes = count_recipes()
     gated, ungated = count_tools()
     total_tools = gated + ungated
+    count_checks = (
+        (SKILL_COUNT_PAT, actual_skills, "skills", SUBFAMILY_CONTEXT, 2),
+        (RECIPE_COUNT_PAT, actual_recipes, "recipes", None, 2),
+        (TOOL_COUNT_PAT, total_tools, "tools", TIER_CONTEXT_PAT, 2),
+        (GATED_PAT, gated, "gated tools", None, 0),
+        (UNGATED_PAT, ungated, "ungated tools", None, 0),
+    )
 
     errors: list[str] = []
 
@@ -138,50 +145,15 @@ def scan_docs() -> list[str]:
             if SELF_CORRECTING.search(line):
                 continue
 
-            # Check skill counts (skip sub-family contexts like Tier 1/2/3,
-            # arch-lens, exp-lens, audit suite — those are not global totals)
-            if not SUBFAMILY_CONTEXT.search(line):
-                for m in SKILL_COUNT_PAT.finditer(line):
-                    claimed = int(m.group(1))
-                    if claimed != actual_skills and claimed > 1:
-                        errors.append(
-                            f"{rel}:{lineno}: claims {claimed} skills, actual is {actual_skills}"
-                        )
-
-            # Check recipe counts
-            for m in RECIPE_COUNT_PAT.finditer(line):
-                claimed = int(m.group(1))
-                if claimed != actual_recipes and claimed > 1:
-                    errors.append(
-                        f"{rel}:{lineno}: claims {claimed} recipes, actual is {actual_recipes}"
-                    )
-
-            # Check total tool counts
-            for m in TOOL_COUNT_PAT.finditer(line):
-                claimed = int(m.group(1))
-                # Skip if this line discusses a tier/subset (handled below)
-                if TIER_CONTEXT_PAT.search(line):
+            for pattern, actual, label, exclusion, minimum_claim in count_checks:
+                if exclusion is not None and exclusion.search(line):
                     continue
-                if claimed != total_tools and claimed > 1:
-                    errors.append(
-                        f"{rel}:{lineno}: claims {claimed} tools, actual is {total_tools}"
-                    )
-
-            # Check gated tool counts
-            for m in GATED_PAT.finditer(line):
-                claimed = int(m.group(1))
-                if claimed != gated:
-                    errors.append(
-                        f"{rel}:{lineno}: claims {claimed} gated tools, actual is {gated}"
-                    )
-
-            # Check ungated tool counts
-            for m in UNGATED_PAT.finditer(line):
-                claimed = int(m.group(1))
-                if claimed != ungated:
-                    errors.append(
-                        f"{rel}:{lineno}: claims {claimed} ungated tools, actual is {ungated}"
-                    )
+                for match in pattern.finditer(line):
+                    claimed = int(match.group(1))
+                    if claimed != actual and claimed >= minimum_claim:
+                        errors.append(
+                            f"{rel}:{lineno}: claims {claimed} {label}, actual is {actual}"
+                        )
 
     return errors
 

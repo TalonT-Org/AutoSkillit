@@ -25,7 +25,7 @@ _FAKE_PREFIXES: tuple[str, ...] = ("Fake", "InMemory", "Mock")
 #: Pre-existing Protocol-declared fakes without shared contract coverage.
 _UNENROLLED_ALLOWLIST: frozenset[str] = frozenset(
     {
-        # These have structural conformance checks in tests/contracts/test_fakes_conformance.py T1.
+        # These have structural conformance checks in test_fakes_conformance.py T1.
         "InMemoryHeadlessExecutor",
         "InMemoryTestRunner",
         "InMemoryRecipeRepository",

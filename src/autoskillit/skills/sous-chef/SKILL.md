@@ -163,6 +163,10 @@ worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
 
 ## STOP-STEP EVIDENCE — MANDATORY
 
+<!-- Programmatic mirror: STOP_STEP_EVIDENCE_DOCTRINE_BULLETS in src/autoskillit/core/types/_type_constants.py.
+     Tests in tests/cli/test_sous_chef_content.py and tests/recipe/test_orchestrator_prompt_contract.py
+     enforce substring parity between this human-readable rendering and the programmatic mirror. -->
+
 Preserve the original failed run_skill response: use its exact result, reason_kind, and
 outcome_fields verbatim; a diagnostic result is supplemental.
 With no structured original reason, do not infer.

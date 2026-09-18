@@ -260,8 +260,8 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - The skill's terminal outcome report could not be parsed. Always fall through to
     on_failure. Do NOT route to on_context_limit or add a label.
 - When run_skill returns "needs_retry: true" AND "retry_reason: cancelled":
-  - The session was cancelled. Always fall through to on_failure. Do not resume.
-    Do not route to on_context_limit.
+  - The session was cancelled. Always fall through to on_failure. Do not resume, and
+    do not route to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
   - The model ran to completion and wrote artifacts but the structured output tokens
     failed pattern validation. Infrastructure nudge was attempted but could not recover.

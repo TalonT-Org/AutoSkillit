@@ -870,6 +870,22 @@ class TestTokenizeShellPayloadSegments:
         assert tokenize_shell_payload_segments("") == []
         assert tokenize_shell_payload_segments("   ") == []
 
+    def test_iterator_yields_empty_outer_for_include_outer_true(self):
+        # Direct coverage of the iterator's `include_outer=True` empty-outer
+        # branch: an empty/whitespace command must yield `[]` as the first
+        # entry so consumers relying on "outer is always the first yield"
+        # (e.g. `_iter_evaluated_payload_segments`) see one entry, not zero.
+        from autoskillit.hooks._classification._interpreters import (
+            _iter_shell_payload_segment_groups,
+        )
+
+        assert list(_iter_shell_payload_segment_groups("")) == [[]]
+        assert list(_iter_shell_payload_segment_groups("   ")) == [[]]
+        # With include_outer=False, the empty outer is processed for nested
+        # discovery but not yielded.
+        assert list(_iter_shell_payload_segment_groups("", include_outer=False)) == []
+        assert list(_iter_shell_payload_segment_groups("   ", include_outer=False)) == []
+
     def test_process_substitution_traversal_is_opt_in(self):
         from autoskillit.hooks._runtime._command_classification import (
             tokenize_shell_payload_segments,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from pathlib import Path
 
 import pytest
 
@@ -86,3 +87,48 @@ def test_check_pyi_symbols_uses_all_when_defined(tmp_path):
     mod = _load_check_module()
     violations = mod.check_file(pyi)
     assert violations == []
+
+
+def test_check_pyi_symbols_checks_package_source(tmp_path):
+    """A submodule package is sourced from foo/__init__.py, not foo.py."""
+    pkg = tmp_path / "mypkg"
+    source = pkg / "foo" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("class Bar:\n    pass\n\nclass Baz:\n    pass\n")
+    pyi = pkg / "__init__.pyi"
+    pyi.write_text("from .foo import Bar as Bar\n")
+
+    mod = _load_check_module()
+
+    assert mod.check_file(pyi) == [
+        "__init__.pyi: foo.Baz defined in submodule but missing from stub re-exports"
+    ]
+
+
+@pytest.mark.parametrize("source_state", ["missing", "malformed", "unreadable"])
+def test_check_pyi_symbols_silently_skips_unusable_package_sources(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, source_state: str
+):
+    pkg = tmp_path / "mypkg"
+    source = pkg / "foo" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    if source_state != "missing":
+        source.write_text("class Bar:\n    pass\n")
+    if source_state == "malformed":
+        source.write_text("class Bar(:\n    pass\n")
+
+    pyi = pkg / "__init__.pyi"
+    pyi.write_text("from .foo import Bar as Bar\n")
+    mod = _load_check_module()
+
+    if source_state == "unreadable":
+        original_read_text = Path.read_text
+
+        def read_text(path: Path, *args, **kwargs) -> str:
+            if path == source:
+                raise OSError("simulated unreadable package source")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", read_text)
+
+    assert mod.check_file(pyi) == []

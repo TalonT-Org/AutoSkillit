@@ -75,7 +75,7 @@ class _ImportMap:
                     local = alias.asname or alias.name.split(".")[0]
                     self._module_imports[local] = alias.name
 
-    def resolve_call(self, call: ast.Call) -> tuple[str, str] | None:
+    def resolve_call(self, call: ast.Call, current_module_relpath: str) -> tuple[str, str] | None:
         """Return (file_relpath, function_name) the call's callee resolves to, if known.
 
         Import statements name a dotted Python module (``autoskillit.x.y``);
@@ -89,7 +89,7 @@ class _ImportMap:
             if func.id in self._from_imports:
                 module, name = self._from_imports[func.id]
                 return (_module_to_relpath(module), name)
-            return None
+            return (current_module_relpath, func.id)
         if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
             resolved_module = self._module_imports.get(func.value.id)
             if resolved_module is not None:
@@ -154,6 +154,36 @@ def _site_key(file_relpath: str, enclosing: ast.AST | None, func_short_name: str
     return f"{file_relpath}:{name}"
 
 
+def _wrapper_equivalence(
+    parsed: dict[str, tuple[ast.Module, dict[ast.AST, ast.AST], _ImportMap]],
+    policy: tuple[str, str],
+) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """Return the transitive policy/wrapper equivalence and wrapper identities."""
+    equivalence = {policy}
+    wrapper_names: set[tuple[str, str]] = set()
+    changed = True
+    while changed:
+        changed = False
+        for relpath, (tree, _parents, imports) in parsed.items():
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not _is_pure_return_wrapper(node):
+                    continue
+                return_stmt = node.body[-1]
+                assert isinstance(return_stmt, ast.Return)
+                call = return_stmt.value
+                assert isinstance(call, ast.Call)
+                resolved = imports.resolve_call(call, relpath)
+                if resolved is not None and resolved in equivalence:
+                    key = (relpath, node.name)
+                    if key not in equivalence:
+                        equivalence.add(key)
+                        wrapper_names.add(key)
+                        changed = True
+    return equivalence, wrapper_names
+
+
 def find_call_sites(func_name: str, defining_module_relpath: str) -> list[str]:
     """Return the equivalence-class-resolved (file:enclosing_function) call sites.
 
@@ -171,43 +201,14 @@ def find_call_sites(func_name: str, defining_module_relpath: str) -> list[str]:
         tree = ast.parse(source, filename=str(path))
         parsed[relpath] = (tree, _build_parent_map(tree), _ImportMap(tree))
 
-    # Equivalence class of names that resolve to the policy: start with the
-    # policy's own (module, name); grow by one BFS pass over pure-return
-    # wrapper functions that call something already in the class.
-    equivalence: set[tuple[str, str]] = {(defining_module_relpath, func_name)}
-    wrapper_names: set[tuple[str, str]] = set()
-    changed = True
-    while changed:
-        changed = False
-        for relpath, (tree, parents, imports) in parsed.items():
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                if not _is_pure_return_wrapper(node):
-                    continue
-                return_stmt = node.body[-1]
-                assert isinstance(return_stmt, ast.Return)
-                call = return_stmt.value
-                assert isinstance(call, ast.Call)
-                resolved = imports.resolve_call(call)
-                if resolved is None and isinstance(call.func, ast.Name):
-                    # Wrapper calling a sibling defined in the same module.
-                    resolved = (relpath, call.func.id)
-                if resolved is not None and resolved in equivalence:
-                    key = (relpath, node.name)
-                    if key not in equivalence:
-                        equivalence.add(key)
-                        wrapper_names.add(key)
-                        changed = True
+    equivalence, wrapper_names = _wrapper_equivalence(parsed, (defining_module_relpath, func_name))
 
     sites: set[str] = set()
     for relpath, (tree, parents, imports) in parsed.items():
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            resolved = imports.resolve_call(node)
-            if resolved is None and isinstance(node.func, ast.Name):
-                resolved = (relpath, node.func.id)
+            resolved = imports.resolve_call(node, relpath)
             if resolved is None or resolved not in equivalence:
                 continue
             enclosing = _enclosing_function(node, parents)

@@ -35,6 +35,49 @@ def _collect_tool_paths() -> list[Path]:
     return sorted(paths)
 
 
+def _decorator_violations(
+    path: Path,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    decorator: ast.expr,
+) -> list[str]:
+    if not (
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "tool"
+        and isinstance(decorator.func.value, ast.Name)
+        and decorator.func.value.id == "mcp"
+    ):
+        return []
+
+    ann_dict: ast.Dict | None = None
+    for keyword in decorator.keywords:
+        if keyword.arg == "annotations" and isinstance(keyword.value, ast.Dict):
+            ann_dict = keyword.value
+            break
+    if ann_dict is None:
+        return [f"{path.name}:{decorator.lineno}: {node.name} missing annotations= keyword"]
+
+    key_names = [key.value for key in ann_dict.keys if isinstance(key, ast.Constant)]
+    if "readOnlyHint" not in key_names:
+        return [
+            f"{path.name}:{decorator.lineno}: {node.name} "
+            "annotations dict missing readOnlyHint key"
+        ]
+
+    expected = READ_ONLY_EXCEPTIONS.get(node.name, True)
+    violations: list[str] = []
+    for key, value in zip(ann_dict.keys, ann_dict.values, strict=True):
+        if isinstance(key, ast.Constant) and key.value == "readOnlyHint":
+            actual = value.value if isinstance(value, ast.Constant) else None
+            if actual is expected:
+                continue
+            violations.append(
+                f"{path.name}:{decorator.lineno}: {node.name} "
+                f"has readOnlyHint={actual!r} (must be {expected!r})"
+            )
+    return violations
+
+
 def check() -> list[str]:
     violations = []
     paths = _collect_tool_paths()
@@ -50,43 +93,7 @@ def check() -> list[str]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for dec in node.decorator_list:
-                if not (
-                    isinstance(dec, ast.Call)
-                    and isinstance(dec.func, ast.Attribute)
-                    and dec.func.attr == "tool"
-                    and isinstance(dec.func.value, ast.Name)
-                    and dec.func.value.id == "mcp"
-                ):
-                    continue
-                ann_kw = None
-                ann_dict: ast.Dict | None = None
-                for kw in dec.keywords:
-                    if kw.arg == "annotations" and isinstance(kw.value, ast.Dict):
-                        ann_kw = kw
-                        ann_dict = kw.value
-                        break
-                if ann_kw is None or ann_dict is None:
-                    violations.append(
-                        f"{path.name}:{dec.lineno}: {node.name} missing annotations= keyword"
-                    )
-                    continue
-                key_names = [k.value for k in ann_dict.keys if isinstance(k, ast.Constant)]
-                if "readOnlyHint" not in key_names:
-                    violations.append(
-                        f"{path.name}:{dec.lineno}: {node.name} "
-                        "annotations dict missing readOnlyHint key"
-                    )
-                    continue
-                expected = READ_ONLY_EXCEPTIONS.get(node.name, True)
-                for key, val in zip(ann_dict.keys, ann_dict.values, strict=True):
-                    if isinstance(key, ast.Constant) and key.value == "readOnlyHint":
-                        actual = val.value if isinstance(val, ast.Constant) else None
-                        if actual is expected:
-                            continue
-                        violations.append(
-                            f"{path.name}:{dec.lineno}: {node.name} "
-                            f"has readOnlyHint={actual!r} (must be {expected!r})"
-                        )
+                violations.extend(_decorator_violations(path, node, dec))
     return violations
 
 

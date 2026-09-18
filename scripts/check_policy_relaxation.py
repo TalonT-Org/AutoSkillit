@@ -85,20 +85,24 @@ def _module_assignment(source: str, symbol: str) -> ast.expr:
         raise UnsupportedSurfaceShape(f"{symbol}: source does not parse ({exc})") from exc
     value: ast.expr | None = None
     for node in tree.body:
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            if len(targets) == 1 and isinstance(targets[0], ast.Name) and targets[0].id == symbol:
-                if value is not None:
-                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
-                value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == symbol and node.value:
-                if value is not None:
-                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
-                value = node.value
-        elif isinstance(node, ast.AugAssign):
+        if isinstance(node, ast.AugAssign):
             if isinstance(node.target, ast.Name) and node.target.id == symbol:
                 raise UnsupportedSurfaceShape(f"{symbol}: augmented assignment is not readable")
+            continue
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        assigned_value = node.value
+        if (
+            assigned_value is None
+            or len(targets) != 1
+            or not isinstance(targets[0], ast.Name)
+            or targets[0].id != symbol
+        ):
+            continue
+        if value is not None:
+            raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
+        value = assigned_value
     if value is not None:
         return value
     raise SurfaceMissing(f"{symbol}: no module-level assignment")

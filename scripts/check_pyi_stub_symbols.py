@@ -51,6 +51,30 @@ def _extract_all(tree: ast.Module) -> set[str] | None:
     return None
 
 
+def _source_public_names(pkg_dir: Path, submod_rel: str) -> set[str] | None:
+    submod_path = pkg_dir.joinpath(*submod_rel.split("."))
+    py_file = (
+        submod_path / "__init__.py" if submod_path.is_dir() else submod_path.with_suffix(".py")
+    )
+    if not py_file.exists():
+        return None
+    try:
+        submod_tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return None
+
+    submod_all = _extract_all(submod_tree)
+    if submod_all is not None:
+        return submod_all
+    public_names = {
+        stmt.name
+        for stmt in submod_tree.body
+        if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and not stmt.name.startswith("_")
+    }
+    return public_names or None
+
+
 def check_file(pyi_path: Path) -> list[str]:
     violations: list[str] = []
     try:
@@ -68,33 +92,9 @@ def check_file(pyi_path: Path) -> list[str]:
             stub_by_submod.setdefault(node.module, set()).update(names)
 
     for submod_rel, stub_names in sorted(stub_by_submod.items()):
-        parts = submod_rel.split(".")
-        submod_path = pkg_dir.joinpath(*parts)
-
-        if submod_path.is_dir():
-            py_file = submod_path / "__init__.py"
-        else:
-            py_file = submod_path.with_suffix(".py")
-
-        if not py_file.exists():
+        public_names = _source_public_names(pkg_dir, submod_rel)
+        if public_names is None:
             continue
-
-        try:
-            submod_tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-        except (SyntaxError, UnicodeDecodeError, OSError):
-            continue
-
-        submod_all = _extract_all(submod_tree)
-        if submod_all is not None:
-            public_names = submod_all
-        else:
-            public_names = set()
-            for stmt in submod_tree.body:
-                if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if not stmt.name.startswith("_"):
-                        public_names.add(stmt.name)
-            if not public_names:
-                continue
 
         for name in sorted(public_names - stub_names):
             if name.startswith("_"):

@@ -145,6 +145,25 @@ def test_wrapper_function_equivalence_class(
     )
 
 
+def test_chained_wrapper_equivalence_class_returns_only_external_caller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_checker, "SRC_ROOT", tmp_path)
+    _write(tmp_path, "policy_mod.py", "def _policy(spec):\n    return []\n")
+    _write(
+        tmp_path,
+        "wrapper_mod.py",
+        "from policy_mod import _policy\n\n\n"
+        "def wrapper_one(spec):\n    return _policy(spec)\n\n\n"
+        "def wrapper_two(spec):\n    return wrapper_one(spec)\n",
+    )
+    _write(tmp_path, "external_caller.py", _direct_caller_source("gate", target="wrapper_two"))
+
+    sites = _checker.find_call_sites("_policy", "policy_mod.py")
+
+    assert sites == ["external_caller.py:gate"]
+
+
 def test_backend_specific_exemption_permits_codex_no_op_second_site(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

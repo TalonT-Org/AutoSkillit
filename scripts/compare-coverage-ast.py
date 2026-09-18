@@ -186,6 +186,15 @@ def query_coverage_db(
     return covered_result, executable_result
 
 
+def _test_file_from_context(context: str) -> str | None:
+    if "::" not in context or not context.endswith("|run"):
+        return None
+    test_file = context.split("::", 1)[0]
+    if test_file.startswith("tests/") and test_file.endswith(".py"):
+        return test_file
+    return None
+
+
 def query_contexts_map(
     db_path: Path,
 ) -> tuple[dict[str, set[str]], list[dict[str, str]]]:
@@ -224,10 +233,9 @@ def query_contexts_map(
         test_files: set[str] = set()
         for contexts in contexts_by_line.values():
             for ctx in contexts:
-                if "::" in ctx and ctx.endswith("|run"):
-                    test_file = ctx.split("::")[0]
-                    if test_file.startswith("tests/") and test_file.endswith(".py"):
-                        test_files.add(test_file)
+                test_file = _test_file_from_context(ctx)
+                if test_file is not None:
+                    test_files.add(test_file)
         if test_files:
             result[rel] = test_files
         else:

@@ -27,6 +27,7 @@ SCRIPTS_ROOT = SRC_ROOT.parent.parent / "scripts"
 
 _VETO_CONSUMER_NAMES = frozenset({"_contains_reference"})
 _SAFE_VETO_SOURCE = "veto_paths"
+_VETO_DELEGATE_ARGUMENTS = {"_candidate_reap_disposition": "revocable_paths"}
 
 
 class _VetoSourceCollector(ast.NodeVisitor):
@@ -72,19 +73,49 @@ def _references_argument(node: ast.Call) -> ast.expr | None:
     return None
 
 
+def _keyword_argument(node: ast.Call, name: str) -> ast.expr | None:
+    for keyword in node.keywords:
+        if keyword.arg == name:
+            return keyword.value
+    return None
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def _is_safe_veto_argument(argument: ast.expr, safe_names: set[str]) -> bool:
+    return _is_veto_paths_call(argument) or (
+        isinstance(argument, ast.Name) and argument.id in safe_names
+    )
+
+
 def _scan_function(fn: ast.FunctionDef | ast.AsyncFunctionDef, relpath: str) -> list[str]:
     collector = _VetoSourceCollector()
     collector.visit(fn)
+    delegated_argument = _VETO_DELEGATE_ARGUMENTS.get(fn.name)
+    if delegated_argument is not None and any(
+        argument.arg == delegated_argument for argument in (*fn.args.args, *fn.args.kwonlyargs)
+    ):
+        collector.safe_names.add(delegated_argument)
     violations: list[str] = []
     for node in ast.walk(fn):
-        if not isinstance(node, ast.Call) or not _is_veto_consumer_call(node):
+        if not isinstance(node, ast.Call):
             continue
-        argument = _references_argument(node)
+        call_name = _call_name(node)
+        if _is_veto_consumer_call(node):
+            argument = _references_argument(node)
+        elif call_name in _VETO_DELEGATE_ARGUMENTS:
+            argument = _keyword_argument(node, _VETO_DELEGATE_ARGUMENTS[call_name])
+        else:
+            continue
         if argument is None:
             continue
-        if _is_veto_paths_call(argument):
-            continue
-        if isinstance(argument, ast.Name) and argument.id in collector.safe_names:
+        if _is_safe_veto_argument(argument, collector.safe_names):
             continue
         violations.append(
             f"{relpath}:{node.lineno} — {fn.name}() passes a references argument that is not "
@@ -160,8 +191,12 @@ def test_reverting_veto_paths_call_is_caught(tmp_path: Path) -> None:
     """
     module_path = tmp_path / "reverted_reaper.py"
     module_path.write_text(
+        "def _candidate_reap_disposition(candidate, *, revocable_paths):\n"
+        "    return _contains_reference(candidate, revocable_paths)\n\n"
         "def _reap(candidate, references):\n"
-        "    return _contains_reference(candidate, references)\n"
+        "    return _candidate_reap_disposition(\n"
+        "        candidate, revocable_paths=references\n"
+        "    )\n"
     )
     tree = ast.parse(module_path.read_text())
     violations: list[str] = []

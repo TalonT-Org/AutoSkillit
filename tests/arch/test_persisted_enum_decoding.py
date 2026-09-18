@@ -93,6 +93,25 @@ def decode(payload):
     assert "bare dynamic construction of PluginArtifactKind" in violations[0]
 
 
+def test_guard_resolves_reverse_ordered_chained_aliases(tmp_path: Path) -> None:
+    _write_decoder(
+        tmp_path,
+        """\
+ShortAlias = LongAlias
+LongAlias = ImportedAlias
+from autoskillit.core import PluginArtifactKind as ImportedAlias
+
+def decode(payload):
+    return ShortAlias(payload["artifact_kind"])
+""",
+    )
+
+    violations = find_bare_enum_constructions(tmp_path)
+
+    assert len(violations) == 1
+    assert "bare dynamic construction of PluginArtifactKind" in violations[0]
+
+
 def test_literal_and_named_tolerant_constructors_are_allowed(tmp_path: Path) -> None:
     _write_decoder(
         tmp_path,

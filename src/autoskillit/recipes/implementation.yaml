@@ -1471,7 +1471,7 @@ steps:
       step_name: resolve_review
     capture:
       verdict: ${{ result.verdict }}
-      fixes_applied: ${{ result.fixes_applied }}
+      review_fixes_applied: ${{ result.fixes_applied }}
       resolve_review_operation_key: ${{ result.review_operation_key }}
       resolve_review_head_sha: ${{ result.review_head_sha }}
       resolve_review_post_state: ${{ result.review_post_state }}
@@ -1486,6 +1486,8 @@ steps:
       route: check_resolve_review_posted
     - when: ${{ result.review_post_state }} == 'RECONCILED'
       route: check_resolve_review_posted
+    # Ordering is load-bearing: verdict routes must precede review_status=processed,
+    # otherwise successful reviews would fall through to release_issue_failure.
     - when: ${{ result.verdict }} == 'real_fix'
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'already_green'
@@ -1494,6 +1496,10 @@ steps:
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: pre_review_rebase
+    - when: ${{ result.review_status }} == 'no_pr'
+      route: release_issue_failure
+    - when: ${{ result.review_status }} == 'processed'
+      route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
     optional_context_refs:

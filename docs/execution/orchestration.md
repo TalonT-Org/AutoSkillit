@@ -50,10 +50,10 @@ tool result. The routing rules per tool:
 - `clone_repo` / `remove_clone` — read `clone_id` and stash for later
   cleanup via `register_clone_status` and `batch_cleanup_clones`.
 
-## The 19 `retry_reason` values
+## The 20 `retry_reason` values
 
 `RetryReason` is a `StrEnum` in `src/autoskillit/core/types/_type_enums.py` with
-19 distinct values. Each value triggers a different recovery route:
+20 distinct values. Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |
 |-------|-------------------------------|----------|
@@ -76,6 +76,7 @@ tool result. The routing rules per tool:
 | `context_exhausted` | A correlated Codex automatic-compaction veto interrupted the turn | Terminal; start an explicit new session, or compact manually and deliberately resume |
 | `cancelled` | Transport teardown cancelled the worker | Terminal; do not retry |
 | `outcome_invariant` | Skill-emitted outcome fields violated their declared relationship | Route to `on_failure` |
+| `outcome_report_malformed` | Skill's terminal outcome report could not be parsed | Route to `on_failure`; do not add a label |
 
 `recipe/rules_isolation.py` enforces matching `clone_contamination` and
 `path_contamination` defenses at recipe-validation time.

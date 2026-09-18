@@ -100,7 +100,7 @@ normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: call `commit_files(paths=[<dirty files>], message="fix: commit pending review changes", cwd="{work_dir}")`. Count any failed call toward `fix_failures`.
+2. If any files are dirty: call `commit_files(paths=[<dirty files>], message="fix: commit pending review changes", cwd="{work_dir}")`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -148,7 +148,10 @@ gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
 
 If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review resolution"
-- Exit 0 (graceful degradation — do not fail the pipeline)
+- Write a bounded no-PR report under `{{AUTOSKILLIT_TEMP}}/resolve-review/`.
+- Emit exactly `review_status = no_pr`; do not emit a `finding_disposition` row or
+  `verdict`.
+- Exit 0 (graceful degradation — do not fail the pipeline).
 
 ### Step 1.5: Publish Accumulated Deferred Observations (github mode only)
 
@@ -587,8 +590,10 @@ For each finding where the classification map shows `verdict = ACCEPT`
    ```
    The tool runs pre-commit hooks, handles auto-fix re-staging, and returns
    `{"success": true, "commit_sha": "..."}` or `{"success": false, "error": "..."}`.
-   A finding counts toward `fixes_applied` ONLY when `commit_files` returns `success: true`.
-   A failed call increments `fix_failures`. Do NOT use `--amend` — always create new commits.
+   Record the finding as `applied` only when `commit_files` returns `success: true`,
+   and attach the returned commit SHA. Failed attempts do not create a terminal
+   disposition; after retries are exhausted, record the finding once as `failed`.
+   Do NOT use `--amend` — always create new commits.
 
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
@@ -625,7 +630,9 @@ the configured test command directly in the shell.
 - Pass → proceed to Step 6 (Resolve Addressed Review Threads)
 - Fail (iteration < 3): analyze failures against the fixes applied, revert/adjust the
   problematic commit, re-commit and retry (increment iteration counter)
-- Fail (iteration >= 3): report failure, leave working directory intact, exit non-zero
+- Fail (iteration >= 3): write the bounded diagnostic report and emit the diagnostic
+  structured output described in Step 7 before exiting non-zero. Preserve the failure
+  status: this is not a successful review result.
 
 ### Step 6: Resolve Addressed Review Threads
 
@@ -757,7 +764,6 @@ Log: `"Saved N reject patterns"`.
 ### Step 7: Report
 
 **MODE INDEPENDENCE:** the `test_check` MCP gate (Step 5) runs identically in both modes.
-Gate token emission is mode-independent.
 
 Print a structured summary to terminal:
 
@@ -772,88 +778,90 @@ Intent validation (before code changes):
   - ACCEPT: {accept_count}
   - REJECT: {reject_count}
   - DISCUSS: {discuss_count}
-Fixes applied: {accept_count - skipped_in_fix_phase}
-Fixes skipped: {n}
-  - {file}:{line} — {reason}
+Fixes applied: {number of applied finding_disposition rows}
+Fixes skipped: {number of skipped finding_disposition rows}
 Threads resolved: {resolved_count}/{len(addressed_thread_ids)}
   - {resolve_failed_count} failed (warnings logged above)
 Inline replies: disabled (structured review publication only)
-Reject patterns saved: {{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}_{ts}.json
 Test iterations: {n}
-Status: PASS
+Status: {PASS|FAIL}
 ```
 
 Save full report to:
 - Analysis report: `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
 - Final report: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md`
 
-Then determine and emit the structured output tokens (required for the
-`write_behavior: conditional` contract gate and `on_result:` routing):
+<!-- gated-field-semantics:begin -->
+### Finding disposition and qualifier semantics
 
-**Verdict Decision:**
-- If `{accept_count - skipped_in_fix_phase} >= 1` (fixes were applied): `verdict = real_fix`
-- If all ACCEPT findings were skipped (no code changes): `verdict = already_green`
+For every processed finding, emit one `finding_disposition` row. A row is `applied`
+only after a successful commit and must include that commit SHA. A finding deliberately
+not changed is `skipped`; an attempted apply or commit that did not succeed is `failed`.
+No-PR handling has no findings, so it emits no rows.
 
-> **IMPORTANT:** Emit the tokens as **literal plain text with no markdown
-> formatting**. Do not wrap in bold or italic. Do not wrap the output block
-> in a code fence. The adjudicator performs a regex match — decorators and
-> code fences cause match failure.
+`accepted_without_changes` is a success qualifier, never a disposition. It applies when
+`accept_count > 0 and fixes_applied == 0 and fix_failures == 0`; report it in prose only.
+Server derivation: `accept_count` equals the number of `finding_disposition` rows.
+Server derivation: `fixes_applied` equals the number of `applied` rows.
+Server derivation: `fix_failures` equals the number of `failed` rows.
+Server derivation: `skipped_in_fix_phase` equals the number of `skipped` rows.
+Do not emit those derived counters or arithmetic expressions for them in skill output.
 
-```
-verdict = {verdict}
-fixes_applied = {accept_count - skipped_in_fix_phase}
-accept_count = {accept_count}
-fix_failures = {fix_failures}
+### Verdict Decision
+
+| Verdict | Decision | Route |
+| --- | --- | --- |
+| `real_fix` | At least one finding is `applied`, none is `failed`, and the final `test_check` passes. | Continue normal success routing. |
+| `already_green` | No finding is `applied` or `failed`, and the final `test_check` passes. | Continue normal success routing; the success qualifier may apply. |
+| `flake_suspected` | No finding is `applied` or `failed`; a local failure is followed by a passing unchanged-tree rerun. | Continue the existing flake route with the recorded evidence. |
+| `ci_only_failure` | No finding is `applied` or `failed`; local tests pass and evidence identifies a CI-only environment or configuration failure. | Continue the existing CI-only route with the recorded evidence. |
+
+Any terminal `failed` disposition is a failure and emits no success verdict. Every processed
+success requires a final passing `test_check`. The retry cap never invents another
+`review_status` value and never reports success; emit `review_status = processed`, the terminal
+disposition rows, and bounded diagnostics before exiting non-zero.
+
+### Operative output template
+
+> Emit literal plain-text tokens: no markdown decoration or code fences around the
+> actual emitted lines. The conditional lines below are selected by outcome.
+
+<!-- resolver-operative-output:begin -->
+review_status = processed
+finding_disposition = {finding-id} | {applied|skipped|failed} [| {commit-sha}]
+verdict = {real_fix|already_green|flake_suspected|ci_only_failure}
 review_operation_key = {authoritative operation key when deferred observations were posted}
 review_head_sha = {authoritative requested head when deferred observations were posted}
 review_post_state = {SUCCEEDED|RECONCILED when deferred observations were posted}
 review_receipt_path = {authoritative receipt path when deferred observations were posted}
-```
+deferred_observations_path = {local-mode observations path, when written}
+reject_patterns_path = {mode-specific reject-patterns path, when written}
+<!-- resolver-operative-output:end -->
 
-Where:
-- `{verdict}` is `real_fix` if fixes were applied, `already_green` otherwise
-- `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
-  where code changes were actually committed
-- `{accept_count}` is the total number of ACCEPT-classified findings
-- `{fix_failures}` is the number of ACCEPT findings whose apply/commit attempt
-  errored (distinct from `skipped_in_fix_phase` which counts legitimate pre-attempt skips)
-
-The Step 1 graceful degradation exit must NOT emit these tokens — no tokens
-when skipping due to no PR found.
-
-Exit 0.
+For no PR or unavailable `gh`, emit exactly `review_status = no_pr`; omit every other
+token, including `finding_disposition` and `verdict`. At a retry cap, write the diagnostic
+report, emit the applicable processed diagnostic tokens, and retain the non-zero exit.
 
 ## Output
 
-When a PR is processed, the following structured output tokens are emitted:
+The following is the final-output template. It repeats the operative output contract so
+the last terminal lines are unambiguous; emit one disposition row per processed finding.
 
-```
-verdict = real_fix|already_green
-fixes_applied = {N}
-accept_count = {N}
-fix_failures = {N}
+<!-- resolver-final-output:begin -->
+review_status = processed
+finding_disposition = {finding-id} | {applied|skipped|failed} [| {commit-sha}]
+verdict = {real_fix|already_green|flake_suspected|ci_only_failure}
 review_operation_key = {operation key, when publication occurred}
 review_head_sha = {head SHA, when publication occurred}
 review_post_state = {SUCCEEDED|RECONCILED, when publication occurred}
 review_receipt_path = {receipt path, when publication occurred}
-```
+deferred_observations_path = {local-mode observations path, when written}
+reject_patterns_path = {mode-specific reject-patterns path, when written}
+<!-- resolver-final-output:end -->
 
-Where `fixes_applied` is the count of ACCEPT findings where code changes were
-committed. `accept_count` is the total number of ACCEPT-classified findings.
-`fix_failures` is the count of ACCEPT findings whose apply/commit attempt failed.
-`verdict = real_fix` means fixes were applied; `verdict = already_green` means
-all review findings were already addressed and no code changes were needed.
-
-**Mode-conditional path outputs:**
-
-When `mode=local`, the following additional tokens are emitted:
-```
-deferred_observations_path = {{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json
-reject_patterns_path = {{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}.json
-```
-
-When `mode=github` and prior local rounds accumulated observations, these are posted
-to GitHub and renamed to `deferred_observations_{pr_number}_posted.json` — no path token
-is emitted for the posted state.
+When `mode=local`, also emit `deferred_observations_path` and `reject_patterns_path` for
+their documented local artifacts. When `mode=github`, omit those path tokens after prior
+local observations are posted. For no PR, emit only `review_status = no_pr`.
 
 Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)
+<!-- gated-field-semantics:end -->

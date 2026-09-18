@@ -83,9 +83,8 @@ class RetryReason(StrEnum):
     IDLE_STALL = "idle_stall"  # stdout idle watchdog kill — session may have partial progress
     RATE_LIMITED = "rate_limited"  # transient HTTP 429 or rate-limit pattern — wait-and-retry
     CANCELLED = "cancelled"
-    OUTCOME_INVARIANT = (
-        "outcome_invariant"  # skill-emitted outcome fields violated a contract invariant
-    )
+    OUTCOME_INVARIANT = "outcome_invariant"
+    OUTCOME_REPORT_MALFORMED = "outcome_report_malformed"
     ASYNC_OBLIGATION = "async_obligation"
     CONTEXT_EXHAUSTED = "context_exhausted"
 

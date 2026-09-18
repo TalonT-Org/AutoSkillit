@@ -573,10 +573,11 @@ class ClosedEpochAudit(_ContractValue):
                 for member in members
             ):
                 _raise_invalid("inconsistent_closed_epoch_link")
-            if batch_record.reservation_id is not None:
-                reservation = reservation_by_id.get(batch_record.reservation_id)
-                if reservation is None or reservation.key.batch_id != batch_record.batch.batch_id:
-                    _raise_invalid("missing-closed-epoch-reservation")
+            if batch_record.reservation_id is not None and (
+                (reservation := reservation_by_id.get(batch_record.reservation_id)) is None
+                or reservation.key.batch_id != batch_record.batch.batch_id
+            ):
+                _raise_invalid("missing-closed-epoch-reservation")
         for generation in self.terminal_generation_reservations:
             generation_batch = batch_by_id.get(generation.batch_id)
             if (

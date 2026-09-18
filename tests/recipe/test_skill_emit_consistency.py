@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from autoskillit.core import load_yaml
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.contracts import load_bundled_manifest
 
@@ -18,6 +19,32 @@ SERVER_COMPUTED_OUTPUTS: frozenset[str] = frozenset(
     {
         "has_implementation_progress",
     }
+)
+
+_REVIEW_RESOLVERS = (
+    "resolve-review",
+    "resolve-research-review",
+    "resolve-claims-review",
+)
+_RESOLVER_TEMPLATE_NAMES = (
+    "resolver-operative-output",
+    "resolver-final-output",
+)
+_RESOLVER_VERDICTS = (
+    "real_fix",
+    "already_green",
+    "flake_suspected",
+    "ci_only_failure",
+)
+_RESOLVER_SEMANTICS_ANCHORS = (
+    "For every processed finding, emit one `finding_disposition` row.",
+    "`accepted_without_changes` is a success qualifier, never a disposition.",
+    "`accept_count > 0 and fixes_applied == 0 and fix_failures == 0`",
+)
+_REVIEW_CAPTURE_CASES = (
+    ("implementation", "resolve_review"),
+    ("merge-prs", "resolve_review_integration"),
+    ("remediation", "resolve_review"),
 )
 
 # Key pattern: if a contract output pattern requires an absolute path (contains
@@ -38,6 +65,22 @@ _ABSOLUTE_RESOLVE_RE = re.compile(
     r'^([A-Z_]+)="?\$\(cd\b|^([A-Z_]+)="?\$\(realpath\b',
     re.MULTILINE,
 )
+
+
+def _resolver_skill_content(skill_name: str) -> str:
+    path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    return path.read_text(encoding="utf-8")
+
+
+def _delimited_block(content: str, name: str) -> str:
+    match = re.search(
+        rf"<!-- {re.escape(name)}:begin -->\s*(?P<body>.*?)\s*"
+        rf"<!-- {re.escape(name)}:end -->",
+        content,
+        re.DOTALL,
+    )
+    assert match, f"missing {name} delimiter block"
+    return match["body"]
 
 
 def _format_compat_check(
@@ -154,3 +197,84 @@ def test_every_declared_output_has_emit_instruction_in_skill_md() -> None:
         failures.extend(_format_compat_check(skill_name, content, expected_output_patterns))
 
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.parametrize("skill_name", _REVIEW_RESOLVERS)
+def test_review_resolver_verdict_decisions_cover_contract_values(skill_name: str) -> None:
+    """Every contract verdict has a documented, reachable resolver decision."""
+    manifest = load_bundled_manifest()
+    contract = manifest["skills"][skill_name]
+    verdict = next(output for output in contract["outputs"] if output["name"] == "verdict")
+    skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    content = skill_md.read_text(encoding="utf-8")
+    match = re.search(
+        r"<!-- gated-field-semantics:begin -->\s*(?P<body>.*?)\s*"
+        r"<!-- gated-field-semantics:end -->",
+        content,
+        re.DOTALL,
+    )
+    assert match, f"{skill_name} must delimit its gated-field semantics"
+    body = match["body"]
+
+    for value in verdict["allowed_values"]:
+        row = re.compile(
+            rf"^\| `{re.escape(value)}` \| (?P<decision>.+) \| (?P<route>.+) \|$",
+            re.MULTILINE,
+        ).search(body)
+        assert row, f"{skill_name} has no Verdict Decision row for {value}"
+        assert row["decision"].strip()
+        assert row["route"].strip()
+
+
+@pytest.mark.parametrize("skill_name", _REVIEW_RESOLVERS)
+def test_review_resolver_declared_outputs_emit_in_both_templates(skill_name: str) -> None:
+    """Each resolver template emits every model-owned contract output."""
+    manifest = load_bundled_manifest()
+    contract = manifest["skills"][skill_name]
+    emitted_names = {
+        output["name"]
+        for output in contract["outputs"]
+        if not output.get("server_computed", False)
+    }
+    content = _resolver_skill_content(skill_name)
+
+    for template_name in _RESOLVER_TEMPLATE_NAMES:
+        template = _delimited_block(content, template_name)
+        missing = {
+            name
+            for name in emitted_names
+            if re.search(rf"^{re.escape(name)}\s*=", template, re.MULTILINE) is None
+        }
+        assert not missing, f"{skill_name} {template_name} omits {sorted(missing)}"
+
+
+@pytest.mark.parametrize("skill_name", _REVIEW_RESOLVERS)
+def test_resolver_family_skill_emit_consistency_parity(skill_name: str) -> None:
+    """Thread resolvers retain the same disposition, qualifier, and verdict structure."""
+    content = _resolver_skill_content(skill_name)
+    for template_name in _RESOLVER_TEMPLATE_NAMES:
+        assert content.count(f"<!-- {template_name}:begin -->") == 1
+        assert content.count(f"<!-- {template_name}:end -->") == 1
+        _delimited_block(content, template_name)
+
+    semantics = _delimited_block(content, "gated-field-semantics")
+    for anchor in _RESOLVER_SEMANTICS_ANCHORS:
+        assert anchor in semantics, f"{skill_name} omits shared semantics: {anchor}"
+
+    rows = re.findall(
+        r"^\| `([a-z_]+)` \| ([^|]+) \| ([^|]+) \|$",
+        semantics,
+        re.MULTILINE,
+    )
+    assert tuple(row[0] for row in rows) == _RESOLVER_VERDICTS
+    assert all(decision.strip() and route.strip() for _, decision, route in rows)
+
+
+@pytest.mark.parametrize("recipe_name, step_name", _REVIEW_CAPTURE_CASES)
+def test_review_resolver_capture_key_is_namespaced(recipe_name: str, step_name: str) -> None:
+    """Review counters cannot overwrite resolve-failures' context key."""
+    recipe = load_yaml(pkg_root() / "recipes" / f"{recipe_name}.yaml")
+    capture = recipe["steps"][step_name]["capture"]
+
+    assert capture["review_fixes_applied"] == "${{ result.fixes_applied }}"
+    assert "fixes_applied" not in capture

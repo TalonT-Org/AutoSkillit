@@ -19,7 +19,7 @@ import autoskillit.cli.ui._timed_input as _timed_input
 import autoskillit.config as _config
 import autoskillit.recipe as _recipe
 from autoskillit import cli
-from autoskillit.core import FreshLaunch, RestoreSession
+from autoskillit.core import FreshLaunch, RestoreSession, SessionType
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -32,7 +32,7 @@ _SESSION_ID = "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
 _PICKED_ID = "4b581974-1f19-4aec-8405-78c5ede5e233"
 _ENTRY_ENV = {
     "AUTOSKILLIT_LAUNCH_ID": "launch-id",
-    "AUTOSKILLIT_SESSION_TYPE": "order",
+    "AUTOSKILLIT_SESSION_TYPE": SessionType.ORCHESTRATOR.value,
 }
 _FEATURE_ENV = {
     "AUTOSKILLIT_SUBSETS__DISABLED": "@json []",
@@ -152,6 +152,8 @@ def _install_order_harness(
     monkeypatch.setattr(_order, "_enable_subsets_permanently", MagicMock())
     monkeypatch.setattr(_order, "_enable_packs_permanently", MagicMock())
     monkeypatch.setattr(_order, "_write_order_entry", lambda *a, **kw: ("launch-id", _ENTRY_ENV))
+    monkeypatch.setattr(_order, "claim_launch_for_session", lambda *a, **kw: "launch-id")
+    monkeypatch.setattr(_order, "release_session_claim", lambda *a, **kw: None)
     monkeypatch.setattr(
         _order,
         "_launch_cook_session",

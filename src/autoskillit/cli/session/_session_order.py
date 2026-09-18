@@ -8,7 +8,7 @@ import random
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, assert_never
 
 import regex as re
 
@@ -18,6 +18,7 @@ from autoskillit.cli.prompts import (
 )
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
+    _order_launch_env,
     _write_order_entry,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
@@ -26,12 +27,16 @@ from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
     FreshLaunch,
     RecipeSource,
+    RestoreSession,
+    ResumeWithBriefing,
     SkillContractError,
     SkillExecutionRole,
     atomic_write,
+    claim_launch_for_session,
     detect_autoskillit_mcp_prefix,
     get_logger,
     pkg_root,
+    release_session_claim,
     resume_spec_from_cli,
 )
 from autoskillit.workspace import (
@@ -388,17 +393,17 @@ def order(
                 ),
                 initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
             )
-        launch_id, launch_env = _write_order_entry(project_dir, None)
-        launch_extra_env = launch_env
+        extra_env: dict[str, str] = {}
     else:
         recipe_info, parsed = _resolve_order_recipe(recipe, project_dir)
-        extra_env = _derive_order_feature_env(
+        derived_env = _derive_order_feature_env(
             parsed,
             automatic=automatic,
             project_dir=project_dir,
         )
-        if extra_env is None:
+        if derived_env is None:
             return
+        extra_env = derived_env
         if not _run_fresh_launch_ceremony(
             launch=launch,
             is_tty=is_tty,
@@ -409,8 +414,6 @@ def order(
         ):
             return
 
-        launch_id, launch_env = _write_order_entry(project_dir, recipe)
-        launch_extra_env = {**extra_env, **launch_env}
         if isinstance(launch, FreshLaunch):
             from autoskillit.cli.prompts import _COOK_GREETINGS
 
@@ -429,16 +432,43 @@ def order(
                 initial_prompt=random.choice(_COOK_GREETINGS).format(recipe_name=recipe),
             )
 
-    _launch_cook_session(
-        launch=launch,
-        extra_env=launch_extra_env,
-        project_dir=project_dir,
-        required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-        backend=backend,
-        skill_compilation=skill_compilation,
-        launch_id=launch_id,
-        default_base_branch=config.branching.default_base_branch,
-        workspace_temp_dir=config.workspace.temp_dir,
-        force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
-        mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
-    )
+    claimed_launch_id: str | None = None
+    match launch:
+        case FreshLaunch():
+            launch_id, launch_env = _write_order_entry(project_dir, recipe)
+            claimed_launch_id = launch_id
+        case (
+            RestoreSession(session_id=claude_session_id)
+            | ResumeWithBriefing(session_id=claude_session_id)
+        ):
+            from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
+
+            launch_id = claim_launch_for_session(
+                project_dir,
+                claude_session_id=claude_session_id,
+                session_type=SESSION_TYPE_ORDER,
+                recipe_name=recipe,
+            )
+            claimed_launch_id = launch_id
+            launch_env = _order_launch_env(launch_id)
+        case _:
+            assert_never(launch)
+
+    launch_extra_env = {**extra_env, **launch_env}
+    try:
+        _launch_cook_session(
+            launch=launch,
+            extra_env=launch_extra_env,
+            project_dir=project_dir,
+            required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+            backend=backend,
+            skill_compilation=skill_compilation,
+            launch_id=launch_id,
+            default_base_branch=config.branching.default_base_branch,
+            workspace_temp_dir=config.workspace.temp_dir,
+            force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
+            mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
+        )
+    finally:
+        if claimed_launch_id is not None:
+            release_session_claim(project_dir, claimed_launch_id)

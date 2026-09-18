@@ -113,6 +113,7 @@ class _ExecutionContext:
         self.audit = _ExecutionAudit()
         self.token_log = _ExecutionTokenLog()
         self.github_api_log = None
+        self.workspace_outcome_ledger = None
 
     @staticmethod
     def build_protected_campaign_ids(_project_dir: Any) -> frozenset[str]:

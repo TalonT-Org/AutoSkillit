@@ -57,6 +57,7 @@ def test_retry_reason_values() -> None:
         RetryReason.RATE_LIMITED,
         RetryReason.CANCELLED,
         RetryReason.OUTCOME_INVARIANT,
+        RetryReason.OUTCOME_REPORT_MALFORMED,
         RetryReason.ASYNC_OBLIGATION,
         RetryReason.CONTEXT_EXHAUSTED,
     }

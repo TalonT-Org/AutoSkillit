@@ -1640,7 +1640,7 @@ steps:
       step_name: resolve_review_integration
     capture:
       verdict: ${{ result.verdict }}
-      fixes_applied: ${{ result.fixes_applied }}
+      review_fixes_applied: ${{ result.fixes_applied }}
       resolve_review_operation_key: ${{ result.review_operation_key }}
       resolve_review_head_sha: ${{ result.review_head_sha }}
       resolve_review_post_state: ${{ result.review_post_state }}
@@ -1663,6 +1663,10 @@ steps:
       route: pre_review_rebase_integration
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: pre_review_rebase_integration
+    - when: ${{ result.review_status }} == 'no_pr'
+      route: register_clone_failure
+    - when: ${{ result.review_status }} == 'processed'
+      route: register_clone_failure
     - route: register_clone_failure
     on_failure: register_clone_failure
     note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and summary review comments from

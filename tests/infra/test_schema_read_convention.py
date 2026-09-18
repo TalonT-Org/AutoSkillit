@@ -29,6 +29,15 @@ _SHARED_READ_SIDE_VALIDATOR_HELPERS = {
     "read_projected_plugin_identity": ("_load_canonical_projection_manifest",),
 }
 
+# Module-level helper functions that the registered shared validator may delegate
+# through. When present in the source, the test walker descends into them so the
+# read-side delegation contract holds across refactors that extract the
+# ``read_versioned_json`` call into a sibling helper.
+_SHARED_READ_SIDE_VALIDATOR_HELPERS: dict[str, tuple[str, ...]] = {
+    "read_installed_plugin_artifact_identity": ("_read_installed_plugin_artifact_manifest",),
+    "read_projected_plugin_identity": ("_load_canonical_projection_manifest",),
+}
+
 
 def _call_name(func: ast.expr) -> str | None:
     if isinstance(func, ast.Name):

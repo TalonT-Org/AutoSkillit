@@ -37,6 +37,7 @@ from autoskillit.execution.headless._headless_evidence import (
     _compute_write_evidence,
 )
 from autoskillit.execution.headless._headless_outcome import (
+    apply_finding_disposition_adjudication,
     evaluate_outcome_invariants,
     parse_outcome_fields,
 )
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         ClosureAuthoritySpec,
         CodingAgentBackend,
         SubprocessResult,
+        WorkspaceOutcomeLedger,
     )
     from autoskillit.recipe._contracts_types import SkillContract
 
@@ -228,6 +230,10 @@ def _apply_post_session_adjudication(
     write_behavior: WriteBehaviorSpec | None,
     skill_contract: SkillContract | None,
     cwd: str,
+    *,
+    outcome_ledger: WorkspaceOutcomeLedger | None = None,
+    start_ts: str = "",
+    end_ts: str = "",
 ) -> SkillResult:
     """Apply write, invariant, and declared-artifact contract checks.
 
@@ -262,6 +268,27 @@ def _apply_post_session_adjudication(
     if skill_contract is None:
         return sr
 
+    sr, fields = apply_finding_disposition_adjudication(
+        sr,
+        fields,
+        skill_contract,
+        cwd=cwd,
+        outcome_ledger=outcome_ledger,
+        start_ts=start_ts,
+        end_ts=end_ts,
+    )
+    return _apply_contract_output_checks(sr, fields, skill_contract, cwd)
+
+
+def _apply_contract_output_checks(
+    sr: SkillResult,
+    fields: dict[str, int | str],
+    skill_contract: SkillContract,
+    cwd: str,
+) -> SkillResult:
+    """Apply scalar invariants and declared-artifact checks after reconciliation."""
+    if not sr.success:
+        return sr
     if skill_contract.outcome_invariants:
         violated, detail = evaluate_outcome_invariants(fields, skill_contract.outcome_invariants)
         if violated:
@@ -388,6 +415,7 @@ def _attempt_stall_recovery(
     file_changes: Sequence[str],
     write_watch_dirs: Sequence[Path],
     backend_resume_session_id: str = "",
+    outcome_ledger: WorkspaceOutcomeLedger | None = None,
 ) -> tuple[SkillResult | None, ClaudeSessionResult, WriteEvidence, ApiRetryOutcome]:
     """Parse a STALE/IDLE_STALL session's stdout and attempt success-recovery.
 
@@ -444,7 +472,14 @@ def _attempt_stall_recovery(
         api_retry=api_retry,
     )
     recovered_sr = _apply_post_session_adjudication(
-        recovered_sr, evidence, write_behavior, skill_contract, cwd
+        recovered_sr,
+        evidence,
+        write_behavior,
+        skill_contract,
+        cwd,
+        outcome_ledger=outcome_ledger,
+        start_ts=result.start_ts,
+        end_ts=result.end_ts,
     )
     return recovered_sr, session, evidence, api_retry
 

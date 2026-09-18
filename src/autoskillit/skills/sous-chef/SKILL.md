@@ -142,6 +142,9 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   but made no Write/Edit tool calls. Partial progress may exist on disk.
 - **If `retry_reason: zero_writes` AND `has_progress_evidence` is false** → fall through to `on_failure`.
 - **If `retry_reason: outcome_invariant`** → fall through to `on_failure`. The skill's contract-declared outcome invariant was violated (e.g. fix application failures detected). This is a logical failure, not infrastructure — do not route to `on_context_limit`.
+- **If `retry_reason: outcome_report_malformed`** → fall through to `on_failure`. The
+  skill's terminal outcome report could not be parsed. Do not route to
+  `on_context_limit` or add a label.
 - **If `retry_reason: stale`** → decrement the `retries` counter for this step.
   Re-execute the same step if retries remain. If retries are exhausted, fall through
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
@@ -176,6 +179,7 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=completed_no_flush` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=empty_output` → `on_failure`.
          `needs_retry=true` + `retry_reason=path_contamination` → `on_failure`.
+         `needs_retry=true` + `retry_reason=outcome_report_malformed` → `on_failure` (no label).
          `needs_retry=true` + `retry_reason=clone_contamination` → `on_failure`.
          `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=contract_recovery` + `has_progress_evidence=false` → `on_failure`.

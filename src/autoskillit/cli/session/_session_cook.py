@@ -24,7 +24,6 @@ from autoskillit.core import (
     PluginLoadMode,
     SkillContractError,
     executable_binding_matches_current_file,
-    get_logger,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,
@@ -43,9 +42,6 @@ if TYPE_CHECKING:
         SkillProjectionContext,
         SkillsDirectoryProvider,
     )
-
-logger = get_logger(__name__)
-
 
 _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
     "This interactive cook session's AutoSkillit kitchen tools are already active and "
@@ -236,7 +232,9 @@ def cook(
         SessionType,
         SkillExecutionRole,
         bind_session_owner,
+        claim_launch_for_session,
         configure_logging,
+        release_session_claim,
         resolve_temp_dir,
         resume_spec_from_cli,
         temp_dir_display_str,
@@ -245,7 +243,6 @@ def cook(
 
     configure_logging()
 
-    launch_id = uuid.uuid4().hex[:16]
     resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
     trace_setting = os.environ.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
     if trace_setting not in {None, "1"}:
@@ -304,51 +301,48 @@ def cook(
     )
     session_mgr.cleanup_stale()
 
+    from autoskillit.cli.session._session_launch_intent import (
+        prepare_resume_housekeeping,
+        resolve_interactive_launch,
+    )
+
+    if not isinstance(resume_spec, NoResume):
+        prepare_resume_housekeeping(backend, resume_spec=resume_spec)
+    launch = resolve_interactive_launch(
+        resume_spec=resume_spec,
+        session_type=SESSION_TYPE_COOK,
+        project_dir=project_dir,
+        backend=backend,
+    )
+    claimed_launch_id: str | None = None
+    match launch:
+        case FreshLaunch():
+            launch_id = uuid.uuid4().hex[:16]
+        case (
+            RestoreSession(session_id=claude_session_id)
+            | ResumeWithBriefing(session_id=claude_session_id)
+        ):
+            launch_id = claim_launch_for_session(
+                project_dir,
+                claude_session_id=claude_session_id,
+                session_type=SESSION_TYPE_COOK,
+                recipe_name=None,
+            )
+            claimed_launch_id = launch_id
+
     projection_load_mode = (
         load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
 
-    with (
-        plugin_launch_binding_scope(
-            authority=artifact_authority,
-            backend=backend,
-            load_mode=projection_load_mode,
-        ) as projection_binding,
-        session_mgr.managed_session(
-            launch_id,
-            skill_compilation,
-            _build_cook_projection_context(
-                skills_provider,
-                session_catalog,
-                project_dir,
-                backend,
-                projection_binding,
-                resolved_exploration_profile,
-                explorer_provisioning_eligible=(
-                    True if backend.capabilities.session_scoped_explorer_capable else None
-                ),
-            ),
-        ) as managed_home,
-    ):
+    def _run_managed() -> None:
+        nonlocal claimed_launch_id, cook_system_prompt, launch
         render_skill_unavailability(managed_home.unavailability_payload)
         cook_system_prompt = append_skill_unavailability(
             cook_system_prompt,
             managed_home.unavailability_payload,
         )
-        from autoskillit.cli.session._session_launch_intent import (
-            _run_fresh_launch_ceremony,
-            prepare_resume_housekeeping,
-            resolve_interactive_launch,
-        )
+        from autoskillit.cli.session._session_launch_intent import _run_fresh_launch_ceremony
 
-        if not isinstance(resume_spec, NoResume):
-            prepare_resume_housekeeping(backend, resume_spec=resume_spec)
-        launch = resolve_interactive_launch(
-            resume_spec=resume_spec,
-            session_type=SESSION_TYPE_COOK,
-            project_dir=project_dir,
-            backend=backend,
-        )
         showed_onboarding = False
         if isinstance(launch, FreshLaunch):
             onboarding_result = (
@@ -373,7 +367,9 @@ def cook(
         ):
             return
         trace.record_launch_anchor()
-        write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
+        if isinstance(launch, FreshLaunch):
+            write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
+            claimed_launch_id = launch_id
 
         cook_env_extras: dict[str, str] = {
             SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
@@ -489,10 +485,9 @@ def cook(
                     def _record_spawn(pid: int, pgid: int) -> None:
                         attempt_handle.record_spawn(pid, pgid)
                         if not bind_session_owner(project_dir, launch_id, pid):
-                            logger.warning(
-                                "session_owner_binding_refused",
-                                launch_id=launch_id,
-                                pid=pid,
+                            raise RuntimeError(
+                                f"session owner binding refused for launch {launch_id!r} "
+                                f"and pid {pid}"
                             )
 
                     result = run_cook_attempt(
@@ -528,6 +523,34 @@ def cook(
         except BaseException:
             trace.close(status="failed")
             raise
+
+    try:
+        with (
+            plugin_launch_binding_scope(
+                authority=artifact_authority,
+                backend=backend,
+                load_mode=projection_load_mode,
+            ) as projection_binding,
+            session_mgr.managed_session(
+                launch_id,
+                skill_compilation,
+                _build_cook_projection_context(
+                    skills_provider,
+                    session_catalog,
+                    project_dir,
+                    backend,
+                    projection_binding,
+                    resolved_exploration_profile,
+                    explorer_provisioning_eligible=(
+                        True if backend.capabilities.session_scoped_explorer_capable else None
+                    ),
+                ),
+            ) as managed_home,
+        ):
+            _run_managed()
+    finally:
+        if claimed_launch_id is not None:
+            release_session_claim(project_dir, claimed_launch_id)
 
 
 def _startup_observer(

@@ -268,7 +268,7 @@ class TestModuleCascadeCore:
 
     def test_type_helpers_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_helpers"] == frozenset(
-            {"core", "execution", "fleet", "pipeline", "recipe", "server"}
+            {"cli", "core", "execution", "fleet", "pipeline", "recipe", "server"}
         )
 
     def test_type_protocols_workspace_cascade(self) -> None:
@@ -734,7 +734,7 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         for pkg in ["core", "execution", "fleet", "pipeline", "recipe", "server"]:
             assert pkg in dir_names, f"_type_helpers cascade should include {pkg}"
-        for excluded in ["cli", "hooks", "workspace", "migration"]:
+        for excluded in ["hooks", "workspace", "migration"]:
             assert excluded not in dir_names, (
                 f"_type_helpers cascade should not include {excluded}"
             )

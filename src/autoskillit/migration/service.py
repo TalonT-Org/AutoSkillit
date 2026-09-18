@@ -11,7 +11,6 @@ this module imports the adapters.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -21,19 +20,17 @@ from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 from autoskillit.migration.adapters_diagram import DiagramMigrationAdapter
 from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
-from autoskillit.migration.engine import MigrationEngine, MigrationFile
+from autoskillit.migration.engine import (
+    HeadlessRunner,
+    MigrationEngine,
+    MigrationFile,
+)
 from autoskillit.migration.loader import applicable_migrations as _applicable
 
 logger = get_logger(__name__)
 
-# Shared shape for any callable that drives a headless skill execution and
-# returns a SkillResult. Defined once so both ``_no_headless_runner`` and the
-# ``run_headless`` parameter at every call site share a precise type instead
-# of falling back to ``Any``.
-HeadlessRunner = Callable[..., Awaitable[SkillResult]]
 
-
-async def _no_headless_runner(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
+async def _no_headless_runner(*args: Any, **kwargs: Any) -> SkillResult:
     """Return the normal engine result when no headless runner is wired in."""
     return SkillResult(
         success=False,

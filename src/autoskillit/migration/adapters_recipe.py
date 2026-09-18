@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from autoskillit import __version__
-from autoskillit.core import SkillResult, YAMLError, dump_yaml_str, get_logger
+from autoskillit.core import YAMLError, dump_yaml_str, get_logger
 from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     HeadlessMigrationAdapter,
+    HeadlessRunner,
     MigrationFile,
     MigrationResult,
 )
@@ -50,7 +50,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
+        run_headless: HeadlessRunner,
         temp_dir: Path,
     ) -> MigrationResult:
         migrations = applicable_migrations(file.current_version, __version__)

@@ -251,7 +251,7 @@ def test_doctor_moved_to_cli_package() -> None:
 
 def test_test_suite_has_domain_subdirectories() -> None:
     """Every top-level tests/<dir> directory (excluding __pycache__ and fixtures/) exists
-    and is wired up either as a Python package or as a test-collection-only subtree.
+    and contains at least one test_*.py file or documented purpose.
 
     Replaces the prior 12-entry hardcoded subset check (#4600 C6.3): the actual tests/
     tree carries 24 top-level directories. Each must be wired up either as a Python

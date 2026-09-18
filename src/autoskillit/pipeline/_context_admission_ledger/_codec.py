@@ -172,26 +172,15 @@ def _validate_stream_key_json_bounds(value: bytes) -> None:
     in_string = False
     escaped = False
     for character in value:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif character == ord("\\"):
-                escaped = True
-            elif character == ord('"'):
-                in_string = False
-            continue
-        if character == ord('"'):
-            in_string = True
-        elif character in {ord("{"), ord("[")}:
-            depth += 1
-            if depth > _MAX_STREAM_KEY_JSON_NESTING:
-                raise _LedgerOpenError(
-                    ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
-                    "invalid-stream-key",
-                )
-        elif character in {ord("}"), ord("]")}:
-            depth -= 1
-            if depth < 0:
+        if character == ord('"') and not escaped:
+            in_string = not in_string
+        elif character == ord("\\") and in_string:
+            escaped = not escaped
+        else:
+            escaped = False
+        if not in_string:
+            depth += (character in b"{[") - (character in b"}]")
+            if not 0 <= depth <= _MAX_STREAM_KEY_JSON_NESTING:
                 raise _LedgerOpenError(
                     ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                     "invalid-stream-key",

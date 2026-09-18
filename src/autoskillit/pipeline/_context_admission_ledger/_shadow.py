@@ -130,56 +130,14 @@ def _shadow_targets(
     event: ContextAdmissionEvent,
     next_state: ContextAdmissionState,
 ) -> tuple[ShadowContextAdmissionTargetRecord, ...]:
-    batch_ids: set[AdmissionBatchId] = set()
-    generation_ids: set[GenerationReservationId] = set()
+    batch_ids, generation_ids = _shadow_target_ids(prior_state, event)
     event_batch: AdmissionBatch | None = None
     event_reservation: AdmissionReservation | None = None
     event_generation: GenerationReservationRecord | None = None
-    match event:
-        case OpenEpochEvent() | AuthorityUnavailableEvent() | ProposeOccurrenceEvent():
-            pass
-        case ReserveRequestEvent():
-            batch_ids.add(event.batch.batch_id)
-            event_batch = event.batch
-            event_reservation = event.input_reservations[0]
-            if event.generation_reservation is not None:
-                generation_ids.add(event.generation_reservation.generation_reservation_id)
-                event_generation = event.generation_reservation
-        case (
-            PrepareBatchEvent()
-            | StageHistoryEvent()
-            | DispatchRequestEvent()
-            | AcceptInputEvent()
-            | ReleaseNonAdmissionEvent()
-            | RollbackAdmissionEvent()
-            | MarkIndeterminateEvent()
-            | ResolveIndeterminateAcceptedEvent()
-            | ResolveIndeterminateNonAdmissionEvent()
-            | ResolveIndeterminateRollbackEvent()
-        ):
-            batch_ids.add(event.batch_id)
-        case (
-            StartGenerationEvent()
-            | ReconcileGenerationEvent()
-            | MarkGenerationIndeterminateEvent()
-        ):
-            generation_ids.add(event.generation_reservation_id)
-        case RequestReconciliationEvent():
-            if isinstance(event.target_id, AdmissionBatchId):
-                batch_ids.add(event.target_id)
-            else:
-                generation_ids.add(event.target_id)
-        case ExpireIdempotencyKeyEvent():
-            batch_ids.add(event.reservation_key.batch_id)
-        case RolloverEpochEvent():
-            if isinstance(prior_state, ActiveContextAdmissionState):
-                batch_ids.update(record.batch.batch_id for record in prior_state.batch_records)
-                generation_ids.update(
-                    record.generation_reservation_id
-                    for record in prior_state.generation_reservations
-                )
-        case _ as unreachable:
-            assert_never(unreachable)
+    if isinstance(event, ReserveRequestEvent):
+        event_batch = event.batch
+        event_reservation = event.input_reservations[0]
+        event_generation = event.generation_reservation
     targets: list[ShadowContextAdmissionTargetRecord] = []
     for batch_id in sorted(batch_ids, key=lambda item: item.value):
         target = _input_shadow_target(
@@ -203,6 +161,71 @@ def _shadow_targets(
         if target is not None:
             targets.append(target)
     return tuple(targets)
+
+
+def _shadow_target_ids(
+    prior_state: ContextAdmissionState,
+    event: ContextAdmissionEvent,
+) -> tuple[set[AdmissionBatchId], set[GenerationReservationId]]:
+    if isinstance(event, ReserveRequestEvent):
+        generation_ids = (
+            {event.generation_reservation.generation_reservation_id}
+            if event.generation_reservation is not None
+            else set()
+        )
+        return {event.batch.batch_id}, generation_ids
+    if isinstance(
+        event,
+        (
+            PrepareBatchEvent,
+            StageHistoryEvent,
+            DispatchRequestEvent,
+            AcceptInputEvent,
+            ReleaseNonAdmissionEvent,
+            RollbackAdmissionEvent,
+            MarkIndeterminateEvent,
+            ResolveIndeterminateAcceptedEvent,
+            ResolveIndeterminateNonAdmissionEvent,
+            ResolveIndeterminateRollbackEvent,
+        ),
+    ):
+        return {event.batch_id}, set()
+    if isinstance(
+        event,
+        (StartGenerationEvent, ReconcileGenerationEvent, MarkGenerationIndeterminateEvent),
+    ):
+        return set(), {event.generation_reservation_id}
+    if isinstance(event, RequestReconciliationEvent):
+        return _reconciliation_target_ids(event)
+    if isinstance(event, ExpireIdempotencyKeyEvent):
+        return {event.reservation_key.batch_id}, set()
+    if isinstance(event, RolloverEpochEvent):
+        return _rollover_target_ids(prior_state)
+    if isinstance(
+        event,
+        (OpenEpochEvent, AuthorityUnavailableEvent, ProposeOccurrenceEvent),
+    ):
+        return set(), set()
+    assert_never(event)
+
+
+def _reconciliation_target_ids(
+    event: RequestReconciliationEvent,
+) -> tuple[set[AdmissionBatchId], set[GenerationReservationId]]:
+    if isinstance(event.target_id, AdmissionBatchId):
+        return {event.target_id}, set()
+    return set(), {event.target_id}
+
+
+def _rollover_target_ids(
+    prior_state: ContextAdmissionState,
+) -> tuple[set[AdmissionBatchId], set[GenerationReservationId]]:
+    if not isinstance(prior_state, ActiveContextAdmissionState):
+        return set(), set()
+    return (
+        {record.batch.batch_id for record in prior_state.batch_records},
+        {record.generation_reservation_id for record in prior_state.generation_reservations},
+    )
 
 
 def _input_shadow_target(

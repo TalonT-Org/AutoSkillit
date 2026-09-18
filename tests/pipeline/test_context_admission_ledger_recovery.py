@@ -290,6 +290,12 @@ def test_stream_key_decoder_enforces_byte_and_nesting_bounds(
         codec_module._decode_stream_key(deeply_nested)
 
 
+def test_stream_key_json_bounds_ignores_quoted_structural_bytes() -> None:
+    value = b'{"literal":"{[ ]}\\""}'
+
+    codec_module._validate_stream_key_json_bounds(value)
+
+
 def test_stream_key_decoder_normalizes_recursive_json_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -3039,7 +3039,7 @@
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
       "on_rate_limit": "escalate_stop",
-      "note": "Preserve the originating failure response separately. Inspect the diagnostic response and include its non-empty result verbatim as supplementary evidence. On on_failure, on_context_limit, or on_rate_limit, state that diagnostic evidence was unavailable and reproduce only observed tool evidence; do not infer a cause. When pipeline_health disables this step and it was not run, say so and preserve the originating failure response."
+      "note": "__RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR__"
     },
     "done": {
       "action": "stop",

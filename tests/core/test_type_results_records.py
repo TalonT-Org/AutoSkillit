@@ -9,6 +9,7 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 ROOT_PUBLIC_NAMES = (
+    "AdjudicationVerdict",
     "CapturedStream",
     "SpilledOutput",
     "SpillSpec",

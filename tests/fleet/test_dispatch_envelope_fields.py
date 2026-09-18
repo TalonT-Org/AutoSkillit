@@ -76,7 +76,12 @@ class TestDispatchStatusEnvelopeField:
 
     @pytest.mark.anyio
     async def test_failure_payload_retains_exact_optional_evidence(self, tool_ctx, monkeypatch):
-        """A clean failure forwards its raw sentinel evidence through l3_payload."""
+        """A clean failure forwards its raw sentinel evidence through l3_payload.
+
+        Each l3_payload field is checked independently so a regression that
+        drops or renames one field (which a wholesale ``==`` comparison would
+        also catch) becomes a named failure pointing at the dropped field.
+        """
         from autoskillit.fleet.result_parser import L3ParseResult
 
         _setup_dispatch(tool_ctx, monkeypatch)
@@ -94,7 +99,7 @@ class TestDispatchStatusEnvelopeField:
             lambda **_: L3ParseResult(
                 outcome="completed_clean",
                 payload=payload,
-                raw_body=None,
+                raw_body=json.dumps(payload),
                 parse_error=None,
                 source="stdout",
             ),
@@ -104,9 +109,18 @@ class TestDispatchStatusEnvelopeField:
 
         assert result["success"] is False
         assert result["dispatch_status"] == "failure"
-        assert result["l3_payload"] == payload
-        assert result["l3_payload"]["reason"] == payload["reason"]
         assert result["l3_parse_source"] == "stdout"
+        # Independent assertions: a silent drop or rename of any single
+        # evidence field names the regression, instead of passing through a
+        # wholesale equality check that lets transforms hide.
+        for key, value in payload.items():
+            assert result["l3_payload"][key] == value, (
+                f"l3_payload[{key!r}] dropped or mutated "
+                f"(expected {value!r}, got {result['l3_payload'].get(key)!r})"
+            )
+        assert set(result["l3_payload"]) == set(payload), (
+            f"l3_payload grew with spurious keys: {set(result['l3_payload']) - set(payload)}"
+        )
 
     @pytest.mark.anyio
     async def test_envelope_includes_dispatch_status_on_no_sentinel(self, tool_ctx, monkeypatch):

@@ -606,8 +606,8 @@ rounds were published through the single structured review operation in Step 1.5
 
 ### Step 4: Apply Fixes (max 3 iterations)
 
-At invocation start, before every possible pending-change or accepted-fix commit,
-capture `fix_loop_base_sha=$(git -C "{work_dir}" rev-parse HEAD)` once. Initialize
+At invocation start, before every possible commit for pending changes or an accepted
+fix, capture `fix_loop_base_sha=$(git -C "{work_dir}" rev-parse HEAD)` once. Initialize
 `addressed_thread_ids: list[str] = []`, `accepted_fixes: list[dict] = []`, and the
 deduplicated `reported_self_revert_pairs: set[tuple[str, str]] = set()`.
 
@@ -742,7 +742,7 @@ Track:
 
 This step is best-effort — failure to resolve any thread never affects the exit code.
 
-**When `mode=local`:**
+**When mode=local:**
 - Skip all GitHub thread resolution API calls (no GraphQL mutation, no thread resolution)
 - Set `resolved_count = 0`, `resolve_failed_count = 0`
 - The `addressed_thread_ids` list is not populated (there are no thread IDs in local mode)

@@ -24,7 +24,8 @@ class _PatchHunk:
     path: str
     added: tuple[str, ...]
     removed: tuple[str, ...]
-    context: tuple[str, ...]
+    before_context: str | None
+    after_context: str | None
 
 
 _ScanGit = Callable[[list[str]], Awaitable[tuple[str | None, str | None]]]
@@ -67,9 +68,34 @@ def _finish_hunk(
         return
     added = tuple(line[1:] for line in hunk_lines if line.startswith("+"))
     removed = tuple(line[1:] for line in hunk_lines if line.startswith("-"))
-    context = tuple(line[1:] for line in hunk_lines if line.startswith(" ") and line[1:].strip())
     if added or removed:
-        hunks.append(_PatchHunk(path=path, added=added, removed=removed, context=context))
+        changed = [index for index, line in enumerate(hunk_lines) if line.startswith(("+", "-"))]
+        first_change, last_change = changed[0], changed[-1]
+        before_context = next(
+            (
+                line[1:]
+                for line in reversed(hunk_lines[:first_change])
+                if line.startswith(" ") and line[1:].strip()
+            ),
+            None,
+        )
+        after_context = next(
+            (
+                line[1:]
+                for line in hunk_lines[last_change + 1 :]
+                if line.startswith(" ") and line[1:].strip()
+            ),
+            None,
+        )
+        hunks.append(
+            _PatchHunk(
+                path=path,
+                added=added,
+                removed=removed,
+                before_context=before_context,
+                after_context=after_context,
+            )
+        )
 
 
 def _parse_text_hunks(patch: str) -> tuple[list[_PatchHunk], str | None]:
@@ -101,22 +127,14 @@ def _parse_text_hunks(patch: str) -> tuple[list[_PatchHunk], str | None]:
     return hunks, None
 
 
-def _has_ordered_context_overlap(
-    earlier_context: tuple[str, ...], later_context: tuple[str, ...]
-) -> bool:
-    """Require an unchanged adjacent context pair for a hunk match."""
-    later_pairs = set(zip(later_context, later_context[1:], strict=False))
-    return any(
-        pair in later_pairs for pair in zip(earlier_context, earlier_context[1:], strict=False)
-    )
-
-
 def _are_inverse_hunks(earlier: _PatchHunk, later: _PatchHunk) -> bool:
     return (
         earlier.path == later.path
         and earlier.added == later.removed
         and earlier.removed == later.added
-        and _has_ordered_context_overlap(earlier.context, later.context)
+        and earlier.before_context == later.before_context
+        and earlier.after_context == later.after_context
+        and (earlier.before_context is not None or earlier.after_context is not None)
     )
 
 

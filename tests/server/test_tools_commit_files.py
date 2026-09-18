@@ -626,8 +626,8 @@ class TestCommitFilesSelfRevertScan:
         assert result["success"] is False
         assert result["failure_class"] == "self_revert_base_validation"
         assert "base" in result["error"].lower()
-        assert tool_ctx.runner.call_args_list == [
-            (["git", "-C", str(wt), "rev-parse", "missing-base^{commit}"],)
+        assert [call[0] for call in tool_ctx.runner.call_args_list] == [
+            ["git", "-C", str(wt), "rev-parse", "missing-base^{commit}"]
         ]
 
     @pytest.mark.anyio

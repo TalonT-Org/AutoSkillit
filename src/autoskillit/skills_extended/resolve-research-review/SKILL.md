@@ -313,6 +313,10 @@ Track `accept_count`, `reject_count`, `discuss_count`, and per-strategy counts.
 
 ### Step 4: Apply Fixes
 
+**`rerun_required` → ESCALATE:** Append full finding details to
+`escalation_records`; do NOT add its `thread_node_id` to `addressed_thread_ids`;
+continue with exit code 0. This is not an in-place fix.
+
 Initialize before processing:
 ```python
 addressed_thread_ids: list[str] = []

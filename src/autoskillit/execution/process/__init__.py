@@ -458,7 +458,7 @@ async def run_managed_async(
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
             async with anyio.create_task_group() as tg:
-                output_capture.start(
+                await output_capture.start(
                     tg,
                     process=proc,
                     stdout_file=stdout_file,

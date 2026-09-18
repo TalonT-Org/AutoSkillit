@@ -68,7 +68,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Exceed 3 fix-and-retry iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
-- Treat dimension grouping as intent-classification-only; Step 4 groups concrete
+- Treat dimension grouping as intent-classification-only; the fix phase groups concrete
   edits by file
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
@@ -233,7 +233,7 @@ codebase and git history. This analysis phase runs entirely before code changes 
 **Dimension grouping:** Group findings by their extracted dimension group key
 (`statistical`, `methodology`, `reproducibility`, `reporting`, `hygiene`, `unknown`).
 This is dimension-based grouping for intent classification only. It does not prohibit
-the file grouping required for concrete edits in Step 4.
+the file grouping required for concrete edits in the fix phase.
 
 Launch one parallel subagent via `child delegation under the declared `sonnet` model-class policy` per non-empty dimension
 group. Each subagent receives:

@@ -703,6 +703,10 @@ the configured test command directly in the shell.
 
 **MODE BRANCHING:**
 
+**When mode=local:** Skip all GitHub thread resolution API calls, make no GraphQL
+mutation, set `resolved_count = 0` and `resolve_failed_count = 0`, then proceed to
+Step 6.5. The `addressed_thread_ids` list remains unpopulated.
+
 **When `mode=github`:** Execute the following thread resolution steps (current behavior unchanged).
 
 Populate `addressed_thread_ids` only after a successful ACCEPT fix with a non-null

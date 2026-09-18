@@ -59,10 +59,12 @@ def _drain_piped_output(
     capture_file: IO[bytes],
     limiter: _CombinedOutputLimiter,
     on_output_limit: Callable[[], None],
+    on_started: Callable[[], None],
     done: threading.Event,
 ) -> None:
     """Drain one pipe while retaining no more than the shared byte ceiling."""
     try:
+        on_started()
         while chunk := cast(io.BufferedReader, stream).read1(_TEE_CHUNK_SIZE):
             if limiter.write(chunk, capture_file):
                 on_output_limit()
@@ -77,6 +79,7 @@ async def drain_piped_output(
     limiter: _CombinedOutputLimiter,
     on_output_limit: Callable[[], None],
     done: threading.Event,
+    task_status: Any = anyio.TASK_STATUS_IGNORED,
 ) -> None:
     """Run one blocking pipe drainer without blocking the lifecycle task group."""
     await anyio.to_thread.run_sync(
@@ -86,6 +89,7 @@ async def drain_piped_output(
             capture_file=capture_file,
             limiter=limiter,
             on_output_limit=on_output_limit,
+            on_started=lambda: anyio.from_thread.run_sync(task_status.started),
             done=done,
         ),
         abandon_on_cancel=True,
@@ -132,7 +136,7 @@ class _OutputCeilingCapture:
         """Return the child stderr target for this capture mode."""
         return subprocess.PIPE if self._limiter is not None else fallback
 
-    def start(
+    async def start(
         self,
         tg: Any,
         *,
@@ -157,7 +161,7 @@ class _OutputCeilingCapture:
         def _notify_output_limit() -> None:
             anyio.from_thread.run_sync(_mark_output_limit)
 
-        tg.start_soon(
+        await tg.start(
             functools.partial(
                 drain_piped_output,
                 stream=process.stdout,
@@ -167,7 +171,7 @@ class _OutputCeilingCapture:
                 done=self._done_events[0],
             )
         )
-        tg.start_soon(
+        await tg.start(
             functools.partial(
                 drain_piped_output,
                 stream=process.stderr,

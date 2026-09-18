@@ -316,6 +316,9 @@ jobs:
           }
           if git cat-file -e "${base}:scripts/check_policy_relaxation.py" 2>/dev/null; then
             git show "${base}:scripts/check_policy_relaxation.py" > "${RUNNER_TEMP}/check_policy_relaxation.py"
+            if git cat-file -e "${base}:scripts/_git_plumbing.py" 2>/dev/null; then
+              git show "${base}:scripts/_git_plumbing.py" > "${RUNNER_TEMP}/_git_plumbing.py"
+            fi
             uv run python "${RUNNER_TEMP}/check_policy_relaxation.py" --base "${base}" --repo-root "${GITHUB_WORKSPACE}"
           else
             echo "::notice::checker absent at ${base} (bootstrap); running the working-tree copy"
@@ -338,6 +341,9 @@ jobs:
           }
           if git cat-file -e "${base}:scripts/check_complexity.py" 2>/dev/null; then
             git show "${base}:scripts/check_complexity.py" > "${RUNNER_TEMP}/check_complexity.py"
+            if git cat-file -e "${base}:scripts/_git_plumbing.py" 2>/dev/null; then
+              git show "${base}:scripts/_git_plumbing.py" > "${RUNNER_TEMP}/_git_plumbing.py"
+            fi
             uv run python "${RUNNER_TEMP}/check_complexity.py" --base "${base}" --repo-root "${GITHUB_WORKSPACE}"
           else
             echo "::notice::checker absent at ${base} (bootstrap); running the working-tree copy"

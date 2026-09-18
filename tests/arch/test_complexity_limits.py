@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,10 +17,11 @@ _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_limits"
 
 check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+git_plumbing = sys.modules["_git_plumbing"]
 
 
 def test_live_registry_is_valid():
-    reader = check._working_tree_reader(REPO_ROOT)
+    reader = git_plumbing._working_tree_reader(REPO_ROOT)
     problems = check.validate_exemptions(check.load_policy(reader), reader)
     assert problems == []
 

@@ -309,6 +309,9 @@ scripts/check_policy_relaxation.py:
 scripts/check_complexity.py:
   - infra/
   - arch/
+scripts/_git_plumbing.py:
+  - infra/
+  - arch/
 scripts/check_launch_path_totality.py:
   - arch/
 scripts/check_persisted_enum_decoding.py:

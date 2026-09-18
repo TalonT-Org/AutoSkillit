@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -40,19 +41,36 @@ _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_policy_relaxation.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_policy_relaxation"
 
 
-def _load_check_module():
-    spec = importlib.util.spec_from_file_location(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+def _load_check_module(
+    name: str = _CHECK_MODULE_NAME,
+    path: Path = _CHECK_SCRIPT,
+):
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None
     assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     # dataclasses resolves string annotations through sys.modules[cls.__module__];
     # an unregistered module makes every @dataclass in the script raise on definition.
-    sys.modules[_CHECK_MODULE_NAME] = mod
-    spec.loader.exec_module(mod)
+    previous_path = list(sys.path)
+    missing = object()
+    previous_module = sys.modules.get(name, missing)
+    sys.modules[name] = mod
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        if previous_module is missing:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous_module
+        raise
+    finally:
+        sys.path[:] = previous_path
     return mod
 
 
 check = _load_check_module()
+git_plumbing = sys.modules["_git_plumbing"]
 
 
 def _int_map(default: int | None = None):
@@ -479,15 +497,175 @@ def test_gate_fails_closed_when_a_registered_surface_vanishes(tmp_path: Path) ->
     assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 1
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["--staged", "--base", "HEAD"],
+    ],
+)
+def test_gate_requires_exactly_one_mode(
+    argv: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert check.main(argv) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Specify exactly one of --staged or --base REF.\n"
+
+
+def test_gate_unresolved_base_is_execution_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _seed_repo(tmp_path)
+
+    assert check.main(["--base", "missing-ref", "--repo-root", str(repo)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "merge-base" in captured.err
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("git executable unavailable"),
+        subprocess.TimeoutExpired(cmd="git", timeout=30),
+    ],
+)
+def test_gate_git_launch_and_timeout_are_execution_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: BaseException,
+) -> None:
+    repo = _seed_repo(tmp_path)
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(git_plumbing.subprocess, "run", fail)
+
+    assert check.main(["--staged", "--repo-root", str(repo)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err != ""
+
+
+def test_gate_unreadable_working_tree_source_is_execution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _seed_repo(tmp_path)
+    original_read_bytes = Path.read_bytes
+
+    def fail_counts(path: Path) -> bytes:
+        if path == repo / "counts.py":
+            raise PermissionError("counts source is unreadable")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", fail_counts)
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unreadable" in captured.err
+
+
+def test_gate_invalid_source_encoding_is_execution_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _seed_repo(tmp_path)
+    (repo / "counts.py").write_bytes(
+        b"# coding: definitely-not-an-encoding\nLIMITS = {'execution': 23}\n"
+    )
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "encoding" in captured.err
+
+
+def test_gate_decodes_non_utf8_policy_source(tmp_path: Path) -> None:
+    repo = _seed_repo(tmp_path)
+    source = "# coding: latin-1\n# caf\xe9\nLIMITS = {'execution': 23}\n"
+    (repo / "counts.py").write_bytes(source.encode("latin-1"))
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 0
+
+
+def test_gate_allows_new_policy_surface_absent_at_valid_base(tmp_path: Path) -> None:
+    repo = _seed_repo(tmp_path)
+    surfaces_path = repo / check.SURFACES_PATH
+    source = surfaces_path.read_text(encoding="utf-8").replace(
+        '    PolicySurface("counts.py", "LIMITS", "int_map", default=10),\n',
+        '    PolicySurface("counts.py", "LIMITS", "int_map", default=10),\n'
+        '    PolicySurface("new.py", "BUDGET", "int_scalar"),\n',
+    )
+    surfaces_path.write_text(source, encoding="utf-8")
+    (repo / "new.py").write_text("BUDGET = 5\n", encoding="utf-8")
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 0
+
+
+def test_policy_loader_restores_sys_path_after_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = tmp_path / "checker.py"
+    script.write_text("import _git_plumbing\nHELPER = _git_plumbing\n", encoding="utf-8")
+    name = "_autoskillit_policy_loader_success_probe"
+    monkeypatch.delitem(sys.modules, name, raising=False)
+    previous_path = list(sys.path)
+
+    loaded = _load_check_module(name, script)
+
+    assert sys.path == previous_path
+    assert sys.modules[name] is loaded
+    assert loaded.HELPER is git_plumbing
+
+
+@pytest.mark.parametrize("has_previous", [False, True])
+def test_policy_loader_restores_registration_after_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    has_previous: bool,
+) -> None:
+    script = tmp_path / "broken_checker.py"
+    script.write_text(
+        "import _git_plumbing\nraise RuntimeError('load failed')\n", encoding="utf-8"
+    )
+    name = f"_autoskillit_policy_loader_failure_probe_{has_previous}"
+    previous = ModuleType(name)
+    if has_previous:
+        monkeypatch.setitem(sys.modules, name, previous)
+    else:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    previous_path = list(sys.path)
+
+    with pytest.raises(RuntimeError, match="load failed"):
+        _load_check_module(name, script)
+
+    assert sys.path == previous_path
+    if has_previous:
+        assert sys.modules[name] is previous
+    else:
+        assert name not in sys.modules
+
+
 # --- 17: the gate itself ----------------------------------------------------
 
 
 def test_no_registered_surface_relaxed_against_base(resolved_test_base: BaseRefContext) -> None:
     """No registered policy value may be loosened without a recorded approval."""
     base_ref = require_base_ref_or_skip(resolved_test_base)
-    base_rev = check.merge_base(REPO_ROOT, base_ref)
-    assert base_rev is not None, f"could not resolve a merge base against {base_ref!r}"
-    diagnostics = check.evaluate(REPO_ROOT, base_rev, check._working_tree_reader(REPO_ROOT))
+    base_rev = git_plumbing.merge_base(REPO_ROOT, base_ref)
+    diagnostics = check.evaluate(
+        git_plumbing._working_tree_reader(REPO_ROOT),
+        git_plumbing._revision_optional_reader(REPO_ROOT, base_rev),
+    )
     assert not diagnostics, "\n".join(diagnostics)
 
 

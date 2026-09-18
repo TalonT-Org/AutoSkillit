@@ -44,26 +44,20 @@ from __future__ import annotations
 import argparse
 import ast
 import dataclasses
-import io
 import os
-import subprocess
 import sys
-import tokenize
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
+import _git_plumbing
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LIMITS_PATH = Path("tests") / "arch" / "_complexity_limits.py"
 SCAN_ROOTS: tuple[str, ...] = ("src", "tests", "scripts")
-_GIT_TIMEOUT_SECONDS = 30
 
 Enforcement = Literal["warn", "fail"]
 ENFORCEMENT: Enforcement = "warn"  # Phase 1. Phase 2 promotion: "fail". Nothing else changes.
-
-
-class GitFailure(RuntimeError):
-    """A required git operation failed, timed out, or could not be launched."""
 
 
 class PolicyUnavailable(RuntimeError):
@@ -322,100 +316,6 @@ def _parse_metrics(source: str, path: str) -> dict[str, FunctionMetrics]:
     return function_metrics(tree)
 
 
-# --- Git plumbing: shapes of scripts/check_policy_relaxation.py's _git/git_show/merge_base -
-
-
-def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
-    """Run one git subprocess; never raises for a non-zero exit, only for a broken launch."""
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=str(repo_root),
-            capture_output=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise GitFailure(f"git {' '.join(args)}: {exc}") from exc
-
-
-def _plumbing_text(result: subprocess.CompletedProcess[bytes]) -> str:
-    """Decode plumbing output -- paths, revisions -- which is never itself Python source."""
-    return result.stdout.decode("utf-8", errors="replace")
-
-
-def _plumbing_stderr(result: subprocess.CompletedProcess[bytes]) -> str:
-    """Format captured stderr for a GitFailure message, or "" when git wrote none.
-
-    _git() always captures stderr; git's actual diagnostic text (the real cause of a
-    plumbing failure) lives there, not on stdout -- surface it instead of discarding it.
-    """
-    text = result.stderr.decode("utf-8", errors="replace").strip()
-    return f" | stderr: {text}" if text else ""
-
-
-def _decode_source(data: bytes) -> str:
-    """Decode a Python blob using its own encoding cookie/BOM, like the stdlib tokenizer."""
-    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
-    try:
-        return data.decode(encoding)
-    except UnicodeDecodeError as exc:
-        raise SyntaxError(f"bad encoding cookie ({encoding}): {exc}") from exc
-
-
-def git_show(repo_root: Path, rev: str, path: str) -> str:
-    """Return one Python blob's decoded source at *rev*.
-
-    Raises GitFailure (with git's stderr attached) on any non-zero exit: every call site in
-    this file already treats a miss here as unrecoverable, so failing loud beats losing the
-    diagnostic behind a bare None.
-    """
-    result = _git(repo_root, "show", f"{rev}:{path}")
-    if result.returncode != 0:
-        raise GitFailure(f"git show {rev}:{path} failed{_plumbing_stderr(result)}")
-    return _decode_source(result.stdout)
-
-
-def merge_base(repo_root: Path, ref: str) -> str:
-    """Return the merge base of HEAD and *ref*.
-
-    Raises GitFailure (with git's stderr attached) on any non-zero exit or empty output --
-    _resolve_mode's only caller always requires a resolved revision.
-    """
-    result = _git(repo_root, "merge-base", "HEAD", ref)
-    if result.returncode != 0:
-        raise GitFailure(f"git merge-base HEAD {ref} failed{_plumbing_stderr(result)}")
-    resolved = _plumbing_text(result).strip()
-    if not resolved:
-        raise GitFailure(f"git merge-base HEAD {ref} produced no output")
-    return resolved
-
-
-def _working_tree_reader(repo_root: Path) -> Callable[[str], str | None]:
-    def read(path: str) -> str | None:
-        candidate = repo_root / path
-        if not candidate.is_file():
-            return None
-        return _decode_source(candidate.read_bytes())
-
-    return read
-
-
-def _index_reader(repo_root: Path) -> Callable[[str], str | None]:
-    def read(path: str) -> str | None:
-        result = _git(repo_root, "show", f":{path}")
-        return _decode_source(result.stdout) if result.returncode == 0 else None
-
-    return read
-
-
-def _revision_reader(repo_root: Path, rev: str) -> Callable[[str], str | None]:
-    def read(path: str) -> str | None:
-        return git_show(repo_root, rev, path)
-
-    return read
-
-
 def _parse_name_status(output: str) -> list[ChangedFile]:
     tokens = output.split("\0")
     changes: list[ChangedFile] = []
@@ -448,21 +348,24 @@ def changed_files(repo_root: Path, *, staged: bool, base_rev: str) -> list[Chang
         diff_args = ["diff", "--cached", "--name-status", "-M", "-z", "--diff-filter=AMRD", "HEAD"]
     else:
         diff_args = ["diff", "--name-status", "-M", "-z", "--diff-filter=AMRD", base_rev]
-    result = _git(repo_root, *diff_args)
+    result = _git_plumbing._git(repo_root, *diff_args)
     if result.returncode != 0:
-        raise GitFailure(
+        raise _git_plumbing.GitFailure(
             f"git {' '.join(diff_args)} failed (exit {result.returncode}): "
-            f"{_plumbing_text(result)}{_plumbing_stderr(result)}"
+            f"{_git_plumbing._plumbing_text(result)}{_git_plumbing._plumbing_stderr(result)}"
         )
-    changes = _parse_name_status(_plumbing_text(result))
+    changes = _parse_name_status(_git_plumbing._plumbing_text(result))
     if not staged:
-        untracked = _git(repo_root, "ls-files", "--others", "--exclude-standard", "-z")
+        untracked = _git_plumbing._git(
+            repo_root, "ls-files", "--others", "--exclude-standard", "-z"
+        )
         if untracked.returncode != 0:
-            raise GitFailure(
+            raise _git_plumbing.GitFailure(
                 f"git ls-files --others --exclude-standard failed (exit {untracked.returncode}): "
-                f"{_plumbing_text(untracked)}{_plumbing_stderr(untracked)}"
+                f"{_git_plumbing._plumbing_text(untracked)}"
+                f"{_git_plumbing._plumbing_stderr(untracked)}"
             )
-        for name in _plumbing_text(untracked).split("\0"):
+        for name in _git_plumbing._plumbing_text(untracked).split("\0"):
             if name:
                 changes.append(ChangedFile(path=name, base_path=None))
     return [change for change in changes if _in_scope_change(change)]
@@ -480,7 +383,7 @@ def allowed_complexity(
 def _read_required(source_for: Callable[[str], str | None], path: str, what: str) -> str:
     source = source_for(path)
     if source is None:
-        raise GitFailure(f"required {what} source missing: {path}")
+        raise _git_plumbing.GitFailure(f"required {what} source missing: {path}")
     return source
 
 
@@ -784,16 +687,16 @@ def _resolve_mode(
     repo_root: Path, *, staged: bool, base: str | None
 ) -> tuple[str, Callable[[str], str | None]]:
     if staged:
-        return "HEAD", _index_reader(repo_root)
+        return "HEAD", _git_plumbing._index_reader(repo_root)
     if base is None:
-        raise GitFailure("_resolve_mode requires --base when --staged is not set")
-    resolved = merge_base(repo_root, base)
-    return resolved, _working_tree_reader(repo_root)
+        raise _git_plumbing.GitFailure("_resolve_mode requires --base when --staged is not set")
+    resolved = _git_plumbing.merge_base(repo_root, base)
+    return resolved, _git_plumbing._working_tree_reader(repo_root)
 
 
 def _run(repo_root: Path, *, staged: bool, base: str | None) -> int:
     base_rev, head_source_for = _resolve_mode(repo_root, staged=staged, base=base)
-    base_source_for = _revision_reader(repo_root, base_rev)
+    base_source_for = _git_plumbing._revision_required_reader(repo_root, base_rev)
     policy = load_policy(head_source_for)
     exemption_problems = validate_exemptions(policy, head_source_for)
     if exemption_problems:
@@ -837,7 +740,7 @@ def main(argv: list[str]) -> int:
     repo_root = Path(args.repo_root).resolve()
     try:
         return _run(repo_root, staged=args.staged, base=args.base)
-    except (PolicyUnavailable, GitFailure) as exc:
+    except (PolicyUnavailable, _git_plumbing.GitFailure) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 

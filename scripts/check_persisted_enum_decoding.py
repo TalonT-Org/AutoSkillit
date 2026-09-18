@@ -107,7 +107,9 @@ class _EnumResolver:
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     self._module_aliases.add(alias.asname or alias.name.split(".")[0])
+        self._resolve_local_aliases(tree)
 
+    def _resolve_local_aliases(self, tree: ast.Module) -> None:
         # Resolve simple aliases such as ``Status = DispatchStatus``. Iterate so a
         # short alias chain cannot evade the guard.
         changed = True

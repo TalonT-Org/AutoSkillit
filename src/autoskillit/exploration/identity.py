@@ -216,8 +216,13 @@ def _match_offline_markers(
                     accepted = False
                     diagnostic = f"unreadable:{type(exc).__name__}"
                 else:
-                    accepted = digest == declared_markers[marker_path]
-                    diagnostic = "digest_match" if accepted else "digest_mismatch"
+                    expected_digest = declared_markers.get(marker_path)
+                    if expected_digest is None:
+                        accepted = False
+                        diagnostic = "undeclared_marker_path"
+                    else:
+                        accepted = digest == expected_digest
+                        diagnostic = "digest_match" if accepted else "digest_mismatch"
             marker_evidence.append(
                 IdentityEvidence(
                     source=source,

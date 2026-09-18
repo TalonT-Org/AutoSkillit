@@ -465,9 +465,10 @@ def test_merge_refined_skips_and_reports_invalid_discovered_results(
         item_factory("P1")["id"],
         item_factory("P3")["id"],
     ]
+    warning_entries = [entry for entry in captured_logs if entry.get("log_level") == "warning"]
     assert any(
         warning_fragment.format(entity_name=entity_name) in entry.get("event", "")
-        for entry in captured_logs
+        for entry in warning_entries
     )
 
 

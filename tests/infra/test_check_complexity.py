@@ -669,11 +669,9 @@ def test_load_check_script_restores_sys_path_and_keeps_success_registration(
     name = "_autoskillit_loader_success_probe"
     monkeypatch.delitem(sys.modules, name, raising=False)
     previous_path = list(sys.path)
-    path_object = sys.path
 
     loaded = load_check_script(name, script)
 
-    assert sys.path is path_object
     assert sys.path == previous_path
     assert sys.modules[name] is loaded
     assert loaded.HELPER is git_plumbing

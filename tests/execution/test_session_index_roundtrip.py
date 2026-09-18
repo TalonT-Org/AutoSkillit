@@ -26,6 +26,7 @@ class TestSessionIndexRoundtrip:
         missing = declared_keys - written_keys
         assert not extra, f"Keys written to sessions.jsonl but not in SessionIndexEntry: {extra}"
         assert not missing, f"SessionIndexEntry fields never written to sessions.jsonl: {missing}"
+        assert entry["adjudication_verdict"] is None
 
     def test_appending_current_schema_row_preserves_retained_v8_row_bytes(self, tmp_path):
         from autoskillit.core import SESSION_INDEX_SCHEMA_VERSION

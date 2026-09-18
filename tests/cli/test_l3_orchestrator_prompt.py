@@ -3,6 +3,8 @@ sentinel format, progress markers, and negative bootstrap assertions."""
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
@@ -606,6 +608,53 @@ class TestK16IngredientDisplayFirstAction:
 
 
 class TestResumeReasonInPrompt:
+    def test_retry_reason_descriptions_are_exhaustive_and_drive_guidance(self) -> None:
+        """Every retry reason has one canonical prompt description."""
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+        from autoskillit.core import RETRY_REASON_DESCRIPTIONS
+        from autoskillit.core.types import RetryReason
+
+        assert set(RETRY_REASON_DESCRIPTIONS) == set(RetryReason)
+        assert all(isinstance(reason, RetryReason) for reason in RETRY_REASON_DESCRIPTIONS)
+        assert all(description.strip() for description in RETRY_REASON_DESCRIPTIONS.values())
+
+        source = inspect.getsource(_resume_reason_guidance)
+        assert "RETRY_REASON_DESCRIPTIONS" in source
+        assert "RetryReason.IDLE_STALL" not in source
+        assert "RetryReason.RESUME" not in source
+        assert "RetryReason.NONE" not in source
+        assert "RetryReason(retry_reason)" not in source
+        for reason, description in RETRY_REASON_DESCRIPTIONS.items():
+            assert description in _resume_reason_guidance(reason.value)
+
+    @pytest.mark.parametrize(
+        "reason",
+        (
+            "outcome_invariant",
+            "context_exhausted",
+            "cancelled",
+            "budget_exhausted",
+            "outcome_report_malformed",
+        ),
+    )
+    def test_terminal_retry_reasons_explicitly_route_to_failure(self, reason: str) -> None:
+        """Terminal reasons must not receive generic resume guidance."""
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+
+        guidance = _resume_reason_guidance(reason).lower()
+
+        assert "on_failure" in guidance
+        assert "do not resume" in guidance
+        assert "on_context_limit" in guidance
+
+    @pytest.mark.parametrize("raw_reason", ("", "unrecognized-retry-reason"))
+    def test_unknown_retry_reason_retains_safe_fallback(self, raw_reason: str) -> None:
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+
+        assert _resume_reason_guidance(raw_reason) == (
+            "Retry reason: unknown. Resume with standard recovery."
+        )
+
     def test_idle_stall_resume_includes_reenter_guidance(self) -> None:
         prompt = _build(
             resumable_dispatch_name="impl-1",

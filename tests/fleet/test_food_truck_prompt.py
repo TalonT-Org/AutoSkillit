@@ -100,6 +100,74 @@ def test_h3b_stop_step_semantics_references_sentinel_and_success():
     )
 
 
+def test_failure_sentinel_preserves_optional_grounded_evidence():
+    """H3b and Section 8 must preserve only the evidence actually returned."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    h3b_start = prompt.index("H3b — STOP STEP SEMANTICS:")
+    h3c_start = prompt.index("H3c — ROUTE STEP SEMANTICS:")
+    h3b_section = prompt[h3b_start:h3c_start]
+    section_8 = prompt[prompt.index("--- SECTION 8:") :]
+
+    assert "exact adjudication detail" in h3b_section.lower()
+    for section in (h3b_section, section_8):
+        lowered = section.lower()
+        for field in ("reason_kind", "outcome_fields", "diagnostic_result"):
+            assert field in section
+        assert "optional" in lowered
+        assert "evidence" in lowered
+        assert "never invent" in lowered
+
+
+def test_fleet_prompt_routes_generic_failed_tool_responses_to_on_failure():
+    """Failure routing is driven by success:false, not a retry-reason enum table."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    start = prompt.index("ROUTING RULES — MANDATORY:")
+    end = prompt.index("FAILURE PREDICATE — open_kitchen:", start)
+    routing_section = prompt[start:end].lower()
+
+    assert 'run_skill: "success: false"' in routing_section
+    assert "follow on_failure" in routing_section
+    assert "optional step" in routing_section
+    assert "must follow on_failure" in routing_section
+
+
+def test_fleet_prompt_gives_rate_limit_routing_precedence_over_on_failure():
+    """Rate-limited run_skill results select their dedicated route before fallback."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    start = prompt.index("RATE LIMIT AND QUOTA RESULT ROUTING")
+    end = prompt.index("SKILL_COMMAND FORMATTING", start)
+    rate_limit_section = prompt[start:end].lower()
+
+    assert "check before on_failure" in rate_limit_section
+    assert "on_rate_limit when defined" in rate_limit_section
+    assert "otherwise route to on_failure" in rate_limit_section
+    assert "do not replay the original call" in rate_limit_section
+
+
 def test_fleet_prompt_contains_missing_on_failure_sentinel():
     """The L2 fleet prompt must instruct the model to emit missing_on_failure sentinel."""
     prompt = _build_food_truck_prompt(

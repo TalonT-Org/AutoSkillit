@@ -9,9 +9,12 @@ reporting fix_failures > 0. Covers RECT-011 through RECT-018.
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import errno
+import inspect
 import json
+import textwrap
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -531,6 +534,24 @@ def _base_skill_result(*, success: bool = True, result_text: str = "") -> SkillR
     )
 
 
+def _assert_demotion_verdict(
+    result: SkillResult,
+    *,
+    outcome_fields: dict[str, int | str] | None,
+    defects: tuple[str, ...] = (),
+) -> None:
+    """Assert the final result and its demotion verdict describe one event."""
+    verdict = result.adjudication_verdict
+
+    assert verdict is not None
+    assert verdict.reason_kind is result.retry_reason
+    assert verdict.subtype == result.subtype
+    assert result.result == verdict.detail
+    assert result.outcome_fields == outcome_fields
+    assert verdict.outcome_fields == outcome_fields
+    assert verdict.defects == defects
+
+
 class TestApplyPostSessionAdjudicationUnit:
     """Direct unit coverage of _apply_post_session_adjudication."""
 
@@ -553,7 +574,13 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
 
-    def test_violated_invariant_demotes_directly(self) -> None:
+    def test_violated_invariant_preserves_counters_in_demotion_verdict(self) -> None:
+        expected_fields = {
+            "verdict": "already_green",
+            "fixes_applied": 0,
+            "accept_count": 3,
+            "fix_failures": 3,
+        }
         sr = _base_skill_result(
             result_text=_e6_result_text(
                 verdict="already_green", accept_count=3, fixes_applied=0, fix_failures=3
@@ -573,6 +600,34 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.subtype == "outcome_invariant_violation"
         assert result.needs_retry is True
         assert result.retry_reason == RetryReason.OUTCOME_INVARIANT
+        _assert_demotion_verdict(result, outcome_fields=expected_fields)
+
+    def test_zero_writes_demotion_carries_parsed_counters_in_verdict(self) -> None:
+        expected_fields = {
+            "verdict": "already_green",
+            "fixes_applied": 0,
+            "accept_count": 3,
+            "fix_failures": 0,
+        }
+        result = _apply_post_session_adjudication(
+            _base_skill_result(
+                result_text=_e6_result_text(
+                    verdict="already_green",
+                    accept_count=3,
+                    fixes_applied=0,
+                    fix_failures=0,
+                )
+            ),
+            WriteEvidence.none_observed(),
+            WriteBehaviorSpec(mode="always"),
+            _resolve_review_contract(),
+            "",
+        )
+
+        assert result.success is False
+        assert result.subtype == "zero_writes"
+        assert result.retry_reason is RetryReason.ZERO_WRITES
+        _assert_demotion_verdict(result, outcome_fields=expected_fields)
 
     def test_satisfied_invariant_preserves_success(self) -> None:
         sr = _base_skill_result(
@@ -585,6 +640,38 @@ class TestApplyPostSessionAdjudicationUnit:
         )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
+
+
+def test_each_direct_demotion_replace_carries_a_verdict_and_detail() -> None:
+    """New direct demotions cannot silently omit their causal envelope."""
+    from autoskillit.execution.headless import _headless_adjudication, _headless_outcome
+
+    functions = (
+        _headless_adjudication._apply_post_session_adjudication,
+        _headless_adjudication._apply_contract_output_checks,
+        _headless_outcome._demote_outcome,
+    )
+    for function in functions:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+        demotions = [
+            call
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "dataclasses"
+            and call.func.attr == "replace"
+            and any(
+                keyword.arg == "success"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is False
+                for keyword in call.keywords
+            )
+        ]
+        assert demotions, f"{function.__name__} no longer has a guarded direct demotion"
+        for demotion in demotions:
+            keyword_names = {keyword.arg for keyword in demotion.keywords}
+            assert {"adjudication_verdict", "result"} <= keyword_names
 
 
 def _artifact_contract() -> SkillContract:
@@ -653,8 +740,10 @@ class TestDeclaredArtifactAdjudication:
 
         assert result.success is False
         assert result.subtype == "artifact_contract_violation"
+        assert result.retry_reason is RetryReason.CONTRACT_RECOVERY
         assert result.outcome_fields is None
         assert artifact_name in result.result
+        _assert_demotion_verdict(result, outcome_fields=None)
 
     def test_symlink_escape_is_producer_failure(self, tmp_path) -> None:
         outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
@@ -718,6 +807,7 @@ class TestDeclaredArtifactAdjudication:
 
         assert result.success is False
         assert result.subtype == "artifact_adjudication_error"
+        assert result.retry_reason is RetryReason.RESUME
         assert result.outcome_fields is None
         warning.assert_called_once_with(
             "artifact_adjudication_error",
@@ -725,6 +815,7 @@ class TestDeclaredArtifactAdjudication:
             artifact_name="report.md",
             exc_info=True,
         )
+        _assert_demotion_verdict(result, outcome_fields=None)
 
     @pytest.mark.parametrize("error_number", [errno.ENOTDIR, errno.ELOOP])
     def test_invalid_artifact_path_is_producer_failure(

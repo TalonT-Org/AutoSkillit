@@ -75,6 +75,40 @@ class TestDispatchStatusEnvelopeField:
         assert result["dispatch_status"] == "failure"
 
     @pytest.mark.anyio
+    async def test_failure_payload_retains_exact_optional_evidence(self, tool_ctx, monkeypatch):
+        """A clean failure forwards its raw sentinel evidence through l3_payload."""
+        from autoskillit.fleet.result_parser import L3ParseResult
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        payload = {
+            "success": False,
+            "reason": "invariant violated: exact write evidence was not retained",
+            "summary": "Outcome invariant failed.",
+            "reason_kind": "outcome_invariant",
+            "outcome_fields": {"write_count": 0, "required_writes": 1},
+            "diagnostic_result": "diagnostic evidence remained supplementary",
+        }
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: L3ParseResult(
+                outcome="completed_clean",
+                payload=payload,
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            ),
+        )
+
+        result = await _run(tool_ctx)
+
+        assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert result["l3_payload"] == payload
+        assert result["l3_payload"]["reason"] == payload["reason"]
+        assert result["l3_parse_source"] == "stdout"
+
+    @pytest.mark.anyio
     async def test_envelope_includes_dispatch_status_on_no_sentinel(self, tool_ctx, monkeypatch):
         """Envelope includes dispatch_status='failure' for no_sentinel without session signal."""
         _setup_dispatch(tool_ctx, monkeypatch)

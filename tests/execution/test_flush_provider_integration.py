@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
@@ -296,3 +298,98 @@ class TestProviderFieldsReachFlush:
 
         assert len(flush_calls) == 1
         assert flush_calls[0]["model_identity"].configured_model == "claude-opus-4-6"
+
+    @pytest.mark.anyio
+    async def test_invariant_verdict_reaches_the_real_session_log_flush(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ) -> None:
+        """The terminal-builder payload remains compatible with the actual index writer."""
+        import autoskillit.execution.evidence.session_log as session_log
+        from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+        from autoskillit.recipe import OutcomeInvariantEntry, SkillContract, SkillOutput
+        from tests.execution.conftest import _sr
+
+        expected_fields = {"accept_count": 2, "fix_failures": 1}
+        expected_detail = "invariant violated: when 'accept_count > 0' require 'fix_failures == 0'"
+        contract = SkillContract(
+            inputs=(),
+            outputs=[
+                SkillOutput("accept_count", "integer"),
+                SkillOutput("fix_failures", "integer"),
+            ],
+            outcome_invariants=[
+                OutcomeInvariantEntry(
+                    when="accept_count > 0",
+                    require="fix_failures == 0",
+                )
+            ],
+        )
+        raw_result = _sr(
+            stdout=json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "accept_count = 2\nfix_failures = 1",
+                    "session_id": "invariant-flush",
+                }
+            )
+        )
+
+        async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+            return raw_result
+
+        monkeypatch.setattr(
+            _patch_headless__headless_execute,
+            "_compute_post_session_metrics",
+            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        )
+        monkeypatch.setattr(
+            _patch_headless__headless_execute,
+            "_capture_git_head_sha",
+            lambda *a: "",  # noqa: ARG005
+        )
+        monkeypatch.setattr(
+            _patch_headless__headless_execute,
+            "collect_version_snapshot",
+            lambda backend=None: {},
+        )
+        real_flush = session_log.flush_session_log
+        captured_flushes: list[dict] = []
+        monkeypatch.setattr(
+            session_log,
+            "flush_session_log",
+            lambda **kwargs: captured_flushes.append(kwargs),
+        )
+        minimal_ctx.runner = fake_runner  # type: ignore[assignment]
+        minimal_ctx.backend = _mock_backend()
+
+        result = await _execute_claude_headless(
+            lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            skill_contract=contract,
+            step_name="implement",
+            **_launch_kwargs(minimal_ctx, str(tmp_path)),
+        )
+
+        assert result.subtype == "outcome_invariant_violation"
+        assert len(captured_flushes) == 1
+        flush_kwargs = captured_flushes[0]
+        expected_verdict = {
+            "reason_kind": RetryReason.OUTCOME_INVARIANT.value,
+            "subtype": "outcome_invariant_violation",
+            "detail": expected_detail,
+            "outcome_fields": expected_fields,
+            "defects": [],
+        }
+        assert flush_kwargs["adjudication_verdict"] == expected_verdict
+        flush_kwargs["log_dir"] = str(tmp_path / "logs")
+        real_flush(**flush_kwargs)
+
+        entry = json.loads((tmp_path / "logs" / "sessions.jsonl").read_text())
+        assert entry["adjudication_verdict"] == expected_verdict
+        assert entry["outcome_fields"] == expected_fields

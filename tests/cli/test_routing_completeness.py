@@ -17,13 +17,10 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # Reasons excluded from orchestrator-prompt routing check:
 # - NONE: not a retry scenario, no routing needed
-# - BUDGET_EXHAUSTED: caps other reasons; orchestrator never sees it directly
-# - CANCELLED: transport-level event; tool handler converts to structured result at the boundary,
-#   orchestrator sees success=False + subtype="cancelled" and routes via on_failure
+# - BUDGET_EXHAUSTED: caps other reasons and has needs_retry=False, so no retry route applies
 _ROUTING_EXCLUDED = {
     RetryReason.NONE,
     RetryReason.BUDGET_EXHAUSTED,
-    RetryReason.CANCELLED,
 }
 
 # Routing contract: RetryReason → (expected_route_keyword, evidence_condition_keyword_or_None)
@@ -42,6 +39,7 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
     RetryReason.CONTRACT_RECOVERY: ("on_context_limit", "has_progress_evidence"),
     RetryReason.CLONE_CONTAMINATION: ("on_failure", "pre_contamination_retry_reason"),
     RetryReason.RATE_LIMITED: ("on_rate_limit", None),
+    RetryReason.CANCELLED: ("on_failure", None),
     RetryReason.OUTCOME_INVARIANT: ("on_failure", None),
     RetryReason.OUTCOME_REPORT_MALFORMED: ("on_failure", None),
     RetryReason.ASYNC_OBLIGATION: ("on_failure", None),
@@ -102,6 +100,49 @@ def test_expected_routes_covers_all_orchestrator_visible_reasons() -> None:
         r.name for r in RetryReason if r not in _ROUTING_EXCLUDED and r not in _EXPECTED_ROUTES
     ]
     assert not missing, f"Add routing expectation for: {missing}"
+
+
+def test_cancelled_is_retriable_and_routes_to_failure() -> None:
+    """Cancellation reaches the orchestrator as a retriable on-failure result."""
+    from autoskillit.core.types import SkillResult
+
+    result = SkillResult.cancelled()
+
+    assert result.needs_retry is True
+    assert result.retry_reason is RetryReason.CANCELLED
+    assert _EXPECTED_ROUTES[RetryReason.CANCELLED] == ("on_failure", None)
+
+
+def test_budget_exhausted_remains_a_non_retry_routing_exclusion() -> None:
+    """Budget exhaustion stops retry routing even though it names a retry reason."""
+    from autoskillit.core.types import SkillResult
+    from autoskillit.execution.headless._headless_evidence import _apply_budget_guard
+    from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
+
+    retriable = SkillResult.cancelled(skill_command="test-skill")
+    audit = DefaultAuditLog()
+    for _ in range(2):
+        audit.record_failure(
+            FailureRecord(
+                timestamp="2026-09-17T00:00:00+00:00",
+                skill_command="test-skill",
+                exit_code=-1,
+                subtype="cancelled",
+                needs_retry=True,
+                retry_reason=RetryReason.CANCELLED.value,
+                stderr="",
+            )
+        )
+    budgeted = _apply_budget_guard(
+        retriable,
+        "test-skill",
+        audit,
+        max_consecutive_retries=1,
+    )
+
+    assert budgeted.retry_reason is RetryReason.BUDGET_EXHAUSTED
+    assert budgeted.needs_retry is False
+    assert RetryReason.BUDGET_EXHAUSTED in _ROUTING_EXCLUDED
 
 
 def test_infrastructure_fault_override_is_documented() -> None:

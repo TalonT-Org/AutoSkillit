@@ -1430,6 +1430,37 @@ def test_build_stop_step_semantics_includes_sentinel_instruction():
     assert "success=false" in sem, "Must include success=false for failure stop steps"
 
 
+def test_build_stop_step_semantics_preserves_failed_run_skill_evidence() -> None:
+    """Failure sentinels use returned evidence instead of a static stop message."""
+    from autoskillit.recipe._api_orchestration import _build_stop_step_semantics
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "escalate_stop": RecipeStep(
+                action="stop",
+                message="Escalate using the returned failure evidence.",
+            ),
+        },
+    )
+
+    semantics = _build_stop_step_semantics(recipe)
+
+    assert "reason=<step message>" not in semantics
+    for required in (
+        "original failed run_skill response",
+        "exact result",
+        "reason_kind",
+        "outcome_fields",
+        "verbatim",
+        "diagnostic result",
+        "static stop message only when no tool evidence exists",
+    ):
+        assert required in semantics.lower(), required
+
+
 def test_load_result_includes_merged_sub_recipe_stop_semantics(tmp_path: Path) -> None:
     """Stop guidance is built from the composed active recipe."""
     from autoskillit.recipe._api import load_and_validate

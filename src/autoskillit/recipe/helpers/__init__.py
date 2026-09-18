@@ -56,11 +56,6 @@ if TYPE_CHECKING:
         substitute_scripts_placeholder,
         substitute_temp_placeholder,
     )
-    from ._recipe_note_templates import (  # noqa: F401
-        ANALYZE_PIPELINE_HEALTH_ERROR_NOTE,
-        RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR,
-        substitute_recipe_note_placeholders,
-    )
     from ._registry_utils import (  # noqa: F401
         _MISSING_MTIME,
         EXPECTED_SCHEMA_VERSION,
@@ -155,7 +150,6 @@ _LAZY_MODULES: frozenset[str] = frozenset(
     {
         "_git_helpers",
         "_io_loading",
-        "_recipe_note_templates",
         "_rule_helpers",
         "_skill_helpers",
         "_skill_placeholder_parser",
@@ -266,9 +260,6 @@ _LAZY_SYMBOL_TO_MODULE: dict[str, str] = {
     "_MISSING_MTIME": "_registry_utils",
     "dir_mtime": "_registry_utils",
     "parse_int_field": "_registry_utils",
-    "ANALYZE_PIPELINE_HEALTH_ERROR_NOTE": "_recipe_note_templates",
-    "RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR": "_recipe_note_templates",
-    "substitute_recipe_note_placeholders": "_recipe_note_templates",
 }
 
 __all__ = [
@@ -374,7 +365,4 @@ __all__ = [
     "shell_vars_assigned",
     "substitute_scripts_placeholder",
     "substitute_temp_placeholder",
-    "ANALYZE_PIPELINE_HEALTH_ERROR_NOTE",
-    "RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR",
-    "substitute_recipe_note_placeholders",
 ]

@@ -3832,7 +3832,7 @@
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Human intervention is needed. Emit the L3 failure sentinel from the original failed run_skill response and any supplementary diagnostic evidence. Do not replace observed evidence with a fixed example reason."
+      "message": "Pipeline failed. Emit the L3 failure sentinel from the original failed run_skill response and any supplementary diagnostic evidence. Do not replace observed evidence with a fixed example reason."
     }
   }
 }

@@ -70,14 +70,14 @@ def test_basename_fallback_dead_exemptions_are_retired() -> None:
 
 
 def test_dead_hook_line_limit_exemptions_are_retired() -> None:
-    obsolete = {
+    retired = {
         "hooks/_command_classification.py",
         "hooks/_capture_lifecycle.py",
         "hooks/_capture_artifacts.py",
         "hooks/_capture_contract.py",
     }
-    stale = obsolete.intersection(_LINE_LIMIT_EXEMPTIONS)
-    assert not stale, f"Dead hook line-limit exemptions reintroduced: {sorted(stale)}"
+    stale = retired.intersection(_LINE_LIMIT_EXEMPTIONS)
+    assert not stale, f"Retired hook line-limit exemptions reintroduced: {sorted(stale)}"
 
 
 def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> None:

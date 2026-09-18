@@ -177,8 +177,8 @@ def test_delivery_mode_is_pinned(
 # Each stored maximum includes 10% headroom above the measured serialized char count.
 # Update when a recipe grows/shrinks past these thresholds.
 _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
-    ("bem-wrapper", "claude-code"): 24_000,
-    ("consolidate-health-reports", "claude-code"): 13_000,
+    ("bem-wrapper", "claude-code"): 24_100,
+    ("consolidate-health-reports", "claude-code"): 13_300,
     ("consolidate-health-reports", "codex"): 12_000,
     ("full-audit", "claude-code"): 37_000,
     ("implement-findings", "claude-code"): 34_000,

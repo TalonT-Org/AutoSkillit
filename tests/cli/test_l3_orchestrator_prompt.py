@@ -675,7 +675,9 @@ class TestResumeReasonInPrompt:
         end_idx = prompt.index("## INTERRUPT/CLEANUP", idx)
         resumable_section = prompt[idx:end_idx]
         assert "context_exhausted" not in resumable_section
-        assert "Retry reason: unknown" in resumable_section
+        assert "context exhausted" in resumable_section
+        assert "on_failure" in resumable_section
+        assert "do not resume" in resumable_section
 
     def test_api_error_resume_includes_retry_guidance(self) -> None:
         prompt = _build(

@@ -185,6 +185,7 @@ steps:
       GitHub issues created.", "issue_urls": "<exact captured issue_urls>",
       "issue_count": "<exact captured issue_count>"}
       Artifacts are in {{AUTOSKILLIT_TEMP}}/.
+    optional_context_refs: [issue_urls, issue_count]
 
   escalate_stop:
     action: stop

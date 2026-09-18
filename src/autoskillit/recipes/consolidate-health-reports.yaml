@@ -54,3 +54,4 @@ steps:
       The sentinel must include success=true and set health_summary to the exact
       captured summary value returned by the consolidation step.
       Example sentinel: {"success": true, "health_summary": "Pipeline health check: 3 dispatches analyzed, no issues found."}
+    optional_context_refs: [summary]

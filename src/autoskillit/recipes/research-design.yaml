@@ -345,6 +345,17 @@ steps:
       "visualization_plan_path": "<path>", "report_plan_path": "<path>",
       "experiment_type": "benchmark", "worktree_path": "<path>",
       "research_dir": "<path>", "research_dir_rel": "<rel>"}
+    optional_context_refs:
+      - scope_report
+      - scope_directions
+      - selected_directions
+      - experiment_plan
+      - visualization_plan_path
+      - report_plan_path
+      - experiment_type
+      - worktree_path
+      - research_dir
+      - research_dir_rel
 
   escalate_stop:
     action: stop

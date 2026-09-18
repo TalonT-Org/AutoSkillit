@@ -9,6 +9,7 @@ import pytest
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core.types import RetryReason, SkillResult
 from tests.execution.conftest import _launch_preparation, _mock_backend
+from tests.execution.test_outcome_invariants import _resolve_review_contract
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -307,24 +308,11 @@ class TestProviderFieldsReachFlush:
         import autoskillit.execution.evidence.session_log as session_log
         from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
-        from autoskillit.recipe import OutcomeInvariantEntry, SkillContract, SkillOutput
         from tests.execution.conftest import _sr
 
         expected_fields = {"accept_count": 2, "fix_failures": 1}
         expected_detail = "invariant violated: when 'accept_count > 0' require 'fix_failures == 0'"
-        contract = SkillContract(
-            inputs=(),
-            outputs=[
-                SkillOutput("accept_count", "integer"),
-                SkillOutput("fix_failures", "integer"),
-            ],
-            outcome_invariants=[
-                OutcomeInvariantEntry(
-                    when="accept_count > 0",
-                    require="fix_failures == 0",
-                )
-            ],
-        )
+        contract = _resolve_review_contract()
         raw_result = _sr(
             stdout=json.dumps(
                 {

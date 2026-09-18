@@ -168,9 +168,11 @@ steps:
   done:
     action: stop
     message: >-
-      Agent evaluation complete. Pass rate: ${{ context.pass_rate }}
-      (${{ context.passed_runs }}/${{ context.total_runs }}).
-      Vacuous passes: ${{ context.vacuous_passes }}.
-      Effective pass rate: ${{ context.effective_pass_rate }}.
-      Scorecard: ${{ context.scorecard_path }}.
-      Emit the L3 sentinel with success status.
+      Agent evaluation complete. Emit the L3 sentinel with success status and
+      the exact captured scorecard_path, pass_rate, total_runs, passed_runs,
+      vacuous_passes, and effective_pass_rate values.
+      Example sentinel: {"success": true, "scorecard_path": "<path>",
+      "pass_rate": "1.0", "total_runs": "1", "passed_runs": "1",
+      "vacuous_passes": "0", "effective_pass_rate": "1.0"}
+    optional_context_refs:
+      [scorecard_path, pass_rate, total_runs, passed_runs, vacuous_passes, effective_pass_rate]

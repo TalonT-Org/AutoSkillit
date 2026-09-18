@@ -22,8 +22,8 @@ from autoskillit.core.closure_hashing import (
 from autoskillit.core.io import write_versioned_json
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
-from autoskillit.recipe import OutcomeInvariantEntry, SkillContract, SkillOutput
 from tests.conftest import _make_result
+from tests.execution.test_outcome_invariants import _resolve_review_contract
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -163,19 +163,7 @@ class TestClosureGate:
         authority_path, authority_hash = _make_authority(tmp_path)
         out_root = tmp_path / "out"
         out_root.mkdir()
-        contract = SkillContract(
-            inputs=(),
-            outputs=[
-                SkillOutput("accept_count", "integer"),
-                SkillOutput("fix_failures", "integer"),
-            ],
-            outcome_invariants=[
-                OutcomeInvariantEntry(
-                    when="accept_count > 0",
-                    require="fix_failures == 0",
-                )
-            ],
-        )
+        contract = _resolve_review_contract()
         stdout = json.dumps(
             {
                 "type": "result",

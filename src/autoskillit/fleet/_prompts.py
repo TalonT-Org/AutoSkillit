@@ -152,13 +152,11 @@ H3 — AUTO-ACCEPT CONFIRM STEPS:
 
 H3b — STOP STEP SEMANTICS:
   When you reach a step with action: "stop", the pipeline is TERMINATED.
-  Preserve the original failed run_skill response that caused the failure route.
-  When it contains an adjudication verdict, put the exact adjudication detail from
-  its result in the reason field and reproduce available reason_kind and
-  outcome_fields verbatim. A later diagnostic_result is supplementary only.
-  reason_kind, outcome_fields, and diagnostic_result are optional evidence fields;
-  include them only when observed and never invent absent evidence. With no tool
-  evidence, use the static step message as the fallback reason.
+  Emit the L3 sentinel. Preserve the original failed run_skill response and put its
+  exact adjudication detail in reason. reason_kind, outcome_fields, and
+  diagnostic_result are optional evidence; include observed values verbatim and never
+  invent absent evidence. A diagnostic_result is supplementary. With no tool evidence,
+  use the static step message.
   Set success=true for completion terminals, success=false for failure/escalation terminals.
   Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
@@ -192,6 +190,7 @@ ROUTING RULES — MANDATORY:
   access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
+- A running optional step with success: false must follow on_failure.
 
 FAILURE PREDICATES — when to follow on_failure:
 - test_check: "passed: False" in output
@@ -258,8 +257,7 @@ RATE LIMIT AND QUOTA RESULT ROUTING — run_skill only (check BEFORE on_failure)
 - A structured result with "candidate_exhausted: true" records that every compatible
   candidate was rejected before a worker started. Inspect its ordered
   "execution_selection.attempts" and "retry_reason". Route `rate_limited` to
-  on_rate_limit when defined; otherwise route to on_failure. Do not replay the original
-  call or add a fixed delay.
+  on_rate_limit when defined; otherwise route to on_failure. Do not replay the original call.
 - When a candidate started and returns "retry_reason: rate_limited", never rerun the
   original call or choose another candidate. Resume only when
   "execution_selection.continuation.resume_session_id" is non-empty, using that exact

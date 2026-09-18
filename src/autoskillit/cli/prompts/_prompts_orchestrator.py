@@ -260,7 +260,7 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     on_failure. Do NOT route to on_context_limit or add a label.
 - When run_skill returns "needs_retry: true" AND "retry_reason: cancelled":
   - The session was cancelled. Always fall through to on_failure. Do NOT resume or
-    route to on_context_limit.
+    Do not route to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
   - The model ran to completion and wrote artifacts but the structured output tokens
     failed pattern validation. Infrastructure nudge was attempted but could not recover.
@@ -359,14 +359,10 @@ ACTION: CONFIRM STEP SEMANTICS:
 
 ACTION: STOP STEP SEMANTICS:
 - When you reach a step with action: "stop", the pipeline is TERMINATED.
-- Preserve the original failed run_skill response that caused the failure route.
-- If it contains an adjudication verdict, use its exact result as the failure reason
-  and reproduce reason_kind and available outcome_fields verbatim.
-- A later diagnostic result is supplementary only and must never replace the original
-  failure evidence.
-- If there is no structured original reason, state that fact and reproduce only
-  observed tool evidence; do not infer a cause.
-- Use the static stop message only when no tool evidence exists. Do NOT call any MCP tools.
+- Preserve the original failed run_skill response: use its exact result, reason_kind,
+  and outcome_fields verbatim; a diagnostic result is supplemental. With no structured
+  original reason, do not infer. Use static stop message only when no tool evidence
+  exists. Do NOT call any MCP tools.
 - Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
 - Do NOT reason about what went wrong or try alternative approaches.
 - A stop step is an INTENTIONAL terminus, not an error. Treat it as the recipe's

@@ -50,9 +50,11 @@ class TestResearchImplementRecipe:
     def test_terminal_stops(self, recipe) -> None:
         assert recipe.steps["escalate_stop"].action == "stop"
         assert recipe.steps["implement_complete"].action == "stop"
-        assert "${{ context.worktree_path }}" in recipe.steps["implement_complete"].message
-        assert "${{ context.report_path }}" in recipe.steps["implement_complete"].message
-        assert "${{ context.experiment_results }}" in recipe.steps["implement_complete"].message
+        message = recipe.steps["implement_complete"].message or ""
+        assert "${{" not in message
+        assert '"worktree_path"' in message
+        assert '"report_path"' in message
+        assert '"experiment_results"' in message
 
     def test_research_implement_has_retry_delay_steps(self, recipe) -> None:
         """research-implement.yaml must have the retry delay gate and sleep step."""

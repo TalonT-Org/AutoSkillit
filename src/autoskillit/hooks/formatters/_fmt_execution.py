@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from _fmt_primitives import (  # type: ignore[import-not-found]
     _CHECK_MARK,
     _CROSS_MARK,
@@ -76,6 +78,16 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"worktree_path: {worktree}")
     _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
+    if isinstance(data.get("adjudication_verdict"), dict):
+        lines.append(
+            "adjudication_verdict: "
+            + json.dumps(data["adjudication_verdict"], sort_keys=True, separators=(",", ":"))
+        )
+    if data.get("outcome_fields") is not None:
+        lines.append(
+            "outcome_fields: "
+            + json.dumps(data["outcome_fields"], sort_keys=True, separators=(",", ":"))
+        )
 
     if pipeline:
         _maybe_tracker_line(data, lines)
@@ -210,6 +222,8 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "audit_attempt_id",
         "provider_used",
         "provider_fallback",
+        "adjudication_verdict",
+        "outcome_fields",
         "pipeline_tracker",
         "recipe_segment",
         "receipt_id",
@@ -242,6 +256,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
         "execution_identity",
+        "outcome_invariant_violated",
+        "outcome_qualifier",
         "stage",
         "retriable",
         "api_error_status",

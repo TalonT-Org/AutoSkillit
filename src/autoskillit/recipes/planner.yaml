@@ -528,6 +528,7 @@ steps:
       Use compile output to create GitHub issues and milestones.
       Emit the L3 result sentinel JSON block now with success=true.
       Example sentinel: {"success": true, "reason": "planning complete"}
+    optional_context_refs: [planner_dir, warning_count]
 
   escalate_stop:
     action: stop

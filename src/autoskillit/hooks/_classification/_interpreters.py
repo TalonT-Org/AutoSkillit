@@ -320,7 +320,7 @@ def _iter_shell_payload_segment_groups(
     command: str,
     *,
     include_process_substitutions: bool = False,
-) -> Iterator[tuple[str, list[list[str]] | None]]:
+) -> Iterator[list[list[str]] | None]:
     seen: set[str] = set()
     queue = deque([(command, False, False)])
     while queue:
@@ -333,9 +333,9 @@ def _iter_shell_payload_segment_groups(
             continue
         segments = tokenize_command_segments(payload)
         if not segments:
-            yield payload, None
+            yield None
             return
-        yield payload, segments
+        yield segments
         queue.extend(
             (nested, preserve_occurrence, True)
             for nested in extract_shell_command_payloads(payload)
@@ -345,7 +345,7 @@ def _iter_shell_payload_segment_groups(
                 payload
             ):
                 if not balanced:
-                    yield body, None
+                    yield None
                     return
                 queue.append((body, True, True))
 
@@ -370,7 +370,7 @@ def tokenize_shell_payload_segments(
     shell payload to traverse.
     """
     result: list[list[str]] = []
-    for index, (_payload, segments) in enumerate(
+    for index, segments in enumerate(
         _iter_shell_payload_segment_groups(
             command,
             include_process_substitutions=include_process_substitutions,

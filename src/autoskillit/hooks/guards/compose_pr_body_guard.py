@@ -161,7 +161,7 @@ def _iter_evaluated_payload_segments(command: str) -> list[list[list[str]]] | No
     contract).
     """
     payload_segment_lists: list[list[list[str]]] = []
-    for _payload, segments in _iter_shell_payload_segment_groups(command):
+    for segments in _iter_shell_payload_segment_groups(command):
         if segments is None:
             return None
         payload_segment_lists.append(segments)

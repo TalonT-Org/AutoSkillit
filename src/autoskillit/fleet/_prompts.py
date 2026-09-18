@@ -14,6 +14,7 @@ from autoskillit.core import (
     ADMIRAL_DISPATCH_SECTIONS,
     ROUTING_AUTHORITY_CLAUSE,
     STEP_SKIP_SEMANTICS_CLAUSE,
+    STOP_STEP_EVIDENCE_DOCTRINE_INDENTED,
     CaptureEntrySpec,
     get_logger,
     resolve_payload_field,
@@ -152,7 +153,8 @@ H3 — AUTO-ACCEPT CONFIRM STEPS:
 
 H3b — STOP STEP SEMANTICS:
   When you reach a step with action: "stop", the pipeline is TERMINATED.
-  Emit the L3 sentinel block with the step's message as the reason field.
+  Emit the L3 sentinel.
+{STOP_STEP_EVIDENCE_DOCTRINE_INDENTED}
   Set success=true for completion terminals, success=false for failure/escalation terminals.
   Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
@@ -186,6 +188,7 @@ ROUTING RULES — MANDATORY:
   access that the orchestrator does not.
 - Your ONLY job is to route to the correct next step and pass the
   required arguments. The downstream skill does the actual work.
+- A running optional step with success: false must follow on_failure.
 
 FAILURE PREDICATES — when to follow on_failure:
 - test_check: "passed: False" in output
@@ -252,8 +255,7 @@ RATE LIMIT AND QUOTA RESULT ROUTING — run_skill only (check BEFORE on_failure)
 - A structured result with "candidate_exhausted: true" records that every compatible
   candidate was rejected before a worker started. Inspect its ordered
   "execution_selection.attempts" and "retry_reason". Route `rate_limited` to
-  on_rate_limit when defined; otherwise route to on_failure. Do not replay the original
-  call or add a fixed delay.
+  on_rate_limit when defined; otherwise route to on_failure. Do not replay the original call.
 - When a candidate started and returns "retry_reason: rate_limited", never rerun the
   original call or choose another candidate. Resume only when
   "execution_selection.continuation.resume_session_id" is non-empty, using that exact
@@ -323,6 +325,14 @@ Fields:
 - reason: "completed", "failed", "quota_exhausted", "timeout",
   "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
 - summary: One-line description of what happened{extra_fields_docs}
+- Failure terminals may also include optional evidence fields reason_kind,
+  outcome_fields, and diagnostic_result. Include only observed values and never invent
+  absent evidence. Preserve the original failed run_skill result as reason; diagnostic
+  evidence is supplementary.
+
+Concrete failure-only example (null means the corresponding evidence was absent):
+{{"success": false, "reason": "observed failure detail", "summary": "pipeline failed",
+"reason_kind": null, "outcome_fields": null, "diagnostic_result": null}}
 
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---
 are parsed by the fleet dispatcher. The %%L3_DONE::{dispatch_id_short}%% marker

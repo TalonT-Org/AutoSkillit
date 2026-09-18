@@ -107,6 +107,7 @@ class TestBackendAuthorityInSessionsJsonl:
             "outcome_fields": None,
             "outcome_invariant_violated": False,
             "outcome_qualifier": None,
+            "adjudication_verdict": None,
             "native_shell_capture": None,
             "session_type": None,
             "subagent_model_outcomes": [],

@@ -98,3 +98,28 @@ def test_sous_chef_preserves_attested_skill_input_shape_and_falsey_defaults() ->
         '`""`, `0`, and\n'
         "`False` are forwarded verbatim; never delete or invent a key."
     ) in content
+
+
+def test_sous_chef_preserves_grounded_failure_evidence_through_stop() -> None:
+    """Sous-chef doctrine keeps the triggering run_skill evidence authoritative."""
+    from tests.cli._routing_test_helpers import STOP_STEP_DOCTRINE_KEY_PHRASES
+
+    content = _read_full_sous_chef().lower()
+
+    for required in STOP_STEP_DOCTRINE_KEY_PHRASES:
+        assert required in content, required
+
+
+@pytest.mark.parametrize("retry_reason", ("cancelled", "outcome_report_malformed"))
+def test_sous_chef_routes_terminal_failure_reasons_to_on_failure(
+    retry_reason: str,
+) -> None:
+    """Cancellation and malformed reports never route through context-limit recovery."""
+    from tests.cli._routing_test_helpers import slice_routing_clause
+
+    content = _read_full_sous_chef().lower()
+    start = content.index(f"retry_reason: {retry_reason}")
+    route_clause = slice_routing_clause(content, start)
+
+    assert "on_failure" in route_clause
+    assert "on_context_limit" in route_clause

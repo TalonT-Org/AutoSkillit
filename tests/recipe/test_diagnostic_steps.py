@@ -8,6 +8,13 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
+_DIAGNOSTIC_ERROR_CHAINS = (
+    ("implementation", "analyze_pipeline_health_error"),
+    ("implementation-groups", "analyze_pipeline_health_error"),
+    ("merge-prs", "analyze_pipeline_health_error"),
+    ("remediation", "analyze_pipeline_health_error"),
+)
+
 
 # DIAG_C7: analyze-pipeline-health skill exists
 def test_analyze_pipeline_health_skill_exists():
@@ -95,3 +102,29 @@ def test_implementation_family_recipes_route_terminals_through_diagnostics() -> 
                 f"{name}: {next_step}.skip_when_false={diag.skip_when_false!r} "
                 f"must reference one of {required_post_run_refs!r}"
             )
+
+
+@pytest.mark.parametrize(("recipe_name", "step_name"), _DIAGNOSTIC_ERROR_CHAINS)
+def test_diagnostic_error_chain_preserves_original_failure_evidence(
+    recipe_name: str, step_name: str
+) -> None:
+    """Diagnostic runs append observed evidence without replacing the failed skill result."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    step = recipe.steps[step_name]
+    note = step.note or ""
+
+    assert "${{" not in note
+    for required in (
+        "originating failure response",
+        "diagnostic response",
+        "verbatim",
+        "non-empty result",
+        "diagnostic evidence was unavailable",
+        "on_failure",
+        "on_context_limit",
+        "on_rate_limit",
+        "pipeline_health",
+        "not run",
+        "do not infer",
+    ):
+        assert required in note.lower(), f"{recipe_name}.{step_name}: missing {required!r}"

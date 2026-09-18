@@ -574,18 +574,25 @@ steps:
       '
   review_pr_complete:
     action: stop
-    message: 'Review phase complete (PR mode). Emit the L3 result sentinel JSON block now. The sentinel must include the following
-      fields: success=true, pr_url=${{ context.pr_url }}, report_path_after_finalize=${{ context.report_path_after_finalize
-      }}, worktree_path=${{ inputs.worktree_path }}, research_dir=${{ inputs.research_dir }}. Note: report_path_after_finalize
-      is empty string when reached via the guard_pr_url fallback (pr_url absent) — finalize_bundle is bypassed in that path.
-      Emit empty string for this field in that case. Example sentinel: {"success": true, "pr_url": "<url>", "report_path_after_finalize":
-      "<path>", "worktree_path": "<path>", "research_dir": "<path>"}'
+    message: >-
+      Review phase complete (PR mode). Emit the L3 result sentinel JSON block now.
+      Include success=true and the exact pr_url, report_path_after_finalize,
+      worktree_path, and research_dir values already available from recipe inputs
+      and captured step results. report_path_after_finalize is an empty string when
+      guard_pr_url bypassed finalize_bundle because no PR URL was available.
+      Example sentinel: {"success": true, "pr_url": "<url>",
+      "report_path_after_finalize": "<path>", "worktree_path": "<path>",
+      "research_dir": "<path>"}
+    optional_context_refs: [pr_url, report_path_after_finalize]
   review_local_complete:
     action: stop
-    message: 'Review phase complete (local mode). Local bundle exported successfully. Emit the L3 result sentinel JSON block
-      now. The sentinel must include: success=true, local_bundle_path=${{ context.local_bundle_path }}, pr_url="" (empty string
-      — no PR in local mode), report_path_after_finalize="" (empty string — no finalization in local mode). Example sentinel:
-      {"success": true, "local_bundle_path": "<path>", "pr_url": "", "report_path_after_finalize": ""}'
+    message: >-
+      Review phase complete (local mode). Local bundle exported successfully.
+      Emit the L3 result sentinel with success=true, the exact captured
+      local_bundle_path, pr_url="", and report_path_after_finalize="".
+      Example sentinel: {"success": true, "local_bundle_path": "<path>",
+      "pr_url": "", "report_path_after_finalize": ""}
+    optional_context_refs: [local_bundle_path]
   escalate_stop:
     action: stop
     message: 'Review pipeline failed — human intervention needed. Check the latest step output for details. Emit the L3 result

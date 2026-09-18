@@ -23,6 +23,32 @@ from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 logger = get_logger(__name__)
 
+
+# Canonical recipe step note prose, single-sourced here so a doctrinal update
+# lands in one place instead of eight recipe YAML/JSON copies.
+ANALYZE_PIPELINE_HEALTH_ERROR_NOTE: str = (
+    "Preserve the originating failure response separately. Inspect the diagnostic "
+    "response and include its non-empty result verbatim as supplementary evidence. "
+    "On on_failure, on_context_limit, or on_rate_limit, state that diagnostic evidence "
+    "was unavailable and reproduce only observed tool evidence; do not infer a cause. "
+    "When pipeline_health disables this step and it was not run, say so and preserve "
+    "the originating failure response."
+)
+
+_RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR: str = "__RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR__"
+
+_RECIPE_NOTE_TABLE: dict[str, str] = {
+    _RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR: ANALYZE_PIPELINE_HEALTH_ERROR_NOTE,
+}
+
+
+def _substitute_recipe_note_placeholders(value: Any) -> Any:
+    """Substitute recipe note placeholders. Only strings reach this layer."""
+    if isinstance(value, str):
+        return _RECIPE_NOTE_TABLE.get(value, value)
+    return value
+
+
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
 _SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
 
@@ -131,7 +157,8 @@ def _substitute_recipe_values(
             if temp_dir_relpath is not None
             else value
         )
-        return substitute_scripts_placeholder(resolved)
+        resolved = substitute_scripts_placeholder(resolved)
+        return _substitute_recipe_note_placeholders(resolved)
     if isinstance(value, dict):
         return {
             key: _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath)
@@ -141,7 +168,7 @@ def _substitute_recipe_values(
         return [
             _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath) for item in value
         ]
-    return value
+    return _substitute_recipe_note_placeholders(value)
 
 
 def load_recipe_dict_with_declarations(

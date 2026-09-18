@@ -2270,7 +2270,7 @@
     },
     "escalate_stop_no_ci": {
       "action": "stop",
-      "message": "CI safety net: statusCheckRollup returned no checks for PR ${{ context.pr_number }}. This typically means no workflow is configured to trigger on this branch pattern. Check .github/workflows/ trigger configuration. This is NOT a test failure — CI never started. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"no CI checks configured\"}"
+      "message": "CI safety net: statusCheckRollup returned no checks for the pull request. This typically means no workflow is configured for the branch pattern. Check workflow trigger configuration. CI never started. Emit the L3 failure sentinel using the exact available tool evidence."
     },
     "check_repo_merge_state": {
       "tool": "check_repo_merge_state",
@@ -3426,7 +3426,7 @@
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
       "on_rate_limit": "escalate_stop",
-      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
+      "note": "__RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR__"
     },
     "register_clone_no_changes": {
       "tool": "register_clone_status",
@@ -3508,7 +3508,7 @@
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Pipeline failed — human intervention needed. Check the worktree and plan for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"implementation pipeline failed\"}"
+      "message": "Pipeline failed. Emit the L3 failure sentinel from the original failed run_skill response and any supplementary diagnostic evidence. Do not replace observed evidence with a fixed example reason."
     }
   }
 }

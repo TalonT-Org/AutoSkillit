@@ -209,11 +209,18 @@ def _validate_step_routing(step_name: str, step: RecipeStep, step_names: set[str
     return errors
 
 
+def _validate_static_step_message(step_name: str, step: RecipeStep) -> list[str]:
+    if step.message is not None and "${{" in step.message:
+        return [f"Step '{step_name}'.message must be static and cannot contain '${{{{'."]
+    return []
+
+
 def _validate_step_schemas(
     recipe: Recipe, step_names: set[str], ingredient_names: set[str]
 ) -> list[str]:
     errors: list[str] = []
     for step_name, step in recipe.steps.items():
+        errors.extend(_validate_static_step_message(step_name, step))
         if step.skip_when_true is not None:
             if not _SKIP_WHEN_TRUE_RE.fullmatch(step.skip_when_true):
                 errors.append(

@@ -606,6 +606,45 @@ class TestK16IngredientDisplayFirstAction:
 
 
 class TestResumeReasonInPrompt:
+    def test_retry_reason_descriptions_are_exhaustive_and_drive_guidance(self) -> None:
+        """Every retry reason has one canonical prompt description."""
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+        from autoskillit.core import RETRY_REASON_DESCRIPTIONS
+        from autoskillit.core.types import RetryReason
+
+        assert set(RETRY_REASON_DESCRIPTIONS) == set(RetryReason)
+
+        for reason, description in RETRY_REASON_DESCRIPTIONS.items():
+            assert description in _resume_reason_guidance(reason.value)
+
+    @pytest.mark.parametrize(
+        "reason",
+        (
+            "outcome_invariant",
+            "context_exhausted",
+            "cancelled",
+            "budget_exhausted",
+            "outcome_report_malformed",
+        ),
+    )
+    def test_terminal_retry_reasons_explicitly_route_to_failure(self, reason: str) -> None:
+        """Terminal reasons must not receive generic resume guidance."""
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+
+        guidance = _resume_reason_guidance(reason).lower()
+
+        assert "on_failure" in guidance
+        assert "do not resume" in guidance
+        assert "never on_context_limit" in guidance
+
+    @pytest.mark.parametrize("raw_reason", ("", "unrecognized-retry-reason"))
+    def test_unknown_retry_reason_retains_safe_fallback(self, raw_reason: str) -> None:
+        from autoskillit.cli.prompts._prompts_campaign import _resume_reason_guidance
+
+        assert _resume_reason_guidance(raw_reason) == (
+            "Retry reason: unknown. Resume with standard recovery."
+        )
+
     def test_idle_stall_resume_includes_reenter_guidance(self) -> None:
         prompt = _build(
             resumable_dispatch_name="impl-1",
@@ -626,7 +665,9 @@ class TestResumeReasonInPrompt:
         end_idx = prompt.index("## INTERRUPT/CLEANUP", idx)
         resumable_section = prompt[idx:end_idx]
         assert "context_exhausted" not in resumable_section
-        assert "Retry reason: unknown" in resumable_section
+        assert "context exhausted" in resumable_section
+        assert "on_failure" in resumable_section
+        assert "do not resume" in resumable_section
 
     def test_api_error_resume_includes_retry_guidance(self) -> None:
         prompt = _build(

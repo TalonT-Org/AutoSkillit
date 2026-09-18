@@ -23,7 +23,7 @@ from ._type_backend import BackendConventions
 from ._type_constants import SKILL_COMMAND_PREFIX
 from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
 from ._type_constants_registries import FLEET_ERROR_CODES
-from ._type_enums import SessionType, SkillSource, WitnessKind
+from ._type_enums import RetryReason, SessionType, SkillSource, WitnessKind
 from ._type_protocols_workspace import SkillResolver
 from ._type_skill_contract import SkillSourceRef
 
@@ -43,7 +43,52 @@ __all__ = [
     "OutcomeComparison",
     "evaluate_outcome_expression",
     "parse_outcome_expression",
+    "RETRY_REASON_DESCRIPTIONS",
+    "TERMINAL_FAILURE_POLICY",
 ]
+
+
+# Trailing clause shared by every terminal-failure retry reason. Centralizes
+# the routing policy that BUDGET_EXHAUSTED, CANCELLED, OUTCOME_INVARIANT,
+# OUTCOME_REPORT_MALFORMED, and CONTEXT_EXHAUSTED all share — none of those
+# reasons is resumable and none should route to on_context_limit. The
+# orchestrator prompt renders the same policy as a bullet; keep both surfaces
+# anchored on this single source so a policy edit only lands once.
+TERMINAL_FAILURE_POLICY: str = "route on_failure, never on_context_limit, and do not resume"
+
+
+def _terminal_retry_description(reason_text: str) -> str:
+    """Render a description for a retry reason that always routes to on_failure."""
+    return f"{reason_text}; {TERMINAL_FAILURE_POLICY}"
+
+
+RETRY_REASON_DESCRIPTIONS: dict[RetryReason, str] = {
+    RetryReason.RESUME: (
+        "transient infrastructure failure; Resume is safe with the recorded recovery context"
+    ),
+    RetryReason.STALE: "start a fresh retry because the prior session is stale",
+    RetryReason.NONE: "no retry reason was supplied",
+    RetryReason.BUDGET_EXHAUSTED: _terminal_retry_description("budget exhausted"),
+    RetryReason.EARLY_STOP: "retry after the early stop using the recorded progress",
+    RetryReason.ZERO_WRITES: "retry because the implementation produced no write evidence",
+    RetryReason.EMPTY_OUTPUT: "retry because the session exited without output",
+    RetryReason.COMPLETED_NO_FLUSH: "retry because completed output was not flushed",
+    RetryReason.DRAIN_RACE: "retry after the output drain race",
+    RetryReason.PATH_CONTAMINATION: "retry from a clean worktree after path contamination",
+    RetryReason.CONTRACT_RECOVERY: "retry using the artifact-contract recovery route",
+    RetryReason.CLONE_CONTAMINATION: "retry from an uncontaminated clone",
+    RetryReason.THINKING_STALL: "retry after the thinking-only stall",
+    RetryReason.IDLE_STALL: "idle timeout; Resume is safe with the existing session",
+    RetryReason.RATE_LIMITED: "wait for the rate-limit window and retry",
+    RetryReason.CANCELLED: _terminal_retry_description("session cancelled"),
+    RetryReason.OUTCOME_INVARIANT: _terminal_retry_description("outcome invariant failed"),
+    RetryReason.OUTCOME_REPORT_MALFORMED: _terminal_retry_description("outcome report malformed"),
+    RetryReason.ASYNC_OBLIGATION: "retry after resolving the outstanding asynchronous obligation",
+    RetryReason.CONTEXT_EXHAUSTED: _terminal_retry_description("context exhausted"),
+}
+
+if set(RETRY_REASON_DESCRIPTIONS) != set(RetryReason):
+    raise AssertionError("RETRY_REASON_DESCRIPTIONS must cover every RetryReason exactly")
 
 _SKILL_CMD_RE = re.compile(
     r"^/(?:autoskillit:)?([\w-]+)"

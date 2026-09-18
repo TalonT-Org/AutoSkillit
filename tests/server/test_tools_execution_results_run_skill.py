@@ -10,7 +10,7 @@ from autoskillit.core.types import ChannelConfirmation, RetryReason
 from autoskillit.server.tools.tools_execution import run_cmd, run_skill
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestRunSkillFailurePaths:
@@ -275,6 +275,72 @@ class TestRunSkillPostSerializationValidation:
         assert data["exit_code"] == 0
         assert "retriable" not in data  # No envelope wrapping
         assert data["subtype"] == "success"
+        assert isinstance(data["receipt_id"], str)
+        assert data["receipt_id"]
+
+    @pytest.mark.anyio
+    async def test_attested_response_preserves_adjudication_evidence(
+        self, tool_ctx_ready_recipe, tmp_path
+    ) -> None:
+        """An attested run_skill failure retains its exact adjudication evidence."""
+        from autoskillit.core import AdjudicationVerdict, SkillResult
+        from tests.fakes import InMemoryHeadlessExecutor
+        from tests.server._pipeline_test_helpers import _write_tracker
+
+        ready = tool_ctx_ready_recipe
+        with_args = ready.with_args
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        _write_tracker(
+            ready.tool_ctx.project_dir,
+            "AB",
+            {ready.step_name: {"status": "pending"}},
+            {},
+            kitchen_id=ready.tool_ctx.kitchen_id,
+        )
+        detail = "invariant violated: exact write evidence was not retained"
+        outcome_fields = {"write_count": 0, "required_writes": 1}
+        verdict = AdjudicationVerdict(
+            reason_kind=RetryReason.OUTCOME_INVARIANT,
+            subtype="outcome_invariant_violation",
+            detail=detail,
+            outcome_fields=outcome_fields,
+            defects=(),
+        )
+        ready.tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=SkillResult(
+                success=False,
+                result=detail,
+                session_id="session-demoted",
+                subtype=verdict.subtype,
+                is_error=True,
+                exit_code=1,
+                needs_retry=False,
+                retry_reason=RetryReason.OUTCOME_INVARIANT,
+                stderr="",
+                outcome_fields=outcome_fields,
+                outcome_invariant_violated=True,
+                adjudication_verdict=verdict,
+            )
+        )
+
+        data = json.loads(
+            await run_skill(
+                with_args["skill_command"],
+                str(work_dir),
+                step_name=with_args["step_name"],
+                output_dir=with_args["output_dir"],
+                recipe_execution_id=ready.credential["execution_id"],
+                invocation_template_digest=ready.template_digest,
+                skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            )
+        )
+
+        assert data["success"] is False
+        assert data["result"] == detail
+        assert data["outcome_fields"] == outcome_fields
+        assert data["outcome_invariant_violated"] is True
+        assert data["adjudication_verdict"] == verdict.to_dict()
         assert isinstance(data["receipt_id"], str)
         assert data["receipt_id"]
 

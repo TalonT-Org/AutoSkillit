@@ -34,6 +34,18 @@ def _resolve_recipe_path(name: str) -> Path:
     return builtin_recipes_dir() / f"{name}.yaml"
 
 
+def test_bundled_recipe_messages_are_static() -> None:
+    """Recipe messages describe evidence to display; they never interpolate it themselves."""
+    interpolated = [
+        f"{recipe_path.name}:{step_name}"
+        for recipe_path in _BUNDLED_ONLY
+        for step_name, step in load_recipe(recipe_path).steps.items()
+        if step.message is not None and "${{" in step.message
+    ]
+
+    assert not interpolated, "Interpolated recipe messages: " + ", ".join(interpolated)
+
+
 def test_optional_context_structured_skill_input_inventory_is_explicit() -> None:
     from autoskillit.recipe._binding import bind_recipe
     from autoskillit.recipe.contracts import get_skill_contract

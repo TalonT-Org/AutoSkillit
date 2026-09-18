@@ -46,6 +46,13 @@ def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = Fa
     lines.append(line)
 
 
+def _maybe_outcome_evidence_lines(data: dict, lines: list[str]) -> None:
+    for name in ("adjudication_verdict", "outcome_fields"):
+        value = data.get(name)
+        if value is not None:
+            lines.append(f"{name}: {value!r}")
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -76,6 +83,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         lines.append(f"worktree_path: {worktree}")
     _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
+    _maybe_outcome_evidence_lines(data, lines)
 
     if pipeline:
         _maybe_tracker_line(data, lines)
@@ -210,6 +218,8 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "audit_attempt_id",
         "provider_used",
         "provider_fallback",
+        "adjudication_verdict",
+        "outcome_fields",
         "pipeline_tracker",
         "recipe_segment",
         "receipt_id",
@@ -242,6 +252,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
         "execution_identity",
+        "outcome_invariant_violated",
+        "outcome_qualifier",
         "stage",
         "retriable",
         "api_error_status",

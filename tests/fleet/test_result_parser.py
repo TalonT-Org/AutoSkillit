@@ -60,6 +60,28 @@ def test_clean_parse_from_stdout() -> None:
     assert result.parse_error is None
 
 
+def test_clean_failure_parse_preserves_optional_grounded_evidence() -> None:
+    """Failure sentinels retain optional evidence without rewriting their reason."""
+    payload = {
+        "success": False,
+        "reason": "invariant violated: exact write evidence was not retained",
+        "summary": "Outcome invariant failed.",
+        "reason_kind": "outcome_invariant",
+        "outcome_fields": {"write_count": 0, "required_writes": 1},
+        "diagnostic_result": "diagnostic evidence remained supplementary",
+    }
+
+    result = parse_l3_result_block(
+        stdout=make_stdout(json.dumps(payload)),
+        expected_dispatch_id=DISPATCH_ID,
+    )
+
+    assert result.outcome == "completed_clean"
+    assert result.payload == payload
+    assert result.payload["reason"] == payload["reason"]
+    assert result.payload["outcome_fields"] == payload["outcome_fields"]
+
+
 def test_last_occurrence_wins() -> None:
     """Parser must use the LAST occurrence of the sentinel block (rfind)."""
 

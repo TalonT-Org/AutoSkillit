@@ -37,6 +37,7 @@ from autoskillit.recipe.contracts._contracts_types import (
     SuccessQualifierEntry,
 )
 from tests.conftest import _make_result
+from tests.execution._adjudication_helpers import assert_demotion_verdict
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -295,6 +296,7 @@ def test_lying_model_real_fix_with_fix_failures_demoted(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == "outcome_invariant_violation"
+    assert_demotion_verdict(result)
 
 
 def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Path) -> None:
@@ -323,7 +325,7 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    ("text", "ledger_present", "expected_detail"),
+    ("text", "ledger_present", "expected_detail", "expected_defects"),
     [
         (
             _processed(
@@ -332,6 +334,7 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
             ),
             True,
             "unobserved commit SHAs",
+            ("applied dispositions cite unobserved commit SHAs: absent",),
         ),
         (
             _processed(
@@ -340,6 +343,7 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
             ),
             False,
             "evidence is unavailable",
+            ("workspace outcome evidence is unavailable for disposition reconciliation",),
         ),
         (
             _processed(
@@ -349,6 +353,7 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
             ),
             True,
             "disagrees with server-derived",
+            (),
         ),
         (
             _processed(
@@ -360,6 +365,7 @@ def test_legitimate_all_skipped_already_green_qualified_not_demoted(tmp_path: Pa
             ),
             True,
             "duplicate finding disposition",
+            ("duplicate finding disposition for 'F-1'",),
         ),
     ],
 )
@@ -368,6 +374,7 @@ def test_malformed_reports_have_a_distinct_failure(
     text: str,
     ledger_present: bool,
     expected_detail: str,
+    expected_defects: tuple[str, ...],
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -379,6 +386,7 @@ def test_malformed_reports_have_a_distinct_failure(
     assert result.subtype == "outcome_report_malformed"
     assert expected_detail in result.result
     assert result.outcome_fields is not None
+    assert_demotion_verdict(result, defects=expected_defects)
 
 
 @pytest.mark.parametrize(
@@ -422,6 +430,7 @@ def test_processed_review_requires_fresh_green_tests(
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == expected_subtype
     assert result.outcome_fields is not None
+    assert_demotion_verdict(result)
 
 
 def test_malformed_workspace_record_timestamps_demote_to_report_malformed(
@@ -444,6 +453,7 @@ def test_malformed_workspace_record_timestamps_demote_to_report_malformed(
     assert result.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
     assert result.subtype == "outcome_report_malformed"
     assert result.outcome_fields is not None
+    assert_demotion_verdict(result)
 
 
 class _CorruptedTimestampLedger:
@@ -572,6 +582,10 @@ def test_unreadable_evidence_is_malformed(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
     assert "evidence is incomplete" in result.result
+    assert_demotion_verdict(
+        result,
+        defects=("workspace outcome evidence is unavailable: evidence is incomplete",),
+    )
 
 
 def test_no_pr_status_clean_exit(tmp_path: Path) -> None:
@@ -591,6 +605,7 @@ def test_missing_review_status_demotes_to_malformed(tmp_path: Path) -> None:
     missing = _adjudicate("verdict = already_green", workspace, None)
 
     assert missing.retry_reason is RetryReason.OUTCOME_REPORT_MALFORMED
+    assert_demotion_verdict(missing)
 
 
 def test_failed_session_anchor_is_preserved_as_path_contamination(tmp_path: Path) -> None:
@@ -650,6 +665,7 @@ def test_red_test_demotes_on_stall_recovery_path(tmp_path: Path) -> None:
 
     assert result.retry_reason is RetryReason.OUTCOME_INVARIANT
     assert result.subtype == "tests_not_green"
+    assert_demotion_verdict(result)
 
 
 def test_parser_reports_duplicate_and_malformed_rows() -> None:

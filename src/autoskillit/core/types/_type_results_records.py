@@ -7,10 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
 
+from ._type_enums import RetryReason
 from ._type_execution_identity import ChildExecutionIdentityDict, ChildOutcomeDict
 from ._type_results_execution import SubagentModelOutcomeDict
 
 __all__ = [
+    "AdjudicationVerdict",
     "CapturedStream",
     "SpilledOutput",
     "SpillSpec",
@@ -42,7 +44,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 12
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 13
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +140,54 @@ class FailureRecord:
             "needs_retry": self.needs_retry,
             "retry_reason": self.retry_reason,
             "stderr": self.stderr,
+        }
+
+
+_ADJUDICATION_VERDICT_SUBTYPES: frozenset[str] = frozenset(
+    {
+        "artifact_adjudication_error",
+        "artifact_contract_violation",
+        "outcome_invariant_violation",
+        "outcome_report_malformed",
+        "test_evidence_missing",
+        "test_evidence_stale",
+        "tests_not_green",
+        "zero_writes",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AdjudicationVerdict:
+    """Structured explanation for a post-session success demotion."""
+
+    reason_kind: RetryReason
+    subtype: str
+    detail: str
+    outcome_fields: Mapping[str, int | str] | None
+    defects: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.subtype:
+            raise ValueError("AdjudicationVerdict.subtype must be a non-empty string")
+        if not self.detail:
+            raise ValueError("AdjudicationVerdict.detail must be a non-empty string")
+        if self.subtype not in _ADJUDICATION_VERDICT_SUBTYPES:
+            raise ValueError(
+                f"AdjudicationVerdict.subtype {self.subtype!r} is not in the "
+                f"canonical subtypes {sorted(_ADJUDICATION_VERDICT_SUBTYPES)}; "
+                "extend the registry if the new failure mode is intentional."
+            )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "reason_kind": self.reason_kind.value,
+            "subtype": self.subtype,
+            "detail": self.detail,
+            "outcome_fields": (
+                dict(self.outcome_fields) if self.outcome_fields is not None else None
+            ),
+            "defects": list(self.defects),
         }
 
 
@@ -378,6 +428,7 @@ class SessionIndexEntry(TypedDict):
     outcome_fields: dict[str, int | str] | None
     outcome_invariant_violated: bool
     outcome_qualifier: str | None
+    adjudication_verdict: dict[str, object] | None
     native_shell_capture: dict[str, object] | None
     session_type: str | None
     subagent_model_outcomes: list[SubagentModelOutcomeDict]

@@ -145,6 +145,8 @@ When `run_skill` returns `needs_retry=true` for **any step**:
 - **If `retry_reason: outcome_report_malformed`** → fall through to `on_failure`. The
   skill's terminal outcome report could not be parsed. Do not route to
   `on_context_limit` or add a label.
+- **If `retry_reason: cancelled`** → fall through to `on_failure`. The session was
+  cancelled. Do not resume. Do not route to `on_context_limit`.
 - **If `retry_reason: stale`** → decrement the `retries` counter for this step.
   Re-execute the same step if retries remain. If retries are exhausted, fall through
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
@@ -158,6 +160,18 @@ useful — the worktree orphan concern that motivates `retries: 0` does not appl
 This is a one-shot retry: if the retry also goes stale, fall through to `on_failure`.
 Before re-executing, if the stale result captured `worktree_path`, remove the empty
 worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
+
+## STOP-STEP EVIDENCE — MANDATORY
+
+<!-- Programmatic mirror: STOP_STEP_EVIDENCE_DOCTRINE_BULLETS in src/autoskillit/core/types/_type_constants.py.
+     Tests in tests/cli/test_sous_chef_content.py, tests/cli/test_orchestrator_prompt_contract.py,
+     and tests/recipe/test_api.py enforce substring parity between this human-readable rendering
+     and the programmatic mirror. -->
+
+Preserve the original failed run_skill response: use its exact result, reason_kind, and
+outcome_fields verbatim; a diagnostic result is supplemental.
+With no structured original reason, do not infer.
+Use static stop message only when no tool evidence exists.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.

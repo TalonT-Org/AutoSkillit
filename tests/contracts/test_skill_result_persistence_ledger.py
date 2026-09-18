@@ -21,6 +21,11 @@ from tests.execution.conftest import _flush
 pytestmark = pytest.mark.medium
 
 SKILL_RESULT_PERSISTENCE: tuple[tuple[str, str, str], ...] = (
+    ("adjudication_verdict.defects", "adjudication_verdict", "index-only"),
+    ("adjudication_verdict.detail", "adjudication_verdict", "index-only"),
+    ("adjudication_verdict.outcome_fields", "adjudication_verdict", "index-only"),
+    ("adjudication_verdict.reason_kind", "adjudication_verdict", "index-only"),
+    ("adjudication_verdict.subtype", "adjudication_verdict", "index-only"),
     (
         "api_failure.api_error_message_seen",
         "api_error_message_seen",
@@ -210,6 +215,13 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
         outcome_fields={"attempt": 1},
         outcome_invariant_violated=True,
         outcome_qualifier="retry",
+        adjudication_verdict={
+            "reason_kind": "outcome_invariant",
+            "subtype": "outcome_invariant_violation",
+            "detail": "distinct adjudication detail",
+            "outcome_fields": {"attempt": 1},
+            "defects": ["distinct defect"],
+        },
     )
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -234,6 +246,13 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
         "outcome_fields": {"attempt": 1},
         "outcome_invariant_violated": True,
         "outcome_qualifier": "retry",
+        "adjudication_verdict": {
+            "reason_kind": "outcome_invariant",
+            "subtype": "outcome_invariant_violation",
+            "detail": "distinct adjudication detail",
+            "outcome_fields": {"attempt": 1},
+            "defects": ["distinct defect"],
+        },
         "api_retry_count": 0,
         "api_retry_exhausted": False,
         "api_retry_last_error": "",

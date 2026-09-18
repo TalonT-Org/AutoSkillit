@@ -336,15 +336,26 @@ steps:
       visualization_plan_path=<context.visualization_plan_path>,
       report_plan_path=<context.report_plan_path>,
       experiment_type=<context.experiment_type>,
-      worktree_path=${{ context.worktree_path }},
-      research_dir=${{ context.research_dir }},
-      research_dir_rel=${{ context.research_dir_rel }}.
+      worktree_path=<exact captured worktree_path>,
+      research_dir=<exact captured research_dir>,
+      research_dir_rel=<exact captured research_dir_rel>.
       Example sentinel:
       {"success": true, "scope_report": "<path>", "scope_directions": "<path>",
       "selected_directions": "<path>", "experiment_plan": "<path>",
       "visualization_plan_path": "<path>", "report_plan_path": "<path>",
       "experiment_type": "benchmark", "worktree_path": "<path>",
       "research_dir": "<path>", "research_dir_rel": "<rel>"}
+    optional_context_refs:
+      - scope_report
+      - scope_directions
+      - selected_directions
+      - experiment_plan
+      - visualization_plan_path
+      - report_plan_path
+      - experiment_type
+      - worktree_path
+      - research_dir
+      - research_dir_rel
 
   escalate_stop:
     action: stop

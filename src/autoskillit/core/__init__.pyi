@@ -710,6 +710,7 @@ from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import RETIRED_SKILL_RESOURCE_IDS as RETIRED_SKILL_RESOURCE_IDS
 from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
+from .types import RETRY_REASON_DESCRIPTIONS as RETRY_REASON_DESCRIPTIONS
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
@@ -743,6 +744,16 @@ from .types import (
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION as STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
 )
 from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
+from .types import (
+    STOP_STEP_EVIDENCE_DOCTRINE as STOP_STEP_EVIDENCE_DOCTRINE,
+)
+from .types import (
+    STOP_STEP_EVIDENCE_DOCTRINE_BULLETS as STOP_STEP_EVIDENCE_DOCTRINE_BULLETS,
+)
+from .types import (
+    STOP_STEP_EVIDENCE_DOCTRINE_INDENTED as STOP_STEP_EVIDENCE_DOCTRINE_INDENTED,
+)
+from .types import TERMINAL_FAILURE_POLICY as TERMINAL_FAILURE_POLICY
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
@@ -752,6 +763,7 @@ from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import AbsentBoundValue as AbsentBoundValue
 from .types import AcceptInputEvent as AcceptInputEvent
 from .types import ActiveContextAdmissionState as ActiveContextAdmissionState
+from .types import AdjudicationVerdict as AdjudicationVerdict
 from .types import AdmissionAttemptId as AdmissionAttemptId
 from .types import AdmissionBatch as AdmissionBatch
 from .types import AdmissionBatchId as AdmissionBatchId

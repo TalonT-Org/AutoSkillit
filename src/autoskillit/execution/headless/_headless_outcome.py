@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Literal
 import regex as re
 
 from autoskillit.core import (
+    AdjudicationVerdict,
     RetryReason,
     SkillProjectionBinding,
     SkillResult,
@@ -200,6 +201,7 @@ class _AdjudicationFailure:
     log_key: str
     subtype: str
     detail: str
+    defects: tuple[str, ...] = ()
 
 
 def _demote_outcome(
@@ -217,6 +219,13 @@ def _demote_outcome(
         retry_reason=failure.retry_reason,
         result=failure.detail,
         outcome_fields=fields,
+        adjudication_verdict=AdjudicationVerdict(
+            reason_kind=failure.retry_reason,
+            subtype=failure.subtype,
+            detail=failure.detail,
+            outcome_fields=fields,
+            defects=failure.defects,
+        ),
     )
 
 
@@ -394,6 +403,7 @@ def apply_finding_disposition_adjudication(
                 log_key=_REPORT_MALFORMED,
                 subtype=_REPORT_MALFORMED,
                 detail=report_defect,
+                defects=tuple(defects),
             ),
         ), fields
     if emitted_fields["review_status"] == "no_pr":
@@ -414,6 +424,7 @@ def apply_finding_disposition_adjudication(
                 log_key=_REPORT_MALFORMED,
                 subtype=_REPORT_MALFORMED,
                 detail=evidence_defect or "workspace outcome evidence is unavailable",
+                defects=(evidence_defect,) if evidence_defect is not None else (),
             ),
         ), fields
     successful_commits = [
@@ -431,6 +442,7 @@ def apply_finding_disposition_adjudication(
                 log_key=_REPORT_MALFORMED,
                 subtype=_REPORT_MALFORMED,
                 detail=commit_defect,
+                defects=(commit_defect,),
             ),
         ), fields
     semantics_failure = _disposition_semantics_failure(dispositions, emitted_fields.get("verdict"))

@@ -13,6 +13,64 @@ from tests.recipe.conftest import _make_workflow
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
+@pytest.mark.parametrize(
+    ("step_name", "step"),
+    (
+        (
+            "confirm_interpolated",
+            {
+                "action": "confirm",
+                "message": "Continue after ${{ context.review_result }}.",
+                "on_success": "done",
+                "on_failure": "done",
+            },
+        ),
+        (
+            "sub_recipe_interpolated",
+            {
+                "sub_recipe": "child",
+                "gate": "enabled",
+                "message": "Show ${{ context.child_result }}.",
+                "on_success": "done",
+            },
+        ),
+    ),
+)
+def test_message_rejects_unresolved_interpolation_before_sub_recipe_bypass(
+    step_name: str, step: dict[str, str]
+) -> None:
+    """Every message is static, including confirm and sub-recipe placeholders."""
+    recipe = _make_workflow(
+        {
+            step_name: step,
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+
+    errors = validate_recipe_structure(recipe)
+
+    assert any(
+        step_name in error and ".message" in error and "${{" in error for error in errors
+    ), errors
+
+
+def test_static_message_remains_valid() -> None:
+    """The interpolation guard must not reject ordinary static instructions."""
+    recipe = _make_workflow(
+        {
+            "confirm": {
+                "action": "confirm",
+                "message": "Continue with the prepared review.",
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+
+    assert validate_recipe_structure(recipe) == []
+
+
 # ---------------------------------------------------------------------------
 # skip_when_false bypass edge tests
 # ---------------------------------------------------------------------------

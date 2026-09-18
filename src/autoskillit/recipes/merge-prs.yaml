@@ -162,8 +162,8 @@ steps:
       '
   confirm_create_integration:
     action: confirm
-    message: The branch '${{ inputs.base_branch }}' does not exist on the remote. Create it now from the repository's default
-      branch? Type yes to create it or no to abort.
+    message: The requested base branch does not exist on the remote. Create it now
+      from the repository's default branch? Type yes to create it or no to abort.
     on_success: create_persistent_integration
     on_failure: escalate_stop
     note: 'User approval gate. On yes: create_persistent_integration creates and pushes the branch. On no: escalate_stop —
@@ -1866,18 +1866,17 @@ steps:
     on_failure: escalate_stop
     on_context_limit: escalate_stop
     on_rate_limit: escalate_stop
-    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline routing.
-
-      '
+    note: __RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR__
   done:
     action: stop
     message: 'PR consolidation complete. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {"success":
       true, "reason": "merge complete"}'
   escalate_stop:
     action: stop
-    message: 'Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/
-      for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {"success": false, "reason":
-      "merge-prs pipeline failed"}'
+    message: >-
+      Pipeline failed. Emit the L3 failure sentinel from the original failed
+      run_skill response and any supplementary diagnostic evidence. Do not replace
+      observed evidence with a fixed example reason.
     note: 'context.task may be null when reached via escalation_required=true from merge_pr (merge-pr does not set conflict_report_path
       on escalation paths). Do not rely on context.task being populated when handling this stop.
 

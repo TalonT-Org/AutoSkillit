@@ -23,6 +23,7 @@ from autoskillit.core.io import write_versioned_json
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
+from tests.execution.test_outcome_invariants import _resolve_review_contract
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -156,6 +157,36 @@ class TestClosureGate:
         assert sr.success is False
         assert sr.is_error is True
         assert sr.subtype == "closure_verification_failed"
+
+    def test_closure_failure_clears_an_earlier_adjudication_verdict(self, tmp_path: Path) -> None:
+        """A final closure failure must not retain superseded demotion evidence."""
+        authority_path, authority_hash = _make_authority(tmp_path)
+        out_root = tmp_path / "out"
+        out_root.mkdir()
+        contract = _resolve_review_contract()
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "accept_count = 2\nfix_failures = 1",
+                "session_id": "combined-adjudication-closure",
+            }
+        )
+
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:audit-impl",
+            skill_contract=contract,
+            closure_spec=_make_closure_spec(authority_path, authority_hash),
+            closure_report_root=out_root,
+            backend=ClaudeCodeBackend(),
+        )
+
+        assert sr.success is False
+        assert sr.subtype == "closure_verification_failed"
+        assert sr.outcome_fields == {"accept_count": 2, "fix_failures": 1}
+        assert sr.adjudication_verdict is None
 
     def test_closure_gate_passes_on_valid_report(self, tmp_path: Path) -> None:
         """Valid report with correct hashes → result unchanged."""

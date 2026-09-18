@@ -38,6 +38,7 @@ from autoskillit.recipe import (
     SuccessQualifierEntry,
 )
 from tests.conftest import _make_result
+from tests.execution._adjudication_helpers import assert_demotion_verdict
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -553,7 +554,13 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
 
-    def test_violated_invariant_demotes_directly(self) -> None:
+    def test_violated_invariant_preserves_counters_in_demotion_verdict(self) -> None:
+        expected_fields = {
+            "verdict": "already_green",
+            "fixes_applied": 0,
+            "accept_count": 3,
+            "fix_failures": 3,
+        }
         sr = _base_skill_result(
             result_text=_e6_result_text(
                 verdict="already_green", accept_count=3, fixes_applied=0, fix_failures=3
@@ -573,6 +580,34 @@ class TestApplyPostSessionAdjudicationUnit:
         assert result.subtype == "outcome_invariant_violation"
         assert result.needs_retry is True
         assert result.retry_reason == RetryReason.OUTCOME_INVARIANT
+        assert_demotion_verdict(result, outcome_fields=expected_fields)
+
+    def test_zero_writes_demotion_carries_parsed_counters_in_verdict(self) -> None:
+        expected_fields = {
+            "verdict": "already_green",
+            "fixes_applied": 0,
+            "accept_count": 3,
+            "fix_failures": 0,
+        }
+        result = _apply_post_session_adjudication(
+            _base_skill_result(
+                result_text=_e6_result_text(
+                    verdict="already_green",
+                    accept_count=3,
+                    fixes_applied=0,
+                    fix_failures=0,
+                )
+            ),
+            WriteEvidence.none_observed(),
+            WriteBehaviorSpec(mode="always"),
+            _resolve_review_contract(),
+            "",
+        )
+
+        assert result.success is False
+        assert result.subtype == "zero_writes"
+        assert result.retry_reason is RetryReason.ZERO_WRITES
+        assert_demotion_verdict(result, outcome_fields=expected_fields)
 
     def test_satisfied_invariant_preserves_success(self) -> None:
         sr = _base_skill_result(
@@ -653,8 +688,10 @@ class TestDeclaredArtifactAdjudication:
 
         assert result.success is False
         assert result.subtype == "artifact_contract_violation"
+        assert result.retry_reason is RetryReason.CONTRACT_RECOVERY
         assert result.outcome_fields is None
         assert artifact_name in result.result
+        assert_demotion_verdict(result, outcome_fields=None)
 
     def test_symlink_escape_is_producer_failure(self, tmp_path) -> None:
         outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
@@ -718,6 +755,7 @@ class TestDeclaredArtifactAdjudication:
 
         assert result.success is False
         assert result.subtype == "artifact_adjudication_error"
+        assert result.retry_reason is RetryReason.RESUME
         assert result.outcome_fields is None
         warning.assert_called_once_with(
             "artifact_adjudication_error",
@@ -725,6 +763,7 @@ class TestDeclaredArtifactAdjudication:
             artifact_name="report.md",
             exc_info=True,
         )
+        assert_demotion_verdict(result, outcome_fields=None)
 
     @pytest.mark.parametrize("error_number", [errno.ENOTDIR, errno.ELOOP])
     def test_invalid_artifact_path_is_producer_failure(

@@ -51,5 +51,7 @@ steps:
     action: stop
     message: >-
       Health reports consolidated. Emit your L3 sentinel JSON block now.
-      The sentinel must include: success=true, health_summary=${{ context.summary }}.
+      The sentinel must include success=true and set health_summary to the exact
+      captured summary value returned by the consolidation step.
       Example sentinel: {"success": true, "health_summary": "Pipeline health check: 3 dispatches analyzed, no issues found."}
+    optional_context_refs: [summary]

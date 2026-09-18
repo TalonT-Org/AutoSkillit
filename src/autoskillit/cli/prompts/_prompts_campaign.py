@@ -9,7 +9,7 @@ from autoskillit.cli.prompts._prompts import (
     _backend_supplement,
     _ingredient_table_display_instruction,
 )
-from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
+from autoskillit.core import RETRY_REASON_DESCRIPTIONS, ROUTING_AUTHORITY_CLAUSE, RetryReason
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -94,26 +94,25 @@ Apply the same failure rules as static dispatches. On any food truck failure:
 """
 
 
-def _resume_reason_guidance(retry_reason: str) -> str:
-    """Return reason-specific resume guidance for the L3 campaign dispatcher."""
-    if retry_reason == RetryReason.IDLE_STALL:
-        return (
-            "Retry reason: idle timeout (session was waiting for an external event). "
-            "Resume is safe — the session likely has partial progress on disk."
-        )
-    if retry_reason == RetryReason.RESUME:
-        return (
-            "Retry reason: transient infrastructure failure (API error or process kill). "
-            "Resume is safe — retry immediately."
-        )
-    if retry_reason == RetryReason.NONE:
-        return (
-            "Retry reason: none — the session ended before any subprocess launched "
-            "(a crash or infrastructure fault at admission/launch time). Standard "
-            "resume does not apply here: there is no partial subprocess run to "
-            "continue. Start a fresh session instead."
-        )
-    return "Retry reason: unknown. Resume with standard recovery."
+def _resume_reason_guidance(retry_reason: str | RetryReason) -> str:
+    """Return reason-specific resume guidance for the L3 campaign dispatcher.
+
+    Accepts either a ``RetryReason`` enum member or the legacy string form so
+    internal callers (who already have the enum) reach the typed branch and
+    external callers passing an opaque string still resolve sensibly — typos
+    hit the fallback instead of silently mismatching.
+    """
+    if isinstance(retry_reason, RetryReason):
+        reason = retry_reason
+    else:
+        try:
+            reason = RetryReason(retry_reason)
+        except ValueError:
+            return "Retry reason: unknown. Resume with standard recovery."
+    description = RETRY_REASON_DESCRIPTIONS.get(reason)
+    if description is None:
+        return "Retry reason: unknown. Resume with standard recovery."
+    return f"Retry reason: {description}."
 
 
 def _build_fleet_campaign_prompt(

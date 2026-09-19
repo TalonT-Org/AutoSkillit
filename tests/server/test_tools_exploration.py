@@ -323,10 +323,10 @@ async def test_sibling_tool_returns_broker_unavailable_when_store_is_none(
 
     result = await _call_sibling_tool(tools_exploration, tool_name)
 
-    assert json.loads(result) == {
-        "status": "error",
-        "code": ExplorationFailureCode.BROKER_UNAVAILABLE.value,
-    }
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == ExplorationFailureCode.BROKER_UNAVAILABLE.value
+    assert "response" in payload and "detail" in payload
 
 
 @pytest.mark.parametrize("tool_name", _SIBLING_TOOL_NAMES)
@@ -349,10 +349,10 @@ async def test_sibling_tool_returns_unexpected_internal_error_for_unnamed_failur
 
     result = await _call_sibling_tool(tools_exploration, tool_name)
 
-    assert json.loads(result) == {
-        "status": "error",
-        "code": ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR.value,
-    }
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR.value
+    assert "response" in payload and "detail" in payload
 
 
 @pytest.mark.parametrize("tool_name", _SIBLING_TOOL_NAMES)
@@ -494,10 +494,10 @@ async def test_second_native_session_cannot_retrieve_first_session_lease(
         _autoskillit_exploration_request_token=token
     )
 
-    assert json.loads(result) == {
-        "status": "error",
-        "code": "exploration_context_unavailable",
-    }
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == "exploration_context_unavailable"
+    assert "response" in payload and "detail" in payload
     lookup.assert_called_once_with("native-session-b")
 
 
@@ -546,10 +546,10 @@ async def test_submit_rejects_invalid_max_results(
         max_results=max_results,
     )
 
-    assert json.loads(result) == {
-        "status": "error",
-        "code": "invalid_exploration_request",
-    }
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == "invalid_exploration_request"
+    assert "response" in payload and "detail" in payload
     assert store.submit_calls == 0
 
 
@@ -597,10 +597,10 @@ async def test_page_rejects_sizes_outside_current_wire_bounds(
 
     result = await tools_exploration.get_exploration_page(page_size=page_size)
 
-    assert json.loads(result) == {
-        "status": "error",
-        "code": "invalid_exploration_request",
-    }
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == "invalid_exploration_request"
+    assert "response" in payload and "detail" in payload
     assert store.calls == []
 
 

@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from autoskillit.core import SessionType
+from autoskillit.core import SessionShape, SessionType
 from autoskillit.exploration import SnapshotCaptureLimits, SnapshotCaptureReason
 from autoskillit.hooks._runtime._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
@@ -31,9 +31,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _skill_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
 
 
@@ -74,9 +73,8 @@ async def test_session_type_ineligible_returns_own_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.ORCHESTRATOR,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.ORCHESTRATOR),
     )
     result = json.loads(await enable_exploration())
     assert result["status"] == "error"
@@ -271,7 +269,7 @@ async def test_bind_failed_returns_own_code(
         tool_ctx,
         exploration_snapshot_service,
         exc=RuntimeError("unclassified bind failure"),
-        expected_code="bind_failed",
+        expected_code="unexpected_internal_error",
     )
 
 

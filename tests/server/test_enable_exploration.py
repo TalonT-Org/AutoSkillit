@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastmcp import Client
 
-from autoskillit.core import SessionType
+from autoskillit.core import SessionShape, SessionType
 from autoskillit.hooks._runtime._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 from autoskillit.server import mcp
@@ -26,9 +26,8 @@ async def test_enable_exploration_rejects_orchestrator(
     from autoskillit.server.tools.tools_exploration import enable_exploration
 
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.ORCHESTRATOR,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.ORCHESTRATOR),
     )
     consumer = MagicMock()
     monkeypatch.setattr(
@@ -47,13 +46,11 @@ async def test_enable_exploration_rejects_fleet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """FLEET sessions cannot establish exploration authority."""
-    from autoskillit.server.tools import tools_exploration
     from autoskillit.server.tools.tools_exploration import enable_exploration
 
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.FLEET,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.FLEET),
     )
     result = json.loads(await enable_exploration())
     assert result["status"] == "error"
@@ -75,12 +72,10 @@ async def test_enable_exploration_succeeds_for_skill_session(
     (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
     bind = MagicMock(wraps=store.bind_session_scoped)
     monkeypatch.setattr(store, "bind_session_scoped", bind)
-    from autoskillit.server.tools import tools_exploration
 
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
 
     async with Client(mcp) as client:
@@ -116,12 +111,10 @@ async def test_enable_exploration_wire_level_surfaces_store_closed(
     store.close()
     tool_ctx.exploration_context_store = store
     (tool_ctx.project_dir / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
-    from autoskillit.server.tools import tools_exploration
 
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
 
     async with Client(mcp) as client:
@@ -144,7 +137,6 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     tool_ctx,
     exploration_snapshot_service: MagicMock,
 ) -> None:
-    from autoskillit.server.tools import tools_exploration
     from autoskillit.server.tools.tools_exploration import enable_exploration
 
     store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
@@ -159,9 +151,8 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_is_ca
     cleanup = MagicMock(wraps=store.cleanup_session)
     monkeypatch.setattr(store, "cleanup_session", cleanup)
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock(side_effect=asyncio.CancelledError())
@@ -187,7 +178,6 @@ async def test_enable_exploration_rejects_missing_invalid_and_unknown_tokens(
     tool_ctx,
     token: str,
 ) -> None:
-    from autoskillit.server.tools import tools_exploration
     from autoskillit.server.tools.tools_exploration import enable_exploration
 
     store = tool_ctx.exploration_context_store
@@ -195,9 +185,8 @@ async def test_enable_exploration_rejects_missing_invalid_and_unknown_tokens(
     bind = MagicMock(wraps=store.bind_session_scoped)
     monkeypatch.setattr(store, "bind_session_scoped", bind)
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
 
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))

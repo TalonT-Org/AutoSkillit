@@ -98,6 +98,7 @@ def test_registry_matches_handler_order_and_requiredness() -> None:
 
 def test_recipe_delivery_tool_classifications_are_exact() -> None:
     expected_automatic = {
+        "bind_plan_set",
         "bootstrap_clone",
         "check_pr_mergeable",
         "check_repo_merge_state",

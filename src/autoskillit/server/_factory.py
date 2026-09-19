@@ -100,6 +100,7 @@ from autoskillit.server._audit_authority_materializer import (
 from autoskillit.server._exploration_service import DefaultExplorationService
 from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
+from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
 from autoskillit.server.recipe._recipe_delivery_helpers import initialize_host_client_attestation
 from autoskillit.server.recipe._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
@@ -123,6 +124,7 @@ def make_recipe_execution(
     allowed_root: Path,
     installation_version: InstallationVersion,
     audit_admission_ledger: AuditAdmissionLedger,
+    kitchen_id: str = "",
 ) -> InstalledRecipeExecution:
     """Build one execution generation from server-owned protocol implementations."""
     return InstalledRecipeExecution(
@@ -135,6 +137,9 @@ def make_recipe_execution(
             ledger=audit_admission_ledger,
             recipe_execution_id=RecipeExecutionId(snapshot.execution_id),
             installation_version=installation_version,
+        ),
+        plan_set_preflight_resolver=DefaultPlanSetPreflightResolver(
+            RecipeExecutionId(snapshot.execution_id), kitchen_id
         ),
     )
 

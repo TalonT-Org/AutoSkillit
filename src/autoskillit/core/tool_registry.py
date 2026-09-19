@@ -628,6 +628,8 @@ _TOOL_DEFS = (
         "bind_plan_set",
         ("plan_parts", "cwd", "issue_url", "parent_authority_path", "seal", "step_name"),
         required=("plan_parts", "cwd"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
     ),
     _tool("reset_test_dir", ("test_dir", "force", "step_name"), required=("test_dir",)),
     _tool("reset_workspace", ("test_dir",), required=("test_dir",)),

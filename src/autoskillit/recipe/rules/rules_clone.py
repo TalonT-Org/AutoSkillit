@@ -70,6 +70,68 @@ def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="plan-set-authority-not-threaded",
+    description="Multipart issue walkthroughs require a sealed bind_plan_set authority.",
+    severity=Severity.ERROR,
+)
+def _check_plan_set_authority(ctx: ValidationContext) -> list[RuleFinding]:
+    if "issue_url" not in ctx.recipe.ingredients and "issue_number" not in ctx.recipe.ingredients:
+        return []
+    producers = [
+        name
+        for name, step in ctx.recipe.steps.items()
+        if (
+            step.tool == "run_skill"
+            and extract_skill_name(step.with_args.get("skill_command", ""))
+            in MULTIPART_SKILL_NAMES
+            and "plan_parts" in step.capture_list
+        )
+    ]
+    walkthroughs = [
+        name
+        for name, step in ctx.recipe.steps.items()
+        if step.tool == "run_skill"
+        and extract_skill_name(step.with_args.get("skill_command", "")) == "dry-walkthrough"
+    ]
+    if not producers or not walkthroughs:
+        return []
+    binds = [
+        step
+        for step in ctx.recipe.steps.values()
+        if step.tool == "bind_plan_set"
+        and "plan_set_authority_path" in step.capture
+        and str(step.with_args.get("seal", "true")).strip("'\"").lower() == "true"
+    ]
+    findings: list[RuleFinding] = []
+    if not binds:
+        findings.append(
+            make_finding(
+                rule_name="plan-set-authority-not-threaded",
+                step_name=producers[0],
+                message="Multipart issue recipes must bind a sealed plan-set authority.",
+            )
+        )
+    for step_name in walkthroughs:
+        invocation = ctx.binding_projection.for_step(step_name)
+        value = invocation.skill_input("plan_set_authority_path") if invocation else None
+        optional = ctx.recipe.steps[step_name].optional_context_refs
+        if (
+            value is not None
+            and value.effective_value == "${{ context.plan_set_authority_path }}"
+            and "plan_set_authority_path" not in optional
+        ):
+            continue
+        findings.append(
+            make_finding(
+                rule_name="plan-set-authority-not-threaded",
+                step_name=step_name,
+                message="dry-walkthrough must thread context.plan_set_authority_path.",
+            )
+        )
+    return findings
+
+
+@semantic_rule(
     name="skill-command-missing-prefix",
     description="run_skill step has a skill_command that does not start with '/'",
     severity=Severity.WARNING,

@@ -173,9 +173,11 @@ delivery_segments:
   steps:
   - rectify
   - salvage_rectify_plan
+  - bind_plan_set
   - review_approach
   - dry_walkthrough
   - retry_walkthrough
+  - renew_plan_set
 - name: R3
   steps:
   - create_impl_worktree
@@ -495,7 +497,7 @@ steps:
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     retries: 0
-    on_success: review_approach
+    on_success: bind_plan_set
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_rectify_plan
@@ -516,7 +518,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == salvaged
-      route: review_approach
+      route: bind_plan_set
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: "Deterministic salvage for rectify context-limit stumbles: verifies captured\
@@ -525,6 +527,24 @@ steps:
       \ Substitute the captured ${{ context.plan_parts }} value into the plan_parts\
       \ argument verbatim, unmodified \u2014 do not reformat, quote, or re-derive\
       \ it; the callable's input grammar absorbs rendering variance."
+  bind_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_parts }}
+      cwd: ${{ context.work_dir }}
+      issue_url: ${{ inputs.issue_url }}
+      seal: 'true'
+      step_name: bind_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: review_approach
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   review_approach:
     tool: run_skill
     model: ''
@@ -557,10 +577,11 @@ steps:
         review_path: ${{ context.review_path }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
         plan_disposition_path: ${{ context.plan_disposition_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
       step_name: dry_walkthrough
-    on_success: create_impl_worktree
+    on_success: renew_plan_set
     on_failure: release_issue_failure
     retries: 3
     on_exhausted: release_issue_failure
@@ -581,11 +602,12 @@ steps:
         review_path: ${{ context.review_path }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
         plan_disposition_path: ${{ context.plan_disposition_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
       step_name: retry_walkthrough
     retries: 0
-    on_success: create_impl_worktree
+    on_success: renew_plan_set
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
@@ -593,6 +615,24 @@ steps:
     - review_path
     - audit_cycle_path
     - plan_disposition_path
+  renew_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_set_parts }}
+      cwd: ${{ context.work_dir }}
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'true'
+      step_name: renew_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: create_impl_worktree
+    - route: release_issue_failure
+    on_failure: release_issue_failure
     note: "Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble\
       \ on the primary dry_walkthrough step. Never routes back to dry_walkthrough\
       \ \u2014 on_failure and on_context_limit both fall through to the original failure\

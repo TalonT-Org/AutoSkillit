@@ -129,7 +129,7 @@ def _audit_preflight_step_names(
             template.invocation.skill_name is not None
             and (contract := resolver(f"/autoskillit:{template.invocation.skill_name}"))
             is not None
-            and getattr(contract, "input_preflight", None) == "audit_cycle_inventory"
+            and "audit_cycle_inventory" in getattr(contract, "input_preflight", ())
         )
     )
     if not names:
@@ -200,6 +200,7 @@ def _prepare_audit_reservation(
         bound_inputs=state._bound_recipe_inputs,
         actual_mcp_kwargs=actual_mcp_kwargs,
         preflight=state._preflight_result,
+        plan_set_preflight=state._plan_set_preflight,
         retry_after_audit_attempt_id=(state.retry_after_audit_attempt_id or None),
     )
     state._bound_input_map = dict(state._bound_recipe_inputs)
@@ -307,6 +308,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
                 state.skill_command,
                 state._bound_recipe_inputs,
                 state._preflight_result,
+                plan_set_preflight=state._plan_set_preflight,
                 audit_reservation_handle=state._reservation_outcome.reservation_handle,
                 audit_reserved_plan_refs=state._audited_plan_refs,
                 audit_output_mode=state._audit_output_mode,
@@ -410,6 +412,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
 
 def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
     state._preflight_result = None
+    state._plan_set_preflight = None
     state._bound_recipe_inputs = ()
     state._invocation_template = None
     state._audit_reservation = None
@@ -532,7 +535,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
         try:
-            state._preflight_result = resolve_attested_input_preflight(
+            resolved_preflights = resolve_attested_input_preflight(
                 state.tool_ctx,
                 state._installed_execution,
                 skill_command=state.skill_command,
@@ -542,6 +545,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 bound_inputs=state._bound_recipe_inputs,
                 allowed_root=state._clone_allowed_root,
             )
+            state._preflight_result = resolved_preflights.audit
+            state._plan_set_preflight = resolved_preflights.plan_set
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
         _runtime_digest = compute_runtime_binding_digest(
@@ -551,6 +556,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             bound_inputs=state._bound_recipe_inputs,
             actual_mcp_kwargs=_actual_mcp_kwargs,
             preflight=state._preflight_result,
+            plan_set_preflight=state._plan_set_preflight,
             retry_after_audit_attempt_id=state.retry_after_audit_attempt_id or None,
         )
         try:
@@ -586,6 +592,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 state.skill_command,
                 state._bound_recipe_inputs,
                 state._preflight_result,
+                plan_set_preflight=state._plan_set_preflight,
                 audit_output_mode=state._audit_output_mode,
             )
     elif state._claims_recipe_execution:

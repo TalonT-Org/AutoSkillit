@@ -20,6 +20,7 @@ from ..audit.closure_hashing import HASH_RE, compute_canonical_hash
 from ._type_audit_admission import InstallationVersion
 from ._type_audit_admission_ledger import AuditAdmissionLedger
 from ._type_audit_cycle_disposition import InventoryAdmissionDecision
+from ._type_plan_set_authority import PlanSetPreflightEvidence, PlanSetVerification
 from ._type_recipe_binding import (
     AbsentBoundValue,
     BoundScalar,
@@ -30,6 +31,9 @@ from ._type_recipe_binding import (
 
 __all__ = [
     "InputPreflightResolver",
+    "PlanSetPreflightRequest",
+    "PlanSetPreflightResolver",
+    "ResolvedInputPreflights",
     "InstalledRecipeExecution",
     "InvocationTemplate",
     "PreflightEvidence",
@@ -290,6 +294,7 @@ def build_recipe_execution_credential(
 
 class PreflightKind(StrEnum):
     AUDIT_CYCLE_INVENTORY = "audit_cycle_inventory"
+    PLAN_SET_COVERAGE = "plan_set_coverage"
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +322,23 @@ class VerifiedInputPreflightResult:
     evidence: tuple[PreflightEvidence, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class PlanSetPreflightRequest:
+    execution_generation: str
+    expected_kitchen_id: str
+    step_name: str
+    skill_name: str
+    plan_path: str
+    plan_set_authority_path: str
+    require_sealed: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedInputPreflights:
+    audit: VerifiedInputPreflightResult | None = None
+    plan_set: PlanSetPreflightEvidence | None = None
+
+
 @runtime_checkable
 class InputPreflightResolver(Protocol):
     def resolve(
@@ -325,6 +347,16 @@ class InputPreflightResolver(Protocol):
         *,
         allowed_root: Path | None = None,
     ) -> VerifiedInputPreflightResult: ...
+
+
+@runtime_checkable
+class PlanSetPreflightResolver(Protocol):
+    def resolve(
+        self,
+        request: PlanSetPreflightRequest,
+        *,
+        allowed_root: Path,
+    ) -> PlanSetVerification: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,6 +368,7 @@ class InstalledRecipeExecution:
     runtime_binding_digests: Mapping[str, str]
     audit_admission_ledger: AuditAdmissionLedger
     input_preflight_resolver: InputPreflightResolver
+    plan_set_preflight_resolver: PlanSetPreflightResolver | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.installation_version, InstallationVersion):
@@ -369,6 +402,7 @@ def _build_runtime_binding_payload(
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
     actual_mcp_kwargs: Mapping[str, BoundScalar],
     preflight: VerifiedInputPreflightResult | None,
+    plan_set_preflight: PlanSetPreflightEvidence | None,
     retry_after_audit_attempt_id: str | None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
@@ -388,6 +422,9 @@ def _build_runtime_binding_payload(
                 "status": preflight.decision.status.value,
             }
         ),
+        "plan_set_preflight": (
+            None if plan_set_preflight is None else plan_set_preflight.to_dict()
+        ),
         "step_name": step_name,
         "template_digest": template_digest,
     }
@@ -404,6 +441,7 @@ def compute_runtime_binding_digest(
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
     actual_mcp_kwargs: Mapping[str, BoundScalar],
     preflight: VerifiedInputPreflightResult | None,
+    plan_set_preflight: PlanSetPreflightEvidence | None = None,
     retry_after_audit_attempt_id: str | None = None,
 ) -> str:
     """Hash actual ordered values independently from the template/payload."""
@@ -414,6 +452,7 @@ def compute_runtime_binding_digest(
         bound_inputs=bound_inputs,
         actual_mcp_kwargs=actual_mcp_kwargs,
         preflight=preflight,
+        plan_set_preflight=plan_set_preflight,
         retry_after_audit_attempt_id=retry_after_audit_attempt_id,
     )
     return compute_canonical_hash(payload, domain=_RUNTIME_BINDING_DOMAIN)
@@ -427,6 +466,7 @@ def compute_audit_slot_intent_digest(
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
     actual_mcp_kwargs: Mapping[str, BoundScalar],
     preflight: VerifiedInputPreflightResult | None,
+    plan_set_preflight: PlanSetPreflightEvidence | None = None,
     retry_after_audit_attempt_id: str | None = None,
 ) -> str:
     """Hash audit-slot intent independently from any retry attempt."""
@@ -442,6 +482,7 @@ def compute_audit_slot_intent_digest(
         bound_inputs=bound_inputs,
         actual_mcp_kwargs=stable_mcp_kwargs,
         preflight=preflight,
+        plan_set_preflight=plan_set_preflight,
         retry_after_audit_attempt_id=None,
     )
     return compute_canonical_hash(payload, domain=_AUDIT_SLOT_INTENT_DOMAIN)

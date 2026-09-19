@@ -165,10 +165,12 @@ delivery_segments:
   - create_and_publish
   - plan
   - salvage_plan
+  - bind_plan_set
 - name: I2
   steps:
   - review_approach
   - verify
+  - renew_plan_set
   - create_impl_worktree
   - implement
   - retry_worktree
@@ -417,6 +419,7 @@ steps:
         task: ${{ inputs.task }}
         issue_url: ${{ inputs.issue_url }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
+        plan_set_coverage_gaps: ${{ context.plan_set_coverage_gaps }}
       cwd: ${{ context.work_dir }}
       step_name: plan
       output_dir: .
@@ -430,12 +433,13 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == plan
-      route: review_approach
+      route: bind_plan_set
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
     optional_context_refs:
     - audit_cycle_path
+    - plan_set_coverage_gaps
     note: Produces an ordinary plan when no audit_cycle_path is present. On NO GO
       re-entry, consumes that exact current authority and emits both plan_path and
       plan_disposition_path. all_plan_paths appends result.plan_path across re-entries;
@@ -459,7 +463,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == salvaged
-      route: review_approach
+      route: bind_plan_set
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: "Deterministic salvage for plan context-limit stumbles: verifies captured\
@@ -468,6 +472,25 @@ steps:
       \ the captured ${{ context.plan_parts }} value into the plan_parts argument\
       \ verbatim, unmodified \u2014 do not reformat, quote, or re-derive it; the callable's\
       \ input grammar absorbs rendering variance."
+  bind_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_parts }}
+      cwd: ${{ context.work_dir }}
+      issue_url: ${{ inputs.issue_url }}
+      seal: 'true'
+      step_name: bind_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: review_approach
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: Aggregate plan-set gate before every walkthrough.
   review_approach:
     tool: run_skill
     model: ''
@@ -503,20 +526,37 @@ steps:
         review_path: ${{ context.review_path }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
         plan_disposition_path: ${{ context.plan_disposition_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-    on_success: create_impl_worktree
+    on_success: renew_plan_set
     on_failure: release_issue_failure
     optional_context_refs:
     - review_path
     - audit_cycle_path
     - plan_disposition_path
-    note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle \u2014 verify\
-      \ \u2192 implement \u2192 test \u2192 merge \u2014 for that part before advancing\
-      \ to the next part. Never run verify for all parts first. If review produced\
-      \ a report, context.review_path is available \u2014 pass it as an additional\
-      \ arg to dry-walkthrough."
+    note: "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify
+      → implement → test → merge — for that part before advancing to the next part."
+  renew_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_set_parts }}
+      cwd: ${{ context.work_dir }}
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'true'
+      step_name: renew_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: create_impl_worktree
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: Renews plan-set bytes after a walkthrough before implementation.
   create_impl_worktree:
     tool: run_cmd
     with:

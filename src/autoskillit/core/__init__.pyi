@@ -1144,6 +1144,8 @@ from .types import PlanSetBindRequest as PlanSetBindRequest
 from .types import PlanSetBindResult as PlanSetBindResult
 from .types import PlanSetMaterializer as PlanSetMaterializer
 from .types import PlanSetPreflightEvidence as PlanSetPreflightEvidence
+from .types import PlanSetPreflightRequest as PlanSetPreflightRequest
+from .types import PlanSetPreflightResolver as PlanSetPreflightResolver
 from .types import PlanSetRejectReason as PlanSetRejectReason
 from .types import PlanSetState as PlanSetState
 from .types import PlanSetVerification as PlanSetVerification
@@ -1236,6 +1238,7 @@ from .types import ReservationRecordedEffect as ReservationRecordedEffect
 from .types import ReservationReleasedEffect as ReservationReleasedEffect
 from .types import ReserveClass as ReserveClass
 from .types import ReserveRequestEvent as ReserveRequestEvent
+from .types import ResolvedInputPreflights as ResolvedInputPreflights
 from .types import ResolvedLaunchContract as ResolvedLaunchContract
 from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import (

@@ -107,7 +107,7 @@ Do not change any code.
   ```
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue
-- The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
+- The plan set must cover every remediation item and every requirement item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan. Each part declares exactly its owned or shared items in `## Issue Requirement Allocation`; never list sibling parts or paths.
 - Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
 ## Context Limit Behavior
@@ -300,4 +300,9 @@ plan_parts = {path_to_part_a}
 
 ## Verification
 {How to verify the architectural changes provide the intended immunity}
+
+## Issue Requirement Allocation
+| Requirement ID | Allocation | Implementation Step |
+|---|---|---|
+| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
 ```

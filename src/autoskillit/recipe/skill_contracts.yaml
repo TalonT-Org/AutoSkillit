@@ -305,9 +305,13 @@ skills:
       type: file_path
       required: false
       absence_value: ""
+    - name: plan_set_authority_path
+      type: file_path
+      required: false
+      absence_value: ""
     outputs: []
     write_behavior: always
-    input_preflight: audit_cycle_inventory
+    input_preflight: [audit_cycle_inventory, plan_set_coverage]
   implement-worktree:
     inputs:
     - name: plan_path
@@ -389,6 +393,10 @@ skills:
       required: false
     - name: audit_cycle_path
       type: file_path
+      required: false
+      absence_value: ""
+    - name: plan_set_coverage_gaps
+      type: string
       required: false
       absence_value: ""
     outputs:

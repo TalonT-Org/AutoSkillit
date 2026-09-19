@@ -248,7 +248,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == plan
-      route: review_approach
+      route: bind_group_parts
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
@@ -288,7 +288,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == salvaged
-      route: review_approach
+      route: bind_group_parts
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: "Deterministic salvage for plan context-limit stumbles: verifies captured\
@@ -297,6 +297,24 @@ steps:
       \ the captured ${{ context.plan_parts }} value into the plan_parts argument\
       \ verbatim, unmodified \u2014 do not reformat, quote, or re-derive it; the callable's\
       \ input grammar absorbs rendering variance.\n"
+  bind_group_parts:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_parts }}
+      cwd: ${{ context.work_dir }}
+      issue_url: ${{ inputs.issue_url }}
+      seal: 'true'
+      step_name: bind_group_parts
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: review_approach
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   review_approach:
     tool: run_skill
     model: ''
@@ -332,6 +350,7 @@ steps:
         review_path: ${{ context.review_path }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
         plan_disposition_path: ${{ context.plan_disposition_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'

@@ -15,9 +15,11 @@ from autoskillit.core import (
     RecipeExecutionId,
     resolve_temp_dir,
 )
+from autoskillit.pipeline import ReadyRecipe
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.lifecycle._guards import _check_dry_walkthrough_plan
 from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
+from autoskillit.server.recipe._recipe_execution import install_recipe_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.server._helpers import _ready_recipe_segment_step
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -156,22 +158,30 @@ async def test_two_kitchens_cannot_consume_each_others_authority(tmp_path: Path)
 
 
 async def test_resumed_execution_consumes_original_authority_without_rebinding(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool_ctx_ready_recipe
 ) -> None:
-    bound, parts, materializer = await _bind(tmp_path)
+    ready = tool_ctx_ready_recipe
+    state = ready.tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    original_execution = state.installed_execution
+    original_id = original_execution.snapshot.execution_id
+    kitchen = ready.tool_ctx.kitchen_id
+    bound, parts, _ = await _bind(tmp_path, kitchen=kitchen, generation=original_id)
 
     async def unexpected_bind(_request: object) -> None:
         raise AssertionError("resume must not re-bind an existing authority")
 
-    monkeypatch.setattr(materializer, "bind", unexpected_bind)
-    original_id = RecipeExecutionId("generation")
-    resumed_id = RecipeExecutionId("generation")
-    assert original_id == resumed_id
-    resumed = DefaultPlanSetPreflightResolver(resumed_id, "kitchen")
-    admitted = resumed.resolve(
+    monkeypatch.setattr(ready.tool_ctx.plan_set_materializer, "bind", unexpected_bind)
+    install_recipe_execution(ready.tool_ctx, prepared_execution=original_execution)
+    resumed_state = ready.tool_ctx.recipe_initialization_state
+    assert isinstance(resumed_state, ReadyRecipe)
+    resumed_execution = resumed_state.installed_execution
+    assert resumed_execution.snapshot.execution_id == original_id
+    assert resumed_execution.plan_set_preflight_resolver is not None
+    admitted = resumed_execution.plan_set_preflight_resolver.resolve(
         PlanSetPreflightRequest(
-            execution_generation=resumed_id.value,
-            expected_kitchen_id="kitchen",
+            execution_generation=original_id,
+            expected_kitchen_id=kitchen,
             step_name="implement",
             skill_name="implement-worktree-no-merge",
             plan_path=str(parts[0]),

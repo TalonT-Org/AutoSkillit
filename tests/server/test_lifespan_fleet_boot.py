@@ -311,7 +311,7 @@ class TestFleetAutoGateBootProjectDir:
                 return_value=MagicMock(),
             ),
             patch.object(
-                _tracker_authority,
+                _session_boots,
                 "register_active_kitchen",
                 return_value=False,
             ),

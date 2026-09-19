@@ -168,11 +168,9 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         try:
             _retain_kitchen_tracker_authority(ctx)
             identity = _register_active_kitchen(ctx)
-            from autoskillit.server.recipe._recipe_generation import (
-                activate_kitchen,
-            )  # circular-break
+            from autoskillit.server.recipe import _recipe_generation  # circular-break
 
-            activate_kitchen(identity.kitchen_id)
+            _recipe_generation.activate_kitchen(identity.kitchen_id)
         except Exception as exc:
             transition_degraded(ctx, "registry_update", exc)
             logger.warning("open_kitchen_registry_failed", exc_info=True)

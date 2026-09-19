@@ -2,9 +2,7 @@
 """PreToolUse hook: blocks direct pytest invocations in headless skill sessions.
 
 Agents must use the configured `test_check.command` instead of invoking pytest
-directly. This repository configures `task test-local-gate`; projects without
-an override use the generic/default `task test-check`. Direct invocations cause
-test-retry loops that waste tokens.
+directly. Direct invocations cause test-retry loops that waste tokens.
 
 stdlib-only; no autoskillit imports.
 """
@@ -167,13 +165,11 @@ def main() -> None:
     if _is_direct_pytest(cmd):
         reason = (
             f"{TEST_RUNNER_DENY_TRIGGER}. "
-            "Use the configured `test_check.command` to run tests.\n"
-            "This repository uses `task test-local-gate`; projects without an override "
-            "use the generic/default `task test-check`.\n"
+            "Use the configured `test_check.command` instead of invoking pytest.\n"
             "The configured gate handles environment setup, path filtering, "
             "and provides unambiguous PASS/FAIL output.\n"
-            "If you need to run a specific test subset, use: "
-            "AUTOSKILLIT_TEST_FILTER=none task test-check"
+            "If you need to run a specific test subset, set AUTOSKILLIT_TEST_FILTER=none "
+            "on the configured command."
         )
         payload = json.dumps(
             {

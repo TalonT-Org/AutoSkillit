@@ -97,6 +97,19 @@ def _write_skill_binding(
     return new_entry, binding_error, binding_written
 
 
+def _invocation_skill(data: dict[str, object]) -> tuple[str, object] | None:
+    """Return the invocation event and unnormalized skill name for supported shapes."""
+    event_name = data.get("hook_event_name")
+    if event_name == "PostToolUse" and data.get("tool_name") == "Skill":
+        tool_input = data.get("tool_input", {})
+        return (
+            ("PostToolUse", tool_input.get("skill", "")) if isinstance(tool_input, dict) else None
+        )
+    if event_name == "UserPromptExpansion" and data.get("expansion_type") == "slash_command":
+        return "UserPromptExpansion", data.get("command_name", "")
+    return None
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -121,19 +134,10 @@ def main() -> None:
         sys.exit(0)
 
     session_id: str = data.get("session_id", "")
-    event_name = data.get("hook_event_name")
-    if event_name == "PostToolUse" and data.get("tool_name") == "Skill":
-        tool_input_value = data.get("tool_input", {})
-        tool_input: dict[str, object] = (
-            tool_input_value if isinstance(tool_input_value, dict) else {}
-        )
-        skill_name_value = tool_input.get("skill", "")
-    elif event_name == "UserPromptExpansion" and data.get("expansion_type") == "slash_command":
-        skill_name_value = data.get("command_name", "")
-    else:
+    invocation = _invocation_skill(data)
+    if invocation is None or not session_id:
         sys.exit(0)
-    if not session_id:
-        sys.exit(0)
+    event_name, skill_name_value = invocation
     skill_name: str = (
         normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
     )

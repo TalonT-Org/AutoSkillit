@@ -47,6 +47,7 @@ class TestCoreSubpackages:
             "_type_dispatch_identity",
             "_type_enums",
             "_type_enums_context_admission",
+            "_type_enums_token",
             "_type_execution_identity",
             "_type_exploration",
             "_type_exceptions",

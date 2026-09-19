@@ -1560,9 +1560,9 @@ class TestCodexPipelineHappyPath:
         assert session.token_usage is not None
         assert "input_tokens" in session.token_usage
         assert "output_tokens" in session.token_usage
-        assert session.token_usage["input_tokens"] == 200
-        assert session.token_usage["output_tokens"] == 90
-        assert session.token_usage["cache_read_tokens"] == 40
+        assert session.token_usage["input_tokens"] == {"state": "measured", "value": 200}
+        assert session.token_usage["output_tokens"] == {"state": "measured", "value": 90}
+        assert session.token_usage["cache_read_tokens"] == {"state": "measured", "value": 40}
 
     def test_parse_stdout_populates_assistant_messages(self):
         content = fixture_path(HAPPY_PATH_V0136).read_text()

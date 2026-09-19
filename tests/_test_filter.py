@@ -343,6 +343,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_enums_context_admission": frozenset(
         {"cli", "core", "execution", "pipeline", "recipe", "server", "smoke_utils"}
     ),
+    "_type_enums_token": frozenset(
+        {"cli", "core", "execution", "pipeline", "recipe", "server", "smoke_utils"}
+    ),
     "_type_constants_retirements": frozenset(
         {"cli", "core", "execution", "fleet", "hooks", "recipe", "server", "skills", "workspace"}
     ),
@@ -528,7 +531,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_shape": frozenset({"core", "cli", "fleet", "pipeline", "server"}),
     "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
-    "_type_token": frozenset({"core", "execution"}),
+    "_type_token": frozenset({"core", "execution", "pipeline"}),
     "_type_constants_env": frozenset(
         {
             "cli",

@@ -340,10 +340,11 @@ class TestCodexResultParserStdout:
         parser = CodexResultParser()
         result = parser.parse_stdout(ndjson)
         canonical = result.raw["canonical_token_usage"]
-        assert canonical["input_tokens"] == 100
-        assert canonical["output_tokens"] == 50
-        assert canonical["cache_read_tokens"] == 25
-        assert canonical["provider"] == "codex"
+        assert canonical["input_tokens"] == {"state": "measured", "value": 100}
+        assert canonical["output_tokens"] == {"state": "measured", "value": 50}
+        assert canonical["cache_read_tokens"] == {"state": "measured", "value": 25}
+        assert canonical["backend"] == "codex"
+        assert canonical["provider_used"] == "codex"
 
     def test_parse_stdout_session_id_from_thread_started(self) -> None:
         ndjson = _thread_started_line("my-session-id")
@@ -482,8 +483,8 @@ class TestCodexResultParserCumulativeTokens:
         ndjson = _turn_completed_line({"input_tokens": 150, "output_tokens": 60})
         result = CodexResultParser().parse_stdout(ndjson)
         canonical = result.raw["canonical_token_usage"]
-        assert canonical["input_tokens"] == 150
-        assert canonical["output_tokens"] == 60
+        assert canonical["input_tokens"] == {"state": "measured", "value": 150}
+        assert canonical["output_tokens"] == {"state": "measured", "value": 60}
 
     def test_three_turns_last_wins_not_cumulative_sum(self) -> None:
         """Scenario 2: three turns (100/40, 220/90, 350/140) — last turn wins,
@@ -497,11 +498,11 @@ class TestCodexResultParserCumulativeTokens:
         )
         result = CodexResultParser().parse_stdout(ndjson)
         canonical = result.raw["canonical_token_usage"]
-        assert canonical["input_tokens"] == 350
-        assert canonical["output_tokens"] == 140
+        assert canonical["input_tokens"] == {"state": "measured", "value": 350}
+        assert canonical["output_tokens"] == {"state": "measured", "value": 140}
 
-    def test_cache_read_mapped_and_cache_write_none(self) -> None:
-        """Scenario 3: cached_input_tokens → cache_read_tokens; cache_write_tokens is None."""
+    def test_cache_read_mapped_and_cache_write_unavailable(self) -> None:
+        """Scenario 3: Codex has no cache-write accounting surface."""
         ndjson = _turn_completed_line(
             {
                 "input_tokens": 100,
@@ -511,8 +512,8 @@ class TestCodexResultParserCumulativeTokens:
         )
         result = CodexResultParser().parse_stdout(ndjson)
         canonical = result.raw["canonical_token_usage"]
-        assert canonical["cache_read_tokens"] == 30
-        assert canonical["cache_write_tokens"] == 0
+        assert canonical["cache_read_tokens"] == {"state": "measured", "value": 30}
+        assert canonical["cache_write_tokens"] == {"state": "unavailable", "value": None}
 
     def test_no_turn_completed_yields_none_canonical(self) -> None:
         """Scenario 4: no turn.completed event — canonical_token_usage is None."""

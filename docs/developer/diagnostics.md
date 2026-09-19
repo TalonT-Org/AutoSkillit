@@ -136,6 +136,10 @@ Schema-v11 rows add `child_outcomes` (see [Child Terminal
 Reasons](#child-terminal-reasons)); older rows are retained without that
 field, same as v9's `subagent_model_outcomes`.
 
+`source_currency()` compares the deployed generation's `direct_url.json` provenance
+with checkout `HEAD`. `kitchen_status` reports the result, and `cook` warns when the
+deployed generation is stale or diverged while continuing the interactive launch.
+
 | Field | Meaning | Source |
 | --- | --- | --- |
 | `model_identifier` | Effective model (OTLP-proven native top-level when available, otherwise launch/token fallback). | `sessions.jsonl`, `token_usage.json`, `summary.json.versions.model_identifier` (when a versions bundle exists) |

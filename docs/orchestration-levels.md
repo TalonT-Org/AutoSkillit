@@ -115,17 +115,16 @@ L3 (interactive fleet)
 | L2 (orchestrator) | `ORCHESTRATOR` | `"order"` | `autoskillit order` | Food truck |
 | L3 (fleet) | `FLEET` | `"fleet"` | `autoskillit fleet` | None — no L4 exists |
 
-> **Note:** `SessionType` enum values (`SKILL`, `ORCHESTRATOR`, `FLEET`) apply to headless
-> sessions only and are read from the `AUTOSKILLIT_SESSION_TYPE` environment variable.
-> Interactive sessions carry CLI display labels (`"cook"`, `"order"`, `"fleet"`) that are
-> not `SessionType` enum members and bypass tier enforcement via the
-> `AUTOSKILLIT_HEADLESS` short-circuit in tier guards.
+> **Session shape:** every AutoSkillit process has a `SessionType` tier and a separate
+> `AUTOSKILLIT_HEADLESS` flag. `session_shape()` reads them as one value. Interactive
+> `cook` sessions are therefore `interactive/skill`; `order` and fleet launchers set
+> `orchestrator` and `fleet` respectively. Tools declare a `SessionScope` and refuse an
+> unadmitted shape; hook scripts exit through their scope prologue outside that scope.
 
 ## Key Rules
 
-- **`run_skill` is exact-L2.** Headless L1 and L3 sessions are denied. The boundary is
-  enforced by visibility, `skill_orchestration_guard.py`, and the
-  `_require_orchestrator_exact()` runtime guard in `tools_execution/`.
+- **`run_skill` is exact-L2 when headless.** Interactive skill sessions remain admitted;
+  the `@session_scoped` declaration is the runtime enforcement point.
 - **`run_cmd` and `run_python` remain L2-or-higher.** L2 and L3 may call them; headless
   L1 may not. Interactive sessions retain the existing headless-guard bypass.
 - **L0 agents cannot launch anything.** They are terminal nodes — they cannot

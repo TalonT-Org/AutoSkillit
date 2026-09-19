@@ -71,6 +71,14 @@ Blocks orchestration tools from skill-tier sessions. Enforces the tier
 invariant: orchestrator and fleet sessions may call orchestration tools;
 skill workers use native Claude Code tools only.
 
+## Session scope
+
+Each `HookDef` declares a session scope. The affected script repeats that literal as
+its first `enforce_session_scope(...)` call, which exits successfully when the current
+shape is outside scope. `hook_session_shape()` preserves unknown tiers for the guard's
+explicit fail-closed policy. `skill_load_post_hook.py` writes the same binding for both
+`PostToolUse`/`Skill` and user-typed `UserPromptExpansion` slash commands.
+
 ### `unsafe_install_guard.py`
 **Guarded tool:** `run_cmd`
 Denies `run_cmd` calls that perform editable installs without `--python

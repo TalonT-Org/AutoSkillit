@@ -38,7 +38,11 @@ def primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
         if isinstance(value, dict):
             try:
                 measured = TokenMeasure.from_dict(value).value
-            except ValueError:
+            except ValueError as exc:
+                logger.debug(
+                    "primary_model_identifier_malformed_measure",
+                    extra={"model": model, "error": str(exc)},
+                )
                 return -1
             return measured if measured is not None else -1
         observed = valid_token_count(value)
@@ -90,14 +94,29 @@ def write_turn_usage_sidecar(path: Path, rows: list[TurnTokenEntry]) -> bool:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             fd = -1
             for row in rows:
-                output.write(fast_dumps(serialize_turn_token_entry(row), sort_keys=True) + "\n")
+                try:
+                    payload = fast_dumps(serialize_turn_token_entry(row), sort_keys=True)
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning(
+                        "turn_usage_sidecar_row_serialize_failed",
+                        path=str(path),
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
+                    return False
+                output.write(payload + "\n")
             output.flush()
             os.fsync(output.fileno())
         os.replace(temp_path, path)
         fsync_directory(path.parent)
         return True
-    except (KeyError, OSError, TypeError, ValueError):
-        logger.debug("turn_usage_sidecar_write_failed", path=str(path), exc_info=True)
+    except OSError as exc:
+        logger.warning(
+            "turn_usage_sidecar_write_failed",
+            path=str(path),
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return False
     finally:
         if fd >= 0:

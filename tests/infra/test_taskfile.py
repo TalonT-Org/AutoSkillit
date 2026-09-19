@@ -181,7 +181,6 @@ class TestTaskfile:
         wrapper_sequence = (
             r"task test-all\n"
             r"\s*LOCAL_GATE_EXIT=\$\?\n"
-            r"\s*set \+o pipefail\n"
             r"\s*set -e\n"
             r"\s*if \[ \"\$LOCAL_GATE_EXIT\" -ne 0 \]; then\n"
             r"(?:\s*echo \"\"\n)?"

@@ -127,7 +127,7 @@ def project_token_observations(
                             "count": len(observations),
                         },
                     )
-                    return None
+                    return tuple(observations)
                 observations.append(
                     (
                         session_id,

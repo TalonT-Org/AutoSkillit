@@ -366,8 +366,8 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": 66,
             }
         )
-        assert result["input_tokens"] == {"state": "measured_zero", "value": 0}
-        assert result["cache_write_tokens"] == {"state": "measured_zero", "value": 0}
+        assert result["input_tokens"] == observed_measure(0)
+        assert result["cache_write_tokens"] == observed_measure(0)
 
     def test_existing_full_mapping_unchanged(self) -> None:
         raw = {

@@ -11,12 +11,12 @@ from types import TracebackType
 from typing import Any
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     DispatchIdentity,
     SerializedTokenMeasure,
     TokenMeasure,
     get_logger,
     read_versioned_json,
+    resolve_provider_used,
     write_versioned_json,
 )
 from autoskillit.fleet.campaign_state._state_lock import CampaignStateMutatorOwnership
@@ -757,7 +757,7 @@ def normalize_dispatch_token_usage(
     backend = backend or str(raw.get("backend") or "unknown")
     provider_used = provider_used or str(raw.get("provider_used") or "")
     if not provider_used:
-        provider_used = {AGENT_BACKEND_CLAUDE_CODE: "anthropic"}.get(backend, backend)
+        provider_used = resolve_provider_used(backend, anthropic_provider_capable=True)
 
     def measure(*keys: str) -> SerializedTokenMeasure:
         for key in keys:

@@ -17,6 +17,7 @@ from autoskillit.core import (
     fast_dumps,
     fsync_directory,
     get_logger,
+    resolve_provider_used,
 )
 
 logger = get_logger(__name__)
@@ -286,7 +287,7 @@ def build_turn_token_entry(
     if not backend:
         raise ValueError("Turn token usage requires a non-empty backend")
     if provider_used is None:
-        provider_used = {AGENT_BACKEND_CLAUDE_CODE: "anthropic"}.get(backend, backend)
+        provider_used = resolve_provider_used(backend, anthropic_provider_capable=True)
     if not provider_used:
         raise ValueError("Turn token usage requires a non-empty provider_used")
     context_window_tokens = valid_context_window(context_window_tokens)

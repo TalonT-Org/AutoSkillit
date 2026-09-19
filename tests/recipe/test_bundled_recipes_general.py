@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
-from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity
+from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity, extract_skill_name
 from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
@@ -81,6 +81,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         ("generate-report", "methodology_traditions"),
         ("generate-report", "tier_c_lens"),
         ("make-plan", "audit_cycle_path"),
+        ("make-plan", "plan_set_coverage_gaps"),
         ("open-integration-pr", "audit_verdict"),
         ("open-integration-pr", "conflict_report_paths"),
         ("open-integration-pr", "domain_partitions_path"),
@@ -125,8 +126,19 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
                 else:
                     occurrences.append(occurrence)
 
-    actual_pairs = {(skill, input_name) for _, _, skill, input_name in occurrences}
-    assert len(occurrences) == 105
+    standalone_optional = (
+        "merge-prs",
+        "implement",
+        "implement-worktree-no-merge",
+        "plan_set_authority_path",
+    )
+    assert standalone_optional in occurrences
+    actual_pairs = {
+        (skill, input_name)
+        for recipe, step, skill, input_name in occurrences
+        if (recipe, step, skill, input_name) != standalone_optional
+    }
+    assert len(occurrences) == 109
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:
@@ -134,6 +146,24 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         assert contract is not None
         input_def = next(item for item in contract.inputs if item.name == input_name)
         assert input_def.has_absence_value
+
+
+@pytest.mark.parametrize("recipe_name", ("implementation", "remediation", "implementation-groups"))
+def test_issue_recipe_implementers_require_plan_set_authority(recipe_name: str) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    protected = {"implement-worktree", "implement-worktree-no-merge", "retry-worktree"}
+    found = 0
+    for step in recipe.steps.values():
+        if step.tool != "run_skill":
+            continue
+        if extract_skill_name(step.with_args.get("skill_command", "")) not in protected:
+            continue
+        found += 1
+        assert step.with_args["skill_inputs"]["plan_set_authority_path"] == (
+            "${{ context.plan_set_authority_path }}"
+        )
+        assert "plan_set_authority_path" not in step.optional_context_refs
+    assert found
 
 
 def test_required_optional_context_routes_are_gated_or_guaranteed() -> None:

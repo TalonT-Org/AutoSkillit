@@ -24,7 +24,7 @@ def _read_make_plan() -> str:
 
 
 _NO_DESCOPE_PATTERN = re.compile(
-    r"plan\s+must\s+cover\s+every\s+(remediation|requirement)\s+item",
+    r"plan(\s+set)?\s+must\s+cover\s+every\s+(remediation|requirement)\s+item",
     re.IGNORECASE,
 )
 

@@ -305,14 +305,22 @@ skills:
       type: file_path
       required: false
       absence_value: ""
+    - name: plan_set_authority_path
+      type: file_path
+      required: false
+      absence_value: ""
     outputs: []
     write_behavior: always
-    input_preflight: audit_cycle_inventory
+    input_preflight: [audit_cycle_inventory, plan_set_coverage]
   implement-worktree:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+    - name: plan_set_authority_path
+      type: file_path
+      required: false
+      absence_value: ""
     outputs:
     - name: worktree_path
       type: directory_path
@@ -326,11 +334,16 @@ skills:
     write_behavior: always
     completion_required: true
     scope_discipline: true
+    input_preflight: [plan_set_coverage]
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
       type: file_path
       required: true
+    - name: plan_set_authority_path
+      type: file_path
+      required: false
+      absence_value: ""
     outputs:
     - name: worktree_path
       type: directory_path
@@ -346,6 +359,7 @@ skills:
     write_behavior: always
     completion_required: true
     scope_discipline: true
+    input_preflight: [plan_set_coverage]
   investigate:
     inputs:
     - name: topic
@@ -389,6 +403,10 @@ skills:
       required: false
     - name: audit_cycle_path
       type: file_path
+      required: false
+      absence_value: ""
+    - name: plan_set_coverage_gaps
+      type: string
       required: false
       absence_value: ""
     outputs:
@@ -471,6 +489,10 @@ skills:
     - name: plan_path
       type: file_path
       required: true
+    - name: plan_set_authority_path
+      type: file_path
+      required: false
+      absence_value: ""
     - name: worktree_path
       type: directory_path
       required: true
@@ -495,6 +517,7 @@ skills:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"
     completion_required: true
     scope_discipline: true
+    input_preflight: [plan_set_coverage]
   review-approach:
     inputs:
     - name: plan_path

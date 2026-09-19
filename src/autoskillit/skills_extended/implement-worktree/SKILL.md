@@ -62,6 +62,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Re-run tests just to see failures — grep the saved output file instead
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Open plan-set authority artifacts directly or reinterpret the verified plan-set preflight result
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -204,6 +205,10 @@ This checklist exists because these categories produce avoidable test-fix cycles
 missed registration generates 5–30 cascading test failures that require a second commit to fix.
 
 ### Step 5: Final Verification
+
+**Plan-set completeness check:** When `verified_plan_set_preflight` is present, use only
+its `assigned_requirements`. Before handoff, cite a delivered change for every assigned
+requirement; do not consult the issue or sibling plans.
 
 The `test_check` MCP tool owns configured test-command resolution and execution.
 

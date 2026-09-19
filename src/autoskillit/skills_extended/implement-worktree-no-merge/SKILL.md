@@ -68,6 +68,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - **Execute `git merge` commands** (including `--no-ff`, `--no-commit`, or any variant). All branch content must be applied via `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Open plan-set authority artifacts directly or reinterpret the verified plan-set preflight result
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -214,6 +215,11 @@ For each phase, begin implementation immediately (no announcement):
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
 ### Step 5: Run Pre-commit Checks
+
+**Plan-set completeness check:** When `verified_plan_set_preflight` is present, use only
+its `assigned_requirements`. Before handoff, cite a delivered change for every assigned
+requirement; do not consult the issue or sibling plans. This applies outside the conditional
+PR-inventory check in Step 5.5.
 
 ```bash
 cd "${WORKTREE_PATH}" && pre-commit run --all-files

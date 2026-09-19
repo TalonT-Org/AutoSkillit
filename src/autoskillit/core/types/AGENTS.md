@@ -28,7 +28,7 @@ Each direct Python file has one responsibility:
 - `_type_audit_artifact_ref.py` — Immutable audit artifact reference value object.
 - `_type_audit_cycle_authority.py` — Immutable audit-cycle authority value objects.
 - `_type_audit_cycle_disposition.py` — Immutable audit-cycle plan-disposition value objects.
-- `_type_audit_protocols.py` — Narrow IL-0 service protocols for server-owned audit publication.
+- `_type_plan_set_authority.py` — Immutable plan-set authority value objects and binding requests/results.
 
 ### Context admission contracts
 
@@ -58,7 +58,7 @@ Each direct Python file has one responsibility:
 - `_type_protocols_backend.py` — Backend abstraction protocol definitions.
 - `_type_protocols_execution.py` — Execution-layer protocol definitions.
 - `_type_protocols_github.py` — GitHub integration protocol definitions.
-- `_type_protocols_infra.py` — Infrastructure and pipeline-control protocol definitions.
+- `_type_protocols_infra.py` — Infrastructure, pipeline-control, and server-owned audit/plan-set publication protocols.
 - `_type_protocols_logging.py` — Logging and observer protocol definitions.
 - `_type_protocols_recipe.py` — Recipe and data access protocol definitions.
 - `_type_protocols_workspace.py` — Workspace and skill management protocol definitions.

@@ -63,6 +63,7 @@ class TestToolRegistration:
             "run_fixed_batch",
             "read_fixed_batch_result",
             "test_check",
+            "bind_plan_set",
             "reset_test_dir",
             "classify_fix",
             "commit_files",

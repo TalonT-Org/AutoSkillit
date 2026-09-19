@@ -123,6 +123,30 @@ class TestCheckMetadataStable:
 
 
 class TestReadStableContainedBytes:
+    def test_short_descriptor_read_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_bytes(b"stable")
+        real_fdopen = os.fdopen
+
+        class ShortReader:
+            def __init__(self, fd: int) -> None:
+                self.handle = real_fdopen(fd, "rb", closefd=False)
+
+            def __enter__(self) -> ShortReader:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                self.handle.close()
+
+            def read(self, _limit: int) -> bytes:
+                return self.handle.read(2)
+
+        monkeypatch.setattr(path_containment.os, "fdopen", lambda fd, *_a, **_k: ShortReader(fd))
+        with pytest.raises(ContainmentError, match="TOCTOU"):
+            read_stable_contained_bytes(artifact, tmp_path)
+
     def test_rejects_intermediate_symlink_swap(
         self,
         tmp_path: Path,

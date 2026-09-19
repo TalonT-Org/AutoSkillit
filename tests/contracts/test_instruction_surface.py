@@ -262,6 +262,17 @@ class TestMultiPartScopeContract:
             "implement-worktree-no-merge SKILL.md must contain a SCOPE FENCE instruction"
         )
 
+    @pytest.mark.parametrize(
+        "skill_name",
+        ("implement-worktree", "implement-worktree-no-merge", "retry-worktree"),
+    )
+    def test_implementers_do_not_open_plan_set_authority(self, skill_name: str) -> None:
+        text = self._skill_text(skill_name)
+        assert (
+            "Open plan-set authority artifacts directly or reinterpret the verified "
+            "plan-set preflight result"
+        ) in text
+
 
 class TestOrchestratorPromptDelegation:
     """Orchestrator prompt must delegate recipe display to load_recipe."""

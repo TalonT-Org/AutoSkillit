@@ -361,10 +361,10 @@ class TestTerminationAndDedup:
         assert len(review_findings) == 1
 
 
-def test_bundled_remediation_recipe_produces_no_finding() -> None:
+def test_bundled_remediation_summary_only_flags_retry_cycle() -> None:
     recipe = load_recipe(_REMEDIATION_PATH)
     findings = _skill_findings(recipe)
-    assert findings == [], (
-        f"Corrected remediation.yaml must produce no summary-graph-divergence finding. "
-        f"Got: {[(f.step_name, f.message) for f in findings]}"
-    )
+    # The retry uses the same dry-walkthrough skill after an earlier review phase.
+    assert [(f.step_name, f.rule) for f in findings] == [
+        ("retry_walkthrough", "summary-graph-divergence")
+    ]

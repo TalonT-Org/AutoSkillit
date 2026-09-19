@@ -68,6 +68,7 @@ if TYPE_CHECKING:
         ManagedHeadlessSessionLineageStore,
         ModelPinResolution,
         NativeShellCaptureDecision,
+        PlanSetPreflightEvidence,
         ProviderBinding,
         RecipeExecutionId,
         ResolvedLaunchContract,
@@ -175,6 +176,7 @@ class _RunSkillDispatchState:
     projection_context: SkillProjectionContext | None = None
     target_name: str | None = None
     _preflight_result: VerifiedInputPreflightResult | None = None
+    _plan_set_preflight: PlanSetPreflightEvidence | None = None
     _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
     _invocation_template: InvocationTemplate | None = None
     _audit_reservation: AuditIdentityReservation | None = None

@@ -656,6 +656,19 @@ class TestImplementationPipelineStructure:
         conds = step.on_result.conditions
         assert not any("more_groups" in (c.when or "") for c in conds)
 
+    def test_ip_coverage_replan_is_bounded(self, recipe) -> None:
+        bind = recipe.steps["bind_plan_set"]
+        assert bind.on_result is not None
+        assert any(c.route == "check_replan_iteration" for c in bind.on_result.conditions)
+        guard = recipe.steps["check_replan_iteration"]
+        assert guard.with_args["max_iterations"] == "2"
+        assert guard.on_result is not None
+        assert any(
+            c.route == "release_issue_failure" and c.when and "max_exceeded" in c.when
+            for c in guard.on_result.conditions
+        )
+        assert "context.plan_set_parts" in (recipe.steps["next_or_done"].note or "")
+
 
 # ---------------------------------------------------------------------------
 # TestImplementationGroupsStructure
@@ -688,23 +701,37 @@ class TestImplementationGroupsStructure:
         """T_IG4: make_groups must not be present — groups are always used in this recipe."""
         assert "make_groups" not in recipe.ingredients
 
-    def test_ig5_next_or_done_routes_more_groups_to_plan(self, recipe) -> None:
-        """T_IG5: next_or_done must route more_groups back to plan for group iteration."""
-        step = recipe.steps["next_or_done"]
+    def test_ig5_next_group_or_seal_routes_more_groups_to_plan(self, recipe) -> None:
+        """T_IG5: group planning finishes before the sealed per-part loop begins."""
+        step = recipe.steps["next_group_or_seal"]
         assert step.on_result is not None
         conds = step.on_result.conditions
         assert any(
             c.route == "plan" and c.when is not None and "more_groups" in c.when for c in conds
-        ), "next_or_done must have a predicate routing more_groups → plan"
+        ), "next_group_or_seal must route more_groups → plan"
+        assert all(c.route != "plan" for c in recipe.steps["next_or_done"].on_result.conditions)
 
-    def test_ig6_next_or_done_routes_more_parts_to_verify(self, recipe) -> None:
-        """T_IG6: next_or_done must route more_parts to verify for sequential part processing."""
+    def test_ig6_next_or_done_routes_more_parts_to_review(self, recipe) -> None:
+        """T_IG6: each sealed part gets review before its walkthrough."""
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
         conds = step.on_result.conditions
         assert any(
-            c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
-        ), "next_or_done must have a predicate routing more_parts → verify"
+            c.route == "review_approach" and c.when is not None and "more_parts" in c.when
+            for c in conds
+        ), "next_or_done must route more_parts → review_approach"
+
+    def test_ig_gap_replan_is_bounded(self, recipe) -> None:
+        seal = recipe.steps["seal_plan_set"]
+        assert seal.on_result is not None
+        assert any(c.route == "check_replan_iteration" for c in seal.on_result.conditions)
+        guard = recipe.steps["check_replan_iteration"]
+        assert guard.with_args["max_iterations"] == "2"
+        assert guard.on_result is not None
+        assert any(
+            c.route == "release_issue_failure" and c.when and "max_exceeded" in c.when
+            for c in guard.on_result.conditions
+        )
 
     def test_ig7_next_or_done_fallthrough_to_audit_impl(self, recipe) -> None:
         """T_IG7: next_or_done fallthrough (all done) must route to audit_impl."""
@@ -873,7 +900,7 @@ class TestInvestigateFirstStructure:
         assert step.on_result is not None
         plan_routes = [c for c in step.on_result.conditions if c.when and "plan" in c.when]
         assert len(plan_routes) == 1
-        assert plan_routes[0].route == "dry_walkthrough"
+        assert plan_routes[0].route == "bind_plan_set"
         assert step.on_failure == "release_issue_failure"
         assert step.on_context_limit == "salvage_plan", (
             "make_plan on_context_limit must route through the deterministic salvage "

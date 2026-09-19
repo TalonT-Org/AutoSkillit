@@ -1123,7 +1123,8 @@
       "with": {
         "skill_command": "/autoskillit:implement-worktree-no-merge",
         "skill_inputs": {
-          "plan_path": "${{ context.pr_plan_path }}"
+          "plan_path": "${{ context.pr_plan_path }}",
+          "plan_set_authority_path": "${{ context.plan_set_authority_path }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "implement",
@@ -1138,7 +1139,10 @@
       "retries": 0,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
-      "on_rate_limit": "register_clone_failure"
+      "on_rate_limit": "register_clone_failure",
+      "optional_context_refs": [
+        "plan_set_authority_path"
+      ]
     },
     "test": {
       "tool": "test_check",

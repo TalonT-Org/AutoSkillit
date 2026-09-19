@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:b514102d53cdbe071ff54e665140430138f7d9c55a36f76bf1955173d35e79c8 -->
+<!-- autoskillit-recipe-hash: sha256:5a369a1ace15164f2d93586c5adc77d4af2871467fdad61a1336a61357337e9a -->
 <!-- autoskillit-diagram-format: v7 -->
 ## remediation
 
@@ -6,11 +6,15 @@
 
 +-- [investigate] (optional)
 |
-rectify --- [review-approach] (optional)
+rectify --- bind_plan_set <-> [bounded coverage replan -> make-plan]
+|
+[review-approach] (optional)
 |
 +----+ FOR EACH PLAN PART:
 |    |
-|    dry-walkthrough --- implement --- test <-> [x fail -> fix]
+|    dry-walkthrough --- renew_plan_set --- implement --- test <-> [x fail -> fix]
+|             |
+|             +-- [context limit -> renew_before_retry -> retry_walkthrough]
 |    |
 |    +-- [audit] (optional)
 |    |     x fail [-> make-plan]

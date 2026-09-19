@@ -36,6 +36,7 @@ from autoskillit.server._audit_authority_materializer import (
     load_current_prior_authority,
     normalize_audited_plan_refs,
 )
+from autoskillit.server.lifecycle._guards import _check_dry_walkthrough_plan
 from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
@@ -129,7 +130,7 @@ def _audit_preflight_step_names(
             template.invocation.skill_name is not None
             and (contract := resolver(f"/autoskillit:{template.invocation.skill_name}"))
             is not None
-            and getattr(contract, "input_preflight", None) == "audit_cycle_inventory"
+            and "audit_cycle_inventory" in getattr(contract, "input_preflight", ())
         )
     )
     if not names:
@@ -200,6 +201,7 @@ def _prepare_audit_reservation(
         bound_inputs=state._bound_recipe_inputs,
         actual_mcp_kwargs=actual_mcp_kwargs,
         preflight=state._preflight_result,
+        plan_set_preflight=state._plan_set_preflight,
         retry_after_audit_attempt_id=(state.retry_after_audit_attempt_id or None),
     )
     state._bound_input_map = dict(state._bound_recipe_inputs)
@@ -307,6 +309,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
                 state.skill_command,
                 state._bound_recipe_inputs,
                 state._preflight_result,
+                plan_set_preflight=state._plan_set_preflight,
                 audit_reservation_handle=state._reservation_outcome.reservation_handle,
                 audit_reserved_plan_refs=state._audited_plan_refs,
                 audit_output_mode=state._audit_output_mode,
@@ -410,6 +413,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
 
 def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
     state._preflight_result = None
+    state._plan_set_preflight = None
     state._bound_recipe_inputs = ()
     state._invocation_template = None
     state._audit_reservation = None
@@ -531,8 +535,19 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
+        if state.tool_ctx.config.safety.require_dry_walkthrough:
+            bound_plan_path = dict(state._bound_recipe_inputs).get("plan_path")
+            if (
+                gate_error := _check_dry_walkthrough_plan(
+                    state.skill_command.split()[0],
+                    state.cwd,
+                    bound_plan_path if isinstance(bound_plan_path, str) else None,
+                    config=state.tool_ctx.config,
+                )
+            ) is not None:
+                return gate_error
         try:
-            state._preflight_result = resolve_attested_input_preflight(
+            resolved_preflights = resolve_attested_input_preflight(
                 state.tool_ctx,
                 state._installed_execution,
                 skill_command=state.skill_command,
@@ -542,6 +557,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 bound_inputs=state._bound_recipe_inputs,
                 allowed_root=state._clone_allowed_root,
             )
+            state._preflight_result = resolved_preflights.audit
+            state._plan_set_preflight = resolved_preflights.plan_set
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
         _runtime_digest = compute_runtime_binding_digest(
@@ -551,6 +568,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             bound_inputs=state._bound_recipe_inputs,
             actual_mcp_kwargs=_actual_mcp_kwargs,
             preflight=state._preflight_result,
+            plan_set_preflight=state._plan_set_preflight,
             retry_after_audit_attempt_id=state.retry_after_audit_attempt_id or None,
         )
         try:
@@ -586,6 +604,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 state.skill_command,
                 state._bound_recipe_inputs,
                 state._preflight_result,
+                plan_set_preflight=state._plan_set_preflight,
                 audit_output_mode=state._audit_output_mode,
             )
     elif state._claims_recipe_execution:

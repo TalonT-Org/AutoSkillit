@@ -16,8 +16,6 @@ from ._type_audit_cycle_authority import *  # noqa: F401, F403
 from ._type_audit_cycle_authority import __all__ as _audit_cycle_authority_all
 from ._type_audit_cycle_disposition import *  # noqa: F401, F403
 from ._type_audit_cycle_disposition import __all__ as _audit_cycle_disposition_all
-from ._type_audit_protocols import *  # noqa: F401, F403
-from ._type_audit_protocols import __all__ as _audit_protocols_all
 from ._type_backend import *  # noqa: F401, F403
 from ._type_backend import __all__ as _backend_all
 from ._type_capture import *  # noqa: F401, F403
@@ -94,6 +92,8 @@ from ._type_orchestrator_instruction_surfaces import (
 )
 from ._type_persisted_formats import *  # noqa: F401, F403
 from ._type_persisted_formats import __all__ as _persisted_formats_all
+from ._type_plan_set_authority import *  # noqa: F401, F403
+from ._type_plan_set_authority import __all__ as _plan_set_authority_all
 from ._type_plugin_source import *  # noqa: F401, F403
 from ._type_plugin_source import __all__ as _plugin_source_all
 from ._type_protocols_backend import *  # noqa: F401, F403
@@ -143,7 +143,7 @@ __all__ = (
     + _audit_artifact_ref_all
     + _audit_cycle_authority_all
     + _audit_cycle_disposition_all
-    + _audit_protocols_all
+    + _plan_set_authority_all
     + _backend_all
     + _capture_all
     + _checkpoint_all

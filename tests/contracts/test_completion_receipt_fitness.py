@@ -50,8 +50,14 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
                 "adversarial_review_level": "standard",
             },
             {
-                "keys": ["task", "issue_url", "adversarial_review_level", "audit_cycle_path"],
-                "absence_values": {"audit_cycle_path": ""},
+                "keys": [
+                    "task",
+                    "issue_url",
+                    "adversarial_review_level",
+                    "audit_cycle_path",
+                    "plan_set_coverage_gaps",
+                ],
+                "absence_values": {"audit_cycle_path": "", "plan_set_coverage_gaps": ""},
             },
             id="plan",
         ),

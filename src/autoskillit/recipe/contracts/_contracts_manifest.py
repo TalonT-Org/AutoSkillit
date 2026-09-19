@@ -249,6 +249,14 @@ def _parse_audit_contracts(
     return audit_output_contracts, authority_publication
 
 
+def _as_input_preflight(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("input_preflight must be a list of strings")
+    return tuple(value)
+
+
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
     """Look up a skill in the manifest and return a SkillContract."""
     skills = manifest.get("skills", {})
@@ -313,7 +321,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         result_fields=result_fields,
         outcome_invariants=outcome_invariants,
         success_qualifiers=success_qualifiers,
-        input_preflight=skill_data.get("input_preflight"),
+        input_preflight=_as_input_preflight(skill_data.get("input_preflight")),
         audit_authority_publication=authority_publication,
         audit_output_contracts=audit_output_contracts,
     )
@@ -384,7 +392,7 @@ def compute_skill_contract_identity(
             ),
             "audit_output_contracts": mode_contracts,
             "completion_required": contract.completion_required,
-            "input_preflight": contract.input_preflight,
+            "input_preflight": list(contract.input_preflight),
             "inputs": [
                 {
                     "name": item.name,

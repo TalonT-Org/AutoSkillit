@@ -45,11 +45,11 @@ from autoskillit.core.types._type_audit_cycle_authority import (
     AuditVerdict,
 )
 from autoskillit.core.types._type_audit_cycle_disposition import PlanDispositionReport
-from autoskillit.core.types._type_audit_protocols import (
+from autoskillit.core.types._type_enums import KillReason
+from autoskillit.core.types._type_protocols_infra import (
     AuditAuthorityMaterializer,
     CommittedDispositionResolver,
 )
-from autoskillit.core.types._type_enums import KillReason
 from autoskillit.core.types._type_recipe_execution import (
     compute_audit_slot_intent_digest,
     compute_runtime_binding_digest,

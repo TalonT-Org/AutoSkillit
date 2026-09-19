@@ -98,6 +98,7 @@ def test_registry_matches_handler_order_and_requiredness() -> None:
 
 def test_recipe_delivery_tool_classifications_are_exact() -> None:
     expected_automatic = {
+        "bind_plan_set",
         "bootstrap_clone",
         "check_pr_mergeable",
         "check_repo_merge_state",
@@ -402,6 +403,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "open_kitchen",
         },
         ToolInitializationOperation.EXECUTION: {
+            "bind_plan_set",
             "delegate_evidence_reader",
             "run_cmd",
             "run_fixed_batch",

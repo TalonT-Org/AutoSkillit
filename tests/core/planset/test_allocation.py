@@ -26,3 +26,20 @@ The step omits the identifier.
     )
     with pytest.raises(ValueError, match="exactly one"):
         parse_part_allocation("# no allocation", part_key="P1")
+
+
+def test_allocation_flags_step_not_present_in_markdown() -> None:
+    markdown = """### Step 1.1: implementation
+
+The step exists.
+
+## Issue Requirement Allocation
+| Requirement ID | Allocation | Implementation Step |
+| --- | --- | --- |
+| R1 | owned | Step 99.9 |
+"""
+    rows = parse_part_allocation(markdown, part_key="P1")
+
+    assert verify_allocation_evidence(markdown, rows) == (
+        ("R1", PlanSetRejectReason.ALLOCATION_STEP_MISSING),
+    )

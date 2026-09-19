@@ -71,3 +71,22 @@ def test_converged_sealed_and_unsealed_paths_are_rejected() -> None:
         )
     )
     assert any(f.rule == "plan-set-authority-sealed-path" for f in findings)
+
+
+def test_salvage_only_bypass_is_rejected() -> None:
+    findings = run_semantic_rules(
+        _recipe(
+            {
+                "salvage": RecipeStep(
+                    tool="run_python",
+                    with_args={"callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts"},
+                    on_success="verify",
+                ),
+                "verify": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:dry-walkthrough"},
+                ),
+            }
+        )
+    )
+    assert any(f.rule == "plan-set-authority-sealed-path" for f in findings)

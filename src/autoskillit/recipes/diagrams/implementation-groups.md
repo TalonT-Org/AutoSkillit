@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:63be3f5ac33e3d4b9f07666ba55722bb918305429dcd5f58e1a23f91e4d6f1cb -->
+<!-- autoskillit-recipe-hash: sha256:409b554e8b7a4f3243ff0a49724e0ee1b2b5db82cac214f06b32350cbffc7dd4 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## implementation-groups
 
@@ -12,7 +12,7 @@ group
 |    |
 +----+
      |
-     seal_plan_set <-> [gap_replan -> bind_group_parts]
+     seal_plan_set <-> [check_replan_iteration -> gap_replan -> bind_group_parts]
      |
      +----+ FOR EACH PLAN PART:
      |    |

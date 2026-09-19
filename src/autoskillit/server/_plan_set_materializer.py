@@ -67,9 +67,8 @@ def _part_suffix(path: Path, *, only_part: bool) -> str:
     return "A" if only_part else path.stem.upper()
 
 
-def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
-    coverage = authority.coverage
-    requirements = {item.requirement_id: item.text for item in authority.requirements}
+def _coverage_gaps(coverage: CoverageResultDef, requirements: tuple[RequirementDef, ...]) -> str:
+    requirement_text = {item.requirement_id: item.text for item in requirements}
     gaps: list[str] = []
     for reason, values in (
         ("unassigned", coverage.unassigned),
@@ -78,7 +77,14 @@ def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
         ("unknown", coverage.unknown),
         ("container_allocated", coverage.container_allocated),
     ):
-        gaps.extend(f"{item} [{reason}]: {requirements.get(item, '')}".rstrip() for item in values)
+        gaps.extend(
+            f"{item} [{reason}]: {requirement_text.get(item, '')}".rstrip() for item in values
+        )
+    return "\n".join(gaps)
+
+
+def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
+    coverage = authority.coverage
     return PlanSetBindResult(
         success=True,
         reason=None,
@@ -96,7 +102,7 @@ def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
         container_allocated=coverage.container_allocated,
         parts_without_obligations=coverage.parts_without_obligations,
         first_part_path=authority.parts[0].locator if authority.parts else "",
-        coverage_gaps="\n".join(gaps),
+        coverage_gaps=_coverage_gaps(coverage, authority.requirements),
     )
 
 
@@ -344,7 +350,24 @@ class DefaultPlanSetMaterializer:
             else CoverageResultDef(CoverageStatus.NOT_EVALUATED)
         )
         if request.seal and coverage.status is not CoverageStatus.PASS:
-            return _failure(PlanSetRejectReason.COVERAGE_FAILED, "plan-set coverage has gaps")
+            return PlanSetBindResult(
+                success=False,
+                reason=PlanSetRejectReason.COVERAGE_FAILED,
+                error="plan-set coverage has gaps",
+                plan_set_authority_path=str(parent_path) if parent_path else "",
+                plan_set_authority_digest=parent.authority_digest if parent else "",
+                plan_set_authority_id=authority_id,
+                plan_set_parts="\n".join(part.locator for part in parent.parts) if parent else "",
+                plan_set_state=parent.state.value if parent else "",
+                coverage_status=coverage.status.value,
+                unassigned=coverage.unassigned,
+                uncovered=coverage.uncovered,
+                duplicate=coverage.duplicate,
+                unknown=coverage.unknown,
+                container_allocated=coverage.container_allocated,
+                parts_without_obligations=coverage.parts_without_obligations,
+                coverage_gaps=_coverage_gaps(coverage, requirements),
+            )
         authority = PlanSetAuthority.create(
             binding_mode=request.binding_mode,
             execution_generation=request.execution_generation,

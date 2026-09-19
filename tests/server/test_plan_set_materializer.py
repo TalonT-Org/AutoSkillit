@@ -75,7 +75,51 @@ async def test_coverage_failure_writes_no_authority(tmp_path: Path) -> None:
 
     assert result.success is False
     assert result.reason is PlanSetRejectReason.COVERAGE_FAILED
+    assert "R2 [unassigned]" in result.coverage_gaps
     assert not list((tmp_path / "plan-set-authority").rglob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_failed_seal_preserves_open_parent_for_gap_replan(tmp_path: Path) -> None:
+    fixture = _FIXTURES / "missing_r2"
+    for name in ("part_a.md", "part_b.md"):
+        (tmp_path / name).write_text((fixture / name).read_text(), encoding="utf-8")
+    request = PlanSetBindRequest(
+        plan_parts_raw=f"{tmp_path / 'part_a.md'}\n{tmp_path / 'part_b.md'}",
+        allowed_root=tmp_path,
+        issue_url="owner/repo#1",
+        parent_authority_path="",
+        seal=False,
+        step_name="bind",
+        execution_generation="generation",
+        kitchen_id="kitchen",
+        dispatch_id="",
+        binding_mode=PlanSetBindingMode.RECIPE,
+    )
+    materializer = DefaultPlanSetMaterializer(_GitHub())
+    parent = await materializer.bind(request)
+    assert parent.success
+    before = set((tmp_path / "plan-set-authority").rglob("*.json"))
+
+    failed = await materializer.bind(
+        PlanSetBindRequest(
+            plan_parts_raw=request.plan_parts_raw,
+            allowed_root=tmp_path,
+            issue_url="",
+            parent_authority_path=parent.plan_set_authority_path,
+            seal=True,
+            step_name="seal",
+            execution_generation="generation",
+            kitchen_id="kitchen",
+            dispatch_id="",
+            binding_mode=PlanSetBindingMode.RECIPE,
+        )
+    )
+    assert failed.reason is PlanSetRejectReason.COVERAGE_FAILED
+    assert "R2 [unassigned]" in failed.coverage_gaps
+    assert failed.plan_set_authority_path == parent.plan_set_authority_path
+    assert failed.plan_set_authority_digest == parent.plan_set_authority_digest
+    assert set((tmp_path / "plan-set-authority").rglob("*.json")) == before
 
 
 @pytest.mark.asyncio

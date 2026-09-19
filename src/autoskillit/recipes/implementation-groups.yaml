@@ -359,6 +359,23 @@ steps:
     on_result:
     - when: ${{ result.success }} == true
       route: review_approach
+    - when: ${{ result.reason }} == coverage_failed
+      route: check_replan_iteration
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+  check_replan_iteration:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.plan_set_replan_count }}
+      max_iterations: '2'
+    capture:
+      plan_set_replan_count: ${{ result.next_iteration }}
+    optional_context_refs:
+    - plan_set_replan_count
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
     - route: gap_replan
     on_failure: release_issue_failure
   gap_replan:
@@ -707,9 +724,19 @@ steps:
       counter_value: ''
     capture:
       group_plan_iteration_count: ${{ result.value }}
+    on_success: reset_plan_set_replan_counter
+    on_failure: reset_plan_set_replan_counter
+    note: Resets the group-planning budget for each audit-remediation cycle.
+  reset_plan_set_replan_counter:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      plan_set_replan_count: ${{ result.value }}
     on_success: remediate
     on_failure: remediate
-    note: Resets the group-planning budget for each audit-remediation cycle.
+    note: Resets the plan-set coverage replan budget for each audit-remediation cycle.
   commit_guard:
     tool: run_python
     with:
@@ -988,7 +1015,7 @@ steps:
     action: route
     on_result:
     - when: ${{ result.next }} == more_parts
-      route: verify
+      route: review_approach
     - route: audit_impl
     note: "Routing step — no tool call. All groups were planned and sealed before verification.
       If more entries in context.plan_set_parts remain, verify the next part; otherwise audit implementation."

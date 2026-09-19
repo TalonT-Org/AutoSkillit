@@ -698,14 +698,27 @@ class TestImplementationGroupsStructure:
         ), "next_group_or_seal must route more_groups → plan"
         assert all(c.route != "plan" for c in recipe.steps["next_or_done"].on_result.conditions)
 
-    def test_ig6_next_or_done_routes_more_parts_to_verify(self, recipe) -> None:
-        """T_IG6: next_or_done must route more_parts to verify for sequential part processing."""
+    def test_ig6_next_or_done_routes_more_parts_to_review(self, recipe) -> None:
+        """T_IG6: each sealed part gets review before its walkthrough."""
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
         conds = step.on_result.conditions
         assert any(
-            c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
-        ), "next_or_done must have a predicate routing more_parts → verify"
+            c.route == "review_approach" and c.when is not None and "more_parts" in c.when
+            for c in conds
+        ), "next_or_done must route more_parts → review_approach"
+
+    def test_ig_gap_replan_is_bounded(self, recipe) -> None:
+        seal = recipe.steps["seal_plan_set"]
+        assert seal.on_result is not None
+        assert any(c.route == "check_replan_iteration" for c in seal.on_result.conditions)
+        guard = recipe.steps["check_replan_iteration"]
+        assert guard.with_args["max_iterations"] == "2"
+        assert guard.on_result is not None
+        assert any(
+            c.route == "release_issue_failure" and c.when and "max_exceeded" in c.when
+            for c in guard.on_result.conditions
+        )
 
     def test_ig7_next_or_done_fallthrough_to_audit_impl(self, recipe) -> None:
         """T_IG7: next_or_done fallthrough (all done) must route to audit_impl."""

@@ -194,6 +194,12 @@ def _check_sealed_plan_set_paths(ctx: ValidationContext) -> list[RuleFinding]:
         and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
         and "plan_parts" in step.capture_list
     ]
+    producers.extend(
+        name
+        for name, step in ctx.recipe.steps.items()
+        if step.tool == "run_python"
+        and str(step.with_args.get("callable", "")).endswith("verify_plan_artifacts")
+    )
     findings: list[RuleFinding] = []
     for producer in producers:
         queue = deque(_outgoing_targets(ctx.recipe.steps[producer], False))

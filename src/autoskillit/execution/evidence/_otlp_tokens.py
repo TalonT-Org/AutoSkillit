@@ -75,10 +75,13 @@ def _unique_count_attribute(attributes: list[object], *keys: str) -> int | None:
     return None
 
 
-def project_token_observations(
-    signal: str, payload: object
-) -> tuple[TokenObservation, ...] | None:
-    """Project only request-correlated parent accounting from native Claude logs."""
+def project_token_observations(signal: str, payload: object) -> tuple[TokenObservation, ...]:
+    """Project only request-correlated parent accounting from native Claude logs.
+
+    Returns an empty tuple (never None) when the payload is not a logs
+    signal or carries no valid observations; callers can iterate the
+    result unconditionally.
+    """
     if signal != "logs" or not isinstance(payload, dict):
         return ()
     resource_logs = payload.get("resourceLogs")

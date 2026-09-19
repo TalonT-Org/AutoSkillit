@@ -548,7 +548,7 @@ class LocalOtlpSink:
         self,
         line: bytes,
         observations: tuple[_ModelObservation, ...] = (),
-        token_observations: tuple[_TokenObservation, ...] | None = (),
+        token_observations: tuple[_TokenObservation, ...] = (),
     ) -> str:
         with self._condition:
             self._counters["received"] += 1
@@ -575,9 +575,11 @@ class LocalOtlpSink:
                     self._model_evidence[session_id] = (parent, outcomes)
                 if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
                     outcomes.append((ordinal, outcome))
-            if token_observations is None:
-                self._token_evidence_overflow_sessions.update(self._token_evidence.keys())
-            for session_id, request_id, usage in token_observations or ():
+            # project_token_observations returns an empty tuple when the
+            # payload is not a logs signal or carries no valid observations;
+            # see _otlp_tokens.py:78. Iterating the empty tuple is a no-op,
+            # so no explicit None-handling branch is needed.
+            for session_id, request_id, usage in token_observations:
                 requests = self._token_evidence.get(session_id)
                 if requests is None:
                     if len(self._token_evidence) >= _TOKEN_EVIDENCE_SESSION_CAPACITY:

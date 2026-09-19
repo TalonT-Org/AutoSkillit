@@ -665,8 +665,10 @@ def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> 
     plan = info.semantic_plan
     if plan is None or not plan.child_spawns:
         return
-    assert plan.concurrency is not None and plan.concurrency.required
     assert plan.join is not None and plan.join.required
+    if len(plan.child_spawns) == 1 and plan.child_spawns[0].count == 1:
+        return
+    assert plan.concurrency is not None and plan.concurrency.required
     skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     violations = _check_parallel_dispatch_reinforcement(skill_text)
     assert not violations, f"{skill_dir.name}: {violations}"

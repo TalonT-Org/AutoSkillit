@@ -21,6 +21,7 @@ __all__ = [
     "ChildOutcomeDict",
     "ExecutionIdentity",
     "ExecutionIdentityDict",
+    "default_provider_for",
     "resolve_provider_used",
 ]
 
@@ -30,6 +31,26 @@ def resolve_provider_used(backend: str, anthropic_provider_capable: bool) -> str
     if not backend:
         raise ValueError("Provider resolution requires a non-empty backend")
     return "anthropic" if anthropic_provider_capable else backend
+
+
+def default_provider_for(
+    backend: str,
+    anthropic_provider_capable: bool,
+    *,
+    profile_name: str = "",
+    provider_name: str = "",
+) -> str:
+    """Pick a provider from explicit overrides, falling back to backend-derived defaults.
+
+    All headless call sites share this fallback chain (``provider_name`` →
+    ``profile_name`` → ``resolve_provider_used``). Centralizing here keeps the
+    precedence consistent and lets new defaults propagate from one place.
+    """
+    return (
+        provider_name
+        or profile_name
+        or resolve_provider_used(backend, anthropic_provider_capable)
+    )
 
 
 @dataclass(frozen=True, slots=True)

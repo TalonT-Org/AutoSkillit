@@ -5,12 +5,24 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from autoskillit.core import TokenMeasure
+from autoskillit.core import TokenMeasure, get_logger
 from autoskillit.execution.session._turn_usage import classify_token_measure
+
+__all__ = [
+    "TokenObservation",
+    "aggregate_token_observations",
+    "has_attribute",
+    "project_token_observations",
+    "record_attributes",
+    "unique_bool_attribute",
+    "unique_string_attribute",
+]
 
 TokenObservation = tuple[str, str, dict[str, int | None]]
 
 _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD = 128
+
+logger = get_logger(__name__)
 
 
 def record_attributes(record: object) -> list[object] | None:
@@ -84,8 +96,8 @@ def project_token_observations(
                 continue
             scope = scope_log.get("scope")
             scope_name = scope.get("name") if isinstance(scope, dict) else None
-            # Codex 0.153.4 token logs have no stable request ID; its token metrics
-            # have no conversation ID. They remain parser-fallback evidence.
+            # Codex 0.153.4 logs carry no stable request ID and no conversation ID
+            # — full architectural rationale in docs/developer/diagnostics.md.
             if scope_name != "com.anthropic.claude_code.events":
                 continue
             records = scope_log.get("logRecords")
@@ -123,6 +135,14 @@ def project_token_observations(
                     )
                 )
                 if len(observations) > _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD:
+                    logger.debug(
+                        "token_observations_overflow",
+                        extra={
+                            "scope": scope_name,
+                            "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
+                            "count": len(observations),
+                        },
+                    )
                     return None
     return tuple(observations)
 
@@ -142,20 +162,14 @@ def aggregate_token_observations(
             if field not in totals:
                 totals[field] = measure
                 continue
-            try:
-                totals[field] = totals[field].combine(measure)
-            except ValueError:
-                totals[field] = TokenMeasure.unknown()
+            totals[field] = TokenMeasure.combine_or_unknown(totals[field], measure)
         cache_read = classify_token_measure(
             backend, provider_used, "peak_context", observation.get("cache_read_tokens")
         )
         if peak is None:
             peak = cache_read
         else:
-            try:
-                peak = peak.maximum(cache_read)
-            except ValueError:
-                peak = TokenMeasure.unknown()
+            peak = TokenMeasure.maximum_or_unknown(peak, cache_read)
     return {
         "backend": backend,
         "provider_used": provider_used,

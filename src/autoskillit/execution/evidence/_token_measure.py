@@ -1,11 +1,18 @@
-"""Token-measure serialization at the execution evidence boundary."""
+"""One-call decoder for token measures persisted into the session evidence sidecar."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
-from autoskillit.core import TURN_USAGE_SCHEMA_VERSION, SerializedTokenMeasure, TokenMeasure
+from autoskillit.core import (
+    TURN_USAGE_SCHEMA_VERSION,
+    SerializedTokenMeasure,
+    TokenMeasure,
+    get_logger,
+)
+
+logger = get_logger(__name__)
 
 
 def serialized_token_measure(raw: object) -> SerializedTokenMeasure:
@@ -13,10 +20,23 @@ def serialized_token_measure(raw: object) -> SerializedTokenMeasure:
     if isinstance(raw, dict):
         try:
             return TokenMeasure.from_dict(raw).to_dict()
-        except ValueError:
-            pass
-    if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
-        return TokenMeasure.observed(raw).to_dict()
+        except ValueError as exc:
+            logger.debug(
+                "token_measure_downgrade_to_unknown",
+                extra={
+                    "raw_kind": type(raw).__name__,
+                    "raw_keys": sorted(raw.keys()) if isinstance(raw, Mapping) else None,
+                    "error": str(exc),
+                },
+            )
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        if raw < 0:
+            logger.debug(
+                "token_measure_negative_value_downgrade",
+                extra={"raw_value": raw},
+            )
+        else:
+            return TokenMeasure.observed(raw).to_dict()
     return TokenMeasure.unknown().to_dict()
 
 

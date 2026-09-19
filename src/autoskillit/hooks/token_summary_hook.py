@@ -32,6 +32,11 @@ if _RUNTIME_DIR not in sys.path:
 
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
+from _token_measure import (  # type: ignore[import-not-found]  # noqa: E402
+    combine_measures,
+    maximum_measures,
+    measure_decode,
+)
 
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
@@ -119,35 +124,15 @@ def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
 
 
 def _measure(raw: Any, *, legacy: bool = False) -> dict[str, Any]:
-    if isinstance(raw, dict) and set(raw) == {"state", "value"}:
-        state, value = raw.get("state"), raw.get("value")
-        if state in {"measured", "measured_zero"} and isinstance(value, int):
-            return {"state": state, "value": value}
-        if state in {"unavailable", "unknown", "not_applicable"} and value is None:
-            return {"state": state, "value": None}
-    if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
-        if legacy and raw == 0:
-            return {"state": "unknown", "value": None}
-        return {"state": "measured_zero" if raw == 0 else "measured", "value": raw}
-    return {"state": "unknown", "value": None}
+    return measure_decode(raw, legacy=legacy)
 
 
 def _combine_measure(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    if isinstance(left.get("value"), int) and isinstance(right.get("value"), int):
-        value = left["value"] + right["value"]
-        return {"state": "measured_zero" if value == 0 else "measured", "value": value}
-    if left.get("state") == right.get("state"):
-        return dict(left)
-    return {"state": "unknown", "value": None}
+    return combine_measures(left, right)
 
 
 def _maximum_measure(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    if isinstance(left.get("value"), int) and isinstance(right.get("value"), int):
-        value = max(left["value"], right["value"])
-        return {"state": "measured_zero" if value == 0 else "measured", "value": value}
-    if left.get("state") == right.get("state"):
-        return dict(left)
-    return {"state": "unknown", "value": None}
+    return maximum_measures(left, right)
 
 
 def _record_measure(

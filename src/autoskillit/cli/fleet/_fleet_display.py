@@ -91,24 +91,27 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
         tu = d.token_usage
         if not tu:
             continue
-        key = (str(tu["backend"]), str(tu["provider_used"]))
+        backend = tu.get("backend")
+        provider_used = tu.get("provider_used")
+        if not isinstance(backend, str) or not isinstance(provider_used, str):
+            continue
+        key = (backend, provider_used)
         row = totals.get(key)
         if row is None:
             totals[key] = {
-                "backend": key[0],
-                "provider_used": key[1],
+                "backend": backend,
+                "provider_used": provider_used,
                 **{field: tu[field] for field in fields},
             }
             continue
         for field in fields:
             try:
-                row[field] = (
-                    TokenMeasure.from_dict(row[field])
-                    .combine(TokenMeasure.from_dict(tu[field]))
-                    .to_dict()
-                )
-            except ValueError:
+                left = TokenMeasure.from_dict(row[field])
+                right = TokenMeasure.from_dict(tu[field])
+            except (TypeError, ValueError, KeyError):
                 row[field] = TokenMeasure.unknown().to_dict()
+                continue
+            row[field] = TokenMeasure.combine_or_unknown(left, right).to_dict()
     return list(totals.values())
 
 
@@ -116,8 +119,10 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
     """Build table rows from campaign state dispatches, including separator and TOTAL rows."""
     rows: list[tuple[str, ...]] = []
     for d in state.dispatches:
-        tu = d.token_usage
-        source = f"{tu['backend']}/{tu['provider_used']}" if tu else ""
+        tu = d.token_usage or {}
+        backend = tu.get("backend")
+        provider_used = tu.get("provider_used")
+        source = f"{backend}/{provider_used}" if backend and provider_used else ""
         rows.append(
             (
                 f"{d.name} ({source})" if source else d.name,

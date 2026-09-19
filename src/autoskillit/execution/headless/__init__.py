@@ -27,8 +27,8 @@ from autoskillit.core import (
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
+    default_provider_for,
     get_logger,
-    resolve_provider_used,
     temp_dir_display_str,
 )
 from autoskillit.execution.headless._headless_evidence import (
@@ -282,13 +282,11 @@ async def run_headless_core(
             plugin_load_mode=plugin_load_mode.value,
             add_dirs=list(add_dirs) if add_dirs else None,
         )
-        effective_provider = (
-            provider_name
-            or profile_name
-            or resolve_provider_used(
-                launch.backend.name,
-                launch.backend.capabilities.anthropic_provider_capable,
-            )
+        effective_provider = default_provider_for(
+            launch.backend.name,
+            launch.backend.capabilities.anthropic_provider_capable,
+            profile_name=profile_name,
+            provider_name=provider_name,
         )
         try:
             skill_result = await _execute_claude_headless(

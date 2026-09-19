@@ -1422,6 +1422,7 @@ from .types import (
 from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
+from .types import default_provider_for as default_provider_for
 from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,

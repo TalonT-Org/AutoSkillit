@@ -99,10 +99,15 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
         key = (backend, provider_used)
         row = totals.get(key)
         if row is None:
+            # First-row init: `dict.get(k, default)` returns None when k is
+            # present with None value, which would silently make
+            # TokenMeasure.from_dict fail downstream. Use explicit membership
+            # check so a stored None and a missing key are both treated as
+            # unknown.
             totals[key] = {
                 "backend": backend,
                 "provider_used": provider_used,
-                **{field: tu.get(field, unknown_measure) for field in fields},
+                **{field: tu[field] if field in tu else unknown_measure for field in fields},
             }
             continue
         for field in fields:

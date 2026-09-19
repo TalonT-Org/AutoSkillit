@@ -31,7 +31,7 @@ The assigned issue or ticket is the source of truth; do not work on unassigned f
     - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`, `RuleDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Typically lives in `core/`; stdlib-only types importable from hook scripts may live at the package root (e.g., `HookDef` in `hook_registry.py`).
     - `*Spec` — behavioral specification or validation rule (e.g., `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Typically lives in `recipe/` or domain layers; `*Spec` types used by IL-0 core protocols live in `core/` (e.g., `WriteBehaviorSpec` in `core/types/_type_results.py`).
   * **Commit discipline**: Always create NEW commits. Never use `git commit --amend`, `--fixup`, or `--squash` unless the active recipe or SKILL.md explicitly requires it. This applies to all session types including headless sessions.
-  * **Multi-part plan green-gate invariant**: Every part of a multi-part plan must independently pass the configured test gate (`task test-local-gate` in this repository). Automation and MCP callers use the configured gate; projects without an override use the generic/default `task test-check`. A part that invalidates a pre-existing test must update, remove, or bridge it with `xfail(strict=True)` in the same part, with a `reason` citing the open tracking issue (`#NNNN`) — enforced by an architectural guard. A bridge whose exit condition is satisfied within the same PR must be removed in that PR.
+  * **Multi-part plan green-gate invariant**: Every part of a multi-part plan must independently pass the configured `test_check.command` (in this repository, `task test-local-gate`). A part that invalidates a pre-existing test must update, remove, or bridge it with `xfail(strict=True)` in the same part, with a `reason` citing the open tracking issue (`#NNNN`) — enforced by an architectural guard. A bridge whose exit condition is satisfied within the same PR must be removed in that PR.
 
 ### **3.2. File System**
 
@@ -65,7 +65,7 @@ The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xd
 
   * **Add tests for new features**
   * **Follow existing test patterns** in `tests/` — avoid test code redundancy
-  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, use the configured `test_check.command`: `task test-local-gate` in this repository. It excludes Channel B locally while retaining `test-all` import lint, and its wrapper provides explicit PASS/FAIL output with portable status capture. `task test-check` remains the generic/default automation command when no project override applies. Never use `pytest`, `python -m pytest`, or any other test runner directly.
+  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, use the configured `test_check.command` (in this repository, `task test-local-gate`). Never use `pytest`, `python -m pytest`, or any other test runner directly.
   * **Filtered tests**: `task test-filtered` runs path-filtered tests (defaults `AUTOSKILLIT_TEST_FILTER=conservative`). Set `AUTOSKILLIT_TEST_BASE_REF` to control the diff base. See `tests/AGENTS.md` for filter modes and algorithm details.
 
 ## **5. Architecture**

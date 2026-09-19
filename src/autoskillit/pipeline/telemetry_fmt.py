@@ -202,11 +202,6 @@ def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _h_cache(val: Any) -> str:
-    """Render a token measure without inventing a numeric zero for absence."""
-    return TelemetryFormatter._humanize(val)
-
-
 def _source_label(row: Mapping[str, Any]) -> str:
     backend = row.get("backend")
     provider = row.get("provider_used")
@@ -278,10 +273,10 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = _h_cache(step.get("cache_read_tokens"))
+            cache_rd = h(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
             turns = step.get("turn_count", 0)
-            cache_wr = _h_cache(step.get("cache_write_tokens"))
+            cache_wr = h(step.get("cache_write_tokens"))
             wc = step.get("elapsed_seconds", 0.0)
             lines.append(
                 f"| {name} | {model} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
@@ -290,9 +285,9 @@ class TelemetryFormatter:
 
         total_in = h(total.get("input_tokens", 0))
         total_out = h(total.get("output_tokens", 0))
-        total_cache_rd = _h_cache(total.get("cache_read_tokens"))
+        total_cache_rd = h(total.get("cache_read_tokens"))
         total_peak = h(total.get("peak_context", 0))
-        total_cache_wr = _h_cache(total.get("cache_write_tokens"))
+        total_cache_wr = h(total.get("cache_write_tokens"))
         total_time = total.get("total_elapsed_seconds", 0.0)
         total_label = f"Total ({_source_label(total)})" if _source_label(total) else "Total"
         lines.append(
@@ -352,10 +347,10 @@ class TelemetryFormatter:
                     str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
-                    _h_cache(step.get("cache_read_tokens")),
+                    h(step.get("cache_read_tokens")),
                     h(step.get("peak_context", 0)),
                     str(step.get("turn_count", 0)),
-                    _h_cache(step.get("cache_write_tokens")),
+                    h(step.get("cache_write_tokens")),
                     fmt_dur(step.get("elapsed_seconds", 0.0)),
                 )
             )
@@ -366,10 +361,10 @@ class TelemetryFormatter:
             "",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
-            _h_cache(total.get("cache_read_tokens")),
+            h(total.get("cache_read_tokens")),
             h(total.get("peak_context", 0)),
             "",
-            _h_cache(total.get("cache_write_tokens")),
+            h(total.get("cache_write_tokens")),
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
 
@@ -419,9 +414,9 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = _h_cache(step.get("cache_read_tokens"))
+            cache_rd = h(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
-            cache_wr = _h_cache(step.get("cache_write_tokens"))
+            cache_wr = h(step.get("cache_write_tokens"))
             turns = step.get("turn_count", 0)
             wc = step.get("elapsed_seconds", 0.0)
             model_tag = f" model:{model}" if model else ""
@@ -434,9 +429,9 @@ class TelemetryFormatter:
             lines.append("")
             lines.append(f"total_uncached: {h(total.get('input_tokens', 0))}")
             lines.append(f"total_out: {h(total.get('output_tokens', 0))}")
-            lines.append(f"total_cache_read: {_h_cache(total.get('cache_read_tokens'))}")
+            lines.append(f"total_cache_read: {h(total.get('cache_read_tokens'))}")
             lines.append(f"total_peak_context: {h(total.get('peak_context', 0))}")
-            lines.append(f"total_cache_write: {_h_cache(total.get('cache_write_tokens'))}")
+            lines.append(f"total_cache_write: {h(total.get('cache_write_tokens'))}")
         if mcp_responses:
             mcp_total = mcp_responses.get("total", {})
             if mcp_total:
@@ -549,8 +544,8 @@ class TelemetryFormatter:
             lines.append(
                 f"| {model} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
-                f" | {_h_cache(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
-                f" | {_h_cache(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
                 f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
             )
         return "\n".join(lines)
@@ -571,8 +566,8 @@ class TelemetryFormatter:
                     str(m.get("step_count", 0)),
                     h(m.get("input_tokens", 0)),
                     h(m.get("output_tokens", 0)),
-                    _h_cache(m.get("cache_read_tokens")),  # type: ignore[arg-type]
-                    _h_cache(m.get("cache_write_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_read_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_write_tokens")),  # type: ignore[arg-type]
                     fmt_dur(m.get("elapsed_seconds", 0.0)),
                 )
             )

@@ -35,12 +35,12 @@ from autoskillit.core import (
     SkillResult,
     WriteBehaviorSpec,
     collect_version_snapshot,
+    default_provider_for,
     get_logger,
     is_git_main_checkout,
     is_git_worktree,
     is_in_git_repo,
     new_managed_attempt_id,
-    resolve_provider_used,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
@@ -182,8 +182,10 @@ async def _execute_claude_headless(
         if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
         else launch_resolver.backend_for(launch_preparation)
     )
-    current_provider_name = provider_name or resolve_provider_used(
-        _step_backend.name, _step_backend.capabilities.anthropic_provider_capable
+    current_provider_name = default_provider_for(
+        _step_backend.name,
+        _step_backend.capabilities.anthropic_provider_capable,
+        provider_name=provider_name,
     )
 
     linux_tracing_cfg = ctx.config.linux_tracing

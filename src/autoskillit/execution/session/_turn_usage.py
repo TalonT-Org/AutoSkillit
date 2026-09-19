@@ -173,20 +173,14 @@ def merge_token_usage_measures(
         n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
         left = classify_token_measure(backend, provider_used, canonical, b)
         right = classify_token_measure(backend, provider_used, canonical, n)
-        try:
-            merged[canonical] = left.combine(right).to_dict()
-        except ValueError:
-            merged[canonical] = TokenMeasure.unknown().to_dict()
+        merged[canonical] = TokenMeasure.combine_or_unknown(left, right).to_dict()
     left_peak = classify_token_measure(
         backend, provider_used, "peak_context", base.get("peak_context")
     )
     right_peak = classify_token_measure(
         backend, provider_used, "peak_context", nudge.get("peak_context")
     )
-    try:
-        merged["peak_context"] = left_peak.maximum(right_peak).to_dict()
-    except ValueError:
-        merged["peak_context"] = TokenMeasure.unknown().to_dict()
+    merged["peak_context"] = TokenMeasure.maximum_or_unknown(left_peak, right_peak).to_dict()
     for legacy in _CANONICAL_TO_LEGACY.values():
         if legacy and legacy in merged:
             del merged[legacy]
@@ -224,7 +218,7 @@ def context_fraction(
 
 
 def serialize_turn_token_entry(row: TurnTokenEntry) -> dict[str, object]:
-    """Project a raw turn into the versioned source-pair/measure sidecar schema."""
+    """Project one TurnTokenEntry into the sidecar schema with classified measures."""
     backend, provider_used = row["backend"], row["provider_used"]
     cache_read = classify_token_measure(
         backend, provider_used, "cache_read_tokens", row["cache_read_tokens"]

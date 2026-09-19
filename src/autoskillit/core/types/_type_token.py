@@ -84,6 +84,41 @@ class TokenMeasure:
             raise ValueError("Token measure value must be an integer or null")
         return cls(parsed_state, value)
 
+    @classmethod
+    def measure_from_raw(cls, raw: object, *, legacy: bool = False) -> TokenMeasure:
+        """Canonical decoder: dict/int/None → TokenMeasure with legacy-zero overload.
+
+        All four production call sites (execution evidence, pipeline tokens, the
+        stdlib-only hook runtime helper, and TokenMeasure.from_dict itself) funnel
+        through here so semantics cannot drift.
+        """
+        if isinstance(raw, dict):
+            try:
+                return cls.from_dict(raw)
+            except ValueError:
+                return cls.unknown()
+        if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
+            if legacy and raw == 0:
+                return cls.unknown()
+            return cls.observed(raw)
+        return cls.unknown()
+
+    @staticmethod
+    def combine_or_unknown(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
+        """Combine two measures or downgrade to unknown on incompatible states."""
+        try:
+            return left.combine(right)
+        except ValueError:
+            return TokenMeasure.unknown()
+
+    @staticmethod
+    def maximum_or_unknown(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
+        """Take the maximum of two measures or downgrade to unknown on conflict."""
+        try:
+            return left.maximum(right)
+        except ValueError:
+            return TokenMeasure.unknown()
+
     def to_dict(self) -> SerializedTokenMeasure:
         return {"state": self.state.value, "value": self.value}
 
@@ -111,7 +146,7 @@ class TokenMeasure:
 
 
 class TurnTokenEntry(TypedDict):
-    """Raw in-memory turn evidence; the sidecar writer classifies its measures."""
+    """One turn's raw token accounting prior to sidecar classification."""
 
     backend: str
     provider_used: str
@@ -144,6 +179,18 @@ class CanonicalTokenUsage:
             raise ValueError("Canonical token usage requires a non-empty backend")
         if not self.provider_used:
             raise ValueError("Canonical token usage requires a non-empty provider_used")
+        for field_name in (
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, TokenMeasure):
+                raise TypeError(
+                    f"CanonicalTokenUsage.{field_name} must be a TokenMeasure, "
+                    f"got {type(value).__name__}"
+                )
 
     @staticmethod
     def _observed_or_unknown(raw: dict[str, Any], field_name: str) -> TokenMeasure:

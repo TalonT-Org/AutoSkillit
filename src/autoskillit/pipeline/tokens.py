@@ -32,32 +32,17 @@ def canonical_step_name(step_name: str) -> str:
 
 
 def _measure(raw: object, *, legacy: bool = False) -> TokenMeasure:
-    """Decode one live or durable measure without turning absence into zero."""
-    if isinstance(raw, dict):
-        try:
-            return TokenMeasure.from_dict(raw)
-        except ValueError:
-            return TokenMeasure.unknown()
-    if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
-        if legacy and raw == 0:
-            return TokenMeasure.unknown()
-        return TokenMeasure.observed(raw)
-    return TokenMeasure.unknown()
+    """Decode one live or durable measure through the canonical helper."""
+    return TokenMeasure.measure_from_raw(raw, legacy=legacy)
 
 
 def _combine(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
     """Combine evidence conservatively when a partial observation is incompatible."""
-    try:
-        return left.combine(right)
-    except ValueError:
-        return TokenMeasure.unknown()
+    return TokenMeasure.combine_or_unknown(left, right)
 
 
 def _maximum(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
-    try:
-        return left.maximum(right)
-    except ValueError:
-        return TokenMeasure.unknown()
+    return TokenMeasure.maximum_or_unknown(left, right)
 
 
 def _primary_model(token_usage: dict[str, Any]) -> str:

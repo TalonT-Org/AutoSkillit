@@ -30,7 +30,7 @@ def reconcile_token_evidence(
     otlp_token_usage: dict[str, Any] | None,
     provider_outcome: ProviderOutcome,
 ) -> SkillResult:
-    """Select correlated OTLP accounting while retaining parser-only turn metadata."""
+    """Prefer correlated OTLP totals; carry parser-only turn metadata across."""
     if otlp_token_usage is None:
         return dataclasses.replace(skill_result, provider=provider_outcome)
     selected = dict(otlp_token_usage)

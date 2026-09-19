@@ -25,7 +25,7 @@ from autoskillit.core import (
     SemanticLaunchPlan,
     SkillProjectionBinding,
     ValidatedAddDir,
-    resolve_provider_used,
+    default_provider_for,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
@@ -123,10 +123,11 @@ def _prepare_headless_launch(
     )
     provider_binding = provider_binding or (
         ProviderBinding(
-            provider=provider_name
-            or profile_name
-            or resolve_provider_used(
-                launch_backend.name, launch_backend.capabilities.anthropic_provider_capable
+            provider=default_provider_for(
+                launch_backend.name,
+                launch_backend.capabilities.anthropic_provider_capable,
+                profile_name=profile_name,
+                provider_name=provider_name,
             ),
             profile=profile_name or "default",
             required_backend=backend_authority.backend,

@@ -40,8 +40,8 @@ from autoskillit.core import (
     SkillProjectionPreparation,
     SkillResult,
     ValidatedAddDir,
+    default_provider_for,
     plugin_launch_binding_scope,
-    resolve_provider_used,
     temp_dir_display_str,
 )
 from autoskillit.execution.headless._headless_helpers import (
@@ -188,11 +188,11 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             )
         )
         dispatch_provider_binding = ProviderBinding(
-            provider=provider_name
-            or profile_name
-            or resolve_provider_used(
+            provider=default_provider_for(
                 dispatch_backend.name,
                 dispatch_backend.capabilities.anthropic_provider_capable,
+                profile_name=profile_name,
+                provider_name=provider_name,
             ),
             profile=profile_name or "default",
             required_backend=dispatch_backend.name,
@@ -431,10 +431,10 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                         on_spawn=on_spawn,
                         skip_clone_guard=True,
                         pty_override=False,
-                        provider_name=provider_name
-                        or resolve_provider_used(
+                        provider_name=default_provider_for(
                             backend.name,
                             backend.capabilities.anthropic_provider_capable,
+                            provider_name=provider_name,
                         ),
                         provider_extras=merged_extras or None,
                         enable_deadline_extension=effective_deadline_ext,

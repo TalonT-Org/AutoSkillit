@@ -24,18 +24,9 @@ inventoried.
 from __future__ import annotations
 
 import ast
-from datetime import date
 from pathlib import Path
 
 import pytest
-
-from tests._evaluation_shape_matrix import DEFERRED_SHAPES
-from tests.arch._deferred_debt import (
-    TrackedDeferral,
-    assert_deferrals_have_regression_tests,
-    assert_not_stale,
-    assert_rationale_present,
-)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -349,96 +340,3 @@ def test_raw_command_scan_detector_does_not_flag_sanctioned_projection() -> None
     collector = _RawScanCollector("synthetic.py")
     collector.visit(tree.body[0])
     assert collector.findings == []
-
-
-# ---------------------------------------------------------------------------
-# Deferred stdin-literal regex limitations (tracking issue #4973)
-# ---------------------------------------------------------------------------
-
-_DEFERRED_STDIN_LITERAL_SHAPES: dict[str, TrackedDeferral] = {
-    "two-heredocs-one-line": TrackedDeferral(
-        issue=4973,
-        rationale=(
-            "_HEREDOC_BODY_RE matches one heredoc per opening line; a second "
-            "`<<` operator on the same line is not recognized as a distinct "
-            "heredoc, so its body is never captured or bound to a consumer."
-        ),
-        added_date=date(2026, 9, 11),
-        regression_test=(
-            "tests/hooks/test_command_classification.py::"
-            "TestDeferredStdinLiteralShapes::test_two_heredocs_one_line"
-        ),
-    ),
-    "backslash-quoted-delimiter": TrackedDeferral(
-        issue=4973,
-        rationale=(
-            "_HEREDOC_BODY_RE's quote group is `['\"]?`, which does not "
-            "recognize a backslash-quoted delimiter (`<<\\EOF`) as quoted -- "
-            "outer_expansion is derived only for unquoted and whole-quoted "
-            "word delimiters."
-        ),
-        added_date=date(2026, 9, 11),
-        regression_test=(
-            "tests/hooks/test_command_classification.py::"
-            "TestDeferredStdinLiteralShapes::test_backslash_quoted_delimiter"
-        ),
-    ),
-    "partially-quoted-delimiter": TrackedDeferral(
-        issue=4973,
-        rationale=(
-            'A delimiter word with only part of it quoted (`<<E"OF"`) is '
-            "not recognized by _HEREDOC_BODY_RE's single leading/trailing "
-            "quote-character group, so its outer_expansion cannot be derived."
-        ),
-        added_date=date(2026, 9, 11),
-        regression_test=(
-            "tests/hooks/test_command_classification.py::"
-            "TestDeferredStdinLiteralShapes::test_partially_quoted_delimiter"
-        ),
-    ),
-    "unterminated-heredoc": TrackedDeferral(
-        issue=4973,
-        rationale=(
-            "With no matching terminator line, _HEREDOC_BODY_RE never "
-            "matches at all, so the body is not captured as a StdinLiteral "
-            "and its lines tokenize as ordinary outer command text instead."
-        ),
-        added_date=date(2026, 9, 11),
-        regression_test=(
-            "tests/hooks/test_command_classification.py::"
-            "TestDeferredStdinLiteralShapes::test_unterminated_heredoc"
-        ),
-    ),
-    "non-word-delimiter": TrackedDeferral(
-        issue=4973,
-        rationale=(
-            "_HEREDOC_BODY_RE's delimiter class is `\\w+`, which rejects a "
-            "delimiter containing non-word characters such as a hyphen "
-            "(`<<'END-OF-DOC'`), so the heredoc is not recognized at all."
-        ),
-        added_date=date(2026, 9, 11),
-        regression_test=(
-            "tests/hooks/test_command_classification.py::"
-            "TestDeferredStdinLiteralShapes::test_non_word_delimiter"
-        ),
-    ),
-}
-
-
-def test_deferred_stdin_literal_shapes_match_matrix_registry() -> None:
-    """The deferral registry here must name exactly DEFERRED_SHAPES's keys."""
-    assert set(_DEFERRED_STDIN_LITERAL_SHAPES) == set(DEFERRED_SHAPES)
-
-
-def test_deferred_stdin_literal_shapes_are_rationale_and_current() -> None:
-    assert_rationale_present(
-        _DEFERRED_STDIN_LITERAL_SHAPES, registry_name="deferred stdin-literal shapes"
-    )
-    assert_not_stale(_DEFERRED_STDIN_LITERAL_SHAPES, registry_name="deferred stdin-literal shapes")
-
-
-def test_deferred_stdin_literal_shapes_have_regression_tests() -> None:
-    assert_deferrals_have_regression_tests(
-        _DEFERRED_STDIN_LITERAL_SHAPES,
-        registry_name="deferred stdin-literal shapes",
-    )

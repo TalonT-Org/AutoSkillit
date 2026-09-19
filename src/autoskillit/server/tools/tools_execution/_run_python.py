@@ -16,7 +16,10 @@ from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import (
     _check_recipe_read_prohibition,
     _require_enabled,
-    _require_orchestrator_or_higher,
+)
+from autoskillit.server.lifecycle._session_scope import (
+    SCOPE_ORCHESTRATOR_OR_HIGHER,
+    session_scoped,
 )
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
@@ -62,6 +65,7 @@ def _finalize_run_python_response(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ORCHESTRATOR_OR_HIGHER)
 @_cancellation_shield(result_type="run_python")
 @track_response_size("run_python")
 async def run_python(
@@ -92,8 +96,6 @@ async def run_python(
 
     Never raises.
     """
-    if (tier_gate := _require_orchestrator_or_higher("run_python")) is not None:
-        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:

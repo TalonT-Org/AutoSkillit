@@ -36,6 +36,7 @@ from autoskillit.server import mcp
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -165,6 +166,7 @@ async def _close_issues_sequentially(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("get_pr_reviews")
 async def get_pr_reviews(
@@ -237,6 +239,7 @@ async def get_pr_reviews(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("verify_review_receipt")
 async def verify_review_receipt(
@@ -325,6 +328,7 @@ async def verify_review_receipt(
 
 
 @mcp.tool(tags={"autoskillit", "headless", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("post_pr_review")
 async def post_pr_review(
@@ -527,6 +531,7 @@ async def post_pr_review(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("bulk_close_issues")
 async def bulk_close_issues(

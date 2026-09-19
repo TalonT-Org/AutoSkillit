@@ -24,7 +24,12 @@ from autoskillit.core import (
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.lifecycle._guards import _require_enabled, _require_orchestrator_exact
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import (
+    SCOPE_ANY,
+    SCOPE_ORCHESTRATOR_EXACT,
+    session_scoped,
+)
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.response._run_skill_completion import _request_session_identity
 from autoskillit.server.tools import (
@@ -51,6 +56,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("record_pipeline_step")
 async def record_pipeline_step(
@@ -487,14 +493,13 @@ def mark_step_skipped(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("recover_run_skill_result")
 async def recover_run_skill_result(
     ctx: Context = CurrentContext(),
 ) -> str:
     """Recover the sole delivered ``run_skill`` receipt after transport loss. Never raises."""
-    if (tier_gate := _require_orchestrator_exact("recover_run_skill_result")) is not None:
-        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     try:
@@ -592,6 +597,7 @@ def _apply_receipt_tracker_outcome(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("complete_run_skill_result")
 async def complete_run_skill_result(
@@ -599,8 +605,6 @@ async def complete_run_skill_result(
     ctx: Context = CurrentContext(),
 ) -> str:
     """Acknowledge one exactly delivered ``run_skill`` result. Never raises."""
-    if (tier_gate := _require_orchestrator_exact("complete_run_skill_result")) is not None:
-        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     try:

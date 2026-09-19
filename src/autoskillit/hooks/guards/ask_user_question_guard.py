@@ -60,7 +60,7 @@ def _is_fresh(data: dict, ttl_hours: int = 24) -> bool:
 
 
 def main() -> None:
-    enforce_session_scope("interactive_only")
+    enforce_session_scope("headless_only")
 
     try:
         payload = json.loads(sys.stdin.read())

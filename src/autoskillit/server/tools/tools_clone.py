@@ -22,6 +22,7 @@ from autoskillit.server import mcp
 from autoskillit.server._misc import clone_registry, ensure_base_branch_local
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled, _require_no_infrastructure_fault
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -33,6 +34,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("clone_repo")
 async def clone_repo(
@@ -133,6 +135,7 @@ async def clone_repo(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("remove_clone")
 async def remove_clone(
@@ -199,6 +202,7 @@ async def remove_clone(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("push_to_remote")
 async def push_to_remote(
@@ -333,6 +337,7 @@ async def push_to_remote(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("register_clone_status")
 async def register_clone_status(
@@ -423,6 +428,7 @@ async def register_clone_status(
 
 
 @mcp.tool(tags={"autoskillit", "clone", "fleet"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(
@@ -539,6 +545,7 @@ def _require_clone_success(clone_result: CloneResult, source_dir: str) -> str | 
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("bootstrap_clone")
 async def bootstrap_clone(

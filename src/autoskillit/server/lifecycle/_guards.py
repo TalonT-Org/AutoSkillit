@@ -15,7 +15,6 @@ from autoskillit.core import (
     BackendPinResolution,
     FaultDomain,
     InputContractResolver,
-    SessionType,
     extract_bash_write_targets,
     extract_path_arg,
     extract_positional_args,
@@ -23,14 +22,13 @@ from autoskillit.core import (
     get_logger,
     is_path_like_token,
     parse_plan_paths,
-    session_type,
 )
 from autoskillit.execution import get_backend
 from autoskillit.hooks import (
     PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
 )
-from autoskillit.pipeline import gate_error_result, headless_error_result
+from autoskillit.pipeline import gate_error_result
 
 if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import (
@@ -57,87 +55,6 @@ def _get_config():  # type: ignore[return]
     from autoskillit.server.lifecycle._state import _get_config as _cfg_fn  # circular-break
 
     return _cfg_fn()
-
-
-def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is L1 (skill session); None if permitted.
-
-    Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be L2 (orchestrator) or L3 (fleet).
-    Fail-closed: unset/invalid SESSION_TYPE → SKILL → deny.
-    """
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        return None
-
-    try:
-        st = session_type()
-    except ValueError as e:
-        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
-    if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
-        return None
-
-    msg = (
-        f"{tool_name} cannot be called from skill sessions. "
-        "Only orchestrator or fleet sessions may call this tool."
-        if tool_name
-        else None
-    )
-    return headless_error_result(msg)
-
-
-def _require_orchestrator_exact(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not exactly L2; None if permitted.
-
-    Interactive sessions (HEADLESS not set) always pass.
-    Headless sessions must be exactly L2 (orchestrator).
-    L1 (skill session) and L3 (fleet) are both denied.
-    """
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        return None
-
-    try:
-        st = session_type()
-    except ValueError as e:
-        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
-    if st is SessionType.ORCHESTRATOR:
-        return None
-
-    if st is SessionType.FLEET:
-        msg = (
-            f"{tool_name} cannot be called from {st.value} sessions. "
-            "Only orchestrator sessions may call this tool."
-            if tool_name
-            else None
-        )
-    else:
-        msg = (
-            f"{tool_name} cannot be called from skill sessions. "
-            "Only the orchestrator may call this tool."
-            if tool_name
-            else None
-        )
-    return headless_error_result(msg)
-
-
-def _require_fleet(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if session is not L3 (fleet); None if permitted.
-
-    No interactive bypass — fleet is a specific orchestration level, not a headless guard.
-    L1 (skill session) and L2 (orchestrator) sessions are both denied.
-    """
-    try:
-        st = session_type()
-    except ValueError as e:
-        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
-    if st is SessionType.FLEET:
-        return None
-
-    msg = (
-        f"{tool_name} requires a fleet session. Current session type is not fleet."
-        if tool_name
-        else None
-    )
-    return headless_error_result(msg)
 
 
 def _require_enabled() -> str | None:

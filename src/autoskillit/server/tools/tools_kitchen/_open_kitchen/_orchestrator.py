@@ -39,6 +39,7 @@ from autoskillit.pipeline import (
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
+from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
 from autoskillit.server.recipe._recipe_delivery import document_recipe_delivery_contract
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope
@@ -146,6 +147,7 @@ def _build_anonymous_open_response(
     annotations={"readOnlyHint": False},
     meta=response_backstop_tool_meta("open_kitchen", always_load=True),
 )
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @document_recipe_delivery_contract
 @_bind_open_kitchen_transition
 @_cancellation_shield(
@@ -199,22 +201,6 @@ async def open_kitchen(
         if overrides:
             if authority_overlap := set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS:
                 return json.dumps(build_authority_rejection_envelope(authority_overlap))
-
-        # Headless guard — wrap denial in envelope shape
-        if (h := _tk_pkg._require_orchestrator_exact("open_kitchen")) is not None:
-            parsed_h = json.loads(h)
-            return json.dumps(
-                {
-                    "success": False,
-                    "kitchen": "failed",
-                    "user_visible_message": parsed_h.get(
-                        "result",
-                        "open_kitchen cannot be called from headless sessions.",
-                    ),
-                    "error": "HeadlessDenied",
-                    "stage": "headless_guard",
-                }
-            )
 
         from autoskillit.server import _get_ctx  # circular-break
 

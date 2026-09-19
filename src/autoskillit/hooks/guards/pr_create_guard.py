@@ -31,7 +31,6 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
-    EXEMPT_SESSION_TYPES_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
@@ -48,7 +47,6 @@ PR_CREATE_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["pr_create_guard"]
 _DENY_REASON = DENY_REASON_BY_GUARD["pr_create_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["pr_create_guard"]
-_EXEMPT_SESSION_TYPES: frozenset[str] = EXEMPT_SESSION_TYPES_BY_GUARD["pr_create_guard"]
 
 
 def _is_gh_pr_create(cmd: str) -> bool:

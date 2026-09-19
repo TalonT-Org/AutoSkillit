@@ -23,6 +23,7 @@ from autoskillit.server import mcp
 from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._backend_compat import (
     DirectSkillDispatch,
     _prepare_direct_skill_dispatch,
@@ -43,6 +44,7 @@ _FINGERPRINT_END = "---/bug-fingerprint---"
 
 
 @mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("fetch_github_issue")
 async def fetch_github_issue(
@@ -123,6 +125,7 @@ async def fetch_github_issue(
 
 
 @mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
@@ -175,6 +178,7 @@ async def get_issue_title(issue_url: str) -> str:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("report_bug")
 async def report_bug(

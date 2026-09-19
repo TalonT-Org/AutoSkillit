@@ -60,7 +60,6 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
 )
-from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 from autoskillit.server.recipe._recipe_delivery import finalize_recipe_delivery
 from autoskillit.server.recipe._recipe_execution import clear_recipe_execution
 from autoskillit.server.recipe._recipe_segment_delivery import prepare_recipe_segment_delivery
@@ -206,7 +205,6 @@ __all__ = [
     "_retain_kitchen_tracker_authority",
     "_register_active_recipe_kitchen",
     "_pipeline_tracker_auto_init_failure",
-    "_require_orchestrator_exact",
     "_write_ingredient_locks",
     "_write_reload_sentinel",
     "__version__",

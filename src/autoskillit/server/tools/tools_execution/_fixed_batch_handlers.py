@@ -57,6 +57,7 @@ from autoskillit.server import mcp
 from autoskillit.server._misc import project_agent_skill_document
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.response._run_skill_completion import _request_session_identity
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -577,6 +578,7 @@ def _read_fixed_batch_result_handler(
     tags={"autoskillit", "kitchen", "kitchen-core"},
     annotations={"readOnlyHint": False},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("run_fixed_batch")
 async def run_fixed_batch(
@@ -613,6 +615,7 @@ async def run_fixed_batch(
     tags={"autoskillit", "kitchen", "kitchen-core"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("read_fixed_batch_result")
 async def read_fixed_batch_result(

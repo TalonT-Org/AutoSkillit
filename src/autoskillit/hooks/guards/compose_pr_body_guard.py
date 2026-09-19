@@ -314,7 +314,7 @@ def _body_path_validation_error(
 
 
 def main() -> None:
-    enforce_session_scope("interactive_only")
+    enforce_session_scope("headless_only")
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name not in {"compose-pr", "open-integration-pr"}:

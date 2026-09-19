@@ -7,7 +7,7 @@ import json
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
+from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("disable_quota_guard")
 async def disable_quota_guard() -> str:
@@ -37,8 +38,6 @@ async def disable_quota_guard() -> str:
     Never raises.
     """
     try:
-        if (h := _require_orchestrator_exact("disable_quota_guard")) is not None:
-            return h
         from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()

@@ -43,6 +43,7 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 POLICY_FUNCTIONS: tuple[tuple[str, str], ...] = (
     ("_interactive_invocation_environment_policy", "execution/backends/claude.py"),
     ("admit_hook_session_scope", "hooks/_runtime/_hook_settings.py"),
+    ("admit_tool_session_scope", "server/lifecycle/_session_scope.py"),
 )
 
 #: Policy functions permitted exactly two call sites, iff the second site is

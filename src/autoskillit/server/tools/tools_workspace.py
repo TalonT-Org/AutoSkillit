@@ -452,7 +452,14 @@ async def commit_files(
 
                 response: dict[str, object] = {"success": True, "commit_sha": commit_sha}
                 if self_revert_base is not None:
-                    assert tool_ctx.runner is not None
+                    if tool_ctx.runner is None:
+                        return _finish(
+                            {
+                                "success": False,
+                                "error": "scan_self_reverts requires a runner context",
+                            },
+                            failure_class=CommitFailureClass.UNHANDLED,
+                        )
                     response.update(
                         await scan_self_reverts(
                             detect_self_reverts,

@@ -65,7 +65,7 @@ The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xd
 
   * **Add tests for new features**
   * **Follow existing test patterns** in `tests/` — avoid test code redundancy
-  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, use the configured `test_check.command` (in this repository, `task test-local-gate`). Never use `pytest`, `python -m pytest`, or any other test runner directly.
+  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, use the configured `test_check.command` (in this repository, `task test-local-gate`); `task test-check` is the generic/default. Never use `pytest`, `python -m pytest`, or any other test runner directly.
   * **Filtered tests**: `task test-filtered` runs path-filtered tests (defaults `AUTOSKILLIT_TEST_FILTER=conservative`). Set `AUTOSKILLIT_TEST_BASE_REF` to control the diff base. See `tests/AGENTS.md` for filter modes and algorithm details.
 
 ## **5. Architecture**

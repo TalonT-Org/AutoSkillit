@@ -52,6 +52,7 @@ _RECOVERY_TOOLS = frozenset(
 )
 _EXECUTION_TOOLS = frozenset(
     {
+        "bind_plan_set",
         "delegate_evidence_reader",
         "run_cmd",
         "run_fixed_batch",

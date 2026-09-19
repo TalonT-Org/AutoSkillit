@@ -66,6 +66,10 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
+- `plan_set_coverage_gaps` (optional) — A bounded list of requirement gaps returned by a
+  failed sealed plan-set bind. On re-entry, allocate every listed requirement in the new
+  plan set; do not absorb the gaps into Part A by default. In grouped planning, the
+  dedicated gap-replan route adds a group to the still-open set.
 
 ## Core Values - CRITICAL
 
@@ -308,7 +312,7 @@ handles correctly.
 - Include verification steps
 - Be willing to recommend significant refactoring if that's the right answer
 - Start all independent child delegations before awaiting any result to maximize concurrency
-- The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
+- The plan set must cover every remediation item and every requirement item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan. Each part declares exactly its owned or shared items in `## Issue Requirement Allocation`; never list sibling parts or paths.
 - Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
 **Requirement Echo Rule:** Every behavioral requirement stated in `## Summary` or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. After drafting the plan:
@@ -432,6 +436,11 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ## Verification
 {How to verify the implementation is correct}
 
+## Issue Requirement Allocation
+| Requirement ID | Allocation | Implementation Step |
+|---|---|---|
+| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |
 |---|---|
@@ -455,6 +464,11 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 
 ## Verification
 {How to verify THIS part's implementation is correct}
+
+## Issue Requirement Allocation
+| Requirement ID | Allocation | Implementation Step |
+|---|---|---|
+| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
 
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |

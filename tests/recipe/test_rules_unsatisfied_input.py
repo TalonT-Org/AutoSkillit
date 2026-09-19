@@ -59,10 +59,11 @@ def test_unsatisfied_input_clean_when_provided() -> None:
             "retry_step": {
                 "tool": "run_skill",
                 "with": {
-                    "skill_command": (
-                        "/autoskillit:retry-worktree "
-                        "${{ context.plan_path }} ${{ context.worktree_path }}"
-                    ),
+                    "skill_command": "/autoskillit:retry-worktree",
+                    "skill_inputs": {
+                        "plan_path": "${{ context.plan_path }}",
+                        "worktree_path": "${{ context.worktree_path }}",
+                    },
                 },
                 "on_success": "done",
             },
@@ -113,6 +114,7 @@ def test_unsatisfied_input_from_pipeline_inputs() -> None:
         ingredients={
             "plan_path": RecipeIngredient(description="Plan file", required=True),
             "worktree_path": RecipeIngredient(description="Worktree", required=True),
+            "plan_set_authority_path": RecipeIngredient(description="Authority", required=True),
         },
         steps={
             "retry_step": _parse_step(
@@ -121,7 +123,8 @@ def test_unsatisfied_input_from_pipeline_inputs() -> None:
                     "with": {
                         "skill_command": (
                             "/autoskillit:retry-worktree "
-                            "${{ inputs.plan_path }} ${{ inputs.worktree_path }}"
+                            "${{ inputs.plan_path }} ${{ inputs.worktree_path }} "
+                            "${{ inputs.plan_set_authority_path }}"
                         ),
                     },
                     "on_success": "done",

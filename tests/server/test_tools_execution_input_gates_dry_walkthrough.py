@@ -8,7 +8,10 @@ import json
 
 import pytest
 
-from autoskillit.server.lifecycle._guards import _check_dry_walkthrough
+from autoskillit.server.lifecycle._guards import (
+    _check_dry_walkthrough,
+    _check_dry_walkthrough_plan,
+)
 from autoskillit.server.lifecycle._state import _get_config
 from autoskillit.server.tools.tools_execution import run_skill
 
@@ -37,6 +40,20 @@ class TestCheckDryWalkthrough:
         plan.write_text("Dry-walkthrough verified = TRUE\n# My Plan")
         result = _check_dry_walkthrough(f"/implement-worktree-no-merge {plan}", str(tmp_path))
         assert result is None
+
+    def test_bound_plan_path_is_checked_before_attested_preflight(self, tool_ctx, tmp_path):
+        plan_dir = tmp_path / "make-plan"
+        plan_dir.mkdir()
+        plan = plan_dir / "plan.md"
+        plan.write_text("# Unmarked plan\n")
+        skill = "/implement-worktree-no-merge"
+
+        rejected = _check_dry_walkthrough_plan(skill, str(tmp_path), str(plan))
+        assert rejected is not None
+        assert "dry-walked" in json.loads(rejected)["result"].lower()
+
+        plan.write_text("Dry-walkthrough verified = TRUE\n# Marked plan\n")
+        assert _check_dry_walkthrough_plan(skill, str(tmp_path), str(plan)) is None
 
     def test_dry_walkthrough_gate_still_works_for_implement_worktree(self, tool_ctx, tmp_path):
         """Original /implement-worktree gating is not broken."""

@@ -41,36 +41,48 @@ def resolve_contained_path(
     original = Path(path)
     orig_st = original.lstat()
     if stat.S_ISLNK(orig_st.st_mode):
-        raise ContainmentError("Symlink not allowed")
+        raise ContainmentError("Symlink not allowed", reason="symlink")
     allowed_root_resolved = Path(allowed_root).resolve(strict=True)
     resolved = original.resolve(strict=True)
     if not resolved.is_relative_to(allowed_root_resolved):
-        raise ContainmentError("Path escapes allowed root")
+        raise ContainmentError("Path escapes allowed root", reason="path_escape")
     st = resolved.stat()
     if not stat.S_ISREG(st.st_mode):
-        raise ContainmentError("Regular file required")
+        raise ContainmentError("Regular file required", reason="not_regular")
     if st.st_nlink > 1:
-        raise ContainmentError("Hardlink not allowed")
+        raise ContainmentError("Hardlink not allowed", reason="hardlink")
     if st.st_size > max_size_bytes:
-        raise ContainmentError("File too large")
+        raise ContainmentError("File too large", reason="oversized")
     if st.st_mode & 0o002:
-        raise ContainmentError("World-writable file")
+        raise ContainmentError("World-writable file", reason="world_writable")
     return resolved
 
 
 def check_metadata_stable(path: Path, pre_stat: os.stat_result, post_stat: os.stat_result) -> None:
     if pre_stat.st_mtime_ns != post_stat.st_mtime_ns:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     if pre_stat.st_size != post_stat.st_size:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     if pre_stat.st_ino != post_stat.st_ino:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     if pre_stat.st_dev != post_stat.st_dev:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     if pre_stat.st_mode != post_stat.st_mode:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     if pre_stat.st_nlink != post_stat.st_nlink:
-        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {path} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
 
 
 def _open_beneath_root_without_symlinks(
@@ -91,7 +103,7 @@ def _open_beneath_root_without_symlinks(
     except ValueError:
         relative = resolved.relative_to(resolved_root)
     if not relative.parts:
-        raise ContainmentError("Regular file required")
+        raise ContainmentError("Regular file required", reason="not_regular")
 
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     file_flags = os.O_RDONLY | os.O_NOFOLLOW
@@ -127,9 +139,11 @@ def read_stable_contained_bytes(
     finally:
         os.close(fd)
     if len(data) > max_size_bytes:
-        raise ContainmentError("File too large")
+        raise ContainmentError("File too large", reason="oversized")
     if len(data) != pre_stat.st_size:
-        raise ContainmentError(f"File {resolved} modified between reads (TOCTOU)")
+        raise ContainmentError(
+            f"File {resolved} modified between reads (TOCTOU)", reason="metadata_drift"
+        )
     check_metadata_stable(resolved, pre_stat, post_fd_stat)
     check_metadata_stable(resolved, pre_stat, resolved.stat())
     return resolved, data

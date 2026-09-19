@@ -1,4 +1,13 @@
-"""Infrastructure and pipeline-control protocol definitions."""
+"""Infrastructure and pipeline-control protocol definitions.
+
+This module groups three responsibilities documented together by the core/types
+concern map: infrastructure, pipeline-control, and server-owned audit/plan-set
+publication protocols. The three publication protocols (AuditAuthorityMaterializer,
+CommittedDispositionResolver, PlanSetMaterializer) live in their own section
+below for clarity even though they share this file. They were originally split
+into _type_audit_protocols.py but were consolidated here to stay within the
+core/types file-count budget.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +16,8 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from .._managed_worker_capacity import ManagedWorkerPermit
+from ._type_audit_admission import AuditIdentityReservation, AuditMaterializationResult
+from ._type_plan_set_authority import PlanSetBindRequest, PlanSetBindResult
 from ._type_skill_semantics import SemanticAdaptationContext
 
 __all__ = [
@@ -20,6 +31,9 @@ __all__ = [
     "QuotaRefreshTask",
     "TokenFactory",
     "CampaignProtector",
+    "AuditAuthorityMaterializer",
+    "CommittedDispositionResolver",
+    "PlanSetMaterializer",
 ]
 
 
@@ -59,6 +73,26 @@ class ManagedJoinAttestationAuthority(Protocol):
         backend: str,
         parent_session_id: str,
     ) -> SemanticAdaptationContext | None: ...
+
+
+@runtime_checkable
+class AuditAuthorityMaterializer(Protocol):
+    """Server-owned publisher for audit authority artifacts."""
+
+    def materialize(
+        self,
+        *,
+        reservation: AuditIdentityReservation,
+        semantic_result_path: Path,
+        preflight_step_names: tuple[str, ...],
+    ) -> AuditMaterializationResult: ...
+
+
+@runtime_checkable
+class CommittedDispositionResolver(Protocol):
+    """Lookup boundary for committed audit disposition artifacts."""
+
+    def resolve(self, *, authority_digest: str, plan_digest: str) -> Path | None: ...
 
 
 @runtime_checkable
@@ -191,6 +225,13 @@ class CampaignProtector(Protocol):
     """
 
     def __call__(self, project_dir: Path) -> frozenset[str]: ...
+
+
+@runtime_checkable
+class PlanSetMaterializer(Protocol):
+    """Server-owned binder for a content-addressed plan-set authority."""
+
+    async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult: ...
 
 
 @dataclass(frozen=True, slots=True)

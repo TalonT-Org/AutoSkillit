@@ -1,4 +1,4 @@
-"""Contract test: dry-walkthrough SKILL.md must contain plan-vs-issue coverage check step."""
+"""The walkthrough distinguishes verified plan sets from standalone issue checks."""
 
 from __future__ import annotations
 
@@ -9,112 +9,78 @@ import pytest
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_SKILL_MD = (
-    Path(__file__).resolve().parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "dry-walkthrough"
-    / "SKILL.md"
+_SKILL = (
+    Path(__file__).resolve().parents[2]
+    / "src/autoskillit/skills_extended/dry-walkthrough/SKILL.md"
 )
 
 
-def _read_skill_md() -> str:
-    return _SKILL_MD.read_text()
+@pytest.fixture(scope="module")
+def skill_text() -> str:
+    return _SKILL.read_text(encoding="utf-8")
 
 
-def test_dry_walkthrough_has_issue_coverage_step():
-    """dry-walkthrough SKILL.md must contain Step 4.6 for plan-vs-issue coverage."""
-    content = _read_skill_md()
+def _coverage_section(text: str) -> str:
+    return text.split("### Step 4.6: Plan-vs-Issue Coverage Check", 1)[1].split(
+        "### Step 4.7:", 1
+    )[0]
+
+
+def _mode(section: str, letter: str, next_letter: str | None = None) -> str:
+    start = section.index(f"**{letter}.")
+    end = section.index(f"**{next_letter}.", start) if next_letter else len(section)
+    return section[start:end]
+
+
+def test_four_modes_are_ordered_and_exclusive(skill_text: str) -> None:
+    section = _coverage_section(skill_text)
+    assert "Exactly one mode applies" in section
+    assert [section.index(f"**{letter}.") for letter in "ABCD"] == sorted(
+        section.index(f"**{letter}.") for letter in "ABCD"
+    )
+    assert skill_text.index("### Step 4.5") < skill_text.index("### Step 4.6")
+    assert skill_text.index("### Step 4.6") < skill_text.index("### Step 4.7")
+
+
+def test_authority_mode_checks_only_assigned_requirements(skill_text: str) -> None:
+    mode = re.sub(r"\s+", " ", _mode(_coverage_section(skill_text), "A", "B"))
+    assert "verified_plan_set_preflight" in mode
+    assert "assigned_requirements" in mode
+    assert "Do not fetch the issue" in mode
+    assert "do not read, open, or reference any other part" in mode
+    assert "do not stamp" in mode
+    assert "aggregate coverage" in mode
+
+
+def test_standalone_single_part_mode_remains_blocking(skill_text: str) -> None:
+    mode = _mode(_coverage_section(skill_text), "B", "C")
+    assert "gh issue view" in mode
+    assert "Enumerate" in mode
+    assert "block stamping" in mode
+
+
+def test_standalone_multipart_warns_without_whole_issue_verdict(skill_text: str) -> None:
+    mode = _mode(_coverage_section(skill_text), "C", "D")
+    assert "Plan-set coverage not verified" in mode
+    assert "do not evaluate whole-issue coverage" in mode
+    assert "do not block" in mode
+
+
+def test_no_issue_mode_and_authority_never_rule(skill_text: str) -> None:
+    mode = _mode(_coverage_section(skill_text), "D")
+    assert "No issue context" in mode
+    assert "omitted" in mode
     assert re.search(
-        r"###\s+Step\s+4\.6[\s:].*Plan-vs-Issue\s+Coverage\s+Check",
-        content,
-        re.DOTALL,
-    ), (
-        "dry-walkthrough/SKILL.md must contain a '### Step 4.6' section titled "
-        "'Plan-vs-Issue Coverage Check'"
+        r"\*\*NEVER:\*\*[\s\S]*?Open plan-set authority artifacts directly",
+        skill_text,
     )
-
-
-def test_dry_walkthrough_issue_coverage_positioned_after_step45():
-    """Step 4.6 must appear between Step 4.5 and Step 5."""
-    content = _read_skill_md()
-    step45_pos = content.find("### Step 4.5")
-    step46_pos = content.find("### Step 4.6")
-    step5_pos = content.find("### Step 5:")
-    assert step45_pos != -1, "Step 4.5 section must exist"
-    assert step46_pos != -1, "Step 4.6 section must exist"
-    assert step5_pos != -1, "Step 5 section must exist"
-    assert step45_pos < step46_pos < step5_pos, (
-        "Step 4.6 must be positioned between Step 4.5 and Step 5 in dry-walkthrough/SKILL.md"
-    )
-
-
-def test_dry_walkthrough_issue_coverage_references_issue_context():
-    """Step 4.6 must reference issue_url or issue_number."""
-    content = _read_skill_md()
-    step46_section = content[content.find("### Step 4.6") : content.find("### Step 5:")]
-    assert "issue_url" in step46_section or "issue_number" in step46_section, (
-        "dry-walkthrough SKILL.md Step 4.6 must reference issue_url or issue_number"
-    )
-
-
-def test_dry_walkthrough_issue_coverage_checks_enumerated_items():
-    """Step 4.6 must mention enumerated or remediation item language."""
-    content = _read_skill_md()
-    step46_section = content[content.find("### Step 4.6") : content.find("### Step 5:")]
     assert re.search(
-        r"enumerated|remediation item|requirement item",
-        step46_section,
-        re.IGNORECASE,
-    ), (
-        "dry-walkthrough SKILL.md Step 4.6 must mention 'enumerated', 'remediation item', "
-        "or 'requirement item' to describe the scope check"
+        r"If the plan filename contains `_part_`",
+        skill_text,
     )
 
 
-def test_dry_walkthrough_issue_coverage_blocks_on_missing():
-    """Step 4.6 must specify blocking/failing when items are unmapped."""
-    content = _read_skill_md()
-    step46_section = content[content.find("### Step 4.6") : content.find("### Step 5:")]
-    assert re.search(
-        r"UNMAPPED|FAIL|block|do not stamp|not stamp",
-        step46_section,
-        re.IGNORECASE,
-    ), (
-        "dry-walkthrough SKILL.md Step 4.6 must specify blocking/failing behavior when "
-        "enumerated items are not mapped to plan steps"
-    )
-
-
-def test_dry_walkthrough_issue_coverage_fetches_issue_body():
-    """Step 4.6 must reference gh issue view or fetch_github_issue for issue body retrieval."""
-    content = _read_skill_md()
-    step46_section = content[content.find("### Step 4.6") : content.find("### Step 5:")]
-    assert "gh issue view" in step46_section or "fetch_github_issue" in step46_section, (
-        "dry-walkthrough SKILL.md Step 4.6 must reference 'gh issue view' or "
-        "'fetch_github_issue' for issue body retrieval"
-    )
-
-
-def test_dry_walkthrough_issue_coverage_graceful_skip():
-    """Step 4.6 must specify graceful skip when issue_url is not provided."""
-    content = _read_skill_md()
-    step46_section = content[content.find("### Step 4.6") : content.find("### Step 5:")]
-    assert re.search(
-        r"skip\s+this\s+step|not\s+provided|no\s+issue\s+context",
-        step46_section,
-        re.IGNORECASE,
-    ), (
-        "dry-walkthrough SKILL.md Step 4.6 must specify graceful skip when issue_url "
-        "or issue_number is not provided (non-issue-sourced pipelines)"
-    )
-
-
-def test_dry_walkthrough_arguments_documents_issue_url():
-    """dry-walkthrough SKILL.md Arguments section must document issue_url."""
-    content = _read_skill_md()
-    args_section = content[content.find("## Arguments") : content.find("## Critical Constraints")]
-    assert "issue_url" in args_section, (
-        "dry-walkthrough SKILL.md Arguments section must document the issue_url argument"
-    )
+def test_arguments_document_issue_and_authority(skill_text: str) -> None:
+    arguments = skill_text.split("## Arguments", 1)[1].split("## Critical Constraints", 1)[0]
+    assert "issue_url" in arguments
+    assert "plan_set_authority_path" in arguments

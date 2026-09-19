@@ -191,6 +191,12 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_protocols_github",
         "_type_protocols_recipe",
         "_type_protocols_infra",
+        "_type_plan_set_authority",
+        "markdown_sections",
+        "requirement_inventory",
+        "allocation",
+        "coverage",
+        "verifier",
         "_type_enums",
         "_type_subprocess",
     }
@@ -258,7 +264,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "conventions": frozenset({"core", "execution", "server", "workspace"}),
     "coverage_schema": frozenset({"core", "infra", "test_test_filter_coverage_map.py"}),
     "delivery_bounds": frozenset({"core", "execution", "server"}),
-    "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "version_snapshot": frozenset({"core", "execution"}),
     "yaml_io": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -514,7 +519,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "execution", "pipeline", "server"}
     ),
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server", "cli"}),
-    "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
     "_type_github_review_anchor": frozenset(
         {"core", "execution", "pipeline", "server", "smoke_utils"}
@@ -1256,6 +1260,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_open_kitchen_auto_init_tracker.py",
             "server/test_tools_execution_input_gates_cross_binding.py",
             "server/test_tools_execution_input_gates_real_contracts.py",
+            # Skills file-level entry that exercises plan-set skill-contract wiring:
+            "skills/test_implementer_plan_set_contracts.py",
             # CLI file-level entries (8 of 39 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

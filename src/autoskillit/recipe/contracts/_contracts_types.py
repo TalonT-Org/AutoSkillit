@@ -127,7 +127,7 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
-    input_preflight: str | None = None
+    input_preflight: tuple[str, ...] = ()
     audit_authority_publication: AuditAuthorityPublicationSpec | None = None
     audit_output_contracts: dict[AuditOutputMode, AuditOutputContract] = dataclasses.field(
         default_factory=dict
@@ -137,12 +137,13 @@ class SkillContract:
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:
             raise ValueError(f"external_effect must be {EXTERNAL_EFFECT_CHOICES}")
-        if self.input_preflight is None:
-            return
+        if not isinstance(self.input_preflight, tuple):
+            raise ValueError("input_preflight must be a tuple")
         try:
-            self.input_preflight = PreflightKind(self.input_preflight).value
+            normalized = tuple(PreflightKind(value).value for value in self.input_preflight)
         except ValueError as exc:
             raise ValueError(f"unsupported input preflight: {self.input_preflight!r}") from exc
+        self.input_preflight = normalized
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

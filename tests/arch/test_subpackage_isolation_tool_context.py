@@ -16,7 +16,6 @@ def _explicit_core_protocol_names() -> set[str]:
         "core/types/__init__.py",
         "core/types/_type_audit_admission.py",
         "core/types/_type_audit_admission_ledger.py",
-        "core/types/_type_audit_protocols.py",
         "core/types/_type_protocols_logging.py",
         "core/types/_type_protocols_execution.py",
         "core/types/_type_protocols_github.py",

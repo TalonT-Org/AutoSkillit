@@ -4,6 +4,16 @@ Canonical terms used across AutoSkillit. The spelling and capitalization on
 each `### {term}` heading is the only form permitted in the rest of the docs;
 `tests/docs/test_glossary_spelling.py` enforces this.
 
+### plan-set authority
+
+A server-produced authority binding a frozen issue snapshot and requirement
+inventory to ordered hashed plan parts, their allocation rows, and aggregate
+coverage. `bind_plan_set` records hashed content evidence rather than command
+lines; aggregate coverage is decided only by the server-side
+`plan_set_coverage` preflight. Consumers receive verified preflight evidence,
+never the artifact itself, and the sealed state is authenticated inside the
+canonical authority digest.
+
 ### arch-lens
 
 A skill family under `src/autoskillit/skills_extended/arch-lens-*/` (13 skills)

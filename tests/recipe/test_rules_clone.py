@@ -1,4 +1,4 @@
-"""Tests for semantic validation rules in recipe/rules_clone.py."""
+"""Tests for semantic validation rules in recipe/rules/dataflow/rules_clone.py."""
 
 from __future__ import annotations
 

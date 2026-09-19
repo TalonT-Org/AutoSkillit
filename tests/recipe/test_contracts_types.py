@@ -56,13 +56,18 @@ def test_skill_input_rejects_non_scalar_absence_value(
 
 def test_skill_contract_rejects_unknown_input_preflight() -> None:
     with pytest.raises(ValueError, match="unsupported input preflight"):
-        SkillContract(inputs=(), outputs=[], input_preflight="unknown")
+        SkillContract(inputs=(), outputs=[], input_preflight=("unknown",))
 
 
 def test_skill_contract_accepts_supported_input_preflight() -> None:
-    contract = SkillContract(inputs=(), outputs=[], input_preflight="audit_cycle_inventory")
+    contract = SkillContract(inputs=(), outputs=[], input_preflight=("audit_cycle_inventory",))
 
-    assert contract.input_preflight == "audit_cycle_inventory"
+    assert contract.input_preflight == ("audit_cycle_inventory",)
+
+
+def test_skill_contract_rejects_scalar_input_preflight() -> None:
+    with pytest.raises(ValueError, match="input_preflight must be a tuple"):
+        SkillContract(inputs=(), outputs=[], input_preflight="audit_cycle_inventory")
 
 
 def test_skill_output_accepts_allowed_values_kwarg() -> None:

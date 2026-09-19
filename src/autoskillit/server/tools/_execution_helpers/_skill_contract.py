@@ -268,7 +268,7 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
             success_qualifiers=[
                 SuccessQualifierEntry(**item) for item in data.get("success_qualifiers", [])
             ],
-            input_preflight=data.get("input_preflight"),
+            input_preflight=tuple(data.get("input_preflight") or ()),
             audit_authority_publication=publication,
             audit_output_mode=AuditOutputMode(raw_mode) if raw_mode is not None else None,
         )

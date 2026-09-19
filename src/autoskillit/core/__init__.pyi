@@ -135,6 +135,7 @@ from .install.install_detect import parse_direct_url as parse_direct_url
 from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
 from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
 from .io import GENERATED_FILES as GENERATED_FILES
+from .io import STEP_HEADING_RE as STEP_HEADING_RE
 from .io import ContainmentError as ContainmentError
 from .io import ReadResult as ReadResult
 from .io import TerminalColumn as TerminalColumn
@@ -155,6 +156,7 @@ from .io import destination_location as destination_location
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
+from .io import extract_section as extract_section
 from .io import fast_dumps as fast_dumps
 from .io import fast_loads as fast_loads
 from .io import find_latest_session_id as find_latest_session_id
@@ -167,6 +169,7 @@ from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
+from .io import parse_pipe_table as parse_pipe_table
 from .io import pkg_root as pkg_root
 from .io import read_stable_contained_bytes as read_stable_contained_bytes
 from .io import read_stable_contained_range as read_stable_contained_range
@@ -183,6 +186,7 @@ from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
 from .io import spill_output as spill_output
+from .io import split_table_row as split_table_row
 from .io import strict_walk as strict_walk
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_canonical_versioned_json as write_canonical_versioned_json
@@ -210,6 +214,13 @@ from .pipeline.pipeline_tracker import release_tracker_lease as release_tracker_
 from .pipeline.pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline.pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline.pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .planset import InventoryExtraction as InventoryExtraction
+from .planset import assigned_requirements as assigned_requirements
+from .planset import evaluate_coverage as evaluate_coverage
+from .planset import extract_requirement_inventory as extract_requirement_inventory
+from .planset import parse_part_allocation as parse_part_allocation
+from .planset import verify_allocation_evidence as verify_allocation_evidence
+from .planset import verify_plan_set_authority as verify_plan_set_authority
 from .plugins._active_kitchens import (
     ActiveKitchensReadResult as ActiveKitchensReadResult,
 )
@@ -643,6 +654,12 @@ from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PARENT_SANDBOX_MODES as PARENT_SANDBOX_MODES
 from .types import PERSISTED_FORMAT_LEDGER as PERSISTED_FORMAT_LEDGER
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
+from .types import PLAN_SET_AUTHORITY_DOMAIN as PLAN_SET_AUTHORITY_DOMAIN
+from .types import PLAN_SET_AUTHORITY_ID_DOMAIN as PLAN_SET_AUTHORITY_ID_DOMAIN
+from .types import PLAN_SET_MAX_AUTHORITY_BYTES as PLAN_SET_MAX_AUTHORITY_BYTES
+from .types import PLAN_SET_MAX_ISSUE_BYTES as PLAN_SET_MAX_ISSUE_BYTES
+from .types import PLAN_SET_MAX_PART_BYTES as PLAN_SET_MAX_PART_BYTES
+from .types import PLAN_SET_SCHEMA_VERSION as PLAN_SET_SCHEMA_VERSION
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
 from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
 from .types import PROVIDER_PROFILE_ENV_VAR as PROVIDER_PROFILE_ENV_VAR
@@ -792,11 +809,14 @@ from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import AllocationKind as AllocationKind
+from .types import AllocationRowDef as AllocationRowDef
 from .types import AnchorAdmission as AnchorAdmission
 from .types import AnchorAuthorityAvailability as AnchorAuthorityAvailability
 from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
+from .types import AssignedRequirementDef as AssignedRequirementDef
 from .types import (
     AuditAdmissionAuthorityMismatchError as AuditAdmissionAuthorityMismatchError,
 )
@@ -949,7 +969,9 @@ from .types import ContextWindowSnapshot as ContextWindowSnapshot
 from .types import ContinuationRecommendation as ContinuationRecommendation
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
+from .types import CoverageResultDef as CoverageResultDef
 from .types import CoverageState as CoverageState
+from .types import CoverageStatus as CoverageStatus
 from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
@@ -1036,8 +1058,10 @@ from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InteractiveLaunch as InteractiveLaunch
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
+from .types import InventoryMode as InventoryMode
 from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
+from .types import IssueSnapshotRef as IssueSnapshotRef
 from .types import JoinSpec as JoinSpec
 from .types import KillReason as KillReason
 from .types import KitchenTransitionLock as KitchenTransitionLock
@@ -1113,6 +1137,18 @@ from .types import PersistedFormatDef as PersistedFormatDef
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
+from .types import PlanPartRef as PlanPartRef
+from .types import PlanSetAuthority as PlanSetAuthority
+from .types import PlanSetBindingMode as PlanSetBindingMode
+from .types import PlanSetBindRequest as PlanSetBindRequest
+from .types import PlanSetBindResult as PlanSetBindResult
+from .types import PlanSetMaterializer as PlanSetMaterializer
+from .types import PlanSetPreflightEvidence as PlanSetPreflightEvidence
+from .types import PlanSetPreflightRequest as PlanSetPreflightRequest
+from .types import PlanSetPreflightResolver as PlanSetPreflightResolver
+from .types import PlanSetRejectReason as PlanSetRejectReason
+from .types import PlanSetState as PlanSetState
+from .types import PlanSetVerification as PlanSetVerification
 from .types import PluginArtifactAuthority as PluginArtifactAuthority
 from .types import PluginArtifactContentionError as PluginArtifactContentionError
 from .types import PluginArtifactIdentity as PluginArtifactIdentity
@@ -1194,12 +1230,15 @@ from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
 from .types import RequestReconciliationEvent as RequestReconciliationEvent
+from .types import RequirementDef as RequirementDef
+from .types import RequirementKind as RequirementKind
 from .types import ReservationDecision as ReservationDecision
 from .types import ReservationInvalidatedEffect as ReservationInvalidatedEffect
 from .types import ReservationRecordedEffect as ReservationRecordedEffect
 from .types import ReservationReleasedEffect as ReservationReleasedEffect
 from .types import ReserveClass as ReserveClass
 from .types import ReserveRequestEvent as ReserveRequestEvent
+from .types import ResolvedInputPreflights as ResolvedInputPreflights
 from .types import ResolvedLaunchContract as ResolvedLaunchContract
 from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import (

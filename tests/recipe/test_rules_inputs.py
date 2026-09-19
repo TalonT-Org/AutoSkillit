@@ -480,6 +480,7 @@ def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
         "reset_merge_test_fix_counter",
         "reset_merge_fix_counter",
         "reset_ref_push_counter",
+        "reset_plan_set_replan_counter",
         "pre_remediation_merge",
         "inter_part_push_pre_remediation",
         "commit_guard_pre_remediation",
@@ -487,8 +488,6 @@ def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
         "check_ref_push_loop_pre_remediation",
         "ref_push_pre_remediation",
         "remediate",
-        "make_plan",
-        "salvage_plan",
     }
 
 

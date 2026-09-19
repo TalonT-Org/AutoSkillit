@@ -10,7 +10,7 @@ registers them through the `@semantic_rule` decorator.
 |---|---|---|
 | `campaign/` | 5 rules | Campaign capture, deps, dispatch, flow, ingredients |
 | `ci/` | 4 rules | CI config hygiene, conflict, guards, merge queue |
-| `dataflow/` | 4 rules | Dataflow capture, callable, handoff, multipart, callable verdict routing completeness |
+| `dataflow/` | 5 rules | Dataflow capture, callable, handoff, multipart, clone/push flow |
 | `graph/` | 5 rules | Graph cycles, output, review, routes, summary-vs-graph divergence |
 
 ## Architecture Notes
@@ -28,7 +28,6 @@ Files with no registration support their folder; files with several registration
 - `rules_backend_compat.py` — Support module: Backend compatibility is adapted from typed skill semantics at execution time.
 - `rules_blocks.py` — Groups 5 registrations: Block-level semantic validation rules for recipe pipelines.
 - `rules_bypass.py` — Groups 9 registrations: Semantic validation rules for skip_when_false bypass routing contracts.
-- `rules_clone.py` — Groups 5 registrations: Semantic validation rules for clone, push, and multipart-plan capture.
 - `rules_cmd.py` — Groups 8 registrations: Semantic rules for run_cmd echo-capture alignment in recipe steps.
 - `rules_contracts.py` — Groups 11 registrations: Semantic rules for skill contract completeness.
 - `rules_features.py` — Groups 3 registrations: Semantic rules for feature-gated tool and skill references.
@@ -45,6 +44,7 @@ Files with no registration support their folder; files with several registration
 - `rules_optional_capture.py` — Groups 2 registrations: Semantic rules for optional capture guard enforcement.
 - `rules_packs.py` — Groups 2 registrations: Semantic rules for pack validation in recipe pipelines.
 - `rules_phoropter_adjacency.py` — Groups 2 registrations: Semantic validation rules enforcing phoropter step adjacency (dial→apply→synthesize).
+- `rules_plan_set_gate.py` — Groups 2 registrations: Issue-wide plan-set authority threading and sealed-path reachability.
 - `rules_reachability.py` — Groups 2 registrations: Symbolic reachability semantic rules for recipe pipelines.
 - `rules_recipe.py` — Groups 3 registrations: Semantic rules for sub-recipe reference validity and with_args hygiene.
 - `rules_skill_content.py` — Support module: Compatibility facade for the decomposed `rules_skill_content` family.

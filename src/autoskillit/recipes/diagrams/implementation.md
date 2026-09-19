@@ -1,14 +1,16 @@
-<!-- autoskillit-recipe-hash: sha256:8e9f3bd50a5bf2de767ab158b0822adcc4ea0870b00b7270ef3c8fa533578ebe -->
+<!-- autoskillit-recipe-hash: sha256:3f730dbdfe7eb70737ae80c372b14177389be170ae5347284fa1cdbb3bf34f91 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## implementation
 
 ### Flow
 
-plan --- [review-approach] (optional)
+plan --- bind_plan_set <-> [bounded coverage replan -> plan]
+|
+[review-approach] (optional)
 |
 +----+ FOR EACH PLAN PART:
 |    |
-|    verify --- implement --- test <-> [x fail -> fix]
+|    verify --- renew_plan_set --- implement --- test <-> [x fail -> fix]
 |    |
 |    merge
 |    |

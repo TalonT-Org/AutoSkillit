@@ -59,6 +59,8 @@ The plan file must remain a **clean, self-contained implementation instruction s
   `audit_cycle_inventory` input preflight.
 - `plan_disposition_path` (optional) — Exact `PlanDispositionReport` paired with the
   authority and plan by input preflight.
+- `plan_set_authority_path` (optional) — Recipe-only authority verified by the server and
+  delivered as `verified_plan_set_preflight`; never open it yourself.
 
 For structured recipe invocations, `""` is the explicit vacancy value for
 `review_path`, `audit_cycle_path`, and `plan_disposition_path`; treat it exactly as
@@ -85,6 +87,7 @@ that optional authority not being supplied, and never discover a replacement.
 - Start independent child delegations sequentially
 - Discover a latest plan, audit cycle, inventory, or disposition report
 - Open audit-cycle artifacts directly in Step 4.7 or reinterpret the verified preflight result
+- Open plan-set authority artifacts directly or reinterpret the verified plan-set preflight result
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
@@ -269,46 +272,32 @@ If Part A and Part B produce no findings, record: "No historical regressions or 
 
 ### Step 4.6: Plan-vs-Issue Coverage Check
 
-If `issue_url` or `issue_number` was provided to this skill, verify that the plan covers every remediation/requirement item enumerated in the source issue. Without this check, a planner that silently drops an item produces a plan that the implementation pipeline faithfully follows — leaving the issue item unaddressed.
+Exactly one mode applies.
 
-1. **Guard:** If `issue_url` or `issue_number` is not provided, omit this check and record: "Plan-vs-issue coverage check omitted — no issue context provided."
+**A. Plan-set authority mode.** If `verified_plan_set_preflight` is present with
+`status: admitted`, use only its `assigned_requirements`. Do not fetch the issue and do
+not read, open, or reference any other part. For each assigned requirement, find its
+`implementation_step` in this plan and confirm it addresses the requirement text. A missing
+or unaddressed step is `Dry Walkthrough FAILED — Plan-set assignment gap`; name the
+`requirement_id`, do not stamp, and stop. Requirements not assigned to this part are not its
+obligation: the verified `coverage_status: pass` and authority digest prove aggregate coverage.
+Prose such as "deferred to Part" has no effect. If this walkthrough edits the plan, the recipe
+renews the authority; never edit an allocation table to drop an assigned row. Record the
+authority revision, part ordinal/count, suffix, and number of assigned requirements verified.
 
-2. **Fetch the issue body:**
-   ```bash
-   gh issue view {issue_number} --json body -q .body
-   ```
+**B. Standalone single-part mode.** When there is no plan-set evidence, issue context is
+provided, and the filename has no `_part_` suffix, fetch the issue body:
+```bash
+gh issue view {issue_number} --json body -q .body
+```
+Enumerate remediation/requirement items and block stamping if any is unmapped.
 
-3. **Extract enumerated items** from the issue body. Scan for patterns indicating structured remediation or requirement items:
-   - `R0`, `R1`, `R2`, … (Rn pattern)
-   - `REQ-*-NNN` patterns
-   - Numbered lists under `## Remediation`, `## Requirements`, or `## Items` headings
-   - Checkbox items (`- [ ]` or `- [x]`) under scope headings
+**C. Standalone multi-part mode.** When there is no plan-set evidence and the filename has a
+`_part_` suffix, do not evaluate whole-issue coverage against this part. Record
+`Plan-set coverage not verified — multi-part plan validated outside a plan-set authority`;
+do not block and proceed to Step 5.
 
-4. **When the issue body contains no enumerated items:** The issue does not use structured enumeration — coverage validation is not applicable. Record: "No enumerated items detected in issue body — coverage check not applicable."
-
-5. **Cross-reference each enumerated item** against plan phases and steps:
-   - For each item, search the plan text for the item's label (e.g., "R0"), its description keywords, and its referenced file paths
-   - Classify as `COVERED` (plan step explicitly addresses this item) or `UNMAPPED` (no plan step addresses it)
-
-6. **If any items are UNMAPPED:** Do NOT stamp the plan. Output a blocking failure:
-   ```
-   ## Dry Walkthrough FAILED — Plan-vs-Issue Coverage Gap
-
-   **Plan:** {path}
-   **Issue:** #{issue_number}
-   **Status:** FAILED — plan does not cover all issue-enumerated items
-
-   ### Unmapped Items
-   - {item_label}: {item_description} — not addressed by any plan step
-
-   The plan must cover every remediation/requirement item enumerated in the source
-   issue. If an item cannot be delivered, re-scope the issue body first (issue body
-   is the source of truth per AGENTS.md §3.4) and re-plan. Do not descope items
-   in the plan.
-   ```
-   Stop execution — do not proceed to Step 5.
-
-7. **If all items are COVERED:** Record coverage confirmation and proceed to Step 5.
+**D. No issue context.** Record that the plan-vs-issue coverage check is omitted and proceed.
 
 ### Step 4.7: Plan-vs-Inventory Coverage Check
 
@@ -343,7 +332,8 @@ or reconstruct any inventory, remediation, authority, or report.
    Stop execution — do not proceed to Step 5.
 
 4. Only `PASS` and `OMIT` may proceed to Step 5. This check composes independently with the
-   plan-vs-issue check in Step 4.6.
+   plan-vs-issue check in Step 4.6. In plan-set authority mode A, both verified evidences
+   come from the same bound invocation payload; neither requires opening an authority file.
 
 ### Step 5: Fix the Plan
 

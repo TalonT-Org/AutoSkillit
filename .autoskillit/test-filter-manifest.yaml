@@ -219,6 +219,10 @@ tests/fixtures/codex_recipe_diagnostic/*:
 tests/fixtures/codex_recipe_protected/*:
   - execution/
 
+tests/fixtures/plan_set/**:
+  - core/
+  - server/
+
 tests/fixtures/context_admission_journals/*.json:
   - core/
   - pipeline/

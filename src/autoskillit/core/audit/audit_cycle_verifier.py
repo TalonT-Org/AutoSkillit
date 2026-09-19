@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..io.io import decode_versioned_json_bytes
+from ..io.markdown_sections import STEP_HEADING_RE, extract_section, split_table_row
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
 from ..logging import get_logger
 from ..types._type_audit_artifact_ref import ArtifactRef
@@ -33,10 +34,6 @@ __all__ = [
 
 _REQUIREMENTS_HEADER = ("Requirement ID", "Disposition", "Implementation Step")
 logger = get_logger(__name__)
-_STEP_HEADING_RE = re.compile(
-    r"^###\s+(Step\s+[1-9][0-9]*(?:\.[1-9][0-9]*)*)(?::[^\n]*)?$",
-    re.MULTILINE,
-)
 
 
 @runtime_checkable
@@ -66,40 +63,22 @@ def _reject(reason: AdmissionReason, detail: str) -> InventoryAdmissionDecision:
     return InventoryAdmissionDecision.reject(reason, detail)
 
 
-def _extract_section(markdown: str, heading: str) -> str:
-    pattern = re.compile(rf"^## {re.escape(heading)}[ \t]*$", re.MULTILINE)
-    matches = tuple(pattern.finditer(markdown))
-    if len(matches) != 1:
-        raise ValueError(f"expected exactly one ## {heading} section")
-    start = matches[0].end()
-    next_heading = re.search(r"^##\s+", markdown[start:], re.MULTILINE)
-    end = start + next_heading.start() if next_heading is not None else len(markdown)
-    return markdown[start:end]
-
-
-def _split_table_row(line: str) -> tuple[str, ...]:
-    stripped = line.strip()
-    if not stripped.startswith("|") or not stripped.endswith("|"):
-        raise ValueError("Requirements Map rows must be pipe-delimited")
-    return tuple(cell.strip() for cell in stripped[1:-1].split("|"))
-
-
 def _parse_requirements_map(markdown: str) -> tuple[PlanDispositionRow, ...]:
-    section = _extract_section(markdown, "Requirements Map")
+    section = extract_section(markdown, "Requirements Map")
     lines = tuple(line for line in section.splitlines() if line.strip())
     if len(lines) < 3:
         raise ValueError("Requirements Map must contain a header, separator, and rows")
-    if _split_table_row(lines[0]) != _REQUIREMENTS_HEADER:
+    if split_table_row(lines[0]) != _REQUIREMENTS_HEADER:
         raise ValueError(
             "Requirements Map header must be "
             "| Requirement ID | Disposition | Implementation Step |"
         )
-    separator = _split_table_row(lines[1])
+    separator = split_table_row(lines[1])
     if len(separator) != 3 or any(re.fullmatch(r":?-{3,}:?", cell) is None for cell in separator):
         raise ValueError("Requirements Map separator is invalid")
     rows: list[PlanDispositionRow] = []
     for line in lines[2:]:
-        cells = _split_table_row(line)
+        cells = split_table_row(line)
         if len(cells) != 3:
             raise ValueError("Requirements Map rows must have exactly three columns")
         requirement_id, disposition, implementation_step = cells
@@ -118,8 +97,8 @@ def _parse_requirements_map(markdown: str) -> tuple[PlanDispositionRow, ...]:
 
 
 def _implementation_step_blocks(markdown: str) -> dict[str, str]:
-    section = _extract_section(markdown, "Implementation Steps")
-    matches = tuple(_STEP_HEADING_RE.finditer(section))
+    section = extract_section(markdown, "Implementation Steps")
+    matches = tuple(STEP_HEADING_RE.finditer(section))
     if not matches:
         raise ValueError("Implementation Steps must contain ### Step N directives")
     blocks: dict[str, str] = {}

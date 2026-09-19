@@ -17,9 +17,18 @@ Stdlib-only — runs under any Python interpreter without the autoskillit packag
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 PLANNER_NAMING_DENY_TRIGGER: str = "Non-canonical planner result filename"
 
@@ -101,8 +110,7 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
 
 
 def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)  # only enforce in headless planner sessions
+    enforce_session_scope("interactive_only")
 
     try:
         data = json.loads(sys.stdin.read())

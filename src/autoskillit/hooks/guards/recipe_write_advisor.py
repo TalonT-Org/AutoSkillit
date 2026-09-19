@@ -15,6 +15,16 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 # Inlined subset of SKILL_FILE_ADVISORY_MAP (recipe-related entries only).
 # Must stay in sync with core._type_constants.SKILL_FILE_ADVISORY_MAP.
@@ -30,6 +40,8 @@ _COMPILED: list[tuple[re.Pattern[str], str]] = [
 
 
 def main() -> None:
+    enforce_session_scope("interactive_only")
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -37,9 +49,6 @@ def main() -> None:
 
     tool_name = data.get("tool_name", "")
     if tool_name not in ("Write", "Edit"):
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         sys.exit(0)
 
     file_path = data.get("tool_input", {}).get("file_path", "")

@@ -64,7 +64,10 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    hook_session_shape,
+    read_merged_hook_config,
+)
 
 GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
@@ -72,8 +75,9 @@ CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
 _DENY_REASON_TEMPLATE = DENY_REASON_BY_GUARD["git_ops_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["git_ops_guard"]
-# Script-local orchestrator bypass; HookDef.exempt_session_types stays empty.
-_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
+# Orchestrators remain subject to the all-session ref preflight, then bypass
+# only the destructive headless operation phase below.
+_DESTRUCTIVE_OP_EXEMPT_TIERS: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset(
     {"cp", "mv", "install", "tee", "truncate", "rm", "unlink", "sed", "dd"}
@@ -473,7 +477,8 @@ def main() -> None:
             sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
             sys.exit(2)
 
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+    headless, session_type = hook_session_shape()
+    if not headless:
         sys.exit(0)
 
     blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
@@ -484,8 +489,7 @@ def main() -> None:
     if skill_name in _EXEMPT_SKILLS:
         sys.exit(0)
 
-    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
-    if session_type in _EXEMPT_SESSION_TYPES:
+    if session_type in _DESTRUCTIVE_OP_EXEMPT_TIERS:
         sys.exit(0)
 
     # Hook config file is written by open_kitchen and removed by close_kitchen.

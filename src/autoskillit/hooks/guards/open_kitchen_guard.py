@@ -29,6 +29,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_kitchen_state_dir,
     resolve_state_root,
 )
+from _hook_settings import hook_session_shape  # type: ignore[import-not-found]  # noqa: E402
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
 _REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
@@ -215,9 +216,8 @@ def _deny(reason: str) -> None:
 
 
 def _enforce_session_authorization() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
-
+    headless, session_type = hook_session_shape()
+    if headless:
         if session_type in ("fleet",):
             _deny(f"open_kitchen cannot be called from {session_type!r} sessions.")
 

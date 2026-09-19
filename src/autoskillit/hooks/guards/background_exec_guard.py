@@ -36,6 +36,7 @@ if _RUNTIME_DIR not in sys.path:
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    hook_session_shape,
     payload_managed_codex_route,
     session_join_required,
 )
@@ -62,8 +63,7 @@ def _governed_skill_session() -> bool:
         return False
     if backend not in ("", "claude-code"):
         return False
-    raw_session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
-    session_type = raw_session_type.lower()
+    _headless, session_type = hook_session_shape()
     if session_type in ("orchestrator", "fleet"):
         return False
     return True
@@ -139,7 +139,6 @@ def _join_bound_denial(
 
 
 def _headless_background_denial(
-    raw_session_type: str,
     session_type: str,
     tool_name: object,
     tool_input: dict[str, object],
@@ -159,7 +158,7 @@ def _headless_background_denial(
     )
     if session_type and session_type != "skill":
         denial_reason += (
-            f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+            f" (AUTOSKILLIT_SESSION_TYPE={session_type!r} is not a recognized tier;"
             " expected: orchestrator, fleet, or skill)"
         )
     return denial_reason
@@ -175,14 +174,11 @@ def main() -> None:
 
     in_subagent_context = bool(data.get("agent_id"))
 
-    raw_session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
-    session_type = raw_session_type.lower()
+    headless, session_type = hook_session_shape()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers
 
     is_governed = _governed_skill_session()
-    headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
-
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
         sys.exit(0)  # fail-open: missing or malformed tool_input
@@ -215,9 +211,7 @@ def main() -> None:
         sys.exit(0)
 
     # --- ADR-0001 background/SessionWakeup gate (headless only) ---
-    denial_reason = _headless_background_denial(
-        raw_session_type, session_type, tool_name, tool_input
-    )
+    denial_reason = _headless_background_denial(session_type, tool_name, tool_input)
     if denial_reason is not None:
         _emit_deny(denial_reason)
 

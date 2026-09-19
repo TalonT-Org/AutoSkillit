@@ -10,6 +10,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_settings import enforce_session_scope  # noqa: E402
+
 _IMPLEMENT_PREFIXES = ("implement-", "resolve-")
 LINT_AUTOFIX_TRIGGER = "--- RUFF AUTOFIX ---"
 LINT_ERROR_TRIGGER = "--- RUFF LINT ---"
@@ -81,8 +90,7 @@ def _run_ruff_pipeline(file_path: str) -> tuple[bool, str]:
 
 
 def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
+    enforce_session_scope("headless_only")
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if not any(skill_name.startswith(p) for p in _IMPLEMENT_PREFIXES):

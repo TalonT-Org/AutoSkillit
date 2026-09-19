@@ -55,6 +55,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
     parse_hook_command,
 )
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -363,8 +364,7 @@ def _interpreter_validation_error(
 
 
 def main() -> None:
-    if not os.environ.get("AUTOSKILLIT_HEADLESS"):
-        sys.exit(0)
+    enforce_session_scope("headless_only")
 
     if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         sys.exit(0)

@@ -20,6 +20,15 @@ import os
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_settings import enforce_session_scope  # noqa: E402
+
 
 def _active_kitchens_path() -> Path:
     return Path.home() / ".autoskillit" / "active_kitchens.json"
@@ -74,16 +83,14 @@ def _pid_alive(pid: int) -> bool:
 
 
 def main() -> None:
+    enforce_session_scope("interactive_only")
+
     # Validate stdin is well-formed JSON; result intentionally discarded — this
     # hook fires on every tool regardless of tool_name, so the payload content
     # is not used.  Fail-open: malformed stdin exits cleanly rather than raising.
     try:
         _ = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
-        sys.exit(0)
-
-    # Never fire in headless sessions — the orchestrator handles reconnection itself.
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         sys.exit(0)
 
     cwd = os.getcwd()

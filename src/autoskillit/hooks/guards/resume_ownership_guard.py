@@ -20,6 +20,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
+from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
 
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 
@@ -68,15 +69,13 @@ def _find_provenance(session_id: str, prov_path: Path) -> dict | None:
 
 
 def main() -> None:
+    enforce_session_scope("headless_only")
+
     try:
         data = json.loads(sys.stdin.read())
         if not isinstance(data, dict):
             sys.exit(0)
     except (json.JSONDecodeError, TypeError, ValueError):
-        sys.exit(0)
-
-    # Interactive sessions bypass ownership — the human user is the implicit owner.
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})

@@ -55,13 +55,6 @@ EXEMPT_SKILLS_BY_GUARD: Final[dict[str, frozenset[str]]] = {
     ),
 }
 
-# Only `pr_create_guard` registers a registry-level session-type exemption.
-# `git_ops_guard`'s orchestrator bypass is script-local (enforced in the guard
-# after the destructive-op match); `test_runner_guard` has no exemption.
-EXEMPT_SESSION_TYPES_BY_GUARD: Final[dict[str, frozenset[str]]] = {
-    "pr_create_guard": frozenset({"orchestrator"}),
-}
-
 # ── Public deny-payload metadata ──────────────────────────────────────────────
 
 DENY_TRIGGER_BY_GUARD: Final[dict[str, str]] = {

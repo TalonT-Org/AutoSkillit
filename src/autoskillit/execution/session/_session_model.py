@@ -352,10 +352,7 @@ def extract_token_usage(
             model_buckets[model or "unknown"] = measures
         else:
             for name, measure in measures.items():
-                try:
-                    bucket[name] = bucket[name].combine(measure)
-                except ValueError:
-                    bucket[name] = TokenMeasure.unknown()
+                bucket[name] = TokenMeasure.combine_or_unknown(bucket[name], measure)
         peak = classify_token_measure(
             AGENT_BACKEND_CLAUDE_CODE,
             provider_used,
@@ -365,10 +362,7 @@ def extract_token_usage(
         if peak_context is None:
             peak_context = peak
         else:
-            try:
-                peak_context = peak_context.maximum(peak)
-            except ValueError:
-                peak_context = TokenMeasure.unknown()
+            peak_context = TokenMeasure.maximum_or_unknown(peak_context, peak)
 
         raw_input = row["input_tokens"]
         cache_read = row["cache_read_tokens"]
@@ -411,10 +405,7 @@ def extract_token_usage(
                 if name not in totals:
                     totals[name] = bucket[name]
                     continue
-                try:
-                    totals[name] = totals[name].combine(bucket[name])
-                except ValueError:
-                    totals[name] = TokenMeasure.unknown()
+                totals[name] = TokenMeasure.combine_or_unknown(totals[name], bucket[name])
 
     return {
         "backend": AGENT_BACKEND_CLAUDE_CODE,

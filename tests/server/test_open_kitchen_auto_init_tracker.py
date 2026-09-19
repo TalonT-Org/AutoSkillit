@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-import autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve as _recipe_serve
-from autoskillit.server._tracker_authority import _release_kitchen_tracker_authority
+import autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init as _tracker_auto_init  # noqa: E501
 from tests.server._helpers import (
     _install_active_recipe_projection,
     _make_finalized_projection_from_recipe_steps,
@@ -46,10 +45,32 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     ctx.recipes.load.return_value = mock_recipe_obj
 
 
+@pytest.fixture
+def track_and_release():
+    """Yield a collector for tracker contexts; release each on teardown.
+
+    Tests that exercise open_kitchen's auto-init tracker retain a kitchen lease
+    on the provided ctx. Registering the ctx via this fixture guarantees the
+    lease is released even if an assertion fails mid-test.
+    """
+    from autoskillit.server._tracker_authority import _release_kitchen_tracker_authority
+
+    contexts: list = []
+
+    def _register(ctx):
+        contexts.append(ctx)
+        return ctx
+
+    yield _register
+
+    for ctx in contexts:
+        _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
+
+
 class TestOpenKitchenAutoInitTracker:
     def test_auto_init_releases_authority_when_initialization_raises(self, monkeypatch, tmp_path):
         from autoskillit.recipe.schema import RecipeStep
-        from autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve import (
+        from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
             _auto_init_pipeline_tracker,
         )
         from tests.server.conftest import _make_mock_ctx
@@ -68,7 +89,7 @@ class TestOpenKitchenAutoInitTracker:
         def _raise(*_args):
             raise RuntimeError("initialization failed")
 
-        monkeypatch.setattr(_recipe_serve, "initialize_kitchen_tracker", _raise)
+        monkeypatch.setattr(_tracker_auto_init, "initialize_kitchen_tracker", _raise)
 
         with pytest.raises(RuntimeError, match="initialization failed"):
             _auto_init_pipeline_tracker(ctx)
@@ -78,7 +99,7 @@ class TestOpenKitchenAutoInitTracker:
 
     def test_auto_init_preserves_corrupt_authority(self, tmp_path):
         from autoskillit.recipe.schema import RecipeStep
-        from autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve import (
+        from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
             _auto_init_pipeline_tracker,
         )
         from tests.server.conftest import _make_mock_ctx
@@ -107,7 +128,7 @@ class TestOpenKitchenAutoInitTracker:
         assert ctx.kitchen_tracker_key is None
 
     @pytest.mark.anyio
-    async def test_open_kitchen_auto_inits_tracker(self, tmp_path):
+    async def test_open_kitchen_auto_inits_tracker(self, tmp_path, track_and_release):
         from unittest.mock import patch
 
         from autoskillit.recipe.schema import RecipeStep
@@ -130,6 +151,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.kitchen_id = "kitchen-abc"
         _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
+        track_and_release(ctx)
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             result = json.loads(await open_kitchen(name="remediation", ctx=ctx))
@@ -141,10 +163,9 @@ class TestOpenKitchenAutoInitTracker:
         assert tracker["dependencies"].get("review_approach") == ["rectify"]
         assert ctx.kitchen_tracker_key is not None
         assert ctx.kitchen_tracker_key.owner_kind == "kitchen"
-        _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
 
     @pytest.mark.anyio
-    async def test_open_kitchen_auto_init_idempotent(self, tmp_path):
+    async def test_open_kitchen_auto_init_idempotent(self, tmp_path, track_and_release):
         from unittest.mock import patch
 
         from autoskillit.recipe.schema import RecipeStep
@@ -167,10 +188,10 @@ class TestOpenKitchenAutoInitTracker:
         ctx1.kitchen_id = "kitchen-abc"
         _set_mock_kitchen_transition(ctx1, kitchen_id=ctx1.kitchen_id)
         _configure_open_kitchen_mock(ctx1, steps, tmp_path)
+        track_and_release(ctx1)
         with patch("autoskillit.server._get_ctx", return_value=ctx1):
             result1 = json.loads(await open_kitchen(name="remediation", ctx=ctx1))
         assert result1["success"] is True
-        _release_kitchen_tracker_authority(ctx1, unregister=False, retire=False)
 
         tracker_path = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-abc.json"
         assert tracker_path.exists()
@@ -185,6 +206,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx2.kitchen_id = "kitchen-abc"
         _set_mock_kitchen_transition(ctx2, kitchen_id=ctx2.kitchen_id)
         _configure_open_kitchen_mock(ctx2, steps, tmp_path)
+        track_and_release(ctx2)
         with patch("autoskillit.server._get_ctx", return_value=ctx2):
             result2 = json.loads(await open_kitchen(name="remediation", ctx=ctx2))
         assert result2["success"] is True
@@ -192,10 +214,11 @@ class TestOpenKitchenAutoInitTracker:
         tracker_after = json.loads(tracker_path.read_text())
         assert tracker_after["steps"]["rectify"]["status"] == "complete"
         assert tracker_after["dependencies"].get("review_approach") == ["rectify"]
-        _release_kitchen_tracker_authority(ctx2, unregister=False, retire=False)
 
     @pytest.mark.anyio
-    async def test_open_kitchen_clears_stale_dependencies_for_existing_tracker(self, tmp_path):
+    async def test_open_kitchen_clears_stale_dependencies_for_existing_tracker(
+        self, tmp_path, track_and_release
+    ):
         from unittest.mock import patch
 
         from autoskillit.recipe.schema import RecipeStep
@@ -217,10 +240,10 @@ class TestOpenKitchenAutoInitTracker:
         first_ctx.kitchen_id = kitchen_id
         _set_mock_kitchen_transition(first_ctx, kitchen_id=kitchen_id)
         _configure_open_kitchen_mock(first_ctx, initial_steps, tmp_path)
+        track_and_release(first_ctx)
         with patch("autoskillit.server._get_ctx", return_value=first_ctx):
             first_result = json.loads(await open_kitchen(name="remediation", ctx=first_ctx))
         assert first_result["success"] is True
-        _release_kitchen_tracker_authority(first_ctx, unregister=False, retire=False)
 
         tracker_path = temp_dir / "pipeline_tracker" / f"{kitchen_id}.json"
         tracker = json.loads(tracker_path.read_text())
@@ -235,6 +258,7 @@ class TestOpenKitchenAutoInitTracker:
         second_ctx.kitchen_id = kitchen_id
         _set_mock_kitchen_transition(second_ctx, kitchen_id=kitchen_id)
         _configure_open_kitchen_mock(second_ctx, no_dependency_steps, tmp_path)
+        track_and_release(second_ctx)
         with patch("autoskillit.server._get_ctx", return_value=second_ctx):
             second_result = json.loads(await open_kitchen(name="remediation", ctx=second_ctx))
         assert second_result["success"] is True
@@ -242,10 +266,9 @@ class TestOpenKitchenAutoInitTracker:
         tracker_after = json.loads(tracker_path.read_text())
         assert tracker_after["dependencies"] == {}
         assert tracker_after["steps"]["rectify"]["status"] == "complete"
-        _release_kitchen_tracker_authority(second_ctx, unregister=False, retire=False)
 
     @pytest.mark.anyio
-    async def test_open_kitchen_auto_init_multi_pipeline(self, tmp_path):
+    async def test_open_kitchen_auto_init_multi_pipeline(self, tmp_path, track_and_release):
         from unittest.mock import patch
 
         from autoskillit.recipe.schema import RecipeStep
@@ -269,6 +292,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.kitchen_id = "kitchen-multi"
         _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
+        track_and_release(ctx)
 
         tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
         tracker_dir.mkdir(parents=True, exist_ok=True)
@@ -314,4 +338,3 @@ class TestOpenKitchenAutoInitTracker:
         assert parsed["success"] is False
         assert "Pipeline 'kitchen-multi'" in parsed["error"]
         assert "other-pipeline" not in parsed["error"]
-        _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)

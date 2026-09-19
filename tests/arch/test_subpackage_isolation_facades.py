@@ -73,6 +73,7 @@ def test_open_kitchen_decomposition_has_expected_siblings() -> None:
         "__init__",
         "_gate",
         "_orchestrator",
+        "_tracker_auto_init",
         "_visibility",
         "_recipe_serve",
     }

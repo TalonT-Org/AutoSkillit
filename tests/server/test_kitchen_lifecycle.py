@@ -18,7 +18,7 @@ from autoskillit.server.tools.tools_kitchen import (
     _close_kitchen_handler,
     _open_kitchen_handler,
 )
-from autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve import (
+from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
     prune_stale_kitchen_state,
 )
 from tests.fakes import FakePluginArtifactAuthority

@@ -6,7 +6,7 @@ import pytest
 import structlog.testing
 
 import autoskillit.server.lifecycle._lifespan._session_boots as _session_boots
-from autoskillit.server import _misc, _tracker_authority
+from autoskillit.server import _misc
 from autoskillit.server.lifecycle import _lifespan
 from autoskillit.server.tools import tools_kitchen
 
@@ -283,7 +283,7 @@ class TestFleetAutoGateBootProjectDir:
                     return_value=MagicMock(),
                 ):
                     with patch.object(
-                        _tracker_authority,
+                        _session_boots,
                         "register_active_kitchen",
                         side_effect=OSError("registry write error"),
                     ):

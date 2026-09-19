@@ -216,6 +216,20 @@ def test_execution_evidence_decomposition_has_expected_siblings() -> None:
     ] | {"__init__"}
 
 
+def test_execution_recording_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "execution" / "recording"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_recording"
+    ] | {"__init__"}
+
+
+def test_execution_session_log_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "execution" / "session_log"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_session_log"
+    ] | {"__init__"}
+
+
 def test_execution_runtime_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "execution" / "runtime"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
@@ -274,6 +288,9 @@ def test_recipe_api_decompositions_have_expected_siblings(
         "autoskillit.cli.prompts",
         "autoskillit.cli.ops",
         "autoskillit.cli.install",
+        "autoskillit.execution.evidence",
+        "autoskillit.execution.recording",
+        "autoskillit.execution.session_log",
         "autoskillit.smoke_utils.review",
         # The six recipe/ sub-package gateways. These are the largest facades
         # in the tree and each hand-maintains a _LAZY_SYMBOL_TO_MODULE dict, so

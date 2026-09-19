@@ -145,3 +145,23 @@ def test_source_map_drops_retired_skill_capability_source_paths() -> None:
         + ", ".join(stale)
         + " — run 'task coverage-audit' and commit .autoskillit/test-source-map.json"
     )
+
+
+def test_source_map_drops_retired_evidence_split_paths() -> None:
+    """#4967: modules split out of execution/evidence/ must not linger in the coverage oracle."""
+    data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
+    source_map = data["map"]
+    retired = (
+        "src/autoskillit/execution/evidence/recording.py",
+        "src/autoskillit/execution/evidence/_recording_skills.py",
+        "src/autoskillit/execution/evidence/session_log.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_retention.py",
+        "src/autoskillit/execution/evidence/session_index.py",
+    )
+    stale = [key for key in retired if key in source_map]
+    assert not stale, (
+        "Retired execution/evidence source paths remain in the coverage oracle: "
+        + ", ".join(stale)
+        + " — run 'task coverage-audit' and commit .autoskillit/test-source-map.json"
+    )

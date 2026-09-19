@@ -494,7 +494,13 @@ steps:
       route: check_replan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: Aggregate plan-set gate before every walkthrough.
+    note: |
+      Aggregate plan-set gate before every walkthrough.
+
+      Single-shot plans omit parent_authority_path intentionally: there is no prior
+      multipart authority to thread through. Multi-shot bind_group_parts in
+      implementation-groups.yaml supplies one because group iteration threads the
+      parent digest from the previous cycle's bind step.
   check_replan_iteration:
     tool: run_python
     with:

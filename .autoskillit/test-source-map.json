@@ -17694,6 +17694,7 @@
     "src/autoskillit/fleet/_dispatch_reaper.py": [
       "tests/cli/test_reap_sidecar_check.py",
       "tests/fleet/test_dispatch_reaper.py",
+      "tests/fleet/test_dispatch_reaper_process.py",
       "tests/fleet/test_fleet_e2e.py",
       "tests/integration/test_fleet_concurrency.py",
       "tests/server/test_lifespan_fleet_boot.py"

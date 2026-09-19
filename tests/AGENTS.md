@@ -235,16 +235,26 @@ and degrade the check to its operational-error path. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
 - The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
 
+<!--
+Convention for the inventory tree below: unannotated entries carry __init__.py
+(Python packages). Only entries explicitly marked `(no __init__.py)` are
+package-less data subtrees. The annotation is required, not optional — see
+`tests/arch/test_subpackage_isolation_topology.py::test_package_style_domain_subdirectories_carry_init_py`
+which derives the package set from this convention.
+-->
+
 ```
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
 ├── assets/                              # Vendored asset integrity tests
+├── backend/                             # MCP backend round-trip + guard-script tests
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
 ├── config/                              # Config loading tests
 ├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/AGENTS.md)
 ├── core/                                # Core layer tests (see core/AGENTS.md)
 ├── docs/                                # Documentation integrity tests
 ├── execution/                           # Subprocess integration + session tests (see execution/AGENTS.md)
+├── exploration/                         # Repository-impact + deterministic-snapshot tests (no __init__.py)
 ├── fleet/                               # Fleet campaign + dispatch tests (see fleet/AGENTS.md)
 ├── hooks/                               # Hook script tests (see hooks/AGENTS.md)
 ├── infra/                               # CI/CD and security configuration tests (see infra/AGENTS.md)
@@ -256,9 +266,11 @@ tests/
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/AGENTS.md)
 ├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/AGENTS.md)
 │   └── fixtures/                        # YAML test data: sample recipes, expected diagram output
+├── report/                              # Test-result renderer tests (no __init__.py)
 ├── server/                              # Server unit tests — tool handlers (see server/AGENTS.md)
 ├── skills/                              # Skill contract and compliance tests (see skills/AGENTS.md)
 ├── skills_extended/                     # Extended skill tests
+├── smoke_utils/                         # Smoke-test facade + per-shard test modules
 └── workspace/                           # Workspace and clone tests (see workspace/AGENTS.md)
 
 temp/                        # Temporary/working files (gitignored)

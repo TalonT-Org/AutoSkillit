@@ -58,8 +58,7 @@ Each direct Python file has one responsibility:
 - `_type_protocols_backend.py` — Backend abstraction protocol definitions.
 - `_type_protocols_execution.py` — Execution-layer protocol definitions.
 - `_type_protocols_github.py` — GitHub integration protocol definitions.
-- `_type_protocols_infra.py` — Infrastructure and pipeline-control protocols.
-- `_type_protocols_publication.py` — Server-owned audit authority and plan-set publication protocols.
+- `_type_protocols_infra.py` — Infrastructure, pipeline-control, and server-owned audit/plan-set publication protocols.
 - `_type_protocols_logging.py` — Logging and observer protocol definitions.
 - `_type_protocols_recipe.py` — Recipe and data access protocol definitions.
 - `_type_protocols_workspace.py` — Workspace and skill management protocol definitions.

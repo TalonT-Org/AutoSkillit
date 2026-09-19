@@ -106,8 +106,6 @@ from ._type_protocols_infra import *  # noqa: F401, F403
 from ._type_protocols_infra import __all__ as _protocols_infra_all
 from ._type_protocols_logging import *  # noqa: F401, F403
 from ._type_protocols_logging import __all__ as _protocols_logging_all
-from ._type_protocols_publication import *  # noqa: F401, F403
-from ._type_protocols_publication import __all__ as _protocols_publication_all
 from ._type_protocols_recipe import *  # noqa: F401, F403
 from ._type_protocols_recipe import __all__ as _protocols_recipe_all
 from ._type_protocols_workspace import *  # noqa: F401, F403
@@ -190,7 +188,6 @@ __all__ = (
     + _protocols_workspace_all
     + _protocols_recipe_all
     + _protocols_infra_all
-    + _protocols_publication_all
     + _protocols_backend_all
     + _results_all
     + _results_execution_all

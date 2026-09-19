@@ -12,6 +12,7 @@ from autoskillit.core.types import (
     CIWatcher,
     CodingAgentBackend,
     DatabaseReader,
+    GitHubFetcher,
     HeadlessExecutor,
     MergeQueueWatcher,
     PluginArtifactAuthority,
@@ -27,6 +28,7 @@ from autoskillit.core.types import (
 from tests.fakes import (
     DispatchFoodTruckCall,
     ExecutorCall,
+    FakeGitHubFetcher,
     FakePluginArtifactAuthority,
     InMemoryCIWatcher,
     InMemoryDatabaseReader,
@@ -70,6 +72,53 @@ def test_in_memory_database_reader_satisfies_protocol():
 
 def test_mock_subprocess_runner_satisfies_protocol():
     assert isinstance(MockSubprocessRunner(), SubprocessRunner)
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_satisfies_protocol_and_tracks_label_state():
+    fake = FakeGitHubFetcher(
+        issues={
+            ("owner", "repo", 42): {
+                "body": "seeded body",
+                "labels": ["bug"],
+                "state": "open",
+            }
+        },
+        repository_labels={("owner", "repo"): ["staged"]},
+    )
+    typed_fetcher: GitHubFetcher = fake
+
+    assert isinstance(typed_fetcher, GitHubFetcher)
+    assert await fake.ensure_label("owner", "repo", "in-progress") == {
+        "success": True,
+        "created": True,
+    }
+    assert await fake.ensure_label("owner", "repo", "in-progress") == {
+        "success": True,
+        "created": False,
+    }
+    assert await fake.ensure_label("owner", "repo", "staged") == {
+        "success": True,
+        "created": False,
+    }
+    assert await fake.swap_labels("owner", "repo", 42, ["bug"], ["in-progress"]) == {
+        "success": True,
+        "labels": ["in-progress"],
+    }
+    assert await fake.fetch_issue("owner/repo#42") == {
+        "success": True,
+        "number": 42,
+        "title": "",
+        "body": "seeded body",
+        "state": "open",
+        "labels": ["in-progress"],
+    }
+    assert (await fake.fetch_issue("owner/repo#99"))["success"] is False
+    assert fake.call_log[0] == (
+        "ensure_label",
+        ("owner", "repo", "in-progress"),
+        {"color": "ededed", "description": ""},
+    )
 
 
 @pytest.mark.anyio

@@ -40,7 +40,7 @@ class TestResearchRecipesAuditImpl:
     def test_audit_impl_on_failure_escalates(self, recipe) -> None:
         """audit_impl on_failure must route to escalate_stop."""
         step = recipe.steps["audit_impl"]
-        assert step.on_failure == "escalate_stop"
+        assert step.on_failure == "check_audit_integrity_retry"
 
     def test_audit_impl_cwd_uses_context_worktree_path(self, recipe) -> None:
         """audit_impl cwd must use context.worktree_path (not inputs)."""
@@ -91,7 +91,7 @@ class TestResearchRecipesAuditImpl:
         conditions = step.on_result.conditions
         go_cond = next((c for c in conditions if c.when and "== GO" in c.when), None)
         assert go_cond is not None, "audit_impl must have a GO verdict condition"
-        assert go_cond.route == "run_experiment"
+        assert go_cond.route == "merge_audit_cycle_path"
 
     def test_implement_phase_on_context_limit_uses_recipe_authority(self, recipe) -> None:
         step = recipe.steps["implement_phase"]
@@ -177,9 +177,9 @@ class TestResearchImplementRemediationLoop:
             if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
         ]
         assert len(nogo_conditions) == 2
-        assert {condition.route for condition in nogo_conditions} == {"remediate"}
+        assert {condition.route for condition in nogo_conditions} == {"merge_audit_cycle_path"}
         default_cond = next(condition for condition in conditions if condition.when is None)
-        assert default_cond.route == "escalate_stop"
+        assert default_cond.route == "check_audit_integrity_retry"
 
     def test_audit_impl_error_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
@@ -250,9 +250,9 @@ class TestResearchRemediationLoop:
             if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
         ]
         assert len(nogo_conditions) == 2
-        assert {condition.route for condition in nogo_conditions} == {"remediate"}
+        assert {condition.route for condition in nogo_conditions} == {"merge_audit_cycle_path"}
         default_cond = next(condition for condition in conditions if condition.when is None)
-        assert default_cond.route == "escalate_stop"
+        assert default_cond.route == "check_audit_integrity_retry"
 
     def test_audit_impl_error_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["audit_impl"]

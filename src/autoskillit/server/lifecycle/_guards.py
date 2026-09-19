@@ -33,6 +33,7 @@ from autoskillit.hooks import (
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
+    from autoskillit.config._automation_config import AutomationConfig
     from autoskillit.config._config_dataclasses import (
         AgentBackendConfig,
         ProviderProfileDef,
@@ -274,10 +275,15 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
 
 
 def _check_dry_walkthrough_plan(
-    skill_name: str, cwd: str, plan_path_str: str | None
+    skill_name: str,
+    cwd: str,
+    plan_path_str: str | None,
+    *,
+    config: AutomationConfig | None = None,
 ) -> str | None:
     """Check the marker using a plan path supplied by command text or bound inputs."""
-    if skill_name not in _get_config().implement_gate.skill_names:
+    gate = (config or _get_config()).implement_gate
+    if skill_name not in gate.skill_names:
         return None
     if plan_path_str is None:
         return gate_error_result(f"Missing plan path argument for {skill_name}")
@@ -286,14 +292,14 @@ def _check_dry_walkthrough_plan(
         return gate_error_result(f"Plan file not found: {plan_path}")
 
     first_line = plan_path.read_text().split("\n", 1)[0].strip()
-    if first_line != _get_config().implement_gate.marker:
+    if first_line != gate.marker:
         return gate_error_result(
             f"Plan has NOT been dry-walked. Run /dry-walkthrough on the plan first. "
-            f"Expected first line: {_get_config().implement_gate.marker!r}, "
+            f"Expected first line: {gate.marker!r}, "
             f"actual: {first_line[:100]!r}"
         )
 
-    allowed = _get_config().implement_gate.allowed_plan_dirs
+    allowed = gate.allowed_plan_dirs
     if allowed and plan_path.parent.name not in allowed:
         return gate_error_result(
             f"Plan file is not at its original location. "

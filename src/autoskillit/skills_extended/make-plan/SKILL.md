@@ -66,6 +66,10 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
+- `plan_set_coverage_gaps` (optional) — A bounded list of requirement gaps returned by a
+  failed sealed plan-set bind. On re-entry, allocate every listed requirement in the new
+  plan set; do not absorb the gaps into Part A by default. In grouped planning, the
+  dedicated gap-replan route adds a group to the still-open set.
 
 ## Core Values - CRITICAL
 

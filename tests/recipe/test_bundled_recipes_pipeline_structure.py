@@ -656,6 +656,19 @@ class TestImplementationPipelineStructure:
         conds = step.on_result.conditions
         assert not any("more_groups" in (c.when or "") for c in conds)
 
+    def test_ip_coverage_replan_is_bounded(self, recipe) -> None:
+        bind = recipe.steps["bind_plan_set"]
+        assert bind.on_result is not None
+        assert any(c.route == "check_replan_iteration" for c in bind.on_result.conditions)
+        guard = recipe.steps["check_replan_iteration"]
+        assert guard.with_args["max_iterations"] == "2"
+        assert guard.on_result is not None
+        assert any(
+            c.route == "release_issue_failure" and c.when and "max_exceeded" in c.when
+            for c in guard.on_result.conditions
+        )
+        assert "context.plan_set_parts" in (recipe.steps["next_or_done"].note or "")
+
 
 # ---------------------------------------------------------------------------
 # TestImplementationGroupsStructure

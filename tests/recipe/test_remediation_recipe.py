@@ -14,7 +14,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:e8413e8fb6abdf0c23850de8a3028bfc61220df6292f98683c2eb17647e14b03"
+    "sha256:4e93300f9ee81aa3694613b60e0be27636d0d5775e9b22687ebf0020b99358f2"
 )
 
 
@@ -25,6 +25,29 @@ def recipe():
 
 def test_delivery_declarations_preserve_canonical_recipe_structure(recipe) -> None:
     _assert_delivery_projection_contract(recipe, RECIPE_PATH, _PRE_DELIVERY_STRUCTURE_SHA256)
+
+
+def test_context_limited_walkthrough_renews_before_retry(recipe) -> None:
+    assert recipe.steps["dry_walkthrough"].on_context_limit == "renew_before_retry"
+    renewal = recipe.steps["renew_before_retry"]
+    assert renewal.tool == "bind_plan_set"
+    assert renewal.on_result is not None
+    assert any(c.route == "retry_walkthrough" for c in renewal.on_result.conditions)
+    for key in ("plan_set_authority_path", "plan_set_authority_digest", "plan_set_parts"):
+        assert key in renewal.capture
+
+
+def test_coverage_replan_is_bounded(recipe) -> None:
+    bind = recipe.steps["bind_plan_set"]
+    assert bind.on_result is not None
+    assert any(c.route == "check_replan_iteration" for c in bind.on_result.conditions)
+    guard = recipe.steps["check_replan_iteration"]
+    assert guard.with_args["max_iterations"] == "2"
+    assert guard.on_result is not None
+    assert any(
+        c.route == "release_issue_failure" and c.when and "max_exceeded" in c.when
+        for c in guard.on_result.conditions
+    )
 
 
 def test_remediation_recipe_has_release_issue_success_step(recipe):

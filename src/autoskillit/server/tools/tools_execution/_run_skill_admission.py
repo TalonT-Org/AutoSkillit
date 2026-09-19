@@ -542,6 +542,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                     state.skill_command.split()[0],
                     state.cwd,
                     bound_plan_path if isinstance(bound_plan_path, str) else None,
+                    config=state.tool_ctx.config,
                 )
             ) is not None:
                 return gate_error

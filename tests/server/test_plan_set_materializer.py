@@ -231,6 +231,7 @@ async def test_verifier_rejects_foreign_kitchen_and_standalone_binding(tmp_path:
         allowed_root=tmp_path,
         expected_execution_generation="generation",
         expected_kitchen_id="other-kitchen",
+        expected_binding_mode=PlanSetBindingMode.STANDALONE,
         current_plan_path=tmp_path / "part_a.md",
         require_sealed=True,
     )

@@ -160,7 +160,8 @@
         "create_and_publish",
         "plan",
         "salvage_plan",
-        "bind_plan_set"
+        "bind_plan_set",
+        "check_replan_iteration"
       ]
     },
     {
@@ -196,6 +197,7 @@
         "reset_merge_test_fix_counter",
         "reset_merge_fix_counter",
         "reset_ref_push_counter",
+        "reset_plan_set_replan_counter",
         "commit_guard",
         "main_repo_guard"
       ]
@@ -567,11 +569,40 @@
           "route": "review_approach"
         },
         {
+          "when": "${{ result.reason }} == coverage_failed",
+          "route": "check_replan_iteration"
+        },
+        {
           "route": "release_issue_failure"
         }
       ],
       "on_failure": "release_issue_failure",
       "note": "Aggregate plan-set gate before every walkthrough."
+    },
+    "check_replan_iteration": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_replan_iteration",
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.plan_set_replan_count }}",
+        "max_iterations": "2"
+      },
+      "capture": {
+        "plan_set_replan_count": "${{ result.next_iteration }}"
+      },
+      "optional_context_refs": [
+        "plan_set_replan_count"
+      ],
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "plan"
+        }
+      ],
+      "on_failure": "release_issue_failure"
     },
     "review_approach": {
       "tool": "run_skill",
@@ -1000,9 +1031,23 @@
       "capture": {
         "ref_push_count": "${{ result.value }}"
       },
+      "on_success": "reset_plan_set_replan_counter",
+      "on_failure": "reset_plan_set_replan_counter",
+      "note": "Resets ref_push_count to 0 so each audit-remediation cycle gets a fresh ref-push budget."
+    },
+    "reset_plan_set_replan_counter": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "reset_plan_set_replan_counter",
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "plan_set_replan_count": "${{ result.value }}"
+      },
       "on_success": "remediate",
       "on_failure": "remediate",
-      "note": "Resets ref_push_count to 0 so each audit-remediation cycle gets a fresh ref-push budget."
+      "note": "Resets the coverage-replan budget for each audit-remediation cycle."
     },
     "commit_guard": {
       "tool": "run_python",
@@ -1390,7 +1435,7 @@
           "route": "audit_impl"
         }
       ],
-      "note": "Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current plan → go to verify with next part. 2. If all plan_parts are complete → go to audit_impl.\n"
+      "note": "Routing step — no tool call. The next part is the entry following the current context.plan_path in context.plan_set_parts, the sealed ordered list. Set plan_path to that entry and re-enter verify; when no entry follows, go to audit_impl."
     },
     "audit_impl": {
       "tool": "run_skill",

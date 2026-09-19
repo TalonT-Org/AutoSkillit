@@ -174,8 +174,10 @@ delivery_segments:
   - rectify
   - salvage_rectify_plan
   - bind_plan_set
+  - check_replan_iteration
   - review_approach
   - dry_walkthrough
+  - renew_before_retry
   - retry_walkthrough
   - renew_plan_set
 - name: R3
@@ -203,6 +205,7 @@ delivery_segments:
   - reset_merge_test_fix_counter
   - reset_merge_fix_counter
   - reset_ref_push_counter
+  - reset_plan_set_replan_counter
 - name: R7
   steps:
   - check_ref_push_loop_pre_remediation
@@ -543,7 +546,25 @@ steps:
     on_result:
     - when: ${{ result.success }} == true
       route: review_approach
+    - when: ${{ result.reason }} == coverage_failed
+      route: check_replan_iteration
     - route: release_issue_failure
+    on_failure: release_issue_failure
+  check_replan_iteration:
+    tool: run_python
+    with:
+      step_name: check_replan_iteration
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.plan_set_replan_count }}
+      max_iterations: '2'
+    capture:
+      plan_set_replan_count: ${{ result.next_iteration }}
+    optional_context_refs:
+    - plan_set_replan_count
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
+    - route: make_plan
     on_failure: release_issue_failure
   review_approach:
     tool: run_skill
@@ -587,12 +608,30 @@ steps:
     on_failure: release_issue_failure
     retries: 3
     on_exhausted: release_issue_failure
-    on_context_limit: retry_walkthrough
+    on_context_limit: renew_before_retry
     optional_context_refs:
     - review_path
     - audit_cycle_path
     - plan_disposition_path
     note: Dry walkthrough retries on failure. It never routes back to a previous step.
+  renew_before_retry:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_set_parts }}
+      cwd: ${{ context.work_dir }}
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'true'
+      step_name: renew_before_retry
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: retry_walkthrough
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   retry_walkthrough:
     tool: run_skill
     model: ''
@@ -931,12 +970,23 @@ steps:
       counter_value: ''
     capture:
       pre_remediation_ref_push_count: ${{ result.value }}
-    on_success: pre_remediation_merge
-    on_failure: pre_remediation_merge
+    on_success: reset_plan_set_replan_counter
+    on_failure: reset_plan_set_replan_counter
     note: Resets pre_remediation_ref_push_count to 0 so each audit-remediation cycle
       gets a fresh pre-remediation ref-push budget. The final-merge ref_push_count
       is exempt from cross-cycle resets (it guards the GO path, which terminates the
       pipeline and never re-enters; see _WRAPPER_LOOP_EXEMPT_COUNTERS in rules_loop_counter.py).
+  reset_plan_set_replan_counter:
+    tool: run_python
+    with:
+      step_name: reset_plan_set_replan_counter
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      plan_set_replan_count: ${{ result.value }}
+    on_success: pre_remediation_merge
+    on_failure: pre_remediation_merge
+    note: Resets the coverage-replan budget for each audit-remediation cycle.
   check_ref_push_loop_pre_remediation:
     tool: run_python
     with:
@@ -1031,17 +1081,12 @@ steps:
       route: release_issue_failure
     - route: inter_part_push_pre_remediation
     on_failure: release_issue_failure
-    note: "Merges the current worktree before the remediation cycle creates a new\
-      \ one. Audit NO GO means the implementation is incomplete, not wrong \u2014\
-      \ merge it first, then remediate on top. This prevents orphaning the original\
-      \ worktree when implement re-runs. A local-ahead ref_coherence mismatch uses\
-      \ the shared ref_push_count budget and pre-remediation push recovery; genuine\
-      \ divergence or indeterminate ancestry escalates. dirty_tree routes to commit_guard_pre_remediation\
-      \ to auto-commit before retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation\
-      \ to stash. test_gate, post_rebase_test_gate, and rebase escalate to release_issue_failure\
-      \ \u2014 leaving the worktree live and retrying from a remediation cycle would\
-      \ orphan the original worktree. path_validation means the worktree was already\
-      \ merged in a prior session and routes to remediate.\n"
+    note: >-
+      Merge the current worktree before remediating Audit NO GO to avoid orphaning it.
+      Local-ahead ref_coherence uses bounded push recovery; divergence fails.
+      dirty_tree and dirty_main_repo use their named guards. test_gate,
+      test_gate_contention, post_rebase_test_gate, and rebase release the issue
+      with the worktree intact. path_validation means already merged and remediates.
   inter_part_push_pre_remediation:
     tool: push_to_remote
     with:
@@ -1309,6 +1354,7 @@ steps:
         task: ${{ inputs.task }}
         issue_url: ${{ inputs.issue_url }}
         audit_cycle_path: ${{ context.audit_cycle_path }}
+        plan_set_coverage_gaps: ${{ context.plan_set_coverage_gaps }}
       cwd: ${{ context.work_dir }}
       step_name: make_plan
       output_dir: .
@@ -1329,6 +1375,7 @@ steps:
       plan_path, and plan_disposition_path. make-plan cannot close the audit lineage.
     optional_context_refs:
     - audit_cycle_path
+    - plan_set_coverage_gaps
   salvage_plan:
     tool: run_python
     with:
@@ -2354,17 +2401,12 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Waits up to 15 minutes for the PR to merge through the queue. merged \u2192\
-      \ release_issue_success to apply staged label, then register_clone_success.\
-      \ release_issue_success is optional with skip_when_false: inputs.issue_url \u2014\
-      \ when issue_url is absent the step is silently skipped and pipeline continues\
-      \ to register_clone_success. ejected_ci_failure \u2192 diagnose_ci (CI failure;\
-      \ conflict resolution cannot fix this). dropped_merge_group_ci \u2192 check_dropped_ci_loop\
-      \ (re-enqueue on first drop, escalate to diagnose_ci after the cap is exceeded).\
-      \ not_enrolled \u2192 release_issue_failure (enrollment failed; repo configuration\
-      \ error). ejected \u2192 conflict fix cycle then re-enter. stalled \u2192 lightweight\
-      \ re-enrollment via enqueue_pr. timeout \u2192 register_clone_unconfirmed (release\
-      \ claim without staged label; merge unconfirmed).\n"
+    note: >-
+      Wait at most 15 minutes. merged releases the issue (optional without
+      issue_url), then registers clone success. ejected_ci_failure diagnoses CI;
+      dropped_merge_group_ci uses bounded retry; not_enrolled releases failure;
+      ejected enters conflict repair; stalled re-enrolls; timeout registers
+      unconfirmed without a staged label.
   reenroll_stalled_pr:
     tool: enqueue_pr
     with:

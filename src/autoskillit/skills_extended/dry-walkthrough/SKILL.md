@@ -332,7 +332,8 @@ or reconstruct any inventory, remediation, authority, or report.
    Stop execution — do not proceed to Step 5.
 
 4. Only `PASS` and `OMIT` may proceed to Step 5. This check composes independently with the
-   plan-vs-issue check in Step 4.6.
+   plan-vs-issue check in Step 4.6. In plan-set authority mode A, both verified evidences
+   come from the same bound invocation payload; neither requires opening an authority file.
 
 ### Step 5: Fix the Plan
 

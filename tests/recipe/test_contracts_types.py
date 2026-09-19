@@ -65,6 +65,11 @@ def test_skill_contract_accepts_supported_input_preflight() -> None:
     assert contract.input_preflight == ("audit_cycle_inventory",)
 
 
+def test_skill_contract_rejects_scalar_input_preflight() -> None:
+    with pytest.raises(ValueError, match="input_preflight must be a tuple"):
+        SkillContract(inputs=(), outputs=[], input_preflight="audit_cycle_inventory")
+
+
 def test_skill_output_accepts_allowed_values_kwarg() -> None:
     """SkillOutput must accept an `allowed_values` keyword argument and store it."""
     output = SkillOutput(

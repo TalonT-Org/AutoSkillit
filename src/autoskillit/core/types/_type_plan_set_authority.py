@@ -80,17 +80,24 @@ class PlanSetRejectReason(StrEnum):
     AUTHORITY_NOT_CANONICAL = "authority_not_canonical"
     AUTHORITY_INVALID = "authority_invalid"
     AUTHORITY_DIGEST = "authority_digest"
-    AUTHORITY_NOT_SEALED = "authority_not_sealed"
-    BINDING_MODE = "binding_mode"
+    AUTHORITY_NOT_SEALED = "not_sealed"
+    BINDING_MODE = "binding_mode_mismatch"
     COVERAGE_FAILED = "coverage_failed"
-    EXECUTION_GENERATION = "execution_generation"
+    EXECUTION_GENERATION = "execution_mismatch"
     ISSUE_DRIFT = "issue_drift"
     ISSUE_FETCH_FAILED = "issue_fetch_failed"
-    KITCHEN_ID = "kitchen_id"
+    KITCHEN_ID = "kitchen_mismatch"
     NO_PARTS = "no_parts"
-    PART_CONTENT_CHANGED = "part_content_changed"
+    PART_CONTENT_CHANGED = "part_digest_mismatch"
+    PART_FILE_MISSING = "part_file_missing"
     PART_LIST_CHANGED = "part_list_changed"
     PART_NOT_FOUND = "part_not_found"
+    PATH_ESCAPE = "path_escape"
+    SYMLINK = "symlink"
+    HARDLINK = "hardlink"
+    OVERSIZED = "oversized"
+    WORLD_WRITABLE = "world_writable"
+    METADATA_DRIFT = "metadata_drift"
     SCHEMA_VERSION = "schema_version"
     UNPARSED_MARKERS = "unparsed_markers"
     ALLOCATION_STEP_MISSING = "allocation_step_missing"
@@ -382,12 +389,16 @@ class PlanSetAuthority:
             raise ValueError("PlanSetAuthority execution identity fields must be strings")
         if not isinstance(self.binding_mode, PlanSetBindingMode):
             raise ValueError("PlanSetAuthority.binding_mode is invalid")
+        if self.binding_mode is PlanSetBindingMode.RECIPE and not self.execution_generation:
+            raise ValueError("recipe-bound authority requires an execution generation")
         if not isinstance(self.state, PlanSetState) or not isinstance(
             self.inventory_mode, InventoryMode
         ):
             raise ValueError("PlanSetAuthority state or inventory mode is invalid")
-        if self.revision < 1:
+        if isinstance(self.revision, bool) or self.revision < 1:
             raise ValueError("PlanSetAuthority.revision must be positive")
+        if self.revision > 1 and not self.parent_authority_digest:
+            raise ValueError("later authority revision requires a parent digest")
         if self.parent_authority_digest is not None:
             _nonempty("PlanSetAuthority.parent_authority_digest", self.parent_authority_digest)
         if self.issue is not None and not isinstance(self.issue, IssueSnapshotRef):
@@ -403,9 +414,11 @@ class PlanSetAuthority:
         object.__setattr__(self, "unparsed_marker_lines", tuple(self.unparsed_marker_lines))
         if not isinstance(self.coverage, CoverageResultDef):
             raise ValueError("PlanSetAuthority.coverage is invalid")
+        if self.state is PlanSetState.SEALED and self.coverage.status is not CoverageStatus.PASS:
+            raise ValueError("sealed authority requires passing coverage")
         if tuple(part.ordinal for part in self.parts) != tuple(range(1, len(self.parts) + 1)):
             raise ValueError("PlanSetAuthority.parts must have consecutive ordinals")
-        if len({part.locator for part in self.parts}) != len(self.parts):
+        if len({Path(part.locator).resolve() for part in self.parts}) != len(self.parts):
             raise ValueError("PlanSetAuthority.parts contain duplicate locators")
         if self.authority_digest != self.compute_digest():
             raise ValueError("PlanSetAuthority.authority_digest does not match event content")
@@ -431,6 +444,8 @@ class PlanSetAuthority:
         unparsed_marker_lines: tuple[int, ...],
         generated_at: str,
     ) -> Self:
+        if not isinstance(binding_mode, PlanSetBindingMode):
+            raise ValueError("PlanSetAuthority.binding_mode is invalid")
         payload = {
             "schema_version": PLAN_SET_SCHEMA_VERSION,
             "binding_mode": binding_mode.value,

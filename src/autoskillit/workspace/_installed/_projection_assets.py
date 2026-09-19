@@ -79,13 +79,13 @@ def per_file_asset_digest(path: Path) -> str:
     """Content-only SHA-256 of one file, independent of its relpath or projection.
 
     Extracted from public_plugin_asset_digest's per-file loop (S3-1) so a
-    content-addressed shared asset store can key on file bytes alone: 91 separate
+    content-addressed shared asset store can key on file bytes alone: separate
     copies of the identical mermaid.min.js each recompute the SAME digest here and
     therefore hash to the same store entry, regardless of which projection or
     relative path they arrived at. Distinct from public_plugin_asset_digest
     (whole-set, path-qualified), authority.py's asset_digest/semantic_key
     (asset-set + skill/adaptation/namespace identities), and artifact_digest (over
-    the staged *output* tree) -- none of the other three is per-file or
+    the staged *output* tree) -- none of those is per-file or
     path-independent.
     """
     with path.open("rb") as handle:

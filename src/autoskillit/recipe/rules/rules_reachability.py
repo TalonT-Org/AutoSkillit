@@ -1,6 +1,6 @@
 """Symbolic reachability semantic rules for recipe pipelines.
 
-Provides two rules:
+Provides these rules:
 
 ``capture-inversion-detection``
     Flags steps that read ``context.X`` via ``${{ context.X }}`` when X is

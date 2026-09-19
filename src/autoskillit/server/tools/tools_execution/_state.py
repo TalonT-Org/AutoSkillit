@@ -9,7 +9,7 @@ Construction contract
 Per D6, ``_RunSkillDispatchState`` is constructed as the first statement
 inside ``run_skill``'s outer ``try:``, after ``_get_ctx()`` has already
 succeeded — so ``tool_ctx`` is guaranteed present, never ``None``, at
-construction time. The constructor accepts exactly ``run_skill``'s 21 tool
+construction time. The constructor accepts ``run_skill``'s tool
 parameters plus ``ctx`` and ``tool_ctx``; every other field carries a default
 and is populated by whichever phase function computes it.
 
@@ -18,7 +18,7 @@ Access convention
 
 Fields without a leading underscore are mostly ``run_skill``'s tool-function
 parameters (e.g. ``skill_command``, ``cwd``, ``skill_inputs``) together with
-roughly twenty dispatch-computed values consumed by later phases (e.g.
+dispatch-computed values consumed by later phases (e.g.
 ``invocation``, ``projection_context``, ``target_name``,
 ``child_skill_command``, ``resolved_command``, ``write_spec``,
 ``closure_spec``, ``is_read_only``, ``completion_required``,

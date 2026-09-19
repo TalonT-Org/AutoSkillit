@@ -3,7 +3,7 @@
 Re-exports the retained surface (see ``__all__``) from ``_documents``,
 ``_publication``, and ``_validation``. Every name here is ``is``-equal to its
 canonical shard definition, so existing importers and ``monkeypatch.setattr``
-call sites resolve unchanged. Eight pre-refactor module-level names are
+call sites resolve unchanged. Pre-refactor module-level names are
 deliberately not re-exported — they have no external importer and stay
 reachable only through their owning shard.
 

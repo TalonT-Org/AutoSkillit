@@ -109,7 +109,7 @@ class BrokerAuthorityStatus(StrEnum):
     """Exhaustive, truthful states for ``kitchen_status()``'s broker_authority field.
 
     One member per branch of ``kitchen_status()``'s broker_authority assignment
-    (see tools_status.py) — the four members are exhaustive by construction.
+    (see tools_status.py); the enum is exhaustive by construction.
     """
 
     AVAILABLE = "available"

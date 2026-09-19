@@ -1,7 +1,7 @@
 """Compatibility facade for the decomposed `rules_skill_content` family.
 
-The 15 SKILL.md content semantic rules have been split into four sibling
-modules under this name's `rules_skill_content_*.py` family:
+SKILL.md content semantic rules have been split into sibling modules under this
+name's `rules_skill_content_*.py` family:
 
   - rules_skill_content_shell_safety        — shell-safety rules
   - rules_skill_content_github_api_safety   — GitHub-API-safety rules

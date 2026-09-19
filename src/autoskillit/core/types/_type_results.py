@@ -627,7 +627,7 @@ class SkillResult:
     ) -> SkillResult:
         """Construct a SkillResult for a runner crash (pre-launch or mid-flight exception).
 
-        Produces the same 13+ field envelope as _build_skill_result, ensuring
+        Produces the same response envelope as _build_skill_result, ensuring
         pipeline orchestrators can route crash responses without schema inspection.
         """
         _result = f"{type(exception).__name__}: {exception}"

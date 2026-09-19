@@ -9,7 +9,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Patterns that indicate the note is instructing inline-arg concatenation.
-# Phrasing variants found in the wild (4 recipes):
+# Phrasing variants found in bundled recipes:
 #   - "append it to the skill_command" (remediation, implementation-groups)
 #   - "Appends number and complexity to skill_command:" (merge-prs)
 #   - "Replace ${{ ... }} in the skill_command" (research)

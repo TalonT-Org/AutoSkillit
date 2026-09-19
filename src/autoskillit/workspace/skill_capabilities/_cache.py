@@ -1,7 +1,7 @@
 """Process-local weighted LRU cache for skill capability evidence.
 
-Owns the cache singleton, the three cache dataclasses, the four cache
-constants, and the three weight helpers. Stdlib-only at runtime — the
+Owns the cache singleton, cache dataclasses, cache constants, and weight
+helpers. Stdlib-only at runtime — the
 ``SkillCapabilityEvidence`` typing import is guarded by ``TYPE_CHECKING``
 because the cache dataclasses' annotations reference it.
 """

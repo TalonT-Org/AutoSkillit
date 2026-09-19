@@ -1,6 +1,6 @@
 """Read-only helpers for the audit admission ledger.
 
-Two facade-facing readers run under ``try/finally`` only (no
+Facade-facing readers run under ``try/finally`` only (no
 ``BEGIN IMMEDIATE``, no ``ROLLBACK``):
 
 - ``_current_head_read(connection, *, recipe_execution_id, cycle_id,

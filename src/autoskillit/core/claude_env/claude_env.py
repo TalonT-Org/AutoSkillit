@@ -191,7 +191,7 @@ def build_maintenance_env(
     """Return a minimal sealed environment for update/install subprocesses.
 
     Host values are copied from an explicit allowlist; the environment is
-    never cloned wholesale. Callers may add only the two maintenance recursion
+    never cloned wholesale. Callers may add only the maintenance recursion
     guards. Rejection messages name offending keys without exposing values.
     """
     supplied_extras = {} if extras is None else extras

@@ -149,7 +149,7 @@ def _skill_result_rate_limit_skip_reason(
 
     One ordered guard table for the boundary checks record_skill_result_rate_limit
     must apply before it may safely call record_observed_rate_limit — mirrors the
-    checks that were previously five near-identical inline if/log/return blocks.
+    checks that were previously repeated inline if/log/return blocks.
     """
     if config is None:
         return "no_quota_guard_config"

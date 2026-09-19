@@ -8,15 +8,15 @@ salvage route. Without one, ``on_failure`` is used as the fallback, discarding a
 completed-but-unparsed artifact instead of attempting salvage (issue #4305).
 
 Severity is WARNING, not ERROR, as a deliberate staged rollout: the contract-derived
-eligibility predicate matches far more steps than the nine sites audited and fixed by
+eligibility predicate matches far more steps than the sites audited and fixed by
 the prior part (any non-read-only skill with expected_output_patterns qualifies, which
 is most write-capable skills, not just plan-producing ones). Promoting straight to ERROR
-today would flip ``valid=False`` for roughly a dozen bundled recipes with pre-existing,
+today would flip ``valid=False`` for bundled recipes with pre-existing,
 unremediated gaps — and this codebase's own governance
 (``test_error_severity_rules_have_no_dispatch_ready_exemptions``) forbids giving ERROR
 rules a dispatch-ready exemption to paper over that, by design: fix all recipes first,
 then promote. See tests/recipe/test_bundled_recipes_behavioral_properties.py's
-``_SALVAGE_ROUTE_SITES`` for the nine sites already fully remediated and covered as an
+``_SALVAGE_ROUTE_SITES`` for the already fully remediated sites covered as an
 unconditional structural regression test. Once a follow-up part wires salvage routes for
 the remaining flagged sites, promote this rule's severity to ERROR (one-line change).
 """

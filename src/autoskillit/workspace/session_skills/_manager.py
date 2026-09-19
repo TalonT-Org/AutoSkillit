@@ -3,7 +3,7 @@
 Single owner of ``DefaultSessionSkillManager`` and ``_InitializedSession``.
 Manager-owned bound-record initialization, public protocol surface
 (materialize_invocation, init_session, managed_session, cleanup_session,
-validate_session_exists, cleanup_stale) and the four ownership maps
+validate_session_exists, cleanup_stale) and the ownership maps
 (``_session_roots``, ``_session_skills_subdirs``, ``_session_skill_infos``,
 ``_session_leases``) live here.
 

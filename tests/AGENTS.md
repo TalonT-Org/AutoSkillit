@@ -32,7 +32,7 @@ Never rely on inverse method calls for cleanup.
   L0+L1 imports (core, pipeline, config). Use for tests that only need gate, audit,
   token_log, timing_log, or config — no server factory, no L2/L3 service wiring. Does NOT
   monkeypatch `server.lifecycle._state._ctx`. Gate starts closed (matching production). Guard tests
-  in `test_conftest.py` enforce the import boundary via AST analysis.
+  in `tests/infra/test_conftest.py` enforce the import boundary via AST analysis.
 - Both `tool_ctx` and `minimal_ctx` start with gate closed to match production behavior.
   Use `tool_ctx_kitchen_open` or `build_ctx_open` for tests that need an open gate.
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
@@ -247,7 +247,6 @@ which derives the package set from this convention.
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
 ├── assets/                              # Vendored asset integrity tests
-├── backend/                             # MCP backend round-trip + guard-script tests
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
 ├── config/                              # Config loading tests
 ├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/AGENTS.md)

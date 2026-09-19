@@ -1082,6 +1082,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
             # by reflection, so a new command builder must be covered automatically.
             "infra/test_plugin_source_ratchets.py",
+            # file-level: relocated test_conftest exercises autoskillit.execution.quota.logger
+            # directly when asserting output scrubbing captures quota warnings before stdout.
+            "infra/test_conftest.py",
             "_llm_triage",
             "smoke_utils",
         }
@@ -1138,7 +1141,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "smoke_utils",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
-            "recipe/test_recipe_backend_composition_matrix.py",
+            "recipe/test_backend_composition_matrix.py",
             "recipe/test_skill_capability_cache_integration.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",
@@ -1159,7 +1162,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_io_discovery.py",
             "recipe/test_issue_url_pipeline.py",
             "recipe/test_planner_contracts.py",
-            "recipe/test_recipe_temp_substitution.py",
+            "recipe/test_temp_substitution.py",
             "recipe/test_repository.py",
             "recipe/test_research_campaign.py",
             "recipe/test_rules_contracts.py",
@@ -1533,7 +1536,7 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
                 "recipe/test_io_discovery.py",
                 "recipe/test_issue_url_pipeline.py",
                 "recipe/test_planner_contracts.py",
-                "recipe/test_recipe_temp_substitution.py",
+                "recipe/test_temp_substitution.py",
                 "recipe/test_repository.py",
                 "recipe/test_research_campaign.py",
                 "recipe/test_rules_contracts.py",

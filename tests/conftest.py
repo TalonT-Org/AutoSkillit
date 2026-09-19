@@ -123,7 +123,6 @@ _SIZE_DIRS: frozenset[str] = frozenset(
     {
         "arch",
         "assets",
-        "backend",
         "cli",
         "config",
         "contracts",

@@ -6,9 +6,9 @@ import pathlib
 
 import pytest
 
-pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+pytestmark = [pytest.mark.small]
 
-_REPO_ROOT = pathlib.Path(__file__).parent.parent
+_REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 
 _ORCHESTRATION_FILES = [
     "src/autoskillit/core/types/_type_enums.py",

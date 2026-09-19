@@ -6,7 +6,7 @@ finally: blocks could fire. The new implementation delegates to anyio.run()
 with a _serve_with_signal_guard closure that uses anyio.open_signal_receiver.
 
 Structural enforcement (no raw signal.signal SIGTERM) is covered by the AST guard
-in tests/server/test_no_raw_signal_handler.py. This test covers unit behavior:
+in tests/cli/test_no_raw_signal_handler.py. This test covers unit behavior:
 serve() must call anyio.run() and pass it an async coroutine function.
 """
 

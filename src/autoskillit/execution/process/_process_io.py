@@ -62,12 +62,20 @@ def _drain_piped_output(
     done: threading.Event,
 ) -> None:
     """Drain one pipe while retaining no more than the shared byte ceiling."""
+    drain_error: BaseException | None = None
     try:
         while chunk := cast(io.BufferedReader, stream).read1(_TEE_CHUNK_SIZE):
             if limiter.write(chunk, capture_file):
                 on_output_limit()
+    except BaseException as exc:
+        drain_error = exc
     finally:
         done.set()
+    if drain_error is not None:
+        logger.error(
+            "piped output drain failed",
+            exc_info=(type(drain_error), drain_error, drain_error.__traceback__),
+        )
 
 
 async def drain_piped_output(

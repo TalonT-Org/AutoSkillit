@@ -630,8 +630,9 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     from ambient values.  Callers that already established join applicability
     must deny rather than substitute the former ``top_level`` literal.
     """
-    binding = read_session_binding(payload_cwd, session_id)
-    if binding is None or not binding.get("join_required") or not binding.get("binding_valid"):
+    admission = session_join_admission(payload_cwd, session_id)
+    binding = admission.binding_dict
+    if binding is None or not admission.enforce or not binding.get("binding_valid"):
         return None
     parent = binding.get("managed_parent_id")
     leaf = binding.get("managed_leaf_id")
@@ -645,8 +646,9 @@ def session_managed_codex_route(
     session_id: str,
 ) -> tuple[str, frozenset[str], str] | None:
     """Return the explicit managed Codex route carried by a valid binding."""
-    binding = read_session_binding(payload_cwd, session_id)
-    if binding is None or not binding.get("binding_valid"):
+    admission = session_join_admission(payload_cwd, session_id)
+    binding = admission.binding_dict
+    if binding is None or not admission.enforce or not binding.get("binding_valid"):
         return None
     route = binding.get("managed_route")
     guards = binding.get("managed_guard_set")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -32,6 +32,20 @@ if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
 
 logger = get_logger(__name__)
+
+
+def _capture_native_session_ids(
+    downstream: Callable[[str], None] | None,
+) -> tuple[list[str], Callable[[str], None]]:
+    captured = [""]
+
+    def capture(candidate: str) -> None:
+        if candidate:
+            captured[0] = candidate
+        if downstream is not None:
+            downstream(candidate)
+
+    return captured, capture
 
 
 def resolve_launch_quota_identity(

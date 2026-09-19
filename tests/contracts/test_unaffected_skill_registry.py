@@ -10,11 +10,9 @@ Retirement Registries).
 
 Lives in core/types/_type_constants.py rather than a bare module under
 src/autoskillit/skills/ — that directory is a namespace package holding
-only SKILL.md content today (no __init__.py, no other .py files); adding
-importable code there means any import creates a skills/__pycache__/
-directory, which scripts/check_doc_counts.py's naive "every directory
-under skills/ is a skill" counter would then miscount as an extra skill.
-Confirmed reproducing locally before choosing this location instead.
+only SKILL.md content today (no __init__.py, no other .py files). Adding
+importable code there would create a skills/__pycache__/ directory, so this
+registry remains in core/types alongside the retirement registries.
 
 _discover_unaffected_skills() mirrors the negative predicate used by the
 investigation and by tests/skills/test_exploration_vector_preflight.py's

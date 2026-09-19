@@ -362,8 +362,6 @@ GATE_FAILED=false
 GATE_AUTHORITY='{"state":"degraded","reason_code":"metrics_missing","snapshot":{},"annotation_generation_id":""}'
 STANDARD_RAW_FINDINGS='[]'
 STANDARD_AUDITOR_RAW_FINDINGS='[]'
-DOC_COUNT_FINDINGS='[]'
-DOC_COUNT_PREFLIGHT_OUTPUT=""
 EXPERIMENTAL_CANDIDATES='[]'
 EXPERIMENTAL_AUDIT_STATE=not_eligible
 AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started","reason_code":"not_eligible"},"pr-review-auditor-abstraction-surface":{"status":"not_started","reason_code":"not_eligible"}}'
@@ -786,36 +784,6 @@ standard calls. `deletion_context` remains independently gated. Missing or malfo
 adaptive selection falls back to all six standard agents and never adds a proof-only
 auditor to that fallback.
 
-### Step 2.95: Doc-Count Preflight
-
-Before auditor dispatch, probe the checkout's declared task capability through the
-bounded review command route. Run `task --json --list` with cwd
-`REVIEW_CHECKOUT_ROOT`, a finite 20-second timeout, and one 64 KiB combined
-stdout/stderr ceiling. Parse only its machine-readable task list; do not infer a
-capability from a Taskfile path or execute `scripts/check_doc_counts.py` directly.
-
-- If the probe fails, times out, or reaches the combined-output limit, set the
-  preflight state to `needs_human`, retain the bounded diagnostic, and stop before
-  auditor dispatch/publication.
-- If `check-docs` is absent, record `not_applicable` with the capability reason and
-  continue to Step 3.
-- If `check-docs` is declared, run `task check-docs` in `REVIEW_CHECKOUT_ROOT`
-  through the same bounded command route, with a finite timeout and the same combined
-  output ceiling. Store that bounded combined output in `DOC_COUNT_PREFLIGHT_OUTPUT`.
-  A zero exit is clean and continues to Step 3.
-- For a non-zero exit, accept only deterministic `path:line: message` records. The
-  parser ignores the hook's heading and total line, then creates one review-level
-  finding per diagnostic with `dimension="tests"`, `severity="critical"`, and
-  `requires_decision=false`. Append those exact validated records to
-  `STANDARD_RAW_FINDINGS` before the normal validation and aggregation boundary.
-- A non-zero exit without a parseable `path:line:` diagnostic is `needs_human`;
-  retain the bounded output and stop before auditor dispatch/publication. Never treat
-  an unparseable failure as clean.
-
-Use `_parse_doc_count_preflight_diagnostics` from the installed review validation
-module for this conversion. A doc-count mismatch is intentionally review-level: do
-not fabricate an inline diff anchor for an unchanged documentation line.
-
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
 Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
@@ -998,9 +966,7 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 
 Keep `STANDARD_AUDITOR_RAW_FINDINGS` separate from `EXPERIMENTAL_CANDIDATES`.
 Append standard and deletion responses only to `STANDARD_AUDITOR_RAW_FINDINGS`, then
-construct `STANDARD_RAW_FINDINGS` as that array plus accepted doc-count preflight
-findings. This keeps the complete raw ledger while allowing doc-count diagnostics to
-use their review-level, non-inline validation path.
+use it as `STANDARD_RAW_FINDINGS` for validation and aggregation.
 
 Before accepting any experimental item, validate both arrays completely. The exact
 candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
@@ -1092,8 +1058,6 @@ from autoskillit.smoke_utils import (
     render_review_finding_body,
     validate_experimental_auditor_outputs,
 )
-from autoskillit.smoke_utils.review._validation import _parse_doc_count_preflight_diagnostics
-
 ANCHOR_AUTHORITY = (
     DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
     if anchor_authority_path
@@ -1114,8 +1078,7 @@ else:
     else:
         STANDARD_FINDINGS = []
         STANDARD_VALIDATION_ERRORS.append("standard findings must be a JSON array")
-DOC_COUNT_FINDINGS = _parse_doc_count_preflight_diagnostics(DOC_COUNT_PREFLIGHT_OUTPUT)
-STANDARD_RAW_FINDINGS = json.dumps([*STANDARD_FINDINGS, *DOC_COUNT_FINDINGS])
+STANDARD_RAW_FINDINGS = json.dumps(STANDARD_FINDINGS)
 if GATE_STATE == "valid_true":
     VALIDATION_RESULT = validate_experimental_auditor_outputs(
         outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
@@ -1158,7 +1121,6 @@ else:
         dispositions=DISPOSITION_RECORDS,
         prior_resolved_findings=prior_resolved_findings,
         standard_findings=STANDARD_FINDINGS,
-        doc_count_findings=DOC_COUNT_FINDINGS,
         anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
         review_root=REVIEW_CHECKOUT_ROOT,
@@ -1197,9 +1159,7 @@ standard/deletion list afterward.
    reason `suppressed_prior_thread`; do not mutate the candidate or disposition.
 2. Deduplicate diff-anchored findings by `(file, line)` after suppression. Rank
    collisions by severity, then prefer `requires_decision=false`, then fixed source
-   rank and original array index. A review-level doc-count finding remains in its
-   own candidate-ID partition and never collides with an inline finding at the same
-   path and line. Create a deterministic `dedup_group_id`; retain every member
+   rank and original array index. Create a deterministic `dedup_group_id`; retain every member
    `candidate_id`, the winner, and rationale. Losers receive linked
    `duplicate_candidate` aggregation records.
 3. Use the programmatic aggregation partition and preserve authority availability:
@@ -1381,8 +1341,7 @@ Prepare one complete `comments` array from `INLINE_FINDINGS`, filtering at the p
 boundary to `severity == "critical"` or `severity == "warning"`. Preserve each validated
 repository-relative `path`, `line`, and `side: "RIGHT"` anchor. Do not place
 `UNPOSTABLE_FINDINGS` or `REVIEW_LEVEL_FINDINGS` in `comments`; summarize both partitions
-in the complete review `body`. A doc-count mismatch is rendered as a review-level `tests`
-finding and never attempts inline publication.
+in the complete review `body`.
 
 Map the verdict to the requested event:
 
@@ -1605,17 +1564,7 @@ replace it through the Step 8 same-directory temporary file and atomic rename:
       "snapshot": {}
     }
   ],
-  "review_level_findings": [
-    {
-      "candidate_id": "...",
-      "path": "docs/skills/catalog.md",
-      "line": 17,
-      "severity": "critical",
-      "dimension": "tests",
-      "message": "claims 63 skills, actual is 64",
-      "requires_decision": false
-    }
-  ],
+  "review_level_findings": [],
   "_head_sha": "{METRICS_HEAD_SHA}",
   "_base_sha": "{METRICS_BASE_SHA}",
   "_merge_base_sha": "{METRICS_MERGE_BASE_SHA}",
@@ -1634,9 +1583,8 @@ receipt/local marker.
 
 Version 2 requires a non-empty `anchor_digest` on every context entry whose `line`
 is an integer. For `line: null`, omit the digest and do not manufacture source bytes.
-`review_level_findings` is separate from `context_entries`: it preserves the
-candidate ID, path, diagnostic line, message, severity, dimension, and
-`requires_decision` for accepted doc-count findings, but has no inline anchor.
+`review_level_findings` is separate from `context_entries`; it remains an empty
+list until a future review source explicitly defines a review-level contract.
 
 **Raw Findings JSON schema (published first):**
 

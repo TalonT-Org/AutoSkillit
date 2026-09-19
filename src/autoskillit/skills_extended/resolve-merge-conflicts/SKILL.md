@@ -306,7 +306,7 @@ pre-existing — they exist on the integration target independent of this branch
 
 If **any** flagged violation is absent from the integration target (the branch
 introduced it), the remaining failure is from a non-auto-fixable hook (e.g., `mypy`,
-`gitleaks`, `doc-counts`). Escalate immediately — do NOT loop:
+`gitleaks`). Escalate immediately — do NOT loop:
 
 ```
 escalation_required = true
@@ -497,5 +497,5 @@ Omit `conflict_report_path=` line entirely when the rebase was clean (no conflic
 
 - **Validation failures**: Emit clear error message and abort before touching git state
 - **`rebase --continue` failure** (not a conflict): Abort with `git -C {worktree_path} rebase --abort` and escalate
-- **`pre-commit` failure**: Apply all auto-fixable hooks in order — ruff format/check (auto-applied by hooks), `check-version-consistency` (run `python3 scripts/sync_versions.py && git add -u`), `uv-lock-check` (run `uv lock && git add -u`) — re-stage, then re-run. If pre-commit still fails after this pass, escalate with `escalation_required=true`; non-fixable hooks (mypy, gitleaks, doc-counts) require manual remediation.
+- **`pre-commit` failure**: Apply all auto-fixable hooks in order — ruff format/check (auto-applied by hooks), `check-version-consistency` (run `python3 scripts/sync_versions.py && git add -u`), `uv-lock-check` (run `uv lock && git add -u`) — re-stage, then re-run. If pre-commit still fails after this pass, escalate with `escalation_required=true`; non-fixable hooks (mypy, gitleaks) require manual remediation.
 - **Unexpected git state**: Run `git -C {worktree_path} rebase --abort` before exiting

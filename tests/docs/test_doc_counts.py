@@ -1,13 +1,7 @@
-"""Verify every numerical claim in every doc file matches source of truth.
-
-Each assertion reads the doc file(s) it covers and the source it derives from,
-then compares. A failure prints which doc has the stale value and what the
-canonical value is.
-"""
+"""Verify documentation names stable relationships and their authorities."""
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
@@ -20,222 +14,10 @@ pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = REPO_ROOT / "src" / "autoskillit"
 DOCS_DIR = REPO_ROOT / "docs"
-ROOT_README = REPO_ROOT / "README.md"
-CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
-
-
-# ----- helpers ----------------------------------------------------------------
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def _doc_files() -> list[Path]:
-    return sorted(DOCS_DIR.rglob("*.md"))
-
-
-def _docs_containing(pattern: str) -> list[Path]:
-    rx = re.compile(pattern)
-    return [p for p in _doc_files() if rx.search(_read(p))]
-
-
-# ----- canonical source-of-truth getters --------------------------------------
-
-
-def _extract_tool_decorators(text: str) -> list[str]:
-    """Extract full @mcp.tool(...) decorator text, handling multi-line decorators."""
-    decorators: list[str] = []
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        stripped = lines[i].strip()
-        if stripped.startswith("@mcp.tool"):
-            # Collect the full decorator (may span multiple lines)
-            parts = [stripped]
-            if ")" not in stripped:
-                i += 1
-                while i < len(lines):
-                    part = lines[i].strip()
-                    parts.append(part)
-                    if ")" in part:
-                        break
-                    i += 1
-            decorators.append(" ".join(parts))
-        i += 1
-    return decorators
-
-
-def _tools_entrypoint_files() -> list[Path]:
-    """Every source file that may define a tools_* MCP tool entry point.
-
-    ``tools_*.py`` used to be a flat-file-only naming convention, but several
-    entry-point modules (``tools_kitchen``, ``tools_fleet_dispatch``,
-    ``tools_pipeline_tracker``) are now directory packages whose siblings
-    (``_open_kitchen.py``, ``_handlers.py``, etc.) don't match the
-    ``tools_*.py`` filename pattern themselves. Walk every ``.py`` file inside
-    each ``tools_*`` package so decomposed tool handlers are still counted.
-    """
-    files: list[Path] = []
-    base = SRC_DIR / "server" / "tools"
-    for entry in sorted(base.iterdir()):
-        if entry.is_file() and entry.name.startswith("tools_") and entry.suffix == ".py":
-            files.append(entry)
-        elif entry.is_dir() and entry.name.startswith("tools_"):
-            files.extend(sorted(entry.rglob("*.py")))
-    return files
-
-
-def _count_mcp_tools() -> int:
-    total = 0
-    for f in _tools_entrypoint_files():
-        total += len(_extract_tool_decorators(_read(f)))
-    return total
-
-
-def _count_kitchen_tools() -> int:
-    total = 0
-    for f in (SRC_DIR / "server" / "tools").rglob("*.py"):
-        for dec in _extract_tool_decorators(_read(f)):
-            if '"kitchen"' in dec:
-                total += 1
-    return total
-
-
-def _count_free_range_tools() -> int:
-    total = 0
-    for f in _tools_entrypoint_files():
-        for dec in _extract_tool_decorators(_read(f)):
-            if '"kitchen"' not in dec and '"evidence-reader"' not in dec:
-                total += 1
-    return total
-
-
-def _count_headless_tools() -> int:
-    total = 0
-    for f in _tools_entrypoint_files():
-        for dec in _extract_tool_decorators(_read(f)):
-            if '"headless"' in dec:
-                total += 1
-    return total
-
-
-def test_doc_count_script_counts_overlapping_gated_and_headless_tools_once(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from scripts import check_doc_counts
-
-    registry = tmp_path / "registries.py"
-    registry.write_text(
-        """
-GATED_TOOLS: frozenset[str] = frozenset({"gated", "shared"})
-HEADLESS_TOOLS: frozenset[str] = frozenset({"headless", "shared"})
-FREE_RANGE_TOOLS: frozenset[str] = frozenset({"free"})
-""",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(check_doc_counts, "TYPES_FILE", registry)
-
-    assert check_doc_counts.count_tools() == (3, 1)
-
-
-def test_doc_count_scan_orders_every_claim_category_and_keeps_existing_filters(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from scripts import check_doc_counts
-
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "claims.md").write_text(
-        """\
-4 skills, 3 skills, 5 recipes, and 4 tools
-1 gated tools
-Always visible (2 tools)
-autoskillit skills list has 99 skills and 99 recipes
-Tier 2 has 99 skills
-1 skills, 1 recipes, and 1 tools
-""",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(check_doc_counts, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(check_doc_counts, "count_skills", lambda: 5)
-    monkeypatch.setattr(check_doc_counts, "count_recipes", lambda: 6)
-    monkeypatch.setattr(check_doc_counts, "count_tools", lambda: (2, 3))
-
-    assert check_doc_counts.scan_docs() == [
-        "docs/claims.md:1: claims 4 skills, actual is 5",
-        "docs/claims.md:1: claims 3 skills, actual is 5",
-        "docs/claims.md:1: claims 5 recipes, actual is 6",
-        "docs/claims.md:1: claims 4 tools, actual is 5",
-        "docs/claims.md:2: claims 1 gated tools, actual is 2",
-        "docs/claims.md:3: claims 2 ungated tools, actual is 3",
-    ]
-
-
-def test_doc_count_script_reports_no_drift_in_repository_docs() -> None:
-    from scripts import check_doc_counts
-
-    assert check_doc_counts.scan_docs() == []
-
-
-def _count_skills_total() -> int:
-    tier1 = sum(1 for p in (SRC_DIR / "skills").iterdir() if p.is_dir())
-    tier23 = sum(1 for p in (SRC_DIR / "skills_extended").iterdir() if p.is_dir())
-    return tier1 + tier23
-
-
-def _configured_skill_tier_counts() -> tuple[int, int, int]:
-    skills = load_yaml(SRC_DIR / "config" / "defaults.yaml")["skills"]
-    return len(skills["tier1"]), len(skills["tier2"]), len(skills["tier3"])
-
-
-def _count_arch_lens_skills() -> int:
-    return sum(
-        1
-        for p in (SRC_DIR / "skills_extended").iterdir()
-        if p.is_dir() and p.name.startswith("arch-lens-")
-    )
-
-
-def _count_exp_lens_skills() -> int:
-    return sum(
-        1
-        for p in (SRC_DIR / "skills_extended").iterdir()
-        if p.is_dir() and p.name.startswith("exp-lens-")
-    )
-
-
-def _count_vis_lens_skills() -> int:
-    return sum(
-        1
-        for p in (SRC_DIR / "skills_extended").iterdir()
-        if p.is_dir() and p.name.startswith("vis-lens-")
-    )
-
-
-def _hook_files() -> list[Path]:
-    return sorted(f for f in (SRC_DIR / "hooks").rglob("*.py") if f.name not in {"__init__.py"})
-
-
-def _count_hooks_by_event() -> dict[str, int]:
-    """Group unique Claude hook scripts by event type.
-
-    Imports HOOK_REGISTRY and counts the distinct script files referenced by
-    each event type — duplicates (e.g. branch_protection_guard registered for
-    both merge_worktree and push_to_remote) collapse to a single entry.
-    """
-    from autoskillit.hook_registry import HOOK_REGISTRY  # local import to avoid hard dep
-
-    by_event: dict[str, set[str]] = {}
-    # join_followup_guard adds one PreToolUse script to the count.
-    for hook_def in HOOK_REGISTRY:
-        if hook_def.runtime_only:
-            continue
-        for script in hook_def.scripts:
-            by_event.setdefault(hook_def.event_type, set()).add(script)
-    return {event: len(scripts) for event, scripts in by_event.items()}
 
 
 def _quota_thresholds_default() -> tuple[float, float]:
@@ -244,187 +26,40 @@ def _quota_thresholds_default() -> tuple[float, float]:
     assert quota is not None, "quota_guard key missing from config/defaults.yaml"
     short = quota.get("short_window_threshold")
     long_ = quota.get("long_window_threshold")
-    assert short is not None, (
-        "quota_guard.short_window_threshold key missing from config/defaults.yaml"
-    )
-    assert long_ is not None, (
-        "quota_guard.long_window_threshold key missing from config/defaults.yaml"
-    )
+    assert short is not None, "quota_guard.short_window_threshold key missing"
+    assert long_ is not None, "quota_guard.long_window_threshold key missing"
     return float(short), float(long_)
 
 
-def _count_doctor_checks() -> int:
-    """Count isolated check invocations inside ``_collect_doctor_results``."""
-    text = _read(SRC_DIR / "cli" / "doctor" / "__init__.py")
-    tree = ast.parse(text)
-    collector = next(
-        (
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_collect_doctor_results"
-        ),
-        None,
-    )
-    assert collector is not None, "_collect_doctor_results not found in cli/doctor/__init__.py"
-    return sum(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_run_check"
-        for node in ast.walk(collector)
-    )
-
-
-def _bundled_recipes() -> list[str]:
-    return sorted(p.stem for p in (SRC_DIR / "recipes").glob("*.yaml"))
-
-
-def _retry_reason_values() -> list[str]:
-    text = _read(SRC_DIR / "core" / "types" / "_type_enums.py")
-    block = re.search(r"class RetryReason\(StrEnum\):(.*?)\nclass ", text, re.DOTALL)
-    assert block, "RetryReason enum not found"
-    return re.findall(r'"([a-z_]+)"', block.group(1))
-
-
-def _count_semantic_rule_files() -> int:
-    return sum(1 for p in (SRC_DIR / "recipe" / "rules").rglob("rules_*.py"))
-
-
-# ----- tests ------------------------------------------------------------------
-
-
-def test_kitchen_tagged_tool_count_is_55() -> None:
-    count = _count_kitchen_tools()
-    assert count == 55, f"Expected 55 kitchen-tagged tools; found {count}"
-
-
-def test_free_range_tool_count_is_22() -> None:
-    assert _count_free_range_tools() == 22, (
-        f"Expected 22 free-range tools; found {_count_free_range_tools()}"
-    )
-
-
-def test_headless_tool_count_is_9() -> None:
-    assert _count_headless_tools() == 9, (
-        f"Expected 9 headless-tagged tools; found {_count_headless_tools()}"
-    )
-
-
-def test_arch_lens_count_is_13() -> None:
-    assert _count_arch_lens_skills() == 13
-
-
-def test_exp_lens_count_is_18() -> None:
-    assert _count_exp_lens_skills() == 18
-
-
-def test_vis_lens_count_is_12() -> None:
-    assert _count_vis_lens_skills() == 12
-
-
-def test_quota_thresholds_defaults() -> None:
+def test_configuration_states_quota_thresholds() -> None:
     short, long_ = _quota_thresholds_default()
     assert short == pytest.approx(85.0)
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_57() -> None:
-    # Combined-tree canonical count: 47 numbered checks + 10 lettered sub-checks.
-    # Check 47 (S2-5): pytest-generation temp-root capacity and orphaned-generation count.
-    # Update both tests whenever a new doctor check is added.
-    count = _count_doctor_checks()
-    assert count == 57, f"Expected 57 doctor checks; found {count}"
+def test_tool_access_names_visibility_authority() -> None:
+    text = _read(DOCS_DIR / "execution" / "tool-access.md")
+    assert "GATED_TOOLS" in text
+    assert "core/types/_type_constants_registries.py" in text
+    for surface in ("FREE RANGE", "HEADLESS-TAGGED", "KITCHEN", "EVIDENCE READER"):
+        assert surface in text
 
 
-def test_bundled_recipe_count_is_15() -> None:
-    recipes = _bundled_recipes()
-    expected = [
-        "bem-wrapper",
-        "consolidate-health-reports",
-        "full-audit",
-        "implement-findings",
-        "implementation",
-        "implementation-groups",
-        "merge-prs",
-        "planner",
-        "promote-to-main-wrapper",
-        "remediation",
-        "research",
-        "research-archive",
-        "research-design",
-        "research-implement",
-        "research-review",
-    ]
-    assert recipes == expected, f"Recipes drifted: {recipes}"
+def test_hook_docs_name_registry_authority() -> None:
+    text = _read(DOCS_DIR / "safety" / "hooks.md")
+    assert "HOOK_REGISTRY" in text
+    assert "src/autoskillit/hook_registry/" in text
 
 
-def test_retry_reason_value_count_is_20() -> None:
-    values = _retry_reason_values()
-    assert len(values) == 20, f"RetryReason has {len(values)} values: {values}"
-
-
-def test_semantic_rule_family_count_is_current() -> None:
-    count = _count_semantic_rule_files()
-    assert count >= 60, f"Semantic rule count dropped unexpectedly: {count} < 60"
-
-
-# ----- per-doc count assertions (run once docs exist) -------------------------
-
-
-def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
-    if not doc.exists():
-        pytest.skip(f"{doc.relative_to(REPO_ROOT)} not yet present")
-    text = _read(doc)
-    if not re.search(rf"\b{expected}\b", text):
-        pytest.fail(f"{doc.relative_to(REPO_ROOT)}: missing canonical {label}={expected}")
-
-
-@pytest.mark.parametrize(
-    "doc_path",
-    [
-        DOCS_DIR / "execution" / "architecture.md",
-        DOCS_DIR / "execution" / "tool-access.md",
-    ],
-)
-def test_docs_state_77_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 77)
-
-
-@pytest.mark.parametrize(
-    "doc_path",
-    [
-        DOCS_DIR / "execution" / "architecture.md",
-        DOCS_DIR / "execution" / "tool-access.md",
-    ],
-)
-def test_docs_state_53_kitchen_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "kitchen tools", 53)
-
-
-def test_skill_visibility_states_141_skills() -> None:
-    # 141 total = 3 Tier-1 (open-kitchen, close-kitchen, sous-chef) + 138 extended.
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 141)
-
-
-def test_skill_visibility_tier_counts_match_defaults() -> None:
-    tier1, tier2, tier3 = _configured_skill_tier_counts()
-    text = _read(DOCS_DIR / "skills" / "visibility.md")
-    assert f"**Default members** ({tier2} total)" in text
-    assert f"**Default members** ({tier3} total)" in text
-    assert "Tier 1" in text and str(tier1) in text
-
-
-def test_skill_catalog_tier_counts_match_defaults() -> None:
-    _, tier2, tier3 = _configured_skill_tier_counts()
-    text = _read(DOCS_DIR / "skills" / "catalog.md")
-    assert f"## Tier 2 — interactive cook + headless ({tier2} configured)" in text
-    assert f"## Tier 3 — pipeline / automation ({tier3} configured)" in text
+def test_doctor_docs_name_run_doctor_authority() -> None:
+    for path in (DOCS_DIR / "cli.md", DOCS_DIR / "installation.md"):
+        text = _read(path)
+        assert "run_doctor" in text
+        assert "cli/doctor/__init__.py" in text
 
 
 def test_process_issues_is_documented_as_role_derived_not_tiered() -> None:
-    for path in (
-        DOCS_DIR / "skills" / "visibility.md",
-        DOCS_DIR / "skills" / "catalog.md",
-    ):
+    for path in (DOCS_DIR / "skills" / "visibility.md", DOCS_DIR / "skills" / "catalog.md"):
         text = _read(path)
         tier2_start = text.index("## Tier 2")
         tier3_start = text.index("## Tier 3", tier2_start)
@@ -435,41 +70,6 @@ def test_process_issues_is_documented_as_role_derived_not_tiered() -> None:
         ), f"{path} must document process-issues as role-derived orchestration"
 
 
-def test_safety_hook_counts_match_registry() -> None:
-    counts = _count_hooks_by_event()
-    text = _read(DOCS_DIR / "safety" / "hooks.md")
-
-    assert f"AutoSkillit registers {sum(counts.values())} Claude Code hook scripts" in text
-    assert f"## PreToolUse hooks ({counts['PreToolUse']})" in text
-    assert f"## PostToolUse hooks ({counts['PostToolUse']})" in text
-    assert f"## SessionStart hooks ({counts['SessionStart']})" in text
-
-
-def test_configuration_states_quota_thresholds() -> None:
-    doc = DOCS_DIR / "configuration.md"
-    if not doc.exists():
-        pytest.skip("docs/configuration.md not present")
-    text = _read(doc)
-    assert "85.0" in text, (
-        "docs/configuration.md does not state quota_guard.short_window_threshold = 85.0"
-    )
-    assert "95.0" in text, (
-        "docs/configuration.md does not state quota_guard.long_window_threshold = 95.0"
-    )
-
-
-def test_installation_states_17_doctor_checks() -> None:
-    _assert_doc_states_number(DOCS_DIR / "installation.md", "doctor checks", 17)
-
-
-def test_recipes_overview_states_6_recipes() -> None:
-    _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
-
-
-def test_orchestration_states_20_retry_reasons() -> None:
-    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 20)
-
-
 def test_architecture_doc_names_declared_interactive_discovery_route() -> None:
     from autoskillit.execution.backends._codex_discovery import (
         CODEX_MANAGED_HOME_ROUTE,
@@ -477,93 +77,40 @@ def test_architecture_doc_names_declared_interactive_discovery_route() -> None:
         CODEX_SKILL_DISCOVERY_CONTRACT,
     )
 
-    doc = DOCS_DIR / "execution" / "architecture.md"
-    text = _read(doc)
-
+    text = _read(DOCS_DIR / "execution" / "architecture.md")
     assert CODEX_MANAGED_HOME_ROUTE.name in text
     assert CODEX_PROJECTED_HOME_ROUTE.name in text
     assert "tests/arch/test_skill_discovery_routes.py" in text
     assert CODEX_SKILL_DISCOVERY_CONTRACT.verified_binary in text
 
-    tracking_issue = CODEX_MANAGED_HOME_ROUTE.tracking_issue
-    assert tracking_issue is not None
-    _assert_doc_states_number(doc, "interactive discovery tracking issue", tracking_issue)
-
-
-def test_authoring_states_28_rule_families() -> None:
-    _assert_doc_states_number(DOCS_DIR / "recipes" / "authoring.md", "rule families", 24)
-
-
-def test_catalog_states_arch_and_exp_lens_counts() -> None:
-    catalog = DOCS_DIR / "skills" / "catalog.md"
-    if not catalog.exists():
-        pytest.skip("docs/skills/catalog.md not present")
-    text = _read(catalog)
-    assert "13" in text, "skills/catalog.md does not state 13 arch-lens skills"
-    assert "18" in text, "skills/catalog.md does not state 18 exp-lens skills"
-
-
-def test_catalog_states_vis_lens_count_is_12() -> None:
-    catalog = DOCS_DIR / "skills" / "catalog.md"
-    if not catalog.exists():
-        pytest.skip("docs/skills/catalog.md not present")
-    text = _read(catalog)
-    assert "12" in text, "skills/catalog.md does not state 12 vis-lens skills"
-
-
-def test_catalog_count_matches_filesystem() -> None:
-    """Header in catalog.md must match the actual skill-dir count."""
-    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text(encoding="utf-8")
-    skills_dir = SRC_DIR / "skills"
-    extended_dir = SRC_DIR / "skills_extended"
-    tier1_count = sum(1 for p in skills_dir.iterdir() if p.is_dir() and p.name != "__pycache__")
-    extended_count = sum(
-        1 for p in extended_dir.iterdir() if p.is_dir() and p.name != "__pycache__"
-    )
-    total = tier1_count + extended_count
-    assert f"{total} total" in catalog, f"catalog.md header should claim {total} total skills"
-
 
 def test_catalog_does_not_reference_open_pr() -> None:
-    """open-pr was decomposed into prepare-pr + compose-pr in PR #659."""
-    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text()
-    assert "`open-pr`" not in catalog
+    assert "`open-pr`" not in _read(DOCS_DIR / "skills" / "catalog.md")
 
 
 def test_catalog_lists_all_skills_in_extended_dir() -> None:
-    """Every directory in skills_extended/ must appear at least once in catalog.md."""
-    catalog = (DOCS_DIR / "skills" / "catalog.md").read_text()
-    extended_dir = SRC_DIR / "skills_extended"
+    catalog = _read(DOCS_DIR / "skills" / "catalog.md")
     missing = [
-        p.name
-        for p in sorted(extended_dir.iterdir())
-        if p.is_dir() and f"`{p.name}`" not in catalog
+        path.name
+        for path in sorted((SRC_DIR / "skills_extended").iterdir())
+        if path.is_dir() and f"`{path.name}`" not in catalog
     ]
     assert missing == [], f"Skills in skills_extended/ not listed in catalog.md: {missing}"
 
 
-def test_authoring_bundled_recipe_count_mentions_6() -> None:
-    """authoring.md prose must reference 6 bundled recipes (planner was missing)."""
-    authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
-    assert "6 today" in authoring and "planner" in authoring, (
-        "authoring.md should mention 6 bundled recipes including planner"
-    )
+def test_authoring_keeps_planner_example() -> None:
+    assert "`planner`" in _read(DOCS_DIR / "recipes" / "authoring.md")
 
 
 def test_authoring_recipe_step_fields_match_schema() -> None:
-    """authoring.md field summary must use actual RecipeStep field names."""
-    authoring = (DOCS_DIR / "recipes" / "authoring.md").read_text()
-    assert "`name`" in authoring
-    assert "`with_args`" in authoring
-    assert "`on_result`" in authoring
-    assert "`retries`" in authoring
+    authoring = _read(DOCS_DIR / "recipes" / "authoring.md")
+    for field in ("`name`", "`with_args`", "`on_result`", "`retries`"):
+        assert field in authoring
     field_summary_line = next(
         (line for line in authoring.splitlines() if "with_args" in line or "id`," in line),
         None,
     )
-    assert field_summary_line is not None, (
-        "authoring.md must contain a line listing RecipeStep fields (with_args or id`,)"
-    )
+    assert field_summary_line is not None
     assert "id`," not in field_summary_line
     assert "params`," not in field_summary_line
     assert "verdict_routes`" not in field_summary_line
@@ -571,7 +118,6 @@ def test_authoring_recipe_step_fields_match_schema() -> None:
 
 
 def test_subsets_lists_required_packs() -> None:
-    """subsets.md must document all four missing built-in pack categories."""
-    subsets = (DOCS_DIR / "skills" / "subsets.md").read_text(encoding="utf-8")
+    subsets = _read(DOCS_DIR / "skills" / "subsets.md")
     for pack in ("kitchen-core", "research", "exp-lens", "vis-lens"):
         assert pack in subsets, f"subsets.md missing pack category: {pack}"

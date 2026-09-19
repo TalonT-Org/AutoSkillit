@@ -1286,8 +1286,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("fetch_issue"):
             return result
         key, failure = self._issue_or_failure(issue_ref_or_owner, repo, number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         issue = self.issues[key]
         return {
             "success": True,
@@ -1338,8 +1339,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("update_issue_body"):
             return result
         key, failure = self._issue_or_failure(owner, repo, issue_number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         self.issues[key]["body"] = new_body
         return {
             "success": True,
@@ -1351,8 +1353,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("fetch_title"):
             return result
         key, failure = self._issue_or_failure(issue_url)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         title = str(self.issues[key].get("title", ""))
         return {"success": True, "number": key[2], "title": title, "slug": title.lower()}
 
@@ -1363,8 +1366,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("add_labels"):
             return result
         key, failure = self._issue_or_failure(owner, repo, issue_number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         self.issues[key]["labels"].update(labels)
         return {"success": True, "labels": sorted(self.issues[key]["labels"])}
 
@@ -1375,8 +1379,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("remove_label"):
             return result
         key, failure = self._issue_or_failure(owner, repo, issue_number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         self.issues[key]["labels"].discard(label)
         return {"success": True, "labels": sorted(self.issues[key]["labels"])}
 
@@ -1392,8 +1397,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("swap_labels"):
             return result
         key, failure = self._issue_or_failure(owner, repo, issue_number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         labels = self.issues[key]["labels"]
         labels.difference_update(remove_labels)
         labels.update(add_labels)
@@ -1421,8 +1427,9 @@ class FakeGitHubFetcher(GitHubFetcher):
         if result := self._failure_result("close_issue"):
             return result
         key, failure = self._issue_or_failure(owner, repo, issue_number)
-        if failure is not None or key is None:
-            return failure or {"success": False, "error": "invalid issue reference"}
+        if failure is not None:
+            return failure
+        assert key is not None
         self.issues[key]["state"] = "closed"
         return {"success": True}
 

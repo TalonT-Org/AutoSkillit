@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import csv
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
+
+_LOGGER = logging.getLogger(__name__)  # noqa: TID251 - hook classification must stay stdlib-only
+_LOGGER.addHandler(logging.NullHandler())
+_LOGGER.propagate = False
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._github_mutation_request_analysis import (
@@ -145,7 +150,11 @@ def _is_static_issue_edit_reference_list(value: ArgvToken) -> bool:
         return False
     try:
         references = next(csv.reader([value.text], strict=True))
-    except csv.Error:
+    except csv.Error as exc:
+        _LOGGER.debug(
+            "gh issue edit reference list CSV parse failed; treating as dynamic_target: %s",
+            exc,
+        )
         return False
     return bool(references) and all(
         reference and _is_static_issue_edit_reference_text(reference) for reference in references

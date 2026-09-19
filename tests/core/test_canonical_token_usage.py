@@ -6,9 +6,38 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from autoskillit.core.types import CanonicalTokenUsage
+from autoskillit.core.types import CanonicalTokenUsage, TokenMeasure, TokenMeasureState
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+@pytest.mark.parametrize(
+    ("value", "state"),
+    [(7, TokenMeasureState.MEASURED), (0, TokenMeasureState.MEASURED_ZERO)],
+)
+def test_observed_token_measure_records_observation_state(
+    value: int, state: TokenMeasureState
+) -> None:
+    measure = TokenMeasure.observed(value)
+
+    assert measure.state is state
+    assert measure.value == value
+    assert TokenMeasure.from_dict(measure.to_dict()) == measure
+
+
+@pytest.mark.parametrize(
+    "measure",
+    [TokenMeasure.unavailable(), TokenMeasure.unknown(), TokenMeasure.not_applicable()],
+)
+def test_non_numeric_token_measure_states_reject_values(measure: TokenMeasure) -> None:
+    assert measure.value is None
+    with pytest.raises(ValueError, match="cannot carry a value"):
+        TokenMeasure(measure.state, 1)
+
+
+def test_token_measure_refuses_incompatible_combination() -> None:
+    with pytest.raises(ValueError, match="incompatible availability"):
+        TokenMeasure.observed(1).combine(TokenMeasure.unknown())
 
 
 class TestFromAnthropicDictRoundTrip:
@@ -221,16 +250,30 @@ class TestFrozen:
 
 
 def test_token_types_importable_via_types_gateway():
-    from autoskillit.core.types import CanonicalTokenUsage, TurnTokenEntry
+    from autoskillit.core.types import (
+        CanonicalTokenUsage,
+        TokenMeasure,
+        TokenMeasureState,
+        TurnTokenEntry,
+    )
 
     assert CanonicalTokenUsage is not None
+    assert TokenMeasure is not None
+    assert TokenMeasureState is not None
     assert TurnTokenEntry is not None
 
 
 def test_token_types_importable_from_core():
-    from autoskillit.core import CanonicalTokenUsage, TurnTokenEntry
+    from autoskillit.core import (
+        CanonicalTokenUsage,
+        TokenMeasure,
+        TokenMeasureState,
+        TurnTokenEntry,
+    )
 
     assert CanonicalTokenUsage is not None
+    assert TokenMeasure is not None
+    assert TokenMeasureState is not None
     assert TurnTokenEntry is not None
 
 
@@ -238,6 +281,8 @@ def test_token_types_in_types_all():
     from autoskillit.core.types import __all__ as types_all
 
     assert "CanonicalTokenUsage" in types_all
+    assert "TokenMeasure" in types_all
+    assert "TokenMeasureState" in types_all
     assert "TurnTokenEntry" in types_all
 
 
@@ -245,6 +290,8 @@ def test_token_types_in_core_all():
     import autoskillit.core as core
 
     assert "CanonicalTokenUsage" in core.__all__
+    assert "TokenMeasure" in core.__all__
+    assert "TokenMeasureState" in core.__all__
     assert "TurnTokenEntry" in core.__all__
 
 
@@ -252,4 +299,6 @@ def test_token_types_not_in_private_reexports():
     import autoskillit.core as core
 
     assert "CanonicalTokenUsage" not in core._PRIVATE_REEXPORTS
+    assert "TokenMeasure" not in core._PRIVATE_REEXPORTS
+    assert "TokenMeasureState" not in core._PRIVATE_REEXPORTS
     assert "TurnTokenEntry" not in core._PRIVATE_REEXPORTS

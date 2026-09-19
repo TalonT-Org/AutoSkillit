@@ -4,6 +4,11 @@ Both MCP tools (get_token_summary, get_timing_summary, write_telemetry_files) an
 the PostToolUse hook delegate formatting to this module. The hook's inline formatter
 (pretty_output.py) cannot import this module (stdlib-only constraint), so it
 maintains an output-equivalent inline implementation guarded by test 1g.
+
+TokenMeasureState taxonomy literals are imported from the canonical
+TokenMeasureState StrEnum in core.types; the hook layer's stdlib-only
+mirror in hooks/_runtime/_token_measure.py must redeclare them as
+string literals (enforced by tests/arch/test_hooks_are_stdlib_only.py).
 """
 
 from __future__ import annotations
@@ -11,7 +16,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from autoskillit.core import ModelTotalEntry, TerminalColumn, _render_terminal_table
+from autoskillit.core import (
+    ModelTotalEntry,
+    TerminalColumn,
+    TokenMeasureState,
+    _render_terminal_table,
+)
+
+# Measured-with-numeric-value states: cache_write, cache_read, etc. aggregate
+# to numeric totals; the other states are categorical and only contribute
+# to the missing_states set during ratio aggregation.
+_NUMERIC_MEASURE_STATES = frozenset({TokenMeasureState.MEASURED, TokenMeasureState.MEASURED_ZERO})
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
@@ -167,23 +182,23 @@ def _ratio_total(steps: list[dict], field: str) -> str:
         raw = step.get(field)
         if isinstance(raw, dict):
             state, value = raw.get("state"), raw.get("value")
-            if state not in {"measured", "measured_zero"} or not isinstance(value, int):
-                missing_states.add(str(state or "unknown"))
+            if state not in _NUMERIC_MEASURE_STATES or not isinstance(value, int):
+                missing_states.add(str(state or TokenMeasureState.UNKNOWN.value))
                 continue
             raw = value
         if not isinstance(raw, int) or isinstance(raw, bool):
-            missing_states.add("unknown")
+            missing_states.add(TokenMeasureState.UNKNOWN.value)
             continue
         tokens += raw
         eligible_loc += loc
-    if "unknown" in missing_states:
-        return "unknown"
+    if TokenMeasureState.UNKNOWN.value in missing_states:
+        return TokenMeasureState.UNKNOWN.value
     if eligible_loc:
         return _ratio(tokens, eligible_loc)
-    if missing_states == {"unavailable"}:
-        return "unavailable"
-    if missing_states == {"not_applicable"}:
-        return "not_applicable"
+    if missing_states == {TokenMeasureState.UNAVAILABLE.value}:
+        return TokenMeasureState.UNAVAILABLE.value
+    if missing_states == {TokenMeasureState.NOT_APPLICABLE.value}:
+        return TokenMeasureState.NOT_APPLICABLE.value
     return "—"
 
 
@@ -217,12 +232,12 @@ class TelemetryFormatter:
         if isinstance(n, dict):
             state = n.get("state")
             value = n.get("value")
-            if state in {"measured", "measured_zero"} and isinstance(value, int):
+            if state in _NUMERIC_MEASURE_STATES and isinstance(value, int):
                 n = value
             else:
-                return str(state or "unknown")
+                return str(state or TokenMeasureState.UNKNOWN.value)
         if n is None:
-            return "unknown"
+            return TokenMeasureState.UNKNOWN.value
         if n == 0:
             return "0"
         if not isinstance(n, (int, float)):

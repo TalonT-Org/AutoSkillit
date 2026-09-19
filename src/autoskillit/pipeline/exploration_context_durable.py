@@ -72,6 +72,14 @@ class DurableBindFailed(RuntimeError):
         super().__init__(f"durable exploration bind failed at {stage}")
 
 
+class _AuthorityWriteFailure(OSError):
+    """Private stage marker preserved until the durable bind boundary."""
+
+    def __init__(self, stage: Literal["authority_write", "authority_chmod"]) -> None:
+        self.stage = stage
+        super().__init__(stage)
+
+
 def _is_capability_shape(value: str) -> bool:
     # Mirrors OwnerBoundExplorationContextStore._is_capability_shape in
     # exploration_context.py — kept as an independent duplicate rather than
@@ -151,15 +159,21 @@ class _ExplorationLaunchAuthorityStore:
             _AUTHORITY_SIGNATURE_DOMAIN + canonical_json_bytes(principal),
             hashlib.sha256,
         ).hexdigest()
-        write_versioned_json(
-            authority_path,
-            {
-                "principal": principal,
-                "signature": signature,
-            },
-            _AUTHORITY_SCHEMA_VERSION,
-        )
-        os.chmod(authority_path, 0o600)
+        try:
+            write_versioned_json(
+                authority_path,
+                {
+                    "principal": principal,
+                    "signature": signature,
+                },
+                _AUTHORITY_SCHEMA_VERSION,
+            )
+        except OSError as exc:
+            raise _AuthorityWriteFailure("authority_write") from exc
+        try:
+            os.chmod(authority_path, 0o600)
+        except OSError as exc:
+            raise _AuthorityWriteFailure("authority_chmod") from exc
         return authority_path
 
     def load_from_environment(self) -> tuple[str, _ReopenedLaunchAuthority] | None:
@@ -346,6 +360,8 @@ def bind_session_scoped_durable(
                 snapshot_digest=lease.snapshot_digest,
                 expires_at=int(lease.expires_at * 1_000_000_000),
             )
+        except _AuthorityWriteFailure as exc:
+            raise DurableBindFailed(exc.stage) from exc
         except OSError as exc:
             raise DurableBindFailed("authority_write") from exc
     except DurableBindFailed:

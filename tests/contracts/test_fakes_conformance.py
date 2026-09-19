@@ -75,20 +75,15 @@ def test_mock_subprocess_runner_satisfies_protocol():
 
 
 @pytest.mark.anyio
-async def test_fake_github_fetcher_satisfies_protocol_and_tracks_label_state():
-    fake = FakeGitHubFetcher(
-        issues={
-            ("owner", "repo", 42): {
-                "body": "seeded body",
-                "labels": ["bug"],
-                "state": "open",
-            }
-        },
-        repository_labels={("owner", "repo"): ["staged"]},
-    )
+async def test_fake_github_fetcher_satisfies_protocol():
+    fake = FakeGitHubFetcher()
     typed_fetcher: GitHubFetcher = fake
-
     assert isinstance(typed_fetcher, GitHubFetcher)
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_ensure_label_creates_then_is_idempotent():
+    fake = FakeGitHubFetcher(repository_labels={("owner", "repo"): ["staged"]})
     assert await fake.ensure_label("owner", "repo", "in-progress") == {
         "success": True,
         "created": True,
@@ -101,10 +96,37 @@ async def test_fake_github_fetcher_satisfies_protocol_and_tracks_label_state():
         "success": True,
         "created": False,
     }
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_swap_labels_replaces_target_labels():
+    fake = FakeGitHubFetcher(
+        issues={
+            ("owner", "repo", 42): {
+                "body": "seeded body",
+                "labels": ["bug"],
+                "state": "open",
+            }
+        },
+    )
     assert await fake.swap_labels("owner", "repo", 42, ["bug"], ["in-progress"]) == {
         "success": True,
         "labels": ["in-progress"],
     }
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_fetch_issue_returns_seeded_payload():
+    fake = FakeGitHubFetcher(
+        issues={
+            ("owner", "repo", 42): {
+                "body": "seeded body",
+                "labels": ["bug"],
+                "state": "open",
+            }
+        },
+    )
+    await fake.swap_labels("owner", "repo", 42, ["bug"], ["in-progress"])
     assert await fake.fetch_issue("owner/repo#42") == {
         "success": True,
         "number": 42,
@@ -113,7 +135,19 @@ async def test_fake_github_fetcher_satisfies_protocol_and_tracks_label_state():
         "state": "open",
         "labels": ["in-progress"],
     }
-    assert (await fake.fetch_issue("owner/repo#99"))["success"] is False
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_fetch_issue_missing_returns_failure():
+    fake = FakeGitHubFetcher()
+    result = await fake.fetch_issue("owner/repo#99")
+    assert result["success"] is False
+
+
+@pytest.mark.anyio
+async def test_fake_github_fetcher_records_call_log_kwargs():
+    fake = FakeGitHubFetcher()
+    await fake.ensure_label("owner", "repo", "in-progress")
     assert fake.call_log[0] == (
         "ensure_label",
         ("owner", "repo", "in-progress"),

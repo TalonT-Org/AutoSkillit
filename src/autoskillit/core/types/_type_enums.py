@@ -1,15 +1,4 @@
-"""Core StrEnum discriminators. Zero autoskillit imports.
-
-Provides the shared enum vocabulary for all higher layers.
-
-Issue #4735: this module is a re-export facade. The context-admission enums
-(``AdmissionState`` and the other phoropter / context-accounting discriminators)
-live in the sibling shard ``_type_enums_context_admission.py`` and are bound
-into this module's namespace via wildcard re-export. Direct symbol imports
-(``from autoskillit.core.types._type_enums import AdmissionState``) and direct
-attribute access (``autoskillit.core.types._type_enums.AdmissionState``) both
-continue to resolve the same object identity.
-"""
+"""Core StrEnum discriminators and context-admission enum re-exports."""
 
 from __future__ import annotations
 
@@ -17,7 +6,6 @@ from enum import StrEnum, unique
 from typing import assert_never
 
 from ._type_enums_context_admission import *  # noqa: F401, F403
-from ._type_enums_token import TokenMeasureState
 
 __all__ = [
     "RetryReason",
@@ -62,6 +50,15 @@ __all__ = [
     "SynthesisStrategy",
     "TokenMeasureState",
 ]
+
+
+@unique
+class TokenMeasureState(StrEnum):
+    MEASURED = "measured"
+    MEASURED_ZERO = "measured_zero"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+    NOT_APPLICABLE = "not_applicable"
 
 
 class RetryReason(StrEnum):

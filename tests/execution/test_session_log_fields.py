@@ -1016,7 +1016,7 @@ def test_flush_session_log_provider_fallback_absent_from_token_usage(tmp_path):
     assert "provider_fallback" not in tu
 
 
-def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path):
+def test_flush_session_log_provider_used_is_nonempty_in_token_usage(tmp_path):
     _flush(
         tmp_path,
         session_id="prov-tu-def",
@@ -1025,7 +1025,7 @@ def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path)
         proc_snapshots=None,
     )
     tu = json.loads((tmp_path / "sessions" / "prov-tu-def" / "token_usage.json").read_text())
-    assert tu["provider_used"] == ""
+    assert tu["provider_used"]
 
 
 def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):

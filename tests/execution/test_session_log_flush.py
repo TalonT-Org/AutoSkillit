@@ -21,6 +21,7 @@ from autoskillit.core import (
     NativeShellCaptureDiagnostic,
     NativeShellCaptureMode,
     NativeShellCaptureReason,
+    TokenMeasure,
 )
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
@@ -28,6 +29,13 @@ from autoskillit.execution.session_log.session_log import resolve_log_dir
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def _observed(value: int) -> dict[str, int | str]:
+    return TokenMeasure.observed(value).to_dict()
+
+
+_UNKNOWN = TokenMeasure.unknown().to_dict()
 
 
 def _turn_usage_row(
@@ -883,8 +891,8 @@ def test_flush_writes_token_usage_json_when_step_name_empty(tmp_path):
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "(ad-hoc)"
     assert "step_name" not in data
-    assert data["cache_write_tokens"] == 20
-    assert data["cache_read_tokens"] == 80
+    assert data["cache_write_tokens"] == _observed(20)
+    assert data["cache_read_tokens"] == _observed(80)
 
 
 def test_flush_writes_step_timing_json(tmp_path):
@@ -969,10 +977,10 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert len(lines) == 1
     entry = json.loads(lines[-1])
     assert entry["step_name"] == "implement"
-    assert entry["input_tokens"] == 100
-    assert entry["output_tokens"] == 50
-    assert entry["cache_write_tokens"] == 20
-    assert entry["cache_read_tokens"] == 80
+    assert entry["input_tokens"] == _observed(100)
+    assert entry["output_tokens"] == _observed(50)
+    assert entry["cache_write_tokens"] == _observed(20)
+    assert entry["cache_read_tokens"] == _observed(80)
 
 
 def test_flush_index_includes_current_schema_version(tmp_path):
@@ -1050,16 +1058,16 @@ def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):
         assert forbidden not in serialized_audit
 
 
-def test_flush_index_token_fields_zero_when_no_step(tmp_path):
-    """sessions.jsonl entry has step_name='' and token fields=0 when no step telemetry."""
+def test_flush_index_token_fields_unknown_when_no_step(tmp_path):
+    """A session without token evidence does not claim an observed zero."""
     _flush(tmp_path, proc_snapshots=None, success=False)  # no step_name
     lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
     entry = json.loads(lines[-1])
     assert entry["step_name"] == ""
-    assert entry["input_tokens"] == 0
-    assert entry["output_tokens"] == 0
-    assert entry["cache_write_tokens"] == 0
-    assert entry["cache_read_tokens"] == 0
+    assert entry["input_tokens"] == _UNKNOWN
+    assert entry["output_tokens"] == _UNKNOWN
+    assert entry["cache_write_tokens"] == _UNKNOWN
+    assert entry["cache_read_tokens"] == _UNKNOWN
 
 
 def test_token_usage_json_schema(tmp_path):
@@ -1081,19 +1089,19 @@ def test_token_usage_json_schema(tmp_path):
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
     assert tu["session_label"] == "plan"
-    assert tu["input_tokens"] == 10
-    assert tu["output_tokens"] == 5
-    assert tu["cache_write_tokens"] == 2
-    assert tu["cache_read_tokens"] == 1
+    assert tu["input_tokens"] == _observed(10)
+    assert tu["output_tokens"] == _observed(5)
+    assert tu["cache_write_tokens"] == _observed(2)
+    assert tu["cache_read_tokens"] == _observed(1)
     assert tu["timing_seconds"] == 15.0
-    assert tu["peak_context"] == 0
+    assert tu["peak_context"] == _UNKNOWN
     assert tu["turn_count"] == 0
     assert tu["dispatch_id"] == "disp-abc"
     assert tu["campaign_id"] == "camp-xyz"
     assert tu["turn_usage_file"] is None
     assert tu["turn_usage_count"] == 0
-    assert tu["turn_usage_schema_version"] == 1
-    assert tu["schema_version"] == 3
+    assert tu["turn_usage_schema_version"] == 2
+    assert tu["schema_version"] == 4
 
 
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
@@ -1114,12 +1122,12 @@ def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
         success=True,
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
-    assert tu["peak_context"] == 75000
+    assert tu["peak_context"] == _observed(75000)
     assert tu["turn_count"] == 14
 
 
-def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
-    """Codex-originated None for cache_write_tokens must persist as 0 on disk."""
+def test_token_usage_json_preserves_unknown_cache_write(tmp_path):
+    """An absent cache-write observation cannot persist as observed zero."""
     _flush(
         tmp_path,
         step_name="implement",
@@ -1134,8 +1142,8 @@ def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
         success=True,
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
-    assert tu["cache_write_tokens"] == 0
-    assert tu["cache_read_tokens"] == 50
+    assert tu["cache_write_tokens"] == _UNKNOWN
+    assert tu["cache_read_tokens"] == _observed(50)
 
 
 @pytest.mark.parametrize(
@@ -1185,16 +1193,16 @@ def test_turn_usage_descriptor_states(
         return
 
     descriptor = json.loads(descriptor_path.read_text())
-    assert descriptor["schema_version"] == 3
-    assert descriptor["turn_usage_schema_version"] == 1
+    assert descriptor["schema_version"] == 4
+    assert descriptor["turn_usage_schema_version"] == 2
     assert descriptor["turn_usage_file"] == ("turn_usage.jsonl" if turn_usage else None)
     assert descriptor["turn_usage_count"] == len(turn_usage)
     assert sidecar_path.exists() is bool(turn_usage)
     if turn_usage:
         assert _read_jsonl(sidecar_path) == turn_usage
     if token_usage is None:
-        assert not any(
-            descriptor[key]
+        assert all(
+            descriptor[key] == _UNKNOWN
             for key in (
                 "input_tokens",
                 "output_tokens",
@@ -1508,8 +1516,8 @@ def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     assert (session_dir / "token_usage.json").exists()
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "dispatch:abc-123"
-    assert data["cache_write_tokens"] == 20
-    assert data["cache_read_tokens"] == 80
+    assert data["cache_write_tokens"] == _observed(20)
+    assert data["cache_read_tokens"] == _observed(80)
 
 
 def test_token_usage_file_entry_type_matches_written_fields(tmp_path):

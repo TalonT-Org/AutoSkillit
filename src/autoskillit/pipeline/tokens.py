@@ -65,12 +65,23 @@ def _primary_model(token_usage: dict[str, Any]) -> str:
     breakdown = token_usage.get("model_breakdown")
     if not isinstance(breakdown, dict):
         return ""
+    for model, values in breakdown.items():
+        if not isinstance(values, dict):
+            logger.warning(
+                "Unexpected model_breakdown entry type for %r: %r",
+                model,
+                type(values).__name__,
+            )
     candidates = [
-        (model, _measure(values.get("output_tokens")).value or -1)
+        (model, _measure(values.get("output_tokens")).value)
         for model, values in breakdown.items()
         if isinstance(model, str) and isinstance(values, dict)
     ]
-    return max(candidates, key=lambda item: item[1])[0] if candidates else ""
+    return (
+        max(candidates, key=lambda item: item[1] if item[1] is not None else -1)[0]
+        if candidates
+        else ""
+    )
 
 
 def _source_pair(token_usage: dict[str, Any], backend: str, provider_used: str) -> tuple[str, str]:
@@ -123,7 +134,8 @@ class TokenEntry:
         if other.model and not self.model:
             self.model = other.model
         for name in (*_TOKEN_FIELDS, "peak_context"):
-            setattr(self, name, _combine(getattr(self, name), getattr(other, name)))
+            operation = _maximum if name == "peak_context" else _combine
+            setattr(self, name, operation(getattr(self, name), getattr(other, name)))
         self.invocation_count += other.invocation_count
         self.elapsed_seconds += other.elapsed_seconds
         self.loc_insertions += other.loc_insertions

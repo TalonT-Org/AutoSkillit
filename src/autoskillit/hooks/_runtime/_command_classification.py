@@ -631,6 +631,7 @@ if TYPE_CHECKING:
         _consume_argv_flag,
         _consume_str_flag,
         _FlagArity,
+        _spec_key_for_token,
         command_has_blocked_protected_path_read,
         is_allowed_protected_path_metadata_command,
     )
@@ -681,6 +682,7 @@ else:
     _argv_token_value_after_key = _flags._argv_token_value_after_key
     _consume_argv_flag = _flags._consume_argv_flag
     _consume_str_flag = _flags._consume_str_flag
+    _spec_key_for_token = _flags._spec_key_for_token
     _FlagArity = _flags._FlagArity
     command_has_blocked_protected_path_read = _flags.command_has_blocked_protected_path_read
     is_allowed_protected_path_metadata_command = _flags.is_allowed_protected_path_metadata_command

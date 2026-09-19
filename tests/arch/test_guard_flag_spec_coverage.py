@@ -34,6 +34,7 @@ _TESTS_ROOT = _REPO_ROOT / "tests"
 # reference it via a pytest.mark.parametrize(...) call.
 _SPEC_TABLE_TEST_FILES: dict[str, tuple[str, ...]] = {
     "_GH_API_FLAG_SPEC": ("hooks/test_command_classification.py",),
+    "_GH_ISSUE_EDIT_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_CURL_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_GIT_GLOBAL_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_GIT_FETCH_FLAG_SPEC": ("infra/test_git_ops_guard.py",),

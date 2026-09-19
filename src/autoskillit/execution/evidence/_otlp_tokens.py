@@ -118,6 +118,16 @@ def project_token_observations(
                 request_id = unique_string_attribute(attributes, "request_id")
                 if not session_id or not request_id:
                     continue
+                if len(observations) >= _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD:
+                    logger.debug(
+                        "token_observations_overflow",
+                        extra={
+                            "scope": scope_name,
+                            "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
+                            "count": len(observations),
+                        },
+                    )
+                    return None
                 observations.append(
                     (
                         session_id,
@@ -134,16 +144,6 @@ def project_token_observations(
                         },
                     )
                 )
-                if len(observations) > _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD:
-                    logger.debug(
-                        "token_observations_overflow",
-                        extra={
-                            "scope": scope_name,
-                            "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
-                            "count": len(observations),
-                        },
-                    )
-                    return None
     return tuple(observations)
 
 

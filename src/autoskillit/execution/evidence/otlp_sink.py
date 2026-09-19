@@ -456,7 +456,7 @@ class LocalOtlpSink:
             ],
         ] = {}
         self._token_evidence: dict[str, dict[str, dict[str, int | None] | None]] = {}
-        self._token_evidence_overflow = False
+        self._token_evidence_overflow_sessions: set[str] = set()
         self._counters = {name: 0 for name in _COUNTER_NAMES}
 
     @classmethod
@@ -576,12 +576,12 @@ class LocalOtlpSink:
                 if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
                     outcomes.append((ordinal, outcome))
             if token_observations is None:
-                self._token_evidence_overflow = True
+                self._token_evidence_overflow_sessions.update(self._token_evidence.keys())
             for session_id, request_id, usage in token_observations or ():
                 requests = self._token_evidence.get(session_id)
                 if requests is None:
                     if len(self._token_evidence) >= _TOKEN_EVIDENCE_SESSION_CAPACITY:
-                        self._token_evidence_overflow = True
+                        self._token_evidence_overflow_sessions.add(session_id)
                         continue
                     requests = {}
                     self._token_evidence[session_id] = requests
@@ -591,7 +591,7 @@ class LocalOtlpSink:
                 elif len(requests) < _TOKEN_EVIDENCE_REQUEST_CAPACITY:
                     requests[request_id] = usage
                 else:
-                    self._token_evidence_overflow = True
+                    self._token_evidence_overflow_sessions.add(session_id)
             return "accepted"
 
     def token_usage_for(
@@ -599,7 +599,9 @@ class LocalOtlpSink:
     ) -> dict[str, Any] | None:
         """Return correlated accounting only when the sink retained complete evidence."""
         with self._condition:
-            if not self._started_successfully or not session_id or self._token_evidence_overflow:
+            if not self._started_successfully or not session_id:
+                return None
+            if session_id in self._token_evidence_overflow_sessions:
                 return None
             if any(
                 self._counters[name]

@@ -1365,7 +1365,7 @@ def test_native_codex_token_fixture_has_no_correlatable_accounting(local_sink: A
     )
 
 
-def test_native_token_persistence_failure_uses_parser_fallback(
+def test_native_token_persistence_failure_returns_none(
     local_sink: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def fail_persist(_line: bytes) -> None:

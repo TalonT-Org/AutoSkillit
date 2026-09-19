@@ -11,6 +11,7 @@ from types import TracebackType
 from typing import Any
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     DispatchIdentity,
     SerializedTokenMeasure,
     TokenMeasure,
@@ -756,7 +757,7 @@ def normalize_dispatch_token_usage(
     backend = backend or str(raw.get("backend") or "unknown")
     provider_used = provider_used or str(raw.get("provider_used") or "")
     if not provider_used:
-        provider_used = {"claude-code": "anthropic"}.get(backend, backend)
+        provider_used = {AGENT_BACKEND_CLAUDE_CODE: "anthropic"}.get(backend, backend)
 
     def measure(*keys: str) -> SerializedTokenMeasure:
         for key in keys:

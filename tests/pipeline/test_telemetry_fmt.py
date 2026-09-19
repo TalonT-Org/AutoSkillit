@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import ModelTotalEntry
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+from tests._helpers import observed_measure
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -1317,17 +1318,14 @@ def test_pr_telemetry_sections_exhaustive() -> None:
 
 
 def test_efficiency_totals_exclude_unavailable_and_surface_unknown_by_pair() -> None:
-    def observed(value: int) -> dict[str, object]:
-        return {"state": "measured_zero" if value == 0 else "measured", "value": value}
-
     steps = [
         {
             "step_name": "one",
             "backend": "claude-code",
             "provider_used": "anthropic",
-            "cache_read_tokens": observed(100),
-            "cache_write_tokens": observed(0),
-            "output_tokens": observed(20),
+            "cache_read_tokens": observed_measure(100),
+            "cache_write_tokens": observed_measure(0),
+            "output_tokens": observed_measure(20),
             "loc_insertions": 10,
             "loc_deletions": 0,
         },
@@ -1336,8 +1334,8 @@ def test_efficiency_totals_exclude_unavailable_and_surface_unknown_by_pair() -> 
             "backend": "claude-code",
             "provider_used": "anthropic",
             "cache_read_tokens": {"state": "unavailable", "value": None},
-            "cache_write_tokens": observed(0),
-            "output_tokens": observed(10),
+            "cache_write_tokens": observed_measure(0),
+            "output_tokens": observed_measure(10),
             "loc_insertions": 90,
             "loc_deletions": 0,
         },
@@ -1347,7 +1345,7 @@ def test_efficiency_totals_exclude_unavailable_and_surface_unknown_by_pair() -> 
             "provider_used": "MiniMax",
             "cache_read_tokens": {"state": "unknown", "value": None},
             "cache_write_tokens": {"state": "unavailable", "value": None},
-            "output_tokens": observed(0),
+            "output_tokens": observed_measure(0),
             "loc_insertions": 5,
             "loc_deletions": 0,
         },

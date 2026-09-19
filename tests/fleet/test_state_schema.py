@@ -23,6 +23,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet.campaign_state.state import _write_state, reset_blocking_dispatch
+from tests._helpers import observed_measure
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -297,10 +298,10 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": 3,
             }
         )
-        assert result["input_tokens"] == {"state": "measured", "value": 10}
-        assert result["output_tokens"] == {"state": "measured", "value": 5}
-        assert result["cache_write_tokens"] == {"state": "measured", "value": 2}
-        assert result["cache_read_tokens"] == {"state": "measured", "value": 3}
+        assert result["input_tokens"] == observed_measure(10)
+        assert result["output_tokens"] == observed_measure(5)
+        assert result["cache_write_tokens"] == observed_measure(2)
+        assert result["cache_read_tokens"] == observed_measure(3)
 
     def test_empty_dict_returns_unknown_measures(self) -> None:
         result = normalize_dispatch_token_usage({})
@@ -330,10 +331,10 @@ class TestNormalizeDispatchTokenUsage:
                 }
             )
         )
-        assert dtu.input_tokens == {"state": "measured", "value": 10}
-        assert dtu.output_tokens == {"state": "measured", "value": 5}
-        assert dtu.cache_write_tokens == {"state": "measured", "value": 2}
-        assert dtu.cache_read_tokens == {"state": "measured", "value": 3}
+        assert dtu.input_tokens == observed_measure(10)
+        assert dtu.output_tokens == observed_measure(5)
+        assert dtu.cache_write_tokens == observed_measure(2)
+        assert dtu.cache_read_tokens == observed_measure(3)
 
     def test_importable_from_fleet_package(self) -> None:
         from autoskillit.fleet import normalize_dispatch_token_usage as imported
@@ -349,8 +350,8 @@ class TestNormalizeDispatchTokenUsage:
         result = normalize_dispatch_token_usage(
             {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
         )
-        assert result["input_tokens"] == {"state": "measured", "value": 10}
-        assert result["cache_write_tokens"] == {"state": "measured", "value": 2}
+        assert result["input_tokens"] == observed_measure(10)
+        assert result["cache_write_tokens"] == observed_measure(2)
 
     def test_mixed_old_and_new_canonical_wins(self) -> None:
         result = normalize_dispatch_token_usage(
@@ -376,9 +377,9 @@ class TestNormalizeDispatchTokenUsage:
             "cache_read_input_tokens": 30,
         }
         result = normalize_dispatch_token_usage(raw)
-        assert result["input_tokens"] == {"state": "measured", "value": 100}
-        assert result["cache_write_tokens"] == {"state": "measured", "value": 20}
-        assert result["cache_read_tokens"] == {"state": "measured", "value": 30}
+        assert result["input_tokens"] == observed_measure(100)
+        assert result["cache_write_tokens"] == observed_measure(20)
+        assert result["cache_read_tokens"] == observed_measure(30)
 
 
 class TestDispatchRecordToDict:
@@ -572,8 +573,8 @@ class TestDispatchRecordSchemaV3:
                 "cache_read_input_tokens": 300,
             }
         )
-        assert result["cache_write_tokens"] == {"state": "measured", "value": 200}
-        assert result["cache_read_tokens"] == {"state": "measured", "value": 300}
+        assert result["cache_write_tokens"] == observed_measure(200)
+        assert result["cache_read_tokens"] == observed_measure(300)
         assert "cache_creation_input_tokens" not in result
         assert "cache_read_input_tokens" not in result
 

@@ -1,4 +1,4 @@
-"""One-call decoder for token measures persisted into the session evidence sidecar."""
+"""Decode raw token observations and assemble the session-evidence sidecar record."""
 
 from __future__ import annotations
 

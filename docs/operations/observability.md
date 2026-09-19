@@ -167,9 +167,9 @@ The local sink derives model evidence from accepted Claude Code and Codex
 before queueing and retains one observation per `(session.id, request_id)`.
 Duplicate requests are counted once; ambiguous or uncorrelated events are not
 summed. The selected execution provider is retained instead of a vendor label.
-Codex 0.153.4 token logs contain no stable request/event ID, while token metrics
-have no `conversation.id`, so Codex uses parser totals. The captured vendor
-shapes and version metadata are in `tests/execution/fixtures/`.
+Codex uses parser totals until native telemetry exposes a stable join — see
+`docs/developer/diagnostics.md` for the full architectural rationale. The
+captured vendor shapes and version metadata are in `tests/execution/fixtures/`.
 
 After terminal execution, the best-effort lifecycle drains the sink, selects
 correlated OTLP accounting when available, then flushes diagnostics. Sink

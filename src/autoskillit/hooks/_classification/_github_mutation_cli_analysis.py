@@ -181,6 +181,9 @@ def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, st
             value, next_i, recognized = _consume_argv_flag(args, i, _GH_ISSUE_EDIT_FLAG_SPEC)
             if recognized:
                 flag = _spec_key_for_token(token.text, _GH_ISSUE_EDIT_FLAG_SPEC)
+                if flag not in _GH_ISSUE_EDIT_FLAG_SPEC:
+                    i = next_i
+                    continue
                 if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE and (
                     value is None
                     or not value.text

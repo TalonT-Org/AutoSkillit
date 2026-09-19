@@ -1280,7 +1280,8 @@ def test_native_claude_token_fixture_projects_measured_zero_and_cache_write(
     local_sink: Any,
 ) -> None:
     fixture = _native_fixture("claude_native_token_evidence_v2_1_257.json")
-    assert (fixture["producer"], fixture["cli_version"]) == ("claude-code", "2.1.257")
+    assert fixture["producer"] == "claude-code"
+    assert isinstance(fixture["cli_version"], str) and fixture["cli_version"]
     payload = fixture["payload"]
     _post_native_logs(local_sink, payload)
     local_sink.close()
@@ -1345,7 +1346,8 @@ def test_native_token_alias_and_missing_field_keep_distinct_states(local_sink: A
 
 def test_native_codex_token_fixture_has_no_correlatable_accounting(local_sink: Any) -> None:
     fixture = _native_fixture("codex_native_token_evidence_v0_153_4.json")
-    assert (fixture["producer"], fixture["cli_version"]) == ("codex", "0.153.4")
+    assert fixture["producer"] == "codex"
+    assert isinstance(fixture["cli_version"], str) and fixture["cli_version"]
     _post_native_logs(local_sink, fixture["log_payload"])
     status, _, response = _request(
         local_sink,

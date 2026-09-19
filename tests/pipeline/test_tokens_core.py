@@ -10,6 +10,8 @@ import pytest
 
 from autoskillit.core import TokenMeasure
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
+from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -22,13 +24,6 @@ def _make_usage(**overrides: int) -> dict[str, int]:
         "cache_read_tokens": 5,
     }
     return {**defaults, **overrides}
-
-
-def _observed(value: int) -> dict[str, int | str]:
-    return TokenMeasure.observed(value).to_dict()
-
-
-_UNKNOWN = TokenMeasure.unknown().to_dict()
 
 
 class TestTokenEntry:

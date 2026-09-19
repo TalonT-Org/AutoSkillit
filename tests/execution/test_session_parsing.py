@@ -20,17 +20,12 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
+from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
+from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _assistant_ndjson, _result_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _observed(value: int) -> dict[str, object]:
-    return {"state": "measured_zero" if value == 0 else "measured", "value": value}
-
-
-_UNKNOWN = {"state": "unknown", "value": None}
 
 
 def _make_session_result(

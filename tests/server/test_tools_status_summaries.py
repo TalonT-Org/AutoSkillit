@@ -8,19 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import TokenMeasure
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
     get_timing_summary,
     get_token_summary,
 )
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _observed(value: int) -> dict[str, int | str]:
-    return TokenMeasure.observed(value).to_dict()
 
 
 class TestGetTokenSummary:

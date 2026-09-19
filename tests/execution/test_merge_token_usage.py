@@ -14,7 +14,9 @@ def _usage(**counts: object) -> dict[str, object]:
 
 
 def _observed(value: int) -> dict[str, object]:
-    return {"state": "measured_zero" if value == 0 else "measured", "value": value}
+    from tests._helpers import observed_measure as _shared_observed
+
+    return _shared_observed(value)
 
 
 def test_observed_canonical_totals_combine_within_source_pair() -> None:

@@ -128,6 +128,7 @@ class TestExecutionTypesNotInResults:
             "ChildOutcomeDict",
             "ExecutionIdentity",
             "ExecutionIdentityDict",
+            "default_provider_for",
             "resolve_provider_used",
         }
         assert resolve_provider_used("codex", False) == "codex"

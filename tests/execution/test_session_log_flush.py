@@ -33,7 +33,9 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def _observed(value: int) -> dict[str, int | str]:
-    return TokenMeasure.observed(value).to_dict()
+    from tests._helpers import observed_measure as _shared_observed
+
+    return _shared_observed(value)
 
 
 _UNKNOWN = TokenMeasure.unknown().to_dict()

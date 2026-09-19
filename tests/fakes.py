@@ -1250,7 +1250,7 @@ class FakeGitHubFetcher(GitHubFetcher):
         if repo is not None and number is not None:
             return issue_ref_or_owner, repo, number
         match = re.fullmatch(
-            r"(?:https?://github\\.com/)?([^/]+)/([^/#]+)(?:/issues/|#)(\\d+)",
+            r"(?:https?://github\.com/)?([^/]+)/([^/#]+)(?:/issues/|#)(\d+)",
             issue_ref_or_owner,
         )
         if match is None:

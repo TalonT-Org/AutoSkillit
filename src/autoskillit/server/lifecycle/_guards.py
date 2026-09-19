@@ -283,7 +283,9 @@ def _check_dry_walkthrough_plan(
 ) -> str | None:
     """Check the marker using a plan path supplied by command text or bound inputs."""
     gate = (config or _get_config()).implement_gate
-    if skill_name not in gate.skill_names:
+    if extract_skill_name(skill_name) not in {
+        extract_skill_name(configured) for configured in gate.skill_names
+    }:
         return None
     if plan_path_str is None:
         return gate_error_result(f"Missing plan path argument for {skill_name}")

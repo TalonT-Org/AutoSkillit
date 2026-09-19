@@ -178,6 +178,34 @@ class TestTaskfile:
         assert re.search(r"\$PYTEST_CMD[^\n]*\$\{PYTEST_IGNORE_PATHS:-\}", test_all_commands)
         assert "lint-imports" in test_all_commands
 
+        wrapper_sequence = (
+            "task test-all",
+            "LOCAL_GATE_EXIT=$?",
+            "set -e",
+            'if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then',
+            'echo "TEST_RESULT=FAIL"',
+            'echo "LOCAL_GATE_EXIT_CODE=$LOCAL_GATE_EXIT"',
+            "exit 1",
+            "else",
+            'echo "TEST_RESULT=PASS"',
+            "exit 0",
+            "fi",
+        )
+        last_idx = -1
+        for fragment in wrapper_sequence:
+            idx = commands.find(fragment, last_idx + 1)
+            assert idx > last_idx, (
+                f"expected '{fragment}' to appear after the previous wrapper "
+                f"fragment in commands; found at {idx}"
+            )
+            last_idx = idx
+
+        set_e_idx = commands.find("set -e", commands.find("LOCAL_GATE_EXIT=$?"))
+        if_branch_idx = commands.index('if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then')
+        assert "exit" not in commands[set_e_idx:if_branch_idx], (
+            "no `exit` should appear between errexit restore and the result branch"
+        )
+
     def test_regen_contracts_task_exists(self):
         """TF-12 — regen-contracts task exists in Taskfile.yml."""
         data = self._load()

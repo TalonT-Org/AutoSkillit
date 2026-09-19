@@ -24,6 +24,30 @@ def test_project_config_has_operational_test_gate_tuple():
     assert test_check["base_ref"] == "develop"
 
 
+def test_root_agents_md_references_configured_test_gate():
+    """AGENTS.md must direct agents at the configured `test_check.command`."""
+    from autoskillit.core.io import load_yaml
+
+    configured_command = " ".join(
+        load_yaml(REPO_ROOT / ".autoskillit/config.yaml")["test_check"]["command"]
+    )
+    root_instructions = (REPO_ROOT / "AGENTS.md").read_text()
+    assert "Multi-part plan green-gate invariant" in root_instructions
+    assert f"`{configured_command}`" in root_instructions
+
+
+def test_contributor_guide_references_configured_test_gate():
+    """contributing.md must direct contributors at the configured `test_check.command`."""
+    from autoskillit.core.io import load_yaml
+
+    configured_command = " ".join(
+        load_yaml(REPO_ROOT / ".autoskillit/config.yaml")["test_check"]["command"]
+    )
+    contributor_guide = (REPO_ROOT / "docs/developer/contributing.md").read_text()
+    assert "test_check.command" in contributor_guide
+    assert f"`{configured_command}`" in contributor_guide
+
+
 def test_hook_registry_tests_in_infra():
     """AC4: test_hook_registry.py must live in tests/hooks/."""
     assert (REPO_ROOT / "tests/hooks/test_hook_registry.py").is_file()

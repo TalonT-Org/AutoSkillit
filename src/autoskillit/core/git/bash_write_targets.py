@@ -22,6 +22,7 @@ _SPLIT_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 _CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
     {
         ("task", "test-check"),
+        ("task", "test-local-gate"),
         ("task", "test-all"),
         ("task", "test-filtered"),
     }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from dataclasses import dataclass
+from math import isfinite
 from typing import Final, Literal
 
 from ._type_constants_env import HEADLESS_ENV_VAR
@@ -16,9 +17,59 @@ __all__ = [
     "SESSION_SCOPE_ANY",
     "SessionScope",
     "SessionShape",
+    "FleetSessionEnv",
     "hookdef_session_scope",
     "session_shape",
+    "select_child_session_deadline",
 ]
+
+
+def select_child_session_deadline(local_deadline: float, inherited_deadline: str) -> str:
+    """Select an inherited positive deadline or the caller's local deadline."""
+    try:
+        inherited_value = float(inherited_deadline)
+        if inherited_deadline and isfinite(inherited_value) and inherited_value > 0:
+            return inherited_deadline
+    except ValueError:
+        pass
+    return str(int(local_deadline))
+
+
+@dataclass(frozen=True, slots=True)
+class FleetSessionEnv:
+    """Environment spec for an interactive fleet session launch."""
+
+    session_type: str
+    fleet_mode: str
+    project_dir: str
+    headless: str = "0"
+    campaign_id: str = ""
+    campaign_state_path: str = ""
+    continue_on_failure: str = "false"
+
+    def __post_init__(self) -> None:
+        try:
+            SessionType(self.session_type)
+        except ValueError:
+            valid = ", ".join(member.value for member in SessionType)
+            raise ValueError(
+                f"FleetSessionEnv.session_type must be a valid SessionType member, "
+                f"got {self.session_type!r}. Valid values: {valid}"
+            ) from None
+
+    def to_dict(self) -> dict[str, str]:
+        values = {
+            "AUTOSKILLIT_SESSION_TYPE": self.session_type,
+            "AUTOSKILLIT_FLEET_MODE": self.fleet_mode,
+            "AUTOSKILLIT_PROJECT_DIR": self.project_dir,
+            "AUTOSKILLIT_HEADLESS": self.headless,
+        }
+        if self.campaign_id:
+            values["AUTOSKILLIT_CAMPAIGN_ID"] = self.campaign_id
+            if self.campaign_state_path:
+                values["AUTOSKILLIT_CAMPAIGN_STATE_PATH"] = self.campaign_state_path
+            values["AUTOSKILLIT_CONTINUE_ON_FAILURE"] = self.continue_on_failure
+        return values
 
 
 @dataclass(frozen=True, slots=True)

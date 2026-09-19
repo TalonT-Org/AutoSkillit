@@ -181,7 +181,7 @@ class TestModuleCascadeCore:
             "_type_github_review_anchor",
             "_type_dispatch_identity",
             "_type_figure_spec",
-            "_type_session_env",
+            "_type_session_shape",
             "_type_capture",
             "_type_install",
             "_type_inspector",
@@ -335,8 +335,8 @@ class TestModuleCascadeCore:
     def test_type_figure_spec_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_figure_spec"] == frozenset({"core", "report"})
 
-    def test_type_session_env_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_session_env"] == frozenset(
+    def test_type_session_shape_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_session_shape"] == frozenset(
             {"core", "cli", "fleet", "server"}
         )
 
@@ -855,11 +855,11 @@ class TestBuildTestScopeCoreCascade:
         for excluded in ["config", "execution", "pipeline", "fleet", "migration", "workspace"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
-    def test_type_session_env_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_session_env → narrow cascade of {"core", "cli"}."""
+    def test_type_session_shape_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_session_shape → narrow cascade of {"core", "cli"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_session_env.py"},
+            changed_files={"src/autoskillit/core/types/_type_session_shape.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

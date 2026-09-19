@@ -107,7 +107,7 @@ Each direct Python file has one responsibility:
 - `_type_persisted_formats.py` — Ledger of enums embedded in versioned persisted formats.
 - `_type_plugin_source.py` — Import-layer-safe plugin artifact lifecycle value objects.
 - `_type_retirement_backstops.py` — Declared safety backstops for destructive plugin-artifact retirement.
-- `_type_session_env.py` — Typed env specs for session launch boundaries.
+- `_type_session_shape.py` — Typed env specs for session launch boundaries.
 - `_type_skill_contract.py` — Backend-neutral skill source identity contracts.
 - `_type_skill_semantics.py` — Backend-neutral semantic requirements declared by portable skills.
 - `_type_subprocess.py` — Subprocess execution types and contracts.

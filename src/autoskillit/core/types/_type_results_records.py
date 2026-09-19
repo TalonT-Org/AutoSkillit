@@ -10,6 +10,7 @@ from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
 from ._type_enums import RetryReason
 from ._type_execution_identity import ChildExecutionIdentityDict, ChildOutcomeDict
 from ._type_results_execution import SubagentModelOutcomeDict
+from ._type_token import SerializedTokenMeasure
 
 __all__ = [
     "AdjudicationVerdict",
@@ -29,6 +30,8 @@ __all__ = [
     "is_recipe_path_validation_report",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
+    "TOKEN_USAGE_SCHEMA_VERSION",
+    "TURN_USAGE_SCHEMA_VERSION",
     "LoadReport",
     "LoadResult",
     "ManagedSessionHome",
@@ -44,7 +47,9 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 13
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 14
+TOKEN_USAGE_SCHEMA_VERSION: Final[int] = 4
+TURN_USAGE_SCHEMA_VERSION: Final[int] = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,12 +319,14 @@ class ModelTotalEntry(TypedDict):
     v2 canonical cache keys (cache_write_tokens, cache_read_tokens).
     """
 
+    backend: str
+    provider_used: str
     model: str
     step_count: int
-    input_tokens: int
-    output_tokens: int
-    cache_write_tokens: int
-    cache_read_tokens: int
+    input_tokens: SerializedTokenMeasure
+    output_tokens: SerializedTokenMeasure
+    cache_write_tokens: SerializedTokenMeasure
+    cache_read_tokens: SerializedTokenMeasure
     elapsed_seconds: float
 
 
@@ -327,11 +334,12 @@ class TokenUsageFileEntry(TypedDict):
     """Schema contract for token_usage.json written by flush_session_log."""
 
     session_label: str
-    input_tokens: int
-    output_tokens: int
-    cache_write_tokens: int
-    cache_read_tokens: int
-    peak_context: int
+    backend: str
+    input_tokens: SerializedTokenMeasure
+    output_tokens: SerializedTokenMeasure
+    cache_write_tokens: SerializedTokenMeasure
+    cache_read_tokens: SerializedTokenMeasure
+    peak_context: SerializedTokenMeasure
     turn_count: int
     timing_seconds: float
     order_id: str
@@ -394,10 +402,10 @@ class SessionIndexEntry(TypedDict):
     peak_rss_kb: int
     peak_oom_score: int
     step_name: str
-    input_tokens: int
-    output_tokens: int
-    cache_write_tokens: int
-    cache_read_tokens: int
+    input_tokens: SerializedTokenMeasure
+    output_tokens: SerializedTokenMeasure
+    cache_write_tokens: SerializedTokenMeasure
+    cache_read_tokens: SerializedTokenMeasure
     write_call_count: int
     fs_writes_detected: bool
     git_writes_detected: bool

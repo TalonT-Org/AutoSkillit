@@ -8,6 +8,7 @@ maintains an output-equivalent inline implementation guarded by test 1g.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from autoskillit.core import ModelTotalEntry, TerminalColumn, _render_terminal_table
@@ -143,8 +144,13 @@ def _is_non_anthropic(model: str) -> bool:
     return bool(model) and not model.startswith("claude-")
 
 
-def _ratio(tokens: int, loc: int) -> str:
-    return f"{tokens / loc:.1f}" if loc > 0 else "—"
+def _ratio(tokens: Any, loc: int) -> str:
+    if isinstance(tokens, dict):
+        value = tokens.get("value")
+        if value is None:
+            return str(tokens.get("state", "unknown"))
+        tokens = value
+    return f"{tokens / loc:.1f}" if isinstance(tokens, int) and loc > 0 else "—"
 
 
 _LEGACY_TO_CANONICAL: dict[str, str] = {
@@ -162,20 +168,33 @@ def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _h_cache(val: int | None) -> str:
-    """Humanize a cache token count; None → '—' (provider lacks cache)."""
-    if val is None:
-        return "—"
+def _h_cache(val: Any) -> str:
+    """Render a token measure without inventing a numeric zero for absence."""
     return TelemetryFormatter._humanize(val)
+
+
+def _source_label(row: Mapping[str, Any]) -> str:
+    backend = row.get("backend")
+    provider = row.get("provider_used")
+    return f"{backend}/{provider}" if backend and provider else ""
 
 
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
 
     @staticmethod
-    def _humanize(n: int | float | None) -> str:
+    def _humanize(n: Any) -> str:
         """Format a number as compact string (45.2k, 1.2M, etc.)."""
-        if n is None or n == 0:
+        if isinstance(n, dict):
+            state = n.get("state")
+            value = n.get("value")
+            if state in {"measured", "measured_zero"} and isinstance(value, int):
+                n = value
+            else:
+                return str(state or "unknown")
+        if n is None:
+            return "unknown"
+        if n == 0:
             return "0"
         if not isinstance(n, (int, float)):
             return "0"
@@ -215,6 +234,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                name = f"{name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 name = f"{name}*"
@@ -239,7 +261,8 @@ class TelemetryFormatter:
         total_cache_wr = _h_cache(total.get("cache_write_tokens"))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
-            f"| **Total** | | | {total_in} | {total_out} | {total_cache_rd}"
+            f"| **Total ({_source_label(total) or 'unknown'})** | | | {total_in}"
+            f" | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
         if has_non_anthropic:
@@ -425,9 +448,27 @@ class TelemetryFormatter:
     @staticmethod
     def format_pr_telemetry_block(
         steps: list[dict],
-        total: dict,
+        total: dict | list[dict],
         model_totals: list[ModelTotalEntry],
     ) -> str:
+        if isinstance(total, list):
+            parts: list[str] = []
+            for source_total in total:
+                source_steps = [
+                    step
+                    for step in steps
+                    if (step.get("backend"), step.get("provider_used"))
+                    == (source_total.get("backend"), source_total.get("provider_used"))
+                ]
+                token = TelemetryFormatter.format_token_table(source_steps, source_total)
+                efficiency = TelemetryFormatter.format_efficiency_table(source_steps, source_total)
+                parts.append(token)
+                if efficiency:
+                    parts.append(efficiency)
+            model = TelemetryFormatter.format_model_table(model_totals)
+            if model:
+                parts.append(model)
+            return "\n\n".join(parts)
         token = TelemetryFormatter.format_token_table(steps, total)
         efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
         model = TelemetryFormatter.format_model_table(model_totals)
@@ -453,8 +494,12 @@ class TelemetryFormatter:
             _MODEL_MD_SEP,
         ]
         for m in model_totals:
+            model = m.get("model", "")
+            source = _source_label(m)
+            if source:
+                model = f"{source}: {model}"
             lines.append(
-                f"| {m.get('model', '')} | {m.get('step_count', 0)}"
+                f"| {model} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
                 f" | {_h_cache(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
                 f" | {_h_cache(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]

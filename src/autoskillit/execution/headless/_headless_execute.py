@@ -626,6 +626,8 @@ async def _execute_claude_headless(
                     loc_insertions=_metrics.loc_insertions,
                     loc_deletions=_metrics.loc_deletions,
                     model=resolved_model_identity.effective_model,
+                    backend=_step_backend.name,
+                    provider_used=skill_result.provider.provider_used,
                 )
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)

@@ -142,45 +142,6 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
     return rows
 
 
-def _load_log_totals(state: CampaignState) -> dict[str, int] | None:
-    """Load token totals from sessions.jsonl for the campaign. Returns None if unavailable."""
-    from autoskillit.execution import resolve_log_dir
-    from autoskillit.pipeline import DefaultTokenLog
-
-    log_root = resolve_log_dir("")
-    sessions_index = log_root / "sessions.jsonl"
-    if not sessions_index.exists():
-        return None
-
-    token_log = DefaultTokenLog()
-    loaded = token_log.load_from_log_dir(log_root, campaign_id_filter=state.campaign_id)
-    if loaded == 0:
-        return None
-
-    return token_log.compute_total()
-
-
-def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
-    """Warn on >5% token divergence between state.json and sessions.jsonl."""
-    log_totals = _load_log_totals(state)
-    if log_totals is None:
-        return
-
-    for label, state_key, log_key in [
-        ("input", "input", "input_tokens"),
-        ("output", "output", "output_tokens"),
-        ("cache_read", "cache_read", "cache_read_tokens"),
-        ("cache_creation", "cache_creation", "cache_write_tokens"),
-    ]:
-        sv = state_totals.get(state_key, 0)
-        lv = log_totals.get(log_key, 0)
-        if sv > 0 and abs(sv - lv) / sv > 0.05:
-            sys.stderr.write(
-                f"WARNING: {label} diverge {abs(sv - lv) / sv:.1%} (>5%)"
-                f" (state={sv}, sessionlog={lv}); state.json wins\n"
-            )
-
-
 def _render_status_display(state: CampaignState) -> int:
     """Print campaign header and dispatch table to stdout.
 

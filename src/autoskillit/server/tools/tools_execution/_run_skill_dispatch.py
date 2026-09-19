@@ -70,11 +70,6 @@ from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchSta
 logger = get_logger(__name__)
 
 
-def _tracker_authority_expected(state: _RunSkillDispatchState, order_id: str) -> bool:
-    """Thin shim — see ``select_tracker_authority_expected`` for the canonical impl."""
-    return select_tracker_authority_expected(state.tool_ctx, order_id)
-
-
 def _restore_resume_dispatch(state: _RunSkillDispatchState) -> str | None:
     """Restore the invocation and backend binding for a resumed session."""
     assert state._contract_store is not None
@@ -378,7 +373,7 @@ async def run_skill(
         ) = _select_tracker_authority(
             state.tool_ctx,
             order_id,
-            expected=_tracker_authority_expected(state, order_id),
+            expected=select_tracker_authority_expected(state.tool_ctx, order_id),
         )
         if (
             step_name

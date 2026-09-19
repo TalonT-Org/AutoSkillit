@@ -26,7 +26,9 @@ from autoskillit.core import (
     executable_binding_matches_current_file,
     is_feature_enabled,
     plugin_launch_binding_scope,
+    resolve_installed_generation_root,
     resolve_project_dir,
+    source_currency,
 )
 
 if TYPE_CHECKING:
@@ -177,6 +179,21 @@ def cook(
     _G = "\x1b[32m" if color else ""
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
+
+    currency = source_currency(
+        project_dir,
+        generation_root=resolve_installed_generation_root(),
+    )
+    if currency.status == "stale":
+        print(
+            f"{_Y}WARNING: installed AutoSkillit generation is {currency.behind_by} commits "
+            f"behind this checkout. Run `autoskillit install` to refresh it.{_R}"
+        )
+    elif currency.status == "diverged":
+        print(
+            f"{_Y}WARNING: installed AutoSkillit generation diverges from this checkout. "
+            f"Run `autoskillit install` to refresh it.{_R}"
+        )
 
     if profile is not None:
         if not is_feature_enabled(

@@ -147,7 +147,9 @@ class TestDispatchFoodTruckExecution:
         assert result["l3_payload"] == canned_payload
         from autoskillit.fleet.campaign_state.state import normalize_dispatch_token_usage
 
-        assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 100})
+        assert result["token_usage"] == normalize_dispatch_token_usage(
+            {"input_tokens": 100}, backend="claude-code", provider_used="anthropic"
+        )
         assert result["l3_parse_source"] == "stdout"
         dispatch_call = tool_ctx.executor.dispatch_calls[0]
         assert dispatch_call.capability_preparation is not None

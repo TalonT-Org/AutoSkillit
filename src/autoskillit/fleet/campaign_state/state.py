@@ -756,7 +756,7 @@ def normalize_dispatch_token_usage(
     backend = backend or str(raw.get("backend") or "unknown")
     provider_used = provider_used or str(raw.get("provider_used") or "")
     if not provider_used:
-        provider_used = "anthropic" if backend == "claude-code" else backend
+        provider_used = {"claude-code": "anthropic"}.get(backend, backend)
 
     def measure(*keys: str) -> SerializedTokenMeasure:
         for key in keys:
@@ -775,11 +775,11 @@ def normalize_dispatch_token_usage(
     return {
         "backend": backend,
         "provider_used": provider_used,
-        "input_tokens": measure("input_tokens", "input"),
-        "output_tokens": measure("output_tokens", "output"),
-        "cache_read_tokens": measure("cache_read_tokens", "cache_read_input_tokens", "cache_read"),
+        "input_tokens": measure("input", "input_tokens"),
+        "output_tokens": measure("output", "output_tokens"),
+        "cache_read_tokens": measure("cache_read", "cache_read_tokens", "cache_read_input_tokens"),
         "cache_write_tokens": measure(
-            "cache_write_tokens", "cache_creation_input_tokens", "cache_creation"
+            "cache_creation", "cache_write_tokens", "cache_creation_input_tokens"
         ),
         "peak_context": measure("peak_context"),
     }

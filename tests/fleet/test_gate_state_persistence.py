@@ -426,8 +426,8 @@ class TestCampaignStateFieldCompleteness:
         state = read_state(sp)
         assert state is not None
         d = next(d for d in state.dispatches if d.name == "token-test")
-        assert d.token_usage.get("input", 0) == 100, "token_usage input must be preserved"
-        assert d.token_usage.get("output", 0) == 50, "token_usage output must be preserved"
+        assert d.token_usage["input_tokens"] == {"state": "measured", "value": 100}
+        assert d.token_usage["output_tokens"] == {"state": "measured", "value": 50}
 
     @pytest.mark.anyio
     async def test_campaign_state_record_field_completeness(
@@ -500,7 +500,7 @@ class TestCampaignStateFieldCompleteness:
         assert d.dispatch_id == "d-field", "dispatch_id must be preserved"
         assert d.dispatched_session_id == "s-field", "dispatched_session_id must be preserved"
         assert d.reason == "my_reason", "reason must be preserved"
-        assert d.token_usage.get("input") == 200, "token_usage must be preserved"
+        assert d.token_usage["input_tokens"] == {"state": "measured", "value": 200}
 
     @pytest.mark.anyio
     async def test_write_dispatch_to_campaign_state_fallback_reconstruction(

@@ -173,7 +173,7 @@ class TestInitialState:
         assert a.dispatched_starttime_ticks == 9999
         assert a.dispatched_boot_id == "b1"
         assert a.reason == "started"
-        assert a.token_usage == {"input": 100}
+        assert a.token_usage["input_tokens"] == {"state": "measured", "value": 100}
         assert a.started_at == 1.0
         assert a.ended_at == 2.0
         assert a.sidecar_path == "/s.jsonl"

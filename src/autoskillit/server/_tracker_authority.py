@@ -33,7 +33,7 @@ def select_tracker_authority_expected(tool_ctx: ToolContext, order_id: str) -> b
 
     A tracker is expected when an explicit order id or dispatch env var is
     present, or when the active recipe projection declares phase-A dependencies
-    that the tracker must enforce. Centralized here so callers cannot drift.
+    that the tracker must enforce.
     """
     if order_id or os.environ.get(DISPATCH_ID_ENV_VAR, ""):
         return True
@@ -167,7 +167,17 @@ def _restore_reserved_tracker_authority(
             lease = tool_ctx.tracker_leases.get(current_key)
         if lease is None:
             return None, None, None, None
-        return target, read_tracker_authority(target, lease), current_key, lease
+        try:
+            authority = read_tracker_authority(target, lease)
+        except Exception:
+            logger.warning(
+                "tracker_authority_read_failed",
+                target=str(target.path),
+                exc_info=True,
+            )
+            _release_context_tracker(tool_ctx, current_key)
+            raise
+        return target, authority, current_key, lease
     key, lease = _retain_context_tracker(
         tool_ctx,
         target,
@@ -177,6 +187,11 @@ def _restore_reserved_tracker_authority(
     try:
         authority = read_tracker_authority(target, lease)
     except Exception:
+        logger.warning(
+            "tracker_authority_read_failed",
+            target=str(target.path),
+            exc_info=True,
+        )
         _release_context_tracker(tool_ctx, key)
         raise
     if current_key is not None:
@@ -187,7 +202,6 @@ def _restore_reserved_tracker_authority(
 def _retain_kitchen_tracker_authority(
     tool_ctx: ToolContext,
 ) -> tuple[TrackerParticipantKey, ArtifactLease]:
-    """Retain this process incarnation's kitchen tracker lease."""
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
         tool_ctx.kitchen_id,
@@ -229,7 +243,6 @@ def _release_kitchen_tracker_authority(
     unregister: bool,
     retire: bool,
 ) -> None:
-    """Release exact ToolContext ownership and optionally retire its tracker."""
     with tool_ctx.tracker_leases_lock:
         key = tool_ctx.kitchen_tracker_key
         identity = tool_ctx.kitchen_process_identity
@@ -250,7 +263,6 @@ def _release_kitchen_tracker_authority(
 
 
 def _drain_context_tracker_leases(tool_ctx: ToolContext) -> set[TrackerAuthorityTarget]:
-    """Release all context-owned tracker leases and return their exact targets."""
     with tool_ctx.tracker_leases_lock:
         targets = {key.target for key in tool_ctx.tracker_leases}
         for key in list(tool_ctx.tracker_leases):

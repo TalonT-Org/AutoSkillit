@@ -134,9 +134,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 352),
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 370),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 586),
+    ("src/autoskillit/server/tools/tools_status.py", 595),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
-    ("src/autoskillit/server/tools/tools_github.py", 339),
+    ("src/autoskillit/server/tools/tools_github.py", 343),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 26),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
@@ -149,7 +149,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils/_review_design.py", 248),
     ("src/autoskillit/smoke_utils/_review_design.py", 350),
     # tools_pr_ops.py — GitHubReviewReceipt.to_dict() already carries schema_version
-    ("src/autoskillit/server/tools/tools_pr_ops.py", 500),
+    ("src/autoskillit/server/tools/tools_pr_ops.py", 504),
     # smoke_utils/_git.py — partitions, merge queue data
     # Line 110 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches

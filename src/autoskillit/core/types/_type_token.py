@@ -130,46 +130,59 @@ class TurnTokenEntry(TypedDict):
 class CanonicalTokenUsage:
     """Provider-normalized token usage snapshot for a single session turn."""
 
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int | None
-    cache_write_tokens: int | None
-    provider: str
+    backend: str
+    provider_used: str
+    input_tokens: TokenMeasure
+    output_tokens: TokenMeasure
+    cache_read_tokens: TokenMeasure
+    cache_write_tokens: TokenMeasure
     raw: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.backend:
+            raise ValueError("Canonical token usage requires a non-empty backend")
+        if not self.provider_used:
+            raise ValueError("Canonical token usage requires a non-empty provider_used")
+
+    @staticmethod
+    def _observed_or_unknown(raw: dict[str, Any], field_name: str) -> TokenMeasure:
+        value = raw.get(field_name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return TokenMeasure.observed(value)
+        return TokenMeasure.unknown()
 
     @classmethod
     def from_anthropic_dict(cls, d: dict[str, Any]) -> CanonicalTokenUsage:
         return cls(
-            input_tokens=d["input_tokens"],
-            output_tokens=d["output_tokens"],
-            cache_read_tokens=d.get("cache_read_input_tokens"),
-            cache_write_tokens=d.get("cache_creation_input_tokens"),
-            provider="anthropic",
+            backend="claude-code",
+            provider_used="anthropic",
+            input_tokens=cls._observed_or_unknown(d, "input_tokens"),
+            output_tokens=cls._observed_or_unknown(d, "output_tokens"),
+            cache_read_tokens=cls._observed_or_unknown(d, "cache_read_input_tokens"),
+            cache_write_tokens=cls._observed_or_unknown(d, "cache_creation_input_tokens"),
             raw=dict(d),
         )
 
     @classmethod
     def from_codex_dict(cls, d: dict[str, Any]) -> CanonicalTokenUsage:
         return cls(
-            input_tokens=d["input_tokens"],
-            output_tokens=d["output_tokens"],
-            cache_read_tokens=d.get("cached_input_tokens"),
-            cache_write_tokens=None,
-            provider="codex",
+            backend="codex",
+            provider_used="codex",
+            input_tokens=cls._observed_or_unknown(d, "input_tokens"),
+            output_tokens=cls._observed_or_unknown(d, "output_tokens"),
+            cache_read_tokens=cls._observed_or_unknown(d, "cached_input_tokens"),
+            cache_write_tokens=TokenMeasure.unavailable(),
             raw=dict(d),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "cache_read_tokens": self.cache_read_tokens
-            if self.cache_read_tokens is not None
-            else 0,
-            "cache_write_tokens": self.cache_write_tokens
-            if self.cache_write_tokens is not None
-            else 0,
-            "provider": self.provider,
+            "backend": self.backend,
+            "provider_used": self.provider_used,
+            "input_tokens": self.input_tokens.to_dict(),
+            "output_tokens": self.output_tokens.to_dict(),
+            "cache_read_tokens": self.cache_read_tokens.to_dict(),
+            "cache_write_tokens": self.cache_write_tokens.to_dict(),
         }
 
     @classmethod
@@ -181,22 +194,19 @@ class CanonicalTokenUsage:
         if other is None:
             return base
 
-        if base.provider != other.provider:
+        if (base.backend, base.provider_used) != (other.backend, other.provider_used):
             raise ValueError(
-                f"Cannot merge CanonicalTokenUsage with mismatched providers: "
-                f"{base.provider!r} vs {other.provider!r}"
+                "Cannot merge CanonicalTokenUsage with mismatched source pairs: "
+                f"{(base.backend, base.provider_used)!r} vs "
+                f"{(other.backend, other.provider_used)!r}"
             )
 
-        def _add_optional(a: int | None, b: int | None) -> int | None:
-            if a is None and b is None:
-                return None
-            return (a or 0) + (b or 0)
-
         return cls(
-            input_tokens=base.input_tokens + other.input_tokens,
-            output_tokens=base.output_tokens + other.output_tokens,
-            cache_read_tokens=_add_optional(base.cache_read_tokens, other.cache_read_tokens),
-            cache_write_tokens=_add_optional(base.cache_write_tokens, other.cache_write_tokens),
-            provider=base.provider,
+            backend=base.backend,
+            provider_used=base.provider_used,
+            input_tokens=base.input_tokens.combine(other.input_tokens),
+            output_tokens=base.output_tokens.combine(other.output_tokens),
+            cache_read_tokens=base.cache_read_tokens.combine(other.cache_read_tokens),
+            cache_write_tokens=base.cache_write_tokens.combine(other.cache_write_tokens),
             raw={**base.raw, **other.raw},
         )

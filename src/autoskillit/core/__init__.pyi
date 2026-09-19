@@ -1424,6 +1424,7 @@ from .types import (
     resolve_native_shell_capture_decision as resolve_native_shell_capture_decision,
 )
 from .types import resolve_payload_field as resolve_payload_field
+from .types import resolve_provider_used as resolve_provider_used
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli

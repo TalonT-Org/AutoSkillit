@@ -21,7 +21,15 @@ __all__ = [
     "ChildOutcomeDict",
     "ExecutionIdentity",
     "ExecutionIdentityDict",
+    "resolve_provider_used",
 ]
+
+
+def resolve_provider_used(backend: str, anthropic_provider_capable: bool) -> str:
+    """Resolve the native reporting provider for a selected backend."""
+    if not backend:
+        raise ValueError("Provider resolution requires a non-empty backend")
+    return "anthropic" if anthropic_provider_capable else backend
 
 
 @dataclass(frozen=True, slots=True)

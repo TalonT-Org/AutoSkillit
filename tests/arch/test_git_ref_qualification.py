@@ -160,7 +160,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/_self_revert.py", "_scan_commit", 147, "rev-list", "BARE"),
     ("server/_self_revert.py", "_scan_commit", 147, "rev-list", "BARE"),
     ("server/_self_revert.py", "_scan_commit", 163, "show", "BARE"),
-    ("server/_self_revert.py", "detect_self_reverts", 238, "rev-list", "BARE"),
+    ("server/_self_revert.py", "detect_self_reverts", 236, "rev-list", "BARE"),
     ("server/git.py", "perform_merge", 322, "<unresolved>", "UNRESOLVABLE"),
     ("server/git.py", "perform_merge", 327, "<unresolved>", "UNRESOLVABLE"),
     ("server/git.py", "perform_merge", 445, "log", "BARE"),

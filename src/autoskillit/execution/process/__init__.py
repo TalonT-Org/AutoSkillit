@@ -623,6 +623,7 @@ async def run_managed_async(
                 process_exited_event=signals.process_exited_event,
                 grace_seconds=natural_exit_grace_seconds,
                 proc_log=proc_log,
+                termination=termination,
                 pid=_observed_pid,
                 marker_dir=marker_dir,
                 session_id=session_id,

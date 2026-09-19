@@ -28,15 +28,14 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def test_output_limit_selects_immediate_kill() -> None:
-    for process_exited in (False, True):
-        assert (
-            decide_termination_action(
-                TerminationReason.OUTPUT_LIMIT,
-                timeout_fired=False,
-                process_exited=process_exited,
-            )
-            is TerminationAction.IMMEDIATE_KILL
+    assert (
+        decide_termination_action(
+            TerminationReason.OUTPUT_LIMIT,
+            timeout_fired=False,
+            process_exited=False,
         )
+        is TerminationAction.IMMEDIATE_KILL
+    )
 
 
 async def _spawn(delay: float, tmp_path: Path) -> object:

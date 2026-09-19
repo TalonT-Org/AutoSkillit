@@ -164,6 +164,8 @@ class TestRestoreReservedTrackerAuthority:
 
         assert restored_key == key
         assert restored_lease is lease
+        assert restored_key.owner_kind == "manual"
+        assert restored_key.owner_id == "selection:AB"
         assert not lease.closed
         assert list(tool_ctx_kitchen_open.tracker_leases) == [key]
         _release_context_tracker(tool_ctx_kitchen_open, key)

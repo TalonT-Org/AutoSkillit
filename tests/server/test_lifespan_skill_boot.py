@@ -282,6 +282,7 @@ class TestSkillAutoGateBoot:
             os.getpid(),
             str(different_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_skill_auto_gate_boot_emits_structured_log(self, tool_ctx, monkeypatch):

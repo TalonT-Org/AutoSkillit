@@ -58,6 +58,7 @@ class TestFleetAutoGateBoot:
             os.getpid(),
             str(tool_ctx.project_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_fleet_auto_gate_boot_passes_campaign_id_to_reaper(
@@ -143,6 +144,7 @@ class TestFleetAutoGateBootProjectDir:
             os.getpid(),
             str(different_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_food_truck_auto_gate_boot_uses_project_dir_for_kitchen_registration(
@@ -186,6 +188,7 @@ class TestFleetAutoGateBootProjectDir:
             os.getpid(),
             str(different_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_gate_fails_open_on_hook_config_error(self, tool_ctx):

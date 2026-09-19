@@ -21,24 +21,16 @@ from autoskillit.core import (
     NativeShellCaptureDiagnostic,
     NativeShellCaptureMode,
     NativeShellCaptureReason,
-    TokenMeasure,
 )
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.evidence.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.evidence.session_log import resolve_log_dir
 from autoskillit.execution.session._turn_usage import serialize_turn_token_entry
+from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
+from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
-
-
-def _observed(value: int) -> dict[str, int | str]:
-    from tests._helpers import observed_measure as _shared_observed
-
-    return _shared_observed(value)
-
-
-_UNKNOWN = TokenMeasure.unknown().to_dict()
 
 
 def _turn_usage_row(

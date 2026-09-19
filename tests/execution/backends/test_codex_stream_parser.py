@@ -62,11 +62,11 @@ class TestCodexStreamParserHappyPath:
         assert event.backend_data.usage is not None
         assert isinstance(event.backend_data.usage, dict)
         usage = CanonicalTokenUsage.from_codex_dict(event.backend_data.usage)
-        assert usage.input_tokens == 150
-        assert usage.output_tokens == 75
-        assert usage.cache_read_tokens == 30
-        assert usage.cache_write_tokens is None
-        assert usage.provider == "codex"
+        assert usage.input_tokens.value == 150
+        assert usage.output_tokens.value == 75
+        assert usage.cache_read_tokens.value == 30
+        assert usage.cache_write_tokens.state.value == "unavailable"
+        assert usage.provider_used == "codex"
 
     def test_turn_failed_yields_terminal_completion(self) -> None:
         parser = CodexStreamParser()

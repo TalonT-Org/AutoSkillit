@@ -86,6 +86,7 @@ Each direct Python file has one responsibility:
 - `_type_dispatch_identity.py` — Dispatch identity value object — single source of truth for all sentinel strings.
 - `_type_enums.py` — Core StrEnum discriminators.
 - `_type_enums_context_admission.py` — Context-admission StrEnum discriminators.
+- `_type_enums_token.py` — Token-accounting StrEnum discriminators.
 - `_type_exceptions.py` — Exception types for recipe loading failures.
 - `_type_execution_identity.py` — Cycle-free execution identity and backend-resolution types.
 - `_type_exploration.py` — Immutable, deterministic contracts for read-only repository exploration.

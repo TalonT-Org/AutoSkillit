@@ -171,7 +171,6 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    # Share the spec-builder authority for adapter digest and inactive-team policy.
     force_inactive_agent_teams = ctx.config.agent_backend.force_inactive_agent_teams
     base_effective_idle = _diag._resolve_idle_output_timeout(
         idle_output_timeout, cfg.idle_output_timeout
@@ -608,7 +607,6 @@ async def _execute_claude_headless(
             _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
             timing_seconds = result.elapsed_seconds
 
-            # Extract the audit record (if any) added by this session.
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
 

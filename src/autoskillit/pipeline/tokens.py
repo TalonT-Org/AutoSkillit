@@ -85,8 +85,8 @@ class TokenEntry:
     """One homogeneous (step, backend, provider) token aggregation bucket."""
 
     step_name: str
-    backend: str
-    provider_used: str
+    backend: str = "unknown"
+    provider_used: str = "unknown"
     model: str = ""
     input_tokens: TokenMeasure = field(default_factory=TokenMeasure.unknown)
     output_tokens: TokenMeasure = field(default_factory=TokenMeasure.unknown)

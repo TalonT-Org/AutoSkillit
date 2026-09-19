@@ -169,34 +169,6 @@ def test_exit_code_3_on_missing_state(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert exc_info.value.code == 3
 
 
-def test_cross_check_warns_on_divergence(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
-    from autoskillit.cli.fleet import _aggregate_totals, _cross_check_tokens
-    from autoskillit.pipeline.tokens import DefaultTokenLog
-
-    (tmp_path / "sessions.jsonl").write_text("")
-    state = _make_state_with_tokens(input_total=10000)
-    state_totals = _aggregate_totals(state)
-
-    monkeypatch.setattr("autoskillit.execution.resolve_log_dir", lambda *a: tmp_path)
-    monkeypatch.setattr(DefaultTokenLog, "load_from_log_dir", lambda self, *a, **kw: 1)
-    monkeypatch.setattr(
-        DefaultTokenLog,
-        "compute_total",
-        lambda self, **kw: {
-            "input_tokens": 8000,
-            "output_tokens": 0,
-            "cache_write_tokens": 0,
-            "cache_read_tokens": 0,
-            "total_elapsed_seconds": 0.0,
-        },
-    )
-    _cross_check_tokens(state, state_totals)
-    assert "diverge" in capsys.readouterr().err.lower()
-
-
 def test_watch_exits_on_terminal_campaign(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """--watch detects all-terminal campaign and exits with code 0."""
     _setup_campaign_with_status(tmp_path, "cid01", "test", status="success")

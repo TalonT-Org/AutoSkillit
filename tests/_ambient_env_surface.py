@@ -974,7 +974,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/tools/tools_execution/_candidate_policy.py:189": (
+    "server/tools/tools_execution/_candidate_policy.py:191": (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from config, not a module-level constant this AST scanner can resolve."
     ),

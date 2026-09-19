@@ -165,3 +165,12 @@ def test_source_map_drops_retired_evidence_split_paths() -> None:
         + ", ".join(stale)
         + " — run 'task coverage-audit' and commit .autoskillit/test-source-map.json"
     )
+
+
+def test_source_map_tracks_neutral_tracker_authority() -> None:
+    source_map = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text())["map"]
+
+    assert "src/autoskillit/server/_tracker_authority.py" in source_map
+    assert "src/autoskillit/server/tools/tools_kitchen/_tracker_authority.py" not in source_map
+    assert "src/autoskillit/server/tools/tools_pipeline_tracker/_authority.py" not in source_map
+    assert "src/autoskillit/server/tools/_evidence_reader/_authority.py" in source_map

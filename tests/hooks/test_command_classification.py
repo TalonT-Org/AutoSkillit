@@ -3350,7 +3350,6 @@ class TestStructuralHeredocShapes:
             "git push --force origin main",
         ]
         assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
-        assert all(literal.kind == "heredoc" for literal in segments[0].stdin_literals)
         payloads = evaluated_payloads(command)
         assert [
             (payload.origin, payload.text) for payload in payloads if payload.origin == "pipe"

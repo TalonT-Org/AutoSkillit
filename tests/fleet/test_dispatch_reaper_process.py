@@ -205,12 +205,16 @@ def test_degraded_identity_is_not_live_but_create_time_fallback_reaps(tmp_path: 
             dispatched_starttime_ticks=0,
         )
         assert not is_dispatch_session_alive(degraded_record)
+        try:
+            child_create_time = psutil.Process(process.pid).create_time()
+        except psutil.NoSuchProcess:
+            pytest.skip("child process exited before create_time could be read")
         state_path = make_running_state(
             tmp_path,
             dispatched_pid=process.pid,
             dispatched_boot_id="",
             dispatched_starttime_ticks=0,
-            dispatched_create_time=psutil.Process(process.pid).create_time(),
+            dispatched_create_time=child_create_time,
         )
 
         reap_stale_dispatches(state_path, min_reap_age_seconds=0.0)

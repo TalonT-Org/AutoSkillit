@@ -247,7 +247,6 @@ which derives the package set from this convention.
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
 ├── assets/                              # Vendored asset integrity tests
-├── backend/                             # MCP backend round-trip + guard-script tests
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
 ├── config/                              # Config loading tests
 ├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/AGENTS.md)

@@ -1395,6 +1395,64 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
     assert result is None, f"Expected None (aggregate > 10 but per-file all < 5) but got: {result}"
 
 
+def test_check_regression_deliberately_ignores_clean_committed_self_revert(tmp_path: Path) -> None:
+    """The cumulative dirty-tree guard is intentionally blind to committed inverse pairs."""
+    from autoskillit.recipe._cmd_rpc_guards import _check_regression
+
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    margin_file = tmp_path / "margin.py"
+    margin_file.write_text("SAFETY_MARGIN = 64\n")
+    subprocess.run(
+        ["git", "add", "--", "margin.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add safety margin"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    margin_file.unlink()
+    subprocess.run(
+        ["git", "add", "--", "margin.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fix: remove safety margin"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    assert status.stdout == b""
+
+    # `_check_regression` compares the cumulative base-to-tree diff; this pair cancels there.
+    result = _check_regression(str(tmp_path), ["margin.py"], "main", {"margin.py": "  "})
+
+    assert result is None
+
+
 def test_cmd_rpc_issues_no_invalid_escape_sequences():
     """Source-level guard: invalid escapes must not appear in GraphQL builders."""
     ruff = Path(sys.executable).resolve().parent / "ruff"

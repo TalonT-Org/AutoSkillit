@@ -125,7 +125,21 @@ tasks:
     cmds:
       - |
         export PYTEST_IGNORE_PATHS="--ignore=tests/execution/test_process_channel_b.py --deselect=tests/execution/test_process_channel_b.py"
+        set +e
         task test-all
+        LOCAL_GATE_EXIT=$?
+        set -e
+
+        if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then
+          echo ""
+          echo "TEST_RESULT=FAIL"
+          echo "LOCAL_GATE_EXIT_CODE=$LOCAL_GATE_EXIT"
+          exit 1
+        else
+          echo ""
+          echo "TEST_RESULT=PASS"
+          exit 0
+        fi
 
   test-codex-config-parse:
     desc: Validate generated interactive config overrides with the installed Codex CLI

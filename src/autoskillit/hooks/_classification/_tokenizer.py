@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import re
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast
 
 # Operators that terminate a shlex token and split command segments.
@@ -18,18 +18,268 @@ _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 # immediately by an operator (no separating whitespace) does not appear to
 # contain that operator in its raw_span.
 _SHELL_OPERATOR_CHARS: str = ";|&"
-# Named groups are a non-semantic addition over the original unnamed pattern
-# (`open`/`q`/`delim`/`rest` decompose the old group 1; `body` names the old
-# unnamed `.*?`; `term` decomposes the old group 3/`\2` backreference). The
-# matched spans are byte-identical to before -- strip_heredoc_bodies's output
-# is parity-locked against core/git/bash_write_targets.py and must not change.
-_HEREDOC_BODY_RE = re.compile(
-    r"(?P<open><<-?\s*(?P<q>['\"]?)(?P<delim>\w+)['\"]?(?P<rest>[^\n]*))"
-    r"\n(?P<body>.*?)\n\t*(?P<term>(?P=delim))(?=[ \t]*(?:\n|$))",
-    re.DOTALL,
-)
-
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
+
+
+@dataclass(frozen=True, slots=True)
+class _HeredocOpener:
+    operator_span: tuple[int, int]
+    delimiter: str
+    delimiter_was_quoted: bool
+    strip_tabs: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _HeredocOccurrence:
+    operator_span: tuple[int, int]
+    body_span: tuple[int, int]
+    body_deletion_span: tuple[int, int]
+    capture_tail_span: tuple[int, int]
+    delimiter_was_quoted: bool
+
+
+def _is_comment_start(command: str, index: int, line_start: int) -> bool:
+    if index == line_start:
+        return True
+    previous = command[index - 1]
+    return previous.isspace() or previous in ";|&("
+
+
+def _quoted_delimiter_fragment(command: str, start: int, line_end: int) -> tuple[str, int] | None:
+    quote = command[start]
+    index = start + 1
+    parts: list[str] = []
+    while index < line_end:
+        char = command[index]
+        if char == quote:
+            return ("".join(parts), index + 1)
+        if quote == '"' and char == "\\" and index + 1 < line_end:
+            parts.append(command[index + 1])
+            index += 2
+        else:
+            parts.append(char)
+            index += 1
+    return None
+
+
+def _parse_heredoc_delimiter(
+    command: str, start: int, line_end: int
+) -> tuple[str, int, bool] | None:
+    """Parse one shell word after a heredoc operator, applying quote removal."""
+    parts: list[str] = []
+    quoted = False
+    index = start
+    while index < line_end:
+        char = command[index]
+        if char.isspace() or char in ";|&()<>":
+            break
+        if char == "\\":
+            if index + 1 >= line_end:
+                return None
+            parts.append(command[index + 1])
+            quoted = True
+            index += 2
+            continue
+        if char in "'\"":
+            fragment = _quoted_delimiter_fragment(command, index, line_end)
+            if fragment is None:
+                return None
+            text, index = fragment
+            parts.append(text)
+            quoted = True
+            continue
+        parts.append(char)
+        index += 1
+    return ("".join(parts), index, quoted) if parts else None
+
+
+def _skip_shell_quote(command: str, start: int, line_end: int) -> int:
+    quote = command[start]
+    index = start + 1
+    while index < line_end:
+        if command[index] == quote:
+            return index + 1
+        if quote == '"' and command[index] == "\\" and index + 1 < line_end:
+            index += 2
+        else:
+            index += 1
+    return line_end
+
+
+def _skip_arithmetic(command: str, start: int, line_end: int) -> int:
+    depth = 1
+    index = start + 3
+    while index < line_end:
+        if command.startswith("$((", index):
+            depth += 1
+            index += 3
+            continue
+        if command.startswith("))", index):
+            depth -= 1
+            index += 2
+            if not depth:
+                return index
+            continue
+        index += 2 if command[index] == "\\" and index + 1 < line_end else 1
+    return line_end
+
+
+def _skip_non_heredoc_syntax(command: str, index: int, line_end: int) -> int | None:
+    if command[index] == "\\":
+        return min(index + 2, line_end)
+    if command[index] in "'\"":
+        return _skip_shell_quote(command, index, line_end)
+    if command.startswith("$((", index):
+        return _skip_arithmetic(command, index, line_end)
+    return None
+
+
+def _heredoc_openers_on_line(command: str, start: int, line_end: int) -> list[_HeredocOpener]:
+    openers: list[_HeredocOpener] = []
+    index = start
+    while index < line_end:
+        char = command[index]
+        skipped = _skip_non_heredoc_syntax(command, index, line_end)
+        if skipped is not None:
+            index = skipped
+            continue
+        if char == "#" and _is_comment_start(command, index, start):
+            break
+        if not command.startswith("<<", index):
+            index += 1
+            continue
+        if command.startswith("<<<", index):
+            index += 3
+            continue
+
+        operator_end = index + 2
+        strip_tabs = operator_end < line_end and command[operator_end] == "-"
+        if strip_tabs:
+            operator_end += 1
+        delimiter_start = operator_end
+        while delimiter_start < line_end and command[delimiter_start] in " \t":
+            delimiter_start += 1
+        parsed = _parse_heredoc_delimiter(command, delimiter_start, line_end)
+        if parsed is None:
+            index = operator_end
+            continue
+        delimiter, delimiter_end, delimiter_was_quoted = parsed
+        openers.append(
+            _HeredocOpener(
+                operator_span=(index, delimiter_end),
+                delimiter=delimiter,
+                delimiter_was_quoted=delimiter_was_quoted,
+                strip_tabs=strip_tabs,
+            )
+        )
+        index = delimiter_end
+    return openers
+
+
+def _heredoc_terminator(
+    command: str, start: int, delimiter: str, *, strip_tabs: bool
+) -> tuple[int, int, int, int] | None:
+    """Return raw/rendered terminator starts, its end, and the next line start."""
+    line_start = start
+    while line_start < len(command):
+        line_end = command.find("\n", line_start)
+        content_end = len(command) if line_end < 0 else line_end
+        rendered_start = line_start
+        if strip_tabs:
+            while rendered_start < content_end and command[rendered_start] == "\t":
+                rendered_start += 1
+        delimiter_end = rendered_start + len(delimiter)
+        if (
+            command.startswith(delimiter, rendered_start)
+            and delimiter_end <= content_end
+            and all(char in " \t" for char in command[delimiter_end:content_end])
+        ):
+            return (
+                line_start,
+                rendered_start,
+                delimiter_end,
+                content_end + 1 if line_end >= 0 else content_end,
+            )
+        if line_end < 0:
+            break
+        line_start = line_end + 1
+    return None
+
+
+def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
+    """Collect heredoc bodies and spans; body contents are not parsed as commands."""
+    occurrences: list[_HeredocOccurrence] = []
+    position = 0
+    while position < len(command):
+        line_end = command.find("\n", position)
+        if line_end < 0:
+            break
+        openers = _heredoc_openers_on_line(command, position, line_end)
+        if not openers:
+            position = line_end + 1
+            continue
+
+        pending: list[tuple[_HeredocOpener, tuple[int, int], tuple[int, int]]] = []
+        body_start = line_end + 1
+        next_position = body_start
+        capture_tail_end = len(command)
+        for opener in openers:
+            terminator = _heredoc_terminator(
+                command, body_start, opener.delimiter, strip_tabs=opener.strip_tabs
+            )
+            if terminator is None:
+                body_end = len(command)
+                if body_end > body_start and command.endswith("\n"):
+                    body_end -= 1
+                pending.append(
+                    (
+                        opener,
+                        (body_start, body_end),
+                        (body_start, len(command)),
+                    )
+                )
+                capture_tail_end = len(command)
+                next_position = len(command)
+                break
+
+            raw_start, rendered_start, delimiter_end, next_position = terminator
+            body_end = raw_start
+            if body_end > body_start and command[body_end - 1] == "\n":
+                body_end -= 1
+            pending.append(
+                (
+                    opener,
+                    (body_start, body_end),
+                    (body_start, rendered_start),
+                )
+            )
+            body_start = next_position
+            capture_tail_end = delimiter_end
+
+        capture_tail_span = (line_end, capture_tail_end)
+        occurrences.extend(
+            _HeredocOccurrence(
+                operator_span=opener.operator_span,
+                body_span=body_span,
+                body_deletion_span=body_deletion_span,
+                capture_tail_span=capture_tail_span,
+                delimiter_was_quoted=opener.delimiter_was_quoted,
+            )
+            for opener, body_span, body_deletion_span in pending
+        )
+        position = next_position
+    return occurrences
+
+
+def _render_replacements(command: str, replacements: list[tuple[int, int, str]]) -> str:
+    rendered: list[str] = []
+    position = 0
+    for start, end, value in sorted(replacements):
+        rendered.append(command[position:start])
+        rendered.append(value)
+        position = end
+    rendered.append(command[position:])
+    return "".join(rendered)
 
 
 def strip_heredoc_bodies(command: str) -> str:
@@ -38,7 +288,10 @@ def strip_heredoc_bodies(command: str) -> str:
     The opening line (containing << and any real redirects) is kept intact.
     Only the body lines between the opening and terminator are removed.
     """
-    return _HEREDOC_BODY_RE.sub(r"\g<open>\n\g<term>", command)
+    return _render_replacements(
+        command,
+        [(*occurrence.body_deletion_span, "") for occurrence in _heredoc_occurrences(command)],
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +309,16 @@ class StdinLiteral:
     `_interpreters.py`. `source_span` is the literal's exact occurrence span
     in the original command string; `None` only for a value constructed
     directly by a test or caller rather than captured from source text.
+    `feeds_stdin` identifies the redirect that supplies the segment's stdin;
+    earlier redirects remain available for outer-expansion analysis. It defaults
+    to True so directly constructed literals retain the historical behavior.
     """
 
     text: str
     kind: str
     outer_expansion: bool
     source_span: tuple[int, int] | None = None
+    feeds_stdin: bool = True
 
 
 def _normalize_newlines_for_tokenize(command: str) -> str:
@@ -151,30 +408,32 @@ class EvaluatedSegment:
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
-    """Replace each heredoc with a placeholder, returning its bound literal.
-
-    The placeholder precedes the opening line's remainder (`rest` — real
-    redirects, a pipe, `&&`, ...) so it stays in the segment that owns the
-    `<<` operator even when that remainder starts a new segment once
-    tokenized. `command[span]` for the returned literal's `source_span` is
-    exactly the heredoc body, matching what `strip_heredoc_bodies` removes
-    (both are driven by the same `_HEREDOC_BODY_RE` match).
-    """
-    literals: list[StdinLiteral] = []
-
-    def _replace(match: re.Match[str]) -> str:
-        index = len(literals)
-        literals.append(
-            StdinLiteral(
-                text=match.group("body"),
-                kind="heredoc",
-                outer_expansion=match.group("q") == "",
-                source_span=match.span("body"),
-            )
+    """Replace each `<<EOF` heredoc with a placeholder; return the bound literals."""
+    occurrences = _heredoc_occurrences(command)
+    literals = [
+        StdinLiteral(
+            text=command[occurrence.body_span[0] : occurrence.body_span[1]],
+            kind="heredoc",
+            outer_expansion=not occurrence.delimiter_was_quoted,
+            source_span=occurrence.body_span,
         )
-        return f" __AUTOSKILLIT_HEREDOC_{index}__{match.group('rest')}"
+        for occurrence in occurrences
+    ]
+    replacements = [
+        (*occurrence.operator_span, f" __AUTOSKILLIT_HEREDOC_{index}__")
+        for index, occurrence in enumerate(occurrences)
+    ]
+    replacements.extend(
+        (*span, "") for span in {occurrence.capture_tail_span for occurrence in occurrences}
+    )
+    return (_render_replacements(command, replacements), literals)
 
-    return (_HEREDOC_BODY_RE.sub(_replace, command), literals)
+
+def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral, ...]:
+    return tuple(
+        replace(literal, feeds_stdin=index == len(literals) - 1)
+        for index, literal in enumerate(literals)
+    )
 
 
 def _output_redirect_end(command: str, start: int) -> int | None:
@@ -356,7 +615,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
                         current_tokens,
                         current_redirect_syntax,
                         current_argv_tokens,
-                        tuple(current_stdin_literals),
+                        _finalize_stdin_literals(current_stdin_literals),
                         piped_from_previous,
                     )
                 )
@@ -380,7 +639,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
                 current_tokens,
                 current_redirect_syntax,
                 current_argv_tokens,
-                tuple(current_stdin_literals),
+                _finalize_stdin_literals(current_stdin_literals),
                 piped_from_previous,
             )
         )

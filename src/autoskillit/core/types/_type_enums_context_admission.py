@@ -221,6 +221,7 @@ class CommitFailureClass(StrEnum):
     """Stable classifications for an unsuccessful commit attempt."""
 
     PATH_REJECTED = "path_rejected"
+    SELF_REVERT_BASE_VALIDATION = "self_revert_base_validation"
     GIT_ADD_FAILED = "git_add_failed"
     HOOK_REJECTED = "hook_rejected"
     HOOK_INFRASTRUCTURE = "hook_infrastructure"

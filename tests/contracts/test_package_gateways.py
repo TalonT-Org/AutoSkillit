@@ -438,24 +438,16 @@ def test_root_module_allowlist() -> None:
 # ── REQ-GATEWAY-PARITY: gateway re-exports pre-move names ──────────────────────
 
 # Shared with tests/arch/test_subpackage_isolation_facades.py's sibling-set
-# assertions for the same four decompositions — both checks must agree on
+# assertions for the same six decompositions — both checks must agree on
 # exactly which modules moved, so the move sets live here once.
 DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
     "execution_github_ops": frozenset(
         {"_github_http", "ci", "github", "pr_analysis", "diff_annotator", "remote_resolver"}
     ),
-    "execution_evidence": frozenset(
-        {
-            "session_log",
-            "_session_log_recovery",
-            "_session_retention",
-            "session_index",
-            "anomaly_detection",
-            "linux_tracing",
-            "otlp_sink",
-            "recording",
-            "_recording_skills",
-        }
+    "execution_evidence": frozenset({"anomaly_detection", "linux_tracing", "otlp_sink"}),
+    "execution_recording": frozenset({"recording", "_recording_skills"}),
+    "execution_session_log": frozenset(
+        {"session_log", "_session_log_recovery", "_session_log_retention", "session_index"}
     ),
     "execution_runtime": frozenset(
         {"launch_resolution", "commands", "clone_guard", "testing", "db"}
@@ -520,6 +512,20 @@ def _gateway_pre_move_names(init_path: Path, parent_pkg: str, move_set: set[str]
         pytest.param(
             ("execution", "__init__.py"),
             "autoskillit.execution",
+            DECOMPOSITION_MOVE_SETS["execution_recording"],
+            "autoskillit.execution.recording",
+            id="execution_recording",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            DECOMPOSITION_MOVE_SETS["execution_session_log"],
+            "autoskillit.execution.session_log",
+            id="execution_session_log",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
             DECOMPOSITION_MOVE_SETS["execution_runtime"],
             "autoskillit.execution.runtime",
             id="execution_runtime",
@@ -552,3 +558,73 @@ def test_gateway_reexports_pre_move_names(
     pkg = importlib.import_module(target_pkg)
     missing = sorted(name for name in expected if not hasattr(pkg, name))
     assert not missing, f"{target_pkg} gateway missing re-exports: {missing}"
+
+
+@pytest.mark.parametrize(
+    ("package", "names"),
+    [
+        (
+            "recording",
+            frozenset(
+                {
+                    "RecordingSubprocessRunner",
+                    "ReplayingSubprocessRunner",
+                    "ScenarioReplayError",
+                    "build_replay_runner",
+                    "RECORD_SCENARIO_ENV",
+                    "RECORD_SCENARIO_DIR_ENV",
+                    "RECORD_SCENARIO_RECIPE_ENV",
+                    "REPLAY_SCENARIO_ENV",
+                    "REPLAY_SCENARIO_DIR_ENV",
+                    "SCENARIO_STEP_NAME_ENV",
+                    "restore_skill_snapshot",
+                    "scan_skill_snapshots",
+                    "snapshot_skill_dir",
+                }
+            ),
+        ),
+        (
+            "session_log",
+            frozenset(
+                {
+                    "flush_session_log",
+                    "resolve_log_dir",
+                    "session_index_lock_path",
+                    "write_execution_candidate_manifest",
+                    "recover_crashed_sessions",
+                    "read_telemetry_clear_marker",
+                    "write_telemetry_clear_marker",
+                    "apply_session_retention",
+                    "read_session_index_rows",
+                    "find_stale_session_archive_references",
+                    "read_tolerant_session_index_rows",
+                }
+            ),
+        ),
+        (
+            "evidence",
+            frozenset(
+                {
+                    "detect_anomalies",
+                    "AnomalyKind",
+                    "AnomalySeverity",
+                    "LINUX_TRACING_AVAILABLE",
+                    "LinuxTracingHandle",
+                    "ProcSnapshot",
+                    "read_boot_id",
+                    "read_starttime_ticks",
+                    "start_linux_tracing",
+                }
+            ),
+        ),
+    ],
+)
+def test_execution_split_gateway_exports_exact_names_and_objects(
+    package: str, names: frozenset[str]
+) -> None:
+    import importlib
+
+    parent = importlib.import_module("autoskillit.execution")
+    gateway = importlib.import_module(f"autoskillit.execution.{package}")
+    assert set(gateway.__all__) == names
+    assert all(getattr(parent, name) is getattr(gateway, name) for name in names)

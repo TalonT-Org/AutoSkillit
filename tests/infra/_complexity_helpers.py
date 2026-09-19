@@ -31,8 +31,21 @@ def load_check_script(name: str, path: Path):
     assert spec is not None
     assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
+    previous_path = list(sys.path)
+    missing = object()
+    previous_module = sys.modules.get(name, missing)
     sys.modules[name] = mod
-    spec.loader.exec_module(mod)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        if previous_module is missing:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous_module
+        raise
+    finally:
+        sys.path[:] = previous_path
     return mod
 
 

@@ -435,7 +435,7 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
 async def test_terminal_launch_provider_stamps_selection_and_result(
     minimal_ctx, tmp_path, monkeypatch, is_resume
 ) -> None:
-    import autoskillit.execution.evidence.session_log as session_log
+    import autoskillit.execution.session_log.session_log as session_log
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _sr
@@ -526,7 +526,7 @@ async def test_terminal_launch_provider_stamps_selection_and_result(
 async def test_manifest_write_failure_does_not_skip_terminal_flush(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    import autoskillit.execution.evidence.session_log as session_log
+    import autoskillit.execution.session_log.session_log as session_log
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _sr

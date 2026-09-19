@@ -2,7 +2,7 @@
 
 Cross-submodule helpers are imported directly from their submodules
 (``.._open_kitchen_transition``, ``.._open_kitchen_errors``,
-``.._tracker_authority``) to avoid a circular-import hazard through the
+``.._recipe_serve``) to avoid a circular-import hazard through the
 package facade.
 """
 
@@ -15,19 +15,21 @@ from autoskillit.pipeline import (
     transition_confirm,
     transition_degraded,
 )
+from autoskillit.server._tracker_authority import (
+    _register_active_kitchen,
+    _retain_kitchen_tracker_authority,
+)
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
+from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
+    prune_stale_kitchen_state,
+)
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
     _ensure_kitchen_transition,
     _transition_start,
-)
-from autoskillit.server.tools.tools_kitchen._tracker_authority import (
-    _register_active_recipe_kitchen,
-    _retain_kitchen_tracker_authority,
-    prune_stale_kitchen_state,
 )
 
 logger = get_logger(__name__)
@@ -165,7 +167,10 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
     if _transition_start(ctx, "registry_update"):
         try:
             _retain_kitchen_tracker_authority(ctx)
-            _register_active_recipe_kitchen(ctx)
+            identity = _register_active_kitchen(ctx)
+            from autoskillit.server.recipe import _recipe_generation  # circular-break
+
+            _recipe_generation.activate_kitchen(identity.kitchen_id)
         except Exception as exc:
             transition_degraded(ctx, "registry_update", exc)
             logger.warning("open_kitchen_registry_failed", exc_info=True)

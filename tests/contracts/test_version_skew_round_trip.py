@@ -32,7 +32,7 @@ _FORMAT_COVERAGE = {
     "retiring_cache": _SkewCoverage(
         unknown_member_file="tests/contracts/test_launch_path_survives_unsafe_queue.py",
         unknown_member_test="test_unknown_artifact_kind_does_not_condemn_the_sibling_records",
-        future_version_file="tests/core/test_plugin_cache.py",
+        future_version_file="tests/core/test__plugin_cache.py",
         future_version_test="test_future_schema_is_preserved_and_mutation_is_refused",
     ),
     "fleet_campaign_state": _SkewCoverage(

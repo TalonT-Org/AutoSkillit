@@ -11,11 +11,12 @@ import pytest
 import structlog
 
 import autoskillit.execution.process._termination as _patch_process__termination
-from autoskillit.core import KillReason, ProcessCleanupResult, TerminationAction
+from autoskillit.core import KillReason, ProcessCleanupResult, TerminationAction, TerminationReason
 from autoskillit.execution.process import (
     RaceAccumulator,
     TetherSpec,
     _watch_process,
+    decide_termination_action,
     execute_termination_action,
     run_managed_async,
     run_managed_sync,
@@ -24,6 +25,17 @@ from autoskillit.execution.process import (
 from autoskillit.execution.process._lifecycle import owned_group as _owned_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def test_output_limit_selects_immediate_kill() -> None:
+    assert (
+        decide_termination_action(
+            TerminationReason.OUTPUT_LIMIT,
+            timeout_fired=False,
+            process_exited=False,
+        )
+        is TerminationAction.IMMEDIATE_KILL
+    )
 
 
 async def _spawn(delay: float, tmp_path: Path) -> object:

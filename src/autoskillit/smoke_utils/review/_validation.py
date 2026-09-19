@@ -7,6 +7,9 @@ import json
 import math
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
+from typing import TypeGuard
+
+import regex as re
 
 from autoskillit.core import AnchorAdmission, DiffAnchorAuthority, get_logger
 from autoskillit.smoke_utils._review_contracts import (
@@ -31,6 +34,9 @@ _STANDARD_FINDING_KEYS = {
     "requires_decision",
 }
 _REVIEW_SEVERITIES = {"critical", "warning", "info"}
+_DOC_COUNT_DIAGNOSTIC = re.compile(
+    r"^\s*(?P<file>[^\s:][^:]*):(?P<line>[1-9][0-9]*):\s*(?P<message>\S.*)\s*$"
+)
 
 _EXPERIMENTAL_CANDIDATE_KEYS = {
     "file",
@@ -117,7 +123,7 @@ def build_malformed_review_envelope(
     }
 
 
-def _is_positive_int(value: object) -> bool:
+def _is_positive_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
@@ -262,14 +268,45 @@ def deletion_regression_is_eligible(deletion_context: object) -> bool:
     )
 
 
-def _standard_finding_validation_error(
+def _parse_doc_count_preflight_diagnostics(output: str) -> list[dict[str, object]]:
+    """Convert deterministic ``check-docs`` diagnostics into review findings.
+
+    ``check-docs`` may also print a heading and summary around its diagnostics.  Only
+    the machine-readable ``path:line: message`` records become findings, and sorting
+    makes the accepted set independent of command-stream ordering.
+    """
+    findings: list[dict[str, object]] = []
+    for raw_line in output.splitlines():
+        match = _DOC_COUNT_DIAGNOSTIC.fullmatch(raw_line)
+        if match is None:
+            continue
+        findings.append(
+            {
+                "file": match["file"],
+                "line": int(match["line"]),
+                "dimension": "tests",
+                "severity": "critical",
+                "message": match["message"],
+                "requires_decision": False,
+            }
+        )
+
+    def sort_key(finding: Mapping[str, object]) -> tuple[str, int, str]:
+        line = finding["line"]
+        if not _is_positive_int(line):
+            raise ValueError("doc-count finding line must be a positive integer")
+        return (str(finding["file"]), line, str(finding["message"]))
+
+    return sorted(findings, key=sort_key)
+
+
+def _review_finding_schema_error(
     finding: object,
     *,
     deletion_only: bool,
-    anchor_authority: DiffAnchorAuthority,
     allowed_dimensions: Collection[str],
     review_root: Path,
-) -> str | AnchorAdmission | None:
+) -> str | None:
     key_error = _closed_key_set_error(
         finding,
         expected=_STANDARD_FINDING_KEYS,
@@ -295,8 +332,51 @@ def _standard_finding_validation_error(
         return "line must be a positive integer"
     if not _is_contained_relative_path(finding["file"], review_root):
         return "file escapes the review root"
+    return None
+
+
+def _standard_finding_validation_error(
+    finding: object,
+    *,
+    deletion_only: bool,
+    anchor_authority: DiffAnchorAuthority,
+    allowed_dimensions: Collection[str],
+    review_root: Path,
+) -> str | AnchorAdmission | None:
+    error = _review_finding_schema_error(
+        finding,
+        deletion_only=deletion_only,
+        allowed_dimensions=allowed_dimensions,
+        review_root=review_root,
+    )
+    if error is not None:
+        return error
+    assert isinstance(finding, dict)
     admission = anchor_authority.classify(str(finding["file"]), int(finding["line"]), "RIGHT")
     return None if admission is AnchorAdmission.ADMITTED else admission
+
+
+def _doc_count_finding_validation_error(
+    finding: object,
+    *,
+    review_root: Path,
+) -> str | None:
+    """Validate a review-level doc-count finding without requiring a diff anchor."""
+    error = _review_finding_schema_error(
+        finding,
+        deletion_only=False,
+        allowed_dimensions={"tests"},
+        review_root=review_root,
+    )
+    if error is not None:
+        assert isinstance(error, str)
+        return error
+    assert isinstance(finding, dict)
+    if finding["severity"] != "critical":
+        return "doc-count severity must be critical"
+    if finding["requires_decision"] is not False:
+        return "doc-count requires_decision must be false"
+    return None
 
 
 def validate_experimental_auditor_outputs(

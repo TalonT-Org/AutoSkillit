@@ -196,6 +196,35 @@ def _consume_argv_flag(
     return (None, i, False)
 
 
+def _spec_key_for_token(token_text: str, spec: Mapping[str, _FlagArity]) -> str:
+    """Return the canonical *spec* key for a recognized flag token.
+
+    Mirrors the normalization that hand-rolled implementations used in
+    ``_analyze_curl_segment``, ``_analyze_gh_api``, and
+    ``_issue_edit_request_count`` -- which each repeated the same
+    ``--long`` / ``--long=value`` / ``-X`` / ``-Xvalue`` collapsing under
+    slightly different shapes. Callers that have already determined
+    ``token_text`` is recognized (typically via :func:`_consume_argv_flag`)
+    use this helper to recover the spec key for downstream arity /
+    canonical-name lookups.
+
+    - ``token_text`` already a key in *spec*: returned unchanged.
+    - ``token_text`` starts with ``--``: partition on ``=`` to strip any
+      attached value (``--flag=value`` -> ``--flag``).
+    - ``token_text`` is a bundled short flag (``-Xy...``): truncate to the
+      first two characters (``-Xy`` -> ``-X``) so the spec key surfaces.
+    - Otherwise (a bare short flag with no attached value): returned
+      unchanged so callers see the same form the spec declares.
+    """
+    if token_text in spec:
+        return token_text
+    if token_text.startswith("--"):
+        return token_text.partition("=")[0]
+    if len(token_text) > 2:
+        return token_text[:2]
+    return token_text
+
+
 def _consume_str_flag(
     tokens: Sequence[str], i: int, spec: Mapping[str, _FlagArity]
 ) -> tuple[str | None, int, bool]:

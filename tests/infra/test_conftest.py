@@ -170,7 +170,7 @@ def test_minimal_ctx_imports_only_l0_l1_composition_packages():
     import ast
     from pathlib import Path
 
-    conftest_path = Path(__file__).parent / "conftest.py"
+    conftest_path = Path(__file__).parent.parent / "conftest.py"
     tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
 
     func = None
@@ -216,7 +216,7 @@ def test_minimal_ctx_has_no_server_factory_dependency():
     import ast
     from pathlib import Path
 
-    conftest_path = Path(__file__).parent / "conftest.py"
+    conftest_path = Path(__file__).parent.parent / "conftest.py"
     tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
 
     func = None
@@ -242,7 +242,7 @@ def test_scrub_ambient_env_no_server_import():
     import ast
     from pathlib import Path
 
-    conftest_path = Path(__file__).parent / "conftest.py"
+    conftest_path = Path(__file__).parent.parent / "conftest.py"
     tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
 
     func = None
@@ -361,7 +361,7 @@ def test_no_per_test_config_cache_clear_fixture():
 
     import pytest
 
-    conftest_path = Path(__file__).resolve().parent / "conftest.py"
+    conftest_path = Path(__file__).resolve().parent.parent / "conftest.py"
     assert conftest_path.exists(), f"conftest.py not found at {conftest_path}"
     tree = ast.parse(conftest_path.read_text())
     for node in ast.walk(tree):

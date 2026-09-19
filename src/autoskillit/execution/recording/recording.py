@@ -27,16 +27,16 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
-from autoskillit.execution.evidence._recording_skills import (
+from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
+from autoskillit.execution.recording._recording_skills import (
     _extract_ephemeral_add_dir,
     scan_skill_snapshots,
     snapshot_skill_dir,
     validate_skill_snapshot_members,
 )
-from autoskillit.execution.evidence._recording_skills import (
+from autoskillit.execution.recording._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
 )
-from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
@@ -151,6 +151,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        max_combined_output_bytes: int | None = None,
         backend_resume_session_id: str = "",
         line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
@@ -166,7 +167,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if step_name:
-            if pty_mode and not pass_fds:
+            if pty_mode and not pass_fds and max_combined_output_bytes is None:
                 return await self._record_session(
                     cmd=cmd,
                     step_name=step_name,
@@ -207,6 +208,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     on_session_id_resolved=on_session_id_resolved,
                     child_deferral_ceiling=child_deferral_ceiling,
                     capture_dir=capture_dir,
+                    max_combined_output_bytes=max_combined_output_bytes,
                     backend_resume_session_id=backend_resume_session_id,
                     line_driver=line_driver,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -244,6 +246,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 on_session_id_resolved=on_session_id_resolved,
                 child_deferral_ceiling=child_deferral_ceiling,
                 capture_dir=capture_dir,
+                max_combined_output_bytes=max_combined_output_bytes,
                 backend_resume_session_id=backend_resume_session_id,
                 line_driver=line_driver,
                 lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -291,6 +294,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
+            max_combined_output_bytes=max_combined_output_bytes,
             backend_resume_session_id=backend_resume_session_id,
             line_driver=line_driver,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -401,6 +405,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        max_combined_output_bytes: int | None = None,
         backend_resume_session_id: str = "",
         line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
@@ -437,6 +442,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
+            max_combined_output_bytes=max_combined_output_bytes,
             backend_resume_session_id=backend_resume_session_id,
             line_driver=line_driver,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -556,6 +562,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        max_combined_output_bytes: int | None = None,
         backend_resume_session_id: str = "",
         line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
@@ -571,6 +578,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
             on_process_spawned,
             on_process_reaped,
             backend_resume_session_id,
+            max_combined_output_bytes,
             line_driver,
             ceiling_seconds,
             systemd_scope_enabled,

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 _APP_PATH = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli" / "app.py"
 _SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"

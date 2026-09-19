@@ -375,6 +375,7 @@ def _build_skill_result(
         TerminationReason.STALE,
         TerminationReason.TIMED_OUT,
         TerminationReason.IDLE_STALL,
+        TerminationReason.OUTPUT_LIMIT,
         TerminationReason.HEALTH_INSPECTOR,
         TerminationReason.SIGNAL_DEATH,
     }
@@ -432,6 +433,8 @@ def _build_skill_result(
         if result.termination == TerminationReason.STALE
         else "timed_out"
         if result.termination == TerminationReason.TIMED_OUT
+        else "output_limit"
+        if result.termination == TerminationReason.OUTPUT_LIMIT
         else "normal"
     )
     logger.debug(

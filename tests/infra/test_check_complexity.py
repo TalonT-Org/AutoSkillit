@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import ast
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -28,6 +30,7 @@ _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity"
 
 check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+git_plumbing = sys.modules["_git_plumbing"]
 
 
 # --- shared helpers --------------------------------------------------------------------
@@ -361,14 +364,14 @@ def test_evaluate_unparseable_base_yields_new_function_violation(capsys):
 
 def test_evaluate_missing_required_head_source_raises_git_failure():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
-    with pytest.raises(check.GitFailure):
+    with pytest.raises(git_plumbing.GitFailure):
         check.evaluate(changes, {}.get, {}.get, _policy())
 
 
 def test_evaluate_missing_required_base_source_raises_git_failure():
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     heads = {"src/x.py": _source_with_function("f", 5)}
-    with pytest.raises(check.GitFailure):
+    with pytest.raises(git_plumbing.GitFailure):
         check.evaluate(changes, heads.get, {}.get, _policy())
 
 
@@ -554,7 +557,7 @@ def test_staged_mode_git_commands(monkeypatch):
             return _FakeCompleted(0, b"def f():\n    pass\n")
         raise AssertionError(f"unexpected git call: {args}")
 
-    monkeypatch.setattr(check, "_git", fake_git)
+    monkeypatch.setattr(git_plumbing, "_git", fake_git)
     check.changed_files(Path("/repo"), staged=True, base_rev="HEAD")
     assert ("diff", "--cached", "--name-status", "-M", "-z", "--diff-filter=AMRD", "HEAD") in calls
 
@@ -568,7 +571,7 @@ def test_base_mode_git_commands(monkeypatch):
             return _FakeCompleted(0, b"")
         raise AssertionError(f"unexpected git call: {args}")
 
-    monkeypatch.setattr(check, "_git", fake_git)
+    monkeypatch.setattr(git_plumbing, "_git", fake_git)
     check.changed_files(Path("/repo"), staged=False, base_rev="abc123")
     assert ("diff", "--name-status", "-M", "-z", "--diff-filter=AMRD", "abc123") in calls
     assert ("ls-files", "--others", "--exclude-standard", "-z") in calls
@@ -581,16 +584,16 @@ def test_readers_use_index_and_named_revision(monkeypatch):
         calls.append(args)
         return _FakeCompleted(0, b"def f():\n    pass\n")
 
-    monkeypatch.setattr(check, "_git", fake_git)
-    check._index_reader(Path("/repo"))("src/a.py")
+    monkeypatch.setattr(git_plumbing, "_git", fake_git)
+    git_plumbing._index_reader(Path("/repo"))("src/a.py")
     assert ("show", ":src/a.py") in calls
-    check.git_show(Path("/repo"), "HEAD", "src/a.py")
+    git_plumbing._revision_required_reader(Path("/repo"), "HEAD")("src/a.py")
     assert ("show", "HEAD:src/a.py") in calls
 
 
 def test_working_tree_reader_reads_real_files(tmp_path):
     (tmp_path / "a.py").write_text("def f():\n    pass\n", encoding="utf-8")
-    reader = check._working_tree_reader(tmp_path)
+    reader = git_plumbing._working_tree_reader(tmp_path)
     assert reader("a.py") == "def f():\n    pass\n"
     assert reader("missing.py") is None
 
@@ -609,7 +612,7 @@ def test_git_timeout_exits_2(monkeypatch, capsys):
     def fake_run(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(cmd="git", timeout=30)
 
-    monkeypatch.setattr(check.subprocess, "run", fake_run)
+    monkeypatch.setattr(git_plumbing.subprocess, "run", fake_run)
     exit_code = check.main(["--staged", "--repo-root", "/tmp"])
     assert exit_code == 2
     assert capsys.readouterr().err != ""
@@ -618,8 +621,88 @@ def test_git_timeout_exits_2(monkeypatch, capsys):
 def test_decode_source_honors_encoding_cookie():
     source = "# -*- coding: latin-1 -*-\ndef f():\n    pass  # cafe: \xe9\n"
     data = source.encode("latin-1")
-    text = check._decode_source(data)
+    text = git_plumbing._decode_source(data)
     assert text == source
+
+
+def test_unreadable_working_tree_source_exits_2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _seed_repo(tmp_path, "def f():\n    pass\n")
+    (repo / "src" / "a.py").write_text(
+        "def f():\n    if changed:\n        pass\n", encoding="utf-8"
+    )
+    original_read_bytes = Path.read_bytes
+
+    def fail_source(path: Path) -> bytes:
+        if path == repo / "src" / "a.py":
+            raise PermissionError("source is unreadable")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", fail_source)
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 2
+    assert "unreadable" in capsys.readouterr().err
+
+
+def test_undecodable_working_tree_source_exits_2(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _seed_repo(tmp_path, "def f():\n    pass\n")
+    (repo / "src" / "a.py").write_bytes(
+        b"# coding: definitely-not-an-encoding\ndef f():\n    pass\n"
+    )
+
+    assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 2
+    assert "encoding" in capsys.readouterr().err
+
+
+def test_load_check_script_restores_sys_path_and_keeps_success_registration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = tmp_path / "checker.py"
+    script.write_text("import _git_plumbing\nHELPER = _git_plumbing\n", encoding="utf-8")
+    name = "_autoskillit_loader_success_probe"
+    monkeypatch.delitem(sys.modules, name, raising=False)
+    previous_path = list(sys.path)
+
+    loaded = load_check_script(name, script)
+
+    assert sys.path == previous_path
+    assert sys.modules[name] is loaded
+    assert loaded.HELPER is git_plumbing
+
+
+@pytest.mark.parametrize("has_previous", [False, True])
+def test_load_check_script_restores_registration_after_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    has_previous: bool,
+) -> None:
+    script = tmp_path / "broken_checker.py"
+    script.write_text(
+        "import _git_plumbing\nraise RuntimeError('load failed')\n", encoding="utf-8"
+    )
+    name = f"_autoskillit_loader_failure_probe_{has_previous}"
+    previous = ModuleType(name)
+    if has_previous:
+        monkeypatch.setitem(sys.modules, name, previous)
+    else:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    previous_path = list(sys.path)
+
+    with pytest.raises(RuntimeError, match="load failed"):
+        load_check_script(name, script)
+
+    assert sys.path == previous_path
+    if has_previous:
+        assert sys.modules[name] is previous
+    else:
+        assert name not in sys.modules
 
 
 # --- load_policy: literal-only extraction ---------------------------------------------------

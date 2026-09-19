@@ -238,6 +238,9 @@ class SubprocessRunner(Protocol):
         the originating session. Threaded from fleet dispatch / run_skill through
         headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
         Default ``None`` (match any marker).
+    max_combined_output_bytes : int | None
+        Combined stdout/stderr byte ceiling. When set, managed capture terminates
+        the owned process as soon as the aggregate output exceeds this value.
     """
 
     def __call__(
@@ -273,6 +276,7 @@ class SubprocessRunner(Protocol):
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        max_combined_output_bytes: int | None = None,
         backend_resume_session_id: str = "",
         line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,

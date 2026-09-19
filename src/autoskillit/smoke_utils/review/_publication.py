@@ -93,6 +93,8 @@ def normalize_local_review_finding(finding: Mapping[str, object]) -> dict[str, o
 
 
 def _normalize_handoff_finding(finding: Mapping[str, object]) -> dict[str, object]:
+    if "anchor_digest" in finding:
+        raise ValueError("anchor_digest is produced only by diff-context enrichment")
     normalized = dict(finding)
     normalized.setdefault("path", normalized.get("file", ""))
     normalized.setdefault("body", render_review_finding_body(normalized))
@@ -112,6 +114,7 @@ def prepare_experimental_review_publication(
     handoff_metadata: Mapping[str, object] | None = None,
     receipt: Mapping[str, object] | None = None,
     unpostable: Sequence[Mapping[str, object]] = (),
+    review_level_findings: Sequence[Mapping[str, object]] = (),
 ) -> dict[str, object]:
     """Build one immutable publication generation or suppress stale effects."""
     if mode not in {"github", "local"}:
@@ -133,11 +136,29 @@ def prepare_experimental_review_publication(
             separators=(",", ":"),
         )
     )
+    normalized_review_level_findings = json.loads(
+        json.dumps(
+            [_normalize_handoff_finding(finding) for finding in review_level_findings],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
     effective_survivors = normalized_survivors if snapshot_is_fresh else []
     effective_unpostable = normalized_unpostable if snapshot_is_fresh else []
+    effective_review_level_findings = normalized_review_level_findings if snapshot_is_fresh else []
     metadata = json.loads(
         json.dumps(dict(handoff_metadata or {}), sort_keys=True, separators=(",", ":"))
     )
+    requested_schema_version = metadata.pop("schema_version", None)
+    review_level_candidate_ids = {
+        finding.get("candidate_id") for finding in effective_review_level_findings
+    }
+    context_entries = [
+        finding
+        for finding in effective_survivors
+        if finding.get("candidate_id") not in review_level_candidate_ids
+    ]
+    schema_version = 2 if requested_schema_version == 2 and not context_entries else 1
     generation_input = json.dumps(
         {
             "annotation_generation_id": annotation_generation_id,
@@ -148,6 +169,7 @@ def prepare_experimental_review_publication(
             "snapshot_is_fresh": snapshot_is_fresh,
             "survivors": effective_survivors,
             "unpostable": effective_unpostable,
+            "review_level_findings": effective_review_level_findings,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -181,8 +203,10 @@ def prepare_experimental_review_publication(
     diff_context = {
         **metadata,
         **identity,
-        "context_entries": normalized_survivors,
+        "schema_version": schema_version,
+        "context_entries": context_entries,
         "unpostable": normalized_unpostable,
+        "review_level_findings": effective_review_level_findings,
     }
     artifacts: dict[str, object] = {
         "raw_findings": raw_findings,

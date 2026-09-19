@@ -18,11 +18,11 @@ from autoskillit.core import (
     read_boot_id,
     read_starttime_ticks,
 )
-from autoskillit.execution.evidence._session_retention import (
+from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
+from autoskillit.execution.session_log._session_log_retention import (
     prune_execution_candidate_manifests_at_root,
 )
-from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
-from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
+from autoskillit.execution.session_log.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
 
@@ -199,10 +199,10 @@ def recover_crashed_sessions(
     """
     try:
         # Deferred: autoskillit.execution.child_outcomes imports
-        # autoskillit.execution.evidence.session_log, which would otherwise
-        # make this module-level import a circular import through the
-        # evidence/ gateway (execution.evidence -> _session_log_recovery ->
-        # child_outcomes -> execution.evidence.session_log).
+        # autoskillit.execution.session_log.session_log at module level, which
+        # would otherwise make this module-level import a circular import
+        # through the session_log/ gateway (execution.session_log ->
+        # _session_log_recovery -> child_outcomes -> session_log.session_log).
         from autoskillit.execution.child_outcomes import reconcile_child_outcome_snapshots
 
         reconcile_child_outcome_snapshots(resolve_log_dir(log_dir))

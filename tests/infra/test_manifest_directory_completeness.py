@@ -32,6 +32,7 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
             "docs/developer/contributing.md",
             "scripts/ci_target_policy.py",
             "scripts/check_complexity.py",
+            "scripts/_git_plumbing.py",
         }
     ),
     "workspace": frozenset(
@@ -60,6 +61,7 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
             ".github/CODEOWNERS",
             "scripts/check_policy_relaxation.py",
             "scripts/check_complexity.py",
+            "scripts/_git_plumbing.py",
         }
     ),
     "contracts": frozenset({"src/autoskillit/assets/**/*", "src/autoskillit/agents/**"}),

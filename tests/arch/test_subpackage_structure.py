@@ -171,7 +171,10 @@ class TestCoreSubpackages:
 
 
 class TestExecutionSubpackages:
-    @pytest.mark.parametrize("subpkg", ["headless", "process", "session", "merge_queue"])
+    @pytest.mark.parametrize(
+        "subpkg",
+        ["headless", "process", "session", "merge_queue", "evidence", "recording", "session_log"],
+    )
     def test_subpackage_is_package(self, subpkg):
         assert (SRC / "execution" / subpkg / "__init__.py").exists()
 

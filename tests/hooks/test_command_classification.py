@@ -40,6 +40,9 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     _CURL_FLAG_SPEC,
     _GH_API_FLAG_SPEC,
     _GH_HELP_FLAGS,
+    _GH_ISSUE_EDIT_FLAG_SPEC,
+    _GH_ISSUE_EDIT_REFERENCE_FLAGS,
+    _GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS,
     GitHubMutationAnalysis,
     GitHubMutationKind,
     GitHubMutationRecord,
@@ -47,7 +50,6 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     analyze_github_mutations,
 )
 from tests._evaluation_shape_matrix import (
-    DEFERRED_SHAPES,
     EVALUATION_SHAPE_MATRIX,
     wrap_git_op,
 )
@@ -2586,6 +2588,138 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.request_count == 1
 
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS))
+    @pytest.mark.parametrize("form", ["separated", "equals", "csv", "repeated"])
+    def test_issue_edit_relationship_flags_are_one_request(self, flag: str, form: str) -> None:
+        if form == "separated":
+            arguments = f"{flag} 4726"
+        elif form == "equals":
+            arguments = f"{flag}=4726"
+        elif form == "csv":
+            arguments = (
+                f'{flag} "https://github.com/o/r/issues/4726,https://github.com/o/r/issues/4727"'
+            )
+        else:
+            arguments = f"{flag} 4726 {flag} 4727"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {arguments}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert len(analysis.mutations) == 1
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 4734 --parent 4726",
+            "gh issue edit 4734 --parent=https://github.com/o/r/issues/4726",
+            "gh issue edit 4734 --type Bug",
+            'gh issue edit 4734 --type=Bug --type="Bug, feature"',
+        ],
+        ids=["parent-number", "parent-url", "type-separated", "type-repeated-comma"],
+    )
+    def test_issue_edit_parent_and_type_flags_are_one_request(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize("flag", ["--remove-milestone", "--remove-parent", "--remove-type"])
+    @pytest.mark.parametrize("position", ["before", "after"])
+    @pytest.mark.parametrize("target_count", [1, 2])
+    def test_issue_edit_boolean_removal_flags_do_not_consume_target(
+        self, flag: str, position: str, target_count: int
+    ) -> None:
+        targets = " ".join(str(4700 + offset) for offset in range(target_count))
+        command = (
+            f"gh issue edit {flag} {targets}"
+            if position == "before"
+            else f"gh issue edit {targets} {flag}"
+        )
+
+        analysis = analyze_github_mutations(command)
+
+        if target_count == 1:
+            assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+            assert analysis.request_count == 1
+        else:
+            assert analysis.status is GitHubMutationStatus.MULTIPLE
+            assert analysis.request_count == target_count
+
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
+    @pytest.mark.parametrize(
+        "value",
+        ["$RELATED", "${RELATED}", "$(echo 4726)"],
+        ids=["bare-variable", "braced-variable", "command-substitution"],
+    )
+    @pytest.mark.parametrize("form", ["separated", "equals"])
+    def test_issue_edit_reference_flags_reject_dynamic_values(
+        self, flag: str, value: str, form: str
+    ) -> None:
+        argument = f"{flag} {value}" if form == "separated" else f"{flag}={value}"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {argument}")
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "4726,",  # trailing empty CSV field
+            ",4726",  # leading empty CSV field
+            "foo",  # single non-numeric reference
+            "4726,foo",  # mixed valid + invalid
+            "12.5",  # decimal-looking but not isdecimal()
+        ],
+        ids=[
+            "trailing-empty-field",
+            "leading-empty-field",
+            "single-non-numeric",
+            "mixed-valid-and-invalid",
+            "decimal-looking",
+        ],
+    )
+    def test_issue_edit_reference_flags_reject_malformed_csv(self, flag: str, value: str) -> None:
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}={value}")
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "gh issue edit 4734 {flag}",
+            "gh issue edit 4734 {flag}=",
+            "gh issue edit 4734 {flag} --title updated",
+        ],
+        ids=["missing", "empty-equals", "next-flag-is-not-a-value"],
+    )
+    def test_issue_edit_reference_flags_require_values(
+        self, flag: str, command_template: str
+    ) -> None:
+        analysis = analyze_github_mutations(command_template.format(flag=flag))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "missing_required_value"
+
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_FLAG_SPEC))
+    def test_every_issue_edit_spec_flag_is_recognized(self, flag: str) -> None:
+        value = ""
+        if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE:
+            value = " 4726" if flag in _GH_ISSUE_EDIT_REFERENCE_FLAGS else " value"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}{value}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
     @pytest.mark.parametrize(
         "command",
         [
@@ -3273,74 +3407,130 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
     assert result.subcommand != "<unresolved>"
 
 
-class TestDeferredStdinLiteralShapes:
-    """Strict-XFAIL regressions for the five _HEREDOC_BODY_RE limitations
-    deferred by rectify #4941 Part A (tracking issue #4973 --
-    tests/arch/test_hook_raw_command_scan_inventory.py's deferral registry
-    names these exact node IDs and requires this class to keep existing).
-
-    Each shape is intended to behave as a single inert `cat` consumer with
-    its inner text bound as one StdinLiteral; the regex limitation instead
-    leaks the inner text out as its own executable top-level segment. A
-    strict xfail means: if this ever starts passing, pytest errors instead
-    of silently going green, forcing the deferral entry to be removed.
-    """
+class TestStructuralHeredocShapes:
+    """Regressions for structural heredoc delimiter and body handling."""
 
     def _assert_single_inert_cat_literal(self, command: str, expected_body: str) -> None:
         segments = command_classification._tokenize_command_segments_with_redirects(command)
         assert len(segments) == 1
         assert segments[0].tokens == ["cat"]
-        assert len(segments[0].stdin_literals) == 1
-        assert segments[0].stdin_literals[0].text == expected_body
+        assert [literal.text for literal in segments[0].stdin_literals] == [expected_body]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="issue #4973: a second `<<` operator on the same opening line "
-        "is not recognized as a distinct heredoc",
-    )
     def test_two_heredocs_one_line(self) -> None:
         inner = "git push --force origin main"
-        cmd = DEFERRED_SHAPES["two-heredocs-one-line"](inner)
-        self._assert_single_inert_cat_literal(cmd, inner)
+        cmd = f"cat <<'A' <<'B'\nignored\nA\n{inner}\nB\n"
+        segments = command_classification._tokenize_command_segments_with_redirects(cmd)
+        assert len(segments) == 1
+        assert segments[0].tokens == ["cat"]
+        assert [literal.text for literal in segments[0].stdin_literals] == ["ignored", inner]
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
+        assert all(literal.kind == "heredoc" for literal in segments[0].stdin_literals)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="issue #4973: a backslash-quoted delimiter (`<<\\EOF`) is not recognized as quoted",
-    )
     def test_backslash_quoted_delimiter(self) -> None:
         inner = "git push --force origin main"
-        cmd = DEFERRED_SHAPES["backslash-quoted-delimiter"](inner)
+        cmd = f"cat <<\\EOF\n{inner}\nEOF\n"
         self._assert_single_inert_cat_literal(cmd, inner)
+        assert (
+            command_classification._tokenize_command_segments_with_redirects(cmd)[0]
+            .stdin_literals[0]
+            .outer_expansion
+            is False
+        )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='issue #4973: a partially quoted delimiter (`<<E"OF"`) is '
-        "not recognized by the single leading/trailing quote-character group",
-    )
     def test_partially_quoted_delimiter(self) -> None:
         inner = "git push --force origin main"
-        cmd = DEFERRED_SHAPES["partially-quoted-delimiter"](inner)
+        cmd = f'cat <<E"OF"\n{inner}\nEOF\n'
         self._assert_single_inert_cat_literal(cmd, inner)
+        assert (
+            command_classification._tokenize_command_segments_with_redirects(cmd)[0]
+            .stdin_literals[0]
+            .outer_expansion
+            is False
+        )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="issue #4973: an unterminated heredoc never matches at all, "
-        "so its body tokenizes as ordinary outer command text",
-    )
     def test_unterminated_heredoc(self) -> None:
         inner = "git push --force origin main"
-        cmd = DEFERRED_SHAPES["unterminated-heredoc"](inner)
+        cmd = f"cat <<'EOF'\n{inner}\n"
         self._assert_single_inert_cat_literal(cmd, inner)
+        literal = command_classification._tokenize_command_segments_with_redirects(cmd)[
+            0
+        ].stdin_literals[0]
+        assert literal.source_span is not None
+        assert cmd[literal.source_span[0] : literal.source_span[1]] == inner
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="issue #4973: the \\w+ delimiter class rejects a delimiter "
-        "containing non-word characters such as a hyphen",
-    )
     def test_non_word_delimiter(self) -> None:
         inner = "git push --force origin main"
-        cmd = DEFERRED_SHAPES["non-word-delimiter"](inner)
+        cmd = f"cat <<'END-DOC'\n{inner}\nEND-DOC\n"
         self._assert_single_inert_cat_literal(cmd, inner)
+        assert (
+            command_classification._tokenize_command_segments_with_redirects(cmd)[0]
+            .stdin_literals[0]
+            .outer_expansion
+            is False
+        )
+
+    def test_same_line_heredocs_bind_to_their_pipeline_segments(self) -> None:
+        command = "cat <<A | bash <<B\nleft\nA\nright\nB\n"
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [segment.tokens for segment in segments] == [["cat"], ["bash"]]
+        assert [literal.text for literal in segments[0].stdin_literals] == ["left"]
+        assert [literal.text for literal in segments[1].stdin_literals] == ["right"]
+
+    def test_only_final_heredoc_feeds_cat_pipeline(self) -> None:
+        command = "cat <<A <<B | bash\nignored\nA\ngit push --force origin main\nB\n"
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [segment.tokens for segment in segments] == [["cat"], ["bash"]]
+        assert [literal.text for literal in segments[0].stdin_literals] == [
+            "ignored",
+            "git push --force origin main",
+        ]
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
+        payloads = evaluated_payloads(command)
+        assert [
+            (payload.origin, payload.text) for payload in payloads if payload.origin == "pipe"
+        ] == [("pipe", "git push --force origin main")]
+        assert _GIT_PUSH_FORCE_ARGV in [
+            command_verb_and_args(segment) for segment in all_evaluated_segments(command) or []
+        ]
+
+    def test_only_final_heredoc_feeds_python(self) -> None:
+        command = (
+            "python3 - <<A <<B\n"
+            "import subprocess; subprocess.run(['git', 'push'])\n"
+            "A\n"
+            "print('safe')\n"
+            "B\n"
+        )
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [segment.tokens for segment in segments] == [["python3", "-"]]
+        assert [literal.text for literal in segments[0].stdin_literals] == [
+            "import subprocess; subprocess.run(['git', 'push'])",
+            "print('safe')",
+        ]
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
+        assert interpreter_invokes(command, target=("git", "push")) is False
+
+    def test_herestring_overrides_heredoc_but_keeps_outer_expansion(self) -> None:
+        command = "bash <<A <<< 'echo safe'\n$(git push --force origin main)\nA\n"
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
+        substitutions = [
+            payload.text
+            for payload in evaluated_payloads(command)
+            if payload.origin == "substitution"
+        ]
+        assert substitutions == ["git push --force origin main"]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo ok # <<EOF\nbody\nEOF\necho after\n",
+            "echo $(( 1 << 2 ))\necho after\n",
+        ],
+        ids=["comment", "arithmetic"],
+    )
+    def test_non_redirection_double_less_than_does_not_capture_tail(self, command: str) -> None:
+        assert command_classification.strip_heredoc_bodies(command) == command
 
 
 class TestSiblingWrappersDelegate:

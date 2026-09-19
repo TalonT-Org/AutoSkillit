@@ -248,6 +248,10 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
             # git.py needs it to strip progress noise from test gate output,
             # matching the pattern in tools_workspace.py.
             "autoskillit.server._misc",
+            # _self_revert owns the injected-runner, bounded first-parent scan;
+            # git.py retains its public detector import without absorbing the
+            # parsing implementation into the merge workflow.
+            "autoskillit.server._self_revert",
             # workspace is IL-1; git.py delegates worktree removal to the
             # single IL-1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",
@@ -396,7 +400,6 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/tools/tools_kitchen/_disable_quota_guard.py"),
         Path("server/tools/tools_kitchen/_get_recipe.py"),
         Path("server/tools/tools_kitchen/_hook_config.py"),
-        Path("server/tools/tools_kitchen/_tracker_authority.py"),
         Path("server/tools/tools_kitchen/_declare_join_batch.py"),
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011

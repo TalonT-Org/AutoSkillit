@@ -432,6 +432,7 @@ GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
         ),
         required_patterns=frozenset(
             {
+                "drift-discipline",
                 "graphql-batch-aliases",
                 "mutating-call-delay",
             }

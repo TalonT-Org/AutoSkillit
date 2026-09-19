@@ -50,8 +50,8 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 ## Adding Agents
 
 1. Create `{agent-name}.md` in this directory with YAML frontmatter
-2. Add the pack to `AGENT_PACK_REGISTRY` in `core/types/_type_constants.py`
-3. Add the pack tag to `ALL_VISIBILITY_TAGS` in `core/types/_type_constants.py`
+2. Add the pack to `AGENT_PACK_REGISTRY` in `core/types/_type_constants_registries.py`
+3. Add the pack tag to `ALL_VISIBILITY_TAGS` in `core/types/_type_constants_registries.py`
 4. Register resource template + index resource in `server/tools/tools_agents.py`
 5. Add `mcp.disable(tags={pack_tag})` in `server/__init__.py`
 

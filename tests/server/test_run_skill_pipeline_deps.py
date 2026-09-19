@@ -217,11 +217,11 @@ class TestPipelineDepsKitchenScopedFallback:
     async def test_check_pipeline_deps_falls_back_to_kitchen_id(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        from autoskillit.server.tools.tools_execution import (
-            _check_pipeline_deps,
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
             _select_tracker_authority,
         )
-        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-2"
@@ -234,6 +234,7 @@ class TestPipelineDepsKitchenScopedFallback:
         _target, authority, key, _lease = _select_tracker_authority(
             tool_ctx_kitchen_open,
             "",
+            expected=False,
         )
         result = _check_pipeline_deps("review_approach", authority)
         if key is not None:
@@ -345,11 +346,11 @@ class TestPipelineDepsRecoveryInstruction:
     async def test_dependency_deny_carries_recovery_instruction(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        from autoskillit.server.tools.tools_execution import (
-            _check_pipeline_deps,
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
             _select_tracker_authority,
         )
-        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         _write_tracker(
@@ -361,6 +362,7 @@ class TestPipelineDepsRecoveryInstruction:
         _target, authority, key, _lease = _select_tracker_authority(
             tool_ctx_kitchen_open,
             "AB",
+            expected=True,
         )
         raw = _check_pipeline_deps("b", authority)
         if key is not None:
@@ -374,11 +376,11 @@ class TestPipelineDepsRecoveryInstruction:
 class TestPreflightDenyEnvelopeShape:
     @pytest.mark.anyio
     async def test_preflight_denials_use_canonical_envelope(self, tool_ctx_kitchen_open, tmp_path):
-        from autoskillit.server.tools.tools_execution import (
-            _check_pipeline_deps,
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
             _select_tracker_authority,
         )
-        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         _write_tracker(
@@ -390,6 +392,7 @@ class TestPreflightDenyEnvelopeShape:
         _target, authority, key, _lease = _select_tracker_authority(
             tool_ctx_kitchen_open,
             "AB",
+            expected=True,
         )
         raw = _check_pipeline_deps("b", authority)
         if key is not None:

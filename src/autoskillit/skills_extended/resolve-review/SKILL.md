@@ -103,9 +103,13 @@ When context is exhausted mid-execution, edits may be on disk but not committed.
 The recipe routes to `on_context_limit` (typically a re-push step), bypassing the
 normal commit protocol.
 
+At invocation start, before any possible in-session commit, capture one immutable
+fix-loop base with `fix_loop_base_sha=$(git -C "{work_dir}" rev-parse HEAD)`. Keep
+that value for every pending-change, accepted-fix, and repair commit in this run.
+
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: call `commit_files(paths=[<dirty files>], message="fix: commit pending review changes", cwd="{work_dir}")`.
+2. If any files are dirty: call `commit_files(paths=[<dirty files>], message="fix: commit pending review changes", cwd="{work_dir}", self_revert_base_sha=fix_loop_base_sha)`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -337,6 +341,7 @@ If the file exists:
 - Build `diff_context_map: dict[tuple[str, int], dict]` where key is `(entry.path, entry.line)`
   and value is the full context entry dict. Copy the complete entry dictionary,
   including `path`, `line`, `severity`, `dimension`, `message`, `code_region`,
+  `anchor_digest`,
   `evidence`, `trace`, `boundary_checks`, `confidence`, `simpler_behavior`,
   `candidate_id`, `disposition_id`, and `snapshot`.
 - In `mode=local`, read `local_findings_{pr_number}.json` and
@@ -348,7 +353,22 @@ If the file exists:
   `review_handoff_pair_error(diff_context, batch_review_response)`. Do not require
   a local-findings artifact in GitHub mode. A helper error for either
   mode-appropriate pair rejects the handoff and uses the existing fallback path.
+- After that mode-appropriate handoff-pair authority check, require
+  `schema_version == 2`. Every `context_entries` entry with an integer `line` must
+  have a non-empty `anchor_digest`; a null line must omit it. Reject incomplete or
+  invalid v2 data rather than constructing a partial `diff_context_map`.
+- For a v1 or missing schema, record an actionable regeneration instruction. It may
+  invoke the installed `enrich_diff_context` producer only after proving the current
+  checkout `HEAD` equals handoff `_head_sha`; reload and validate v2 before any edit.
+  A head mismatch, unavailable/ambiguous target, or invalid regenerated data is
+  stale, not permission to mint an anchor digest from this checkout.
 - Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
+
+After the same pair-authority and v2 schema validation, load
+`review_level_findings` separately from line-anchored `context_entries`. Preserve
+each `candidate_id`, path, diagnostic line, message, severity, and dimension; deduplicate
+by `candidate_id` against any local finding already loaded. These entries have
+`thread_node_id=None` and never obtain an inline anchor.
 
 If the file is absent or cannot be parsed:
 - Set `diff_context_map = {}`
@@ -383,6 +403,14 @@ These skipped comments do not count toward `accept_count`, `reject_count`, or
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
 - `body` — the review summary text (skip empty bodies and APPROVED state)
+
+Append each validated handoff `review_level_findings` entry as a structured finding
+before intent validation. Use its `candidate_id` as the finding identity, preserve
+its path, diagnostic line, message, severity, and dimension, and set
+`thread_node_id=None`. It participates in intent validation, live-source rereading,
+accepted-fix commits, and final reporting exactly like other findings. Skip only
+thread reply and thread resolution for it; do not parse a top-level review body or
+manufacture an inline anchor.
 
 **Classify each finding by severity:**
 - `critical` — body contains: "must", "critical", "security", "data loss", "wrong",
@@ -578,29 +606,49 @@ rounds were published through the single structured review operation in Step 1.5
 
 ### Step 4: Apply Fixes (max 3 iterations)
 
-Initialize `addressed_thread_ids: list[str] = []` before processing findings.
+At invocation start, before every possible commit for pending changes or an accepted
+fix, capture `fix_loop_base_sha=$(git -C "{work_dir}" rev-parse HEAD)` once. Initialize
+`addressed_thread_ids: list[str] = []`, `accepted_fixes: list[dict] = []`, and the
+deduplicated `reported_self_revert_pairs: set[tuple[str, str]] = set()`.
 
-For each finding where the classification map shows `verdict = ACCEPT`
-(process critical findings first, then warnings):
+The context-limit pending-change commit uses that saved base too:
+```
+commit_files(paths=["{dirty files}"], message="fix: commit pending review changes", cwd="{work_dir}", self_revert_base_sha=fix_loop_base_sha)
+```
 
-1. **Context for understanding:** If `diff_context_map.get((path, line), {}).get("code_region")` returns a non-empty value,
-   use the pre-built code_region for initial understanding — skip the ±20 line read.
-   The pre-built region is already available from the review-pr handoff.
-   If `diff_context_map` has no entry, read the referenced file and ±20 lines of
-   context as before. In both cases, still read the file when actually applying
-   the edit — the pre-built context covers understanding only, not the write.
-2. Understand what the reviewer is requesting
-3. Apply the fix
-4. Stage and commit via the `commit_files` MCP tool:
+Build edit candidates only from `verdict = ACCEPT` findings with a concrete edit
+route. Group those candidates by path; escalation or non-edit items never join a
+file group. Define severity rank as `critical=3`, `warning=2`, `info=1`, then process
+contiguous file groups by `(-file_max_severity, path, -line,
+stable_finding_identity)`. Within a file, edit in descending-line order. For an
+inline comment, `stable_finding_identity` is its existing `id`; for a structured
+review-level finding it is its existing `candidate_id`. The strategy selects the
+edit route only and must not split a file group.
+
+Import `validate_anchor` from the installed `autoskillit.execution` package; do not
+assume a helper script exists in the target checkout.
+
+For every candidate in that order:
+
+1. Use a pre-built `diff_context_map` `code_region` only for initial understanding;
+   skip the ±20 line understanding read when it is present. Before each edit, still read
+   the file from live source — the handoff context never authorizes an edit by itself.
+2. For a v2 context entry, call the installed `validate_anchor(live_content, line,
+   anchor_digest)` helper. Set `effective_line` only when the result is `fresh` or a
+   uniquely `moved` line, and use `effective_line` for both the edit and accepted-fix
+   range. Retain the original review coordinates for reporting and thread identity.
+   A `stale` result is skipped and recorded, or is fully reclassified from live
+   source and review-comment context; never derive an edit from a guessed anchor.
+3. Apply the fix at `effective_line`, then stage and commit it:
    ```
-   commit_files(paths=["{file}"], message="fix(review): {brief description of reviewer's request}", cwd="{work_dir}")
+   commit_files(paths=["{file}"], message="fix(review): {brief description of reviewer's request}", cwd="{work_dir}", self_revert_base_sha=fix_loop_base_sha)
    ```
    The tool runs pre-commit hooks, handles auto-fix re-staging, and returns
    `{"success": true, "commit_sha": "..."}` or `{"success": false, "error": "..."}`.
-   Record the finding as `applied` only when `commit_files` returns `success: true`,
-   and attach the returned commit SHA. Failed attempts do not create a terminal
-   disposition; after retries are exhausted, record the finding once as `failed`.
-   Do NOT use `--amend` — always create new commits.
+   Record `applied` only when it returns `success: true`; append an accepted-fix
+   entry containing the existing finding identity, path, effective range, and returned
+   commit SHA. Failed attempts do not create a terminal disposition; after retries
+   are exhausted, record the finding once as `failed`. Do NOT use `--amend`.
 
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
@@ -620,7 +668,8 @@ For findings where the classification map shows `verdict = REJECT` or `verdict =
 **Skip a finding if:**
 - The comment is a file-level comment (`line` is null) — these have no code anchor
 - The referenced file does not exist in the current branch
-- The finding references a line number that no longer exists (stale comment)
+- V2 digest validation reports a stale anchor and the finding cannot be fully
+  reclassified from live source and review-comment context
 - The fix would require a design decision beyond the reviewer's explicit guidance
 - The reviewer's request is contradicted by another reviewer's comment on the same location
 
@@ -635,8 +684,17 @@ Call the `test_check` MCP tool with `worktree_path` set to the current clone. Do
 the configured test command directly in the shell.
 
 - Pass → proceed to Step 6 (Resolve Addressed Review Threads)
-- Fail (iteration < 3): analyze failures against the fixes applied, revert/adjust the
-  problematic commit, re-commit and retry (increment iteration counter)
+- Fail (iteration < 3): analyze failures against accepted fixes. Before a repair
+  commit, compare its changed region with `accepted_fixes`; on overlap, re-read the
+  live source and re-derive the repair without erasing another finding's fix. Make
+  the repair with:
+  ```
+  commit_files(paths=["{file}"], message="fix(review): repair failing review fix", cwd="{work_dir}", self_revert_base_sha=fix_loop_base_sha)
+  ```
+  Inspect its self-revert scan fields. Report every returned pair once by
+  `(earlier_commit_sha, later_commit_sha)`, deduplicating repeated full-range scans;
+  report an incomplete scan as incomplete, never as clean. Then retry (increment
+  iteration counter).
 - Fail (iteration >= 3): write the bounded diagnostic report and emit the diagnostic
   structured output described in Step 7 before exiting non-zero. Preserve the failure
   status: this is not a successful review result.
@@ -645,7 +703,15 @@ the configured test command directly in the shell.
 
 **MODE BRANCHING:**
 
+**When mode=local:** Skip all GitHub thread resolution API calls, make no GraphQL
+mutation, set `resolved_count = 0` and `resolve_failed_count = 0`, then proceed to
+Step 6.5. The `addressed_thread_ids` list remains unpopulated.
+
 **When `mode=github`:** Execute the following thread resolution steps (current behavior unchanged).
+
+Populate `addressed_thread_ids` only after a successful ACCEPT fix with a non-null
+`thread_node_id`. Before batching, exclude every skipped or stale finding and every
+review-level finding (`thread_node_id=None`); none of those entries may be resolved.
 
 Batch all thread resolutions into a single GraphQL request using aliased mutations.
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
@@ -680,7 +746,7 @@ Track:
 
 This step is best-effort — failure to resolve any thread never affects the exit code.
 
-**When `mode=local`:**
+**When mode=local:**
 - Skip all GitHub thread resolution API calls (no GraphQL mutation, no thread resolution)
 - Set `resolved_count = 0`, `resolve_failed_count = 0`
 - The `addressed_thread_ids` list is not populated (there are no thread IDs in local mode)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -21,6 +22,29 @@ from tests.smoke_utils._experimental_helpers import (
 )
 
 pytestmark = [pytest.mark.medium]
+
+
+def _prepared_local_experimental_publication() -> dict[str, Any]:
+    return prepare_experimental_review_publication(
+        raw_ledger={"candidate_records": [{"candidate_id": "candidate-1"}]},
+        survivors=[
+            {
+                "candidate_id": "candidate-1",
+                "disposition_id": "disposition-1",
+                "file": "src/app.py",
+                "line": 42,
+            }
+        ],
+        snapshot={
+            "head_sha": "head",
+            "base_sha": "base",
+            "merge_base_sha": "merge",
+            "diff_sha256": "diff",
+        },
+        annotation_generation_id="annotation-generation",
+        mode="local",
+        snapshot_is_fresh=True,
+    )
 
 
 def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
@@ -167,29 +191,6 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
     assert (
         no_survivors["artifacts"]["raw_findings"]["review_generation_id"]
         != publication["artifacts"]["raw_findings"]["review_generation_id"]
-    )
-
-
-def _prepared_local_experimental_publication() -> dict[str, object]:
-    return prepare_experimental_review_publication(
-        raw_ledger={"candidate_records": [{"candidate_id": "candidate-1"}]},
-        survivors=[
-            {
-                "candidate_id": "candidate-1",
-                "disposition_id": "disposition-1",
-                "file": "src/app.py",
-                "line": 42,
-            }
-        ],
-        snapshot={
-            "head_sha": "head",
-            "base_sha": "base",
-            "merge_base_sha": "merge",
-            "diff_sha256": "diff",
-        },
-        annotation_generation_id="annotation-generation",
-        mode="local",
-        snapshot_is_fresh=True,
     )
 
 

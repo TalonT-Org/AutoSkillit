@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 ANOMALY_DETECTION = SRC / "execution" / "evidence" / "anomaly_detection.py"
-SESSION_LOG = SRC / "execution" / "evidence" / "session_log.py"
+SESSION_LOG = SRC / "execution" / "session_log" / "session_log.py"
 
 
 def _first_drift_call(func_node: ast.FunctionDef) -> ast.Call | None:

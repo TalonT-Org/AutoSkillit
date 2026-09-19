@@ -30,8 +30,7 @@ class TestCheckClaudeBinary:
 
         assert result.severity == Severity.WARNING
         assert result.check == "claude_binary"
-        msg = result.message.lower()
-        assert "not found" in msg or "missing" in msg
+        assert "claude CLI not found on PATH" in result.message
         assert "agent_subagent" in result.message
         assert "agent_model" in result.message
         assert "cross_skill_ref" in result.message

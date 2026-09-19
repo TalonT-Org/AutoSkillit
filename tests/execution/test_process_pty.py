@@ -502,6 +502,7 @@ class TestAdjudicationCoverageMatrix:
       NATURAL_EXIT → TestSTOPDelayPipelineAdjudication
       STALE        → TestStaleRecoveryPipelineAdjudication
       TIMED_OUT    → TestTimedOutPipelineAdjudication
+      OUTPUT_LIMIT → test_combined_output_ceiling_kills_and_bounds_retained_streams
 
     See core/types.py _TERMINATION_CONTRACT for the per-reason semantic invariants.
     """
@@ -514,6 +515,7 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
             TerminationReason.IDLE_STALL,  # TestIdleStallWatchdog in test_process_run.py
+            TerminationReason.OUTPUT_LIMIT,  # test_process_output_ceiling.py
             TerminationReason.HEALTH_INSPECTOR,  # forward-declared — see issue #3574
         }
     )

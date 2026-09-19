@@ -363,8 +363,9 @@ _TOOL_DEFS = (
     ),
     _tool(
         "commit_files",
-        ("paths", "message", "cwd", "step_name"),
+        ("paths", "message", "cwd", "step_name", "self_revert_base_sha"),
         required=("paths", "message", "cwd"),
+        wire_types={"self_revert_base_sha": ToolWireType.STRING},
     ),
     _tool(
         "write_audit_semantic_result",

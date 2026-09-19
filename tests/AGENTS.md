@@ -32,7 +32,7 @@ Never rely on inverse method calls for cleanup.
   L0+L1 imports (core, pipeline, config). Use for tests that only need gate, audit,
   token_log, timing_log, or config — no server factory, no L2/L3 service wiring. Does NOT
   monkeypatch `server.lifecycle._state._ctx`. Gate starts closed (matching production). Guard tests
-  in `test_conftest.py` enforce the import boundary via AST analysis.
+  in `tests/infra/test_conftest.py` enforce the import boundary via AST analysis.
 - Both `tool_ctx` and `minimal_ctx` start with gate closed to match production behavior.
   Use `tool_ctx_kitchen_open` or `build_ctx_open` for tests that need an open gate.
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
@@ -235,6 +235,14 @@ and degrade the check to its operational-error path. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
 - The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
 
+<!--
+Convention for the inventory tree below: unannotated entries carry __init__.py
+(Python packages). Only entries explicitly marked `(no __init__.py)` are
+package-less data subtrees. The annotation is required, not optional — see
+`tests/arch/test_subpackage_isolation_topology.py::test_package_style_domain_subdirectories_carry_init_py`
+which derives the package set from this convention.
+-->
+
 ```
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
@@ -245,6 +253,7 @@ tests/
 ├── core/                                # Core layer tests (see core/AGENTS.md)
 ├── docs/                                # Documentation integrity tests
 ├── execution/                           # Subprocess integration + session tests (see execution/AGENTS.md)
+├── exploration/                         # Repository-impact + deterministic-snapshot tests (no __init__.py)
 ├── fleet/                               # Fleet campaign + dispatch tests (see fleet/AGENTS.md)
 ├── hooks/                               # Hook script tests (see hooks/AGENTS.md)
 ├── infra/                               # CI/CD and security configuration tests (see infra/AGENTS.md)
@@ -256,9 +265,11 @@ tests/
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/AGENTS.md)
 ├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/AGENTS.md)
 │   └── fixtures/                        # YAML test data: sample recipes, expected diagram output
+├── report/                              # Test-result renderer tests (no __init__.py)
 ├── server/                              # Server unit tests — tool handlers (see server/AGENTS.md)
 ├── skills/                              # Skill contract and compliance tests (see skills/AGENTS.md)
 ├── skills_extended/                     # Extended skill tests
+├── smoke_utils/                         # Smoke-test facade + per-shard test modules
 └── workspace/                           # Workspace and clone tests (see workspace/AGENTS.md)
 
 temp/                        # Temporary/working files (gitignored)

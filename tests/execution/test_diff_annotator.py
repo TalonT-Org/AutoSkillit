@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 import pytest
@@ -14,9 +15,15 @@ from autoskillit.execution.github_ops.diff_annotator import (
     extract_valid_lines,
     parse_hunk_ranges,
     select_review_agents,
+    validate_anchor,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _anchor_digest(source_line: str) -> str:
+    return hashlib.sha256(source_line.rstrip().encode()).hexdigest()
+
 
 _MARKER_RE = re.compile(r"^\[L(\d+)\]")
 
@@ -456,6 +463,44 @@ class TestExtractCodeRegion:
         from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         assert extract_code_region("", "src/app.py", 42) == ""
+
+
+class TestValidateAnchor:
+    def test_fresh_anchor_keeps_its_original_line(self):
+        result = validate_anchor(
+            "+target = 1  \nother = 2\n",
+            1,
+            _anchor_digest("+target = 1"),
+        )
+
+        assert result == ("fresh", 1)
+
+    def test_unique_matching_digest_reports_a_moved_anchor(self):
+        result = validate_anchor(
+            "inserted = True\n target = 1\n",
+            1,
+            _anchor_digest(" target = 1"),
+        )
+
+        assert result == ("moved", 2)
+
+    @pytest.mark.parametrize(
+        ("content", "anchor_digest"),
+        [
+            ("edited = True\n", _anchor_digest("original = True")),
+            (
+                "edited = True\noriginal = True\noriginal = True\n",
+                _anchor_digest("original = True"),
+            ),
+        ],
+        ids=["no-match", "ambiguous-match"],
+    )
+    def test_missing_or_ambiguous_matching_digest_is_stale(
+        self,
+        content: str,
+        anchor_digest: str,
+    ) -> None:
+        assert validate_anchor(content, 1, anchor_digest) == ("stale", None)
 
 
 # --- extract_valid_lines ---

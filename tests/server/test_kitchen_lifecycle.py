@@ -10,12 +10,15 @@ import pytest
 import autoskillit.core as core
 from autoskillit.config import AutomationConfig
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.server import _tracker_authority
 from autoskillit.server._factory import make_context
 from autoskillit.server.lifecycle import _state
 from autoskillit.server.tools import tools_kitchen
 from autoskillit.server.tools.tools_kitchen import (
     _close_kitchen_handler,
     _open_kitchen_handler,
+)
+from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
     prune_stale_kitchen_state,
 )
 from tests.fakes import FakePluginArtifactAuthority
@@ -41,8 +44,8 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(core, "register_active_kitchen"),
-        patch.object(core, "unregister_active_kitchen"),
+        patch.object(_tracker_authority, "register_active_kitchen"),
+        patch.object(_tracker_authority, "unregister_active_kitchen"),
     ):
         # initial state
         assert ctx.gate.enabled is False
@@ -86,11 +89,9 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(
-            tools_kitchen._tracker_authority, "register_active_kitchen", return_value=False
-        ),
-        patch.object(tools_kitchen, "unregister_active_kitchen", return_value=False),
-        patch.object(tools_kitchen._tracker_authority, "logger", lifecycle_logger),
+        patch.object(_tracker_authority, "register_active_kitchen", return_value=False),
+        patch.object(_tracker_authority, "unregister_active_kitchen", return_value=False),
+        patch.object(_tracker_authority, "logger", lifecycle_logger),
     ):
         assert await _open_kitchen_handler() is None
         kitchen_id = ctx.kitchen_id

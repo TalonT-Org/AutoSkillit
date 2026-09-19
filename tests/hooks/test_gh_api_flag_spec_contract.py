@@ -35,6 +35,7 @@ from autoskillit.hooks._runtime._command_classification import (
 from autoskillit.hooks._runtime._github_mutation_analysis import (
     _CURL_FLAG_SPEC,
     _GH_API_FLAG_SPEC,
+    _GH_ISSUE_EDIT_FLAG_SPEC,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -118,6 +119,30 @@ def test_gh_api_flag_spec_covers_every_live_value_taking_flag() -> None:
 
     parsed_flags = _parse_help_line_placeholder_flags(result.stdout, section_header="FLAGS")
     _assert_spec_covers_parsed_flags(parsed_flags, _GH_API_FLAG_SPEC, cli_label="gh api")
+
+
+def test_gh_issue_edit_flag_spec_covers_every_live_value_taking_flag() -> None:
+    if shutil.which("gh") is None:
+        pytest.skip("gh binary not available in this environment")
+
+    result = subprocess.run(
+        ["gh", "issue", "edit", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, f"gh issue edit --help failed: {result.stderr}"
+
+    parsed_flags = _parse_help_line_placeholder_flags(result.stdout, section_header="FLAGS")
+    parsed_flags.update(
+        _parse_help_line_placeholder_flags(result.stdout, section_header="INHERITED FLAGS")
+    )
+    _assert_spec_covers_parsed_flags(
+        parsed_flags,
+        _GH_ISSUE_EDIT_FLAG_SPEC,
+        cli_label="gh issue edit",
+    )
 
 
 def test_pip_global_flag_spec_covers_every_live_value_taking_flag() -> None:

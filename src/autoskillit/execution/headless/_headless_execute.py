@@ -612,7 +612,7 @@ async def _execute_claude_headless(
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
 
-            from autoskillit.execution.evidence.session_log import _resolve_session_label
+            from autoskillit.execution.session_log.session_log import _resolve_session_label
 
             _token_label = _resolve_session_label(step_name, dispatch_id)
             try:
@@ -660,7 +660,7 @@ async def _execute_claude_headless(
         )
 
         if terminal_selection is not None:
-            from autoskillit.execution.evidence.session_log import (
+            from autoskillit.execution.session_log.session_log import (
                 write_execution_candidate_manifest,
             )
 
@@ -680,7 +680,7 @@ async def _execute_claude_headless(
             if result is None:
                 from autoskillit.execution import flush_session_log
             else:
-                from autoskillit.execution.evidence.session_log import flush_session_log
+                from autoskillit.execution.session_log.session_log import flush_session_log
 
             flush_kwargs = _terminal.build_terminal_flush_kwargs(
                 ctx=ctx,

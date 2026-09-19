@@ -82,8 +82,6 @@ from autoskillit.server.tools._overlay_state import (
     read_overlay,  # noqa: F401
 )
 from autoskillit.server.tools.tools_pipeline_tracker import (
-    _release_context_tracker,  # noqa: F401 — re-exported for facade completeness
-    _select_tracker_authority,  # noqa: F401 — re-exported for facade completeness
     mark_step_skipped,  # noqa: F401
 )
 from autoskillit.workspace import (  # noqa: F401
@@ -107,7 +105,6 @@ from ._gates import (  # noqa: F401
     _begin_run_skill_completion,
     _check_ingredient_locks,
     _check_pipeline_deps,
-    _completion_tracker_binding,
     _finalize_run_skill_completion,
     _has_active_locks,
 )
@@ -160,7 +157,6 @@ __all__ = [
     "_compute_write_prefixes",
     "_complete_audit_finalization_effects",
     "_complete_resumed_audit",
-    "_completion_tracker_binding",
     "_execute_and_finalize_run_skill",
     "_explorer_launch_identity",
     "_finalize_run_skill_completion",
@@ -177,10 +173,8 @@ __all__ = [
     "_recipe_execution_deny",
     "_record_explorer_launch_lease",
     "_reject_missing_semantic_result",
-    "_release_context_tracker",
     "_resolve_step_name_from_recipe",
     "_run_subprocess_captured",
-    "_select_tracker_authority",
     "create_git_worktree",
     "execution_marker",
     "find_caller_session_id",

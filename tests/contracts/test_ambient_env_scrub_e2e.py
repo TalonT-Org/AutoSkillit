@@ -1,6 +1,6 @@
 """End-to-end proof that the real root conftest.py scrubs ambient env leakage.
 
-Unlike tests/test_conftest_feature_summary.py and tests/test_test_filter_plugin.py
+Unlike tests/infra/test_conftest_feature_scope_summary.py and tests/test_test_filter_plugin.py
 (which write a hardcoded shadow reimplementation of conftest.py logic so the
 subject under test can be exercised without importing the real conftest.py),
 these two tests specifically need the REAL, production ``_scrub_ambient_env``

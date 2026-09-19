@@ -2,7 +2,7 @@
 
 Cross-submodule helpers are imported directly from their submodules
 (``.._open_kitchen_transition``, ``.._open_kitchen_errors``,
-``.._tracker_authority``, ``.._get_recipe``) to avoid a circular-import
+``.._get_recipe``, ``.._tracker_auto_init``) to avoid a circular-import
 hazard through the package facade.
 """
 
@@ -36,6 +36,11 @@ from autoskillit.server.tools.tools_kitchen._get_recipe import (
     _check_override_keys,
     _render_ingredients_only_response,
 )
+from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (  # circular-break  # noqa: E501
+    _auto_init_pipeline_tracker,
+    _pipeline_tracker_auto_init_failure,
+    prune_stale_kitchen_state,
+)
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
     _recipe_validation_error_response,
@@ -43,10 +48,6 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
 from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
     _attach_transition_fields,
     _transition_start,
-)
-from autoskillit.server.tools.tools_kitchen._tracker_authority import (
-    _auto_init_pipeline_tracker,
-    _pipeline_tracker_auto_init_failure,
 )
 
 if TYPE_CHECKING:
@@ -84,7 +85,7 @@ async def _preflight_named_recipe(
         return None
     if prune_stale:
         try:
-            _tk_pkg.prune_stale_kitchen_state(tool_ctx.project_dir, tool_ctx.kitchen_id)
+            prune_stale_kitchen_state(tool_ctx.project_dir, tool_ctx.kitchen_id)
         except Exception:
             logger.warning("open_kitchen_deferred_prune_failed", exc_info=True)
     tracker_error = _auto_init_pipeline_tracker(tool_ctx)

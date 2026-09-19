@@ -37,6 +37,11 @@ from autoskillit.execution import (
 from autoskillit.fleet import warm_failure_path_imports
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._tracker_authority import (
+    _release_context_tracker,
+    _select_tracker_authority,
+    select_tracker_authority_expected,
+)
 from autoskillit.server.lifecycle._guards import (
     _require_enabled,
     _require_orchestrator_exact,
@@ -51,6 +56,7 @@ from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
 )
 from autoskillit.server.tools._types import deny_envelope
+from autoskillit.server.tools.tools_execution._gates import _authority_blocks_dependency_check
 from autoskillit.server.tools.tools_execution._managed_leaf import (  # noqa: F401
     _MAX_CLEANUP_FAILURE_RECORDS,
     _ChildResourceOwnerRequest,
@@ -60,11 +66,6 @@ from autoskillit.server.tools.tools_execution._run_skill_session import (
     _prepare_owned_dispatch_session,
 )
 from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
-from autoskillit.server.tools.tools_pipeline_tracker import (
-    _authority_blocks_dependency_check,
-    _release_context_tracker,
-    _select_tracker_authority,
-)
 
 logger = get_logger(__name__)
 
@@ -369,7 +370,11 @@ async def run_skill(
             state._tracker_authority,
             state._tracker_key,
             state._tracker_lease,
-        ) = _select_tracker_authority(state.tool_ctx, order_id)
+        ) = _select_tracker_authority(
+            state.tool_ctx,
+            order_id,
+            expected=select_tracker_authority_expected(state.tool_ctx, order_id),
+        )
         if (
             step_name
             and not resume_session_id

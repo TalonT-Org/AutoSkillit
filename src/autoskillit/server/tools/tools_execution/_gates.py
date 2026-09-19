@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash, get_logger
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
+from autoskillit.server._tracker_authority import _completion_tracker_binding
 from autoskillit.server.response._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
     _request_session_identity,
@@ -29,6 +30,13 @@ logger = get_logger(__name__)
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
+
+
+def _authority_blocks_dependency_check(authority: TrackerAuthorityReadResult | None) -> bool:
+    return bool(
+        authority is not None
+        and (authority.error is not None or (authority.data or {}).get("dependencies"))
+    )
 
 
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
@@ -141,42 +149,6 @@ def _has_active_locks(order_id: str) -> bool:
     if effective_oid:
         return any(v is False for v in locked_steps.get(effective_oid, {}).values())
     return any(v is False for steps in locked_steps.values() for v in steps.values())
-
-
-def _completion_tracker_binding(
-    tool_ctx: ToolContext,
-    order_id: str,
-    *,
-    tracker_target: TrackerAuthorityTarget | None = None,
-) -> tuple[str, str, str, str]:
-    """Resolve immutable tracker identity for a new completion receipt."""
-    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        _release_context_tracker,
-        _retain_context_tracker,
-        read_tracker_identity,
-        select_tracker_target,
-    )
-
-    target = tracker_target or select_tracker_target(tool_ctx, order_id, expected=bool(order_id))
-    if target is None or not target.path.exists():
-        return "", "", "", ""
-    key, lease = _retain_context_tracker(
-        tool_ctx,
-        target,
-        owner_kind="manual",
-        owner_id=target.target_order_id,
-    )
-    try:
-        tracker_identity = read_tracker_identity(target, lease)
-    except Exception:
-        _release_context_tracker(tool_ctx, key)
-        raise
-    if tracker_identity is None:
-        _release_context_tracker(tool_ctx, key)
-        return "", "", "", ""
-    kitchen_id, incarnation_id = tracker_identity
-    _release_context_tracker(tool_ctx, key)
-    return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
 
 
 def _begin_run_skill_completion(

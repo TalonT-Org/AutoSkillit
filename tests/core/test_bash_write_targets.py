@@ -249,7 +249,40 @@ def test_parity_with_command_classification(
     )
 
 
-def test_strip_heredoc_bodies_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+_HEREDOC_STRIP_CASES = [
+    (
+        "python3 - <<'EOF'\nif x > 3:\n    pass\nEOF",
+        "python3 - <<'EOF'\nEOF",
+    ),
+    (
+        "cat <<EOF > /real/file.txt\nbody\nEOF",
+        "cat <<EOF > /real/file.txt\nEOF",
+    ),
+    ("echo hello > /dev/null", "echo hello > /dev/null"),
+    ("cat <<-DELIM\n\tbody\n\tDELIM", "cat <<-DELIM\nDELIM"),
+    (
+        "cat <<'A' <<'B'\nignored\nA\nbody\nB\n",
+        "cat <<'A' <<'B'\nA\nB\n",
+    ),
+    ("cat <<\\EOF\nbody\nEOF\n", "cat <<\\EOF\nEOF\n"),
+    ('cat <<E"OF"\nbody\nEOF\n', 'cat <<E"OF"\nEOF\n'),
+    ("cat <<'EOF'\nbody\n", "cat <<'EOF'\n"),
+    ("cat <<'END-DOC'\nbody\nEND-DOC\n", "cat <<'END-DOC'\nEND-DOC\n"),
+    (
+        "echo ok # <<EOF\nbody\nEOF\necho after\n",
+        "echo ok # <<EOF\nbody\nEOF\necho after\n",
+    ),
+    (
+        "echo $(( 1 << 2 ))\necho after\n",
+        "echo $(( 1 << 2 ))\necho after\n",
+    ),
+]
+
+
+@pytest.mark.parametrize(("command", "expected"), _HEREDOC_STRIP_CASES)
+def test_strip_heredoc_bodies_parity(
+    monkeypatch: pytest.MonkeyPatch, command: str, expected: str
+) -> None:
     """IL-0 and hooks implementations of strip_heredoc_bodies must agree."""
     from pathlib import Path
 
@@ -264,11 +297,5 @@ def test_strip_heredoc_bodies_parity(monkeypatch: pytest.MonkeyPatch) -> None:
 
     from autoskillit.core.bash_write_targets import _strip_heredoc_bodies as core_strip
 
-    cases = [
-        "python3 - <<'EOF'\nif x > 3:\n    pass\nEOF",
-        "cat <<EOF > /real/file.txt\nbody\nEOF",
-        "echo hello > /dev/null",
-        "cat <<-DELIM\n\tbody\n\tDELIM",
-    ]
-    for cmd in cases:
-        assert core_strip(cmd) == hooks_strip_heredoc_bodies(cmd), f"Parity mismatch for: {cmd!r}"
+    assert core_strip(command) == expected
+    assert hooks_strip_heredoc_bodies(command) == expected

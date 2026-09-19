@@ -200,6 +200,7 @@ class TestServerSideStepCompletionMarking:
         assert completed["success"] is True
         assert completed["tracker"]["success"] is True
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
+        assert tool_ctx_kitchen_open.tracker_leases == {}
 
     @pytest.mark.anyio
     async def test_lost_delivery_is_recovered_by_replacement_request_session(

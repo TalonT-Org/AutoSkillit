@@ -1,17 +1,19 @@
 # execution/
 
 IL-1 execution layer — headless Claude sessions, process lifecycle, CI/GitHub integration.
-Sub-packages: headless/ (see headless/AGENTS.md), process/ (see process/AGENTS.md),
-merge_queue/ (see merge_queue/AGENTS.md), session/ (see session/AGENTS.md),
-backends/ (see backends/AGENTS.md), github_ops/ (see github_ops/AGENTS.md),
-evidence/ (see evidence/AGENTS.md), runtime/ (see runtime/AGENTS.md),
-github_review/ (see github_review/AGENTS.md).
+Sub-packages: backends/ (see backends/AGENTS.md), evidence/ (see evidence/AGENTS.md),
+github_ops/ (see github_ops/AGENTS.md), github_review/ (see github_review/AGENTS.md),
+headless/ (see headless/AGENTS.md), merge_queue/ (see merge_queue/AGENTS.md),
+process/ (see process/AGENTS.md), quota/, recording/ (see recording/AGENTS.md),
+runtime/ (see runtime/AGENTS.md), session/ (see session/AGENTS.md),
+session_log/ (see session_log/AGENTS.md).
 
 SQLite access is read-only with defense in depth. The GitHub Actions CI watcher never
 raises.
 
 ## Architecture Notes
 
-`session_log.py` uses XDG base dir spec; log directory names use hyphens (never
-underscores). `recording.py` and `_recording_skills.py` only activate when
-`AUTOSKILLIT_RECORD_SESSION` is set; production paths never touch them.
+`session_log/session_log.py` uses XDG base dir spec; log directory names use hyphens
+(never underscores). `recording/recording.py` and `recording/_recording_skills.py`
+activate only under `AUTOSKILLIT_RECORD_SESSION` or `REPLAY_SCENARIO_*`; production paths
+never activate them.

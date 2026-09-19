@@ -51,10 +51,11 @@ class TestSkillsConfig:
         assert "make-plan" in cfg.skills.tier2
         assert "compose-pr" in cfg.skills.tier3
 
-    def test_process_issues_is_role_derived_not_user_tiered(self) -> None:
+    def test_default_user_tiers_exclude_process_issues(self, tmp_path) -> None:
+        """Role-derived skills are not included in default user-tier configuration."""
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path)
         assert "process-issues" not in cfg.skills.tier1
         assert "process-issues" not in cfg.skills.tier2
         assert "process-issues" not in cfg.skills.tier3

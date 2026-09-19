@@ -214,7 +214,7 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
     """Every terminal class reaches one event/summary/index projection."""
 
     import autoskillit.execution as execution
-    import autoskillit.execution.evidence.session_log as session_log
+    import autoskillit.execution.session_log.session_log as session_log
 
     observer = _AttemptObserver()
     log_root = tmp_path / "logs"

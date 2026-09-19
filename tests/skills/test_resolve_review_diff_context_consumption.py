@@ -41,11 +41,29 @@ def _step35_section() -> str:
     return text[start:end]
 
 
+def _step3_section() -> str:
+    text = _skill_text()
+    start = text.find("### Step 3: Parse and Classify Findings")
+    assert start != -1, "### Step 3 not found in SKILL.md"
+    end = text.find("### Step 3.5", start)
+    return text[start:end]
+
+
 def _step4_section() -> str:
     text = _skill_text()
     start = text.find("### Step 4")
     assert start != -1, "### Step 4 not found in SKILL.md"
     end = text.find("### Step 5", start)
+    end = end if end != -1 else None
+    return text[start:end]
+
+
+def _step4_through_step5_section() -> str:
+    """Return the edit-loop section, including the repair path in Step 5."""
+    text = _skill_text()
+    start = text.find("### Step 4")
+    assert start != -1, "### Step 4 not found in SKILL.md"
+    end = text.find("### Step 6", start)
     end = end if end != -1 else None
     return text[start:end]
 
@@ -147,6 +165,87 @@ def test_enriched_context_fields_remain_opaque_dict_values() -> None:
         "snapshot",
     ):
         assert field in section
+
+
+def test_step2_rejects_an_incomplete_or_stale_diff_context_schema() -> None:
+    """Resolver input must be a regenerable, complete anchor handoff."""
+    section = _step2_section()
+    lower = section.lower()
+
+    assert "schema_version" in section
+    assert "anchor_digest" in section
+    assert "regenerat" in lower
+
+
+def test_v2_review_level_findings_enter_the_resolver_without_thread_identity() -> None:
+    """Doc-count findings remain actionable without manufacturing inline threads."""
+    step2 = _step2_section()
+    step3 = _step3_section()
+
+    pair_check = step2.find("review_handoff_pair_error")
+    schema_check = step2.find("schema_version == 2", pair_check)
+    review_level_load = step2.find("review_level_findings", schema_check)
+    assert 0 <= pair_check < schema_check < review_level_load
+
+    for field in ("candidate_id", "path", "line", "message", "severity", "dimension"):
+        assert field in step2
+    assert "thread_node_id=None" in step2
+
+    for behavior in (
+        "intent validation",
+        "live-source rereading",
+        "accepted-fix commits",
+        "final reporting",
+    ):
+        assert behavior in step3
+    assert "candidate_id" in step3
+    assert "thread_node_id=None" in step3
+    assert "Skip only" in step3
+    assert "thread reply" in step3
+    assert "thread resolution" in step3
+
+
+def test_step4_uses_live_anchor_validation_to_choose_the_edit_line() -> None:
+    """Direct helper coverage is insufficient unless the resolver consumes its result."""
+    section = _step4_section()
+    lower = section.lower()
+
+    assert "validate_anchor" in section
+    assert "anchor_digest" in section
+    assert "effective_line" in section
+    assert "live" in lower
+
+
+def test_fix_loop_captures_its_base_before_any_commit() -> None:
+    section = _step4_through_step5_section()
+    base_capture = section.find("fix_loop_base_sha")
+    commit_calls = [
+        index for index in range(len(section)) if section.startswith("commit_files", index)
+    ]
+
+    assert base_capture != -1
+    assert "rev-parse HEAD" in section
+    assert commit_calls
+    assert base_capture < min(commit_calls)
+
+
+def test_every_fix_loop_commit_including_repair_uses_the_saved_base() -> None:
+    section = _step4_through_step5_section()
+    lower = section.lower()
+
+    # Pending changes, normal accepted fixes, and a Step 5 repair can all land commits.
+    assert "pending changes" in lower
+    assert "repair" in lower
+    assert section.count("self_revert_base_sha=fix_loop_base_sha") >= 3
+
+
+def test_fix_loop_deduplicates_and_reports_repeated_self_revert_scans() -> None:
+    section = _step4_through_step5_section()
+    lower = section.lower()
+
+    assert "deduplicat" in lower
+    assert "self-revert" in lower
+    assert "incomplete" in lower
 
 
 @pytest.mark.parametrize("mode", ["local", "github"])

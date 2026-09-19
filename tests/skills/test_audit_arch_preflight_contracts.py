@@ -18,12 +18,12 @@ def test_preflight_checklist_section_exists():
 
 
 def test_preflight_checklist_precedes_launch_subagents():
-    """T-AA-002: Checklist step appears before 'Launch parallel subagents'."""
+    """T-AA-002: Checklist step appears before the worker assignment."""
     text = SKILL_MD.read_text()
     checklist_idx = text.index("Pre-Flight Verification Checklist")
-    launch_idx = text.index("Launch parallel subagents")
+    launch_idx = text.index("2. **Assign every principle to the declared single worker.**")
     assert checklist_idx < launch_idx, (
-        "Pre-Flight Verification Checklist must appear BEFORE 'Launch parallel subagents' "
+        "Pre-Flight Verification Checklist must appear BEFORE the worker assignment "
         "in the Audit Workflow"
     )
 
@@ -122,9 +122,10 @@ def test_principle_auditor_dispatch_is_bounded(skill_md: Path, workflow_contract
     """Both audit-arch variants bound and join their principle work."""
     text = skill_md.read_text()
     never_block = text.split("**NEVER:**", maxsplit=1)[1].split("**ALWAYS:**", maxsplit=1)[0]
+    workflow = text.split("## Audit Workflow", maxsplit=1)[1]
 
     assert "Launch more than 6 principle auditors in one parallel batch" in never_block
-    assert workflow_contract in text
+    assert workflow_contract in workflow
     assert "Start ALL independent child delegations before awaiting any result" not in text
 
     if skill_md == LOCAL_SKILL_MD:

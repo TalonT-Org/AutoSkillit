@@ -3,8 +3,8 @@ name: audit-arch
 categories:
 - audit
 description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch",
-  "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural
-  aspects and generates a structured report.
+  "audit architecture", "check architecture", or "architectural review". Assigns every principle to one delegated worker and generates
+  a structured report.
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -20,8 +20,6 @@ semantic_requirements:
   child_spawns:
   - role: delegated-worker
     count: 1
-  concurrency:
-    required: true
   join:
     required: true
   evidence:
@@ -44,12 +42,11 @@ Audit the codebase for adherence to architectural standards and rules.
 
 - Modify any source code files
 - Update an existing report - always generate new
+- Launch more than 6 principle auditors in one parallel batch. The declared single worker is the only principle auditor for this workflow.
 - Detach child delegations instead of joining them (joining every child is required)
-- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use subagents for parallel exploration
-- Start all independent child delegations before awaiting any result to maximize concurrency
+- Assign every principle to the declared single worker. Join that worker before synthesis.
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
@@ -273,11 +270,9 @@ These apply across all principles when evaluating architectural decisions:
    | **Code duplication** | Use the Read tool to retrieve the full body of each function. Compare the full signature (parameters, return type) and logic step-by-step. Same-named functions at different abstraction levels are NOT duplicates. Discard if logically distinct. |
    | **Misplaced file or incorrect import path** | Use the Bash tool to run `git log --oneline -- {file_path}` (substituting the actual path). Inspect commit messages for intentional placement decisions. Discard the finding if a commit explains the placement. |
 
-2. **Launch parallel subagents (SINGLE MESSAGE)** for each principle
-
-   **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
-
-   Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+2. **Assign every principle to the declared single worker.** Give the worker the complete
+   principle list, retain its evidence for every principle, and join that worker before
+   synthesis.
 3. **Consolidate findings** by principle and severity
 4. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 5. **Suggest new principle** (optional) - see below

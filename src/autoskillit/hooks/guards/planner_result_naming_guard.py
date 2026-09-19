@@ -110,7 +110,7 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
 
 
 def main() -> None:
-    enforce_session_scope("interactive_only")
+    enforce_session_scope("headless_only")
 
     try:
         data = json.loads(sys.stdin.read())

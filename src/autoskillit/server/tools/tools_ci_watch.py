@@ -17,6 +17,7 @@ from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -75,6 +76,7 @@ async def _infer_ci_head_sha(head_sha: str | None, *, branch: str, cwd: str) -> 
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
@@ -270,6 +272,7 @@ async def wait_for_ci(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("get_ci_status")
 async def get_ci_status(

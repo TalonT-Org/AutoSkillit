@@ -31,6 +31,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.git import detect_self_reverts, validate_commit_paths
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -126,6 +127,7 @@ def _build_test_check_response(
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"}, annotations={"readOnlyHint": True}
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 # No _require_enabled() — headless skill sessions need test_check without opening kitchen.
 # The kitchen tag governs visibility only; the headless tag provides access in SKILL sessions.
@@ -286,6 +288,7 @@ async def test_check(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("commit_files")
 async def commit_files(
@@ -495,6 +498,7 @@ async def commit_files(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("reset_test_dir")
 async def reset_test_dir(
@@ -581,6 +585,7 @@ async def reset_test_dir(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:

@@ -16,6 +16,7 @@ from autoskillit.server._misc import fetch_repo_merge_state, resolve_repo_from_r
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -38,6 +39,7 @@ def _validate_commit_status_inputs(sha: str, context: str, description: str) -> 
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("set_commit_status")
 async def set_commit_status(
@@ -119,6 +121,7 @@ async def set_commit_status(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("check_repo_merge_state")
 async def check_repo_merge_state(

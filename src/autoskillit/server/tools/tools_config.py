@@ -12,7 +12,7 @@ from autoskillit.core import ManagedWorkerCapacity, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._misc import _hook_config_path
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
+from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import (
     OverlayStateError,
@@ -178,6 +178,7 @@ def _configuration_error(exc: Exception) -> str:
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("configure_fleet")
 async def configure_fleet(
@@ -212,8 +213,6 @@ async def configure_fleet(
     Never raises.
     """
     try:
-        if (guard := _require_orchestrator_exact("configure_fleet")) is not None:
-            return guard
         from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
@@ -243,6 +242,7 @@ async def configure_fleet(
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("configure_order")
 async def configure_order(
@@ -273,8 +273,6 @@ async def configure_order(
     Never raises.
     """
     try:
-        if (guard := _require_orchestrator_exact("configure_order")) is not None:
-            return guard
         from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()

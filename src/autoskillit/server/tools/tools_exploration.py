@@ -19,7 +19,6 @@ from autoskillit.core import (
     ExplorationQuerySpec,
     NodeKey,
     get_logger,
-    session_shape,
 )
 from autoskillit.pipeline import (
     EXPLORATION_STORE_FAILURE_CODES,
@@ -31,6 +30,7 @@ from autoskillit.pipeline import (
 )
 from autoskillit.server import mcp
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _MAX_QUERY_LENGTH = 4_096
@@ -332,6 +332,7 @@ def _fetch_page_from_launch_environment(
     tags={"autoskillit", "kitchen", "exploration"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 async def submit_exploration_query(
     query: str,
@@ -400,6 +401,7 @@ async def submit_exploration_query(
     tags={"autoskillit", "kitchen", "exploration"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 async def get_exploration_page(
     page_size: int = _MAX_RESPONSE_PAGE_SIZE,
@@ -466,6 +468,7 @@ async def get_exploration_page(
     tags={"autoskillit", "kitchen", "exploration"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 async def resume_exploration_context(
     page_size: int = _MAX_RESPONSE_PAGE_SIZE,
@@ -528,6 +531,10 @@ async def resume_exploration_context(
     tags={"autoskillit"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(
+    EXPLORER_SESSION_SCOPE,
+    refusal=lambda *_: _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE),
+)
 @_cancellation_shield()
 async def enable_exploration(
     project_dir: str = "",
@@ -550,9 +557,6 @@ async def enable_exploration(
     Never raises.
     """
     try:
-        if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
-            return _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE)
-
         store = _get_store()
         if not isinstance(store, OwnerBoundExplorationContextStore):
             return _failure(ExplorationFailureCode.STORE_UNAVAILABLE)

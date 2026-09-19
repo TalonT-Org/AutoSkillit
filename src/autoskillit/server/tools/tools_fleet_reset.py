@@ -30,7 +30,8 @@ from autoskillit.fleet import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.lifecycle._guards import _require_enabled, _require_fleet
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -112,6 +113,7 @@ def _locate_reset_dispatch(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield(result_type="fleet_error")
 @track_response_size("reset_dispatch")
 async def reset_dispatch(
@@ -137,9 +139,6 @@ async def reset_dispatch(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    if (fleet_err := _require_fleet("reset_dispatch")) is not None:
-        return fleet_err
 
     if reset_to not in _VALID_RESET_TARGETS:
         return fleet_error(

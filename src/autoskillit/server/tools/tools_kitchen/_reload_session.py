@@ -16,6 +16,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 
 # Late-binding for monkeypatch reach: tests patch
 # "autoskillit.server.tools.tools_kitchen.find_latest_session_id" (the
@@ -71,6 +72,7 @@ def _reload_session_handler() -> dict[str, str]:
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("reload_session")
 async def reload_session() -> str:

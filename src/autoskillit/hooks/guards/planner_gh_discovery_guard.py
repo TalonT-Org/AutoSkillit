@@ -111,7 +111,7 @@ def _is_gh_discovery(cmd: str) -> bool:
 
 
 def main() -> None:
-    enforce_session_scope("interactive_only")
+    enforce_session_scope("headless_only")
 
     try:
         data = json.loads(sys.stdin.read())

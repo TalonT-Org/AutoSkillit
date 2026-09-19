@@ -42,6 +42,7 @@ from autoskillit.pipeline import ToolContext, create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._explorer_projection import _explorer_launch_identity
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
     ArtifactCaptureError,
@@ -497,6 +498,7 @@ async def _delegate_async(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("delegate"),
     state_context_var=_delegate_cancellation_state,
@@ -544,6 +546,7 @@ async def delegate_evidence_reader(
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("read"),
     state_context_var=_broker_cancellation_state,
@@ -571,6 +574,7 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("page"),
     state_context_var=_broker_cancellation_state,

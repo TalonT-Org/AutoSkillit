@@ -33,6 +33,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.lifecycle._state import _get_ctx_or_none
 from autoskillit.server.recipe._recipe_delivery import (
     document_recipe_delivery_contract,
@@ -143,6 +144,7 @@ async def _finalize_load_recipe_result(
     tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("list_recipes")
 async def list_recipes() -> str:
@@ -184,6 +186,7 @@ async def list_recipes() -> str:
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("load_recipe"),
 )
+@session_scoped(SCOPE_ANY)
 @document_recipe_delivery_contract
 @_document_step_skip_semantics
 @_cancellation_shield()
@@ -419,6 +422,7 @@ async def load_recipe(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @track_response_size("complete_recipe_initialization")
 @_cancellation_shield()
 async def complete_recipe_initialization(initialization_id: str) -> str:
@@ -453,6 +457,7 @@ async def complete_recipe_initialization(initialization_id: str) -> str:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
@@ -520,6 +525,7 @@ async def validate_recipe(script_path: str) -> str:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("migrate_recipe")
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:

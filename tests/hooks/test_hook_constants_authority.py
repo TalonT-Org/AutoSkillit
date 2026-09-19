@@ -17,7 +17,6 @@ from autoskillit.hooks._runtime import _hook_constants
 from autoskillit.hooks._runtime._hook_constants import (
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
-    EXEMPT_SESSION_TYPES_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
@@ -72,17 +71,6 @@ def test_exempt_skills_by_guard_covers_all_three_guards() -> None:
             "pipeline-summary",
         }
     )
-
-
-def test_exempt_session_types_by_guard_contains_only_pr_create_guard() -> None:
-    """EXEMPT_SESSION_TYPES_BY_GUARD must contain only `pr_create_guard`.
-
-    The registry-level field for `git_ops_guard` MUST stay empty (the orchestrator
-    bypass is script-local, enforced in the guard after the destructive-op match);
-    `test_runner_guard` has no session-type exemption.
-    """
-    assert set(EXEMPT_SESSION_TYPES_BY_GUARD.keys()) == {"pr_create_guard"}
-    assert EXEMPT_SESSION_TYPES_BY_GUARD["pr_create_guard"] == frozenset({"orchestrator"})
 
 
 def test_deny_trigger_by_guard_strings() -> None:

@@ -22,7 +22,10 @@ from autoskillit.server.lifecycle._guards import (
     _check_recipe_read_prohibition,
     _check_write_target_boundary,
     _require_enabled,
-    _require_orchestrator_or_higher,
+)
+from autoskillit.server.lifecycle._session_scope import (
+    SCOPE_ORCHESTRATOR_OR_HIGHER,
+    session_scoped,
 )
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
@@ -121,6 +124,7 @@ async def _execute_captured_command(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ORCHESTRATOR_OR_HIGHER)
 @_cancellation_shield(result_type="run_cmd")
 @track_response_size("run_cmd")
 async def run_cmd(
@@ -140,8 +144,6 @@ async def run_cmd(
 
     Never raises.
     """
-    if (tier_gate := _require_orchestrator_or_higher("run_cmd")) is not None:
-        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     if (gate := _check_recipe_read_prohibition(cmd=cmd)) is not None:

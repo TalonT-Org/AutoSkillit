@@ -10,7 +10,6 @@ from a state that should be treated as a hard failure (the recipe is gone).
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -27,6 +26,7 @@ from _command_classification import (  # noqa: E402
     command_has_blocked_protected_path_read,
 )
 from _hook_payload import parse_hook_command  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
 
@@ -34,13 +34,12 @@ _CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\.(?!_cmd_
 
 
 def main() -> None:
+    enforce_session_scope("headless_only")
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.stderr.write("recipe_read_guard: malformed stdin — failing open\n")
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 
     tool_name: str = data.get("tool_name", "")

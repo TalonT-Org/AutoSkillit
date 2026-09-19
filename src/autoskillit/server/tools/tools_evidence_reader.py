@@ -21,14 +21,13 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_ENV_FORWARD_VARS,
-    HEADLESS_ENV_VAR,
     SessionType,
     SkillExecutionRole,
     agent_definition_digest,
     canonical_reader_tools_to_bare,
     get_logger,
     load_bundled_agent_definitions,
-    session_type,
+    session_shape,
 )
 from autoskillit.execution import (
     CodexBackend,
@@ -43,6 +42,7 @@ from autoskillit.pipeline import ToolContext, create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._explorer_projection import _explorer_launch_identity
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
     ArtifactCaptureError,
@@ -293,8 +293,8 @@ def _reader_transport(tool_ctx: ToolContext) -> dict[str, object]:
 
 def _delegate_caller_session(ctx: Context, tool_ctx: ToolContext) -> str:
     if (
-        session_type() is not SessionType.SKILL
-        or os.environ.get(HEADLESS_ENV_VAR) != "1"
+        not (shape := session_shape()).headless
+        or shape.tier is not SessionType.SKILL
         or not isinstance(tool_ctx.backend, CodexBackend)
     ):
         raise _DelegateError("reader_admission_denied")
@@ -498,6 +498,7 @@ async def _delegate_async(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("delegate"),
     state_context_var=_delegate_cancellation_state,
@@ -545,6 +546,7 @@ async def delegate_evidence_reader(
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("read"),
     state_context_var=_broker_cancellation_state,
@@ -572,6 +574,7 @@ async def read_authorized_artifact(page_size: int | None = None) -> str:
     tags={"autoskillit", "evidence-reader"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield(
     state_factory=lambda: _EvidenceReaderCancellationState("page"),
     state_context_var=_broker_cancellation_state,

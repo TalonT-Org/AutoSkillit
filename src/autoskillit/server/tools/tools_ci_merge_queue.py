@@ -14,6 +14,7 @@ from autoskillit.server import mcp
 from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("toggle_auto_merge")
 async def toggle_auto_merge(
@@ -97,6 +99,7 @@ async def toggle_auto_merge(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("enqueue_pr")
 async def enqueue_pr(
@@ -205,6 +208,7 @@ async def enqueue_pr(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("wait_for_merge_queue")
 async def wait_for_merge_queue(

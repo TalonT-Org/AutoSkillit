@@ -126,6 +126,8 @@ from ._type_retirement_backstops import *  # noqa: F401, F403
 from ._type_retirement_backstops import __all__ as _retirement_backstops_all
 from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
+from ._type_session_shape import *  # noqa: F401, F403
+from ._type_session_shape import __all__ as _session_shape_all
 from ._type_skill_contract import *  # noqa: F401, F403
 from ._type_skill_contract import __all__ as _skill_contract_all
 from ._type_skill_semantics import *  # noqa: F401, F403
@@ -196,6 +198,7 @@ __all__ = (
     + _recipe_delivery_all
     + _recipe_sections_all
     + _session_env_all
+    + _session_shape_all
     + _skill_contract_all
     + _skill_semantics_all
     + _subprocess_all

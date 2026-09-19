@@ -31,21 +31,22 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
-    EXEMPT_SESSION_TYPES_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    enforce_session_scope,
+    read_merged_hook_config,
+)
 
 PR_CREATE_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["pr_create_guard"]
 
 _DENY_REASON = DENY_REASON_BY_GUARD["pr_create_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["pr_create_guard"]
-_EXEMPT_SESSION_TYPES: frozenset[str] = EXEMPT_SESSION_TYPES_BY_GUARD["pr_create_guard"]
 
 
 def _is_gh_pr_create(cmd: str) -> bool:
@@ -71,6 +72,8 @@ def _is_gh_pr_create(cmd: str) -> bool:
 
 
 def main() -> None:
+    enforce_session_scope("any", exempt_tiers=frozenset({"orchestrator"}))
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, AttributeError, OSError):
@@ -84,10 +87,6 @@ def main() -> None:
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
-        sys.exit(0)
-
-    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
-    if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     project_root = resolve_state_root(parsed.payload_cwd)

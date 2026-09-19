@@ -39,8 +39,8 @@ from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import (
     _require_enabled,
-    _require_orchestrator_exact,
 )
+from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -224,6 +224,7 @@ def _resolve_fresh_recipe_step(state: _RunSkillDispatchState) -> str | None:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("run_skill")
 async def run_skill(
@@ -293,8 +294,6 @@ async def run_skill(
 
     Never raises.
     """
-    if (tier_gate := _require_orchestrator_exact("run_skill")) is not None:
-        return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
     if cwd and not Path(cwd).is_absolute():

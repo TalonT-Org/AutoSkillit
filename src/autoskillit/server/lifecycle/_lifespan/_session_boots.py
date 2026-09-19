@@ -21,13 +21,10 @@ from autoskillit.core import (
     EVIDENCE_READER_TOOLS,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
-    HEADLESS_ENV_VAR,
     SESSION_STALE_SECONDS,
     SessionType,
     get_logger,
-)
-from autoskillit.core import (
-    session_type as _resolve_session_type,
+    session_shape,
 )
 from autoskillit.execution import (
     find_orphaned_autoskillit_daemons,
@@ -266,7 +263,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     # boundary regardless of tag visibility.
     if exploration_auto_provision_eligible(
         auto_provision=ctx.config.agent_backend.auto_provision_exploration,
-        session_type=_resolve_session_type(),
+        session_type=session_shape().tier,
     ):
         _mcp.enable(tags={"exploration"})
 
@@ -309,7 +306,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     )
     from autoskillit.server.tools import tools_kitchen as _tk_food_truck  # circular-break
 
-    if os.environ.get(HEADLESS_ENV_VAR) != "1":
+    if not session_shape().headless:
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
             await _pre_reveal_kitchen(ctx)
         return
@@ -435,7 +432,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     codex/daemon children (see test_boot_step_symmetry.py's carve-out).
     """
 
-    if os.environ.get(HEADLESS_ENV_VAR) != "1":
+    if not session_shape().headless:
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
             await _pre_reveal_kitchen(ctx)
         return

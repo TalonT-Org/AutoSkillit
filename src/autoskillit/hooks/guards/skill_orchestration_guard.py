@@ -27,7 +27,7 @@ from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import normalize_payload_cwd  # noqa: E402
-from _hook_settings import payload_managed_codex_route  # noqa: E402
+from _hook_settings import enforce_session_scope, payload_managed_codex_route  # noqa: E402
 
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
@@ -65,14 +65,12 @@ def _enforce_managed_codex_route(tool: str, payload_cwd: str | None, session_id:
 
 
 def main() -> None:
+    enforce_session_scope("headless_only")
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
-
-    # Interactive sessions always pass
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
 
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>

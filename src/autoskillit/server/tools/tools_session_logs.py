@@ -24,6 +24,7 @@ from autoskillit.core import (
 from autoskillit.execution import read_session_index_rows, resolve_log_dir
 from autoskillit.server import _get_ctx, mcp
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -546,6 +547,7 @@ def _validate_arguments(
     tags={"autoskillit", "kitchen", "kitchen-core"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 async def inspect_session_logs(
     operation: str,

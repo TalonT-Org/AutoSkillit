@@ -45,6 +45,7 @@ from autoskillit.server import mcp
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, session_scoped
 from autoskillit.server.tools import (
     tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
 )
@@ -132,6 +133,7 @@ def _load_preflight_projection(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_bind_dispatch_provenance
 @_cancellation_shield(
     state_factory=_bound_dispatch_provenance,
@@ -201,9 +203,6 @@ async def dispatch_food_truck(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := tools_fleet_dispatch._require_fleet("dispatch_food_truck")) is not None:
-        return fleet_gate
-
     try:
         from autoskillit.server import _get_ctx  # circular-break
 
@@ -553,6 +552,7 @@ async def dispatch_food_truck(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield(result_type="fleet_error")
 @track_response_size("record_gate_dispatch")
 async def record_gate_dispatch(
@@ -574,9 +574,6 @@ async def record_gate_dispatch(
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := tools_fleet_dispatch._require_fleet("record_gate_dispatch")) is not None:
-        return fleet_gate
-
     try:
         from autoskillit.server import _get_ctx as _get_ctx_for_feature_check  # circular-break
 

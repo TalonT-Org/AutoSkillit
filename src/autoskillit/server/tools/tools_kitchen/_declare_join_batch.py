@@ -24,6 +24,7 @@ from autoskillit.hooks._session_binding import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -270,6 +271,7 @@ def _emit_join_diagnostic(record: dict[str, object]) -> None:
     annotations={"readOnlyHint": False},
     meta={"anthropic/alwaysLoad": False},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("declare_join_batch")
 async def declare_join_batch(

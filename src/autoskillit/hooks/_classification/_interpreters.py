@@ -430,8 +430,9 @@ def _upstream_pipe_text(segments: Sequence[_CommandSegment], index: int) -> str 
     verb, args = command_verb_and_args(list(segment.tokens))
     executable = _normalize_executable(verb)
     if executable == "cat" and (not args or args == ["-"]):
-        if segment.stdin_literals:
-            return "\n".join(literal.text for literal in segment.stdin_literals)
+        effective_literals = [literal for literal in segment.stdin_literals if literal.feeds_stdin]
+        if effective_literals:
+            return "\n".join(literal.text for literal in effective_literals)
         if segment.piped_from_previous and index > 0:
             return _upstream_pipe_text(segments, index - 1)
         return None
@@ -492,12 +493,14 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
 
         consumer = stdin_consumer(segment.tokens)
         for literal in segment.stdin_literals:
-            if consumer != StdinConsumer.INERT:
+            if literal.feeds_stdin and consumer != StdinConsumer.INERT:
                 origin = "heredoc" if literal.kind == "heredoc" else "herestring"
                 payloads.append(
                     EvaluatedPayload(literal.text, consumer, index, origin, literal.source_span)
                 )
-            if literal.outer_expansion and consumer != StdinConsumer.SHELL:
+            if literal.outer_expansion and (
+                not literal.feeds_stdin or consumer != StdinConsumer.SHELL
+            ):
                 for rel_start, sub in _iter_substitution_occurrences(literal.text):
                     abs_span = (
                         (
@@ -672,6 +675,8 @@ def _extract_interpreter_segment_specs(
 
     if stdin_literals and stdin_consumer(list(segment)) == StdinConsumer.PYTHON:
         for literal in stdin_literals:
+            if not literal.feeds_stdin:
+                continue
             found, unresolved = _python_program_command_specs(literal.text)
             specs.extend(found)
             has_unresolved = has_unresolved or unresolved

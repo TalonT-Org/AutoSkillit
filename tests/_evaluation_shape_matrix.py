@@ -232,18 +232,3 @@ EVALUATION_SHAPE_MATRIX: tuple[EvaluationShape, ...] = (
         lambda inner: f"cat <<'EOF' | tee f\n{inner}\nEOF\n",
     ),
 )
-
-
-# Deferred shapes: regex-level limitations of _HEREDOC_BODY_RE that are not
-# fixed by this rectify because each would change strip_heredoc_bodies's
-# matching and therefore the byte-for-byte parity lock against
-# core/git/bash_write_targets.py. Each is an inert `cat` consumer whose
-# intended-behavior builder is documented here for the strict-XFAIL
-# regression pinned in tests/arch/test_hook_raw_command_scan_inventory.py.
-DEFERRED_SHAPES: dict[str, Callable[[str], str]] = {
-    "two-heredocs-one-line": lambda inner: f"cat <<'A' <<'B'\nignored\nA\n{inner}\nB\n",
-    "backslash-quoted-delimiter": lambda inner: f"cat <<\\EOF\n{inner}\nEOF\n",
-    "partially-quoted-delimiter": lambda inner: f'cat <<E"OF"\n{inner}\nEOF\n',
-    "unterminated-heredoc": lambda inner: f"cat <<'EOF'\n{inner}\n",
-    "non-word-delimiter": lambda inner: f"cat <<'END-DOC'\n{inner}\nEND-DOC\n",
-}

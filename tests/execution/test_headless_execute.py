@@ -253,7 +253,6 @@ async def test_correlated_otlp_tokens_replace_parser_totals_before_logging_and_f
 async def test_otlp_tokens_captured_before_runner_crash_reach_terminal_artifact(
     minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution as execution
     import autoskillit.execution.headless._headless_execute as execute_module
     from autoskillit.execution.headless import _execute_claude_headless
     from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
@@ -287,7 +286,9 @@ async def test_otlp_tokens_captured_before_runner_crash_reach_terminal_artifact(
 
     minimal_ctx.runner = crashing_runner  # type: ignore[assignment]
     flushed: list[dict[str, object]] = []
-    monkeypatch.setattr(execution, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+    import autoskillit.execution.evidence.session_log as _sl_mod
+
+    monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
 
     result = await _execute_claude_headless(
         lambda _binding, extras: ClaudeHeadlessCmd(

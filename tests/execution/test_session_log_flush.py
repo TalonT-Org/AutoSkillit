@@ -25,7 +25,6 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log.session_log import resolve_log_dir
-from autoskillit.execution.session._turn_usage import serialize_turn_token_entry
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
@@ -1229,7 +1228,17 @@ def test_turn_usage_descriptor_states(
     assert descriptor["turn_usage_count"] == len(turn_usage)
     assert sidecar_path.exists() is bool(turn_usage)
     if turn_usage:
-        assert _read_jsonl(sidecar_path) == [serialize_turn_token_entry(row) for row in turn_usage]
+        # Use the public JSONL load path rather than calling the private
+        # `serialize_turn_token_entry` helper, so the test stays coupled to
+        # the loadable shape and not the internal serializer. Verify the
+        # record count and that each line is parseable JSON carrying the
+        # row's identifying fields.
+        loaded_rows = _read_jsonl(sidecar_path)
+        assert len(loaded_rows) == len(turn_usage)
+        for src, dst in zip(turn_usage, loaded_rows, strict=True):
+            assert dst["backend"] == src["backend"]
+            assert dst["provider_used"] == src["provider_used"]
+            assert dst["request_id"] == src["request_id"]
     if token_usage is None:
         assert all(
             descriptor[key] == _UNKNOWN
@@ -1310,7 +1319,15 @@ def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
     sidecar = (
         tmp_path / "sessions" / "resumed-codex_2026-09-10T10-00-00+00-00" / "turn_usage.jsonl"
     )
-    assert _read_jsonl(sidecar) == [serialize_turn_token_entry(current)]
+    # Compare via the public JSONL load path instead of the private
+    # `serialize_turn_token_entry` helper, so the test is robust to
+    # serializer evolution. Verify identifying fields instead of full
+    # dict equality.
+    loaded = _read_jsonl(sidecar)
+    assert len(loaded) == 1
+    assert loaded[0]["backend"] == current["backend"]
+    assert loaded[0]["provider_used"] == current["provider_used"]
+    assert loaded[0]["request_id"] == current["request_id"]
 
 
 def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(

@@ -52,8 +52,8 @@ def _fixture_docstring(path: Path, fixture_name: str) -> str | None:
         pytest.param(
             TEST_LOGGING,
             "_structlog_to_null",
-            ("override",),
-            id="logging_override_structlog_to_null",
+            ("override", "xdist"),
+            id="test_logging_structlog_to_null",
         ),
     ],
 )
@@ -69,10 +69,18 @@ def test_fixture_documents_required_semantics(
     autouse fixtures shadow same-named parent fixtures in the test class's MRO.
     Docstrings must call these mechanisms out so future readers do not assume
     single-execution semantics or mistake an empty-body override for a bug.
+
+    Keyword selection rationale: every protected fixture documents two
+    distinct concepts — the mechanism (``override``, ``session``) and the
+    execution environment (``xdist``, ``worker``). Each tuple has exactly two
+    keywords so the assertion shape is uniform across fixtures and a
+    regression that drops either concept fails the guard. ``all(...)`` is
+    used (not ``any(...)``) so a docstring mentioning only one of the two
+    required keywords does not silently satisfy the assertion.
     """
     doc = _fixture_docstring(path, fixture_name)
     assert doc is not None, f"{fixture_name} fixture not found in {path}"
     doc_lower = doc.lower()
-    assert any(keyword in doc_lower for keyword in required_keywords), (
-        f"{fixture_name} docstring must mention one of {required_keywords!r}; got: {doc!r}"
+    assert all(keyword in doc_lower for keyword in required_keywords), (
+        f"{fixture_name} docstring must mention ALL of {required_keywords!r}; got: {doc!r}"
     )

@@ -17,41 +17,11 @@ from autoskillit.fleet import (
     read_state,
     write_initial_state,
 )
+from tests.fleet._reaper_test_support import BOOT_ID, _make_running_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
-BOOT_ID = "boot-abc-123"
 OTHER_BOOT_ID = "boot-xyz-999"
-
-
-def _make_running_state(
-    tmp_path: Path,
-    *,
-    dispatch_name: str = "d1",
-    dispatch_id: str = "did-reap",
-    dispatched_pid: int = 12345,
-    dispatched_starttime_ticks: int = 1000,
-    dispatched_boot_id: str = BOOT_ID,
-    dispatched_create_time: float = 0.0,
-) -> Path:
-    sp = tmp_path / "state.json"
-    write_initial_state(
-        sp, "cid-reap", "reap-campaign", "/m.yaml", [DispatchRecord(name=dispatch_name)]
-    )
-    raw = json.loads(sp.read_text())
-    raw["dispatches"][0].update(
-        {
-            "status": "running",
-            "dispatch_id": dispatch_id,
-            "dispatched_pid": dispatched_pid,
-            "dispatched_starttime_ticks": dispatched_starttime_ticks,
-            "dispatched_boot_id": dispatched_boot_id,
-            "dispatched_create_time": dispatched_create_time,
-            "started_at": 1000.0,
-        }
-    )
-    sp.write_text(json.dumps(raw))
-    return sp
 
 
 def _reap(

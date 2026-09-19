@@ -180,6 +180,11 @@ def _humanize(n: Any) -> str:
     return str(n)
 
 
+def _source_label(entry: dict[str, Any]) -> str:
+    backend, provider = entry.get("backend"), entry.get("provider_used")
+    return f"{backend}/{provider}" if backend and provider else ""
+
+
 def _fmt_duration(seconds: float) -> str:
     """Format seconds as human-readable duration."""
     seconds = float(seconds)
@@ -310,7 +315,6 @@ def _load_sessions(
         )
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
-        entry["invocation_count"] += 1
         entry["loc_insertions"] = entry.get("loc_insertions", 0) + (
             data.get("loc_insertions") or 0
         )
@@ -322,6 +326,7 @@ def _load_sessions(
             legacy=legacy,
             maximum=True,
         )
+        entry["invocation_count"] += 1
         _raw_turns = data.get("turn_count", 0)
         if isinstance(_raw_turns, int):
             entry["turn_count"] = entry.get("turn_count", 0) + _raw_turns
@@ -338,30 +343,25 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
         "|------|-------|-------|----------|--------|------------|----------|-------|-------------|------|",
     ]
 
-    total_input = _measure(None)
-    total_output = _measure(None)
-    total_cache_rd = _measure(None)
-    total_peak = _measure(None)
-    total_cache_wr = _measure(None)
-    total_time = 0.0
-    has_total = False
+    totals: dict[str, dict[str, Any]] = {}
     has_non_anthropic = False
 
     for entry in aggregated.values():
         name = entry["step_name"]
-        source = f"{entry.get('backend', 'unknown')}/{entry.get('provider_used', 'unknown')}"
-        name = f"{name} ({source})"
+        source = _source_label(entry)
+        if source:
+            name = f"{name} ({source})"
         model = entry.get("model", "")
         if model and not model.startswith("claude-"):
             name = f"{name}*"
             has_non_anthropic = True
         count = entry.get("invocation_count", 1)
-        inp = entry["input_tokens"]
-        out = entry["output_tokens"]
-        cache_rd = entry.get("cache_read_tokens", 0)
-        peak_ctx = entry.get("peak_context", 0)
+        inp = _measure(entry.get("input_tokens"))
+        out = _measure(entry.get("output_tokens"))
+        cache_rd = _measure(entry.get("cache_read_tokens"))
+        peak_ctx = _measure(entry.get("peak_context"))
         turns = entry.get("turn_count", 0)
-        cache_wr = entry.get("cache_write_tokens", 0)
+        cache_wr = _measure(entry.get("cache_write_tokens"))
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
@@ -370,27 +370,37 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
             f" | {_fmt_duration(elapsed)} |"
         )
 
-        if not has_total:
-            total_input, total_output = dict(inp), dict(out)
-            total_cache_rd, total_peak, total_cache_wr = (
-                dict(cache_rd),
-                dict(peak_ctx),
-                dict(cache_wr),
-            )
-            has_total = True
+        if source not in totals:
+            totals[source] = {
+                "input_tokens": inp,
+                "output_tokens": out,
+                "cache_read_tokens": cache_rd,
+                "peak_context": peak_ctx,
+                "cache_write_tokens": cache_wr,
+                "elapsed_seconds": elapsed,
+            }
         else:
-            total_input = _combine_measure(total_input, inp)
-            total_output = _combine_measure(total_output, out)
-            total_cache_rd = _combine_measure(total_cache_rd, cache_rd)
-            total_peak = _maximum_measure(total_peak, peak_ctx)
-            total_cache_wr = _combine_measure(total_cache_wr, cache_wr)
-        total_time += elapsed
+            total = totals[source]
+            for field, value in (
+                ("input_tokens", inp),
+                ("output_tokens", out),
+                ("cache_read_tokens", cache_rd),
+                ("cache_write_tokens", cache_wr),
+            ):
+                total[field] = _combine_measure(total[field], value)
+            total["peak_context"] = _maximum_measure(total["peak_context"], peak_ctx)
+            total["elapsed_seconds"] += elapsed
 
-    lines.append(
-        f"| **Total** | | | {_humanize(total_input)} | {_humanize(total_output)}"
-        f" | {_humanize(total_cache_rd)} | {_humanize(total_peak)}"
-        f" | | {_humanize(total_cache_wr)} | {_fmt_duration(total_time)} |"
-    )
+    for source, total in totals.items():
+        label = f"Total ({source})" if source else "Total"
+        lines.append(
+            f"| **{label}** | | | {_humanize(total['input_tokens'])}"
+            f" | {_humanize(total['output_tokens'])}"
+            f" | {_humanize(total['cache_read_tokens'])}"
+            f" | {_humanize(total['peak_context'])} | |"
+            f" {_humanize(total['cache_write_tokens'])}"
+            f" | {_fmt_duration(total['elapsed_seconds'])} |"
+        )
     if has_non_anthropic:
         lines.append("")
         lines.append(r"\* *Step used a non-Anthropic provider; caching behavior may differ.*")
@@ -423,15 +433,47 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
         "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
         "|------|-------------|----------------|-----------------|------------|",
     ]
+    totals: dict[str, dict[str, Any]] = {}
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-        cr = entry.get("cache_read_tokens", 0)
-        cw = entry.get("cache_write_tokens", 0)
-        out = entry.get("output_tokens", 0)
+        cr = _measure(entry.get("cache_read_tokens"))
+        cw = _measure(entry.get("cache_write_tokens"))
+        out = _measure(entry.get("output_tokens"))
+        source = _source_label(entry)
+        label = f"{entry['step_name']} ({source})" if source else entry["step_name"]
         lines.append(
-            f"| {entry['step_name']} ({entry.get('backend')}/{entry.get('provider_used')}) | {loc}"
-            f" | {_ratio(cr, loc)}"
-            f" | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+            f"| {label} | {loc} | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
+        )
+        total = totals.setdefault(
+            source,
+            {field: {"tokens": 0, "loc": 0, "unknown": False} for field in ("cr", "cw", "out")},
+        )
+        for field, measure in (("cr", cr), ("cw", cw), ("out", out)):
+            state = measure["state"]
+            if state == "unknown":
+                total[field]["unknown"] = True
+            elif state in {"measured", "measured_zero"}:
+                total[field]["tokens"] += measure["value"]
+                total[field]["loc"] += loc
+    for source, total in totals.items():
+
+        def total_ratio(field: str) -> str:
+            measure = total[field]
+            if measure["unknown"]:
+                return "unknown"
+            if not measure["loc"]:
+                return "—"
+            return _ratio(measure["tokens"], measure["loc"])
+
+        label = f"Total ({source})" if source else "Total"
+        total_loc = sum(
+            entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
+            for entry in aggregated.values()
+            if _source_label(entry) == source
+        )
+        lines.append(
+            f"| **{label}** | **{total_loc}** | {total_ratio('cr')}"
+            f" | {total_ratio('cw')} | {total_ratio('out')} |"
         )
     return "\n".join(lines)
 
@@ -449,28 +491,33 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
         model = entry.get("model", "")
         if not model or model == "unknown":
             continue
-        source = f"{entry.get('backend', 'unknown')}/{entry.get('provider_used', 'unknown')}"
+        source = _source_label(entry)
         key = f"{source}\x1f{model}"
-        if key not in model_data:
+        first = key not in model_data
+        if first:
             model_data[key] = {
-                "model": f"{source}: {model}",
+                "model": f"{source}: {model}" if source else model,
                 "_steps": set(),
-                "input_tokens": dict(entry["input_tokens"]),
-                "output_tokens": dict(entry["output_tokens"]),
-                "cache_write_tokens": dict(entry["cache_write_tokens"]),
-                "cache_read_tokens": dict(entry["cache_read_tokens"]),
+                "input_tokens": _measure(entry.get("input_tokens")),
+                "output_tokens": _measure(entry.get("output_tokens")),
+                "cache_write_tokens": _measure(entry.get("cache_write_tokens")),
+                "cache_read_tokens": _measure(entry.get("cache_read_tokens")),
                 "elapsed_seconds": 0.0,
             }
         md = model_data[key]
         md["_steps"].add(entry.get("step_name", ""))
-        if len(md["_steps"]) > 1:
-            md["input_tokens"] = _combine_measure(md["input_tokens"], entry["input_tokens"])
-            md["output_tokens"] = _combine_measure(md["output_tokens"], entry["output_tokens"])
+        if not first:
+            md["input_tokens"] = _combine_measure(
+                md["input_tokens"], _measure(entry.get("input_tokens"))
+            )
+            md["output_tokens"] = _combine_measure(
+                md["output_tokens"], _measure(entry.get("output_tokens"))
+            )
             md["cache_write_tokens"] = _combine_measure(
-                md["cache_write_tokens"], entry["cache_write_tokens"]
+                md["cache_write_tokens"], _measure(entry.get("cache_write_tokens"))
             )
             md["cache_read_tokens"] = _combine_measure(
-                md["cache_read_tokens"], entry["cache_read_tokens"]
+                md["cache_read_tokens"], _measure(entry.get("cache_read_tokens"))
             )
         md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
 

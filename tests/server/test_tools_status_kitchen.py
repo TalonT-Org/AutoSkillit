@@ -394,7 +394,7 @@ class TestTelemetryRecoveryData:
         result = json.loads(await get_token_summary())
         steps = {s["step_name"]: s for s in result["steps"]}
         assert "implement" in steps
-        assert steps["implement"]["input_tokens"] == 500
+        assert steps["implement"]["input_tokens"] == {"state": "measured", "value": 500}
 
     @pytest.mark.anyio
     async def test_timing_summary_reflects_recovered_data(self, tool_ctx_kitchen_open, tmp_path):

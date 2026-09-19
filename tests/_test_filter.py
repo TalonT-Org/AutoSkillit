@@ -337,9 +337,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_enums_context_admission": frozenset(
         {"cli", "core", "execution", "pipeline", "recipe", "server", "smoke_utils"}
     ),
-    "_type_enums_token": frozenset(
-        {"cli", "core", "execution", "pipeline", "recipe", "server", "smoke_utils"}
-    ),
     "_type_constants_retirements": frozenset(
         {"cli", "core", "execution", "fleet", "hooks", "recipe", "server", "skills", "workspace"}
     ),

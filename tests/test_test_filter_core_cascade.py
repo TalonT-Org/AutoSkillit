@@ -348,7 +348,7 @@ class TestModuleCascadeCore:
         )
 
     def test_type_token_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core", "execution"})
+        assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core", "execution", "pipeline"})
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
@@ -873,7 +873,7 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_token_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_token → narrow cascade of {"core", "execution"}."""
+        """_type_token also cascades to its pipeline consumer."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_token.py"},
@@ -882,9 +882,9 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "execution"]:
+        for pkg in ["core", "execution", "pipeline"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
-        for excluded in ["config", "pipeline", "fleet", "migration", "workspace"]:
+        for excluded in ["config", "fleet", "migration", "workspace"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:

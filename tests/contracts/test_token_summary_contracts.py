@@ -182,11 +182,10 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "_load_sessions returned empty dict — hook cannot read what flush_session_log wrote. "
         "Check key name: flush writes 'session_label' but hook may read 'step_name'."
     )
-    key = token_summary_hook._canonical("plan")
-    assert key in aggregated, f"Expected key 'plan' in aggregated, got: {list(aggregated.keys())}"
-    entry = aggregated[key]
-    assert entry["input_tokens"] == 100
-    assert entry["output_tokens"] == 200
+    entry = next(iter(aggregated.values()))
+    assert entry["step_name"] == "plan"
+    assert entry["input_tokens"] == {"state": "measured", "value": 100}
+    assert entry["output_tokens"] == {"state": "measured", "value": 200}
 
 
 # ── Step 1d-alias: Bridge contract: _V1_TOKEN_FIELD_ALIASES structural correctness ──

@@ -177,7 +177,8 @@ def test_default_token_log_satisfies_token_store_with_order_id():
     )
     assert log.get_report(order_id="test-order") != []
     total = log.compute_total(order_id="test-order")
-    assert "input_tokens" in total
+    assert len(total) == 1
+    assert total[0]["input_tokens"] == {"state": "measured", "value": 1}
 
 
 def test_default_token_log_implements_check_step_completeness():

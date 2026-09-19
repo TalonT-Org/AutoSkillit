@@ -73,6 +73,8 @@ _TOKEN_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _tok_md_headers) + "|
 _TOKEN_DISPLAY_FIELDS: frozenset[str] = frozenset(
     {
         "step_name",
+        "backend",
+        "provider_used",
         "model",
         "input_tokens",
         "output_tokens",
@@ -94,6 +96,8 @@ _TOKEN_EXCLUDED_FIELDS: frozenset[str] = frozenset(
 
 _TOKEN_FIELD_TO_COLUMN: dict[str, str] = {
     "step_name": "STEP",
+    "backend": "STEP",
+    "provider_used": "STEP",
     "model": "MODEL",
     "input_tokens": "UNCACHED",
     "output_tokens": "OUTPUT",
@@ -248,7 +252,7 @@ class TelemetryFormatter:
             peak_ctx = h(step.get("peak_context", 0))
             turns = step.get("turn_count", 0)
             cache_wr = _h_cache(step.get("cache_write_tokens"))
-            wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+            wc = step.get("elapsed_seconds", 0.0)
             lines.append(
                 f"| {name} | {model} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
                 f" | {turns} | {cache_wr} | {fmt_dur(wc)} |"
@@ -260,8 +264,9 @@ class TelemetryFormatter:
         total_peak = h(total.get("peak_context", 0))
         total_cache_wr = _h_cache(total.get("cache_write_tokens"))
         total_time = total.get("total_elapsed_seconds", 0.0)
+        total_label = f"Total ({_source_label(total)})" if _source_label(total) else "Total"
         lines.append(
-            f"| **Total ({_source_label(total) or 'unknown'})** | | | {total_in}"
+            f"| **{total_label}** | | | {total_in}"
             f" | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
@@ -303,6 +308,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             step_name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                step_name = f"{step_name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 step_name = f"{step_name}*"
@@ -318,7 +326,7 @@ class TelemetryFormatter:
                     h(step.get("peak_context", 0)),
                     str(step.get("turn_count", 0)),
                     _h_cache(step.get("cache_write_tokens")),
-                    fmt_dur(step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))),
+                    fmt_dur(step.get("elapsed_seconds", 0.0)),
                 )
             )
 
@@ -371,6 +379,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                name = f"{name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 name = f"{name}*"
@@ -382,7 +393,7 @@ class TelemetryFormatter:
             peak_ctx = h(step.get("peak_context", 0))
             cache_wr = _h_cache(step.get("cache_write_tokens"))
             turns = step.get("turn_count", 0)
-            wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+            wc = step.get("elapsed_seconds", 0.0)
             model_tag = f" model:{model}" if model else ""
             lines.append(
                 f"{name} x{count}"

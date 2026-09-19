@@ -1608,8 +1608,8 @@ class TestCodexPipelineHappyPath:
         assert session.session_id == "thread_hp_abc123"
         assert session.is_error is False
         assert session.token_usage is not None
-        assert session.token_usage["input_tokens"] == 150
-        assert session.token_usage["output_tokens"] == 75
+        assert session.token_usage["input_tokens"] == {"state": "measured", "value": 150}
+        assert session.token_usage["output_tokens"] == {"state": "measured", "value": 75}
         assert len(session.assistant_messages) > 0
 
 

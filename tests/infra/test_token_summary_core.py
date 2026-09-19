@@ -734,8 +734,8 @@ def test_load_sessions_reads_model_identifier(tmp_path: Path) -> None:
     )
 
     aggregated = _load_sessions(log_root, kitchen_id)
-    assert "plan" in aggregated
-    assert aggregated["plan"]["model"] == "claude-sonnet-4-6"
+    assert any(entry["step_name"] == "plan" for entry in aggregated.values())
+    assert next(iter(aggregated.values()))["model"] == "claude-sonnet-4-6"
 
 
 def test_model_table_equivalence() -> None:
@@ -937,9 +937,10 @@ class TestLoadSessionsSchemaVersionCompat:
         )
         result = _load_sessions(log_root, self._KITCHEN_ID)
         assert len(result) == 1
-        entry = result["plan"]
-        assert entry["cache_write_tokens"] == 10
-        assert entry["cache_read_tokens"] == 5
+        entry = next(iter(result.values()))
+        assert entry["step_name"] == "plan"
+        assert entry["cache_write_tokens"] == {"state": "measured", "value": 10}
+        assert entry["cache_read_tokens"] == {"state": "measured", "value": 5}
 
 
 # ---------------------------------------------------------------------------
@@ -1262,6 +1263,8 @@ def test_load_sessions_handles_null_cache_write(tmp_path: Path) -> None:
     )
 
     result = _load_sessions(log_root, pipeline_id)
-    assert "plan" in result
-    assert result["plan"]["cache_write_tokens"] == 0
-    assert result["plan"]["cache_read_tokens"] == 0
+    assert len(result) == 1
+    entry = next(iter(result.values()))
+    assert entry["step_name"] == "plan"
+    assert entry["cache_write_tokens"] == {"state": "unknown", "value": None}
+    assert entry["cache_read_tokens"] == {"state": "unknown", "value": None}

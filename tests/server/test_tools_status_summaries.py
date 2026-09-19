@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import TokenMeasure
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
@@ -16,6 +17,10 @@ from autoskillit.server.tools.tools_status import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _observed(value: int) -> dict[str, int | str]:
+    return TokenMeasure.observed(value).to_dict()
 
 
 class TestGetTokenSummary:
@@ -46,10 +51,7 @@ class TestGetTokenSummary:
     async def test_returns_empty_steps_initially(self, tool_ctx_kitchen_open):
         result = json.loads(await get_token_summary())
         assert result["steps"] == []
-        assert result["total"]["input_tokens"] == 0
-        assert result["total"]["output_tokens"] == 0
-        assert result["total"]["cache_write_tokens"] == 0
-        assert result["total"]["cache_read_tokens"] == 0
+        assert result["totals"] == []
 
     @pytest.mark.anyio
     async def test_returns_entry_per_step_name(self, tool_ctx_kitchen_open):
@@ -89,11 +91,11 @@ class TestGetTokenSummary:
         tool_ctx_kitchen_open.token_log.record("implement", usage)
         result = json.loads(await get_token_summary())
         assert len(result["steps"]) == 1
-        assert result["steps"][0]["input_tokens"] == 300
+        assert result["steps"][0]["input_tokens"] == _observed(300)
         assert result["steps"][0]["invocation_count"] == 3
 
     @pytest.mark.anyio
-    async def test_total_field_sums_all_steps(self, tool_ctx_kitchen_open):
+    async def test_totals_sum_only_within_source_pair(self, tool_ctx_kitchen_open):
         tool_ctx_kitchen_open.token_log.record(
             "plan",
             {
@@ -113,10 +115,12 @@ class TestGetTokenSummary:
             },
         )
         result = json.loads(await get_token_summary())
-        assert result["total"]["input_tokens"] == 300
-        assert result["total"]["output_tokens"] == 130
-        assert result["total"]["cache_write_tokens"] == 30
-        assert result["total"]["cache_read_tokens"] == 15
+        assert len(result["totals"]) == 1
+        total = result["totals"][0]
+        assert total["input_tokens"] == _observed(300)
+        assert total["output_tokens"] == _observed(130)
+        assert total["cache_write_tokens"] == _observed(30)
+        assert total["cache_read_tokens"] == _observed(15)
 
     @pytest.mark.anyio
     async def test_clear_true_resets_after_returning(self, tool_ctx_kitchen_open):
@@ -147,15 +151,17 @@ class TestGetTokenSummary:
         )
         result = json.loads(await get_token_summary())
         assert "steps" in result
-        assert "total" in result
+        assert "totals" in result
         assert "model_totals" in result
         assert isinstance(result["steps"], list)
         assert isinstance(result["model_totals"], list)
         assert all("model" in e for e in result["model_totals"]), (
             "each model_totals entry must have a 'model' key"
         )
-        total_keys = set(result["total"].keys())
+        total_keys = set(result["totals"][0].keys())
         assert {
+            "backend",
+            "provider_used",
             "input_tokens",
             "output_tokens",
             "cache_write_tokens",
@@ -174,8 +180,8 @@ class TestGetTokenSummary:
         assert result["steps"][0]["elapsed_seconds"] == pytest.approx(30.0)
 
     @pytest.mark.anyio
-    async def test_total_includes_total_elapsed_seconds(self, tool_ctx_kitchen_open):
-        """Total dict includes total_elapsed_seconds summed across all steps."""
+    async def test_totals_include_elapsed_seconds(self, tool_ctx_kitchen_open):
+        """The source-pair total includes elapsed time from its token rows."""
         tool_ctx_kitchen_open.token_log.record(
             "a",
             {"input_tokens": 10},
@@ -189,8 +195,7 @@ class TestGetTokenSummary:
             end_ts="2026-01-01T00:01:08+00:00",
         )
         result = json.loads(await get_token_summary())
-        assert "total_elapsed_seconds" in result["total"]
-        assert result["total"]["total_elapsed_seconds"] == pytest.approx(13.0)
+        assert result["totals"][0]["total_elapsed_seconds"] == pytest.approx(13.0)
 
 
 class TestGetTimingSummary:
@@ -283,7 +288,7 @@ class TestGetTokenSummaryFormat:
         )
         result = json.loads(await get_token_summary())
         assert "steps" in result
-        assert "total" in result
+        assert "totals" in result
 
     @pytest.mark.anyio
     async def test_format_table_returns_markdown(self, tool_ctx_kitchen_open):
@@ -296,7 +301,7 @@ class TestGetTokenSummaryFormat:
         assert "| Step |" in result
         assert "|---" in result
         assert "plan" in result
-        assert "**Total**" in result
+        assert "**Total (" in result
         # Not JSON
         with pytest.raises(json.JSONDecodeError):
             json.loads(result)
@@ -348,7 +353,7 @@ class TestTokenSummaryWallClock:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     @pytest.mark.anyio
-    async def test_wall_clock_seconds_merged_from_timing_log(self, tool_ctx_kitchen_open):
+    async def test_token_elapsed_is_independent_of_timing_log(self, tool_ctx_kitchen_open):
         from autoskillit.pipeline.timings import DefaultTimingLog
         from autoskillit.pipeline.tokens import DefaultTokenLog
 
@@ -368,11 +373,11 @@ class TestTokenSummaryWallClock:
 
         result = json.loads(await get_token_summary())
         step = next(s for s in result["steps"] if s["step_name"] == "step-a")
-        assert step["wall_clock_seconds"] == pytest.approx(12.5)
         assert step["elapsed_seconds"] == pytest.approx(8.0)
+        assert "wall_clock_seconds" not in step
 
     @pytest.mark.anyio
-    async def test_wall_clock_falls_back_to_elapsed_when_no_timing(self, tool_ctx_kitchen_open):
+    async def test_elapsed_without_timing_log(self, tool_ctx_kitchen_open):
         from autoskillit.pipeline.timings import DefaultTimingLog
         from autoskillit.pipeline.tokens import DefaultTokenLog
 
@@ -395,15 +400,11 @@ class TestTokenSummaryWallClock:
         )
         result = json.loads(await get_token_summary())
         step = next(s for s in result["steps"] if s["step_name"] == "step-b")
-        # No timing_log entry → falls back to elapsed_seconds
-        assert step["wall_clock_seconds"] == pytest.approx(5.0)
+        assert step["elapsed_seconds"] == pytest.approx(5.0)
 
     @pytest.mark.anyio
-    async def test_merge_wall_clock_after_normalization(self, tool_ctx_kitchen_open):
-        """
-        When token entries and timing entries are both normalized to canonical names,
-        _merge_wall_clock_seconds must match them correctly.
-        """
+    async def test_normalization_does_not_copy_timing_log(self, tool_ctx_kitchen_open):
+        """Token rows remain source-pair scoped after step normalization."""
         from autoskillit.pipeline.timings import DefaultTimingLog
         from autoskillit.pipeline.tokens import DefaultTokenLog
 
@@ -427,10 +428,8 @@ class TestTokenSummaryWallClock:
         assert len(result["steps"]) == 1
         step = result["steps"][0]
         assert step["step_name"] == "implement"
-        assert step["input_tokens"] == 200
-        # wall_clock_seconds from timing log should be present
-        assert "wall_clock_seconds" in step
-        assert step["wall_clock_seconds"] == pytest.approx(115.0)
+        assert step["input_tokens"] == _observed(200)
+        assert "wall_clock_seconds" not in step
 
 
 class TestClearMarkerWritten:

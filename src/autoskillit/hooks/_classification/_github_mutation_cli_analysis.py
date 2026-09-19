@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import re
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
@@ -37,6 +38,51 @@ else:
 
 
 _GH_HELP_FLAGS: frozenset[str] = frozenset({"--help", "-h"})
+_GH_ISSUE_EDIT_FLAG_SPEC: Mapping[str, _FlagArity] = {
+    **{
+        flag: _FlagArity.VALUE
+        for flag in (
+            "--add-assignee",
+            "--add-label",
+            "--add-project",
+            "--body",
+            "--body-file",
+            "--milestone",
+            "--remove-assignee",
+            "--remove-label",
+            "--remove-project",
+            "--repo",
+            "--title",
+            "-b",
+            "-F",
+            "-m",
+            "-R",
+            "-t",
+            "--add-sub-issue",
+            "--remove-sub-issue",
+            "--add-blocked-by",
+            "--remove-blocked-by",
+            "--add-blocking",
+            "--remove-blocking",
+            "--parent",
+            "--type",
+        )
+    },
+    "--remove-milestone": _FlagArity.BOOLEAN,
+    "--remove-parent": _FlagArity.BOOLEAN,
+    "--remove-type": _FlagArity.BOOLEAN,
+}
+_GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS: frozenset[str] = frozenset(
+    {
+        "--add-sub-issue",
+        "--remove-sub-issue",
+        "--add-blocked-by",
+        "--remove-blocked-by",
+        "--add-blocking",
+        "--remove-blocking",
+    }
+)
+_GH_ISSUE_EDIT_REFERENCE_FLAGS: frozenset[str] = _GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS | {"--parent"}
 _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
     {
         "--body",
@@ -59,37 +105,46 @@ _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
         "--target",
         "--visibility",
     }
+    | {flag for flag, arity in _GH_ISSUE_EDIT_FLAG_SPEC.items() if arity == _FlagArity.VALUE}
 )
-_GH_ISSUE_EDIT_LONG_VALUE_FLAGS: frozenset[str] = frozenset(
-    {
-        "--add-assignee",
-        "--add-label",
-        "--add-project",
-        "--body",
-        "--body-file",
-        "--milestone",
-        "--remove-assignee",
-        "--remove-label",
-        "--remove-project",
-        "--repo",
-        "--title",
-    }
-)
-_GH_ISSUE_EDIT_SHORT_VALUE_FLAGS: frozenset[str] = frozenset({"-b", "-F", "-m", "-R", "-t"})
 _GH_ISSUE_URL_RE = re.compile(r"^/[^/\s]+/[^/\s]+/issues/\d+/?$")
 
 
-def _is_static_issue_edit_target(value: ArgvToken) -> bool:
-    if not value.text or _is_dynamic_shell_value(value):
-        return False
-    if value.text.isdecimal():
+def _is_static_issue_edit_reference_text(value: str) -> bool:
+    if value.isdecimal():
         return True
-    parsed = urlsplit(value.text)
+    parsed = urlsplit(value)
     return bool(
         parsed.scheme in {"http", "https"}
         and parsed.netloc
         and _GH_ISSUE_URL_RE.fullmatch(parsed.path)
     )
+
+
+def _is_static_issue_edit_target(value: ArgvToken) -> bool:
+    return bool(
+        value.text
+        and not _is_dynamic_shell_value(value)
+        and _is_static_issue_edit_reference_text(value.text)
+    )
+
+
+def _is_static_issue_edit_reference_list(value: ArgvToken) -> bool:
+    if not value.text or _is_dynamic_shell_value(value):
+        return False
+    try:
+        references = next(csv.reader([value.text], strict=True))
+    except csv.Error:
+        return False
+    return bool(references) and all(
+        reference and _is_static_issue_edit_reference_text(reference) for reference in references
+    )
+
+
+def _is_static_issue_edit_flag_reference(flag: str, value: ArgvToken) -> bool:
+    if flag in _GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS:
+        return _is_static_issue_edit_reference_list(value)
+    return _is_static_issue_edit_target(value)
 
 
 def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, str, str]:
@@ -103,24 +158,33 @@ def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, st
             i += 1
             continue
         if not options_ended:
-            if (
-                token.text in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS
-                or token.text in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS
-            ):
-                if i + 1 >= len(args):
+            value, next_i, recognized = _consume_argv_flag(args, i, _GH_ISSUE_EDIT_FLAG_SPEC)
+            if recognized:
+                flag = token.text.partition("=")[0]
+                if flag not in _GH_ISSUE_EDIT_FLAG_SPEC and len(token.text) > 2:
+                    flag = token.text[:2]
+                if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE and (
+                    value is None
+                    or not value.text
+                    or value.text == "--"
+                    or value.text.startswith("-")
+                ):
                     return (
                         None,
                         "missing_required_value",
-                        f"gh issue edit flag {token.text} is missing a value",
+                        f"gh issue edit flag {flag} is missing a value",
                     )
-                i += 2
-                continue
-            long_flag, separator, _value = token.text.partition("=")
-            if separator and long_flag in _GH_ISSUE_EDIT_LONG_VALUE_FLAGS:
-                i += 1
-                continue
-            if len(token.text) > 2 and token.text[:2] in _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS:
-                i += 1
+                if (
+                    flag in _GH_ISSUE_EDIT_REFERENCE_FLAGS
+                    and value is not None
+                    and not _is_static_issue_edit_flag_reference(flag, value)
+                ):
+                    return (
+                        None,
+                        "dynamic_target",
+                        f"gh issue edit flag {flag} has an unresolved reference",
+                    )
+                i = next_i
                 continue
             if token.text.startswith("-"):
                 return (

@@ -395,6 +395,36 @@ def test_multi_target_issue_edit_is_denied(
     assert "multiple_mutations" in result["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+@pytest.mark.parametrize(
+    "command, reason_code",
+    [
+        ("gh issue edit 4734 --add-blocked-by 4726,4727", None),
+        ("gh issue edit 4734 --parent=https://github.com/o/r/issues/4726 --type Bug", None),
+        ("gh issue edit --remove-parent 4734", None),
+        ("gh issue edit 4734 --add-blocked-by", "missing_required_value"),
+        ("gh issue edit 4734 --parent=$RELATED", "dynamic_target"),
+        ("gh issue edit 4734 4727 --add-sub-issue 4726", "multiple_mutations"),
+        ("gh issue edit 4734 --unknown value", "unsupported_grammar"),
+    ],
+    ids=["relationship", "parent-type", "boolean", "missing", "dynamic", "multiple", "unknown"],
+)
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_issue_edit_flag_grammar_guard_outcomes(
+    command: str,
+    reason_code: str | None,
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    result = _run_hook(event_factory(command, cwd=str(tmp_path)), monkeypatch)
+
+    if reason_code is None:
+        assert result == {}
+        return
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert reason_code in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_unexpected_classifier_error_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

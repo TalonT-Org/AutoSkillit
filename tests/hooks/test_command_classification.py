@@ -40,6 +40,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     _CURL_FLAG_SPEC,
     _GH_API_FLAG_SPEC,
     _GH_HELP_FLAGS,
+    _GH_ISSUE_EDIT_FLAG_SPEC,
     GitHubMutationAnalysis,
     GitHubMutationKind,
     GitHubMutationRecord,
@@ -2582,6 +2583,143 @@ class TestAnalyzeGitHubMutations:
     )
     def test_issue_edit_single_target_flag_grammar_is_one_request(self, command: str) -> None:
         analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "--add-blocked-by",
+            "--add-blocking",
+            "--add-sub-issue",
+            "--remove-blocked-by",
+            "--remove-blocking",
+            "--remove-sub-issue",
+        ],
+    )
+    @pytest.mark.parametrize("form", ["separated", "equals", "csv", "repeated"])
+    def test_issue_edit_relationship_flags_are_one_request(self, flag: str, form: str) -> None:
+        if form == "separated":
+            arguments = f"{flag} 4726"
+        elif form == "equals":
+            arguments = f"{flag}=4726"
+        elif form == "csv":
+            arguments = f"{flag} '\"https://github.com/o/r/issues/4726?labels=a,b\",4727'"
+        else:
+            arguments = f"{flag} 4726 {flag} 4727"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {arguments}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert len(analysis.mutations) == 1
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 4734 --parent 4726",
+            "gh issue edit 4734 --parent=https://github.com/o/r/issues/4726",
+            "gh issue edit 4734 --type Bug",
+            'gh issue edit 4734 --type=Bug --type="Bug, feature"',
+        ],
+        ids=["parent-number", "parent-url", "type-separated", "type-repeated-comma"],
+    )
+    def test_issue_edit_parent_and_type_flags_are_one_request(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize("flag", ["--remove-milestone", "--remove-parent", "--remove-type"])
+    @pytest.mark.parametrize("position", ["before", "after"])
+    def test_issue_edit_boolean_removal_flags_do_not_consume_target(
+        self, flag: str, position: str
+    ) -> None:
+        command = (
+            f"gh issue edit {flag} 4734" if position == "before" else f"gh issue edit 4734 {flag}"
+        )
+
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "--add-blocked-by",
+            "--add-blocking",
+            "--add-sub-issue",
+            "--parent",
+            "--remove-blocked-by",
+            "--remove-blocking",
+            "--remove-sub-issue",
+        ],
+    )
+    @pytest.mark.parametrize("form", ["separated", "equals"])
+    def test_issue_edit_reference_flags_reject_dynamic_values(self, flag: str, form: str) -> None:
+        argument = f"{flag} $RELATED" if form == "separated" else f"{flag}=$RELATED"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {argument}")
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "--add-blocked-by",
+            "--add-blocking",
+            "--add-sub-issue",
+            "--parent",
+            "--remove-blocked-by",
+            "--remove-blocking",
+            "--remove-sub-issue",
+        ],
+    )
+    @pytest.mark.parametrize("value", ["4726,", ",4726"])
+    def test_issue_edit_reference_flags_reject_malformed_csv(self, flag: str, value: str) -> None:
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}={value}")
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "dynamic_target"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 4734 --add-blocked-by",
+            "gh issue edit 4734 --add-blocked-by=",
+            "gh issue edit 4734 --parent --title updated",
+        ],
+        ids=["missing", "empty-equals", "next-flag-is-not-a-value"],
+    )
+    def test_issue_edit_reference_flags_require_values(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code == "missing_required_value"
+
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_FLAG_SPEC))
+    def test_every_issue_edit_spec_flag_is_recognized(self, flag: str) -> None:
+        value = ""
+        if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE:
+            reference_flags = {
+                "--parent",
+                "--add-blocked-by",
+                "--add-blocking",
+                "--add-sub-issue",
+                "--remove-blocked-by",
+                "--remove-blocking",
+                "--remove-sub-issue",
+            }
+            value = " 4726" if flag in reference_flags else " value"
+
+        analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}{value}")
 
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.request_count == 1

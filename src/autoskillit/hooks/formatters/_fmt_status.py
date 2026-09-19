@@ -32,7 +32,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         peak_ctx = _fmt_tokens(step.get("peak_context", 0))
         cache_wr = _fmt_tokens(step.get("cache_write_tokens", 0))
         turns = step.get("turn_count", 0)
-        wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+        wc = step.get("elapsed_seconds", 0.0)
         model_tag = f" model:{model}" if model else ""
         lines.append(
             f"{name} x{count}"

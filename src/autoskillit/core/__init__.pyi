@@ -131,6 +131,7 @@ from .install.install_detect import _is_release_tag as _is_release_tag
 from .install.install_detect import _is_stable_track as _is_stable_track
 from .install.install_detect import distribution_version_at as distribution_version_at
 from .install.install_detect import SourceCurrency as SourceCurrency
+from .install.install_detect import SourceCurrencyStatus as SourceCurrencyStatus
 from .install.install_detect import is_dev_install as is_dev_install
 from .install.install_detect import parse_direct_url as parse_direct_url
 from .install.install_detect import source_currency as source_currency

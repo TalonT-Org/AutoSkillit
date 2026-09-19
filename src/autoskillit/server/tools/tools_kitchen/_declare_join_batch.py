@@ -17,6 +17,7 @@ from autoskillit.hooks._session_binding import (
     LoadedSkillEntry,
     SessionBinding,
     SessionBindingError,
+    admit_join,
     enumerate_binding_paths,
     normalize_skill_name,
     read_binding,
@@ -37,23 +38,21 @@ def _admit_join_binding(
     normalized_skill_name: str,
 ) -> tuple[SessionBinding, LoadedSkillEntry] | dict[str, object]:
     """Validate a join-bearing loaded entry for the requested session."""
-    binding_invalid = False
-    try:
-        binding = read_binding(binding_path)
-    except SessionBindingError:
-        binding = None
-        binding_invalid = True
-
-    if binding is None:
-        if not binding_invalid:
+    admission = admit_join(binding_path, session_id=session_id, skill_name=normalized_skill_name)
+    if admission.outcome == "no_binding":
+        if admission.binding is None:
             wrong_session_error = _wrong_session_error(channel_dir, session_id)
             if wrong_session_error is not None:
                 return {"success": False, "error": wrong_session_error}
         return {
             "success": False,
-            "error": "declare_join_batch requires a valid session binding",
+            "error": (
+                "declare_join_batch requires a session binding written by Skill/PostToolUse "
+                "or UserPromptExpansion slash-command invocation"
+            ),
         }
-    if binding.session_id != session_id:
+    if admission.outcome == "wrong_session":
+        assert admission.binding is not None
         _emit_join_diagnostic(
             {
                 "gate": "declare_join_batch",
@@ -63,22 +62,14 @@ def _admit_join_binding(
         )
         return {
             "success": False,
-            "error": _session_mismatch_error(session_id, binding.session_id),
+            "error": _session_mismatch_error(session_id, admission.binding.session_id),
         }
-    if not binding.binding_valid:
+    if admission.outcome == "invalid_binding":
         return {
             "success": False,
-            "error": "declare_join_batch requires a valid session binding",
+            "error": admission.error or "declare_join_batch requires a valid session binding",
         }
-    selected_entry = next(
-        (
-            entry
-            for entry in reversed(binding.loaded_skills)
-            if entry.skill_name == normalized_skill_name
-        ),
-        None,
-    )
-    if selected_entry is None:
+    if admission.outcome == "skill_not_loaded":
         return {
             "success": False,
             "error": (
@@ -86,12 +77,13 @@ def _admit_join_binding(
                 "is not loaded in this session"
             ),
         }
-    if not selected_entry.join_required:
+    if admission.outcome == "not_join_bearing":
         return {
             "success": False,
             "error": (f"declare_join_batch: skill {normalized_skill_name!r} is not join-bearing"),
         }
-    return binding, selected_entry
+    assert admission.binding is not None and admission.entry is not None
+    return admission.binding, admission.entry
 
 
 def _declare_join_batch_handler(

@@ -17,7 +17,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
@@ -221,6 +221,28 @@ class SessionBinding(NamedTuple):
         raise SessionBindingError(
             f"unsupported session-binding schema_version: {schema_version!r}"
         )
+
+
+class JoinAdmission(NamedTuple):
+    """The single semantic decision derived from a session binding."""
+
+    outcome: Literal[
+        "admitted",
+        "no_binding",
+        "wrong_session",
+        "invalid_binding",
+        "skill_not_loaded",
+        "not_join_bearing",
+    ]
+    enforce: bool
+    binding: SessionBinding | None
+    entry: LoadedSkillEntry | None
+    join_bearing_skills: frozenset[str]
+    error: str | None
+
+    @property
+    def binding_dict(self) -> dict[str, object] | None:
+        return None if self.binding is None else json.loads(self.binding.to_json())
 
 
 def resolve_channel_dir(anchor: Path) -> Path:
@@ -431,9 +453,43 @@ def read_binding(path: Path) -> SessionBinding | None:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise SessionBindingError(f"session binding is unreadable: {exc}") from exc
     return SessionBinding.from_json(raw)
+
+
+def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission:
+    """Read a binding once and decide whether this exact skill may declare a join."""
+    try:
+        binding = read_binding(path)
+    except SessionBindingError as exc:
+        return JoinAdmission("invalid_binding", True, None, None, frozenset(), str(exc))
+    if binding is None:
+        return JoinAdmission("no_binding", False, None, None, frozenset(), None)
+    if binding.session_id != session_id:
+        return JoinAdmission("wrong_session", False, binding, None, frozenset(), None)
+    join_bearing = frozenset(
+        entry.skill_name for entry in binding.loaded_skills if entry.join_required
+    )
+    if not binding.binding_valid:
+        error = next(
+            (entry.binding_error for entry in binding.loaded_skills if entry.binding_error),
+            None,
+        )
+        return JoinAdmission("invalid_binding", True, binding, None, join_bearing, error)
+    entry = next(
+        (entry for entry in reversed(binding.loaded_skills) if entry.skill_name == skill_name),
+        None,
+    )
+    if entry is None:
+        return JoinAdmission(
+            "skill_not_loaded", binding.join_required, binding, None, join_bearing, None
+        )
+    if not entry.join_required or not entry.binding_valid:
+        return JoinAdmission(
+            "not_join_bearing", binding.join_required, binding, entry, join_bearing, None
+        )
+    return JoinAdmission("admitted", True, binding, entry, join_bearing, None)
 
 
 def atomic_write(path: Path, content: str) -> None:

@@ -605,10 +605,22 @@ def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object]
     return parsed if isinstance(parsed, dict) else None
 
 
+def session_join_admission(payload_cwd: str, session_id: str):
+    """Return the authoritative join decision for the payload session."""
+    module_name = (
+        f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
+    )
+    binding_module = importlib.import_module(module_name)
+    return getattr(binding_module, "admit_join")(
+        getattr(binding_module, "resolve_binding_path")(payload_cwd, session_id),
+        session_id=session_id,
+        skill_name="",
+    )
+
+
 def session_join_required(payload_cwd: str, session_id: str) -> bool:
     """Return whether the payload-identified binding requires a fixed-set join."""
-    binding = read_session_binding(payload_cwd, session_id)
-    return binding is not None and bool(binding.get("join_required", False))
+    return session_join_admission(payload_cwd, session_id).enforce
 
 
 def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] | None:

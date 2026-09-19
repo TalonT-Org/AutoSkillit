@@ -1214,13 +1214,29 @@ class FakeGitHubFetcher(GitHubFetcher):
         self._has_token = has_token
         self.issues: dict[tuple[str, str, int], dict[str, Any]] = {}
         for key, issue in (issues or {}).items():
+            if key[2] <= 0:
+                raise ValueError(f"issue number must be positive, got {key[2]}")
             seeded_issue = dict(issue)
+            body = seeded_issue.get("body", "")
+            title = seeded_issue.get("title", "")
+            state = seeded_issue.get("state", "open")
+            if not isinstance(body, str):
+                raise TypeError(f"issue body must be str, got {type(body).__name__}")
+            if not isinstance(title, str):
+                raise TypeError(f"issue title must be str, got {type(title).__name__}")
+            if not isinstance(state, str):
+                raise TypeError(f"issue state must be str, got {type(state).__name__}")
+            seeded_issue["body"] = body
+            seeded_issue["title"] = title
+            seeded_issue["state"] = state
             labels = seeded_issue.get("labels", [])
-            seeded_issue["labels"] = (
-                set(labels)
-                if isinstance(labels, Sequence) and not isinstance(labels, str)
-                else set()
-            )
+            if not isinstance(labels, Sequence) or isinstance(labels, str):
+                raise TypeError(
+                    f"issue labels must be a Sequence[str], got {type(labels).__name__}"
+                )
+            if not all(isinstance(label, str) for label in labels):
+                raise TypeError("issue labels must contain only str entries")
+            seeded_issue["labels"] = set(labels)
             self.issues[key] = seeded_issue
         self.repository_labels = {
             key: set(labels) for key, labels in (repository_labels or {}).items()

@@ -1,9 +1,7 @@
 """Open-kitchen pipeline-tracker auto-init lifecycle.
 
 Cohorts the three helpers that initialize, sweep, and abort on a kitchen's
-pipeline tracker before the first recipe projection is served. Lives in its
-own module because the responsibilities belong to the tracker lifecycle
-rather than to recipe payload construction (``_recipe_serve``).
+pipeline tracker before the first recipe projection is served.
 """
 
 from __future__ import annotations

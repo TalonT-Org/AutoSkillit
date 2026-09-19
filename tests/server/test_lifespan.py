@@ -89,11 +89,15 @@ async def test_lifespan_releases_boot_tracker_before_recorder_finalization():
     """Recorder finalize runs only after the boot-tracker release attempt.
 
     The release path may raise (e.g. OSError on disk failure); the test confirms
-    that finalize still runs after the release attempt completes or raises, and
-    that the order is release-then-finalize — not the other way around.
+    that finalize still runs after the release attempt completes or raises,
+    in release-then-finalize order.
     """
     from autoskillit.server import _autoskillit_lifespan
     from autoskillit.server.lifecycle import _lifespan
+
+    # _release_kitchen_tracker_authority lives on the inner module (not re-exported
+    # by the package), so we patch the module directly. _get_ctx_or_none is
+    # re-exported by the package, so we patch via the package facade.
     from autoskillit.server.lifecycle._lifespan import _lifespan as lifespan_module
 
     mock_recorder = MagicMock()

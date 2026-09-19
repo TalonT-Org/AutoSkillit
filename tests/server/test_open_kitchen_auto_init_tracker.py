@@ -49,9 +49,8 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
 def track_and_release():
     """Yield a collector for tracker contexts; release each on teardown.
 
-    Tests that exercise open_kitchen's auto-init tracker retain a kitchen lease
-    on the provided ctx. Registering the ctx via this fixture guarantees the
-    lease is released even if an assertion fails mid-test.
+    Registering the ctx via this fixture guarantees the lease is released
+    even if an assertion fails mid-test.
     """
     from autoskillit.server._tracker_authority import _release_kitchen_tracker_authority
 
@@ -65,6 +64,27 @@ def track_and_release():
 
     for ctx in contexts:
         _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
+
+
+class TestTrackAndReleaseCleanup:
+    def test_fixture_releases_kitchen_tracker_on_teardown(self):
+        from tests.server.conftest import _make_mock_ctx
+
+        ctx = _make_mock_ctx()
+        # Simulate a retained kitchen tracker key/lease, then explicitly trigger
+        # the same release the track_and_release fixture applies on teardown.
+        from autoskillit.server._tracker_authority import (
+            _release_kitchen_tracker_authority,
+            _retain_kitchen_tracker_authority,
+        )
+
+        _retain_kitchen_tracker_authority(ctx)
+        assert ctx.kitchen_tracker_key is not None
+        assert ctx.tracker_leases != {}
+
+        _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
+        assert ctx.kitchen_tracker_key is None
+        assert ctx.tracker_leases == {}
 
 
 class TestOpenKitchenAutoInitTracker:

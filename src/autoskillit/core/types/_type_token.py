@@ -146,7 +146,7 @@ class TokenMeasure:
 
 
 class TurnTokenEntry(TypedDict):
-    """One turn's raw token accounting prior to sidecar classification."""
+    """Raw turn evidence prior to sidecar classification."""
 
     backend: str
     provider_used: str

@@ -218,7 +218,7 @@ def context_fraction(
 
 
 def serialize_turn_token_entry(row: TurnTokenEntry) -> dict[str, object]:
-    """Project one TurnTokenEntry into the sidecar schema with classified measures."""
+    """Project one TurnTokenEntry into the sidecar schema, classifying measures."""
     backend, provider_used = row["backend"], row["provider_used"]
     cache_read = classify_token_measure(
         backend, provider_used, "cache_read_tokens", row["cache_read_tokens"]

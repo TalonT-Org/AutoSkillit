@@ -626,8 +626,8 @@ async def _execute_claude_headless(
                     backend=_step_backend.name,
                     provider_used=skill_result.provider.provider_used,
                 )
-            except Exception:
-                logger.debug("token_log_record_failed", exc_info=True)
+            except (TypeError, ValueError, KeyError, AttributeError):
+                logger.warning("token_log_record_failed", exc_info=True)
 
             terminal_telemetry = _build_session_telemetry(
                 skill_result=skill_result,

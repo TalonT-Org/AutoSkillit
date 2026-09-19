@@ -13,17 +13,14 @@ STEP_HEADING_RE = re.compile(
 )
 
 
-def extract_section(markdown: str, heading: str, *, level: int = 2) -> str:
-    """Return the body belonging to one exact Markdown heading."""
-    if level < 1 or level > 6:
-        raise ValueError("heading level must be between 1 and 6")
-    prefix = "#" * level
-    pattern = re.compile(rf"^{re.escape(prefix)} {re.escape(heading)}[ \t]*$", re.MULTILINE)
+def extract_section(markdown: str, heading: str) -> str:
+    """Return the body belonging to the level-2 Markdown heading."""
+    pattern = re.compile(rf"^## {re.escape(heading)}[ \t]*$", re.MULTILINE)
     matches = tuple(pattern.finditer(markdown))
     if len(matches) != 1:
-        raise ValueError(f"expected exactly one {prefix} {heading} section")
+        raise ValueError(f"expected exactly one ## {heading} section")
     start = matches[0].end()
-    next_heading = re.search(rf"^{re.escape(prefix)}\s+", markdown[start:], re.MULTILINE)
+    next_heading = re.search(r"^##\s+", markdown[start:], re.MULTILINE)
     end = start + next_heading.start() if next_heading is not None else len(markdown)
     return markdown[start:end]
 

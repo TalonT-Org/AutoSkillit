@@ -348,7 +348,10 @@ while True:
 """
     writer = subprocess.Popen([sys.executable, "-c", writer_code], env=env, text=True)
     try:
-        deadline = time.monotonic() + 5
+        # Under xdist load the fresh child can be delayed well beyond the usual
+        # sub-second startup, but the test must observe an actual straggler write
+        # before exercising the next generation's setup/reap path.
+        deadline = time.monotonic() + 15
         while not any(tmp_a.glob("writer-*")) and time.monotonic() < deadline:
             time.sleep(0.02)
         assert any(tmp_a.glob("writer-*"))

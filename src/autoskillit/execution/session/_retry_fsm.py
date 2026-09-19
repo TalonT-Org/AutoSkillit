@@ -176,6 +176,7 @@ def _compute_retry(
         case (
             TerminationReason.STALE
             | TerminationReason.IDLE_STALL
+            | TerminationReason.OUTPUT_LIMIT
             | TerminationReason.TIMED_OUT
             | TerminationReason.HEALTH_INSPECTOR
         ):

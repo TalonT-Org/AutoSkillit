@@ -34,6 +34,13 @@ def family_skill(request: pytest.FixtureRequest) -> tuple[str, str, SkillFamilyD
     return request.param
 
 
+def test_thread_resolvers_require_drift_discipline() -> None:
+    family = next(
+        family for family in GITHUB_API_SKILL_FAMILIES if family.name == "thread-resolvers"
+    )
+    assert "drift-discipline" in family.required_patterns
+
+
 class TestGraphqlBatchAliases:
     @pytest.fixture(autouse=True)
     def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
@@ -112,4 +119,25 @@ class TestOwnPrGuard:
         )
         assert has_self_ref and has_comment_fallback, (
             f"{family_skill[1]} must include own-PR guard with COMMENT fallback"
+        )
+
+
+class TestDriftDiscipline:
+    @pytest.fixture(autouse=True)
+    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
+        if "drift-discipline" not in family_skill[2].required_patterns:
+            pytest.skip("drift-discipline not required for this family")
+
+    def test_groups_descends_and_rereads_live_source(
+        self, family_skill: tuple[str, str, SkillFamilyDef]
+    ) -> None:
+        text = _read_skill_md(family_skill[1])
+        text_lower = text.lower()
+
+        assert "group" in text_lower, f"{family_skill[1]} must group concrete edits by file"
+        assert "descending" in text_lower or "-line" in text_lower, (
+            f"{family_skill[1]} must edit each file in descending-line order"
+        )
+        assert "live" in text_lower and ("re-read" in text_lower or "reread" in text_lower), (
+            f"{family_skill[1]} must re-read live source before each edit"
         )

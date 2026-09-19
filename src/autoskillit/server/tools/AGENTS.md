@@ -25,12 +25,15 @@ Files with no registration support their folder; files with several registration
 - `_backend_compat.py` — Support module: Shared backend-compatibility setup for direct headless executor callers.
 - `_cancellation_shield.py` — Support module: Cancellation shield decorator for MCP tool handlers.
 - `_claim_helpers.py` — Support module: Shared claiming logic for claim_issue and claim_and_resolve_issue.
+- `_commit_outcome.py` — Support module: Durable outcome accounting for commit_files responses.
 - `_ordering_telemetry.py` — Support module: Ordering-violation detection over pipeline session step records.
 - `_overlay_state.py` — Support module: Locked, validated access to the kitchen session overlay.
 - `_pipeline_deps.py` — Support module: Curated Phase A dependencies from the finalized recipe routing graph.
 - `_preflight.py` — Support module: Dispatch-feasibility preflight — shared by open_kitchen and dispatch_food_truck.
 - `_pre_commit_failure.py` — Support module: Pre-commit failure classification helpers for commit_files.
+- `_pre_commit_transaction.py` — Support module: Pre-commit execution, re-stage, and retry transaction for commit_files.
 - `_serve_helpers.py` — Support module: Unified serve-pipeline helpers.
+- `_self_revert.py` — Support module: Commit base validation and advisory self-revert scan response handling.
 - `_type_coercion.py` — Support module: Override value coercion and type-validation gate for typed recipe ingredients.
 - `_types.py` — Support module: Server tool response TypedDicts — typed contracts for MCP tool JSON responses.
 - `tools_agents.py` — Groups 3 registrations: Agent listing, exploration, and agent-resource lookup.

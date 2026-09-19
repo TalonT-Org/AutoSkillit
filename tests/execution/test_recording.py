@@ -1102,6 +1102,45 @@ async def test_recording_runner_forwards_process_lifecycle_callbacks(tmp_path: P
 
 
 @pytest.mark.anyio
+async def test_recording_runner_forwards_combined_output_ceiling(tmp_path: Path) -> None:
+    recorder = Mock()
+    inner = MockSubprocessRunner()
+    runner = RecordingSubprocessRunner(
+        recorder=recorder,
+        inner=inner,
+        scenario_dir=tmp_path,
+        capabilities=_NON_PTY_CAPABILITIES,
+    )
+
+    await runner(
+        ["codex", "exec", "do something"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        max_combined_output_bytes=123,
+    )
+
+    assert inner.call_args_list[0][3]["max_combined_output_bytes"] == 123
+
+
+@pytest.mark.anyio
+async def test_replay_runner_accepts_combined_output_ceiling(tmp_path: Path) -> None:
+    runner = ReplayingSubprocessRunner(
+        {}, {"recorded": {"exit_code": 0, "stdout_head": "", "stderr": ""}}
+    )
+
+    result = await runner(
+        ["codex", "exec", "do something"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        max_combined_output_bytes=123,
+    )
+
+    assert result.returncode == 0
+
+
+@pytest.mark.anyio
 async def test_replay_runner_never_invokes_process_lifecycle_callbacks(tmp_path: Path) -> None:
     """Replay results have no owned live process to report."""
     runner = ReplayingSubprocessRunner(

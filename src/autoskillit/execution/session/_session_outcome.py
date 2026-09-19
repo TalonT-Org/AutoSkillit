@@ -48,6 +48,7 @@ def _compute_success(
             TerminationReason.TIMED_OUT
             | TerminationReason.STALE
             | TerminationReason.IDLE_STALL
+            | TerminationReason.OUTPUT_LIMIT
             | TerminationReason.HEALTH_INSPECTOR
             | TerminationReason.SIGNAL_DEATH
         ):

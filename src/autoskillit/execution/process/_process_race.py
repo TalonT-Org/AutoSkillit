@@ -56,6 +56,7 @@ class RaceSignals:
     channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
     stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
     idle_stall: bool = False
+    output_limit_exceeded: bool = False
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
@@ -91,6 +92,7 @@ class RaceAccumulator:
     channel_b_session_id: str = ""
     stdout_session_id: str | None = None
     idle_stall: bool = False
+    output_limit_exceeded: bool = False
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
@@ -162,6 +164,7 @@ class RaceAccumulator:
             channel_b_session_id=self.channel_b_session_id,
             stdout_session_id=self.stdout_session_id,
             idle_stall=self.idle_stall,
+            output_limit_exceeded=self.output_limit_exceeded,
             channel_b_orphaned_tool_result=self.channel_b_orphaned_tool_result,
             process_exited_event=self.process_exited_event,
             exit_snapshot=self.exit_snapshot,
@@ -455,6 +458,8 @@ def _resolve_channel_confirmation(signals: RaceSignals) -> ChannelConfirmation:
 
 def resolve_termination(
     signals: RaceSignals,
+    *,
+    timeout_fired: bool = False,
 ) -> tuple[TerminationReason, ChannelConfirmation]:
     """Determine termination and channel from accumulated signals.
 
@@ -462,7 +467,8 @@ def resolve_termination(
     reason are resolved independently so that simultaneous task completion
     never discards a channel signal.
 
-    Priority for termination: process exit > idle stall > stale > channel win.
+    Priority for termination: output ceiling > timeout > process exit > idle stall
+    > stale > channel win.
     Channel confirmation is independent of termination.
 
     Exhaustive match over ChannelBStatus ensures mypy flags any new member
@@ -470,8 +476,14 @@ def resolve_termination(
     """
     channel = _resolve_channel_confirmation(signals)
 
-    # Termination reason: priority order (process exit > idle stall > stale > channel win)
-    if signals.process_exited:
+    # Termination reason: output ceiling > process exit > idle stall > stale > channel win.
+    # The capture event is producer-side evidence, so retain it even if the child
+    # exits in the same scheduling window.
+    if signals.output_limit_exceeded:
+        termination = TerminationReason.OUTPUT_LIMIT
+    elif timeout_fired:
+        termination = TerminationReason.TIMED_OUT
+    elif signals.process_exited:
         if signals.process_returncode is not None and is_signal_death_code(
             signals.process_returncode
         ):
@@ -499,6 +511,8 @@ def resolve_termination(
         channel_b_status=signals.channel_b_status,
         channel_b_session_id=signals.channel_b_session_id,
         idle_stall=signals.idle_stall,
+        output_limit_exceeded=signals.output_limit_exceeded,
+        timeout_fired=timeout_fired,
         resolved_termination=str(termination),
         resolved_channel=str(channel),
     )

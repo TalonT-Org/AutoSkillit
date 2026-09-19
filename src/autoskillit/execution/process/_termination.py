@@ -69,6 +69,7 @@ def decide_termination_action(
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
         case (
             TerminationReason.IDLE_STALL
+            | TerminationReason.OUTPUT_LIMIT
             | TerminationReason.STALE
             | TerminationReason.TIMED_OUT
             | TerminationReason.HEALTH_INSPECTOR
@@ -124,6 +125,7 @@ async def execute_termination_action(
     process_exited_event: anyio.Event,
     grace_seconds: float,
     proc_log: structlog.BoundLogger,
+    termination: TerminationReason | None = None,
     pid: int | None = None,
     marker_dir: Path | None = None,
     session_id: str | None = None,
@@ -146,7 +148,11 @@ async def execute_termination_action(
         owner.merge_snapshot(process_observation_snapshot)
     match action:
         case TerminationAction.NO_KILL:
-            kill_reason = KillReason.NATURAL_EXIT
+            kill_reason = (
+                KillReason.INFRA_KILL
+                if termination is TerminationReason.OUTPUT_LIMIT
+                else KillReason.NATURAL_EXIT
+            )
         case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
             settled = await _drain_before_escalation(
                 owner=owner,

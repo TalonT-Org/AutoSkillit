@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -18,6 +18,7 @@ TOOLS_PATH = (
     / "tools"
     / "tools_workspace.py"
 )
+COMMIT_OUTCOME_PATH = TOOLS_PATH.with_name("_commit_outcome.py")
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class _ReturnInventory:
     outer_unavailable: int
     helper_returns: int
     ledger_record_calls: int
+    outcome_authority_calls: int = field(default=0, repr=False)
 
 
 _EXPECTED_INVENTORIES = {
@@ -39,10 +41,11 @@ _EXPECTED_INVENTORIES = {
     ),
     "commit_files": _ReturnInventory(
         helpers=1,
-        outer_finish=9,
+        outer_finish=11,
         outer_unavailable=1,
-        helper_returns=2,
-        ledger_record_calls=1,
+        helper_returns=1,
+        ledger_record_calls=0,
+        outcome_authority_calls=1,
     ),
 }
 
@@ -105,6 +108,15 @@ def _ledger_record_calls(helper: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     return calls
 
 
+def _outcome_authority_calls(helper: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    return sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_finish_commit_response"
+        for node in ast.walk(helper)
+    )
+
+
 def _audit_function(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     expected: _ReturnInventory,
@@ -128,12 +140,14 @@ def _audit_function(
     ]
     helper_returns = sum(len(_returns_in(helper.body)) for helper in helpers)
     ledger_calls = sum(_ledger_record_calls(helper) for helper in helpers)
+    outcome_calls = sum(_outcome_authority_calls(helper) for helper in helpers)
     observed = _ReturnInventory(
         helpers=len(helpers),
         outer_finish=sum(_calls_local_finish(node) for node in outer_returns),
         outer_unavailable=sum(node in unavailable_returns for node in outer_returns),
         helper_returns=helper_returns,
         ledger_record_calls=ledger_calls,
+        outcome_authority_calls=outcome_calls,
     )
     if observed != expected:
         violations.append(
@@ -162,6 +176,17 @@ def test_workspace_tools_have_closed_world_outcome_coverage() -> None:
         for violation in _audit_function(functions[name], expected)
     ]
     assert not violations, "Workspace outcome coverage violations:\n" + "\n".join(violations)
+
+
+def test_commit_outcome_authority_records_once() -> None:
+    tree = ast.parse(COMMIT_OUTCOME_PATH.read_text(encoding="utf-8"))
+    helpers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_finish_commit_response"
+    ]
+    assert len(helpers) == 1
+    assert _ledger_record_calls(helpers[0]) == 1
 
 
 _CANARY_EXPECTED = _ReturnInventory(

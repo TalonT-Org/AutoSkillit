@@ -145,6 +145,55 @@ def test_experimental_result_failures_are_distinct_from_empty_array() -> None:
     assert "no partial experimental findings" in step3
 
 
+def _doc_count_preflight_block(text: str) -> str:
+    """Return the dedicated doc-count preflight step from review-pr/SKILL.md."""
+    start = re.search(
+        r"^### Step .*(?:doc[- ]?count|check-docs)", text, re.MULTILINE | re.IGNORECASE
+    )
+    assert start is not None, "review-pr/SKILL.md must contain a doc-count preflight step"
+    end = re.search(r"^### Step ", text[start.end() :], re.MULTILINE)
+    return text[start.start() : start.end() + end.start() if end else len(text)]
+
+
+def test_doc_count_preflight_runs_declared_check_docs_and_accepts_clean_result() -> None:
+    block = _doc_count_preflight_block(_skill_text())
+
+    assert "--json" in block
+    assert "--list" in block
+    assert "check-docs" in block
+    assert "REVIEW_CHECKOUT_ROOT" in block
+    assert re.search(r"(?:zero|0).{0,20}exit|exit.{0,20}(?:zero|0)", block, re.IGNORECASE)
+    assert "clean" in block.lower()
+
+
+def test_doc_count_preflight_adds_parseable_drift_to_standard_findings() -> None:
+    block = _doc_count_preflight_block(_skill_text())
+
+    assert "path:line:" in block
+    assert "critical" in block
+    assert re.search(r"requires_decision\s*=\s*false", block)
+    assert "STANDARD_RAW_FINDINGS" in block
+    assert "review-level" in block
+
+
+def test_doc_count_preflight_stops_unparseable_nonzero_result_for_human_review() -> None:
+    block = _doc_count_preflight_block(_skill_text())
+
+    assert "unparseable" in block.lower()
+    assert re.search(r"non[- ]?zero", block, re.IGNORECASE)
+    assert "needs_human" in block
+    assert "before auditor dispatch" in block.lower() or "do not dispatch" in block.lower()
+    assert "publication" in block.lower()
+
+
+def test_doc_count_preflight_records_absent_capability_as_not_applicable() -> None:
+    block = _doc_count_preflight_block(_skill_text())
+
+    assert "not_applicable" in block
+    assert re.search(r"capability.{0,40}reason", block, re.IGNORECASE)
+    assert "continue" in block.lower()
+
+
 def test_closed_experimental_reason_codes_are_documented() -> None:
     text = _skill_text()
     for reason in (

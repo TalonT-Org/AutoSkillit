@@ -5,14 +5,19 @@ from __future__ import annotations
 import json
 import logging
 import re
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
+from urllib.parse import unquote, urlparse
 
 __all__ = [
     "DirectUrlInfo",
+    "SourceCurrency",
     "distribution_version_at",
     "is_dev_install",
     "parse_direct_url",
+    "source_currency",
     "_is_release_tag",
     "_is_stable_track",
 ]
@@ -26,6 +31,66 @@ class DirectUrlInfo(TypedDict):
     commit_id: str | None
     editable: bool
     url: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCurrency:
+    status: str
+    installed_commit: str | None
+    checkout_head: str | None
+    behind_by: int | None
+    generation_root: Path | None
+
+
+def _git(checkout: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(checkout), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def source_currency(checkout: Path, *, generation_root: Path | None) -> SourceCurrency:
+    """Compare the deployed generation provenance with a checkout's current HEAD."""
+    if generation_root is None:
+        return SourceCurrency("unknown", None, None, None, None)
+    info = parse_direct_url(generation_root)
+    head = _git(checkout, "rev-parse", "HEAD")
+    if head is None:
+        return SourceCurrency("unknown", info["commit_id"], None, None, generation_root)
+    if info["install_type"] == "local-editable":
+        parsed = urlparse(info["url"])
+        installed_path = Path(unquote(parsed.path)).resolve()
+        return SourceCurrency(
+            "current" if installed_path == checkout.resolve() else "not_source_checkout",
+            None,
+            head,
+            None,
+            generation_root,
+        )
+    commit = info["commit_id"]
+    if info["install_type"] != "git-vcs" or not commit:
+        return SourceCurrency("unknown", commit, head, None, generation_root)
+    if commit == head:
+        return SourceCurrency("current", commit, head, 0, generation_root)
+    if _git(checkout, "cat-file", "-e", f"{commit}^{{commit}}") is None:
+        return SourceCurrency("not_source_checkout", commit, head, None, generation_root)
+    if _git(checkout, "merge-base", "--is-ancestor", commit, "HEAD") is None:
+        return SourceCurrency("diverged", commit, head, None, generation_root)
+    behind = _git(checkout, "rev-list", "--count", f"{commit}..HEAD")
+    return SourceCurrency(
+        "stale",
+        commit,
+        head,
+        int(behind) if behind is not None else None,
+        generation_root,
+    )
 
 
 def _unknown_direct_url() -> DirectUrlInfo:

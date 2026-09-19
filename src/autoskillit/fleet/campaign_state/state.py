@@ -12,6 +12,8 @@ from typing import Any
 
 from autoskillit.core import (
     DispatchIdentity,
+    SerializedTokenMeasure,
+    TokenMeasure,
     get_logger,
     read_versioned_json,
     write_versioned_json,
@@ -199,7 +201,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10, 11})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10, 11, 12})
 
 
 def read_fleet_state_payload(state_path: Path) -> dict[str, Any] | None:
@@ -262,6 +264,15 @@ def read_state(state_path: Path) -> CampaignState | None:
         try:
             if not isinstance(raw_dispatch, dict):
                 raise TypeError("dispatch record must be an object")
+            if raw_dispatch.get("token_usage"):
+                raw_dispatch = {
+                    **raw_dispatch,
+                    "token_usage": normalize_dispatch_token_usage(
+                        raw_dispatch["token_usage"],
+                        backend=raw_dispatch.get("backend_name", ""),
+                        legacy=data.get("schema_version") in _LEGACY_SCHEMA_VERSIONS,
+                    ),
+                }
             dispatch = DispatchRecord.from_dict(raw_dispatch)
         except (KeyError, ValueError, TypeError):
             campaign.opaque_dispatches.append(raw_dispatch)
@@ -734,22 +745,41 @@ def read_all_campaign_captures(
     return result
 
 
-def normalize_dispatch_token_usage(raw: dict[str, Any]) -> dict[str, int]:
-    """Map raw Claude session token keys to canonical DispatchTokenUsage key set.
+def normalize_dispatch_token_usage(
+    raw: dict[str, Any],
+    *,
+    backend: str = "",
+    provider_used: str = "",
+    legacy: bool = False,
+) -> dict[str, Any]:
+    """Preserve one source pair and five accounting measures in fleet state."""
+    backend = backend or str(raw.get("backend") or "unknown")
+    provider_used = provider_used or str(raw.get("provider_used") or "")
+    if not provider_used:
+        provider_used = "anthropic" if backend == "claude-code" else backend
 
-    Idempotent: handles both raw keys (input_tokens/output_tokens) and canonical
-    keys (input/output) so that double-normalization is safe. Canonical keys take
-    priority when both are present.
-    """
+    def measure(*keys: str) -> SerializedTokenMeasure:
+        for key in keys:
+            if key not in raw:
+                continue
+            value = raw[key]
+            if isinstance(value, dict):
+                return TokenMeasure.from_dict(value).to_dict()
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                if legacy and value == 0:
+                    return TokenMeasure.unknown().to_dict()
+                return TokenMeasure.observed(value).to_dict()
+            return TokenMeasure.unknown().to_dict()
+        return TokenMeasure.unknown().to_dict()
+
     return {
-        "input": int(raw["input"] if "input" in raw else raw.get("input_tokens", 0)),
-        "output": int(raw["output"] if "output" in raw else raw.get("output_tokens", 0)),
-        "cache_creation": int(
-            raw["cache_creation"]
-            if "cache_creation" in raw
-            else raw.get("cache_creation_input_tokens", 0)
+        "backend": backend,
+        "provider_used": provider_used,
+        "input_tokens": measure("input_tokens", "input"),
+        "output_tokens": measure("output_tokens", "output"),
+        "cache_read_tokens": measure("cache_read_tokens", "cache_read_input_tokens", "cache_read"),
+        "cache_write_tokens": measure(
+            "cache_write_tokens", "cache_creation_input_tokens", "cache_creation"
         ),
-        "cache_read": int(
-            raw["cache_read"] if "cache_read" in raw else raw.get("cache_read_input_tokens", 0)
-        ),
+        "peak_context": measure("peak_context"),
     }

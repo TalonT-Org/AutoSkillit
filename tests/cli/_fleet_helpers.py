@@ -167,13 +167,20 @@ def _make_state(*, statuses: list[str]) -> CampaignState:
 
 def _make_state_with_tokens(*, input_total: int) -> CampaignState:
     """Build an in-memory CampaignState with known token totals."""
-    from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
+    from autoskillit.fleet import (
+        CampaignState,
+        DispatchRecord,
+        DispatchStatus,
+        normalize_dispatch_token_usage,
+    )
 
     dispatches = [
         DispatchRecord(
             name="dispatch-1",
             status=DispatchStatus.SUCCESS,
-            token_usage={"input": input_total},
+            token_usage=normalize_dispatch_token_usage(
+                {"input_tokens": input_total}, backend="claude-code", provider_used="anthropic"
+            ),
         )
     ]
     return CampaignState(

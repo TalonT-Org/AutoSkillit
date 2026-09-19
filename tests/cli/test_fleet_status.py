@@ -264,18 +264,15 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "fleet" in checked_features
 
 
-def test_aggregate_totals_uses_canonical_keys() -> None:
-    """_aggregate_totals reads canonical keys (input/output) from DispatchRecord.
-
-    Regression guard: previously this function read input_tokens/output_tokens
-    but normalize_dispatch_token_usage writes input/output, so totals were
-    always 0 unless callers populated the long-named keys manually.
-    """
-    from autoskillit.cli.fleet._fleet_display import _aggregate_totals
+def test_pair_totals_preserve_source_and_measure() -> None:
+    """Fleet status totals retain the backend/provider boundary."""
+    from autoskillit.cli.fleet._fleet_display import _pair_totals
 
     state = _make_state_with_tokens(input_total=5000)
-    totals = _aggregate_totals(state)
-    assert totals["input"] == 5000
+    totals = _pair_totals(state)
+    assert totals[0]["backend"] == "claude-code"
+    assert totals[0]["provider_used"] == "anthropic"
+    assert totals[0]["input_tokens"] == {"state": "measured", "value": 5000}
 
 
 def test_build_status_rows_shows_nonzero_tokens() -> None:

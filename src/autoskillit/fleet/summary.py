@@ -1,4 +1,4 @@
-"""Campaign summary schema v1 — dataclasses, parser, and validator.
+"""Campaign summary schema — dataclasses, parser, and validator.
 
 Provides the structured contract for the campaign summary sentinel block
 emitted by L3 fleet sessions before exit.
@@ -14,7 +14,10 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import FleetErrorCode
+from autoskillit.core import FleetErrorCode, SerializedTokenMeasure, TokenMeasure
+from autoskillit.fleet.campaign_state.state import normalize_dispatch_token_usage
+
+CAMPAIGN_SUMMARY_SCHEMA_VERSION = 2
 
 
 class CampaignSummaryStatus(StrEnum):
@@ -45,12 +48,27 @@ class ParseFailure:
 
 @dataclass(frozen=True, slots=True)
 class DispatchTokenUsage:
-    """Per-dispatch token usage — exactly 4 fields, no extras."""
+    """Per-dispatch token usage for one reporting source pair."""
 
-    input: int
-    output: int
-    cache_read: int
-    cache_creation: int
+    backend: str
+    provider_used: str
+    input_tokens: SerializedTokenMeasure
+    output_tokens: SerializedTokenMeasure
+    cache_read_tokens: SerializedTokenMeasure
+    cache_write_tokens: SerializedTokenMeasure
+    peak_context: SerializedTokenMeasure
+
+    def __post_init__(self) -> None:
+        if not self.backend or not self.provider_used:
+            raise ValueError("Dispatch token usage requires backend and provider_used")
+        for field_name in (
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "peak_context",
+        ):
+            TokenMeasure.from_dict(getattr(self, field_name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +95,7 @@ class SummaryErrorRecord:
 
 @dataclass(frozen=True, slots=True)
 class CampaignSummary:
-    """Campaign summary schema v1 — top-level contract."""
+    """Campaign summary schema v2 — top-level contract."""
 
     schema_version: int
     campaign_id: str
@@ -136,8 +154,8 @@ def _validate_top_level(data: dict[str, Any], errors: list[str]) -> None:
     missing = _REQUIRED_TOP_KEYS - set(data.keys())
     if missing:
         errors.append(f"Missing required fields: {sorted(missing)}")
-    if data.get("schema_version") != 1:
-        errors.append(f"schema_version must be 1, got {data.get('schema_version')}")
+    if data.get("schema_version") not in {1, CAMPAIGN_SUMMARY_SCHEMA_VERSION}:
+        errors.append(f"unsupported schema_version: {data.get('schema_version')}")
 
 
 def _validate_per_dispatch_entries(data: dict[str, Any], errors: list[str]) -> None:
@@ -151,7 +169,19 @@ def _validate_per_dispatch_entries(data: dict[str, Any], errors: list[str]) -> N
         tu = entry.get("token_usage")
         if isinstance(tu, dict):
             tu_keys = set(tu.keys())
-            expected = {"input", "output", "cache_read", "cache_creation"}
+            expected = (
+                {"input", "output", "cache_read", "cache_creation"}
+                if data.get("schema_version") == 1
+                else {
+                    "backend",
+                    "provider_used",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_write_tokens",
+                    "peak_context",
+                }
+            )
             if tu_keys != expected:
                 errors.append(
                     f"per_dispatch[{i}].token_usage must have exactly "
@@ -160,7 +190,7 @@ def _validate_per_dispatch_entries(data: dict[str, Any], errors: list[str]) -> N
 
 
 def validate_campaign_summary(data: dict[str, Any]) -> list[str]:
-    """Validate raw JSON dict against campaign summary schema v1.
+    """Validate raw JSON dict against the current or legacy summary schema.
 
     Returns list of error strings. Empty list = valid.
     """
@@ -211,10 +241,9 @@ def parse_campaign_summary(
                 status=CampaignSummaryStatus(e["status"]),
                 elapsed_seconds=float(e["elapsed_seconds"]),
                 token_usage=DispatchTokenUsage(
-                    input=e["token_usage"]["input"],
-                    output=e["token_usage"]["output"],
-                    cache_read=e["token_usage"]["cache_read"],
-                    cache_creation=e["token_usage"]["cache_creation"],
+                    **normalize_dispatch_token_usage(
+                        e["token_usage"], legacy=data["schema_version"] == 1
+                    )
                 ),
                 dispatched_session_id=e.get("dispatched_session_id")
                 or e.get("l3_session_id")
@@ -235,7 +264,7 @@ def parse_campaign_summary(
             for r in data["error_records"]
         ]
         return CampaignSummary(
-            schema_version=data["schema_version"],
+            schema_version=CAMPAIGN_SUMMARY_SCHEMA_VERSION,
             campaign_id=data["campaign_id"],
             campaign_name=data["campaign_name"],
             dispatch_count=data["dispatch_count"],
@@ -252,7 +281,7 @@ def parse_campaign_summary(
 def serialize_campaign_summary(summary: CampaignSummary) -> str:
     """Serialize a CampaignSummary to sentinel-wrapped JSON text."""
     data = {
-        "schema_version": summary.schema_version,
+        "schema_version": CAMPAIGN_SUMMARY_SCHEMA_VERSION,
         "campaign_id": summary.campaign_id,
         "campaign_name": summary.campaign_name,
         "dispatch_count": summary.dispatch_count,
@@ -265,10 +294,16 @@ def serialize_campaign_summary(summary: CampaignSummary) -> str:
                 "status": e.status.value,
                 "elapsed_seconds": e.elapsed_seconds,
                 "token_usage": {
-                    "input": e.token_usage.input,
-                    "output": e.token_usage.output,
-                    "cache_read": e.token_usage.cache_read,
-                    "cache_creation": e.token_usage.cache_creation,
+                    field_name: getattr(e.token_usage, field_name)
+                    for field_name in (
+                        "backend",
+                        "provider_used",
+                        "input_tokens",
+                        "output_tokens",
+                        "cache_read_tokens",
+                        "cache_write_tokens",
+                        "peak_context",
+                    )
                 },
                 "dispatched_session_id": e.dispatched_session_id,
                 "dispatch_id": e.dispatch_id,

@@ -19,13 +19,11 @@ from autoskillit.core import (
     ExplorationQuerySpec,
     NodeKey,
     get_logger,
-)
-from autoskillit.core import (
-    session_type as _resolve_session_type,
+    session_shape,
 )
 from autoskillit.pipeline import (
     EXPLORATION_STORE_FAILURE_CODES,
-    EXPLORER_INELIGIBLE_SESSION_TYPES,
+    EXPLORER_SESSION_SCOPE,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
     bind_session_scoped_durable,
@@ -552,8 +550,7 @@ async def enable_exploration(
     Never raises.
     """
     try:
-        session_type = _resolve_session_type()
-        if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
+        if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
             return _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE)
 
         store = _get_store()

@@ -186,7 +186,7 @@ def test_exploration_context_facade_re_exports_contract() -> None:
         "CapabilityResolutionStatus",
         "EXPLORATION_STORE_FAILURE_CODES",
         "EXPLORER_ROLE_NAMES",
-        "EXPLORER_INELIGIBLE_SESSION_TYPES",
+        "EXPLORER_SESSION_SCOPE",
         "EXPLORATION_AUTHORITY_PATH_ENV",
         "EXPLORATION_CAPABILITY_ENV",
         "EXPLORATION_PRINCIPAL_ROLE",

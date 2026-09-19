@@ -23,12 +23,10 @@ from autoskillit.core import (
     render_adjacency_table,
     render_dot,
     render_mermaid,
-)
-from autoskillit.core import (
-    session_type as _resolve_session_type,
+    session_shape,
 )
 from autoskillit.pipeline import (
-    EXPLORER_INELIGIBLE_SESSION_TYPES,
+    EXPLORER_SESSION_SCOPE,
     OwnerBoundExplorationContextStore,
     TelemetryFormatter,
 )
@@ -109,7 +107,7 @@ async def kitchen_status() -> str:
             # enable_exploration would refuse *before* the downstream zero-tool
             # subagent refusal, instead of only after the fact.
             ctx = _get_ctx()
-            if _resolve_session_type() in EXPLORER_INELIGIBLE_SESSION_TYPES:
+            if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
                 status["broker_authority"] = BrokerAuthorityStatus.SESSION_TYPE_INELIGIBLE.value
             elif not isinstance(ctx.exploration_context_store, OwnerBoundExplorationContextStore):
                 status["broker_authority"] = BrokerAuthorityStatus.STORE_UNAVAILABLE.value

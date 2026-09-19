@@ -21,14 +21,13 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     DIRECT_PREFIX,
     EVIDENCE_READER_ENV_FORWARD_VARS,
-    HEADLESS_ENV_VAR,
     SessionType,
     SkillExecutionRole,
     agent_definition_digest,
     canonical_reader_tools_to_bare,
     get_logger,
     load_bundled_agent_definitions,
-    session_type,
+    session_shape,
 )
 from autoskillit.execution import (
     CodexBackend,
@@ -293,8 +292,8 @@ def _reader_transport(tool_ctx: ToolContext) -> dict[str, object]:
 
 def _delegate_caller_session(ctx: Context, tool_ctx: ToolContext) -> str:
     if (
-        session_type() is not SessionType.SKILL
-        or os.environ.get(HEADLESS_ENV_VAR) != "1"
+        not (shape := session_shape()).headless
+        or shape.tier is not SessionType.SKILL
         or not isinstance(tool_ctx.backend, CodexBackend)
     ):
         raise _DelegateError("reader_admission_denied")

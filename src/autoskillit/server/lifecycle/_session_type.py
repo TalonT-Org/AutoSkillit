@@ -17,11 +17,10 @@ from autoskillit.core import (
     FLEET_MODE_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
-    HEADLESS_ENV_VAR,
     SessionType,
     get_logger,
+    session_shape,
 )
-from autoskillit.core import session_type as _resolve_session_type
 from autoskillit.pipeline import (
     EXPLORATION_AUTHORITY_PATH_ENV,
     EXPLORATION_CAPABILITY_ENV,
@@ -81,8 +80,9 @@ def _apply_session_type_visibility() -> None:
     """
     from autoskillit.server import mcp  # circular-break
 
-    _session = _resolve_session_type()
-    _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
+    _shape = session_shape()
+    _session = _shape.tier
+    _headless = _shape.headless
 
     if _evidence_reader_binding_state() != "absent" or _has_explorer_binding_env():
         # Restricted bindings gain visibility only after lifespan verifies their

@@ -235,6 +235,14 @@ and degrade the check to its operational-error path. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
 - The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
 
+<!--
+Convention for the inventory tree below: unannotated entries carry __init__.py
+(Python packages). Only entries explicitly marked `(no __init__.py)` are
+package-less data subtrees. The annotation is required, not optional — see
+`tests/arch/test_subpackage_isolation_topology.py::test_package_style_domain_subdirectories_carry_init_py`
+which derives the package set from this convention.
+-->
+
 ```
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from autoskillit.core import TokenMeasure, get_logger
+from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TokenMeasure, get_logger
 from autoskillit.execution.session._turn_usage import classify_token_measure
 
 __all__ = [
@@ -153,7 +153,7 @@ def aggregate_token_observations(
     provider_used: str,
 ) -> dict[str, Any]:
     """Aggregate verified requests without combining source pairs or missing values."""
-    fields = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
+    fields = CANONICAL_ACCOUNTING_FIELDS
     totals: dict[str, TokenMeasure] = {}
     peak: TokenMeasure | None = None
     for observation in observations:

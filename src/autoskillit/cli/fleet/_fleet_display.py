@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import TerminalColumn, TokenMeasure, get_logger
+from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TerminalColumn, TokenMeasure, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 
 logger = get_logger(__name__)
@@ -86,7 +86,7 @@ def _fmt_elapsed(dispatch: DispatchRecord) -> str:
 def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
     """Aggregate dispatch measures only inside their source pair."""
     totals: dict[tuple[str, str], dict[str, object]] = {}
-    fields = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
+    fields = CANONICAL_ACCOUNTING_FIELDS
     unknown_measure = TokenMeasure.unknown().to_dict()
     for d in state.dispatches:
         tu = d.token_usage

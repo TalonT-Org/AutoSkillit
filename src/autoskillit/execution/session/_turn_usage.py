@@ -12,6 +12,7 @@ from typing import Any, Literal
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
+    CANONICAL_ACCOUNTING_FIELDS,
     TokenMeasure,
     TurnTokenEntry,
     fast_dumps,
@@ -133,9 +134,7 @@ def valid_token_count(value: Any) -> int | None:
     return value
 
 
-_ACCOUNTING_MEASURES = frozenset(
-    {"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "peak_context"}
-)
+_ACCOUNTING_MEASURES = frozenset({*CANONICAL_ACCOUNTING_FIELDS, "peak_context"})
 _NO_CACHE_WRITE_BACKENDS = frozenset({AGENT_BACKEND_CODEX})
 _NO_CACHE_WRITE_PAIRS = frozenset({(AGENT_BACKEND_CLAUDE_CODE, "minimax")})
 _CANONICAL_TO_LEGACY: dict[str, str | None] = {

@@ -11,17 +11,12 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import ModelTotalEntry, TokenMeasure, get_logger
+from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, ModelTotalEntry, TokenMeasure, get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
 
-_TOKEN_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "cache_write_tokens",
-    "cache_read_tokens",
-)
+_TOKEN_FIELDS = CANONICAL_ACCOUNTING_FIELDS
 
 
 def canonical_step_name(step_name: str) -> str:

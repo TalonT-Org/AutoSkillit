@@ -11,7 +11,20 @@ from ._type_enums import TokenMeasureState
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
 
+# Canonical accounting field set shared by TokenEntry, fleet pair totals,
+# OTLP observation aggregation, and the sidecar accounting measures frozenset.
+# Order is deliberate (cache_write before cache_read) so iteration across all
+# consumers stays consistent. peak_context is intentionally NOT in this tuple —
+# it is a separate measure aggregated only by aggregate_token_observations.
+CANONICAL_ACCOUNTING_FIELDS: tuple[str, ...] = (
+    "input_tokens",
+    "output_tokens",
+    "cache_write_tokens",
+    "cache_read_tokens",
+)
+
 __all__ = [
+    "CANONICAL_ACCOUNTING_FIELDS",
     "CanonicalTokenUsage",
     "SerializedTokenMeasure",
     "TokenMeasure",

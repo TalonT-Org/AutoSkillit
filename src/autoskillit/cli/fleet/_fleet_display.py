@@ -111,10 +111,15 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
                 continue
             try:
                 right = TokenMeasure.from_dict(candidate)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as exc:
                 logger.debug(
                     "fleet_pair_totals_skipped_malformed_dispatch_field",
-                    extra={"backend": backend, "provider_used": provider_used, "field": field},
+                    extra={
+                        "backend": backend,
+                        "provider_used": provider_used,
+                        "field": field,
+                        "error": str(exc),
+                    },
                 )
                 continue
             row[field] = TokenMeasure.combine_or_unknown(

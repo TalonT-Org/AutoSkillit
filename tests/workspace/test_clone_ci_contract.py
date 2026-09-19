@@ -8,7 +8,6 @@ origin set by clone isolation.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,50 +18,51 @@ from autoskillit.workspace import clone_repo
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
-# ---------------------------------------------------------------------------
-# Primary cross-boundary integration test
-# ---------------------------------------------------------------------------
+
+def _remote_url(repository: str, name: str) -> str:
+    """Return a configured remote URL from a real Git repository."""
+    return subprocess.run(
+        ["git", "-C", repository, "remote", "get-url", name],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 @pytest.mark.anyio
-async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> None:
+async def test_resolve_remote_repo_after_clone_uses_upstream(local_with_remote: Path) -> None:
     """
     clone_repo sets file:// origin and upstream=real_url.
     resolve_remote_repo must return owner/repo from upstream, not fail on file://.
 
     Primary cross-boundary integration test.
     """
-    # Set up a bare remote with a github-like URL
-    bare_remote = tmp_path / "bare.git"
-    bare_remote.mkdir()
-    subprocess.run(
-        ["git", "init", "--bare", "--initial-branch=main", str(bare_remote)], check=True
-    )
-
-    source = tmp_path / "source"
-    subprocess.run(["git", "clone", str(bare_remote), str(source)], check=True)
-    subprocess.run(["git", "-C", str(source), "config", "user.email", "t@t.com"], check=True)
-    subprocess.run(["git", "-C", str(source), "config", "user.name", "T"], check=True)
-    (source / "README.md").write_text("hello")
-    subprocess.run(["git", "-C", str(source), "add", "."], check=True)
-    subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
-    src_branch = subprocess.run(
-        ["git", "-C", str(source), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    subprocess.run(["git", "-C", str(source), "push", "origin", src_branch], check=True)
-
-    # Pass remote_url to clone_repo so it sets upstream to the GitHub URL while
-    # cloning from the local bare repo (which exists). This mirrors production use
-    # where the recipe provides remote_url from a previous step's context.
     github_url = "https://github.com/testowner/testrepo.git"
-    result = clone_repo(str(source), "contract-ci-test", remote_url=github_url)
+    result = clone_repo(
+        str(local_with_remote),
+        "contract-ci-test",
+        branch="main",
+        remote_url=github_url,
+    )
     clone_path = result["clone_path"]
 
-    try:
-        resolved = await resolve_remote_repo(clone_path)
-        assert resolved == "testowner/testrepo"
-    finally:
-        shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+    assert _remote_url(clone_path, "origin") == f"file://{clone_path}"
+    assert _remote_url(clone_path, "upstream") == github_url
+    assert await resolve_remote_repo(clone_path) == "testowner/testrepo"
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_repo_after_local_only_clone_returns_none(git_repo: Path) -> None:
+    """A local-only clone must not be interpreted as GitHub-backed."""
+    result = clone_repo(str(git_repo), "contract-ci-local-only", strategy="clone_local")
+    clone_path = result["clone_path"]
+
+    assert _remote_url(clone_path, "origin") == f"file://{clone_path}"
+    upstream = subprocess.run(
+        ["git", "-C", clone_path, "remote", "get-url", "upstream"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert upstream.returncode != 0
+    assert await resolve_remote_repo(clone_path) is None

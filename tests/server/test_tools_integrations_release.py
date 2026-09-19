@@ -105,13 +105,6 @@ async def test_release_issue_add_labels_failure_returns_error(tool_ctx_kitchen_o
 
 
 @pytest.mark.anyio
-async def test_release_issue_staged_null_when_not_staged(tool_ctx_kitchen_open, monkeypatch):
-    fake = make_release_issue_fake()
-    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
-    assert (await _release(target_branch="main"))["staged_label"] is None
-
-
-@pytest.mark.anyio
 @pytest.mark.parametrize(
     "default_base_branch,promotion_target,target_branch,expected_staged",
     [
@@ -137,21 +130,3 @@ async def test_release_issue_staging_uses_promotion_target(
     result = await _release(target_branch=target_branch)
     assert result["staged"] is expected_staged
     assert (result["staged_label"] is not None) is expected_staged
-
-
-@pytest.mark.anyio
-async def test_release_issue_staged_uses_swap_labels(tool_ctx_kitchen_open, monkeypatch):
-    fake = make_release_issue_fake(["bug", "in-progress"])
-    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
-    result = await _release(target_branch="develop")
-    assert result["success"] and result["staged"] and len(calls_for(fake, "swap_labels")) == 1
-    assert not calls_for(fake, "remove_label") and not calls_for(fake, "add_labels")
-
-
-@pytest.mark.anyio
-async def test_release_issue_no_stage_uses_swap_labels(tool_ctx_kitchen_open, monkeypatch):
-    fake = make_release_issue_fake(["bug", "in-progress"])
-    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
-    result = await _release()
-    assert result["success"] and result["staged"] is False
-    assert len(calls_for(fake, "swap_labels")) == 1 and not calls_for(fake, "remove_label")

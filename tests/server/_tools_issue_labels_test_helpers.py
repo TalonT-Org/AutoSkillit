@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
 
 from tests.fakes import FakeGitHubFetcher
 
 _ISSUE_KEY: tuple[str, str, int] = ("owner", "repo", 42)
+
+
+def _coerce_labels(labels: Sequence[str] | None, *, default: list[str]) -> list[str]:
+    if labels is None:
+        return list(default)
+    if isinstance(labels, str):
+        raise TypeError(
+            "labels must be a Sequence[str], got str (use a list to pass multiple labels)"
+        )
+    return list(labels)
 
 
 def make_release_issue_fake(
@@ -20,13 +29,13 @@ def make_release_issue_fake(
     """Build a :class:`FakeGitHubFetcher` seeded with the canonical issue key.
 
     ``labels`` defaults to ``["in-progress"]`` to match the post-claim state
-    expected by most release_issue scenarios; pass an explicit list (or rely
-    on the validator accepting empty sequences) to override.
+    expected by most release_issue scenarios.
     """
-    issue_labels = list(labels) if labels is not None else ["in-progress"]
+    issue_labels = _coerce_labels(labels, default=["in-progress"])
+    repo_labels = _coerce_labels(repository_labels, default=[])
     return FakeGitHubFetcher(
         issues={_ISSUE_KEY: {"labels": issue_labels, "body": body, "state": state}},
-        repository_labels={("owner", "repo"): list(repository_labels or [])},
+        repository_labels={("owner", "repo"): repo_labels},
     )
 
 
@@ -34,8 +43,4 @@ def calls_for(
     fake: FakeGitHubFetcher, operation: str
 ) -> list[tuple[str, tuple[object, ...], dict[str, object]]]:
     """Filter ``fake.call_log`` to entries for a single operation."""
-    return [
-        cast(tuple[str, tuple[object, ...], dict[str, object]], entry)
-        for entry in fake.call_log
-        if entry[0] == operation
-    ]
+    return [entry for entry in fake.call_log if entry[0] == operation]

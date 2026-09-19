@@ -113,6 +113,7 @@ async def test_fake_github_fetcher_swap_labels_replaces_target_labels():
         "success": True,
         "labels": ["in-progress"],
     }
+    assert fake.issues[("owner", "repo", 42)]["labels"] == {"in-progress"}
 
 
 @pytest.mark.anyio
@@ -141,6 +142,8 @@ async def test_fake_github_fetcher_fetch_issue_missing_returns_failure():
     fake = FakeGitHubFetcher()
     result = await fake.fetch_issue("owner/repo#99")
     assert result["success"] is False
+    assert "error" in result
+    assert result["error"] == "issue not found: 99"
 
 
 @pytest.mark.anyio

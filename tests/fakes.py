@@ -1238,9 +1238,16 @@ class FakeGitHubFetcher(GitHubFetcher):
                 raise TypeError("issue labels must contain only str entries")
             seeded_issue["labels"] = set(labels)
             self.issues[key] = seeded_issue
-        self.repository_labels = {
-            key: set(labels) for key, labels in (repository_labels or {}).items()
-        }
+        self.repository_labels: dict[tuple[str, str], set[str]] = {}
+        for repo_key, labels in (repository_labels or {}).items():
+            if not isinstance(labels, Sequence) or isinstance(labels, str):
+                raise TypeError(
+                    f"repository_labels must map keys to Sequence[str], "
+                    f"got {type(labels).__name__}"
+                )
+            if not all(isinstance(label, str) for label in labels):
+                raise TypeError("repository_labels must contain only str entries")
+            self.repository_labels[repo_key] = set(labels)
         self.failure_results: dict[str, dict[str, Any]] = {}
         self.call_log: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 

@@ -41,6 +41,14 @@ def _step35_section() -> str:
     return text[start:end]
 
 
+def _step3_section() -> str:
+    text = _skill_text()
+    start = text.find("### Step 3: Parse and Classify Findings")
+    assert start != -1, "### Step 3 not found in SKILL.md"
+    end = text.find("### Step 3.5", start)
+    return text[start:end]
+
+
 def _step4_section() -> str:
     text = _skill_text()
     start = text.find("### Step 4")
@@ -167,6 +175,34 @@ def test_step2_rejects_an_incomplete_or_stale_diff_context_schema() -> None:
     assert "schema_version" in section
     assert "anchor_digest" in section
     assert "regenerat" in lower
+
+
+def test_v2_review_level_findings_enter_the_resolver_without_thread_identity() -> None:
+    """Doc-count findings remain actionable without manufacturing inline threads."""
+    step2 = _step2_section()
+    step3 = _step3_section()
+
+    pair_check = step2.find("review_handoff_pair_error")
+    schema_check = step2.find("schema_version == 2", pair_check)
+    review_level_load = step2.find("review_level_findings", schema_check)
+    assert 0 <= pair_check < schema_check < review_level_load
+
+    for field in ("candidate_id", "path", "line", "message", "severity", "dimension"):
+        assert field in step2
+    assert "thread_node_id=None" in step2
+
+    for behavior in (
+        "intent validation",
+        "live-source rereading",
+        "accepted-fix commits",
+        "final reporting",
+    ):
+        assert behavior in step3
+    assert "candidate_id" in step3
+    assert "thread_node_id=None" in step3
+    assert "Skip only" in step3
+    assert "thread reply" in step3
+    assert "thread resolution" in step3
 
 
 def test_step4_uses_live_anchor_validation_to_choose_the_edit_line() -> None:

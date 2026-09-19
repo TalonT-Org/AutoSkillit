@@ -9,7 +9,12 @@ from datetime import datetime
 
 import pytest
 
-from autoskillit.core import CommitFailureClass, WorkspaceOutcomeKind
+from autoskillit.core import (
+    CommitFailureClass,
+    ToolWireType,
+    WorkspaceOutcomeKind,
+    get_tool_def,
+)
 from autoskillit.server.git import validate_commit_paths
 from autoskillit.server.tools import tools_workspace
 from autoskillit.server.tools.tools_workspace import commit_files
@@ -608,6 +613,16 @@ class TestCommitFilesEnvelopeShape:
 
 
 class TestCommitFilesSelfRevertScan:
+    def test_self_revert_base_is_an_optional_registered_string(self) -> None:
+        tool_def = get_tool_def("commit_files")
+        assert tool_def is not None
+        parameter = next(
+            param for param in tool_def.params if param.name == "self_revert_base_sha"
+        )
+
+        assert parameter.wire_type is ToolWireType.STRING
+        assert parameter.required is False
+
     @pytest.mark.anyio
     async def test_invalid_self_revert_base_stops_before_mutating(self, tool_ctx, tmp_path):
         wt = tmp_path / "wt"

@@ -59,12 +59,10 @@ def _drain_piped_output(
     capture_file: IO[bytes],
     limiter: _CombinedOutputLimiter,
     on_output_limit: Callable[[], None],
-    on_started: Callable[[], None],
     done: threading.Event,
 ) -> None:
     """Drain one pipe while retaining no more than the shared byte ceiling."""
     try:
-        on_started()
         while chunk := cast(io.BufferedReader, stream).read1(_TEE_CHUNK_SIZE):
             if limiter.write(chunk, capture_file):
                 on_output_limit()
@@ -82,6 +80,7 @@ async def drain_piped_output(
     task_status: Any = anyio.TASK_STATUS_IGNORED,
 ) -> None:
     """Run one blocking pipe drainer without blocking the lifecycle task group."""
+    task_status.started()
     await anyio.to_thread.run_sync(
         functools.partial(
             _drain_piped_output,
@@ -89,10 +88,9 @@ async def drain_piped_output(
             capture_file=capture_file,
             limiter=limiter,
             on_output_limit=on_output_limit,
-            on_started=lambda: anyio.from_thread.run_sync(task_status.started),
             done=done,
         ),
-        abandon_on_cancel=True,
+        abandon_on_cancel=False,
     )
 
 

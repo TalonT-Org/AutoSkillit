@@ -141,7 +141,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     assert "## Token Usage Summary" in body_content
     assert "plan" in body_content
     assert "open-pr" in body_content
-    assert "**Total**" in body_content
+    assert "**Total (" in body_content
     assert "uncached" in body_content
     assert "cache_read" in body_content
     assert "cache_write" in body_content
@@ -813,6 +813,7 @@ def test_pr_telemetry_assembly_parity() -> None:
             "output_tokens": 500,
             "cache_write_tokens": 100,
             "cache_read_tokens": 200,
+            "peak_context": {"state": "unknown", "value": None},
             "elapsed_seconds": 60.0,
             "invocation_count": 1,
             "loc_insertions": 50,
@@ -825,6 +826,7 @@ def test_pr_telemetry_assembly_parity() -> None:
             "output_tokens": 2000,
             "cache_write_tokens": 500,
             "cache_read_tokens": 1000,
+            "peak_context": {"state": "unknown", "value": None},
             "elapsed_seconds": 120.0,
             "invocation_count": 2,
             "loc_insertions": 200,
@@ -848,6 +850,7 @@ def test_pr_telemetry_assembly_parity() -> None:
         "output_tokens": sum(s["output_tokens"] for s in steps),
         "cache_write_tokens": sum(s["cache_write_tokens"] for s in steps),
         "cache_read_tokens": sum(s["cache_read_tokens"] for s in steps),
+        "peak_context": {"state": "unknown", "value": None},
         "total_elapsed_seconds": sum(s["elapsed_seconds"] for s in steps),
         "loc_insertions": sum(s["loc_insertions"] for s in steps),
         "loc_deletions": sum(s["loc_deletions"] for s in steps),
@@ -1125,10 +1128,10 @@ def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
     assert "## Token Efficiency" in body_content
     eff_section = body_content[body_content.index("## Token Efficiency") :]
     plan_row = next(
-        (line for line in eff_section.split("\n") if line.startswith("| plan |")),
+        (line for line in eff_section.split("\n") if line.startswith("| plan (")),
         None,
     )
-    assert plan_row is not None, "No '| plan |' row found in efficiency section"
+    assert plan_row is not None, "No source-pair plan row found in efficiency section"
     assert "—" in plan_row
 
 

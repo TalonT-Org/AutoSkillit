@@ -152,8 +152,8 @@ def test_format_get_token_summary_compact():
 
 
 # T7
-def test_fmt_get_token_summary_prefers_wall_clock_seconds():
-    """_fmt_get_token_summary prefers wall_clock_seconds over elapsed_seconds."""
+def test_fmt_get_token_summary_uses_pair_elapsed_seconds():
+    """_fmt_get_token_summary uses the token row's elapsed time."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__get_token_summary",
         "tool_response": json.dumps(
@@ -185,7 +185,7 @@ def test_fmt_get_token_summary_prefers_wall_clock_seconds():
     data = json.loads(out)
     rendered = data["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "implement" in rendered
-    assert "t:150.0s" in rendered
+    assert "t:123.4s" in rendered
 
 
 # T7b

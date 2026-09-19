@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         _consume_argv_flag,
         _FlagArity,
         _normalize_executable,
+        _spec_key_for_token,
         command_verb_and_args,
     )
 else:
@@ -29,6 +30,7 @@ else:
             _consume_argv_flag,
             _FlagArity,
             _normalize_executable,
+            _spec_key_for_token,
             command_verb_and_args,
         )
     else:
@@ -38,6 +40,7 @@ else:
             _consume_argv_flag,
             _FlagArity,
             _normalize_executable,
+            _spec_key_for_token,
             command_verb_and_args,
         )
 
@@ -245,9 +248,7 @@ def _analyze_gh_api(
                     f"unrecognized gh api flag: {token.text!r}",
                     False,
                 )
-            option = token.text
-            if option not in _GH_API_FLAG_SPEC:
-                option = option.partition("=")[0] if option.startswith("--") else option[:2]
+            option = _spec_key_for_token(token.text, _GH_API_FLAG_SPEC)
             if option in {"--method", "-X"}:
                 if value is None:
                     return (None, "missing_required_value", "GitHub API method is missing", False)

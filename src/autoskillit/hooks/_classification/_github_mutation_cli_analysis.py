@@ -21,12 +21,23 @@ if TYPE_CHECKING:
         ArgvToken,
         _consume_argv_flag,
         _FlagArity,
+        _spec_key_for_token,
     )
 else:
     if __package__ == "autoskillit.hooks._classification":
-        from .._runtime._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+        from .._runtime._command_classification import (
+            ArgvToken,
+            _consume_argv_flag,
+            _FlagArity,
+            _spec_key_for_token,
+        )
     else:
-        from _command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+        from _command_classification import (
+            ArgvToken,
+            _consume_argv_flag,
+            _FlagArity,
+            _spec_key_for_token,
+        )
     from ._github_mutation_request_analysis import (
         _GITHUB_WRITE_METHODS,
         GitHubMutationKind,
@@ -160,9 +171,7 @@ def _issue_edit_request_count(args: Sequence[ArgvToken]) -> tuple[int | None, st
         if not options_ended:
             value, next_i, recognized = _consume_argv_flag(args, i, _GH_ISSUE_EDIT_FLAG_SPEC)
             if recognized:
-                flag = token.text.partition("=")[0]
-                if flag not in _GH_ISSUE_EDIT_FLAG_SPEC and len(token.text) > 2:
-                    flag = token.text[:2]
+                flag = _spec_key_for_token(token.text, _GH_ISSUE_EDIT_FLAG_SPEC)
                 if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE and (
                     value is None
                     or not value.text
@@ -415,9 +424,7 @@ def _analyze_curl_segment(
                     f"unrecognized curl flag: {token.text!r}",
                     False,
                 )
-            flag = token.text
-            if flag not in _CURL_FLAG_SPEC:
-                flag = flag.partition("=")[0] if flag.startswith("--") else flag[:2]
+            flag = _spec_key_for_token(token.text, _CURL_FLAG_SPEC)
             if value is None and _CURL_FLAG_SPEC[flag] == _FlagArity.VALUE:
                 if flag in {"--request", "-X"}:
                     return ([], "missing_required_value", "curl method is missing", False)

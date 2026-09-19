@@ -226,7 +226,8 @@ def enrich_diff_context(
     handoff, reason = _load_complete_v1_handoff(handoff_path)
     if reason:
         return {"enriched": "false", "reason": reason}
-    assert handoff is not None
+    if handoff is None:
+        return {"enriched": "false", "reason": "handoff_not_complete_v1"}
 
     if reason := _validate_handoff_checkout_head(handoff, project_dir):
         return {"enriched": "false", "reason": reason}
@@ -241,8 +242,9 @@ def enrich_diff_context(
     )
     if reason:
         return {"enriched": "false", "reason": reason}
+    if enriched_handoff is None:
+        return {"enriched": "false", "reason": "invalid_context_anchor"}
 
-    assert enriched_handoff is not None
     atomic_write(handoff_path, json.dumps(enriched_handoff, indent=2))
     return {
         "enriched": "true",

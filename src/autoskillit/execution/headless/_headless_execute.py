@@ -54,6 +54,7 @@ from autoskillit.execution.headless._headless_git import (
     _detect_session_git_writes,
 )
 from autoskillit.execution.headless._headless_helpers import (
+    _capture_native_session_ids,
     _compute_post_session_metrics,
     _detect_fs_writes,
     _stat_snapshot,
@@ -62,11 +63,7 @@ from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
     _run_headless_attempt,
 )
-from autoskillit.execution.headless._headless_model_evidence import (
-    _capture_native_session_ids,
-    _drain_model_evidence,
-    _reconcile_token_evidence,
-)
+from autoskillit.execution.headless._headless_model_evidence import _drain_model_evidence
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.headless._managed import _attempt as _diag
 from autoskillit.execution.headless._managed import (
@@ -590,7 +587,9 @@ async def _execute_claude_headless(
             backend=_step_backend.name,
             provider_used=provider_outcome.provider_used,
         )
-        skill_result = _reconcile_token_evidence(skill_result, otlp_token_usage, provider_outcome)
+        skill_result = _terminal.reconcile_token_evidence(
+            skill_result, otlp_token_usage, provider_outcome
+        )
         child_outcomes = collect_and_project_child_outcomes(
             step_backend=_step_backend,
             cwd=cwd,

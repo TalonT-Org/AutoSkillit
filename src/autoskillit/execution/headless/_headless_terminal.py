@@ -25,6 +25,21 @@ from autoskillit.core import (
 )
 
 
+def reconcile_token_evidence(
+    skill_result: SkillResult,
+    otlp_token_usage: dict[str, Any] | None,
+    provider_outcome: ProviderOutcome,
+) -> SkillResult:
+    """Select correlated OTLP accounting while retaining parser-only turn metadata."""
+    if otlp_token_usage is None:
+        return dataclasses.replace(skill_result, provider=provider_outcome)
+    selected = dict(otlp_token_usage)
+    parser_usage = skill_result.token_usage or {}
+    if "turn_count" in parser_usage:
+        selected["turn_count"] = parser_usage["turn_count"]
+    return dataclasses.replace(skill_result, provider=provider_outcome, token_usage=selected)
+
+
 def finalize_terminal_selection(
     *,
     execution_selection: ExecutionSelection | None,

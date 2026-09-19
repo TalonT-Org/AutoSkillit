@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 import autoskillit.server.tools.tools_evidence_reader as delegate_module
-from autoskillit.core import SessionType, agent_definition_digest
+from autoskillit.core import SessionShape, SessionType, agent_definition_digest
 from autoskillit.execution import CodexBackend
 from autoskillit.execution.evidence_reader import (
     EvidenceCitation,
@@ -143,7 +143,11 @@ def test_delegate_admission_requires_exact_headless_codex_skill_identity(
         backend=backend,
     )
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setattr(delegate_module, "session_type", lambda: SessionType.SKILL)
+    monkeypatch.setattr(
+        delegate_module,
+        "session_shape",
+        lambda: SessionShape(True, SessionType.SKILL),
+    )
 
     assert (
         delegate_module._delegate_caller_session(
@@ -159,7 +163,11 @@ def test_delegate_admission_requires_exact_headless_codex_skill_identity(
         with pytest.raises(delegate_module._DelegateError, match="caller_session_unavailable"):
             delegate_module._delegate_caller_session(denied, tool_ctx)
 
-    monkeypatch.setattr(delegate_module, "session_type", lambda: SessionType.ORCHESTRATOR)
+    monkeypatch.setattr(
+        delegate_module,
+        "session_shape",
+        lambda: SessionShape(True, SessionType.ORCHESTRATOR),
+    )
     with pytest.raises(delegate_module._DelegateError, match="reader_admission_denied"):
         delegate_module._delegate_caller_session(
             SimpleNamespace(session_id="trusted-parent"), tool_ctx

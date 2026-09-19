@@ -47,6 +47,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
         "_capture_store",  # cli/ops/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
+        "_type_session_shape",  # session scope constants and fleet launch environment contract
+        "_constants",  # exploration session scope is a module-level immutable contract
+        "_session_scope",  # tool scope registry and ParamSpec decorator contract
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
         "_sessions",  # cli/ops/_sessions.py: sessions_app = App(name="sessions", ...)

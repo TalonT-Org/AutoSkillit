@@ -288,6 +288,7 @@ from .plugins._plugin_artifact_identity import (
 )
 from .plugins._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
+    resolve_installed_generation_root as resolve_installed_generation_root,
 )
 from .plugins._plugin_artifact_retirement import (
     PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,

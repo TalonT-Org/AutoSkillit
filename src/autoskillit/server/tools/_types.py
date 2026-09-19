@@ -245,6 +245,7 @@ class KitchenStatusResult(TypedDict, total=False):
     github_default_repo: str
     tracker_authority: dict[str, Any]
     broker_authority: str
+    source_currency: dict[str, Any]
     warning: str
     success: bool
     error: str

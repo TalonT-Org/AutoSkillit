@@ -23,7 +23,9 @@ from autoskillit.core import (
     render_adjacency_table,
     render_dot,
     render_mermaid,
+    resolve_installed_generation_root,
     session_shape,
+    source_currency,
 )
 from autoskillit.pipeline import (
     EXPLORER_SESSION_SCOPE,
@@ -109,6 +111,19 @@ async def kitchen_status() -> str:
             # enable_exploration would refuse *before* the downstream zero-tool
             # subagent refusal, instead of only after the fact.
             ctx = _get_ctx()
+            currency = source_currency(
+                ctx.project_dir,
+                generation_root=resolve_installed_generation_root(),
+            )
+            status["source_currency"] = {
+                "status": currency.status,
+                "installed_commit": currency.installed_commit,
+                "checkout_head": currency.checkout_head,
+                "behind_by": currency.behind_by,
+                "generation_root": (
+                    str(currency.generation_root) if currency.generation_root else None
+                ),
+            }
             if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
                 status["broker_authority"] = BrokerAuthorityStatus.SESSION_TYPE_INELIGIBLE.value
             elif not isinstance(ctx.exploration_context_store, OwnerBoundExplorationContextStore):

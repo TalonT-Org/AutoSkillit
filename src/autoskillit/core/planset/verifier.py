@@ -35,9 +35,25 @@ def _rejection(
     return PlanSetVerification(False, reason, tuple(detail), None, None)
 
 
+_REASON_MAP: dict[str, PlanSetRejectReason] = {
+    "path_escape": PlanSetRejectReason.PATH_ESCAPE,
+    "symlink": PlanSetRejectReason.SYMLINK,
+    "hardlink": PlanSetRejectReason.HARDLINK,
+    "oversized": PlanSetRejectReason.OVERSIZED,
+    "world_writable": PlanSetRejectReason.WORLD_WRITABLE,
+    "metadata_drift": PlanSetRejectReason.METADATA_DRIFT,
+}
+
+
 def _read_reject_reason(exc: Exception, *, part: bool = False) -> PlanSetRejectReason:
     if part and isinstance(exc, FileNotFoundError):
         return PlanSetRejectReason.PART_FILE_MISSING
+    if isinstance(exc, ContainmentError):
+        mapped = _REASON_MAP.get(exc.reason)
+        if mapped is not None:
+            return mapped
+    if isinstance(exc, FileNotFoundError):
+        return PlanSetRejectReason.CONTAINMENT
     message = str(exc).lower()
     if "escapes allowed root" in message:
         return PlanSetRejectReason.PATH_ESCAPE

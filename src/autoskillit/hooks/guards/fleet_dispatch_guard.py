@@ -9,13 +9,24 @@ Interactive callers (cook with kitchen open) are always permitted.
 """
 
 import json
-import os
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_settings import enforce_session_scope, hook_session_shape  # noqa: E402
 
 FLEET_DISPATCH_DENY_TRIGGER: str = "dispatch_food_truck cannot be called from headless sessions"
 
 
 def main() -> None:
+    enforce_session_scope("headless_only")
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -26,14 +37,7 @@ def main() -> None:
         sys.stderr.write("fleet_dispatch_guard: unexpected JSON root type — failing open\n")
         sys.exit(0)
 
-    # AUTOSKILLIT_HEADLESS is the sole discriminator. Hook payload cross-check
-    # (session_type field) would add defence-in-depth against local env
-    # manipulation, but the attack surface is narrowly local and the env var
-    # is set by our own launcher — not user-supplied input.
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
-
-    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    _headless, session_type = hook_session_shape()
     if session_type and session_type != "fleet":
         payload = json.dumps(
             {

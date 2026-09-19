@@ -2,10 +2,8 @@
 
 These tests ensure that:
 1. HookDef declares an exempt_session_types field
-2. Any hook declared with exempt_session_types non-empty has AUTOSKILLIT_SESSION_TYPE in its source
-3. Any exempt hook has test coverage for the exempt session-type path
-4. _EXEMPT_SESSION_TYPES in guard scripts matches HookDef.exempt_session_types
-5. exempt_session_types is included in the canonical registry payload (hash input)
+2. Any exempt hook has test coverage for the exempt session-type path
+3. exempt_session_types is included in the canonical registry payload (hash input)
 
 These form a closed loop that makes the "guard blocks legitimate orchestrator session"
 bug class structurally impossible without explicit, tested, declared exemptions.
@@ -68,23 +66,7 @@ def test_at_least_one_hookdef_has_exempt_session_types() -> None:
     """Vacuousness guard: parametrized tests must have at least one test case."""
     assert len(_exempt_session_type_hooks()) >= 1, (
         "HOOK_REGISTRY must have at least one HookDef with non-empty exempt_session_types. "
-        "test_exempt_session_type_guard_contains_session_type_check would collect zero test cases."
-    )
-
-
-@pytest.mark.parametrize("hookdef,script", _exempt_session_type_hooks())
-def test_exempt_session_type_guard_contains_session_type_check(
-    hookdef: HookDef, script: str
-) -> None:
-    """Every guard declared with exempt_session_types must check AUTOSKILLIT_SESSION_TYPE."""
-    script_path = HOOKS_DIR / script
-    assert script_path.exists(), f"Hook script not found: {script_path}"
-    source = script_path.read_text(encoding="utf-8")
-    assert "AUTOSKILLIT_SESSION_TYPE" in source, (
-        f"{script} is declared with exempt_session_types="
-        f"{hookdef.exempt_session_types!r} "  # type: ignore[attr-defined]
-        f"but does not contain 'AUTOSKILLIT_SESSION_TYPE'. "
-        f"Add the env-var check to allow exempt session types."
+        "test_exempt_session_type_guard_has_test_cases would collect zero test cases."
     )
 
 
@@ -145,34 +127,6 @@ def test_exempt_session_type_guard_has_test_cases(guard_script: str) -> None:
     )
 
 
-def test_pr_create_guard_exempt_session_types_matches_hookdef() -> None:
-    """_EXEMPT_SESSION_TYPES in pr_create_guard.py must equal exempt_session_types on HookDef.
-
-    Catches drift between the two parallel frozensets that the stdlib-only boundary
-    prevents from sharing a common import.
-    """
-    script_path = HOOKS_DIR / "guards/pr_create_guard.py"
-    spec = importlib.util.spec_from_file_location("pr_create_guard", script_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
-    script_exempt: frozenset[str] | None = getattr(module, "_EXEMPT_SESSION_TYPES", None)
-    assert script_exempt is not None, "_EXEMPT_SESSION_TYPES not found in pr_create_guard.py"
-
-    hookdef_exempt: frozenset[str] | None = None
-    for hookdef in HOOK_REGISTRY:
-        if "guards/pr_create_guard.py" in hookdef.scripts:
-            hookdef_exempt = getattr(hookdef, "exempt_session_types", None)
-            break
-    assert hookdef_exempt is not None, "No HookDef found for guards/pr_create_guard.py"
-
-    assert script_exempt == hookdef_exempt, (
-        f"_EXEMPT_SESSION_TYPES in pr_create_guard.py {script_exempt!r} does not match "
-        f"exempt_session_types on the HookDef {hookdef_exempt!r}. "
-        "Update both frozensets together."
-    )
-
-
 def test_git_ops_guard_orchestrator_exemption_is_phase_local() -> None:
     """The orchestrator exemption applies after the all-session ref preflight only."""
     script_path = HOOKS_DIR / "guards/git_ops_guard.py"
@@ -180,8 +134,8 @@ def test_git_ops_guard_orchestrator_exemption_is_phase_local() -> None:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)  # type: ignore[union-attr]
-    script_exempt: frozenset[str] | None = getattr(module, "_EXEMPT_SESSION_TYPES", None)
-    assert script_exempt is not None, "_EXEMPT_SESSION_TYPES not found in git_ops_guard.py"
+    script_exempt: frozenset[str] | None = getattr(module, "_DESTRUCTIVE_OP_EXEMPT_TIERS", None)
+    assert script_exempt is not None, "_DESTRUCTIVE_OP_EXEMPT_TIERS not found in git_ops_guard.py"
 
     hookdef_exempt: frozenset[str] | None = None
     for hookdef in HOOK_REGISTRY:

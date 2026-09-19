@@ -65,11 +65,15 @@ from autoskillit.hooks._runtime._hook_constants import (  # noqa: E402,F401
     CODEX_AUTO_COMPACTION_DENIED_REASON,
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
-    EXEMPT_SESSION_TYPES_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
     MANAGED_PARENT_ALLOWED_TOOLS,
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
+)
+from autoskillit.hooks._runtime._hook_settings import (
+    admit_hook_session_scope,
+    enforce_session_scope,
+    hook_session_shape,
 )
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
@@ -91,9 +95,11 @@ __all__ = [
     "CODEX_AUTO_COMPACTION_DENIED_REASON",
     "DENY_REASON_BY_GUARD",
     "DENY_TRIGGER_BY_GUARD",
-    "EXEMPT_SESSION_TYPES_BY_GUARD",
+    "admit_hook_session_scope",
+    "enforce_session_scope",
     "EXEMPT_SKILLS_BY_GUARD",
     "HOOK_REGISTRY",
+    "hook_session_shape",
     "MANAGED_PARENT_ALLOWED_TOOLS",
     "OUTCOME_CANCELLED",
     "OUTCOME_FAILURE",

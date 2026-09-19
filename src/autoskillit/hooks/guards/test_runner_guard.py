@@ -32,6 +32,7 @@ from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     EXEMPT_SKILLS_BY_GUARD,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
 
 TEST_RUNNER_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["test_runner_guard"]
 
@@ -146,8 +147,7 @@ def _is_direct_pytest(cmd: str) -> bool:
 
 
 def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)
+    enforce_session_scope("headless_only")
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:

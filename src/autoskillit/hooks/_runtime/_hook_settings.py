@@ -541,6 +541,43 @@ def write_dispatch_diagnostic(
         return
 
 
+def hook_session_shape() -> tuple[bool, str]:
+    """Return the normalized shape without rejecting an unknown hook tier."""
+    headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+    tier = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower() or "skill"
+    return headless, tier
+
+
+def admit_hook_session_scope(
+    session_scope: str,
+    exempt_tiers: frozenset[str],
+    shape: tuple[bool, str],
+) -> bool:
+    """Return whether a HookDef scope admits a raw hook-process shape."""
+    headless, tier = shape
+    if session_scope == "headless_only" and not headless:
+        return False
+    if session_scope == "interactive_only" and headless:
+        return False
+    if session_scope != "any" and session_scope not in {"headless_only", "interactive_only"}:
+        msg = f"Unknown hook session scope: {session_scope!r}"
+        raise ValueError(msg)
+    return tier not in exempt_tiers
+
+
+def enforce_session_scope(
+    session_scope: str,
+    *,
+    exempt_tiers: frozenset[str] = frozenset(),
+) -> None:
+    """Exit successfully when a hook is outside its declared session scope."""
+    shape = hook_session_shape()
+    if shape[1] not in {"skill", "orchestrator", "fleet"}:
+        write_dispatch_diagnostic("invalid_session_shape", "enforce_session_scope", shape[1])
+    if not admit_hook_session_scope(session_scope, exempt_tiers, shape):
+        raise SystemExit(0)
+
+
 def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
     """Read the binding identified by the hook payload.
 

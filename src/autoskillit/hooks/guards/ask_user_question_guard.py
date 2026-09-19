@@ -25,6 +25,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 ASK_USER_QUESTION_DENY_TRIGGER: str = "AskUserQuestion is not available in headless sessions"
 
@@ -59,6 +60,8 @@ def _is_fresh(data: dict, ttl_hours: int = 24) -> bool:
 
 
 def main() -> None:
+    enforce_session_scope("interactive_only")
+
     try:
         payload = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -67,11 +70,6 @@ def main() -> None:
     tool_name = payload.get("tool_name", "")
     if tool_name != "AskUserQuestion":
         sys.exit(0)  # defensive; matcher should pre-filter
-
-    # In interactive sessions, AskUserQuestion is always permitted --
-    # the user is present at the terminal and can respond.
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)  # not headless -- pass through
 
     session_id = payload.get("session_id", "")
     if not session_id:

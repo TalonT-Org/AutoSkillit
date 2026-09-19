@@ -11,7 +11,6 @@ Stdlib-only — runs under any Python interpreter without the autoskillit packag
 from __future__ import annotations
 
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +27,7 @@ from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_kitchen_state_dir,
 )
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 
 def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
@@ -64,8 +64,7 @@ def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
 
 
 def main() -> None:
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        sys.exit(0)
+    enforce_session_scope("interactive_only")
 
     try:
         data = json.loads(sys.stdin.read())

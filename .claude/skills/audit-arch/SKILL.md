@@ -28,6 +28,7 @@ Audit the codebase for adherence to architectural standards and rules.
 **NEVER:**
 - Modify any source code files
 - Update an existing report - always generate new
+- Launch more than 6 principle auditors in one parallel batch. Process all principles in sequential batches of at most 6, and join each batch before starting the next.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -324,7 +325,7 @@ Before reporting any finding, complete the mandatory verification for its catego
 
 ## Audit Workflow
 
-1. **Launch parallel subagents** for each principle. Each subagent MUST NOT invent or enforce principles beyond its assigned principle.
+1. **Process every principle in sequential batches of at most 6.** For the current batch, **launch parallel subagents** for each assigned principle. Each subagent MUST NOT invent or enforce principles beyond its assigned principle. Start all current-batch delegations before awaiting any current-batch result, then join and retain every result before starting the next batch. After every batch has completed, continue with the gates and consolidation below.
 2. **Apply P1 3-question gate** before finalizing any P1 findings — confirm all three questions are YES and the pattern is not listed under "Non-SSOT Patterns — Do NOT flag these"
 3. **Apply cross-cutting exemptions** — verify CC-flagged patterns are not listed under "Standard patterns that are NOT cross-cutting violations" (error accumulation, validator collections, or facade re-exports)
 4. **Apply severity gate** — CRITICAL requires data loss, security bypass, or correctness bug; downgrade findings that do not meet this bar

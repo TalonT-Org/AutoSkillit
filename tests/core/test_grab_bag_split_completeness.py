@@ -512,6 +512,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_inspector_types.py",
             "test_install_binding_seal_regression.py",
             "test_install_detect.py",
+            "test_install_detect_source_currency.py",
             "test_invariant_registry.py",
             "test_inventory_admission.py",
             "test_io.py",

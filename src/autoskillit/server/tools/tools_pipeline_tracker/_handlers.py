@@ -20,10 +20,16 @@ from autoskillit.core import (
     get_logger,
     initialize_manual_tracker,
     mutate_tracker,
+    read_tracker_authority,
 )
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._tracker_authority import (
+    _release_context_tracker,
+    _retain_context_tracker,
+    select_tracker_target,
+)
 from autoskillit.server.lifecycle._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.response._run_skill_completion import _request_session_identity
@@ -31,13 +37,8 @@ from autoskillit.server.tools import (
     tools_pipeline_tracker,  # noqa: F401 — late-binding for monkeypatch reach
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._types import deny_envelope
-from autoskillit.server.tools.tools_pipeline_tracker._authority import (
-    _release_context_tracker,
-    _resolve_skipped_steps,
-    _retain_context_tracker,
-    select_tracker_target,
-)
 from autoskillit.server.tools.tools_pipeline_tracker._status import (
     _build_tracker_steps,
     _compute_status_counts,
@@ -48,6 +49,15 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import RunSkillCompletionReceipt, ToolContext
 
 logger = get_logger(__name__)
+
+
+def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
+    try:
+        overlay = read_overlay(project_dir)
+        pid_locks = overlay.get("locked_steps", {}).get(pipeline_id, {})
+        return {step for step, locked in pid_locks.items() if locked is False}
+    except OSError:
+        return set()
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -198,7 +208,7 @@ def _handle_init(
 
 
 def _handle_status(target: TrackerAuthorityTarget, lease: ArtifactLease) -> str:
-    authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
+    authority = read_tracker_authority(target, lease)
     if authority.data is None:
         return json.dumps(
             {
@@ -250,7 +260,7 @@ def _handle_complete(ctx: ToolContext, effective_pipeline_id: str, step_name: st
         owner_id=target.target_order_id,
     )
     try:
-        tracker_authority = tools_pipeline_tracker.read_tracker_authority(target, lease)
+        tracker_authority = read_tracker_authority(target, lease)
     except Exception:
         _release_context_tracker(ctx, key)
         raise

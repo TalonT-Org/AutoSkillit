@@ -250,10 +250,10 @@ class TestSkillAutoGateBoot:
         import os
         from unittest.mock import AsyncMock, patch
 
+        import autoskillit.server.lifecycle._lifespan._session_boots as _session_boots
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server import _misc
-        from autoskillit.server.lifecycle import _lifespan
         from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
         from autoskillit.server.tools import tools_kitchen
 
@@ -268,11 +268,14 @@ class TestSkillAutoGateBoot:
 
         with patch.object(tools_kitchen, "_write_hook_config"):
             with patch.object(_misc, "_prime_quota_cache", new=AsyncMock()):
-                with patch.object(_lifespan, "register_active_kitchen") as mock_register_kitchen:
+                with patch.object(
+                    _session_boots, "register_active_kitchen"
+                ) as mock_register_kitchen:
                     await _skill_auto_gate_boot(ctx)
 
         mock_register_kitchen.assert_called_once()
-        identity = mock_register_kitchen.call_args.args[0]
+        identity = ctx.kitchen_process_identity
+        assert identity is not None
         assert identity.create_time > 0
         assert (identity.kitchen_id, identity.pid, identity.project_path) == (
             ctx.kitchen_id,

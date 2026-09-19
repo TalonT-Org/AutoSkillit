@@ -35,6 +35,7 @@ class TestRecordPipelineStepComplete:
         )
         assert tracker["steps"]["rectify"]["status"] == "complete"
         assert "completed_at" in tracker["steps"]["rectify"]
+        assert tool_ctx_kitchen_open.tracker_leases == {}
 
     @pytest.mark.anyio
     async def test_canonicalizes_suffix(self, tool_ctx_kitchen_open, tmp_path):

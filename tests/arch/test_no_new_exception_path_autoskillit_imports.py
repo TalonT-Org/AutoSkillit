@@ -29,9 +29,6 @@ _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
         ("pipeline/background.py", 81),
         # Config re-read on a config-load failure path.
         ("cli/_init_helpers.py", 687),
-        # Kitchen tracker-authority import inside a server lifespan
-        # teardown/cleanup path.
-        ("server/lifecycle/_lifespan/_lifespan.py", 170),
     }
 )
 

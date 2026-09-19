@@ -29,6 +29,7 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.pipeline import create_background_task
+from autoskillit.server._tracker_authority import _release_kitchen_tracker_authority
 
 # Late-binding for monkeypatch reach: tests patch
 # "autoskillit.server.lifecycle._lifespan._get_ctx_or_none" (the package facade), so
@@ -167,10 +168,6 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             logger.exception("lifespan sentinel cleanup error")
         try:
             if _boot_ctx is not None:
-                from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # noqa: E501 # circular-break
-                    _release_kitchen_tracker_authority,
-                )
-
                 _release_kitchen_tracker_authority(
                     _boot_ctx,
                     unregister=True,

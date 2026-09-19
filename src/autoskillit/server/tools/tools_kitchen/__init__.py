@@ -11,7 +11,6 @@ Submodule layout:
     _open_kitchen_transition   — transition lifecycle + ContextVar
     _open_kitchen_errors       — failure / validation envelope builders
     _hook_config               — hook-subprocess bridge config writer
-    _tracker_authority         — tracker retain/release + auto-init
     _open_kitchen              — open_kitchen tool + handler + redisable + register
     _close_kitchen             — close_kitchen tool + handler
     _lock_ingredients          — lock_ingredients tool + overlay helpers
@@ -33,10 +32,7 @@ from autoskillit.config import (
 from autoskillit.core import (
     _collect_disabled_feature_tags,
     find_latest_session_id,
-    initialize_kitchen_tracker,
     resolve_kitchen_id,
-    try_retire_tracker,
-    unregister_active_kitchen,
 )
 from autoskillit.core import get_logger as _get_logger
 from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers_async
@@ -113,7 +109,7 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen import (
 # _open_kitchen.py imports its cross-submodule helpers (ContextVar,
 # failure envelope, tracker authority, etc.) via this facade — and the
 # facade cannot fully populate those names until their submodules are
-# loaded.  Order: errors, transition, tracker_authority, hook_config,
+# loaded.  Order: errors, transition, hook_config,
 # then the tool entry points.
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
@@ -135,14 +131,6 @@ from autoskillit.server.tools.tools_kitchen._reload_session import (
     _reload_session_handler,
     _write_reload_sentinel,
     reload_session,
-)
-from autoskillit.server.tools.tools_kitchen._tracker_authority import (
-    _auto_init_pipeline_tracker,
-    _pipeline_tracker_auto_init_failure,
-    _register_active_recipe_kitchen,
-    _release_kitchen_tracker_authority,
-    _retain_kitchen_tracker_authority,
-    prune_stale_kitchen_state,
 )
 
 # Module-level logger kept at the facade so tests that
@@ -179,9 +167,7 @@ __all__ = [
     "_kitchen_failure_envelope",
     "_quota_guard_hook_payload",
     "_output_budget_policy_hook_payload",
-    "_auto_init_pipeline_tracker",
     "_reload_session_handler",
-    "prune_stale_kitchen_state",
     "_OPEN_KITCHEN_REQUEST_CTX",
     # Additional internal helpers preserved for completeness
     "_apply_triage_gate",
@@ -202,10 +188,6 @@ __all__ = [
     "_transition_fields",
     "_update_hook_config_with_recipe",
     "_update_hook_config_with_git_ops_policy",
-    "_release_kitchen_tracker_authority",
-    "_retain_kitchen_tracker_authority",
-    "_register_active_recipe_kitchen",
-    "_pipeline_tracker_auto_init_failure",
     "_require_orchestrator_exact",
     "_write_ingredient_locks",
     "_write_reload_sentinel",
@@ -228,7 +210,6 @@ __all__ = [
     "execute_dispatch",
     "finalize_recipe_delivery",
     "find_latest_session_id",
-    "initialize_kitchen_tracker",
     "iter_all_scope_paths",
     "locked_overlay",
     "logger",
@@ -242,7 +223,5 @@ __all__ = [
     "resolve_log_dir",
     "serve_recipe",
     "sweep_orphaned_tethers_async",
-    "try_retire_tracker",
-    "unregister_active_kitchen",
     "update_overlay",
 ]

@@ -142,11 +142,11 @@ class TestRecordPipelineStepInit:
 
     @pytest.mark.anyio
     async def test_kitchen_release_preserves_manual_tracker_lease(self):
-        from autoskillit.server.tools.tools_kitchen import (
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
             _release_kitchen_tracker_authority,
             _retain_kitchen_tracker_authority,
         )
-        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
 
         _retain_kitchen_tracker_authority(self.ctx)
         initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
@@ -160,18 +160,18 @@ class TestRecordPipelineStepInit:
         _release_context_tracker(self.ctx, manual_key)
 
     def test_kitchen_release_does_external_work_outside_lease_lock(self, monkeypatch):
-        from autoskillit.server.tools import tools_kitchen
+        from autoskillit.server import _tracker_authority
 
-        tools_kitchen._retain_kitchen_tracker_authority(self.ctx)
+        _tracker_authority._retain_kitchen_tracker_authority(self.ctx)
         lock_states = []
 
         def record_lock_state(_value):
             lock_states.append(getattr(self.ctx.tracker_leases_lock, "_is_owned")())
 
-        monkeypatch.setattr(tools_kitchen, "unregister_active_kitchen", record_lock_state)
-        monkeypatch.setattr(tools_kitchen, "try_retire_tracker", record_lock_state)
+        monkeypatch.setattr(_tracker_authority, "unregister_active_kitchen", record_lock_state)
+        monkeypatch.setattr(_tracker_authority, "try_retire_tracker", record_lock_state)
 
-        tools_kitchen._release_kitchen_tracker_authority(
+        _tracker_authority._release_kitchen_tracker_authority(
             self.ctx,
             unregister=True,
             retire=True,
@@ -206,7 +206,7 @@ class TestRecordPipelineStepInit:
 
     @pytest.mark.anyio
     async def test_completion_identity_read_exception_releases_manual_lease(self, monkeypatch):
-        from autoskillit.server.tools import tools_pipeline_tracker
+        from autoskillit.server.tools.tools_pipeline_tracker import _handlers
 
         lease_observed = False
 
@@ -216,7 +216,7 @@ class TestRecordPipelineStepInit:
             lease_observed = True
             raise OSError("identity read failed")
 
-        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+        monkeypatch.setattr(_handlers, "read_tracker_authority", fail_read)
         completed = json.loads(
             await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
         )

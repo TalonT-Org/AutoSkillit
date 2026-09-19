@@ -36,6 +36,7 @@ from autoskillit.server._audit_authority_materializer import (
     load_current_prior_authority,
     normalize_audited_plan_refs,
 )
+from autoskillit.server._tracker_authority import _restore_reserved_tracker_authority
 from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
@@ -51,7 +52,6 @@ from autoskillit.server.tools._execution_helpers import (
     select_audit_output_contract,
 )
 from autoskillit.server.tools._types import deny_envelope
-from autoskillit.server.tools.tools_pipeline_tracker import _restore_reserved_tracker_authority
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

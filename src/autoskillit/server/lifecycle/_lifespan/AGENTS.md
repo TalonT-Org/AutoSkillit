@@ -9,7 +9,7 @@ FastMCP lifespan boot sequence — relocated from `server/_lifespan/`
 (`run_startup_drift_check`, `run_startup_hook_health_check`,
 `run_startup_install_state_check`, `run_startup_fix_required_coverage_check`,
 `run_startup_join_guard_coverage_check`, `_activate_recipe_kitchen`,
-`_retain_context_tracker_authority`, `_finalize_recorder`). `_session_boots`
+`_finalize_recorder`). `_session_boots`
 holds the per-session-type async auto-gate boots and the
 `_LIFESPAN_BOOT_REGISTRY` dispatch table that picks exactly one boot path
 based on session type and the presence of a sealed launch authority.

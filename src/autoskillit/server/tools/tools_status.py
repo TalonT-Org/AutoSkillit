@@ -117,12 +117,12 @@ async def kitchen_status() -> str:
                 status["broker_authority"] = BrokerAuthorityStatus.AVAILABLE.value
             else:
                 status["broker_authority"] = BrokerAuthorityStatus.NO_SESSION_BOUND.value
-            from autoskillit.server.tools._pipeline_deps import (  # circular-break
-                _derive_phase_a_deps,
-            )
-            from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+            from autoskillit.server._tracker_authority import (  # circular-break
                 _release_context_tracker,
                 _select_tracker_authority,
+            )
+            from autoskillit.server.tools._pipeline_deps import (  # circular-break
+                _derive_phase_a_deps,
             )
 
             expected = bool(

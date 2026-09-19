@@ -135,9 +135,11 @@ def _seed_acknowledged_receipt(tool_ctx, *, fault_domain, step_name="seed-step")
 def _ack_direct_run_skill_result(tool_ctx, payload):
     """Simulate the outer delivery boundary for a directly called handler."""
     from autoskillit.core import TrackerAuthorityTarget
-    from autoskillit.server.tools.tools_pipeline_tracker import (
+    from autoskillit.server._tracker_authority import (
         _release_context_tracker,
         _retain_context_tracker,
+    )
+    from autoskillit.server.tools.tools_pipeline_tracker import (
         mark_step_complete,
     )
 

@@ -85,6 +85,34 @@ async def test_lifespan_calls_finalize_on_cancellation():
 
 
 @pytest.mark.asyncio
+async def test_lifespan_releases_boot_tracker_before_recorder_finalization():
+    from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
+    from autoskillit.server.lifecycle._lifespan import _lifespan as lifespan_module
+
+    mock_recorder = MagicMock()
+    mock_runner = MagicMock(spec=RecordingSubprocessRunner)
+    mock_runner.recorder = mock_recorder
+    mock_ctx = MagicMock()
+    mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
+
+    with (
+        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(
+            lifespan_module,
+            "_release_kitchen_tracker_authority",
+            side_effect=OSError("release failed"),
+        ) as release,
+    ):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass
+
+    release.assert_called_once_with(mock_ctx, unregister=True, retire=True)
+    mock_recorder.finalize.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_lifespan_sets_startup_ready_event(monkeypatch):
     """_startup_ready must be set to a real Event and signalled after lifespan yield."""
     from autoskillit.server import _autoskillit_lifespan

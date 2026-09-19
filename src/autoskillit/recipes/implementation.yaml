@@ -578,6 +578,7 @@ steps:
       skill_command: /autoskillit:implement-worktree-no-merge
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.worktree_path }}
       step_name: implement
       output_dir: .
@@ -598,6 +599,7 @@ steps:
       skill_command: /autoskillit:retry-worktree
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree

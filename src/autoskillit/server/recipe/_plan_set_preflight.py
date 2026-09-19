@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.core import (
+    PlanSetBindingMode,
     PlanSetPreflightRequest,
     PlanSetVerification,
     RecipeExecutionId,
@@ -30,6 +31,7 @@ class DefaultPlanSetPreflightResolver:
             allowed_root=allowed_root,
             expected_execution_generation=self._recipe_execution_id.value,
             expected_kitchen_id=request.expected_kitchen_id or self._kitchen_id,
+            expected_binding_mode=PlanSetBindingMode.RECIPE,
             current_plan_path=request.plan_path,
             require_sealed=request.require_sealed,
         )

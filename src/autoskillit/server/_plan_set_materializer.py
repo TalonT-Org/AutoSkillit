@@ -125,9 +125,11 @@ class DefaultPlanSetMaterializer:
                 request.parent_authority_path,
                 allowed_root=root,
                 expected_execution_generation=request.execution_generation,
-                expected_kitchen_id=None,
+                expected_kitchen_id=request.kitchen_id,
+                expected_binding_mode=request.binding_mode,
                 current_plan_path=None,
                 require_sealed=False,
+                allow_part_drift=True,
             )
             if not verified.accepted or verified.authority is None:
                 return _failure(
@@ -173,13 +175,32 @@ class DefaultPlanSetMaterializer:
                 return _failure(
                     PlanSetRejectReason.PART_LIST_CHANGED, "parent part list cannot be changed"
                 )
+            if append:
+                unchanged_parent = verify_plan_set_authority(
+                    request.parent_authority_path,
+                    allowed_root=root,
+                    expected_execution_generation=request.execution_generation,
+                    expected_kitchen_id=request.kitchen_id,
+                    expected_binding_mode=request.binding_mode,
+                    current_plan_path=None,
+                    require_sealed=False,
+                )
+                if not unchanged_parent.accepted:
+                    return _failure(
+                        unchanged_parent.reason or PlanSetRejectReason.AUTHORITY_INVALID,
+                        "; ".join(unchanged_parent.detail),
+                    )
             parts.extend(parent.parts)
             allocations.extend(parent.allocations)
             issue = parent.issue
             authority_id = parent.plan_set_authority_id
             revision = parent.revision + 1
             if renew and request.seal and parent.state is PlanSetState.SEALED:
-                return _result(parent, parent_path or Path(request.parent_authority_path))
+                if all(
+                    part.byte_size == len(data) and part.content_digest == compute_bytes_hash(data)
+                    for part, (_, data) in zip(parent.parts, loaded, strict=True)
+                ):
+                    return _result(parent, parent_path or Path(request.parent_authority_path))
 
         if parent is None:
             if request.issue_url:
@@ -259,7 +280,10 @@ class DefaultPlanSetMaterializer:
                     PlanSetRejectReason.ISSUE_DRIFT, "issue body changed since snapshot"
                 )
 
-        if append or parent is None:
+        if renew:
+            parts.clear()
+            allocations.clear()
+        if append or parent is None or renew:
             start = len(parts) + 1
             for ordinal, (path, data) in enumerate(loaded, start=start):
                 parts.append(
@@ -272,10 +296,6 @@ class DefaultPlanSetMaterializer:
                         content_digest=compute_bytes_hash(data),
                     )
                 )
-        if renew and parent is not None:
-            # Parts were verified above; preserve their exact stored allocation evidence.
-            loaded = []
-
         errors: list[str] = []
         loaded_by_locator = {str(path): data for path, data in loaded}
         for part in parts:

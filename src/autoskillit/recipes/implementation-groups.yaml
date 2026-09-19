@@ -291,6 +291,7 @@ steps:
       route: bind_group_parts
     - route: release_issue_failure
     on_failure: release_issue_failure
+    on_rate_limit: release_issue_failure
     note: "Deterministic salvage for plan context-limit stumbles: verifies captured\
       \ plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded;\
       \ unsalvageable falls through to plan's original on_failure destination. Substitute\
@@ -303,7 +304,8 @@ steps:
       plan_parts: ${{ context.plan_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
-      seal: 'true'
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'false'
       step_name: bind_group_parts
     capture:
       plan_set_authority_path: ${{ result.plan_set_authority_path }}
@@ -312,9 +314,81 @@ steps:
       plan_set_coverage_gaps: ${{ result.coverage_gaps }}
     on_result:
     - when: ${{ result.success }} == true
-      route: review_approach
+      route: check_group_plan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
+    optional_context_refs:
+    - plan_set_authority_path
+  check_group_plan_iteration:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.group_plan_iteration_count }}
+      max_iterations: '30'
+    capture:
+      group_plan_iteration_count: ${{ result.next_iteration }}
+    optional_context_refs:
+    - group_plan_iteration_count
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
+    - route: next_group_or_seal
+    on_failure: release_issue_failure
+  next_group_or_seal:
+    action: route
+    on_result:
+    - when: ${{ result.next }} == more_groups
+      route: plan
+    - route: seal_plan_set
+    note: "Planning loop: every group is planned and bound before any part is verified or implemented."
+  seal_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_set_parts }}
+      cwd: ${{ context.work_dir }}
+      issue_url: ${{ inputs.issue_url }}
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'true'
+      step_name: seal_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+      plan_path: ${{ result.first_part_path }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: review_approach
+    - route: gap_replan
+    on_failure: release_issue_failure
+  gap_replan:
+    tool: run_skill
+    model: ''
+    retries: 0
+    with:
+      skill_command: /autoskillit:make-plan
+      skill_inputs:
+        task: ${{ context.plan_set_coverage_gaps }}
+        issue_url: ${{ inputs.issue_url }}
+        adversarial_review_level: ${{ inputs.adversarial_review_level }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
+      cwd: ${{ context.work_dir }}
+      step_name: gap_replan
+      output_dir: .
+    capture:
+      plan_path: ${{ result.plan_path }}
+      plan_disposition_path: ${{ result.plan_disposition_path }}
+    capture_list:
+      plan_parts: ${{ result.plan_parts }}
+    optional_context_refs:
+    - audit_cycle_path
+    on_result:
+    - when: ${{ result.verdict }} == plan
+      route: bind_group_parts
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    on_context_limit: salvage_plan
+    on_rate_limit: release_issue_failure
   review_approach:
     tool: run_skill
     model: ''
@@ -354,7 +428,7 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-    on_success: create_impl_worktree
+    on_success: renew_plan_set
     on_failure: release_issue_failure
     optional_context_refs:
     - review_path
@@ -365,6 +439,25 @@ steps:
       \ to the next part. Never run verify for all parts first. If review produced\
       \ a report, context.review_path is available \u2014 pass it as an additional\
       \ arg to dry-walkthrough."
+  renew_plan_set:
+    tool: bind_plan_set
+    with:
+      plan_parts: ${{ context.plan_set_parts }}
+      cwd: ${{ context.work_dir }}
+      parent_authority_path: ${{ context.plan_set_authority_path }}
+      seal: 'true'
+      step_name: renew_plan_set
+    capture:
+      plan_set_authority_path: ${{ result.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ result.plan_set_authority_digest }}
+      plan_set_parts: ${{ result.plan_set_parts }}
+      plan_set_coverage_gaps: ${{ result.coverage_gaps }}
+    on_result:
+    - when: ${{ result.success }} == true
+      route: create_impl_worktree
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: Rebinds current part bytes after walkthrough edits before implementation.
   create_impl_worktree:
     tool: run_cmd
     with:
@@ -386,6 +479,7 @@ steps:
       skill_command: /autoskillit:implement-worktree-no-merge
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.worktree_path }}
       step_name: implement
       output_dir: .
@@ -405,6 +499,7 @@ steps:
       skill_command: /autoskillit:retry-worktree
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
@@ -601,10 +696,20 @@ steps:
       counter_value: ''
     capture:
       ref_push_count: ${{ result.value }}
-    on_success: remediate
-    on_failure: remediate
+    on_success: reset_group_plan_counter
+    on_failure: reset_group_plan_counter
     note: Resets ref_push_count to 0 so each audit-remediation cycle gets a fresh
       ref-push budget.
+  reset_group_plan_counter:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      group_plan_iteration_count: ${{ result.value }}
+    on_success: remediate
+    on_failure: remediate
+    note: Resets the group-planning budget for each audit-remediation cycle.
   commit_guard:
     tool: run_python
     with:
@@ -884,13 +989,9 @@ steps:
     on_result:
     - when: ${{ result.next }} == more_parts
       route: verify
-    - when: ${{ result.next }} == more_groups
-      route: plan
     - route: audit_impl
-    note: "Routing step \u2014 no tool call. The agent evaluates what comes next:\
-      \ 1. If more plan_parts remain for the current group \u2192 go to verify with\
-      \ next part. 2. If all plan_parts done but more groups remain \u2192 go to plan\
-      \ with next group's task. 3. If all groups complete \u2192 go to audit_impl.\n"
+    note: "Routing step — no tool call. All groups were planned and sealed before verification.
+      If more entries in context.plan_set_parts remain, verify the next part; otherwise audit implementation."
   audit_impl:
     tool: run_skill
     model: ''

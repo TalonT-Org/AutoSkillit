@@ -54,6 +54,9 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 
 ## Critical Constraints
 
+For a multipart plan, apply this scope fence: **PART {X} ONLY. I MUST NOT read,
+open, reference, or validate any other part files.**
+
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
@@ -69,6 +72,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Open plan-set authority artifacts directly or reinterpret the verified plan-set preflight result
 - Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`{{AUTOSKILLIT_TEMP}}/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**
@@ -199,6 +203,10 @@ For each remaining/incomplete phase, begin implementation immediately (no announ
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
 ### Step 4: Final Verification
+
+**Plan-set completeness check:** When `verified_plan_set_preflight` is present, use only
+its `assigned_requirements`. Before handoff, cite a delivered change or a deviation-manifest
+entry for every assigned requirement; do not consult the issue or sibling plans.
 
 Run the project's code quality checks and test suite from the worktree.
 

@@ -17,6 +17,7 @@ from ..types._type_plan_set_authority import (
     PLAN_SET_MAX_PART_BYTES,
     PLAN_SET_SCHEMA_VERSION,
     PlanSetAuthority,
+    PlanSetBindingMode,
     PlanSetPreflightEvidence,
     PlanSetRejectReason,
     PlanSetState,
@@ -40,8 +41,10 @@ def verify_plan_set_authority(
     allowed_root: str | Path,
     expected_execution_generation: str | None,
     expected_kitchen_id: str | None,
+    expected_binding_mode: PlanSetBindingMode | None = None,
     current_plan_path: str | Path | None,
     require_sealed: bool,
+    allow_part_drift: bool = False,
 ) -> PlanSetVerification:
     """Verify canonical authority bytes and every artifact they bind, without trust-on-read."""
     details: list[str] = []
@@ -82,6 +85,8 @@ def verify_plan_set_authority(
         and authority.execution_generation != expected_execution_generation
     ):
         details.append("authority execution generation does not match")
+    if expected_binding_mode is not None and authority.binding_mode is not expected_binding_mode:
+        details.append("authority binding mode does not match")
     if expected_kitchen_id is not None and authority.kitchen_id != expected_kitchen_id:
         details.append("authority kitchen ID does not match")
     if require_sealed and authority.state is not PlanSetState.SEALED:
@@ -109,7 +114,9 @@ def verify_plan_set_authority(
         except (ContainmentError, OSError) as exc:
             details.append(f"{part.part_key}: {exc}")
             continue
-        if len(data) != part.byte_size or compute_bytes_hash(data) != part.content_digest:
+        if (
+            len(data) != part.byte_size or compute_bytes_hash(data) != part.content_digest
+        ) and not allow_part_drift:
             details.append(f"{part.part_key}: part content changed")
         if wanted is not None and path == wanted:
             part_key = part.part_key
@@ -132,6 +139,8 @@ def verify_plan_set_authority(
     if details:
         if any("execution generation" in detail for detail in details):
             reason = PlanSetRejectReason.EXECUTION_GENERATION
+        elif any("binding mode" in detail for detail in details):
+            reason = PlanSetRejectReason.BINDING_MODE
         elif any("kitchen ID" in detail for detail in details):
             reason = PlanSetRejectReason.KITCHEN_ID
         elif any("not sealed" in detail for detail in details):

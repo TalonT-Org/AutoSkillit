@@ -270,6 +270,15 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
         return None
     skill_name = tokens[0]
     plan_path_str = extract_path_arg(skill_command)
+    return _check_dry_walkthrough_plan(skill_name, cwd, plan_path_str)
+
+
+def _check_dry_walkthrough_plan(
+    skill_name: str, cwd: str, plan_path_str: str | None
+) -> str | None:
+    """Check the marker using a plan path supplied by command text or bound inputs."""
+    if skill_name not in _get_config().implement_gate.skill_names:
+        return None
     if plan_path_str is None:
         return gate_error_result(f"Missing plan path argument for {skill_name}")
     plan_path = Path(cwd) / plan_path_str

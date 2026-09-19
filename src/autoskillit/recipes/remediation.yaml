@@ -554,7 +554,7 @@ steps:
         plan_path: ${{ context.plan_path }}
       cwd: ${{ context.work_dir }}
       step_name: review_approach
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-approach'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-approach/audit_${{ context.audit_remediation_count }}'
     capture:
       review_path: ${{ result.review_path }}
     retries: 1
@@ -564,6 +564,8 @@ steps:
     on_rate_limit: dry_walkthrough
     skip_when_false: inputs.review_approach
     on_skip: dry_walkthrough
+    optional_context_refs:
+    - audit_remediation_count
     note: Only execute this step if review_approach input is 'true'. Otherwise skip
       directly to dry_walkthrough.
   dry_walkthrough:
@@ -659,6 +661,7 @@ steps:
       skill_command: /autoskillit:implement-worktree-no-merge
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
       cwd: ${{ context.worktree_path }}
       step_name: implement
       output_dir: .
@@ -680,6 +683,7 @@ steps:
       skill_command: /autoskillit:retry-worktree
       skill_inputs:
         plan_path: ${{ context.plan_path }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
@@ -1317,7 +1321,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == plan
-      route: dry_walkthrough
+      route: bind_plan_set
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
@@ -1342,7 +1346,7 @@ steps:
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == salvaged
-      route: dry_walkthrough
+      route: bind_plan_set
     - route: release_issue_failure
     on_failure: release_issue_failure
     note: "Deterministic salvage for make_plan context-limit stumbles: verifies captured\

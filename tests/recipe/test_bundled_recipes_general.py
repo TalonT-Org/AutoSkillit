@@ -80,6 +80,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         ("generate-report", "group_manifest"),
         ("generate-report", "methodology_traditions"),
         ("generate-report", "tier_c_lens"),
+        ("implement-worktree-no-merge", "plan_set_authority_path"),
         ("make-plan", "audit_cycle_path"),
         ("make-plan", "plan_set_coverage_gaps"),
         ("open-integration-pr", "audit_verdict"),
@@ -127,7 +128,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
                     occurrences.append(occurrence)
 
     actual_pairs = {(skill, input_name) for _, _, skill, input_name in occurrences}
-    assert len(occurrences) == 106
+    assert len(occurrences) == 108
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:

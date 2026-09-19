@@ -36,6 +36,7 @@ from autoskillit.server._audit_authority_materializer import (
     load_current_prior_authority,
     normalize_audited_plan_refs,
 )
+from autoskillit.server.lifecycle._guards import _check_dry_walkthrough_plan
 from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
@@ -534,6 +535,16 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
+        if state.tool_ctx.config.safety.require_dry_walkthrough:
+            bound_plan_path = dict(state._bound_recipe_inputs).get("plan_path")
+            if (
+                gate_error := _check_dry_walkthrough_plan(
+                    state.skill_command.split()[0],
+                    state.cwd,
+                    bound_plan_path if isinstance(bound_plan_path, str) else None,
+                )
+            ) is not None:
+                return gate_error
         try:
             resolved_preflights = resolve_attested_input_preflight(
                 state.tool_ctx,

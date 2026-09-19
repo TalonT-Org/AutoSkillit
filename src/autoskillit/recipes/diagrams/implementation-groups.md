@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:8e504e7bf8588ab746ebd7166b2577a462ea7fb90c5851b065883e79ebc70c17 -->
+<!-- autoskillit-recipe-hash: sha256:63be3f5ac33e3d4b9f07666ba55722bb918305429dcd5f58e1a23f91e4d6f1cb -->
 <!-- autoskillit-diagram-format: v7 -->
 ## implementation-groups
 
@@ -8,17 +8,21 @@ group
 |
 +----+ FOR EACH GROUP:
 |    |
-|    plan --- [review-approach] (optional)
-|    |
-|    +----+ FOR EACH PLAN PART:
-|    |    |
-|    |    verify --- implement --- test <-> [x fail -> fix]
-|    |    |
-|    |    merge
-|    |    |
-|    +----+
+|    plan --- bind_group_parts (open)
 |    |
 +----+
+     |
+     seal_plan_set <-> [gap_replan -> bind_group_parts]
+     |
+     +----+ FOR EACH PLAN PART:
+     |    |
+     |    [review-approach] (optional) --- verify --- renew_plan_set
+     |    |
+     |    implement --- test <-> [x fail -> fix]
+     |    |
+     |    merge
+     |    |
+     +----+
      |
      +-- [audit] (optional)
      |     x fail [-> plan]

@@ -91,8 +91,8 @@ def _route_partition_violations(
         violations.append("generic result.error must route to infrastructure failure")
     if len(default_routes) != 1 or default_routes != infrastructure_routes:
         violations.append("the catch-all route must be the infrastructure failure route")
-    if go_routes & correction_routes or go_routes & infrastructure_routes:
-        violations.append("semantic success must not share correction or infrastructure routes")
+    if go_routes & infrastructure_routes:
+        violations.append("semantic success must not share the infrastructure failure route")
     if semantic_route not in infrastructure_routes:
         violations.append("semantic rejection must route through the integrity path")
     if correction_routes & infrastructure_routes:

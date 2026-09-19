@@ -276,6 +276,25 @@ def _iter_top_level_test_dirs(tests_root: Path) -> list[str]:
     )
 
 
+def _parse_tests_tree(agents_md: str) -> dict[str, bool]:
+    """Parse the tests/ inventory tree from ``agents_md`` and return a mapping
+    from each top-level listed directory name to whether it is annotated as
+    ``(no __init__.py)`` in the inventory. Nested subtree entries are ignored."""
+    tree_block = _extract_tests_tree_block(agents_md)
+    inventory: dict[str, bool] = {}
+    for match in _TREE_ENTRY_PATTERN.finditer(tree_block):
+        if tree_block[match.start()] == "│":
+            continue  # nested subtree entry — not a top-level tests/ child
+        name = match.group(1)
+        line_start = tree_block.rfind("\n", 0, match.start()) + 1
+        line_end = tree_block.find("\n", match.end())
+        if line_end == -1:
+            line_end = len(tree_block)
+        line = tree_block[line_start:line_end]
+        inventory[name] = "(no __init__.py)" in line
+    return inventory
+
+
 def _extract_tests_tree_block(agents_md: str) -> str:
     """Return the body of the triple-backtick fence that contains the ``tests/`` tree."""
     for match in _FENCE_PATTERN.finditer(agents_md):
@@ -369,40 +388,25 @@ def test_no_stale_smoke_utils_exemption_rationale() -> None:
 
 
 def test_package_style_domain_subdirectories_carry_init_py() -> None:
-    """The package-style test subdirectories each carry __init__.py.
+    """Every test subdirectory listed in tests/AGENTS.md without the ``(no __init__.py)``
+    annotation must carry ``__init__.py``.
 
     Splits test_test_suite_has_domain_subdirectories' conflated "all dirs must be
     packages" claim: exploration/ and report/ are intentionally package-less data
-    subtrees; the remaining top-level dirs that carry __init__.py stay that way. The
-    22-name set is curated: see ``tests/AGENTS.md`` for the documented partition.
+    subtrees (annotated ``(no __init__.py)``); every other listed dir must be a real
+    Python package. The package-style partition is derived from the AGENTS.md inventory
+    itself rather than a hardcoded set, so the contract is self-enforcing.
     """
-    package_style = {
-        "arch",
-        "assets",
-        "backend",
-        "cli",
-        "config",
-        "contracts",
-        "core",
-        "docs",
-        "execution",
-        "fleet",
-        "hooks",
-        "infra",
-        "integration",
-        "migration",
-        "pipeline",
-        "planner",
-        "recipe",
-        "server",
-        "skills",
-        "skills_extended",
-        "smoke_utils",
-        "workspace",
-    }
     tests_root = SRC_ROOT.parents[1] / "tests"
+    agents_md = (tests_root / "AGENTS.md").read_text(encoding="utf-8")
+    inventory = _parse_tests_tree(agents_md)
+    package_dirs = {
+        name
+        for name, no_init in inventory.items()
+        if not no_init and name not in _EXCLUDED_TEST_DIRS
+    }
     missing_init = sorted(
-        name for name in package_style if not (tests_root / name / "__init__.py").is_file()
+        name for name in package_dirs if not (tests_root / name / "__init__.py").is_file()
     )
     assert not missing_init, (
         f"Package-style test subdirectories lost their __init__.py: {missing_init}"

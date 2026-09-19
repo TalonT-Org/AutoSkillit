@@ -1253,7 +1253,13 @@ class FakeGitHubFetcher(GitHubFetcher):
 
     def _failure_result(self, operation: str) -> dict[str, Any] | None:
         result = self.failure_results.get(operation)
-        return dict(result) if result is not None else None
+        if result is None:
+            return None
+        if not isinstance(result, Mapping):
+            raise TypeError(
+                f"failure_results[{operation!r}] must be a Mapping, got {type(result).__name__}"
+            )
+        return dict(result)
 
     @staticmethod
     def _issue_key(

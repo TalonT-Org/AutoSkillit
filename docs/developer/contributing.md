@@ -13,16 +13,21 @@
 
 ## Running Tests
 
-The configured AutoSkillit local gate is `task test-local-gate`. It excludes
+The checked-in `.autoskillit/config.yaml` `test_check.command` is a live
+override: MCP `test_check` and merge's pre-merge and post-rebase test gates use
+it. In this repository it is `task test-local-gate`, which excludes
 `tests/execution/test_process_channel_b.py` from local gate runs, including when
-that file is explicitly selected with `PYTEST_TEST_PATHS`. To run the complete
-manual suite, use:
+that file is explicitly selected with `PYTEST_TEST_PATHS`, while retaining
+`test-all` import lint. The wrapper emits explicit PASS/FAIL output with portable
+status capture. To run the complete manual suite, use:
 
     task test-all
 
 Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for
 parallel execution. Never use `pytest` directly; use `task test-all` for the
-complete suite or `task test-check` for CI automation.
+complete suite or the configured `task test-local-gate` for repository automation.
+`task test-check` remains the generic/default automation command when no project
+override applies.
 
 ## Branch-Targeted CI Policy
 

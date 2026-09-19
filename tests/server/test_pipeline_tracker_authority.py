@@ -33,20 +33,20 @@ class TestCheckPipelineDepsImmutableTarget:
                 )
             )
 
-        from autoskillit.server.tools.tools_execution import _select_tracker_authority
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
+            _select_tracker_authority,
+        )
 
         _target, authority, key, _lease = _select_tracker_authority(
             tool_ctx_kitchen_open,
             "",
+            expected=False,
         )
         try:
             result = _check_pipeline_deps("b", authority)
         finally:
             if key is not None:
-                from autoskillit.server.tools.tools_pipeline_tracker import (
-                    _release_context_tracker,
-                )
-
                 _release_context_tracker(tool_ctx_kitchen_open, key)
         assert _target is not None
         assert _target.target_order_id == "kitchen-xyz"
@@ -57,7 +57,7 @@ class TestSelectTrackerAuthority:
     def test_read_failure_releases_retained_lease(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
-        from autoskillit.server.tools import tools_pipeline_tracker
+        from autoskillit.server import _tracker_authority
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
@@ -67,10 +67,14 @@ class TestSelectTrackerAuthority:
             retained["lease"] = lease
             raise OSError("read failed")
 
-        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+        monkeypatch.setattr(_tracker_authority, "read_tracker_authority", fail_read)
 
         with pytest.raises(OSError, match="read failed"):
-            tools_pipeline_tracker._select_tracker_authority(tool_ctx_kitchen_open, "")
+            _tracker_authority._select_tracker_authority(
+                tool_ctx_kitchen_open,
+                "",
+                expected=False,
+            )
 
         assert retained["lease"].closed
         assert tool_ctx_kitchen_open.tracker_leases == {}
@@ -78,33 +82,36 @@ class TestSelectTrackerAuthority:
     def test_scoped_selection_cannot_release_kitchen_lifetime_lease(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        from autoskillit.server.tools import tools_kitchen, tools_pipeline_tracker
+        from autoskillit.server._tracker_authority import (
+            _release_context_tracker,
+            _release_kitchen_tracker_authority,
+            _retain_kitchen_tracker_authority,
+            _select_tracker_authority,
+        )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
-        kitchen_key, kitchen_lease = tools_kitchen._retain_kitchen_tracker_authority(
-            tool_ctx_kitchen_open
-        )
+        kitchen_key, kitchen_lease = _retain_kitchen_tracker_authority(tool_ctx_kitchen_open)
 
-        _target, _authority, scoped_key, scoped_lease = (
-            tools_pipeline_tracker._select_tracker_authority(tool_ctx_kitchen_open, "")
+        _target, _authority, scoped_key, scoped_lease = _select_tracker_authority(
+            tool_ctx_kitchen_open,
+            "",
+            expected=False,
         )
         assert scoped_key is not None
         assert scoped_lease is not None
         assert scoped_key != kitchen_key
 
-        tools_pipeline_tracker._release_context_tracker(tool_ctx_kitchen_open, scoped_key)
+        _release_context_tracker(tool_ctx_kitchen_open, scoped_key)
         assert not kitchen_lease.closed
         assert tool_ctx_kitchen_open.tracker_leases == {kitchen_key: kitchen_lease}
-        tools_kitchen._release_kitchen_tracker_authority(
-            tool_ctx_kitchen_open, unregister=False, retire=False
-        )
+        _release_kitchen_tracker_authority(tool_ctx_kitchen_open, unregister=False, retire=False)
 
     def test_completion_binding_read_exception_releases_lease(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         from autoskillit.core import TrackerAuthorityTarget
-        from autoskillit.server.tools import tools_execution, tools_pipeline_tracker
+        from autoskillit.server import _tracker_authority
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
@@ -114,9 +121,9 @@ class TestSelectTrackerAuthority:
         def fail_read(_target, _lease):
             raise OSError("identity read failed")
 
-        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_identity", fail_read)
+        monkeypatch.setattr(_tracker_authority, "read_tracker_identity", fail_read)
         with pytest.raises(OSError, match="identity read failed"):
-            tools_execution._completion_tracker_binding(
+            _tracker_authority._completion_tracker_binding(
                 tool_ctx_kitchen_open, "AB", tracker_target=target
             )
 
@@ -129,7 +136,7 @@ class TestRestoreReservedTrackerAuthority:
         from typing import cast
 
         from autoskillit.core import AuditIdentityReservation, TrackerAuthorityTarget
-        from autoskillit.server.tools.tools_pipeline_tracker import (
+        from autoskillit.server._tracker_authority import (
             _release_context_tracker,
             _restore_reserved_tracker_authority,
             _retain_context_tracker,
@@ -141,8 +148,8 @@ class TestRestoreReservedTrackerAuthority:
         key, lease = _retain_context_tracker(
             tool_ctx_kitchen_open,
             target,
-            owner_kind="kitchen",
-            owner_id="kitchen-xyz",
+            owner_kind="manual",
+            owner_id="selection:AB",
         )
         reservation = cast(
             AuditIdentityReservation,
@@ -157,6 +164,8 @@ class TestRestoreReservedTrackerAuthority:
 
         assert restored_key == key
         assert restored_lease is lease
+        assert restored_key.owner_kind == "manual"
+        assert restored_key.owner_id == "selection:AB"
         assert not lease.closed
         assert list(tool_ctx_kitchen_open.tracker_leases) == [key]
         _release_context_tracker(tool_ctx_kitchen_open, key)
@@ -168,16 +177,16 @@ class TestRestoreReservedTrackerAuthority:
         from typing import cast
 
         from autoskillit.core import AuditIdentityReservation, TrackerAuthorityTarget
-        from autoskillit.server.tools import tools_pipeline_tracker
+        from autoskillit.server import _tracker_authority
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
         current_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
-        current_key, current_lease = tools_pipeline_tracker._retain_context_tracker(
+        current_key, current_lease = _tracker_authority._retain_context_tracker(
             tool_ctx_kitchen_open,
             current_target,
-            owner_kind="kitchen",
-            owner_id="kitchen-xyz",
+            owner_kind="manual",
+            owner_id="selection:AB",
         )
         reservation = cast(
             AuditIdentityReservation,
@@ -187,10 +196,10 @@ class TestRestoreReservedTrackerAuthority:
         def fail_read(_target, _lease):
             raise OSError("read failed")
 
-        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+        monkeypatch.setattr(_tracker_authority, "read_tracker_authority", fail_read)
 
         with pytest.raises(OSError, match="read failed"):
-            tools_pipeline_tracker._restore_reserved_tracker_authority(
+            _tracker_authority._restore_reserved_tracker_authority(
                 tool_ctx_kitchen_open,
                 reservation,
                 current_key,
@@ -198,7 +207,7 @@ class TestRestoreReservedTrackerAuthority:
 
         assert not current_lease.closed
         assert tool_ctx_kitchen_open.tracker_leases == {current_key: current_lease}
-        tools_pipeline_tracker._release_context_tracker(tool_ctx_kitchen_open, current_key)
+        _tracker_authority._release_context_tracker(tool_ctx_kitchen_open, current_key)
 
 
 class TestSelectTrackerTarget:
@@ -206,9 +215,7 @@ class TestSelectTrackerTarget:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         """The caller-selected kitchen target is immutable despite ambient files."""
-        from autoskillit.server.tools.tools_pipeline_tracker import (
-            select_tracker_target,
-        )
+        from autoskillit.server._tracker_authority import select_tracker_target
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"

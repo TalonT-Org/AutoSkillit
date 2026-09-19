@@ -14,11 +14,15 @@ from autoskillit.core import (
     atomic_write,
     fast_dumps,
     get_logger,
-    release_tracker_lease,
 )
 from autoskillit.pipeline import closed_kitchen_open_state
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._tracker_authority import (
+    _drain_context_tracker_leases,
+    _release_kitchen_tracker_authority,
+    try_retire_tracker,
+)
 from autoskillit.server.recipe._recipe_delivery import retire_recipe_artifacts
 from autoskillit.server.recipe._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
@@ -30,9 +34,6 @@ from autoskillit.server.recipe._recipe_generation import (
 # package at call time rather than imported by name into this submodule.
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_kitchen._tracker_authority import (
-    _release_kitchen_tracker_authority,
-)
 
 logger = get_logger(__name__)
 
@@ -88,12 +89,9 @@ def _close_kitchen_handler() -> None:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:
         logger.warning("close_kitchen_tracker_authority_release_failed", exc_info=True)
-    with ctx.tracker_leases_lock:
-        abandoned_targets = {key.target for key in ctx.tracker_leases}
-        for key in list(ctx.tracker_leases):
-            release_tracker_lease(ctx.tracker_leases, key)
+    abandoned_targets = _drain_context_tracker_leases(ctx)
     for target in abandoned_targets:
-        _tk_pkg.try_retire_tracker(target)
+        try_retire_tracker(target)
     if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
         if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
             ctx.temp_dir,

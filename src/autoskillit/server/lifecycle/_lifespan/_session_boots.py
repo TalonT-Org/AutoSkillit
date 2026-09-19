@@ -46,6 +46,10 @@ from autoskillit.pipeline import (
     new_kitchen_open_state,
     start_kitchen_effect,
 )
+from autoskillit.server._tracker_authority import (
+    _retain_kitchen_tracker_authority,
+    register_active_kitchen,
+)
 
 # Late-binding for monkeypatch reach: tests patch
 # "autoskillit.server.lifecycle._lifespan._get_ctx_or_none" (the package facade), so
@@ -55,7 +59,6 @@ from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.lifecycle._lifespan._startup_checks import (
     _activate_recipe_kitchen,
-    _retain_context_tracker_authority,
 )
 
 logger = get_logger(__name__)
@@ -186,8 +189,8 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
             logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+        _retain_kitchen_tracker_authority(ctx)
+        if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("fleet_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -277,8 +280,8 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     ):
         _mcp.disable(tags={tag})
     try:
-        _retain_context_tracker_authority(ctx)
-        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+        _retain_kitchen_tracker_authority(ctx)
+        if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("pre_reveal_kitchen_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -370,8 +373,8 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+        _retain_kitchen_tracker_authority(ctx)
+        if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("food_truck_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -483,8 +486,8 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        if not _lifespan_pkg.register_active_kitchen(get_kitchen_process_identity(ctx)):
+        _retain_kitchen_tracker_authority(ctx)
+        if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("skill_auto_gate_boot_registry_refused")
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:

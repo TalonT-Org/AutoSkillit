@@ -9,7 +9,6 @@ diagnostics find problems.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
@@ -45,14 +44,6 @@ from autoskillit.workspace import (
 )
 
 logger = get_logger(__name__)
-
-
-def _retain_context_tracker_authority(ctx: Any) -> None:
-    from autoskillit.server.tools.tools_kitchen._tracker_authority import (  # circular-break
-        _retain_kitchen_tracker_authority,
-    )
-
-    _retain_kitchen_tracker_authority(ctx)
 
 
 def run_startup_drift_check() -> None:

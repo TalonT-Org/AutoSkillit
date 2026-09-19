@@ -193,6 +193,7 @@ class TestKitchenStatus:
         assert status["tracker_authority"]["target_order_id"] == "kitchen-status"
         assert status["tracker_authority"]["available"] is False
         assert "Expected pipeline tracker 'kitchen-status'" in status["error"]
+        assert tool_ctx_kitchen_open.tracker_leases == {}
 
     @pytest.mark.anyio
     async def test_kitchen_status_treats_tracker_as_optional_without_dependencies(
@@ -217,6 +218,7 @@ class TestKitchenStatus:
             "error": None,
         }
         assert "error" not in status
+        assert tool_ctx_kitchen_open.tracker_leases == {}
 
     @pytest.mark.anyio
     async def test_kitchen_status_reports_readable_kitchen_tracker_clean(
@@ -242,6 +244,7 @@ class TestKitchenStatus:
 
         assert status["tracker_authority"]["available"] is True
         assert "error" not in status
+        assert tool_ctx_kitchen_open.tracker_leases == {}
 
 
 class TestGetPipelineReport:

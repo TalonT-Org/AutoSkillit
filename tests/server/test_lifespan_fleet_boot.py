@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import structlog.testing
 
+import autoskillit.server.lifecycle._lifespan._session_boots as _session_boots
 from autoskillit.server import _misc
 from autoskillit.server.lifecycle import _lifespan
 from autoskillit.server.tools import tools_kitchen
@@ -38,7 +39,7 @@ class TestFleetAutoGateBoot:
                     return_value=MagicMock(),
                 ) as mock_create_bg_task:
                     with patch.object(
-                        _lifespan, "register_active_kitchen"
+                        _session_boots, "register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(tool_ctx)
 
@@ -49,13 +50,15 @@ class TestFleetAutoGateBoot:
         mock_prime_quota_cache.assert_awaited_once_with(supports_quota_check=True)
         mock_create_bg_task.assert_called_once()
         mock_register_kitchen.assert_called_once()
-        identity = mock_register_kitchen.call_args.args[0]
+        identity = tool_ctx.kitchen_process_identity
+        assert identity is not None
         assert identity.create_time > 0
         assert (identity.kitchen_id, identity.pid, identity.project_path) == (
             tool_ctx.kitchen_id,
             os.getpid(),
             str(tool_ctx.project_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_fleet_auto_gate_boot_passes_campaign_id_to_reaper(
@@ -82,7 +85,7 @@ class TestFleetAutoGateBoot:
             patch.object(tools_kitchen, "_write_hook_config"),
             patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
             patch.object(_lifespan, "create_background_task", return_value=MagicMock()),
-            patch.object(_lifespan, "register_active_kitchen"),
+            patch.object(_session_boots, "register_active_kitchen"),
             patch.object(
                 _lifespan,
                 "discover_campaign_state_files",
@@ -129,16 +132,19 @@ class TestFleetAutoGateBootProjectDir:
                     return_value=MagicMock(),
                 ):
                     with patch.object(
-                        _lifespan, "register_active_kitchen"
+                        _session_boots, "register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(ctx)
 
-        identity = mock_register_kitchen.call_args.args[0]
+        mock_register_kitchen.assert_called_once()
+        identity = ctx.kitchen_process_identity
+        assert identity is not None
         assert (identity.kitchen_id, identity.pid, identity.project_path) == (
             ctx.kitchen_id,
             os.getpid(),
             str(different_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_food_truck_auto_gate_boot_uses_project_dir_for_kitchen_registration(
@@ -170,16 +176,19 @@ class TestFleetAutoGateBootProjectDir:
                     return_value=MagicMock(),
                 ):
                     with patch.object(
-                        _lifespan, "register_active_kitchen"
+                        _session_boots, "register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _food_truck_auto_gate_boot(ctx)
 
-        identity = mock_register_kitchen.call_args.args[0]
+        mock_register_kitchen.assert_called_once()
+        identity = ctx.kitchen_process_identity
+        assert identity is not None
         assert (identity.kitchen_id, identity.pid, identity.project_path) == (
             ctx.kitchen_id,
             os.getpid(),
             str(different_dir),
         )
+        assert mock_register_kitchen.call_args.args[0] is identity
 
     @pytest.mark.anyio
     async def test_fleet_lifespan_auto_gate_fails_open_on_hook_config_error(self, tool_ctx):
@@ -203,7 +212,7 @@ class TestFleetAutoGateBootProjectDir:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite hook_config failure
@@ -230,7 +239,7 @@ class TestFleetAutoGateBootProjectDir:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite quota cache failure
@@ -253,7 +262,7 @@ class TestFleetAutoGateBootProjectDir:
                     "create_background_task",
                     side_effect=RuntimeError("task creation error"),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite background task failure
@@ -277,7 +286,7 @@ class TestFleetAutoGateBootProjectDir:
                     return_value=MagicMock(),
                 ):
                     with patch.object(
-                        _lifespan,
+                        _session_boots,
                         "register_active_kitchen",
                         side_effect=OSError("registry write error"),
                     ):
@@ -305,7 +314,7 @@ class TestFleetAutoGateBootProjectDir:
                 return_value=MagicMock(),
             ),
             patch.object(
-                _lifespan,
+                _session_boots,
                 "register_active_kitchen",
                 return_value=False,
             ),
@@ -334,7 +343,7 @@ class TestFleetAutoGateBootProjectDir:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         with structlog.testing.capture_logs() as logs:
                             await _fleet_auto_gate_boot(tool_ctx)
 
@@ -374,7 +383,7 @@ class TestFleetAutoGateBootProjectDir:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         async with Client(mcp) as client:
@@ -408,7 +417,7 @@ class TestFleetAutoGateBootProjectDir:
                         "create_background_task",
                         return_value=MagicMock(),
                     ):
-                        with patch.object(_lifespan, "register_active_kitchen"):
+                        with patch.object(_session_boots, "register_active_kitchen"):
                             await _fleet_auto_gate_boot(tool_ctx)
 
         mock_helper.assert_called_once_with(
@@ -442,7 +451,7 @@ class TestFoodTruckAutoGateBoot:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -469,7 +478,7 @@ class TestFoodTruckAutoGateBoot:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.active_recipe_packs == frozenset({"kitchen-core", "rectify"})
@@ -560,7 +569,7 @@ class TestFoodTruckAutoGateBoot:
                     "create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         result = json.loads(await run_skill("/some-skill", "/tmp"))
@@ -593,7 +602,7 @@ class TestFoodTruckAutoGateBoot:
         with patch.object(tools_kitchen, "_write_hook_config"):
             with patch.object(_misc, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_lifespan, "create_background_task", mock_create_bg_task):
-                    with patch.object(_lifespan, "register_active_kitchen"):
+                    with patch.object(_session_boots, "register_active_kitchen"):
                         with patch.object(
                             _lifespan,
                             "sweep_stale_dispatch_labels",
@@ -648,7 +657,7 @@ class TestFoodTruckAutoGateBoot:
             patch.object(tools_kitchen, "_write_hook_config"),
             patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
             patch.object(_lifespan, "create_background_task", return_value=MagicMock()),
-            patch.object(_lifespan, "register_active_kitchen"),
+            patch.object(_session_boots, "register_active_kitchen"),
             patch.object(
                 _lifespan,
                 "discover_campaign_state_files",
@@ -701,7 +710,7 @@ class TestFoodTruckAutoGateBoot:
             patch.object(tools_kitchen, "_write_hook_config"),
             patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
             patch.object(_lifespan, "create_background_task", return_value=MagicMock()),
-            patch.object(_lifespan, "register_active_kitchen"),
+            patch.object(_session_boots, "register_active_kitchen"),
             patch.object(
                 _lifespan,
                 "discover_campaign_state_files",
@@ -749,7 +758,7 @@ async def test_boot_paths_inherit_campaign_id(boot_fn_name, tool_ctx, monkeypatc
     with patch.object(tools_kitchen, "_write_hook_config"):
         with patch.object(_misc, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(lifespan, "create_background_task", return_value=MagicMock()):
-                with patch.object(lifespan, "register_active_kitchen"):
+                with patch.object(_session_boots, "register_active_kitchen"):
                     await boot_fn(tool_ctx)
 
     assert tool_ctx.kitchen_id == expected_id

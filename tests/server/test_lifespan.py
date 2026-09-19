@@ -85,6 +85,58 @@ async def test_lifespan_calls_finalize_on_cancellation():
 
 
 @pytest.mark.asyncio
+async def test_lifespan_releases_boot_tracker_before_recorder_finalization():
+    """Recorder finalize runs only after the boot-tracker release attempt.
+
+    The release path may raise (e.g. OSError on disk failure); the test confirms
+    that finalize still runs after the release attempt completes or raises,
+    in release-then-finalize order.
+    """
+    from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
+
+    # _release_kitchen_tracker_authority lives on the inner module (not re-exported
+    # by the package), so we patch the module directly. _get_ctx_or_none is
+    # re-exported by the package, so we patch via the package facade.
+    from autoskillit.server.lifecycle._lifespan import _lifespan as lifespan_module
+
+    mock_recorder = MagicMock()
+    mock_runner = MagicMock(spec=RecordingSubprocessRunner)
+    mock_runner.recorder = mock_recorder
+    mock_ctx = MagicMock()
+    mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
+
+    events: list[str] = []
+
+    def _record_release(*_args, **_kwargs):
+        events.append("release")
+        raise OSError("release failed")
+
+    def _record_finalize():
+        events.append("finalize")
+
+    mock_recorder.finalize.side_effect = _record_finalize
+
+    with (
+        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(
+            lifespan_module,
+            "_release_kitchen_tracker_authority",
+            side_effect=_record_release,
+        ) as release,
+    ):
+        async with _autoskillit_lifespan(MagicMock()):
+            pass
+
+    release.assert_called_once_with(mock_ctx, unregister=True, retire=True)
+    mock_recorder.finalize.assert_called_once()
+    assert events == ["release", "finalize"], (
+        f"expected release→finalize ordering, observed {events}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_lifespan_sets_startup_ready_event(monkeypatch):
     """_startup_ready must be set to a real Event and signalled after lifespan yield."""
     from autoskillit.server import _autoskillit_lifespan

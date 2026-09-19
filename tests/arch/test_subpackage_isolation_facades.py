@@ -63,7 +63,6 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
         "_disable_quota_guard",
         "_get_recipe",
         "_hook_config",
-        "_tracker_authority",
         "_declare_join_batch",
     }
 
@@ -74,6 +73,7 @@ def test_open_kitchen_decomposition_has_expected_siblings() -> None:
         "__init__",
         "_gate",
         "_orchestrator",
+        "_tracker_auto_init",
         "_visibility",
         "_recipe_serve",
     }
@@ -93,10 +93,34 @@ def test_tools_pipeline_tracker_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "tools" / "tools_pipeline_tracker"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
-        "_authority",
         "_status",
         "_handlers",
     }
+
+
+def test_tracker_authority_has_one_neutral_server_owner() -> None:
+    authority_path = SRC_ROOT / "server" / "_tracker_authority.py"
+    source = authority_path.read_text(encoding="utf-8")
+
+    assert authority_path.is_file()
+    assert not (SRC_ROOT / "server" / "tools" / "tools_kitchen" / "_tracker_authority.py").exists()
+    assert not (
+        SRC_ROOT / "server" / "tools" / "tools_pipeline_tracker" / "_authority.py"
+    ).exists()
+    for symbol in (
+        "_select_tracker_authority",
+        "_retain_kitchen_tracker_authority",
+        "_release_kitchen_tracker_authority",
+        "_completion_tracker_binding",
+        "_drain_context_tracker_leases",
+    ):
+        assert f"def {symbol}(" in source
+    assert "autoskillit.server.tools.tools_kitchen" not in source
+    assert "autoskillit.server.tools.tools_pipeline_tracker" not in source
+    assert not any(
+        "autoskillit.server._tracker_authority" in path.read_text(encoding="utf-8")
+        for path in (SRC_ROOT / "fleet").rglob("*.py")
+    )
 
 
 def test_tools_execution_decomposition_has_expected_siblings() -> None:

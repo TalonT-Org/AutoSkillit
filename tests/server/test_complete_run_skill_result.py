@@ -19,7 +19,7 @@ class TestCompleteRunSkillResult:
     ):
         from types import SimpleNamespace
 
-        from autoskillit.server.tools import tools_pipeline_tracker
+        from autoskillit.server import _tracker_authority
 
         authority = tool_ctx_kitchen_open.run_skill_completion
         assert authority is not None
@@ -36,7 +36,7 @@ class TestCompleteRunSkillResult:
         def fail_retain(*_args, **_kwargs):
             raise OSError("lease unavailable")
 
-        monkeypatch.setattr(tools_pipeline_tracker, "_retain_context_tracker", fail_retain)
+        monkeypatch.setattr(_tracker_authority, "_retain_context_tracker", fail_retain)
         result = json.loads(
             await complete_run_skill_result(
                 receipt.receipt_id,

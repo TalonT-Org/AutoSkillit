@@ -9,7 +9,7 @@ startup checks:
   (``run_startup_drift_check``, ``run_startup_hook_health_check``,
   ``run_startup_install_state_check``, ``run_startup_fix_required_coverage_check``,
   ``run_startup_join_guard_coverage_check``,
-  ``_activate_recipe_kitchen``, ``_retain_context_tracker_authority``,
+  ``_activate_recipe_kitchen``,
   ``_finalize_recorder``).
 - :mod:`_session_boots` — per-session-type async auto-gate boots and the
   ``_LIFESPAN_BOOT_REGISTRY`` dispatch table.
@@ -67,7 +67,6 @@ from autoskillit.server.lifecycle._lifespan._session_boots import (
 from autoskillit.server.lifecycle._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _finalize_recorder,
-    _retain_context_tracker_authority,
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
@@ -91,7 +90,6 @@ __all__ = [
     "_food_truck_auto_gate_boot",
     "_pre_reveal_kitchen",
     "_reap_self_excluded_codex_and_daemon_orphans",
-    "_retain_context_tracker_authority",
     "_run_deferred_init",
     "_run_drift_check_async",
     "_run_hook_health_check_async",

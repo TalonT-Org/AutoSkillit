@@ -600,6 +600,12 @@ class LocalOtlpSink:
         self, session_id: str, backend: str, provider_used: str
     ) -> dict[str, Any] | None:
         """Return correlated accounting only when the sink retained complete evidence."""
+        # Boundary validation: this method is MCP-facing (tools_execution_results_telemetry
+        # routes through it), so empty/invalid identifiers must short-circuit to None
+        # rather than propagating into the aggregator and surfacing as ValueError
+        # at a far-removed caller.
+        if not backend or not provider_used:
+            return None
         with self._condition:
             if not self._started_successfully or not session_id:
                 return None

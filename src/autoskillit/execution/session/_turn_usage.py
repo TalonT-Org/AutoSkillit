@@ -93,6 +93,12 @@ def write_turn_usage_sidecar(path: Path, rows: list[TurnTokenEntry]) -> bool:
             prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
         )
         temp_path = Path(raw_temp_path)
+        # Track whether any row failed to serialize so we can exit before
+        # promoting the partial sidecar to its final path. Returning False
+        # from inside the os.fdopen block used to skip os.replace/fsync,
+        # leaving a half-written sidecar that downstream loaders then
+        # picked up as if it were complete.
+        row_serialize_failed = False
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             fd = -1
             for row in rows:
@@ -105,10 +111,13 @@ def write_turn_usage_sidecar(path: Path, rows: list[TurnTokenEntry]) -> bool:
                         error_type=type(exc).__name__,
                         error=str(exc),
                     )
-                    return False
+                    row_serialize_failed = True
+                    break
                 output.write(payload + "\n")
             output.flush()
             os.fsync(output.fileno())
+        if row_serialize_failed:
+            return False
         os.replace(temp_path, path)
         fsync_directory(path.parent)
         return True

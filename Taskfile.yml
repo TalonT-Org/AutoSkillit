@@ -125,11 +125,9 @@ tasks:
     cmds:
       - |
         export PYTEST_IGNORE_PATHS="--ignore=tests/execution/test_process_channel_b.py --deselect=tests/execution/test_process_channel_b.py"
-        set -o pipefail
         set +e
         task test-all
         LOCAL_GATE_EXIT=$?
-        set +o pipefail
         set -e
 
         if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then

@@ -57,6 +57,21 @@ _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
 )
 
 
+def _print_source_currency_warning(
+    status: str, behind_by: int | None, yellow: str, reset: str
+) -> None:
+    if status == "stale":
+        print(
+            f"{yellow}WARNING: installed AutoSkillit generation is {behind_by} commits "
+            f"behind this checkout. Run `autoskillit install` to refresh it.{reset}"
+        )
+    elif status == "diverged":
+        print(
+            f"{yellow}WARNING: installed AutoSkillit generation diverges from this checkout. "
+            f"Run `autoskillit install` to refresh it.{reset}"
+        )
+
+
 def _build_cook_projection_context(
     skills_provider: SkillsDirectoryProvider,
     session_catalog: EffectiveSkillCatalog,
@@ -184,16 +199,7 @@ def cook(
         project_dir,
         generation_root=resolve_installed_generation_root(),
     )
-    if currency.status == "stale":
-        print(
-            f"{_Y}WARNING: installed AutoSkillit generation is {currency.behind_by} commits "
-            f"behind this checkout. Run `autoskillit install` to refresh it.{_R}"
-        )
-    elif currency.status == "diverged":
-        print(
-            f"{_Y}WARNING: installed AutoSkillit generation diverges from this checkout. "
-            f"Run `autoskillit install` to refresh it.{_R}"
-        )
+    _print_source_currency_warning(currency.status, currency.behind_by, _Y, _R)
 
     if profile is not None:
         if not is_feature_enabled(

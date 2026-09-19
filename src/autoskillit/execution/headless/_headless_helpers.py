@@ -37,6 +37,14 @@ logger = get_logger(__name__)
 def _capture_native_session_ids(
     downstream: Callable[[str], None] | None,
 ) -> tuple[list[str], Callable[[str], None]]:
+    """Capture the most-recent native session id while forwarding each candidate downstream.
+
+    Returns a (captured, capture) pair: ``captured`` is a single-cell list whose
+    first element holds the latest non-empty id; ``capture`` is the closure to
+    pass into sink-registration sites that emit session ids. The list cell is
+    mutable state shared with the closure, so callers should treat the returned
+    list as read-only.
+    """
     captured = [""]
 
     def capture(candidate: str) -> None:

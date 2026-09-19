@@ -1,12 +1,10 @@
 """Stdlib-only stand-in for ``TokenMeasure`` used by hook scripts.
 
-Hook scripts run under any Python interpreter and cannot import the
-``autoskillit`` package. This module mirrors the dict-level surface of
+Mirrors the dict-level surface of
 ``autoskillit.core.types._type_token.TokenMeasure`` so the
 ``token_summary_hook`` can decode durable measure records and combine
-or take the maximum of two without duplicating core's logic. Any
-semantic change here must be reflected in ``TokenMeasure`` (and the
-two canonical helpers used by Python-side callers).
+or take the maximum of two. Any semantic change here must be reflected
+in ``TokenMeasure``.
 """
 
 from __future__ import annotations

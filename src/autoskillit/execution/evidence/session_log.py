@@ -632,6 +632,18 @@ def flush_session_log(
                 sidecar_published=sidecar_published,
                 turn_usage_count=len(turn_usage),
             )
+            summary["token_usage"] = {
+                key: tu_data[key]
+                for key in (
+                    "backend",
+                    "provider_used",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_write_tokens",
+                    "cache_read_tokens",
+                    "peak_context",
+                )
+            }
             write_versioned_json(
                 session_dir / "token_usage.json",
                 tu_data,

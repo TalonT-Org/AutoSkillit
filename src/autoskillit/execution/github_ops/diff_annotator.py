@@ -282,10 +282,10 @@ def extract_annotated_source_line(
     if len(matches) != 1:
         return None
     marker_match = _LINE_MARKER.match(matches[0])
-    if marker_match is None:  # pragma: no cover - guarded by the collection above
+    if marker_match is None:
         return None
     annotated_source_line = matches[0][marker_match.end() :]
-    if not annotated_source_line.startswith(("+", " ")):
+    if not annotated_source_line.startswith(("+", "-", " ")):
         return None
     return annotated_source_line[1:]
 

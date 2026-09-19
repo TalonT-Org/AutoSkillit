@@ -191,7 +191,6 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_protocols_github",
         "_type_protocols_recipe",
         "_type_protocols_infra",
-        "_type_protocols_publication",
         "_type_plan_set_authority",
         "markdown_sections",
         "requirement_inventory",
@@ -1302,7 +1301,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_skill_variable_threading.py",
             "skills/test_phoropter_structural.py",
             "skills/test_compose_pr_retry.py",
-            "skills/test_implementer_plan_set_contracts.py",
             "smoke_utils",
         }
     ),

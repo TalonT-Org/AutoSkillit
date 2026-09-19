@@ -75,9 +75,8 @@ def test_no_issue_mode_and_authority_never_rule(skill_text: str) -> None:
         skill_text,
     )
     assert re.search(
-        r"_part_[a-z0-9]+\s+to detect multi-part",
+        r"If the plan filename contains `_part_`",
         skill_text,
-        re.IGNORECASE,
     )
 
 

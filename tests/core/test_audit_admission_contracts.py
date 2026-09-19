@@ -46,7 +46,7 @@ from autoskillit.core.types._type_audit_cycle_authority import (
 )
 from autoskillit.core.types._type_audit_cycle_disposition import PlanDispositionReport
 from autoskillit.core.types._type_enums import KillReason
-from autoskillit.core.types._type_protocols_publication import (
+from autoskillit.core.types._type_protocols_infra import (
     AuditAuthorityMaterializer,
     CommittedDispositionResolver,
 )

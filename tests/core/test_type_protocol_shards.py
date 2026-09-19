@@ -223,17 +223,10 @@ def test_infra_shard_all():
         "QuotaRefreshTask",
         "TokenFactory",
         "CampaignProtector",
-        "QuotaPolicy",
-    }
-
-
-def test_publication_shard_all():
-    from autoskillit.core.types._type_protocols_publication import __all__
-
-    assert set(__all__) == {
         "AuditAuthorityMaterializer",
         "CommittedDispositionResolver",
         "PlanSetMaterializer",
+        "QuotaPolicy",
     }
 
 

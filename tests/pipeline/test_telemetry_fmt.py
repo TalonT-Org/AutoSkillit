@@ -717,10 +717,10 @@ def test_efficiency_markdown_terminal_column_parity() -> None:
 
 
 class TestCacheColumnSuppression:
-    """Cache columns render '—' when value is None (non-Anthropic provider)."""
+    """Cache columns render 'unknown' when value is None (non-Anthropic provider)."""
 
     def test_none_cache_read_produces_unknown_in_token_table(self) -> None:
-        """format_token_table renders '—' for None cache_read_tokens."""
+        """format_token_table renders 'unknown' for None cache_read_tokens."""
         steps = [
             {
                 "step_name": "plan",

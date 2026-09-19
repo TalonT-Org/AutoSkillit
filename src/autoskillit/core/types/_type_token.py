@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 from ._type_enums import TokenMeasureState
+
+logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
 
 __all__ = [
     "CanonicalTokenUsage",
@@ -88,14 +92,20 @@ class TokenMeasure:
     def measure_from_raw(cls, raw: object, *, legacy: bool = False) -> TokenMeasure:
         """Canonical decoder: dict/int/None → TokenMeasure with legacy-zero overload.
 
-        All four production call sites (execution evidence, pipeline tokens, the
-        stdlib-only hook runtime helper, and TokenMeasure.from_dict itself) funnel
-        through here so semantics cannot drift.
+        Downgrades to unknown on malformed input while logging the offending shape.
         """
         if isinstance(raw, dict):
             try:
                 return cls.from_dict(raw)
-            except ValueError:
+            except ValueError as exc:
+                logger.debug(
+                    "token_measure_decode_downgrade_to_unknown",
+                    extra={
+                        "raw_kind": type(raw).__name__,
+                        "raw_keys": sorted(raw.keys()) if isinstance(raw, Mapping) else None,
+                        "error": str(exc),
+                    },
+                )
                 return cls.unknown()
         if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
             if legacy and raw == 0:
@@ -108,7 +118,15 @@ class TokenMeasure:
         """Combine two measures or downgrade to unknown on incompatible states."""
         try:
             return left.combine(right)
-        except ValueError:
+        except ValueError as exc:
+            logger.debug(
+                "token_measure_combine_downgrade_to_unknown",
+                extra={
+                    "left_state": left.state.value,
+                    "right_state": right.state.value,
+                    "error": str(exc),
+                },
+            )
             return TokenMeasure.unknown()
 
     @staticmethod
@@ -116,7 +134,15 @@ class TokenMeasure:
         """Take the maximum of two measures or downgrade to unknown on conflict."""
         try:
             return left.maximum(right)
-        except ValueError:
+        except ValueError as exc:
+            logger.debug(
+                "token_measure_maximum_downgrade_to_unknown",
+                extra={
+                    "left_state": left.state.value,
+                    "right_state": right.state.value,
+                    "error": str(exc),
+                },
+            )
             return TokenMeasure.unknown()
 
     def to_dict(self) -> SerializedTokenMeasure:

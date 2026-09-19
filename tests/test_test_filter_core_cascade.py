@@ -337,7 +337,7 @@ class TestModuleCascadeCore:
 
     def test_type_session_shape_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_session_shape"] == frozenset(
-            {"core", "cli", "fleet", "server"}
+            {"core", "cli", "fleet", "pipeline", "server"}
         )
 
     def test_type_capture_cascade(self) -> None:
@@ -865,9 +865,9 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "fleet", "server"]:
+        for pkg in ["core", "cli", "fleet", "pipeline", "server"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
-        for excluded in ["config", "execution", "pipeline", "migration", "workspace"]:
+        for excluded in ["config", "execution", "migration", "workspace"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_token_narrow_cascade(self, tmp_path: Path) -> None:

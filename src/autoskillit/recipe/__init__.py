@@ -192,7 +192,6 @@ from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: E402
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_callable_scope as _rules_callable_scope,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_clone as _rules_clone  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_commit_guard_regression_route as _rules_commit_guard_regression_route,
@@ -256,6 +255,7 @@ from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_phoropter_adjacency as _rules_phoropter_adjacency,  # noqa: F401
 )
+from autoskillit.recipe.rules import rules_plan_set_gate as _rules_plan_set_gate  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_pseudocode_sync as _rules_pseudocode_sync,  # noqa: F401
 )
@@ -324,6 +324,7 @@ from autoskillit.recipe.rules.ci import rules_ci_guards as _rules_ci_guards  # n
 from autoskillit.recipe.rules.ci import (
     rules_ci_merge_queue as _rules_ci_merge_queue,  # noqa: E402 F401
 )
+from autoskillit.recipe.rules.dataflow import rules_clone as _rules_clone  # noqa: E402 F401
 from autoskillit.recipe.rules.dataflow import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe.rules.dataflow import (
     rules_dataflow_callable as _rules_dataflow_callable,  # noqa: E402 F401

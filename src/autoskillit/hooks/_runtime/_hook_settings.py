@@ -578,33 +578,6 @@ def enforce_session_scope(
         raise SystemExit(0)
 
 
-def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
-    """Read the binding identified by the hook payload.
-
-    Missing, unreadable, malformed, or mismatched binding artifacts retain the
-    existing permissive policy and are treated as no binding.
-    """
-    # Some projected hooks consume settings without carrying join artifacts, so
-    # load this dependency only on the join-binding path. ``_session_binding``
-    # is excluded from the hooks/_runtime/ move (dual-import contract) and
-    # stays a sibling of this module's *parent* package, not this package.
-    module_name = (
-        f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
-    )
-    binding_module = importlib.import_module(module_name)
-    resolve_path = getattr(binding_module, "resolve_binding_path")
-    read_binding = getattr(binding_module, "read_binding")
-    binding_error = getattr(binding_module, "SessionBindingError")
-    try:
-        binding = read_binding(resolve_path(payload_cwd, session_id))
-    except binding_error:
-        return None
-    if binding is None or binding.session_id != session_id:
-        return None
-    parsed = json.loads(binding.to_json())
-    return parsed if isinstance(parsed, dict) else None
-
-
 def session_join_admission(payload_cwd: str, session_id: str):
     """Return the authoritative join decision for the payload session."""
     module_name = (

@@ -45,6 +45,23 @@ def _is_comment_start(command: str, index: int, line_start: int) -> bool:
     return previous.isspace() or previous in ";|&("
 
 
+def _quoted_delimiter_fragment(command: str, start: int, line_end: int) -> tuple[str, int] | None:
+    quote = command[start]
+    index = start + 1
+    parts: list[str] = []
+    while index < line_end:
+        char = command[index]
+        if char == quote:
+            return ("".join(parts), index + 1)
+        if quote == '"' and char == "\\" and index + 1 < line_end:
+            parts.append(command[index + 1])
+            index += 2
+        else:
+            parts.append(char)
+            index += 1
+    return None
+
+
 def _parse_heredoc_delimiter(
     command: str, start: int, line_end: int
 ) -> tuple[str, int, bool] | None:
@@ -63,73 +80,69 @@ def _parse_heredoc_delimiter(
             quoted = True
             index += 2
             continue
-        if char == "'":
-            closing = command.find("'", index + 1, line_end)
-            if closing < 0:
+        if char in "'\"":
+            fragment = _quoted_delimiter_fragment(command, index, line_end)
+            if fragment is None:
                 return None
-            parts.append(command[index + 1 : closing])
+            text, index = fragment
+            parts.append(text)
             quoted = True
-            index = closing + 1
-            continue
-        if char == '"':
-            quoted = True
-            index += 1
-            while index < line_end and command[index] != '"':
-                if command[index] == "\\" and index + 1 < line_end:
-                    parts.append(command[index + 1])
-                    index += 2
-                else:
-                    parts.append(command[index])
-                    index += 1
-            if index >= line_end:
-                return None
-            index += 1
             continue
         parts.append(char)
         index += 1
-    if not parts:
-        return None
-    return ("".join(parts), index, quoted)
+    return ("".join(parts), index, quoted) if parts else None
+
+
+def _skip_shell_quote(command: str, start: int, line_end: int) -> int:
+    quote = command[start]
+    index = start + 1
+    while index < line_end:
+        if command[index] == quote:
+            return index + 1
+        if quote == '"' and command[index] == "\\" and index + 1 < line_end:
+            index += 2
+        else:
+            index += 1
+    return line_end
+
+
+def _skip_arithmetic(command: str, start: int, line_end: int) -> int:
+    depth = 1
+    index = start + 3
+    while index < line_end:
+        if command.startswith("$((", index):
+            depth += 1
+            index += 3
+            continue
+        if command.startswith("))", index):
+            depth -= 1
+            index += 2
+            if not depth:
+                return index
+            continue
+        index += 2 if command[index] == "\\" and index + 1 < line_end else 1
+    return line_end
+
+
+def _skip_non_heredoc_syntax(command: str, index: int, line_end: int) -> int | None:
+    if command[index] == "\\":
+        return min(index + 2, line_end)
+    if command[index] in "'\"":
+        return _skip_shell_quote(command, index, line_end)
+    if command.startswith("$((", index):
+        return _skip_arithmetic(command, index, line_end)
+    return None
 
 
 def _heredoc_openers_on_line(command: str, start: int, line_end: int) -> list[_HeredocOpener]:
     """Find unquoted heredoc redirect operators on one command line."""
     openers: list[_HeredocOpener] = []
-    in_single = False
-    in_double = False
-    arithmetic_depth = 0
     index = start
     while index < line_end:
         char = command[index]
-        if arithmetic_depth:
-            if command.startswith("$((", index):
-                arithmetic_depth += 1
-                index += 3
-            elif command.startswith("))", index):
-                arithmetic_depth -= 1
-                index += 2
-            elif char == "\\" and index + 1 < line_end:
-                index += 2
-            else:
-                index += 1
-            continue
-        if char == "\\" and not in_single and index + 1 < line_end:
-            index += 2
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-            index += 1
-            continue
-        if char == '"' and not in_single:
-            in_double = not in_double
-            index += 1
-            continue
-        if in_single or in_double:
-            index += 1
-            continue
-        if command.startswith("$((", index):
-            arithmetic_depth = 1
-            index += 3
+        skipped = _skip_non_heredoc_syntax(command, index, line_end)
+        if skipped is not None:
+            index = skipped
             continue
         if char == "#" and _is_comment_start(command, index, start):
             break

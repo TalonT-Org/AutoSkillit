@@ -216,17 +216,19 @@ def test_execution_evidence_decomposition_has_expected_siblings() -> None:
     ] | {"__init__"}
 
 
-def test_execution_recording_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "execution" / "recording"
+@pytest.mark.parametrize(
+    ("subpackage", "move_set_key"),
+    [
+        pytest.param("recording", "execution_recording", id="recording"),
+        pytest.param("session_log", "execution_session_log", id="session_log"),
+    ],
+)
+def test_execution_split_subpackage_decomposition_has_expected_siblings(
+    subpackage: str, move_set_key: str
+) -> None:
+    pkg = SRC_ROOT / "execution" / subpackage
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
-        "execution_recording"
-    ] | {"__init__"}
-
-
-def test_execution_session_log_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "execution" / "session_log"
-    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
-        "execution_session_log"
+        move_set_key
     ] | {"__init__"}
 
 

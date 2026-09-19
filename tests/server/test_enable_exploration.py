@@ -133,7 +133,9 @@ async def test_enable_exploration_wire_level_surfaces_store_closed(
             {"_autoskillit_exploration_request_token": token},
         )
     result = json.loads(wire_result.structured_content["result"])
-    assert result == {"status": "error", "code": "store_closed"}
+    assert result["status"] == "error"
+    assert result["code"] == "store_closed"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -200,5 +202,7 @@ async def test_enable_exploration_rejects_missing_invalid_and_unknown_tokens(
 
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
 
-    assert result == {"status": "error", "code": "no_session_id"}
+    assert result["status"] == "error"
+    assert result["code"] == "no_session_id"
+    assert "response" in result and "detail" in result
     bind.assert_not_called()

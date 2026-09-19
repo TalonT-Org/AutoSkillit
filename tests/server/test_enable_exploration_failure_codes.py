@@ -64,7 +64,9 @@ async def _bind_raising(
     )
     monkeypatch.setattr(store, "bind_session_scoped", MagicMock(side_effect=exc))
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
-    assert result == {"status": "error", "code": expected_code}
+    assert result["status"] == "error"
+    assert result["code"] == expected_code
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio

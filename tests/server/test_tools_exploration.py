@@ -692,7 +692,10 @@ async def test_stale_resume_never_reopens_a_capability(monkeypatch: pytest.Monke
 
     result = await tools_exploration.resume_exploration_context()
 
-    assert json.loads(result) == {"status": "error", "code": "exploration_context_unavailable"}
+    payload = json.loads(result)
+    assert payload["status"] == "error"
+    assert payload["code"] == "exploration_context_unavailable"
+    assert "response" in payload and "detail" in payload
     assert store.submit_calls == 0
 
 

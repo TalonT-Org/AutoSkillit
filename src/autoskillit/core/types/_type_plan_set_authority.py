@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
@@ -583,6 +583,9 @@ class PlanSetBindResult:
     plan_set_authority_path: str = ""
     plan_set_authority_digest: str = ""
     plan_set_authority_id: str = ""
+    coverage: CoverageResultDef = field(
+        default_factory=lambda: CoverageResultDef(CoverageStatus.NOT_EVALUATED)
+    )
     plan_set_parts: str = ""
     plan_set_state: str = ""
     coverage_status: str = ""
@@ -607,4 +610,5 @@ class PlanSetBindResult:
             "parts_without_obligations",
         ):
             result[name] = list(getattr(self, name))
+        result["coverage"] = self.coverage.to_dict()
         return result

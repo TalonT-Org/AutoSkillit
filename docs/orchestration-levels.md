@@ -115,8 +115,9 @@ L3 (interactive fleet)
 | L2 (orchestrator) | `ORCHESTRATOR` | `"order"` | `autoskillit order` | Food truck |
 | L3 (fleet) | `FLEET` | `"fleet"` | `autoskillit fleet` | None — no L4 exists |
 
-> **Session shape:** every AutoSkillit process has a `SessionType` tier and a separate
-> `AUTOSKILLIT_HEADLESS` flag. `session_shape()` reads them as one value. Interactive
+> **Session shape:** every AutoSkillit process has a `SessionType` tier from
+> `AUTOSKILLIT_SESSION_TYPE` and a separate `AUTOSKILLIT_HEADLESS` flag.
+> `session_shape()` reads them as one value. Interactive
 > `cook` sessions are therefore `interactive/skill`; `order` and fleet launchers set
 > `orchestrator` and `fleet` respectively. Tools declare a `SessionScope` and refuse an
 > unadmitted shape; hook scripts exit through their scope prologue outside that scope.

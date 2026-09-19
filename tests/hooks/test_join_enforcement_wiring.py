@@ -118,6 +118,7 @@ def _load_join_bearing_skill(tmp_path: Path, *, session_id: str = "session-1") -
         tmp_path,
         skill_load_hook,
         {
+            "hook_event_name": "PostToolUse",
             "tool_name": "Skill",
             "tool_input": {"skill": "join-bearing"},
             "session_id": session_id,

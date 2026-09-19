@@ -46,7 +46,7 @@ def test_source_currency_classifies_git_generation(monkeypatch, tmp_path) -> Non
     assert stale.status == "stale"
     assert stale.behind_by == 3
 
-    monkeypatch.setattr(install_detect, "_git", lambda _checkout, *args: "head")
+    info["commit_id"] = "head"
     current = source_currency(tmp_path, generation_root=generation)
     assert current.status == "current"
 

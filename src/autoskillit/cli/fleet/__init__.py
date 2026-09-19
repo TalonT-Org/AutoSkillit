@@ -17,7 +17,6 @@ from cyclopts import App, Parameter
 from autoskillit.cli.fleet._fleet_display import (
     _aggregate_totals,
     _compute_exit_code,
-    _cross_check_tokens,
     _render_status_display,
     _watch_loop,
     render_fleet_error,
@@ -338,7 +337,6 @@ def _show_named_campaign_status(
             "totals": totals,
         }
         print(json.dumps(data))
-        _cross_check_tokens(state, totals)
         sys.exit(_compute_exit_code(state))
 
     if watch and cleanup:
@@ -354,7 +352,6 @@ def _show_named_campaign_status(
         _reap_stale_dispatches(state_path, dry_run=dry_run)
 
     totals = _aggregate_totals(state)
-    _cross_check_tokens(state, totals)
     sys.exit(_compute_exit_code(state))
 
 

@@ -228,15 +228,6 @@ async def get_pipeline_report(clear: bool = False) -> str:
             )
 
 
-def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
-    """Add wall_clock_seconds to each token step from timing log; fall back to elapsed_seconds."""
-    timing_by_step = {e["step_name"]: e["total_seconds"] for e in timing_report}
-    for step in steps:
-        sn = step.get("step_name", "")
-        step["wall_clock_seconds"] = timing_by_step.get(sn, step.get("elapsed_seconds", 0.0))
-    return steps
-
-
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
@@ -247,11 +238,10 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     """Return accumulated run_skill token usage grouped by step name.
 
     Returns JSON with:
-    - steps: list of {step_name, input_tokens, output_tokens,
+    - steps: list of {step_name, backend, provider_used, input_tokens, output_tokens,
                        cache_write_tokens, cache_read_tokens,
                        invocation_count, wall_clock_seconds}
-    - total: {input_tokens, output_tokens, cache_write_tokens,
-               cache_read_tokens}
+    - totals: per-(backend, provider_used) token totals
 
     This tool sends no MCP progress notifications.
 
@@ -276,11 +266,8 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
             )  # circular-break: server-internal circular dependency
 
             ctx = _get_ctx()
-            steps = _merge_wall_clock_seconds(
-                ctx.token_log.get_report(order_id=order_id),
-                ctx.timing_log.get_report(order_id=order_id),
-            )
-            total = ctx.token_log.compute_total(order_id=order_id)
+            steps = ctx.token_log.get_report(order_id=order_id)
+            totals = ctx.token_log.compute_total(order_id=order_id)
             mcp_report = ctx.response_log.get_report()
             mcp_total = ctx.response_log.compute_total()
             if clear:
@@ -292,11 +279,11 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                     logger.debug("write_telemetry_clear_marker failed", exc_info=True)
             model_totals = ctx.token_log.compute_model_totals(order_id=order_id)
             if format == "table":
-                return TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
+                return TelemetryFormatter.format_pr_telemetry_block(steps, totals, model_totals)
             return json.dumps(
                 {
                     "steps": steps,
-                    "total": total,
+                    "totals": totals,
                     "mcp_responses": {
                         "steps": mcp_report,
                         "total": mcp_total,
@@ -563,15 +550,13 @@ async def write_telemetry_files(
                 return json.dumps({"success": False, "error": msg})
             out.mkdir(parents=True, exist_ok=True)
 
-            token_steps = _merge_wall_clock_seconds(
-                tool_ctx.token_log.get_report(), tool_ctx.timing_log.get_report()
-            )
-            token_total = tool_ctx.token_log.compute_total()
+            token_steps = tool_ctx.token_log.get_report()
+            token_totals = tool_ctx.token_log.compute_total()
 
             token_path = out / "token_summary.md"
             model_totals = tool_ctx.token_log.compute_model_totals()
             token_content = TelemetryFormatter.format_pr_telemetry_block(
-                token_steps, token_total, model_totals
+                token_steps, token_totals, model_totals
             )
             atomic_write(token_path, token_content)
 

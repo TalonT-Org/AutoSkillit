@@ -29,6 +29,8 @@ from ._type_execution_identity import ExecutionIdentity
 from ._type_results_execution import ApiFailureOutcome, ExecutionSelection, RateLimitWindow
 from ._type_results_records import (
     SESSION_INDEX_SCHEMA_VERSION,
+    TOKEN_USAGE_SCHEMA_VERSION,
+    TURN_USAGE_SCHEMA_VERSION,
     AdjudicationVerdict,
     CapturedStream,
     CleanupResult,
@@ -119,6 +121,8 @@ __all__ = [
     "TokenUsageFileEntry",
     "SessionIndexEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
+    "TOKEN_USAGE_SCHEMA_VERSION",
+    "TURN_USAGE_SCHEMA_VERSION",
     "parse_plan_paths",
 ]
 

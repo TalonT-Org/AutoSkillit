@@ -14,6 +14,7 @@ from autoskillit.core import (
     ModelPinResolution,
     ProviderBinding,
     SkillContractError,
+    resolve_provider_used,
 )
 from autoskillit.execution import get_backend, resolve_model_pin
 from autoskillit.server.lifecycle._guards import _profile_to_env
@@ -154,8 +155,9 @@ def resolve_candidate_policy(
             source = model_pin.source
 
     backend = get_backend(authority.backend)
-    native_provider = (
-        "anthropic" if backend.capabilities.anthropic_provider_capable else authority.backend
+    native_provider = resolve_provider_used(
+        authority.backend,
+        backend.capabilities.anthropic_provider_capable,
     )
     if not selected:
         selected = native_provider

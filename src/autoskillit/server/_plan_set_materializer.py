@@ -41,7 +41,7 @@ from autoskillit.core import (
 
 logger = get_logger(__name__)
 
-_PART_SUFFIX = re.compile(r"_part_([a-z0-9]+)", re.IGNORECASE)
+_PART_SUFFIX = re.compile(r"(?:^|_)part_([a-z0-9]+)", re.IGNORECASE)
 _ISSUE_NUMBER = re.compile(r"(?:#|/issues/)(\d+)(?:$|[/?#])")
 
 

@@ -322,20 +322,30 @@ class IssueSnapshotRef:
 
 @dataclass(frozen=True, slots=True)
 class PlanSetPreflightEvidence:
+    status: str
     plan_set_authority_path: str
     plan_set_authority_digest: str
     plan_set_authority_id: str
+    revision: int
     part_key: str | None
+    part_ordinal: int | None
+    part_count: int
+    part_suffix: str | None
     plan_set_state: PlanSetState
     coverage_status: str
     assigned_requirements: tuple[AssignedRequirementDef, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "status": self.status,
             "plan_set_authority_path": self.plan_set_authority_path,
             "plan_set_authority_digest": self.plan_set_authority_digest,
             "plan_set_authority_id": self.plan_set_authority_id,
+            "revision": self.revision,
             "part_key": self.part_key,
+            "part_ordinal": self.part_ordinal,
+            "part_count": self.part_count,
+            "part_suffix": self.part_suffix,
             "plan_set_state": self.plan_set_state.value,
             "coverage_status": self.coverage_status,
             "assigned_requirements": [item.to_dict() for item in self.assigned_requirements],

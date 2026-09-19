@@ -150,11 +150,17 @@ def verify_plan_set_authority(
         else:
             reason = PlanSetRejectReason.PART_CONTENT_CHANGED
         return _rejection(reason, details)
+    selected_part = next((part for part in authority.parts if part.part_key == part_key), None)
     evidence = PlanSetPreflightEvidence(
+        status="admitted",
         plan_set_authority_path=str(resolved_authority),
         plan_set_authority_digest=authority.authority_digest,
         plan_set_authority_id=authority.plan_set_authority_id,
+        revision=authority.revision,
         part_key=part_key,
+        part_ordinal=selected_part.ordinal if selected_part else None,
+        part_count=len(authority.parts),
+        part_suffix=selected_part.part_suffix if selected_part else None,
         plan_set_state=authority.state,
         coverage_status=authority.coverage.status.value,
         assigned_requirements=assigned_requirements(authority, part_key) if part_key else (),

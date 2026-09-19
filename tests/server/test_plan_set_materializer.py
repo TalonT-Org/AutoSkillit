@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from autoskillit.core import (
     verify_plan_set_authority,
 )
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
+from autoskillit.server.recipe._recipe_execution import build_bound_child_prompt
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -186,9 +188,23 @@ async def test_renewal_rebinds_walkthrough_edits_before_implementation(tmp_path:
     assert admitted.accepted
     assert admitted.authority is not None and admitted.authority.revision == 2
     assert admitted.evidence is not None
+    assert admitted.evidence.to_dict()["status"] == "admitted"
+    assert admitted.evidence.revision == 2
+    assert admitted.evidence.part_ordinal == 1
+    assert admitted.evidence.part_count == 2
+    assert admitted.evidence.part_suffix == "A"
     assert tuple(item.requirement_id for item in admitted.evidence.assigned_requirements) == (
         "R1",
     )
+    prompt = build_bound_child_prompt(
+        "/autoskillit:dry-walkthrough",
+        (("plan_path", str(parts[0])),),
+        None,
+        plan_set_preflight=admitted.evidence,
+    )
+    payload = json.loads(prompt.split("AUTOSKILLIT_BOUND_INVOCATION_V1\n", 1)[1])
+    assert payload["verified_plan_set_preflight"]["status"] == "admitted"
+    assert payload["verified_plan_set_preflight"]["part_count"] == 2
 
 
 @pytest.mark.asyncio

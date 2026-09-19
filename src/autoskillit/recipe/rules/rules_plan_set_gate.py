@@ -10,6 +10,16 @@ from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
+def _multipart_producer_steps(ctx: ValidationContext) -> list[str]:
+    return [
+        name
+        for name, step in ctx.recipe.steps.items()
+        if step.tool == "run_skill"
+        and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
+        and "plan_parts" in step.capture_list
+    ]
+
+
 @semantic_rule(
     name="plan-set-authority-not-threaded",
     description="Multipart issue walkthroughs require a sealed bind_plan_set authority.",
@@ -18,16 +28,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 def _check_plan_set_authority(ctx: ValidationContext) -> list[RuleFinding]:
     if "issue_url" not in ctx.recipe.ingredients and "issue_number" not in ctx.recipe.ingredients:
         return []
-    producers = [
-        name
-        for name, step in ctx.recipe.steps.items()
-        if (
-            step.tool == "run_skill"
-            and extract_skill_name(step.with_args.get("skill_command", ""))
-            in MULTIPART_SKILL_NAMES
-            and "plan_parts" in step.capture_list
-        )
-    ]
+    producers = _multipart_producer_steps(ctx)
     protected_steps = [
         name
         for name, step in ctx.recipe.steps.items()
@@ -126,13 +127,7 @@ def _outgoing_targets(step: object, sealed: bool) -> tuple[tuple[str, bool], ...
 def _check_sealed_plan_set_paths(ctx: ValidationContext) -> list[RuleFinding]:
     if "issue_url" not in ctx.recipe.ingredients and "issue_number" not in ctx.recipe.ingredients:
         return []
-    producers = [
-        name
-        for name, step in ctx.recipe.steps.items()
-        if step.tool == "run_skill"
-        and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
-        and "plan_parts" in step.capture_list
-    ]
+    producers = _multipart_producer_steps(ctx)
     producers.extend(
         name
         for name, step in ctx.recipe.steps.items()

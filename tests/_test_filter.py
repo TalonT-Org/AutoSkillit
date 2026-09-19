@@ -523,7 +523,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli", "fleet", "server"}),
     "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
-    "_type_token": frozenset({"core", "execution", "pipeline"}),
+    "_type_token": frozenset({"cli", "core", "execution", "fleet", "pipeline"}),
     "_type_constants_env": frozenset(
         {
             "cli",

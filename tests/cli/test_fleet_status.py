@@ -116,10 +116,10 @@ def test_fleet_status_json_includes_totals(
     with pytest.raises(SystemExit):
         _fleet_status("cid01", json_output=True)
     data = json.loads(capsys.readouterr().out)
-    assert data["totals"]["input"] == 100
-    assert data["totals"]["output"] == 50
-    assert data["totals"]["cache_read"] == 20
-    assert data["totals"]["cache_creation"] == 10
+    assert data["totals"][0]["input_tokens"] == {"state": "measured", "value": 100}
+    assert data["totals"][0]["output_tokens"] == {"state": "measured", "value": 50}
+    assert data["totals"][0]["cache_read_tokens"] == {"state": "measured", "value": 20}
+    assert data["totals"][0]["cache_write_tokens"] == {"state": "measured", "value": 10}
 
 
 def test_fleet_status_json_no_ansi(

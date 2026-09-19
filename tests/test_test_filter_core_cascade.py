@@ -348,7 +348,9 @@ class TestModuleCascadeCore:
         )
 
     def test_type_token_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core", "execution", "pipeline"})
+        assert MODULE_CASCADE_CORE["_type_token"] == frozenset(
+            {"cli", "core", "execution", "fleet", "pipeline"}
+        )
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
@@ -882,9 +884,9 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "execution", "pipeline"]:
+        for pkg in ["cli", "core", "execution", "fleet", "pipeline"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
-        for excluded in ["config", "fleet", "migration", "workspace"]:
+        for excluded in ["config", "migration", "workspace"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:

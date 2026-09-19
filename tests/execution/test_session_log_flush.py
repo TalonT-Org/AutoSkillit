@@ -1131,7 +1131,9 @@ def test_persisted_token_artifacts_keep_source_pair_and_measure_states(tmp_path)
                 "unknown",
                 "not_applicable",
             }
-            assert ("value" in measure) == (measure["state"] in {"measured", "measured_zero"})
+            assert (measure["value"] is not None) == (
+                measure["state"] in {"measured", "measured_zero"}
+            )
     assert descriptor["input_tokens"] == {"state": "measured_zero", "value": 0}
     assert summary["token_usage"]["input_tokens"] == descriptor["input_tokens"]
     assert index["input_tokens"] == descriptor["input_tokens"]

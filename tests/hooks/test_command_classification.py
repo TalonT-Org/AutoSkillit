@@ -2597,7 +2597,9 @@ class TestAnalyzeGitHubMutations:
         elif form == "equals":
             arguments = f"{flag}=4726"
         elif form == "csv":
-            arguments = f"{flag} '\"https://github.com/o/r/issues/4726?labels=a,b\",4727'"
+            arguments = (
+                f'{flag} "https://github.com/o/r/issues/4726,https://github.com/o/r/issues/4727"'
+            )
         else:
             arguments = f"{flag} 4726 {flag} 4727"
 
@@ -2626,22 +2628,37 @@ class TestAnalyzeGitHubMutations:
 
     @pytest.mark.parametrize("flag", ["--remove-milestone", "--remove-parent", "--remove-type"])
     @pytest.mark.parametrize("position", ["before", "after"])
+    @pytest.mark.parametrize("target_count", [1, 2])
     def test_issue_edit_boolean_removal_flags_do_not_consume_target(
-        self, flag: str, position: str
+        self, flag: str, position: str, target_count: int
     ) -> None:
+        targets = " ".join(str(4700 + offset) for offset in range(target_count))
         command = (
-            f"gh issue edit {flag} 4734" if position == "before" else f"gh issue edit 4734 {flag}"
+            f"gh issue edit {flag} {targets}"
+            if position == "before"
+            else f"gh issue edit {targets} {flag}"
         )
 
         analysis = analyze_github_mutations(command)
 
-        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
-        assert analysis.request_count == 1
+        if target_count == 1:
+            assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+            assert analysis.request_count == 1
+        else:
+            assert analysis.status is GitHubMutationStatus.MULTIPLE
+            assert analysis.request_count == target_count
 
     @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
+    @pytest.mark.parametrize(
+        "value",
+        ["$RELATED", "${RELATED}", "$(echo 4726)"],
+        ids=["bare-variable", "braced-variable", "command-substitution"],
+    )
     @pytest.mark.parametrize("form", ["separated", "equals"])
-    def test_issue_edit_reference_flags_reject_dynamic_values(self, flag: str, form: str) -> None:
-        argument = f"{flag} $RELATED" if form == "separated" else f"{flag}=$RELATED"
+    def test_issue_edit_reference_flags_reject_dynamic_values(
+        self, flag: str, value: str, form: str
+    ) -> None:
+        argument = f"{flag} {value}" if form == "separated" else f"{flag}={value}"
 
         analysis = analyze_github_mutations(f"gh issue edit 4734 {argument}")
 
@@ -2650,7 +2667,23 @@ class TestAnalyzeGitHubMutations:
         assert analysis.reason_code == "dynamic_target"
 
     @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
-    @pytest.mark.parametrize("value", ["4726,", ",4726"])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "4726,",  # trailing empty CSV field
+            ",4726",  # leading empty CSV field
+            "foo",  # single non-numeric reference
+            "4726,foo",  # mixed valid + invalid
+            "12.5",  # decimal-looking but not isdecimal()
+        ],
+        ids=[
+            "trailing-empty-field",
+            "leading-empty-field",
+            "single-non-numeric",
+            "mixed-valid-and-invalid",
+            "decimal-looking",
+        ],
+    )
     def test_issue_edit_reference_flags_reject_malformed_csv(self, flag: str, value: str) -> None:
         analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}={value}")
 
@@ -2658,17 +2691,20 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count is None
         assert analysis.reason_code == "dynamic_target"
 
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
     @pytest.mark.parametrize(
-        "command",
+        "command_template",
         [
-            "gh issue edit 4734 --add-blocked-by",
-            "gh issue edit 4734 --add-blocked-by=",
-            "gh issue edit 4734 --parent --title updated",
+            "gh issue edit 4734 {flag}",
+            "gh issue edit 4734 {flag}=",
+            "gh issue edit 4734 {flag} --title updated",
         ],
         ids=["missing", "empty-equals", "next-flag-is-not-a-value"],
     )
-    def test_issue_edit_reference_flags_require_values(self, command: str) -> None:
-        analysis = analyze_github_mutations(command)
+    def test_issue_edit_reference_flags_require_values(
+        self, flag: str, command_template: str
+    ) -> None:
+        analysis = analyze_github_mutations(command_template.format(flag=flag))
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.request_count is None

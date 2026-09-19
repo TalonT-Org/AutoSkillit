@@ -16,8 +16,9 @@ import tempfile
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from enum import StrEnum, unique
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import NamedTuple
 
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
@@ -223,17 +224,20 @@ class SessionBinding(NamedTuple):
         )
 
 
+@unique
+class JoinAdmissionOutcome(StrEnum):
+    ADMITTED = "admitted"
+    NO_BINDING = "no_binding"
+    WRONG_SESSION = "wrong_session"
+    INVALID_BINDING = "invalid_binding"
+    SKILL_NOT_LOADED = "skill_not_loaded"
+    NOT_JOIN_BEARING = "not_join_bearing"
+
+
 class JoinAdmission(NamedTuple):
     """The single semantic decision derived from a session binding."""
 
-    outcome: Literal[
-        "admitted",
-        "no_binding",
-        "wrong_session",
-        "invalid_binding",
-        "skill_not_loaded",
-        "not_join_bearing",
-    ]
+    outcome: JoinAdmissionOutcome
     enforce: bool
     binding: SessionBinding | None
     entry: LoadedSkillEntry | None
@@ -463,11 +467,20 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
     try:
         binding = read_binding(path)
     except SessionBindingError as exc:
-        return JoinAdmission("invalid_binding", True, None, None, frozenset(), str(exc))
+        return JoinAdmission(
+            JoinAdmissionOutcome.INVALID_BINDING,
+            True,
+            None,
+            None,
+            frozenset(),
+            str(exc),
+        )
     if binding is None:
-        return JoinAdmission("no_binding", False, None, None, frozenset(), None)
+        return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, frozenset(), None)
     if binding.session_id != session_id:
-        return JoinAdmission("wrong_session", False, binding, None, frozenset(), None)
+        return JoinAdmission(
+            JoinAdmissionOutcome.WRONG_SESSION, False, binding, None, frozenset(), None
+        )
     join_bearing = frozenset(
         entry.skill_name for entry in binding.loaded_skills if entry.join_required
     )
@@ -476,20 +489,37 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
             (entry.binding_error for entry in binding.loaded_skills if entry.binding_error),
             None,
         )
-        return JoinAdmission("invalid_binding", True, binding, None, join_bearing, error)
+        return JoinAdmission(
+            JoinAdmissionOutcome.INVALID_BINDING,
+            True,
+            binding,
+            None,
+            join_bearing,
+            error,
+        )
     entry = next(
         (entry for entry in reversed(binding.loaded_skills) if entry.skill_name == skill_name),
         None,
     )
     if entry is None:
         return JoinAdmission(
-            "skill_not_loaded", binding.join_required, binding, None, join_bearing, None
+            JoinAdmissionOutcome.SKILL_NOT_LOADED,
+            binding.join_required,
+            binding,
+            None,
+            join_bearing,
+            None,
         )
     if not entry.join_required or not entry.binding_valid:
         return JoinAdmission(
-            "not_join_bearing", binding.join_required, binding, entry, join_bearing, None
+            JoinAdmissionOutcome.NOT_JOIN_BEARING,
+            binding.join_required,
+            binding,
+            entry,
+            join_bearing,
+            None,
         )
-    return JoinAdmission("admitted", True, binding, entry, join_bearing, None)
+    return JoinAdmission(JoinAdmissionOutcome.ADMITTED, True, binding, entry, join_bearing, None)
 
 
 def atomic_write(path: Path, content: str) -> None:

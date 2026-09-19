@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.hooks._session_binding import (
+    JoinAdmissionOutcome,
     SessionBinding,
     admit_join,
     write_binding,
@@ -16,7 +17,7 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 def test_missing_binding_is_not_enforced(tmp_path) -> None:
     admission = admit_join(tmp_path / "missing.flag", session_id="session", skill_name="scope")
 
-    assert admission.outcome == "no_binding"
+    assert admission.outcome is JoinAdmissionOutcome.NO_BINDING
     assert not admission.enforce
 
 
@@ -36,7 +37,7 @@ def test_wrong_session_is_not_enforced(tmp_path) -> None:
 
     admission = admit_join(path, session_id="session", skill_name="scope")
 
-    assert admission.outcome == "wrong_session"
+    assert admission.outcome is JoinAdmissionOutcome.WRONG_SESSION
     assert not admission.enforce
 
 
@@ -46,5 +47,5 @@ def test_malformed_binding_is_fail_closed(tmp_path) -> None:
 
     admission = admit_join(path, session_id="session", skill_name="scope")
 
-    assert admission.outcome == "invalid_binding"
+    assert admission.outcome is JoinAdmissionOutcome.INVALID_BINDING
     assert admission.enforce

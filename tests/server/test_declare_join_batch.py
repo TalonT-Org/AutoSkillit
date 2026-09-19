@@ -67,5 +67,5 @@ def test_invalid_binding_cannot_open_batch_with_retained_digest(
 
     assert result == {
         "success": False,
-        "error": "declare_join_batch requires a valid session binding",
+        "error": "invalid test binding",
     }

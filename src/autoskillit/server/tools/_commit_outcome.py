@@ -51,7 +51,7 @@ def finish_commit_response(
                 failure_class=None if succeeded else failure_class,
             )
         )
-    except (OSError, ValueError, RuntimeError) as exc:
+    except Exception as exc:
         logger.error("commit_files outcome recording failed", exc_info=True)
         ledger_failure: dict[str, object] = {
             "success": False,

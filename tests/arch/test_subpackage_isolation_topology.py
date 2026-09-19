@@ -264,12 +264,15 @@ _TREE_ENTRY_PATTERN = re.compile(
 # Fence-block regex: capture the body of a triple-backtick code block.
 _FENCE_PATTERN = re.compile(r"```([^\n]*)\n(.*?)\n```", re.DOTALL)
 
+# Anchor regex: match the ``tests/`` directory entry that heads the inventory tree.
+_TESTS_ANCHOR_PATTERN = re.compile(r"^tests/$", re.MULTILINE)
+
 
 def _extract_tests_tree_block(agents_md: str) -> str:
     """Return the body of the triple-backtick fence that contains the ``tests/`` tree."""
     for match in _FENCE_PATTERN.finditer(agents_md):
         body = match.group(2)
-        if re.search(r"^tests/$", body, re.MULTILINE):
+        if _TESTS_ANCHOR_PATTERN.search(body):
             return body
     raise AssertionError("tests/ directory-tree fence not found in tests/AGENTS.md")
 

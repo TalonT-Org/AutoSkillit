@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import (
@@ -12,6 +13,40 @@ from autoskillit.core import (
 )
 
 logger = get_logger(__name__)
+
+
+class RemediationOutcome(StrEnum):
+    PROGRESSING = "PROGRESSING"
+    STUCK_REPEATING = "STUCK_REPEATING"
+    EXHAUSTED = "EXHAUSTED"
+    AWAITING_DECISION = "AWAITING_DECISION"
+    INTEGRITY_FAULT = "INTEGRITY_FAULT"
+
+
+_BLOCKING_ASSESSMENTS = frozenset(
+    {"MISSING", "CONFLICT", "UNPRESCRIBED_SUBSTITUTION", "UNSATISFIABLE_BY_CODE"}
+)
+
+
+def _blocking_rows_from_authority(path: str) -> dict[str, str]:
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        rows = raw["assessments"]
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid audit authority {path!r}: {exc}") from exc
+    if not isinstance(rows, list):
+        raise ValueError("audit authority assessments must be a list")
+    blocking: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("audit authority assessment must be a mapping")
+        assessment = row.get("assessment")
+        digest = row.get("row_digest")
+        if not isinstance(assessment, str) or not isinstance(digest, str) or not digest:
+            raise ValueError("audit authority assessment is malformed")
+        if assessment in _BLOCKING_ASSESSMENTS:
+            blocking[digest] = assessment
+    return blocking
 
 
 def annotate_pr_diff(
@@ -441,6 +476,47 @@ def check_loop_iteration(
     }
 
 
+def check_audit_remediation_outcome(
+    current_iteration: str = "",
+    max_iterations: str = "2",
+    current_authority_path: str = "",
+    prior_authority_path: str = "",
+) -> dict[str, str]:
+    """Classify a remediation round from its current and prior audit authorities."""
+    budget = check_loop_iteration(current_iteration, max_iterations)
+    try:
+        current = _blocking_rows_from_authority(current_authority_path)
+    except ValueError:
+        return {
+            "outcome": RemediationOutcome.INTEGRITY_FAULT.value,
+            "next_iteration": current_iteration.strip() or "0",
+        }
+    if current and set(current.values()) == {"UNSATISFIABLE_BY_CODE"}:
+        outcome = RemediationOutcome.AWAITING_DECISION
+    elif prior_authority_path:
+        try:
+            prior = _blocking_rows_from_authority(prior_authority_path)
+        except ValueError:
+            outcome = RemediationOutcome.INTEGRITY_FAULT
+        else:
+            outcome = (
+                RemediationOutcome.STUCK_REPEATING
+                if set(current) == set(prior)
+                else (
+                    RemediationOutcome.EXHAUSTED
+                    if budget["max_exceeded"] == "true"
+                    else RemediationOutcome.PROGRESSING
+                )
+            )
+    else:
+        outcome = (
+            RemediationOutcome.EXHAUSTED
+            if budget["max_exceeded"] == "true"
+            else RemediationOutcome.PROGRESSING
+        )
+    return {"outcome": outcome.value, "next_iteration": budget["next_iteration"]}
+
+
 def check_loop_with_progress(
     current_iteration: str = "",
     max_iterations: str = "5",
@@ -464,7 +540,7 @@ def check_loop_with_progress(
         raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
 
     current_fixed = issues_fixed_count.strip() or "0"
-    prev_fixed = prev_issues_fixed_count.strip()
+    prev_fixed = prev_issues_fixed_count.strip() or "0"
     zero_progress = current_fixed == "0" and prev_fixed == "0"
 
     return {

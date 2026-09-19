@@ -3008,6 +3008,35 @@ callable_contracts:
     - name: prev_issues_fixed_count
       type: str
       required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+    - name: zero_progress
+      type: str
+    - name: prev_issues_fixed_count
+      type: str
+  autoskillit.smoke_utils.check_audit_remediation_outcome:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    - name: current_authority_path
+      type: str
+      required: false
+    - name: prior_authority_path
+      type: str
+      required: false
+    outputs:
+    - name: outcome
+      type: str
+      allowed_values: [PROGRESSING, STUCK_REPEATING, EXHAUSTED, AWAITING_DECISION, INTEGRITY_FAULT]
+    - name: next_iteration
+      type: str
 
   autoskillit.smoke_utils.consolidate_health_reports:
     inputs:

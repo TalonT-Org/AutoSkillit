@@ -28,7 +28,9 @@ from autoskillit.smoke_utils._helpers import probe_audit_substitutions, try_load
 from autoskillit.smoke_utils._investigation import extract_investigation
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
+    RemediationOutcome,
     annotate_pr_diff,
+    check_audit_remediation_outcome,
     check_loop_iteration,
     check_loop_with_progress,
 )
@@ -68,6 +70,7 @@ __all__ = [
     "EXPERIMENTAL_REVIEW_AUDITORS",
     "LOCAL_ROUND_EXEMPT_VERDICTS",
     "REVIEW_HANDOFF_IDENTITY_FIELDS",
+    "RemediationOutcome",
     "REQUIRED_CRITERION_KEYS",
     "VALID_CRITERION_TYPES",
     "aggregate_combined_review_candidates",
@@ -76,6 +79,7 @@ __all__ = [
     "build_agent_eval_context",
     "build_eval_context",
     "build_malformed_review_envelope",
+    "check_audit_remediation_outcome",
     "check_bug_report_non_empty",
     "check_commits_ahead",
     "check_loop_iteration",

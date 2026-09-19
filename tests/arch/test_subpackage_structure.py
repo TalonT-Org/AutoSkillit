@@ -73,6 +73,7 @@ class TestCoreSubpackages:
             "_type_protocols_execution",
             "_type_protocols_github",
             "_type_protocols_infra",
+            "_type_protocols_publication",
             "_type_protocols_logging",
             "_type_protocols_recipe",
             "_type_protocols_workspace",

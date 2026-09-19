@@ -71,9 +71,8 @@ def test_no_issue_mode_and_authority_never_rule(skill_text: str) -> None:
     assert "No issue context" in mode
     assert "omitted" in mode
     assert re.search(
-        r"do not[^\n]*Open plan-set authority artifacts directly",
+        r"\*\*NEVER:\*\*[\s\S]*?Open plan-set authority artifacts directly",
         skill_text,
-        re.IGNORECASE,
     )
     assert re.search(
         r"_part_[a-z0-9]+\s+to detect multi-part",

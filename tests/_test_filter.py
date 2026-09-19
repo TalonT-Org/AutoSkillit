@@ -191,6 +191,7 @@ _CORE_UNIVERSAL_MODULES: frozenset[str] = frozenset(
         "_type_protocols_github",
         "_type_protocols_recipe",
         "_type_protocols_infra",
+        "_type_protocols_publication",
         "_type_plan_set_authority",
         "markdown_sections",
         "requirement_inventory",

@@ -577,7 +577,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Aggregate plan-set gate before every walkthrough."
+      "note": "Aggregate plan-set gate before every walkthrough.\n\nSingle-shot plans omit parent_authority_path intentionally: there is no prior\nmultipart authority to thread through. Multi-shot bind_group_parts in\nimplementation-groups.yaml supplies one because group iteration threads the\nparent digest from the previous cycle's bind step.\n"
     },
     "check_replan_iteration": {
       "tool": "run_python",

@@ -114,9 +114,7 @@ def _open_beneath_root_without_symlinks(
             directory_fds.append(os.open(component, directory_flags, dir_fd=directory_fds[-1]))
         return os.open(relative.parts[-1], file_flags, dir_fd=directory_fds[-1])
     except OSError as exc:
-        raise ContainmentError(
-            "Symlink or unsafe path component not allowed", reason="symlink"
-        ) from exc
+        raise ContainmentError("Symlink or unsafe path component not allowed") from exc
     finally:
         for directory_fd in reversed(directory_fds):
             os.close(directory_fd)

@@ -22,6 +22,7 @@ def _explicit_core_protocol_names() -> set[str]:
         "core/types/_type_protocols_workspace.py",
         "core/types/_type_protocols_recipe.py",
         "core/types/_type_protocols_infra.py",
+        "core/types/_type_protocols_publication.py",
         "core/types/_type_protocols_backend.py",
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",

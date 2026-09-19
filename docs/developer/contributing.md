@@ -19,7 +19,8 @@ it. In this repository it is `task test-local-gate`, which excludes
 `tests/execution/test_process_channel_b.py` from local gate runs, including when
 that file is explicitly selected with `PYTEST_TEST_PATHS`, while retaining
 `test-all` import lint. The wrapper emits explicit PASS/FAIL output with portable
-status capture. To run the complete manual suite, use:
+status capture. To run the complete
+manual suite, use:
 
     task test-all
 

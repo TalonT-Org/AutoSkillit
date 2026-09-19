@@ -307,7 +307,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             if cwd
             else None
         )
-        from autoskillit.execution.evidence.session_log import resolve_log_dir
+        from autoskillit.execution.session_log.session_log import resolve_log_dir
 
         diagnostic_log_root = resolve_log_dir(cfg.linux_tracing.log_dir)
         admission_deadline_monotonic = time.monotonic() + effective_timeout

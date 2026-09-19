@@ -292,7 +292,7 @@ class TestBuildReplayRunner:
         import atexit
         import weakref
 
-        from autoskillit.execution.evidence.recording import (
+        from autoskillit.execution.recording.recording import (
             ReplayingSubprocessRunner,
             build_replay_runner,
         )
@@ -309,7 +309,7 @@ class TestBuildReplayRunner:
         import atexit
         import weakref
 
-        from autoskillit.execution.evidence.recording import (
+        from autoskillit.execution.recording.recording import (
             ReplayingSubprocessRunner,
             build_replay_runner,
         )

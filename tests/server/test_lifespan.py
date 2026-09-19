@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog
 
-from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+from autoskillit.execution.recording.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

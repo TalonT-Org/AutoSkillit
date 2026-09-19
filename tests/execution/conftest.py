@@ -467,7 +467,7 @@ def _flush(
         RecipeIdentity,
         SessionTelemetry,
     )
-    from autoskillit.execution.evidence.session_log import flush_session_log
+    from autoskillit.execution.session_log.session_log import flush_session_log
 
     defaults: dict = {
         "log_dir": str(tmp_path),

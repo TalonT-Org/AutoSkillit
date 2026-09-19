@@ -102,7 +102,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/planner/merge.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/consolidation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/validation.py": "Transient single-pipeline-run artifacts",
-    "src/autoskillit/execution/evidence/_recording_skills.py": (
+    "src/autoskillit/execution/recording/_recording_skills.py": (
         "Informational manifest — never read back"
     ),
     "src/autoskillit/execution/quota/_quota_observed.py": (
@@ -115,7 +115,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/core/pipeline/_execution_marker.py": (
         "Progress signal — written and deleted, never read back"
     ),
-    "src/autoskillit/execution/evidence/session_log.py": (
+    "src/autoskillit/execution/session_log/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),
     "src/autoskillit/workspace/session_skills/_catalog.py": (

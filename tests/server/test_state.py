@@ -136,7 +136,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
     """_initialize() registers McpRecordingMiddleware when runner is RecordingSubprocessRunner."""
     import autoskillit.execution as execution
     import autoskillit.server as server
-    from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+    from autoskillit.execution.recording.recording import RecordingSubprocessRunner
     from autoskillit.server.lifecycle._state import _initialize
 
     mock_atexit = Mock()
@@ -192,7 +192,7 @@ def test_initialize_skips_middleware_for_non_recording_runner(tmp_path, monkeypa
 def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, monkeypatch):
     """_initialize() degrades gracefully when api_simulator.mcp is unavailable."""
     import autoskillit.execution as execution
-    from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+    from autoskillit.execution.recording.recording import RecordingSubprocessRunner
     from autoskillit.server.lifecycle._state import _initialize
 
     mock_atexit = Mock()
@@ -220,7 +220,7 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
     """_initialize() registers McpReplayMiddleware when runner is ReplayingSubprocessRunner."""
     import autoskillit.execution as execution
     import autoskillit.server as server
-    from autoskillit.execution.evidence.recording import ReplayingSubprocessRunner
+    from autoskillit.execution.recording.recording import ReplayingSubprocessRunner
     from autoskillit.server.lifecycle._state import _initialize
 
     mock_player = Mock()

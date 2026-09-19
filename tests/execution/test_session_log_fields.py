@@ -53,7 +53,7 @@ def test_candidate_manifest_updates_before_session_bundle_flush(tmp_path):
         ExecutionCandidateAttempt,
         ExecutionSelection,
     )
-    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+    from autoskillit.execution.session_log.session_log import write_execution_candidate_manifest
 
     first = ExecutionCandidateAttempt(candidate_id="primary", ordinal=0, transition="rejected")
     selection = ExecutionSelection(selection_id="selection-1", attempts=(first,))
@@ -1358,7 +1358,7 @@ class TestCodexLogFields:
 def test_primary_model_identifier_parent_wins_on_output_tokens():
     """_primary_model_identifier returns the model with the most output tokens,
     resisting subagent input/cache volume dominance (parent wins case)."""
-    from autoskillit.execution.evidence.session_log import _primary_model_identifier
+    from autoskillit.execution.session_log.session_log import _primary_model_identifier
 
     token_usage = {
         "model_breakdown": {
@@ -1383,7 +1383,7 @@ def test_primary_model_identifier_parent_wins_on_output_tokens():
 def test_primary_model_identifier_argmax_parent_only():
     """After subagent filtering, model_breakdown contains only parent models.
     Argmax returns the parent model with the highest output_tokens."""
-    from autoskillit.execution.evidence.session_log import _primary_model_identifier
+    from autoskillit.execution.session_log.session_log import _primary_model_identifier
 
     token_usage = {
         "model_breakdown": {
@@ -1400,8 +1400,8 @@ def test_primary_model_identifier_argmax_parent_only():
 def test_no_false_drift_with_subagent_dominant_output():
     """End-to-end: opus parent + sonnet subagent stream -> no MODEL_DRIFT anomaly."""
     from autoskillit.execution.evidence.anomaly_detection import detect_model_drift
-    from autoskillit.execution.evidence.session_log import _primary_model_identifier
     from autoskillit.execution.session import extract_token_usage
+    from autoskillit.execution.session_log.session_log import _primary_model_identifier
 
     parent_lines = [
         json.dumps(
@@ -1470,7 +1470,7 @@ def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):
 
 
 def test_resolved_model_identity_is_not_used_for_drift_normalization(tmp_path, monkeypatch):
-    import autoskillit.execution.evidence.session_log as session_log
+    import autoskillit.execution.session_log.session_log as session_log
 
     captured: dict[str, str] = {}
 

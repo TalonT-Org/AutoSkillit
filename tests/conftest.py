@@ -954,7 +954,7 @@ def bind_test_skill_resume_contract(
         completed=True,
     )
     log_root = Path(tool_ctx.config.linux_tracing.log_dir)
-    from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+    from autoskillit.execution.session_log.session_log import write_execution_candidate_manifest
 
     write_execution_candidate_manifest(
         selection,

@@ -232,19 +232,19 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.execution.evidence.session_log:_append_session_archive_rows",
+        writer="autoskillit.execution.session_log.session_log:_append_session_archive_rows",
         artifact=(
             "sessions-archive.jsonl machine-local historical telemetry written via "
             "flush_session_log()"
         ),
         machine_local=True,
         detection=(
-            "autoskillit.execution.evidence.session_index:find_stale_session_archive_references"
+            "autoskillit.execution.session_log.session_index:find_stale_session_archive_references"
         ),
     ),
     DurableArtifactWriterDef(
         writer=(
-            "autoskillit.execution.evidence._session_retention:"
+            "autoskillit.execution.session_log._session_retention:"
             "write_execution_candidate_manifest_at_root"
         ),
         artifact=(

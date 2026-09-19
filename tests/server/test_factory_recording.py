@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 import autoskillit.server._factory as factory
-from autoskillit.execution.evidence.recording import (
+from autoskillit.execution.recording.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
 )
@@ -216,7 +216,7 @@ def test_make_context_replay_wraps_for_codex_backend(monkeypatch, tmp_path):
 
     from autoskillit.config import AutomationConfig
     from autoskillit.config._config_dataclasses import AgentBackendConfig
-    from autoskillit.execution.evidence.recording import ReplayingSubprocessRunner
+    from autoskillit.execution.recording.recording import ReplayingSubprocessRunner
     from autoskillit.server._factory import make_context
 
     replay_dir = tmp_path / "replay"
@@ -245,7 +245,7 @@ def test_make_context_record_skipped_for_codex_backend(monkeypatch, tmp_path):
     from autoskillit.config import AutomationConfig
     from autoskillit.config._config_dataclasses import AgentBackendConfig
     from autoskillit.execution import DefaultSubprocessRunner
-    from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+    from autoskillit.execution.recording.recording import RecordingSubprocessRunner
     from autoskillit.server._factory import make_context
 
     scenario_dir = tmp_path / "record"
@@ -271,7 +271,7 @@ def test_make_context_record_skipped_for_codex_backend(monkeypatch, tmp_path):
 def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
     """build_replay_runner() populates runner.skill_snapshots from scenario dir."""
 
-    from autoskillit.execution.evidence.recording import build_replay_runner
+    from autoskillit.execution.recording.recording import build_replay_runner
 
     replay_dir = tmp_path / "replay"
     replay_dir.mkdir()
@@ -303,7 +303,7 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(
     """With a replay snapshot for the step, run_skill skips live materialization."""
     from unittest.mock import MagicMock
 
-    from autoskillit.execution.evidence.recording import ReplayingSubprocessRunner
+    from autoskillit.execution.recording.recording import ReplayingSubprocessRunner
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -344,7 +344,7 @@ async def test_run_skill_replay_fallback_to_materialization(
     """With no replay snapshot, run_skill materializes the exact invocation."""
     from unittest.mock import MagicMock
 
-    from autoskillit.execution.evidence.recording import ReplayingSubprocessRunner
+    from autoskillit.execution.recording.recording import ReplayingSubprocessRunner
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 

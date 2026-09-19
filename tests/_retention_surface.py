@@ -162,9 +162,9 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
-        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
+        ("src/autoskillit/execution/session_log/_session_retention.py", "apply_session_retention"),
         (
-            "src/autoskillit/execution/evidence/_session_retention.py",
+            "src/autoskillit/execution/session_log/_session_retention.py",
             "apply_execution_candidate_manifest_retention",
         ),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
@@ -230,19 +230,19 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "_repair_hook_payload_under_lease",
         ),
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_eligible_enrolled_trace",
         ),
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_decode_enrolled_trace",
         ),
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_finalize_crashed_trace",
         ),
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "recover_crashed_sessions",
         ),
     }
@@ -363,17 +363,17 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar")
     ),
     (
-        "src/autoskillit/execution/evidence/_session_retention.py",
+        "src/autoskillit/execution/session_log/_session_retention.py",
         "apply_session_retention",
     ): _convergence_adapters(
-        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention")
+        ("src/autoskillit/execution/session_log/_session_retention.py", "apply_session_retention")
     ),
     (
-        "src/autoskillit/execution/evidence/_session_retention.py",
+        "src/autoskillit/execution/session_log/_session_retention.py",
         "apply_execution_candidate_manifest_retention",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/evidence/_session_retention.py",
+            "src/autoskillit/execution/session_log/_session_retention.py",
             "apply_execution_candidate_manifest_retention",
         )
     ),
@@ -522,38 +522,38 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         )
     ),
     (
-        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/session_log/_session_log_recovery.py",
         "_eligible_enrolled_trace",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_eligible_enrolled_trace",
         )
     ),
     (
-        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/session_log/_session_log_recovery.py",
         "_decode_enrolled_trace",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_decode_enrolled_trace",
         )
     ),
     (
-        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/session_log/_session_log_recovery.py",
         "_finalize_crashed_trace",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "_finalize_crashed_trace",
         )
     ),
     (
-        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/session_log/_session_log_recovery.py",
         "recover_crashed_sessions",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "src/autoskillit/execution/session_log/_session_log_recovery.py",
             "recover_crashed_sessions",
         )
     ),
@@ -620,7 +620,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_remove_index",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/execution/evidence/session_log.py",
+        "src/autoskillit/execution/session_log/session_log.py",
         "flush_session_log",
     ): _DELEGATED_MUTATION_REASON,
     (
@@ -705,7 +705,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "cleanup_readiness_sentinel",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/execution/evidence/_recording_skills.py",
+        "src/autoskillit/execution/recording/_recording_skills.py",
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
@@ -762,9 +762,9 @@ _CS = (
 _CSE = "src/autoskillit/workspace/session_skills/_manager.py::_reclaim_stale_entry"
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
-_SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
+_SL = "src/autoskillit/execution/session_log/_session_retention.py::apply_session_retention"
 _ECMR = (
-    "src/autoskillit/execution/evidence/_session_retention.py::"
+    "src/autoskillit/execution/session_log/_session_retention.py::"
     "apply_execution_candidate_manifest_retention"
 )
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
@@ -810,10 +810,10 @@ _HRL = (
     "src/autoskillit/workspace/_projected_artifact/"
     "_hook_repair.py::_repair_hook_payload_under_lease"
 )
-_SR = "src/autoskillit/execution/evidence/_session_log_recovery.py::recover_crashed_sessions"
-_SRE = "src/autoskillit/execution/evidence/_session_log_recovery.py::_eligible_enrolled_trace"
-_SRD = "src/autoskillit/execution/evidence/_session_log_recovery.py::_decode_enrolled_trace"
-_SRF = "src/autoskillit/execution/evidence/_session_log_recovery.py::_finalize_crashed_trace"
+_SR = "src/autoskillit/execution/session_log/_session_log_recovery.py::recover_crashed_sessions"
+_SRE = "src/autoskillit/execution/session_log/_session_log_recovery.py::_eligible_enrolled_trace"
+_SRD = "src/autoskillit/execution/session_log/_session_log_recovery.py::_decode_enrolled_trace"
+_SRF = "src/autoskillit/execution/session_log/_session_log_recovery.py::_finalize_crashed_trace"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_candidate_reap_disposition --

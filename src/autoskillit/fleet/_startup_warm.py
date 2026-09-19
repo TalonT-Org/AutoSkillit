@@ -10,7 +10,7 @@ WARM_MODULE_NAMES: tuple[str, ...] = (
     "autoskillit.core",
     "autoskillit.execution",
     "autoskillit.execution.process._process_kill",
-    "autoskillit.execution.evidence.session_log",
+    "autoskillit.execution.session_log.session_log",
     "autoskillit.fleet",
     "autoskillit.fleet._label_cleanup",
     "autoskillit.fleet.campaign_state.state",

@@ -988,7 +988,7 @@ class TestRunHeadlessCore:
 
     @pytest.mark.anyio
     async def test_run_headless_core_returns_success_result(self, monkeypatch, tool_ctx, tmp_path):
-        import autoskillit.execution.evidence.session_log as session_log
+        import autoskillit.execution.session_log.session_log as session_log
         from autoskillit.execution.headless import run_headless_core
 
         flushed: list[dict] = []
@@ -1107,8 +1107,8 @@ class TestRunHeadlessCore:
         already configures, so the child's own subagent-lifecycle hooks can find
         the diagnostic root.
         """
-        from autoskillit.execution.evidence.session_log import resolve_log_dir
         from autoskillit.execution.headless import run_headless_core
+        from autoskillit.execution.session_log.session_log import resolve_log_dir
 
         marker = tool_ctx.config.run_skill.completion_marker
         payload = json.dumps(

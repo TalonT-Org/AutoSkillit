@@ -112,7 +112,7 @@ def _outcome_authority_calls(helper: ast.FunctionDef | ast.AsyncFunctionDef) -> 
     return sum(
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id == "finish_commit_response"
+        and node.func.id == "_finish_commit_response"
         for node in ast.walk(helper)
     )
 
@@ -183,7 +183,7 @@ def test_commit_outcome_authority_records_once() -> None:
     helpers = [
         node
         for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "finish_commit_response"
+        if isinstance(node, ast.FunctionDef) and node.name == "_finish_commit_response"
     ]
     assert len(helpers) == 1
     assert _ledger_record_calls(helpers[0]) == 1

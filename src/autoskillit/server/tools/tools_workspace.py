@@ -37,7 +37,7 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
     prepare_recipe_segment_delivery,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._commit_outcome import finish_commit_response
+from autoskillit.server.tools._commit_outcome import _finish_commit_response
 from autoskillit.server.tools._pre_commit_failure import (
     parse_combined_process_output as _combined_process_output,
 )
@@ -327,7 +327,7 @@ async def commit_files(
                 *,
                 failure_class: CommitFailureClass | None = None,
             ) -> str:
-                return finish_commit_response(
+                return _finish_commit_response(
                     response,
                     failure_class=failure_class,
                     tool_ctx=tool_ctx,

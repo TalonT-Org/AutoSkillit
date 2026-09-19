@@ -20,12 +20,12 @@ from autoskillit.server.recipe._recipe_segment_delivery import (
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
-__all__ = ["finish_commit_response"]
+__all__ = ["_finish_commit_response"]
 
 logger = get_logger(__name__)
 
 
-def finish_commit_response(
+def _finish_commit_response(
     response: dict[str, object],
     *,
     failure_class: CommitFailureClass | None,

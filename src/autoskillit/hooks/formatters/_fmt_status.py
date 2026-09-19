@@ -195,6 +195,7 @@ _FMT_KITCHEN_STATUS_RENDERED: frozenset[str] = frozenset(
         "github_default_repo",
         "tracker_authority",
         "broker_authority",
+        "source_currency",
         "warning",
     }
 )

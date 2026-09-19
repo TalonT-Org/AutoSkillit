@@ -44,7 +44,7 @@ from autoskillit.server.tools._pre_commit_failure import (
 from autoskillit.server.tools._pre_commit_failure import (
     parse_hook_failure_class as _parse_hook_failure_class,
 )
-from autoskillit.server.tools._pre_commit_transaction import run_pre_commit_transaction
+from autoskillit.server.tools._pre_commit_transaction import _run_pre_commit_transaction
 from autoskillit.server.tools._self_revert import (
     scan_self_reverts,
     validate_self_revert_base,
@@ -393,7 +393,7 @@ async def commit_files(
                     )
 
                 if (
-                    hook_error := await run_pre_commit_transaction(
+                    hook_error := await _run_pre_commit_transaction(
                         resolved,
                         paths,
                         workspace_temp_dir=tool_ctx.config.workspace.temp_dir,

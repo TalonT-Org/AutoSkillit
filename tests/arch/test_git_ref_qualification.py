@@ -174,7 +174,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/tools/tools_git.py", "classify_fix", 217, "diff", "BARE"),
     (
         "server/tools/_pre_commit_transaction.py",
-        "run_pre_commit_transaction",
+        "_run_pre_commit_transaction",
         67,
         "<unresolved>",
         "UNRESOLVABLE",

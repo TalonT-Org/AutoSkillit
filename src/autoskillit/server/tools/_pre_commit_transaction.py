@@ -14,10 +14,10 @@ from autoskillit.server.tools._pre_commit_failure import (
     pre_commit_failure_class,
 )
 
-__all__ = ["run_pre_commit_transaction"]
+__all__ = ["_run_pre_commit_transaction"]
 
 
-async def run_pre_commit_transaction(
+async def _run_pre_commit_transaction(
     cwd: str,
     paths: list[str],
     *,

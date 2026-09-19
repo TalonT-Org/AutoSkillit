@@ -36,13 +36,14 @@ Return one finding per requirement using these verdict labels:
 - `CONFLICT` — two plans' implementations interfere with each other
 - `NAMED_DEVIATION` — a sub-category of MISSING where the required symbol IS present in the diff with the same type, location, and functional role, but has a different name due to a contextual prefix, scoping refinement, or established naming convention (e.g., plan requires `DENY_TRIGGER` but implementation uses `COMPOSE_PR_BODY_DENY_TRIGGER` following the `{GUARD_NAME}_DENY_TRIGGER` pattern). Use NAMED_DEVIATION instead of MISSING when: (a) the symbol fills the same role in the same file/location, (b) the name difference is a prefix/suffix addition or convention-driven transformation, and (c) the symbol's behavior is functionally identical to what was specified. The orchestrator will evaluate cross-slice references to determine whether to downgrade to ODD (non-blocking) or retain as MISSING (blocking).
 - `UNPRESCRIBED_SUBSTITUTION` — the requirement's goal is met, but via a mechanism or test topology the plan did not prescribe. Use this instead of `COVERED` when all three hold: (a) the plan text names a concrete mechanism, symbol, or test topology; (b) the diff achieves the goal by different means; and (c) the difference is substantive, not a naming or formatting variation. When the plan prescribes no particular mechanism — renames, docstrings, and ordinary refactors — a satisfied requirement is `COVERED`, never `UNPRESCRIBED_SUBSTITUTION`. Mocking, stubbing, or simulating behavior the plan required to be exercised for real always satisfies (b).
+- `UNSATISFIABLE_BY_CODE` — the finding is real and blocking, but no code change can resolve it; it requires a human decision.
 
 ## Verdict
 
 After all findings, emit a summary line:
 
 ```
-Verdict: {COVERED_count} COVERED, {MISSING_count} MISSING, {ODD_count} ODD, {CONFLICT_count} CONFLICT, {NAMED_DEVIATION_count} NAMED_DEVIATION, {UNPRESCRIBED_SUBSTITUTION_count} UNPRESCRIBED_SUBSTITUTION
+Verdict: {COVERED_count} COVERED, {MISSING_count} MISSING, {ODD_count} ODD, {CONFLICT_count} CONFLICT, {NAMED_DEVIATION_count} NAMED_DEVIATION, {UNPRESCRIBED_SUBSTITUTION_count} UNPRESCRIBED_SUBSTITUTION, {UNSATISFIABLE_BY_CODE_count} UNSATISFIABLE_BY_CODE
 ```
 
 ## Scope Guard

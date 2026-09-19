@@ -415,6 +415,7 @@ Each subagent returns structured findings:
 - `CONFLICT` — two plans' implementations interfere with each other
 - `NAMED_DEVIATION` — the planned symbol exists with the same role under a convention-driven name; Step 4 performs the cross-slice reference guard
 - `UNPRESCRIBED_SUBSTITUTION` — the goal is met through a substantive mechanism or test-topology substitution
+- `UNSATISFIABLE_BY_CODE` — the finding is real, blocking, and requires a human decision rather than a code change
 
 ### Step 3.4 — Deterministic Substitution Probe
 

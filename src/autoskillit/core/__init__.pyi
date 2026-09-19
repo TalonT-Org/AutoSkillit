@@ -843,6 +843,7 @@ from .types import AuditArtifactFieldOwnership as AuditArtifactFieldOwnership
 from .types import AuditArtifactFieldOwnershipDef as AuditArtifactFieldOwnershipDef
 from .types import AuditAssessment as AuditAssessment
 from .types import AuditAssessmentRow as AuditAssessmentRow
+from .types import AuditFindingWaiver as AuditFindingWaiver
 from .types import AuditAttemptId as AuditAttemptId
 from .types import AuditAttemptLifecycle as AuditAttemptLifecycle
 from .types import AuditAttemptRecord as AuditAttemptRecord

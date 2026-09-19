@@ -104,7 +104,8 @@ class DefaultInputPreflightResolver:
         recipe_execution_id: RecipeExecutionId,
         installation_version: InstallationVersion,
     ) -> None:
-        self._verifier = AuditCycleVerifier(allowed_root)
+        self._waiver_root = allowed_root
+        self._verifier = AuditCycleVerifier(allowed_root, waiver_root=self._waiver_root)
         self._ledger = ledger
         self._recipe_execution_id = recipe_execution_id
         self._installation_version = installation_version
@@ -196,7 +197,11 @@ class DefaultInputPreflightResolver:
                     "a disposition report cannot activate without authority",
                 )
             )
-        verifier = AuditCycleVerifier(allowed_root) if allowed_root is not None else self._verifier
+        verifier = (
+            AuditCycleVerifier(allowed_root, waiver_root=self._waiver_root)
+            if allowed_root is not None
+            else self._verifier
+        )
         try:
             authority = verifier.load_authority(authority_path)
         except Exception as exc:

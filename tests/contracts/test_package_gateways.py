@@ -447,7 +447,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
     "execution_evidence": frozenset({"anomaly_detection", "linux_tracing", "otlp_sink"}),
     "execution_recording": frozenset({"recording", "_recording_skills"}),
     "execution_session_log": frozenset(
-        {"session_log", "_session_log_recovery", "_session_retention", "session_index"}
+        {"session_log", "_session_log_recovery", "_session_log_retention", "session_index"}
     ),
     "execution_runtime": frozenset(
         {"launch_resolution", "commands", "clone_guard", "testing", "db"}
@@ -594,7 +594,10 @@ def test_gateway_reexports_pre_move_names(
                     "recover_crashed_sessions",
                     "read_telemetry_clear_marker",
                     "write_telemetry_clear_marker",
+                    "apply_session_retention",
                     "read_session_index_rows",
+                    "find_stale_session_archive_references",
+                    "read_tolerant_session_index_rows",
                 }
             ),
         ),

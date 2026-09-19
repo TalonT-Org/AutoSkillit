@@ -229,11 +229,16 @@ from autoskillit.execution.session import (
     read_session_state,
 )
 from autoskillit.execution.session_log._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution.session_log._session_retention import (
+from autoskillit.execution.session_log._session_log_retention import (
+    apply_session_retention,
     read_telemetry_clear_marker,
     write_telemetry_clear_marker,
 )
-from autoskillit.execution.session_log.session_index import read_session_index_rows
+from autoskillit.execution.session_log.session_index import (
+    find_stale_session_archive_references,
+    read_session_index_rows,
+    read_tolerant_session_index_rows,
+)
 from autoskillit.execution.session_log.session_log import (
     flush_session_log,
     resolve_log_dir,
@@ -437,9 +442,12 @@ __all__ = [
     "AnomalyKind",
     "AnomalySeverity",
     # session_log
+    "apply_session_retention",
+    "find_stale_session_archive_references",
     "flush_session_log",
     "read_session_index_rows",
     "read_telemetry_clear_marker",
+    "read_tolerant_session_index_rows",
     "recover_crashed_sessions",
     "resolve_log_dir",
     "session_index_lock_path",

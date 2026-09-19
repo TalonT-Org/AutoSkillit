@@ -15,6 +15,7 @@ from autoskillit.core import (
     CoverageResultDef,
     CoverageStatus,
     InventoryMode,
+    IssueSnapshotRef,
     PlanPartRef,
     PlanSetAuthority,
     PlanSetBindingMode,
@@ -220,3 +221,46 @@ def test_post_read_hashing_uses_bound_bytes(
         compute_canonical_hash(payload, domain=verifier.PLAN_SET_AUTHORITY_DOMAIN)
         == authority.authority_digest
     )
+
+
+def test_issue_snapshot_mutation_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir(parents=True)
+    issue_path = root / "issue.json"
+    issue_path.write_text("# Issue\n", encoding="utf-8")
+    issue_bytes = issue_path.read_bytes()
+    part = root / "part_a.md"
+    part.write_text("# Plan\n", encoding="utf-8")
+    authority = PlanSetAuthority.create(
+        binding_mode=PlanSetBindingMode.RECIPE,
+        execution_generation="execution",
+        kitchen_id="kitchen",
+        dispatch_id="",
+        plan_set_authority_id="planset-issue",
+        revision=1,
+        parent_authority_digest=None,
+        state=PlanSetState.SEALED,
+        inventory_mode=InventoryMode.ENUMERATED,
+        issue=IssueSnapshotRef(
+            issue_url="https://example/1",
+            issue_number=1,
+            locator=str(issue_path),
+            byte_size=len(issue_bytes),
+            content_digest=compute_bytes_hash(issue_bytes),
+            fetched_at="2026-09-18T00:00:00Z",
+        ),
+        requirements=(),
+        parts=(
+            PlanPartRef(
+                1, "P1", "A", str(part), part.stat().st_size, compute_bytes_hash(part.read_bytes())
+            ),
+        ),
+        allocations=(AllocationRowDef("P-1", "P1", AllocationKind.OWNED, "Step 1.1"),),
+        coverage=CoverageResultDef(CoverageStatus.PASS),
+        unparsed_marker_lines=(),
+        generated_at="2026-09-18T00:00:00Z",
+    )
+    path = root / "authority.json"
+    path.write_bytes(authority.canonical_bytes)
+    issue_path.write_text("# Issue mutated\n", encoding="utf-8")
+    assert _verify(root, part, path).reason is PlanSetRejectReason.PART_CONTENT_CHANGED

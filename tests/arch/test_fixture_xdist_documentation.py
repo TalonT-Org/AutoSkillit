@@ -91,13 +91,19 @@ def test_fixture_documents_required_semantics(
     Docstrings must call these mechanisms out so future readers do not assume
     single-execution semantics or mistake an empty-body override for a bug.
 
-    Keyword selection rationale: every protected fixture documents two
-    distinct concepts — the mechanism (``override``, ``session``) and the
-    execution environment (``xdist``, ``worker``). Each tuple has exactly two
-    keywords so the assertion shape is uniform across fixtures and a
-    regression that drops either concept fails the guard. ``all(...)`` is
-    used (not ``any(...)``) so a docstring mentioning only one of the two
-    required keywords does not silently satisfy the assertion.
+    Keyword selection rationale: every protected fixture's docstring
+    must mention the execution environment it runs under (``xdist``,
+    ``worker``) and, where relevant, the mechanism that distinguishes it
+    (``override``). The two conftest fixtures share two environment
+    keywords because both are session-scoped and run once per worker;
+    the override fixture pairs its mechanism keyword with the xdist
+    callout that ties MRO shadowing to per-worker state isolation.
+    Session scope itself is encoded in the separate ``expected_scope``
+    parametrize column (see Scope verification rationale below) rather
+    than in ``required_keywords``. Each tuple has exactly two keywords so
+    a regression that drops either keyword fails the guard. ``all(...)``
+    is used (not ``any(...)``) so a docstring mentioning only one of the
+    two required keywords does not silently satisfy the assertion.
 
     Scope verification rationale: the xdist callout on a session-scoped
     fixture only makes sense if the fixture is actually ``scope='session'``.

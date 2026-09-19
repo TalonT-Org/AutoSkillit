@@ -44,6 +44,7 @@ async def test_release_issue_default_branch_no_staged(tool_ctx_kitchen_open, mon
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
     result = await _release(target_branch="main")
     assert result["success"] and result["staged"] is False
+    assert result["staged_label"] is None
     assert not calls_for(fake, "ensure_label") and len(calls_for(fake, "swap_labels")) == 1
     assert not calls_for(fake, "remove_label") and not calls_for(fake, "add_labels")
 
@@ -55,6 +56,7 @@ async def test_release_issue_no_target_branch_no_staged(tool_ctx_kitchen_open, m
     result = await _release()
     assert result["success"] and result["staged"] is False
     assert len(calls_for(fake, "swap_labels")) == 1
+    assert not calls_for(fake, "remove_label")
 
 
 @pytest.mark.anyio

@@ -70,8 +70,16 @@ def test_no_issue_mode_and_authority_never_rule(skill_text: str) -> None:
     mode = _mode(_coverage_section(skill_text), "D")
     assert "No issue context" in mode
     assert "omitted" in mode
-    assert "Open plan-set authority artifacts directly" in skill_text
-    assert "PART" in skill_text and "_part_" in skill_text
+    assert re.search(
+        r"do not[^\n]*Open plan-set authority artifacts directly",
+        skill_text,
+        re.IGNORECASE,
+    )
+    assert re.search(
+        r"_part_[a-z0-9]+\s+to detect multi-part",
+        skill_text,
+        re.IGNORECASE,
+    )
 
 
 def test_arguments_document_issue_and_authority(skill_text: str) -> None:

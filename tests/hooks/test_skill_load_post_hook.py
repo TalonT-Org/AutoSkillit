@@ -42,6 +42,8 @@ def _run_hook(
     else:
         payload = dict(stdin_data)
         payload.setdefault("cwd", str(tmp_dir.resolve()))
+        if payload.get("tool_name") == "Skill":
+            payload.setdefault("hook_event_name", "PostToolUse")
         stdin_content = json.dumps(payload)
 
     env_base = production_interpreter_env()
@@ -255,6 +257,8 @@ def _run_hook_with_marker(
     else:
         payload = dict(stdin_data)
         payload.setdefault("cwd", str(tmp_dir.resolve()))
+        if payload.get("tool_name") == "Skill":
+            payload.setdefault("hook_event_name", "PostToolUse")
         stdin_content = json.dumps(payload)
 
     env_base = {

@@ -6,7 +6,7 @@ analysis, and exploration-request record management.
 
 Moved out of `hooks/` top level so `hooks/` holds only the atomic-registry
 fixtures that the `hooks.json` plugin-manifest contract pins at that path:
-the 11 hook-event scripts, `_dispatch.py`, `_session_binding.py`,
+hook-event scripts, `_dispatch.py`, `_session_binding.py`,
 `_join_ledger.py`, and the package's bare-name bootstrap convention.
 
 ## Architecture Notes

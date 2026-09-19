@@ -168,7 +168,7 @@ def resolve_venue_appendices(
     plan_text: str,
     project_dir: Path | None = None,
 ) -> list[VenueAppendixMatch]:
-    """Two-stage venue appendix resolution.
+    """Venue appendix resolution.
 
     1. Detect ML sub-areas from plan text using folding map keywords
     2. For each detected sub-area, resolve conditional parent

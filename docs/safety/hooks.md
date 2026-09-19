@@ -623,7 +623,7 @@ failure remain fail-closed.
 
 ## Drift detection
 
-`cli/_doctor.py:_check_hook_registry_drift` calls `generate_hooks_json()` and
+`src/autoskillit/cli/doctor/_doctor_hooks.py:_check_hook_registry_drift_all_scopes` calls `generate_hooks_json()` and
 compares against the deployed `hooks.json` field by field, reporting any
 missing or orphaned hook scripts. The check is gated by a 12-hour dismissal
 cooldown to keep the doctor noise level reasonable; missing hook files are

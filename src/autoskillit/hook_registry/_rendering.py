@@ -1,7 +1,7 @@
 """Hook command rendering + hooks.json generation.
 
 The single authoritative formatter for ``hooks.json`` / ``settings.json``
-entries. ``_build_hook_entry`` is shared between the two generation paths
+entries. ``_build_hook_entry`` is shared between generation paths
 so path A/B divergence is structurally impossible.
 """
 

@@ -66,7 +66,7 @@ Guards fail-**open** for malformed/unparseable input (JSON decode failure = exit
 except `join_stop_guard.py`. Stop fails closed because releasing without a truthful session
 identity can lose an unresolved required-join wave.
 
-Nine guards fail-**closed** for the conditions below, as a
+The following guards fail-**closed** for the conditions below, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |

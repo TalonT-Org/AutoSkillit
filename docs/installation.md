@@ -88,7 +88,7 @@ checks and conditionally adds fleet checks:
 | 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
 | 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
 | 7 | Hook registration | Hooks are registered in `settings.json` |
-| 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
+| 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `src/autoskillit/hook_registry/` |
 | 7c | Dual hook registration | Plugin-active installs do not also register hooks in `settings.json` |
 | 8 | Script version health | Project recipes carry the current `autoskillit_version` |
 | 9 | gitignore completeness | `.gitignore` covers `.autoskillit/temp/` and other generated paths |

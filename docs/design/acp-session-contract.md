@@ -11,14 +11,14 @@ This document provides the authoritative mapping between the autoskillit
 `CodingAgentBackend` session lifecycle and ACP (Agent Communication Protocol)
 session method semantics. It serves as the normative reference for P6-A3-WP1.
 
-Four sections cover:
+The following sections cover:
 
 1. **Lifecycle Mapping** — per-method mapping of `CodingAgentBackend` protocol
    methods to ACP session methods for `ClaudeCodeBackend` and `CodexBackend`.
-2. **Recovery Ladder** — mapping of the 20 `RetryReason` enum values to ACP
+2. **Recovery Ladder** — mapping of `RetryReason` enum values to ACP
    session rungs (`session/resume`, `session/load`, `session/new`) and
    terminal/wait-and-retry handling, plus the contract-nudge mechanism.
-3. **Capabilities Translation** — field-by-field categorization of all 47
+3. **Capabilities Translation** — field-by-field categorization of
    `BackendCapabilities` fields into ACP-mappable, autoskillit-local extension,
    and forward-declared buckets (validated against `_FORWARD_DECLARED` in
    `tests/arch/test_capability_consumption.py`).
@@ -35,11 +35,9 @@ routing fields (`recipe/schema.py` lines 119–121).
 
 ## Section 1: Lifecycle Mapping
 
-The `CodingAgentBackend` protocol
-(`src/autoskillit/core/types/_type_protocols_backend.py`) defines 26 methods.
-Its four sub-protocols define another 8 (`StreamParser` 1, `ResultParser` 2,
-`EnvPolicy` 1, and `SessionLocator` 4), for 34 documented protocol methods.
-The per-method table below maps each backend protocol
+The `CodingAgentBackend` protocol and its `StreamParser`, `ResultParser`,
+`EnvPolicy`, and `SessionLocator` sub-protocols are defined in
+`src/autoskillit/core/types/_type_protocols_backend.py`. The per-method table below maps each backend protocol
 method to its ACP session method analogue for both `ClaudeCodeBackend` and
 `CodexBackend`, with explicit notes where the Codex implementation deviates.
 
@@ -284,8 +282,8 @@ The contract nudge exclusively targets `session/resume`; it never invokes
 
 ## Section 3: Capabilities Translation
 
-`BackendCapabilities` (`src/autoskillit/core/types/_type_backend.py`,
-frozen dataclass, 47 fields total) declares feature flags the orchestrator
+`BackendCapabilities` (`src/autoskillit/core/types/_type_backend.py`) is a
+frozen dataclass that declares feature flags the orchestrator
 consumes when selecting an ACP rung or backend-specific code path. Each field
 falls into one of three categories:
 
@@ -296,11 +294,10 @@ falls into one of three categories:
   outside the exemption set. Membership is validated against `_FORWARD_DECLARED`
   in `tests/arch/test_capability_consumption.py`.
 
-The mechanically verified counts are **17 ACP-Mappable + 7 Forward-Declared
-+ 23 autoskillit-Local = 47 total**. They supersede the earlier 41-field
-snapshot.
+The category membership is mechanically verified against the live dataclass and
+`_FORWARD_DECLARED`; the tables below name every field.
 
-### 3.1 Category 1: ACP-Mappable (17 fields)
+### 3.1 Category 1: ACP-Mappable
 
 | Field | ACP analogue |
 |---|---|
@@ -322,7 +319,7 @@ snapshot.
 | `record_capable` | ACP scenario recording |
 | `inspector_capable` | ACP health monitoring callback (Health Inspector per issue #3533) |
 
-### 3.2 Category 2: autoskillit-Local Extension (23 fields)
+### 3.2 Category 2: autoskillit-Local Extension
 
 | Field | autoskillit-specific contract |
 |---|---|
@@ -350,7 +347,7 @@ snapshot.
 | `recipe_delivery_budget` | Version-pinned backend authority for ordinary and protected recipe delivery |
 | `hook_trust_policy` | Interactive hook-review policy translated at command construction; Codex uses `REVIEW_EACH_SESSION` |
 
-### 3.3 Category 3: Forward-Declared (7 fields)
+### 3.3 Category 3: Forward-Declared
 
 Membership in this category is **authoritative from `_FORWARD_DECLARED`** in
 `tests/arch/test_capability_consumption.py`. Fields here are declared for
@@ -504,7 +501,7 @@ relaxed, on the app-server transport:
 | §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
-| §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
+| §3 Capabilities | `BackendCapabilities` | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
 | §4 Codex divergence mappings | Binding, output-mode, idle-stop, and warning sites | `src/autoskillit/execution/backends/codex.py` |

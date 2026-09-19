@@ -182,7 +182,7 @@ def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> N
 
 
 def _render_status_display(state: CampaignState) -> int:
-    """Print campaign header and 8-column dispatch table to stdout.
+    """Print campaign header and dispatch table to stdout.
 
     Returns the number of lines printed (for cursor-based screen refresh).
     """

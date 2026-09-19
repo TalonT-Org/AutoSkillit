@@ -1,6 +1,6 @@
 """Bridge fleet progress and launch evidence to core contracts.
 
-Two progress sources feed into SessionCheckpoint:
+Progress sources feed into SessionCheckpoint:
 - Sidecar (issue-level): completed issue URLs from IssueSidecarEntry
 - Pipeline tracker (step-level): completed recipe steps from tracker JSON
 """

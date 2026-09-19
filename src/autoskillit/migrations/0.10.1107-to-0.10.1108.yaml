@@ -9,7 +9,7 @@ changes:
       autoskillit.execution.commands moved to
       autoskillit.execution.runtime.commands as part of #4672's decomposition
       of execution/ into execution/{github_ops,evidence,runtime}/ sub-packages.
-      The single public name ClaudeHeadlessCmd is also re-exported by the
+      The public name ClaudeHeadlessCmd is also re-exported by the
       execution/ gateway (autoskillit.execution) so most consumers need no
       change.
     instruction: |
@@ -22,7 +22,7 @@ changes:
 
   - id: execution-decomposition-full-module-list
     description: >
-      #4672 relocated ~26 other execution/ top-level modules (session log,
+      #4672 relocated other execution/ top-level modules (session log,
       recording, anomaly detection, linux tracing, CI watcher, GitHub
       fetcher/PR analysis/diff annotator, remote resolver, database reader,
       launch resolver, test runner, and their private helpers) into

@@ -143,8 +143,8 @@ Each row in Sections 2–5 carries one of three classifications:
 ## Section 2: Protocol Method Classification
 
 The `CodingAgentBackend` protocol (`src/autoskillit/core/types/_type_protocols_backend.py`,
-26 methods) and the four sub-protocols (`StreamParser`, `ResultParser`,
-`EnvPolicy`, `SessionLocator`; 8 methods total) yield 34 rows below. The row
+methods) and the `StreamParser`, `ResultParser`, `EnvPolicy`, and
+`SessionLocator` sub-protocols yield the rows below. The row
 order and per-method groupings follow `acp-session-contract.md` Section 1
 (Claude Code and Codex columns are omitted; the rightmost column is the
 opencode classification).
@@ -220,19 +220,19 @@ and PCR-003 in Section 6.
 
 The taxonomy below mirrors `acp-session-contract.md` Section 3:
 
-- **ACP-Mappable** — 17 fields with a direct or close ACP analogue.
-- **autoskillit-Local Extension** — 23 fields with no ACP analogue but
+- **ACP-Mappable** — fields with a direct or close ACP analogue.
+- **autoskillit-Local Extension** — fields with no ACP analogue but
   required for autoskillit's extended contract.
-- **Forward-Declared** — 7 fields with no current production consumer
+- **Forward-Declared** — fields with no current production consumer
   outside the exemption set in `_FORWARD_DECLARED`
   (`tests/arch/test_capability_consumption.py:26–63`).
 
-All 47 fields appear in exactly one row below. The "opencode value" column
+Each field appears in exactly one row below. The "opencode value" column
 records what the field would hold for an `OpencodeBackend.capabilities`
 instance; the classification column is TRIVIAL / SHIM-REQUIRED / GAP with the
 same legend as Section 2.
 
-### 3.1 ACP-Mappable fields (17)
+### 3.1 ACP-Mappable fields
 
 | # | Field | opencode value | Classification | Rationale |
 |---|---|---|---|---|
@@ -436,10 +436,10 @@ semantics.
 
 | Section | Source of truth | File |
 |---|---|---|
-| §2 method enumeration | `CodingAgentBackend` Protocol + 4 sub-protocols | `src/autoskillit/core/types/_type_protocols_backend.py` |
-| §3 capability taxonomy | `BackendCapabilities` (47 fields) + `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
-| §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared counts | `docs/design/acp-session-contract.md` Section 3 |
-| §4 conventions | `BackendConventions` (2 fields) | `src/autoskillit/core/types/_type_backend.py:38–49` |
+| §2 method enumeration | `CodingAgentBackend` Protocol and its sub-protocols | `src/autoskillit/core/types/_type_protocols_backend.py` |
+| §3 capability taxonomy | `BackendCapabilities` and `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
+| §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared membership | `docs/design/acp-session-contract.md` Section 3 |
+| §4 conventions | `BackendConventions` | `src/autoskillit/core/types/_type_backend.py:38–49` |
 | §5 B3a pattern | Codex NDJSON fixtures | `tests/execution/backends/fixtures/codex_ndjson/` |
 | §5 B3b pattern | Codex hook-efficacy probe | `tests/execution/backends/test_hook_deny_efficacy_probe.py` |
 | §6 PCR-001 / 003 blocker | `--sandbox deny` hard-coding | sst/opencode#13851 |

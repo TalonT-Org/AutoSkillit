@@ -22,7 +22,7 @@ Step-by-step guide for authoring a new phoropter lens family. This document walk
 
 ## §1. Choose a Synthesis Strategy
 
-Before creating any files, decide which synthesis strategy your family will use. The four recognized strategies (see [execution-contract.md §6](execution-contract.md#6-synthesisstrategy-catalog)):
+Before creating any files, decide which recognized synthesis strategy your family will use (see [execution-contract.md §6](execution-contract.md#6-synthesisstrategy-catalog)):
 
 | Strategy | When to Use | Implementation |
 |----------|-------------|----------------|

@@ -5,8 +5,8 @@ query it.
 
 ## In-memory accumulators
 
-`pipeline/context.py:ToolContext` carries four accumulators that every tool
-handler appends to:
+`pipeline/context.py:ToolContext` carries accumulators that every tool handler
+appends to:
 
 - `pipeline/tokens.py:DefaultTokenLog` — per-step token usage extracted from
   the headless session output via `execution/session.py:extract_token_usage`.
@@ -55,9 +55,9 @@ periodic snapshots of every descendant of a headless Claude session: RSS, CPU
 time, FDs, child PIDs, network connections. Snapshots accumulate into
 `ProcSnapshot` records and are written to disk per session.
 
-## 7 anomaly rules
+## Anomaly rules
 
-`execution/anomaly_detection.py` runs 7 post-hoc rules over the
+`execution/anomaly_detection.py` runs post-hoc rules over the
 `ProcSnapshot` series and flags any anomaly into `anomalies.jsonl`. The
 rules cover RSS spikes, FD leaks, runaway child counts, network surges,
 CPU starvation, hung-with-no-progress, and zombie accumulation.

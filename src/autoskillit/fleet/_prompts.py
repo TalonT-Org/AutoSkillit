@@ -80,13 +80,13 @@ def _build_food_truck_prompt(
     """Build the system prompt for an L2 food truck headless session.
 
     The prompt is self-contained — the L2 food truck session needs no runtime reference
-    material beyond what is embedded here. It assembles 8 sections:
+    material beyond what is embedded here. It assembles sections for
     filtered sous-chef discipline, headless directives, routing/predicates,
     budget guidance, quota awareness, campaign task, ingredient values,
     and a sentinel-anchored result contract.
 
     ``capture`` is an optional mapping of capture entry keys to their specs,
-    used to inject additional fields into the Section 8 sentinel format block.
+    used to inject additional fields into the sentinel format block.
     """
     dispatch_id_short = dispatch_id[:8]
     ingredients_json = json.dumps(ingredients)
@@ -210,7 +210,7 @@ FAILURE PREDICATE — DEGRADED RESPONSE:
     2. Stop. Do not improvise a recovery path, do not route to on_failure,
        and do not retry the tool.
 
-TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
+FAILURE TIER ROUTING FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.
 - Skill-level error ("error:" line present in result): Follow the matching on_result

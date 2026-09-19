@@ -77,7 +77,7 @@ not an automated balancing rule or permanent timing SLA.
 ## Pre-commit Hooks
 
 Hooks run automatically on commit: ruff format, ruff check, mypy, uv lock check,
-gitleaks secret scanning, doc count accuracy.
+and gitleaks secret scanning.
 
     pre-commit run --all-files
 

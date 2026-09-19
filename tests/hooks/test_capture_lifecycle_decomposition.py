@@ -1,6 +1,6 @@
 """Tests for the ``_capture_lifecycle`` package split (issue #4727, sub-ticket B).
 
-The single-file ``hooks/_capture_lifecycle.py`` (1,209 lines) was converted
+The single-file ``hooks/_capture_lifecycle.py`` was converted
 into a regular package ``hooks/_capture_lifecycle/`` containing:
 
 - ``__init__.py`` — pure re-export facade (the original ``__all__`` plus
@@ -13,11 +13,9 @@ into a regular package ``hooks/_capture_lifecycle/`` containing:
   ``_scan_and_adopt_orphans`` (the four methods named in issue #4727).
 
 These tests verify that the public-API surface at the original import
-path remains intact (``Test 2``), that the class-method wrappers
-preserve the bound-method contract that
-``tests/cli/test_capture_store.py:247`` relies on
-(``Test 3``), and that ``register_module_aliases`` registers both
-spellings under ``sys.modules`` (``Test 4``).
+path remains intact, that the class-method wrappers preserve the bound-method
+contract, and that ``register_module_aliases`` registers both spellings under
+``sys.modules``.
 """
 
 from __future__ import annotations
@@ -38,7 +36,7 @@ def test_public_api_importable_from_package_facade() -> None:
     from autoskillit.hooks import _capture_lifecycle as facade
 
     expected = {
-        # Original __all__ (lines 75-92)
+        # Original __all__ from the deleted module.
         "CaptureCapacityError",
         "CaptureCapacityReason",
         "CaptureCleanupOutcome",
@@ -114,8 +112,10 @@ def test_admission_helpers_resolvable_through_package() -> None:
 
 
 def test_admit_new_record_class_method_wrapper_delegates_to_module_function() -> None:
-    """``tests/cli/test_capture_store.py:247`` relies on this monkeypatching
-    contract (``real_admit = CaptureLifecycleStore._admit_new_record``)."""
+    """The decomposition preserves this monkeypatching contract.
+
+    ``real_admit = CaptureLifecycleStore._admit_new_record`` remains valid.
+    """
     from autoskillit.hooks._capture_lifecycle._store import CaptureLifecycleStore
 
     store_method = CaptureLifecycleStore._admit_new_record

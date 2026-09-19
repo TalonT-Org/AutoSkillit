@@ -74,7 +74,7 @@ _DATE_SUFFIX_RE = _re.compile(r"-\d{8}$")
 def normalize_model_id(model: str) -> str:
     """Normalize a model identifier to its canonical prefix for comparison.
 
-    Handles four cases:
+    Handles these forms:
     1. Short aliases: "sonnet" → "claude-sonnet"
     2. Full IDs with date suffixes: "claude-haiku-4-5-20251001" → "claude-haiku-4-5"
     3. Full IDs without dates: "claude-sonnet-4-6" → "claude-sonnet-4-6" (unchanged)

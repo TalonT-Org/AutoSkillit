@@ -7,6 +7,9 @@
 > - `grep -rn "from autoskillit.execution.commands import" tests/` → 13+ test files
 > - `build_skill_session_cmd|build_food_truck_cmd` in `execution/__init__.__all__` → 0 matches (gap confirmed)
 > - `execution/__init__.__all__` from commands.py → 5 names confirmed
+>
+> The query results below are recorded evidence for this dated freeze, not a
+> continuously maintained inventory contract.
 
 ---
 

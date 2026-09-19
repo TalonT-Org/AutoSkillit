@@ -1,8 +1,8 @@
 """tools_kitchen package facade.
 
-Decomposition of the legacy ``server.tools.tools_kitchen`` 2147-line module
-into sibling submodules. The facade re-exports the six MCP tool/resource
-entry points plus the internal helpers that tests pin via
+Decomposition of the legacy ``server.tools.tools_kitchen`` module into sibling
+submodules. The facade re-exports MCP tool/resource entry points plus the
+internal helpers that tests pin via
 ``mock.patch("autoskillit.server.tools.tools_kitchen._name")`` so that the
 patch reaches the call site regardless of which submodule actually
 defines the function.

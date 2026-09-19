@@ -1,15 +1,15 @@
 """Facade for ``_capture_lifecycle`` — preserves the public API surface.
 
-The package was carved out of the 1,209-line ``hooks/_capture_lifecycle.py``
+The package was carved out of ``hooks/_capture_lifecycle.py``
 (see issue #4727) so the lock-retry primitive, the capacity-admission
 check, and the orphan-adoption call are physically separate from the
 ``CaptureLifecycleStore`` class. This ``__init__.py`` is a pure re-export
 facade — every name in the original ``__all__`` plus the lazy re-aliases
-(lines 56–74 of the deleted file) is reproduced verbatim, and every
+from the deleted file is reproduced verbatim, and every
 module-level constant that callers relied on remains importable from
 ``autoskillit.hooks._capture_lifecycle``.
 
-The three-way discriminator mirrors ``_capture/_reconcile.py:12-32``: under
+The import discriminator mirrors ``_capture/_reconcile.py``: under
 ``TYPE_CHECKING`` (mypy / pyright) the imports use fully-qualified paths
 so static analysis can resolve them; under the ``_capture_lifecycle`` bare
 package identity (the standalone hook-script path with ``hooks/`` on
@@ -246,7 +246,7 @@ else:
 os = _os
 
 __all__ = [
-    # Original __all__ (lines 75-92 of the deleted file)
+    # Original __all__ from the deleted module.
     "CaptureCapacityError",
     "CaptureCapacityReason",
     "CaptureCleanupOutcome",

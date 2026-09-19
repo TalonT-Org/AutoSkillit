@@ -1,6 +1,6 @@
 """Stable facade re-exporting exploration snapshot capture surface.
 
-Decomposed from the original 1,155-line ``exploration/snapshot.py`` per #4836.
+Decomposed from the original ``exploration/snapshot.py`` per #4836.
 Importing shard symbols directly is fine; importing them through this facade
 guarantees the public surface (``autoskillit.exploration.snapshot.X``) survives
 future shard reorganisation.

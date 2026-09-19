@@ -216,6 +216,22 @@ def test_execution_evidence_decomposition_has_expected_siblings() -> None:
     ] | {"__init__"}
 
 
+@pytest.mark.parametrize(
+    ("subpackage", "move_set_key"),
+    [
+        pytest.param("recording", "execution_recording", id="recording"),
+        pytest.param("session_log", "execution_session_log", id="session_log"),
+    ],
+)
+def test_execution_split_subpackage_decomposition_has_expected_siblings(
+    subpackage: str, move_set_key: str
+) -> None:
+    pkg = SRC_ROOT / "execution" / subpackage
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        move_set_key
+    ] | {"__init__"}
+
+
 def test_execution_runtime_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "execution" / "runtime"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
@@ -274,6 +290,9 @@ def test_recipe_api_decompositions_have_expected_siblings(
         "autoskillit.cli.prompts",
         "autoskillit.cli.ops",
         "autoskillit.cli.install",
+        "autoskillit.execution.evidence",
+        "autoskillit.execution.recording",
+        "autoskillit.execution.session_log",
         "autoskillit.smoke_utils.review",
         # The six recipe/ sub-package gateways. These are the largest facades
         # in the tree and each hand-maintains a _LAZY_SYMBOL_TO_MODULE dict, so

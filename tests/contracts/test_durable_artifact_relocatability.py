@@ -44,23 +44,25 @@ class TestRegistryIntegrity:
     """Every registry entry resolves and obeys its machine-local contract."""
 
     def test_session_archive_writer_has_exact_machine_local_contract(self) -> None:
-        writer = "autoskillit.execution.evidence.session_log:_append_session_archive_rows"
+        writer = "autoskillit.execution.session_log.session_log:_append_session_archive_rows"
         entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]
         assert len(entries) == 1
         entry = entries[0]
         assert entry.machine_local is True
         assert entry.detection == (
-            "autoskillit.execution.evidence.session_index:find_stale_session_archive_references"
+            "autoskillit.execution.session_log.session_index:find_stale_session_archive_references"
         )
         assert callable(_resolve(entry.writer))
         assert callable(_resolve(entry.detection))
 
     def test_execution_candidate_manifest_writer_is_relocatable(self, tmp_path: Path) -> None:
         from autoskillit.core.types._type_results_execution import ExecutionSelection
-        from autoskillit.execution.evidence.session_log import write_execution_candidate_manifest
+        from autoskillit.execution.session_log.session_log import (
+            write_execution_candidate_manifest,
+        )
 
         writer = (
-            "autoskillit.execution.evidence._session_retention:"
+            "autoskillit.execution.session_log._session_log_retention:"
             "write_execution_candidate_manifest_at_root"
         )
         entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]

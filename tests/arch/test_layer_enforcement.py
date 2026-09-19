@@ -1779,7 +1779,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultSessionSkillManager",
             "DefaultSkillResolver",
         },  # interactive cook composition
-        Path("execution/evidence/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
+        Path("execution/recording/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
             "DefaultBackgroundSupervisor",  # field default_factory
             "DefaultMcpResponseLog",

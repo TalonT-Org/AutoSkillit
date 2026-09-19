@@ -411,7 +411,7 @@ def test_reclaimer_targets_exist_on_disk() -> None:
 def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     """Canary: target-list completeness survives a coordinated target/row deletion."""
     target = (
-        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "src/autoskillit/execution/session_log/_session_log_recovery.py",
         "recover_crashed_sessions",
     )
     reduced_targets = RECLAIMER_TARGETS - {target}
@@ -428,6 +428,6 @@ def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     )
     assert errors == [
         "unclassified discovered reclaimers: "
-        + "[('src/autoskillit/execution/evidence/_session_log_recovery.py',"
+        + "[('src/autoskillit/execution/session_log/_session_log_recovery.py',"
         + " 'recover_crashed_sessions')]"
     ]

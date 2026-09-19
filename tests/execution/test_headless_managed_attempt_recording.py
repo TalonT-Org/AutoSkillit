@@ -149,8 +149,8 @@ def _runner_cancelling_after_spawn(pid: int):
 
 def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     """Mirrors TestProviderFallbackLoop._patch_common (test_headless_provider_fallback.py)."""
-    import autoskillit.execution.evidence.session_log as _sl_mod
     import autoskillit.execution.headless._headless_execute as _execute_module
+    import autoskillit.execution.session_log.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
 
     monkeypatch.setattr(

@@ -149,8 +149,8 @@ class _Authority:
 
 class TestPostStartProviderSafety:
     def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
-        import autoskillit.execution.evidence.session_log as _sl_mod
         import autoskillit.execution.headless._headless_execute as _execute_module
+        import autoskillit.execution.session_log.session_log as _sl_mod
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
 

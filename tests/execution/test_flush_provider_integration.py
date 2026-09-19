@@ -35,7 +35,7 @@ def _launch_kwargs(ctx, cwd: str) -> dict[str, object]:
 
 
 def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
-    import autoskillit.execution.evidence.session_log as _sl_mod
+    import autoskillit.execution.session_log.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
     from tests.execution.conftest import _sr
 
@@ -128,7 +128,7 @@ class TestProviderFieldsReachFlush:
         results = [stale, _SUCCESS_RESULT]
         call_count = [0]
 
-        import autoskillit.execution.evidence.session_log as _sl_mod
+        import autoskillit.execution.session_log.session_log as _sl_mod
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
 
@@ -305,7 +305,7 @@ class TestProviderFieldsReachFlush:
         self, minimal_ctx, tmp_path, monkeypatch
     ) -> None:
         """The terminal-builder payload remains compatible with the actual index writer."""
-        import autoskillit.execution.evidence.session_log as session_log
+        import autoskillit.execution.session_log.session_log as session_log
         from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from tests.execution.conftest import _sr

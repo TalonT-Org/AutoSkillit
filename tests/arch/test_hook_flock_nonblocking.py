@@ -98,12 +98,12 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/evidence/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
     (
-        "execution/evidence/_session_retention.py",
+        "execution/session_log/_session_log_retention.py",
         "prune_execution_candidate_manifests_at_root",
         "ArtifactLease.acquire_exclusive",
     ),
     (
-        "execution/evidence/_session_retention.py",
+        "execution/session_log/_session_log_retention.py",
         "write_execution_candidate_manifest_at_root",
         "ArtifactLease.acquire_exclusive",
     ),
@@ -124,7 +124,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/session/_session_state.py", "acquire", "flock"),
     (
-        "execution/evidence/session_log.py",
+        "execution/session_log/session_log.py",
         "flush_session_log",
         "ArtifactLease.acquire_exclusive",
     ),

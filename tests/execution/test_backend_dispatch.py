@@ -329,7 +329,7 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
     """
     import importlib
 
-    import autoskillit.execution.evidence.session_log as _sl_mod
+    import autoskillit.execution.session_log.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
 
     headless_execute_module = importlib.import_module(

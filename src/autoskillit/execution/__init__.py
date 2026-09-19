@@ -1,8 +1,10 @@
 """execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
-Re-exports the full public surface of the ten execution sub-packages.
-All sub-modules depend only on autoskillit.core.* at runtime;
-execution/headless/ has TYPE_CHECKING-only references to pipeline/.
+Re-exports the full public surface of the twelve execution sub-packages:
+backends, evidence, github_ops, github_review, headless, merge_queue, process,
+quota, recording, runtime, session, and session_log. Sub-packages may import
+autoskillit.core and peer execution sub-packages at runtime; headless has
+TYPE_CHECKING-only references to pipeline.
 """
 
 from autoskillit.core import CmdSpec, SkillResult
@@ -59,16 +61,6 @@ from autoskillit.execution.child_outcomes import (
     normalize_backend_name,
     reconcile_child_outcome_snapshots,
 )
-from autoskillit.execution.evidence._recording_skills import (
-    restore_skill_snapshot,
-    scan_skill_snapshots,
-    snapshot_skill_dir,
-)
-from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution.evidence._session_retention import (
-    read_telemetry_clear_marker,
-    write_telemetry_clear_marker,
-)
 from autoskillit.execution.evidence.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -81,25 +73,6 @@ from autoskillit.execution.evidence.linux_tracing import (
     read_boot_id,
     read_starttime_ticks,
     start_linux_tracing,
-)
-from autoskillit.execution.evidence.recording import (
-    RECORD_SCENARIO_DIR_ENV,
-    RECORD_SCENARIO_ENV,
-    RECORD_SCENARIO_RECIPE_ENV,
-    REPLAY_SCENARIO_DIR_ENV,
-    REPLAY_SCENARIO_ENV,
-    SCENARIO_STEP_NAME_ENV,
-    RecordingSubprocessRunner,
-    ReplayingSubprocessRunner,
-    ScenarioReplayError,
-    build_replay_runner,
-)
-from autoskillit.execution.evidence.session_index import read_session_index_rows
-from autoskillit.execution.evidence.session_log import (
-    flush_session_log,
-    resolve_log_dir,
-    session_index_lock_path,
-    write_execution_candidate_manifest,
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderConformanceEvidence,
@@ -202,6 +175,23 @@ from autoskillit.execution.quota import (
     invalidate_cache,
     oauth_admission_lock_path,
 )
+from autoskillit.execution.recording._recording_skills import (
+    restore_skill_snapshot,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
+)
+from autoskillit.execution.recording.recording import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
+    SCENARIO_STEP_NAME_ENV,
+    RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
+    ScenarioReplayError,
+    build_replay_runner,
+)
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from autoskillit.execution.runtime.db import (
     DefaultDatabaseReader,
@@ -237,6 +227,23 @@ from autoskillit.execution.session import (
     parse_session_result,
     persist_session_state,
     read_session_state,
+)
+from autoskillit.execution.session_log._session_log_recovery import recover_crashed_sessions
+from autoskillit.execution.session_log._session_log_retention import (
+    apply_session_retention,
+    read_telemetry_clear_marker,
+    write_telemetry_clear_marker,
+)
+from autoskillit.execution.session_log.session_index import (
+    find_stale_session_archive_references,
+    read_session_index_rows,
+    read_tolerant_session_index_rows,
+)
+from autoskillit.execution.session_log.session_log import (
+    flush_session_log,
+    resolve_log_dir,
+    session_index_lock_path,
+    write_execution_candidate_manifest,
 )
 
 __all__ = [
@@ -435,9 +442,12 @@ __all__ = [
     "AnomalyKind",
     "AnomalySeverity",
     # session_log
+    "apply_session_retention",
+    "find_stale_session_archive_references",
     "flush_session_log",
     "read_session_index_rows",
     "read_telemetry_clear_marker",
+    "read_tolerant_session_index_rows",
     "recover_crashed_sessions",
     "resolve_log_dir",
     "session_index_lock_path",

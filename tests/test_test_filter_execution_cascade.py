@@ -164,7 +164,7 @@ class TestBuildTestScopeExecutionCascade:
         # Create the specific server test file so it resolves in the result
         (tests_root / "server" / "test_factory_recording.py").write_text("")
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/evidence/recording.py"},
+            changed_files={"src/autoskillit/execution/recording/recording.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

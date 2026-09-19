@@ -52,6 +52,7 @@ from autoskillit.core import (
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
+    PlanSetMaterializer,
     PluginArtifactAuthority,
     PluginRetirementCoordinator,
     QuotaRefreshTask,
@@ -215,6 +216,9 @@ class ToolContext:
     audit_authority_materializer:
                           AuditAuthorityMaterializer — converts reserved child semantics
                           into server-owned canonical audit authority artifacts.
+    plan_set_materializer:
+                          PlanSetMaterializer — binds ordered plan parts to server-owned
+                          plan-set authority artifacts.
     committed_disposition_resolver:
                           CommittedDispositionResolver — resolves only disposition paths
                           backed by the durable audit-admission ledger.
@@ -276,6 +280,7 @@ class ToolContext:
     audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)
     workspace_outcome_ledger: WorkspaceOutcomeLedger = field(default=_MISSING)
     audit_authority_materializer: AuditAuthorityMaterializer = field(default=_MISSING)
+    plan_set_materializer: PlanSetMaterializer | None = field(default=None)
     committed_disposition_resolver: CommittedDispositionResolver = field(default=_MISSING)
     recipe_name: str = field(default="")
     recipe_content_hash: str = field(default="")

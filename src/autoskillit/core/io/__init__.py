@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import os  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.core.io.os", ...)
 
+from autoskillit.core._json import (
+    fast_dumps,
+    fast_loads,
+)
 from autoskillit.core.io.delivery_bounds import (
     recipe_delivery_request_digest,
     resolve_general_output_token_limit,
@@ -51,9 +55,11 @@ from autoskillit.core.io.io import (
 from autoskillit.core.io.io import (
     _reset_schema_drift_logged_for_tests as _reset_schema_drift_logged_for_tests,
 )
-from autoskillit.core.io.json import (
-    fast_dumps,
-    fast_loads,
+from autoskillit.core.io.markdown_sections import (
+    STEP_HEADING_RE,
+    extract_section,
+    parse_pipe_table,
+    split_table_row,
 )
 from autoskillit.core.io.path_containment import (
     ContainmentError,
@@ -97,6 +103,7 @@ from autoskillit.core.io.yaml_io import (
 
 __all__ = [
     "ContainmentError",
+    "STEP_HEADING_RE",
     "GENERATED_FILES",
     "ReadResult",
     "TerminalColumn",
@@ -119,6 +126,7 @@ __all__ = [
     "directory_tree_digest",
     "dump_yaml_str",
     "ensure_project_temp",
+    "extract_section",
     "fast_dumps",
     "fast_loads",
     "find_latest_session_id",
@@ -131,6 +139,7 @@ __all__ = [
     "is_yaml_mapping_node",
     "load_yaml",
     "mapping_entry_byte_ranges_from_yaml",
+    "parse_pipe_table",
     "pkg_root",
     "read_stable_contained_bytes",
     "read_stable_contained_range",
@@ -148,6 +157,7 @@ __all__ = [
     "safe_upsert_section",
     "_reset_schema_drift_logged_for_tests",
     "spill_output",
+    "split_table_row",
     "strict_walk",
     "temp_dir_display_str",
     "write_canonical_versioned_json",

@@ -28,9 +28,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from .._json import fast_dumps as _fast_dumps
 from ..types._type_helpers import extract_skill_name
 from ..types._type_results import SpilledOutput, SpillSpec
-from .json import fast_dumps as _fast_dumps
 
 
 class _AtomicWriteDurabilityError(OSError):

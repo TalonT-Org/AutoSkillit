@@ -121,7 +121,7 @@ _TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (429, 529)),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (508, 525)),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
@@ -135,7 +135,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "inventory": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (577, 682)),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", 661),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",

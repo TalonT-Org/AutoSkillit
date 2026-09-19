@@ -33,7 +33,10 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "delegate_evidence_reader",
         ),
     ),
-    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Testing & Workspace",
+        ("test_check", "bind_plan_set", "reset_test_dir", "classify_fix", "reset_workspace"),
+    ),
     (
         "Git Operations",
         (

@@ -99,6 +99,7 @@ from autoskillit.server._audit_authority_materializer import (
 )
 from autoskillit.server._exploration_service import DefaultExplorationService
 from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.recipe._recipe_delivery_helpers import initialize_host_client_attestation
 from autoskillit.server.recipe._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
@@ -418,6 +419,8 @@ def make_context(
         shared_outcome_root / "workspace-outcomes"
     )
     audit_authority_materializer = DefaultAuditAuthorityMaterializer(audit_admission_ledger)
+    github_client = DefaultGitHubFetcher(token=token_factory, tracker=github_api_log)
+    plan_set_materializer = DefaultPlanSetMaterializer(github_client)
     committed_disposition_resolver = DefaultCommittedDispositionResolver(audit_admission_ledger)
     github_review_ledger = GitHubReviewLedger(github_review_ledger_path())
     github_review_gateway = DefaultGitHubReviewGateway(
@@ -451,7 +454,7 @@ def make_context(
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
-        github_client=DefaultGitHubFetcher(token=token_factory, tracker=github_api_log),
+        github_client=github_client,
         github_review_poster=github_review_poster,
         ci_watcher=DefaultCIWatcher(token=token_factory, tracker=github_api_log),
         merge_queue_watcher=DefaultMergeQueueWatcher(token=token_factory, tracker=github_api_log),
@@ -465,6 +468,7 @@ def make_context(
         audit_admission_ledger=audit_admission_ledger,
         workspace_outcome_ledger=workspace_outcome_ledger,
         audit_authority_materializer=audit_authority_materializer,
+        plan_set_materializer=plan_set_materializer,
         committed_disposition_resolver=committed_disposition_resolver,
         run_skill_completion=DefaultRunSkillCompletionAuthority(),
         exploration_context_store=OwnerBoundExplorationContextStore(

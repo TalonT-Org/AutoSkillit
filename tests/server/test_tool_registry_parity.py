@@ -402,6 +402,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "open_kitchen",
         },
         ToolInitializationOperation.EXECUTION: {
+            "bind_plan_set",
             "delegate_evidence_reader",
             "run_cmd",
             "run_fixed_batch",

@@ -11,6 +11,7 @@ def test_headless_tools_contains_expected_names() -> None:
     from autoskillit.core.types import HEADLESS_TOOLS
 
     assert HEADLESS_TOOLS == {
+        "bind_plan_set",
         "test_check",
         "unlock_agent_pack",
         "commit_files",

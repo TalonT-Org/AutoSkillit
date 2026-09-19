@@ -80,6 +80,7 @@ _KITCHEN_TOOL_MODULE_PATHS: Mapping[str, str] = MappingProxyType(
         "server.tools._recipe_section_handler": "server/tools/_recipe_section_handler.py",
         "server.tools.tools_agents": "server/tools/tools_agents.py",
         "server.tools.tools_audit_artifacts": "server/tools/tools_audit_artifacts.py",
+        "server.tools.tools_plan_set": "server/tools/tools_plan_set.py",
         "server.tools.tools_ci": "server/tools/tools_ci.py",
         "server.tools.tools_ci_merge_queue": "server/tools/tools_ci_merge_queue.py",
         "server.tools.tools_ci_watch": "server/tools/tools_ci_watch.py",

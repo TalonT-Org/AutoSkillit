@@ -1109,6 +1109,7 @@ def test_token_usage_json_schema(tmp_path):
 def test_persisted_token_artifacts_keep_source_pair_and_measure_states(tmp_path):
     _flush(
         tmp_path,
+        provider_used="anthropic",
         token_usage={"input_tokens": 0, "output_tokens": 4},
         turn_usage=[_turn_usage_row(input_tokens=0, output_tokens=4)],
     )

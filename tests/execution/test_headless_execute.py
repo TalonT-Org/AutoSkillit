@@ -44,6 +44,7 @@ def _install_fake_sink(
     *,
     close_raises: bool,
     evidence: dict[str, tuple[str, tuple[dict[str, object], ...]]] | None = None,
+    token_evidence: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, str]:
     sink_env = _sink_env()
 
@@ -64,6 +65,10 @@ def _install_fake_sink(
         def model_evidence_for(self, session_id: str):
             events.append(f"lookup:{session_id}")
             return (evidence or {}).get(session_id, ("", ()))
+
+        def token_usage_for(self, session_id: str, _backend: str, _provider: str):
+            events.append(f"token_lookup:{session_id}")
+            return (token_evidence or {}).get(session_id)
 
     monkeypatch.setattr(execute_module, "LocalOtlpSink", FakeSink)
     return sink_env
@@ -142,7 +147,14 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
     )
 
     assert result.success
-    assert events == ["start", "close", "lookup:sess-idle-test", "flush", "close"]
+    assert events == [
+        "start",
+        "close",
+        "lookup:sess-idle-test",
+        *([] if close_raises else ["token_lookup:sess-idle-test"]),
+        "flush",
+        "close",
+    ]
     assert flush_calls[0]["session_id"] == "sess-idle-test"
     resolved_identity = flush_calls[0]["model_identity"]
     telemetry = flush_calls[0]["telemetry"]
@@ -154,6 +166,145 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
     runner_env = runner.call_args_list[0][3]["env"]
     assert {key: runner_env[key] for key in sink_env} == sink_env
     assert os.environ == parent_environment
+
+
+@pytest.mark.anyio
+async def test_correlated_otlp_tokens_replace_parser_totals_before_logging_and_flush(
+    minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.evidence.session_log as session_log
+    import autoskillit.execution.headless._headless_execute as execute_module
+    from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+    from tests.fakes import MockSubprocessRunner
+
+    parser_record = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "done",
+            "session_id": "sess-idle-test",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 20,
+                "cache_creation_input_tokens": 10,
+            },
+        }
+    )
+    runner = MockSubprocessRunner()
+    runner.set_default(
+        SubprocessResult(
+            returncode=0,
+            stdout=parser_record,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+    )
+    minimal_ctx.runner = runner
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    selected = {
+        "backend": "claude-code",
+        "provider_used": "anthropic",
+        "input_tokens": {"state": "measured", "value": 2},
+        "output_tokens": {"state": "measured", "value": 4},
+        "cache_read_tokens": {"state": "measured_zero", "value": 0},
+        "cache_write_tokens": {"state": "measured", "value": 36520},
+        "peak_context": {"state": "measured_zero", "value": 0},
+    }
+    events: list[str] = []
+    _install_fake_sink(
+        monkeypatch,
+        execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=False,
+        token_evidence={"sess-idle-test": selected},
+    )
+    flushed: list[dict[str, object]] = []
+    monkeypatch.setattr(session_log, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+
+    result = await _execute_claude_headless(
+        lambda _binding, extras: ClaudeHeadlessCmd(
+            cmd=("claude", "-p", "test"), env=dict(extras or {})
+        ),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        step_name="sink-token-preference",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    assert result.token_usage is not None
+    assert result.token_usage["input_tokens"] == {"state": "measured", "value": 2}
+    assert minimal_ctx.token_log.get_report()[0]["input_tokens"] == {
+        "state": "measured",
+        "value": 2,
+    }
+    assert flushed[0]["telemetry"].token_usage["input_tokens"] == {"state": "measured", "value": 2}
+
+
+@pytest.mark.anyio
+async def test_otlp_tokens_captured_before_runner_crash_reach_terminal_artifact(
+    minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution as execution
+    import autoskillit.execution.headless._headless_execute as execute_module
+    from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+
+    selected = {
+        "backend": "claude-code",
+        "provider_used": "anthropic",
+        "input_tokens": {"state": "measured_zero", "value": 0},
+        "output_tokens": {"state": "measured", "value": 3},
+        "cache_read_tokens": {"state": "measured_zero", "value": 0},
+        "cache_write_tokens": {"state": "measured", "value": 7},
+        "peak_context": {"state": "measured_zero", "value": 0},
+    }
+    events: list[str] = []
+    _install_fake_sink(
+        monkeypatch,
+        execute_module,
+        events,
+        minimal_ctx.config.linux_tracing.log_dir,
+        close_raises=False,
+        token_evidence={"native-before-crash": selected},
+    )
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+
+    async def crashing_runner(_cmd, **kwargs):
+        callback = kwargs.get("on_session_id_resolved")
+        if callback is not None:
+            callback("native-before-crash")
+        raise RuntimeError("runner crashed")
+
+    minimal_ctx.runner = crashing_runner  # type: ignore[assignment]
+    flushed: list[dict[str, object]] = []
+    monkeypatch.setattr(execution, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+
+    result = await _execute_claude_headless(
+        lambda _binding, extras: ClaudeHeadlessCmd(
+            cmd=("claude", "-p", "test"), env=dict(extras or {})
+        ),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        step_name="sink-crash-tokens",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    assert result.subtype == "crashed"
+    assert result.token_usage == selected
+    assert flushed[0]["telemetry"].token_usage == selected
 
 
 @pytest.mark.anyio
@@ -345,11 +496,15 @@ async def test_drain_model_evidence_falls_back_to_captured_session_id() -> None:
             return None
 
         def model_evidence_for(self, session_id: str):
-            lookups.append(session_id)
+            lookups.append(f"model:{session_id}")
             return "captured-model-id", ()
 
+        def token_usage_for(self, session_id: str, backend: str, provider_used: str):
+            lookups.append(f"tokens:{session_id}:{backend}:{provider_used}")
+            return {"backend": backend, "provider_used": provider_used}
+
     captured_session = "native-only-session-42"
-    evidence_session_id, _, _ = _drain_model_evidence(
+    evidence_session_id, _, _, usage = _drain_model_evidence(
         _StubSink(),
         terminal_session_id="",
         captured_session_id=captured_session,
@@ -358,10 +513,16 @@ async def test_drain_model_evidence_falls_back_to_captured_session_id() -> None:
             effective_model="",
             profile_name="",
         ),
+        backend="claude-code",
+        provider_used="anthropic",
     )
 
     assert evidence_session_id == captured_session
-    assert lookups == [captured_session]
+    assert usage == {"backend": "claude-code", "provider_used": "anthropic"}
+    assert lookups == [
+        f"model:{captured_session}",
+        f"tokens:{captured_session}:claude-code:anthropic",
+    ]
 
 
 @pytest.mark.anyio

@@ -111,9 +111,10 @@ class TokenMeasure:
 
 
 class TurnTokenEntry(TypedDict):
-    """Dict-shaped sidecar row; aggregate totals use ``CanonicalTokenUsage``."""
+    """Raw in-memory turn evidence; the sidecar writer classifies its measures."""
 
     backend: str
+    provider_used: str
     message_id: str | None
     request_id: str | None
     timestamp: str | None
@@ -171,7 +172,11 @@ class CanonicalTokenUsage:
             input_tokens=cls._observed_or_unknown(d, "input_tokens"),
             output_tokens=cls._observed_or_unknown(d, "output_tokens"),
             cache_read_tokens=cls._observed_or_unknown(d, "cached_input_tokens"),
-            cache_write_tokens=TokenMeasure.unavailable(),
+            cache_write_tokens=(
+                cls._observed_or_unknown(d, "cache_write_input_tokens")
+                if "cache_write_input_tokens" in d
+                else TokenMeasure.unavailable()
+            ),
             raw=dict(d),
         )
 

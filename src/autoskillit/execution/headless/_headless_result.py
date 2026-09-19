@@ -359,7 +359,10 @@ def _build_skill_result(
             obligation_wakeup = obligation_wakeup or defensive_wakeup
 
     session = _parse_stdout(
-        result, backend=backend, backend_resume_session_id=backend_resume_session_id
+        result,
+        backend=backend,
+        backend_resume_session_id=backend_resume_session_id,
+        provider_used=provider_used or None,
     )
     controlled_context_exhaustion = (
         session.provider_error_code == CODEX_AUTO_COMPACTION_DENIED_REASON

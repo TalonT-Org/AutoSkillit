@@ -25,6 +25,7 @@ from autoskillit.core import (
     SemanticLaunchPlan,
     SkillProjectionBinding,
     ValidatedAddDir,
+    resolve_provider_used,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
@@ -122,7 +123,11 @@ def _prepare_headless_launch(
     )
     provider_binding = provider_binding or (
         ProviderBinding(
-            provider=provider_name or profile_name or backend_authority.backend,
+            provider=provider_name
+            or profile_name
+            or resolve_provider_used(
+                launch_backend.name, launch_backend.capabilities.anthropic_provider_capable
+            ),
             profile=profile_name or "default",
             required_backend=backend_authority.backend,
             normalized_endpoint=(
@@ -137,8 +142,6 @@ def _prepare_headless_launch(
             environment={},
             secret_environment_keys=secret_provider_keys,
         )
-        if provider_name or profile_name or provider_values
-        else None
     )
     projection_payload = (
         dict(sorted(capability_contract.projected_digests.items()))

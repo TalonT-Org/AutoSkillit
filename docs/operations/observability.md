@@ -8,8 +8,8 @@ query it.
 `pipeline/context.py:ToolContext` carries accumulators that every tool handler
 appends to:
 
-- `pipeline/tokens.py:DefaultTokenLog` — per-step token usage extracted from
-  the headless session output via `execution/session.py:extract_token_usage`.
+- `pipeline/tokens.py:DefaultTokenLog` — per-step, per-backend/provider token
+  usage selected from correlated native OTLP accounting or session parsing.
 - `pipeline/timings.py:DefaultTimingLog` — per-step wall-clock duration.
 - `pipeline/mcp_response.py:DefaultMcpResponseLog` — per-tool response size
   in bytes (used to detect runaway tool output).
@@ -32,11 +32,44 @@ equivalence between the canonical formatter and the hook is enforced by
 markdown headers from `_EFFICIENCY_COLUMNS` / `_TOKEN_COLUMNS` via
 label-mapping dicts rather than hardcoding header strings.
 
+## Token availability and provider boundaries
+
+Every accounting measure is a `{"state": ..., "value": ...}` record. The five
+states refine the familiar absent/zero/no-recorded-value distinction:
+
+- `measured` has a positive observed integer; `measured_zero` has an observed
+  integer zero. Only these states render as numbers.
+- `unavailable` means the backend/provider producer cannot report that measure.
+  `unknown` means the measure should be reportable but this observation is
+  missing or invalid. Neither state is a numeric zero.
+- `not_applicable` means the measure has no semantic meaning for this scope.
+  It is not an alias for either missing state.
+
+Each token-bearing row names non-empty `backend` and `provider_used`. The latter
+is the resolved serving provider/profile, not the agent backend or a guessed
+upstream behind a gateway. Claude Code/Anthropic expects cache-write evidence;
+Claude Code/MiniMax and current Codex parser output do not provide it. Unknown
+source pairs classify missing measures as `unknown`. A field actually observed
+as zero is `measured_zero`, even when the producer often omits that class.
+
+`get_token_summary` returns `steps` and a `totals` list keyed by this complete
+source pair. Token classes and ratios are never pooled across providers without
+a named normalization contract. A ratio with an `unknown` required measure
+renders `unknown`; `unavailable` and `not_applicable` scopes do not contribute
+to its denominator, and an observed zero denominator renders `—`.
+
+Token descriptor schema v4, turn sidecar schema v2, session index schema v14,
+fleet campaign state v13, and campaign summary v2 retain these records. Legacy
+numeric zero is decoded as `unknown` because older formats did not prove an
+observation. `context_window_tokens` is positive capacity metadata, not a
+measure; `context_fraction` exists only with observed cache-read usage and a
+known capacity.
+
 ## Mid-run accessors
 
 The orchestrator can read accumulators mid-run via the status MCP tools:
 
-- `get_token_summary` — current per-step token totals
+- `get_token_summary` — current per-step rows and per-source-pair totals
 - `get_timing_summary` — current per-step wall-clock totals
 - `get_quota_events` — quota throttle events from `quota_check.py`
 - `get_pipeline_report` — composite snapshot of all accumulators
@@ -129,15 +162,21 @@ without normalizing its nested structure, rotating one 20 MiB generation to
 `otlp.jsonl.1`. No collector, daemon, telemetry database, or additional package
 is required.
 
-The local sink derives its model projection only from accepted Claude Code and
-Codex OTLP `/v1/logs` batches; it never reads Codex rollout JSONL. Raw metrics
-and traces are captured but unused. Within explicit session and outcome
-bounds, the earliest accepted valid evidence wins; excess observations follow
-the existing bounded write, failure, and rotation policy and are not
-guaranteed retained.
+The local sink derives model evidence from accepted Claude Code and Codex
+`/v1/logs` batches. It also projects Claude Code `api_request` accounting
+before queueing and retains one observation per `(session.id, request_id)`.
+Duplicate requests are counted once; ambiguous or uncorrelated events are not
+summed. The selected execution provider is retained instead of a vendor label.
+Codex 0.153.4 token logs contain no stable request/event ID, while token metrics
+have no `conversation.id`, so Codex uses parser totals. The captured vendor
+shapes and version metadata are in `tests/execution/fixtures/`.
 
-After terminal execution, the best-effort lifecycle drains the sink, reads the
-retained snapshot, and then flushes diagnostics. `sessions.jsonl` remains the
+After terminal execution, the best-effort lifecycle drains the sink, selects
+correlated OTLP accounting when available, then flushes diagnostics. Sink
+startup, queue, persistence, or close failure leaves parser or `unknown`
+evidence; it never synthesizes zero or changes the headless outcome. The
+reconciliation uses retained in-memory observations, not a raw `otlp.jsonl`
+readback or a numeric cross-check. `sessions.jsonl` remains the
 retained committed-session projection, not a general-purpose or raw telemetry
 join, but it now includes this explicitly bounded session-keyed model
 projection.

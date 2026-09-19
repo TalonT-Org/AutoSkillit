@@ -452,6 +452,7 @@ def _make_codex_parse_stdout() -> object:
         result: SubprocessResult,
         backend: object,  # noqa: ARG001
         backend_resume_session_id: str = "",  # noqa: ARG001
+        provider_used: str | None = None,  # noqa: ARG001
     ) -> ClaudeSessionResult:
         agent_result = CodexBackend().result_parser().parse_stdout(result.stdout)
         return _adapt_codex_result(agent_result)
@@ -567,10 +568,10 @@ class TestStaleTokenUsagePropagation:
         skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.token_usage is not None
         tu = skill_result.token_usage
-        assert tu["input_tokens"] == 100
-        assert tu["output_tokens"] == 200
-        assert tu["cache_write_tokens"] == 50
-        assert tu["cache_read_tokens"] == 75
+        assert tu["input_tokens"] == {"state": "measured", "value": 100}
+        assert tu["output_tokens"] == {"state": "measured", "value": 200}
+        assert tu["cache_write_tokens"] == {"state": "measured", "value": 50}
+        assert tu["cache_read_tokens"] == {"state": "measured", "value": 75}
 
 
 class TestTurnUsagePropagation:
@@ -705,11 +706,14 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend, backend_resume_session_id=""):
+        def spy(result, backend, backend_resume_session_id="", **kwargs):
             captured["backend"] = backend
             return dataclasses.replace(
                 original_parse(
-                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                    result,
+                    backend=backend,
+                    backend_resume_session_id=backend_resume_session_id,
+                    **kwargs,
                 ),
                 turn_usage=turn_usage,
             )
@@ -744,11 +748,14 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend, backend_resume_session_id=""):
+        def spy(result, backend, backend_resume_session_id="", **kwargs):
             captured["backend"] = backend
             return dataclasses.replace(
                 original_parse(
-                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                    result,
+                    backend=backend,
+                    backend_resume_session_id=backend_resume_session_id,
+                    **kwargs,
                 ),
                 turn_usage=turn_usage,
             )
@@ -782,11 +789,14 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend, backend_resume_session_id=""):
+        def spy(result, backend, backend_resume_session_id="", **kwargs):
             captured["backend"] = backend
             return dataclasses.replace(
                 original_parse(
-                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                    result,
+                    backend=backend,
+                    backend_resume_session_id=backend_resume_session_id,
+                    **kwargs,
                 ),
                 turn_usage=turn_usage,
             )
@@ -815,11 +825,14 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend, backend_resume_session_id=""):
+        def spy(result, backend, backend_resume_session_id="", **kwargs):
             captured["backend"] = backend
             return dataclasses.replace(
                 original_parse(
-                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                    result,
+                    backend=backend,
+                    backend_resume_session_id=backend_resume_session_id,
+                    **kwargs,
                 ),
                 turn_usage=turn_usage,
             )

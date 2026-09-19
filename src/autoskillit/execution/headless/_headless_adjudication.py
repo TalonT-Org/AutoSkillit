@@ -30,6 +30,7 @@ from autoskillit.core import (
     WriteEvidence,
     extract_skill_name,
     get_logger,
+    resolve_provider_used,
 )
 from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
 from autoskillit.execution.headless._headless_evidence import (
@@ -84,6 +85,7 @@ def _parse_stdout(
     result: SubprocessResult,
     backend: CodingAgentBackend,
     backend_resume_session_id: str = "",
+    provider_used: str | None = None,
 ) -> ClaudeSessionResult:
     """Parse a completed session's stdout, seeded by its resume identity.
 
@@ -95,9 +97,21 @@ def _parse_stdout(
     empty. A transport-observed identity that disagrees is rejected outright
     — never silently overridden or averaged.
     """
+    provider_used = provider_used or resolve_provider_used(
+        backend.name, backend.capabilities.anthropic_provider_capable
+    )
     if backend.capabilities.supports_claude_format_stdout:
-        return parse_session_result(result.stdout)
+        return parse_session_result(result.stdout, provider_used=provider_used)
     agent_result = backend.result_parser().parse_stdout(result.stdout)
+    canonical = agent_result.raw.get("canonical_token_usage")
+    if isinstance(canonical, dict):
+        agent_result = dataclasses.replace(
+            agent_result,
+            raw={
+                **agent_result.raw,
+                "canonical_token_usage": {**canonical, "provider_used": provider_used},
+            },
+        )
     if backend_resume_session_id:
         observed = agent_result.session_id or result.session_id
         if observed and observed != backend_resume_session_id:
@@ -118,6 +132,7 @@ def _parse_stdout(
         agent_result.session_id or result.session_id,
         result.start_ts,
         result.end_ts,
+        provider_used=provider_used,
     )
     agent_result = dataclasses.replace(
         agent_result,
@@ -450,7 +465,10 @@ def _attempt_stall_recovery(
     using the returned ``session``/``evidence``/``api_retry``.
     """
     session = _parse_stdout(
-        result, backend=backend, backend_resume_session_id=backend_resume_session_id
+        result,
+        backend=backend,
+        backend_resume_session_id=backend_resume_session_id,
+        provider_used=provider_used,
     )
     evidence = _compute_write_evidence(
         session,

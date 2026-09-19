@@ -444,7 +444,16 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
     "execution_github_ops": frozenset(
         {"_github_http", "ci", "github", "pr_analysis", "diff_annotator", "remote_resolver"}
     ),
-    "execution_evidence": frozenset({"anomaly_detection", "linux_tracing", "otlp_sink", "_token_measure"}),
+    "execution_evidence": frozenset(
+        {
+            "anomaly_detection",
+            "linux_tracing",
+            "otlp_sink",
+            "_token_measure",
+            "_otlp_tokens",
+            "reader",
+        }
+    ),
     "execution_recording": frozenset({"recording", "_recording_skills"}),
     "execution_session_log": frozenset(
         {"session_log", "_session_log_recovery", "_session_log_retention", "session_index"}

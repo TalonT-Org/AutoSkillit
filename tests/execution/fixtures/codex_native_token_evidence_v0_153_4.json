@@ -1,0 +1,54 @@
+{
+  "producer": "codex",
+  "cli_version": "0.153.4",
+  "sanitization": "Captured from a native CLI run; conversation ID replaced and unrelated attributes removed.",
+  "identity_observation": "The token log has conversation.id but no request/event ID; token metrics have no conversation.id.",
+  "log_payload": {
+    "resourceLogs": [
+      {
+        "scopeLogs": [
+          {
+            "scope": {"name": "codex_otel.log_only"},
+            "logRecords": [
+              {
+                "attributes": [
+                  {"key": "event.name", "value": {"stringValue": "codex.sse_event"}},
+                  {"key": "event.kind", "value": {"stringValue": "response.completed"}},
+                  {"key": "conversation.id", "value": {"stringValue": "00000000-0000-4000-8000-000000000004"}},
+                  {"key": "originator", "value": {"stringValue": "codex_exec"}},
+                  {"key": "input_token_count", "value": {"stringValue": "16657"}},
+                  {"key": "output_token_count", "value": {"stringValue": "5"}},
+                  {"key": "cached_token_count", "value": {"intValue": 11520}},
+                  {"key": "cache_write_token_count", "value": {"intValue": 0}}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "metric_payload": {
+    "resourceMetrics": [
+      {
+        "scopeMetrics": [
+          {
+            "metrics": [
+              {
+                "name": "codex.turn.token_usage",
+                "histogram": {
+                  "dataPoints": [
+                    {"sum": 16657, "attributes": [{"key": "token_type", "value": {"stringValue": "input"}}]},
+                    {"sum": 5, "attributes": [{"key": "token_type", "value": {"stringValue": "output"}}]},
+                    {"sum": 11520, "attributes": [{"key": "token_type", "value": {"stringValue": "cached_input"}}]},
+                    {"sum": 0, "attributes": [{"key": "token_type", "value": {"stringValue": "cache_write_input"}}]}
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

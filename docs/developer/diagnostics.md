@@ -149,22 +149,32 @@ deployed generation is stale or diverged while continuing the interactive launch
 
 Completed sessions with per-request evidence publish `turn_usage.jsonl` before
 `token_usage.json`; `summary.json` remains the final completion artifact. The
-version-3 token descriptor adds `turn_usage_file`, `turn_usage_count`, and
+version-4 token descriptor carries `turn_usage_file`, `turn_usage_count`, and
 `turn_usage_schema_version`. The file reference is `null` with count zero when
-no series was observed. The JSONL row schema is version 1.
+no series was observed. The JSONL row schema is version 2; the retained
+`sessions.jsonl` index uses schema version 14.
 
-Each row retains nullable source `message_id`, `request_id`, `timestamp`, and
-observed `model`, plus `input_tokens`, `output_tokens`, `cache_read_tokens`,
-`cache_creation_tokens`, `context_window_tokens`, and `context_fraction`.
+Each token-bearing row carries non-empty `backend` and `provider_used`, plus
+nullable source `message_id`, `request_id`, `timestamp`, and observed `model`.
+Its five accounting fields (`input_tokens`, `output_tokens`,
+`cache_read_tokens`, `cache_write_tokens`, `peak_context`) each contain one
+`{"state": ..., "value": ...}` record. Only `measured` and `measured_zero`
+carry a number; `unavailable`, `unknown`, and `not_applicable` carry `null`.
+Claude's `cache_creation_input_tokens` maps to canonical `cache_write_tokens`.
 Ledger input is inclusive of cached input: Claude raw counters are combined
 only when all input components are known, while Codex input is already
-inclusive. Unknown counters and metadata remain `null`.
+inclusive. Historical numeric zero values load as `unknown` because their
+observation status cannot be recovered.
 
 `context_fraction` is the normalized cache-read proxy
 `cache_read_tokens / context_window_tokens` for that row's observed model. It
 does not include uncached or newly cached input and is not total context
-occupancy. Claude snapshots deduplicate only by a non-empty native
-`message.id`, preserving first-seen order and the first timestamp. Codex rows
+occupancy. `context_window_tokens` is positive capacity metadata, not an
+accounting observation; a missing capacity or unobserved cache read leaves the
+fraction `null`. Claude snapshots deduplicate by
+`(backend, provider_used, message.id)`, preserving first-seen order and the
+first timestamp. Identical message IDs from different source pairs remain
+separate rows. Codex rows
 come from advancing `last_token_usage` snapshots in the native rollout, bounded
 to the subprocess interval; the terminal stdout aggregate is not a request row.
 
@@ -209,6 +219,23 @@ PII scrubbing happens recursively before persistence, including nested OTLP
 attribute lists. Native join and event-name attributes are retained while user,
 account, organization, and email identifiers are removed. Prompt, assistant,
 tool-content, and raw-API-body capture are not enabled by this integration.
+
+Native Claude Code 2.1.257 `api_request` logs carry both `session.id` and
+`request_id`. The sink projects token counts before queueing, deduplicates by
+that request ID inside the session, and selects correlated OTLP accounting
+before parser totals. It never sums the two sources or rereads `otlp.jsonl` for
+reconciliation. Missing/invalid request identity, bounded sink failure, or
+absent correlation leaves parser accounting as the fallback. Codex 0.153.4
+`codex.sse_event` token logs carry `conversation.id` but no stable request or
+event ID, while `codex.turn.token_usage` metrics have no conversation ID. Codex
+therefore uses parser accounting until native telemetry exposes a safe join;
+the sanitized captures live in `tests/execution/fixtures/`.
+
+Recovery merges structured measures only for matching backend/provider pairs.
+Different states do not silently become zero. Fleet campaign state v13 and
+campaign summary v2 retain the same source-pair measures, with v12/v1 numeric
+legacy readers treating ambiguous zero as `unknown`. No token view produces a
+grand total across providers without an explicit normalization contract.
 
 Consumers must preserve raw accounting and stop metadata. Do not add
 cache-read tokens to input tokens, add reasoning tokens to output tokens, or

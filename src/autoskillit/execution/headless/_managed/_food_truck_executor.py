@@ -187,30 +187,26 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 )
             )
         )
-        dispatch_provider_binding = (
-            ProviderBinding(
-                provider=provider_name
-                or profile_name
-                or resolve_provider_used(
-                    dispatch_backend.name,
-                    dispatch_backend.capabilities.anthropic_provider_capable,
-                ),
-                profile=profile_name or "default",
-                required_backend=dispatch_backend.name,
-                normalized_endpoint=(
-                    merged_extras.get("ANTHROPIC_BASE_URL")
-                    or merged_extras.get("OPENAI_BASE_URL")
-                    or ""
-                ),
-                key_path="fleet.provider",
-                provider_source=authority_source,
-                profile_source=authority_source,
-                endpoint_source=authority_source,
-                environment={},
-                secret_environment_keys=secret_provider_keys,
-            )
-            if provider_name or profile_name or merged_extras
-            else None
+        dispatch_provider_binding = ProviderBinding(
+            provider=provider_name
+            or profile_name
+            or resolve_provider_used(
+                dispatch_backend.name,
+                dispatch_backend.capabilities.anthropic_provider_capable,
+            ),
+            profile=profile_name or "default",
+            required_backend=dispatch_backend.name,
+            normalized_endpoint=(
+                merged_extras.get("ANTHROPIC_BASE_URL")
+                or merged_extras.get("OPENAI_BASE_URL")
+                or ""
+            ),
+            key_path="fleet.provider",
+            provider_source=authority_source,
+            profile_source=authority_source,
+            endpoint_source=authority_source,
+            environment={},
+            secret_environment_keys=secret_provider_keys,
         )
         semantic_digest = hashlib.sha256(orchestrator_prompt.encode()).hexdigest()
         launch_preparation = self._ctx.launch_resolver.prepare(

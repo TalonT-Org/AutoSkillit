@@ -334,7 +334,7 @@ async def test_default_executor_run_forwards_provider_name(
 
 
 @pytest.mark.anyio
-async def test_no_fallback_env_returns_empty_provider_used(
+async def test_native_launch_without_profile_uses_anthropic_provider(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
@@ -376,7 +376,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
-    assert result.provider.provider_used == ""
+    assert result.provider.provider_used == "anthropic"
     assert result.provider.fallback_activated is False
 
 
@@ -1309,6 +1309,9 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
         def model_evidence_for(self, session_id: str):
             type(self).looked_up.append(session_id)
             return "", ()
+
+        def token_usage_for(self, _session_id: str, _backend: str, _provider: str):
+            return None
 
     async def fake_runner(_cmd, **_kwargs):
         return _sr()

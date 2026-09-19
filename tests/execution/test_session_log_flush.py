@@ -26,6 +26,7 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log.session_log import resolve_log_dir
+from autoskillit.execution.session._turn_usage import serialize_turn_token_entry
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -46,6 +47,7 @@ def _turn_usage_row(
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "backend": backend,
+        "provider_used": "anthropic" if backend == "claude-code" else backend,
         "message_id": f"message-{index}",
         "request_id": f"request-{index}",
         "timestamp": f"2026-09-10T10:00:{index % 60:02d}+00:00",
@@ -1199,7 +1201,7 @@ def test_turn_usage_descriptor_states(
     assert descriptor["turn_usage_count"] == len(turn_usage)
     assert sidecar_path.exists() is bool(turn_usage)
     if turn_usage:
-        assert _read_jsonl(sidecar_path) == turn_usage
+        assert _read_jsonl(sidecar_path) == [serialize_turn_token_entry(row) for row in turn_usage]
     if token_usage is None:
         assert all(
             descriptor[key] == _UNKNOWN
@@ -1280,7 +1282,7 @@ def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
     sidecar = (
         tmp_path / "sessions" / "resumed-codex_2026-09-10T10-00-00+00-00" / "turn_usage.jsonl"
     )
-    assert _read_jsonl(sidecar) == [current]
+    assert _read_jsonl(sidecar) == [serialize_turn_token_entry(current)]
 
 
 def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
@@ -1334,8 +1336,8 @@ def test_long_turn_usage_series_is_complete_while_metadata_stays_bounded(tmp_pat
     session_501 = tmp_path / "sessions" / "long-501"
     persisted_501 = _read_jsonl(session_501 / "turn_usage.jsonl")
     assert len(persisted_501) == 501
-    assert persisted_501[250]["cache_read_tokens"] == 0
-    assert persisted_501[250]["cache_creation_tokens"] == 777
+    assert persisted_501[250]["cache_read_tokens"] == {"state": "measured_zero", "value": 0}
+    assert persisted_501[250]["cache_write_tokens"] == {"state": "measured", "value": 777}
 
     descriptors = []
     for session_id, expected_count in (("long-501", 501), ("long-5001", 5_001)):

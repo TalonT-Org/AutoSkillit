@@ -190,6 +190,38 @@ def test_backend_named_candidate_profile_supplies_its_environment(tool_ctx) -> N
     assert environment == {"CODEX_API_KEY": "key"}
 
 
+@pytest.mark.parametrize(
+    ("backend_name", "expected_provider"),
+    [("claude-code", "anthropic"), ("codex", "codex")],
+)
+def test_native_candidate_binding_has_named_provider(
+    tool_ctx, backend_name: str, expected_provider: str
+) -> None:
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+    from autoskillit.server.tools.tools_execution._candidate_policy import resolve_candidate_policy
+
+    authority = BackendAuthority(
+        backend=backend_name,
+        kind=BackendAuthorityKind.GLOBAL,
+        tier=BackendAuthorityTier.GLOBAL,
+        key_path="agent_backend.backend",
+    )
+    binding, _, _ = resolve_candidate_policy(
+        tool_ctx.config,
+        authority=authority,
+        candidate=None,
+        ordinal=1,
+        step_name="",
+        recipe_name="",
+        step_provider="",
+        requested_model="",
+        providers_enabled=False,
+    )
+
+    assert binding.provider == expected_provider
+    assert binding.required_backend == backend_name
+
+
 @pytest.mark.anyio
 async def test_run_skill_model_as_profile_resolves_provider(
     tool_ctx_kitchen_open, tmp_path, monkeypatch

@@ -231,6 +231,7 @@ def _codex_turn_usage_entry(
     effective_model: str | None,
     start: datetime,
     end: datetime,
+    provider_used: str,
 ) -> TurnTokenEntry | None:
     timestamp = first_nonempty_string(record.get("timestamp"))
     event_time = _utc_datetime(timestamp)
@@ -259,6 +260,7 @@ def _codex_turn_usage_entry(
 
     return build_turn_token_entry(
         backend=AGENT_BACKEND_CODEX,
+        provider_used=provider_used,
         message_id=first_nonempty_string(
             info.get("message_id"),
             payload.get("message_id"),
@@ -286,6 +288,8 @@ def extract_codex_turn_usage(
     thread_id: str,
     start_ts: str,
     end_ts: str,
+    *,
+    provider_used: str = "codex",
 ) -> list[TurnTokenEntry]:
     """Extract interval-bounded request snapshots from a native Codex rollout."""
     start = _utc_datetime(start_ts)
@@ -352,6 +356,7 @@ def extract_codex_turn_usage(
                     current_model,
                     start,
                     end,
+                    provider_used,
                 )
                 if entry is not None:
                     rows.append(entry)

@@ -1691,8 +1691,8 @@ class TestContractNudge:
         )
         assert result.success is True
         assert result.token_usage is not None
-        assert result.token_usage.get("input_tokens", 0) >= 1200
-        assert result.token_usage.get("output_tokens", 0) >= 600
+        assert result.token_usage["input_tokens"] == {"state": "measured", "value": 1200}
+        assert result.token_usage["output_tokens"] == {"state": "measured", "value": 600}
 
     @pytest.mark.anyio
     async def test_nudge_exception_falls_through(self, tool_ctx):

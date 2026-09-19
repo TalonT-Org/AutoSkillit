@@ -11,6 +11,13 @@ from autoskillit.execution.session._session_model import extract_token_usage
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
+def _observed(value: int) -> dict[str, object]:
+    return {"state": "measured_zero" if value == 0 else "measured", "value": value}
+
+
+_UNKNOWN = {"state": "unknown", "value": None}
+
+
 def _assistant(
     cache_read: object = 0,
     *,
@@ -85,7 +92,7 @@ def test_extract_peak_context_from_multi_turn_stdout():
     )
     usage, _rows = extract_token_usage(stdout)
     assert usage is not None
-    assert usage["peak_context"] == 50000
+    assert usage["peak_context"] == _observed(50000)
 
 
 def test_extract_turn_count_from_multi_turn_stdout():
@@ -105,7 +112,7 @@ def test_extract_peak_context_single_turn():
     stdout = _build_ndjson([_assistant(cache_read=42000)])
     usage, _rows = extract_token_usage(stdout)
     assert usage is not None
-    assert usage["peak_context"] == 42000
+    assert usage["peak_context"] == _observed(42000)
     assert usage["turn_count"] == 1
 
 
@@ -119,7 +126,7 @@ def test_extract_peak_context_with_result_record():
     )
     usage, _rows = extract_token_usage(stdout)
     assert usage is not None
-    assert usage["peak_context"] == 80000
+    assert usage["peak_context"] == _observed(80000)
     assert usage["turn_count"] == 2
 
 
@@ -127,7 +134,7 @@ def test_extract_peak_context_no_assistant_records():
     stdout = _build_ndjson([_result(cache_read=100000)])
     usage, _rows = extract_token_usage(stdout)
     assert usage is not None
-    assert usage["peak_context"] == 0
+    assert usage["peak_context"] == _UNKNOWN
     assert usage["turn_count"] == 0
 
 
@@ -140,7 +147,7 @@ def test_extract_peak_context_zero_cache_read():
     )
     usage, _rows = extract_token_usage(stdout)
     assert usage is not None
-    assert usage["peak_context"] == 0
+    assert usage["peak_context"] == _observed(0)
     assert usage["turn_count"] == 2
 
 
@@ -165,13 +172,13 @@ def test_duplicate_message_snapshots_count_once_in_rows_and_aggregate():
     assert len(lines) == 9
     assert usage is not None
     assert usage["turn_count"] == 5
-    assert usage["input_tokens"] == 15
-    assert usage["output_tokens"] == 150
-    assert usage["cache_read_tokens"] == 1_500
-    assert usage["cache_write_tokens"] == 15
-    assert usage["peak_context"] == 500
-    assert usage["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == 6
-    assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 9
+    assert usage["input_tokens"] == _observed(15)
+    assert usage["output_tokens"] == _observed(150)
+    assert usage["cache_read_tokens"] == _observed(1_500)
+    assert usage["cache_write_tokens"] == _observed(15)
+    assert usage["peak_context"] == _observed(500)
+    assert usage["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == _observed(6)
+    assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == _observed(9)
     assert [row["message_id"] for row in rows] == [f"msg-{index}" for index in range(1, 6)]
 
 
@@ -206,7 +213,7 @@ def test_rows_use_exact_model_windows_and_inclusive_input():
     usage, rows = extract_token_usage(stdout)
 
     assert usage is not None
-    assert usage["input_tokens"] == 30
+    assert usage["input_tokens"] == _observed(30)
     assert [row["backend"] for row in rows] == ["claude-code", "claude-code"]
     assert [row["model"] for row in rows] == [opus, sonnet]
     assert [row["input_tokens"] for row in rows] == [115, 125]

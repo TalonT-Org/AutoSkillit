@@ -184,6 +184,9 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
         def model_evidence_for(self, _session_id: str):
             return "", ()
 
+        def token_usage_for(self, _session_id: str, _backend: str, _provider: str):
+            return None
+
     monkeypatch.setattr(_execute_module, "LocalOtlpSink", DisabledSink, raising=False)
 
 
@@ -386,6 +389,7 @@ async def test_cancellation_after_spawn_records_one_interrupted_row(
     )
     assert len(outcomes) == 1
     assert outcomes[0]["terminal_reason"] == "interrupted"
+    assert outcomes[0]["effective_provider"] == "anthropic"
 
 
 # --- 6. binding a later-resolved backend id merges into the same row --------

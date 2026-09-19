@@ -52,11 +52,13 @@ def finalize_terminal_selection(
             )
 
     terminal_attempt = selection.attempts[-1] if selection and selection.attempts else None
-    terminal_provider = (
-        current_launch_contract.provider or provider_name
-        if current_launch_contract is not None
-        else provider_name
-    )
+    terminal_provider = provider_name
+    if current_launch_contract is not None:
+        contract_provider = current_launch_contract.provider
+        if contract_provider and contract_provider != current_launch_contract.effective_backend:
+            terminal_provider = contract_provider
+        elif not terminal_provider:
+            terminal_provider = contract_provider
     provider_fallback = selection.provider_fallback if selection is not None else False
     terminal_binding_matches = bool(
         terminal_attempt is not None

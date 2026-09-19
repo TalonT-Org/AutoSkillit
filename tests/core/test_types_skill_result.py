@@ -34,6 +34,8 @@ def test_skill_result_cancelled_factory() -> None:
     assert result.exit_code == -1
     assert result.order_id == "oid-123"
     assert "/test-skill" in result.result
+    assert result.provider.provider_used == ""
+    assert result.token_usage is None
 
 
 @pytest.mark.parametrize(
@@ -215,6 +217,7 @@ class TestSkillResultCrashedFactory:
     def test_crashed_sets_provider_used_empty_string(self) -> None:
         result = SkillResult.crashed(exception=RuntimeError("boom"))
         assert result.provider.provider_used == ""
+        assert result.token_usage is None
 
     def test_crashed_sets_provider_fallback_false(self) -> None:
         result = SkillResult.crashed(exception=RuntimeError("boom"))

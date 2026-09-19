@@ -517,6 +517,14 @@ def check_audit_remediation_outcome(
     return {"outcome": outcome.value, "next_iteration": budget["next_iteration"]}
 
 
+def merge_audit_cycle_path(
+    current_authority_path: str = "",
+    prior_authority_path: str = "",
+) -> dict[str, str]:
+    """Preserve a trusted authority path unless this round published a replacement."""
+    return {"audit_cycle_path": current_authority_path or prior_authority_path}
+
+
 def check_loop_with_progress(
     current_iteration: str = "",
     max_iterations: str = "5",

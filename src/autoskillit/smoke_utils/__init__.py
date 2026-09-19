@@ -33,6 +33,7 @@ from autoskillit.smoke_utils._review import (
     check_audit_remediation_outcome,
     check_loop_iteration,
     check_loop_with_progress,
+    merge_audit_cycle_path,
 )
 from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
@@ -100,6 +101,7 @@ __all__ = [
     "fetch_merge_queue_data",
     "init_counter",
     "normalize_local_review_finding",
+    "merge_audit_cycle_path",
     "parse_agent_eval_manifests",
     "parse_eval_manifests",
     "patch_pr_token_summary",

@@ -1106,6 +1106,37 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["schema_version"] == 4
 
 
+def test_persisted_token_artifacts_keep_source_pair_and_measure_states(tmp_path):
+    _flush(
+        tmp_path,
+        token_usage={"input_tokens": 0, "output_tokens": 4},
+        turn_usage=[_turn_usage_row(input_tokens=0, output_tokens=4)],
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    descriptor = json.loads((session_dir / "token_usage.json").read_text())
+    summary = json.loads((session_dir / "summary.json").read_text())
+    index = _read_jsonl(tmp_path / "sessions.jsonl")[0]
+    turn = _read_jsonl(session_dir / "turn_usage.jsonl")[0]
+
+    measure_fields = ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens")
+    for row in (descriptor, summary["token_usage"], index, turn):
+        assert (row["backend"], row["provider_used"]) == ("claude-code", "anthropic")
+        for field in measure_fields:
+            measure = row[field]
+            assert measure["state"] in {
+                "measured",
+                "measured_zero",
+                "unavailable",
+                "unknown",
+                "not_applicable",
+            }
+            assert ("value" in measure) == measure["state"] in {"measured", "measured_zero"}
+    assert descriptor["input_tokens"] == {"state": "measured_zero", "value": 0}
+    assert summary["token_usage"]["input_tokens"] == descriptor["input_tokens"]
+    assert index["input_tokens"] == descriptor["input_tokens"]
+    assert turn["input_tokens"] == descriptor["input_tokens"]
+
+
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
     """flush_session_log writes peak_context and turn_count to token_usage.json."""
     _flush(

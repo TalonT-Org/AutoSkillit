@@ -244,7 +244,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     ),
     DurableArtifactWriterDef(
         writer=(
-            "autoskillit.execution.session_log._session_retention:"
+            "autoskillit.execution.session_log._session_log_retention:"
             "write_execution_candidate_manifest_at_root"
         ),
         artifact=(

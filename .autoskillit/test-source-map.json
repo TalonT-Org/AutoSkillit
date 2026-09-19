@@ -17459,7 +17459,7 @@
       "tests/server/test_tools_kitchen_visibility.py",
       "tests/server/test_wire_compat.py"
     ],
-    "src/autoskillit/execution/session_log/_session_retention.py": [
+    "src/autoskillit/execution/session_log/_session_log_retention.py": [
       "tests/contracts/test_durable_artifact_relocatability.py",
       "tests/contracts/test_skill_result_persistence_ledger.py",
       "tests/execution/headless/test_headless_natural_exit_grace_seconds.py",

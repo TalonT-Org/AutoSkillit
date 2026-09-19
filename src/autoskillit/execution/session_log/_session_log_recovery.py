@@ -19,7 +19,7 @@ from autoskillit.core import (
     read_starttime_ticks,
 )
 from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
-from autoskillit.execution.session_log._session_retention import (
+from autoskillit.execution.session_log._session_log_retention import (
     prune_execution_candidate_manifests_at_root,
 )
 from autoskillit.execution.session_log.session_log import flush_session_log, resolve_log_dir

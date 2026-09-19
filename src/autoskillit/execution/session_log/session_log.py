@@ -58,7 +58,7 @@ from autoskillit.execution.session._turn_usage import (
 from autoskillit.execution.session._turn_usage import (
     write_turn_usage_sidecar,
 )
-from autoskillit.execution.session_log._session_retention import (
+from autoskillit.execution.session_log._session_log_retention import (
     apply_session_retention,
     refresh_summary_child_outcomes,
     write_execution_candidate_manifest_at_root,
@@ -307,7 +307,7 @@ def flush_session_log(
     Writes proc_trace.jsonl, summary.json, anomalies.jsonl (if any),
     and transactionally projects the session into sessions.jsonl. Applies retention
     to keep at most ``max_sessions`` session directories (default 2000, see
-    ``_session_retention.py``, configurable via ``linux_tracing.max_sessions``).
+    ``_session_log_retention.py``, configurable via ``linux_tracing.max_sessions``).
 
     When step_name is provided, also writes token_usage.json, step_timing.json,
     and (if telemetry.audit_record is set) audit_log.json to the session directory

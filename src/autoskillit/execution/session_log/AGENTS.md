@@ -12,13 +12,13 @@ run's result (exit classification, outcome, retry FSM).
   `write_execution_candidate_manifest`. XDG base dir spec; log directory names use hyphens
   (never underscores).
 - **`_session_log_recovery.py`** — `recover_crashed_sessions` only.
-- **`_session_retention.py`** — `read_telemetry_clear_marker`, `write_telemetry_clear_marker`,
+- **`_session_log_retention.py`** — `read_telemetry_clear_marker`, `write_telemetry_clear_marker`,
   `apply_session_retention`.
 - **`session_index.py`** — `read_session_index_rows`, `find_stale_session_archive_references`,
   `read_tolerant_session_index_rows`.
 
-Inter-peer coupling (absolute imports): `session_log.py` → `_session_retention`,
-`session_index`; `_session_log_recovery.py` → `_session_retention`, `session_log`.
+Inter-peer coupling (absolute imports): `session_log.py` → `_session_log_retention`,
+`session_index`; `_session_log_recovery.py` → `_session_log_retention`, `session_log`.
 
 Cross-package edges:
 

@@ -62,7 +62,7 @@ class TestRegistryIntegrity:
         )
 
         writer = (
-            "autoskillit.execution.session_log._session_retention:"
+            "autoskillit.execution.session_log._session_log_retention:"
             "write_execution_candidate_manifest_at_root"
         )
         entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]

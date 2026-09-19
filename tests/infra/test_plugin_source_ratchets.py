@@ -83,7 +83,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "recovery directory for the same dir_name being committed.",
     ),
     (
-        "execution/session_log/_session_retention.py",
+        "execution/session_log/_session_log_retention.py",
         "apply_execution_candidate_manifest_retention",
         "entry.path.unlink",
     ): (
@@ -92,7 +92,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "decision has classified its owning session as eligible for pruning.",
     ),
     (
-        "execution/session_log/_session_retention.py",
+        "execution/session_log/_session_log_retention.py",
         "apply_session_retention",
         "shutil.rmtree",
     ): (

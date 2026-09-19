@@ -162,9 +162,12 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
-        ("src/autoskillit/execution/session_log/_session_retention.py", "apply_session_retention"),
         (
-            "src/autoskillit/execution/session_log/_session_retention.py",
+            "src/autoskillit/execution/session_log/_session_log_retention.py",
+            "apply_session_retention",
+        ),
+        (
+            "src/autoskillit/execution/session_log/_session_log_retention.py",
             "apply_execution_candidate_manifest_retention",
         ),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
@@ -363,17 +366,20 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar")
     ),
     (
-        "src/autoskillit/execution/session_log/_session_retention.py",
+        "src/autoskillit/execution/session_log/_session_log_retention.py",
         "apply_session_retention",
     ): _convergence_adapters(
-        ("src/autoskillit/execution/session_log/_session_retention.py", "apply_session_retention")
+        (
+            "src/autoskillit/execution/session_log/_session_log_retention.py",
+            "apply_session_retention",
+        )
     ),
     (
-        "src/autoskillit/execution/session_log/_session_retention.py",
+        "src/autoskillit/execution/session_log/_session_log_retention.py",
         "apply_execution_candidate_manifest_retention",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/session_log/_session_retention.py",
+            "src/autoskillit/execution/session_log/_session_log_retention.py",
             "apply_execution_candidate_manifest_retention",
         )
     ),
@@ -762,9 +768,9 @@ _CS = (
 _CSE = "src/autoskillit/workspace/session_skills/_manager.py::_reclaim_stale_entry"
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
-_SL = "src/autoskillit/execution/session_log/_session_retention.py::apply_session_retention"
+_SL = "src/autoskillit/execution/session_log/_session_log_retention.py::apply_session_retention"
 _ECMR = (
-    "src/autoskillit/execution/session_log/_session_retention.py::"
+    "src/autoskillit/execution/session_log/_session_log_retention.py::"
     "apply_execution_candidate_manifest_retention"
 )
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
@@ -985,7 +991,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     f"{_WWS}::L209": _self_limiting(
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
-    # -- execution._session_retention::apply_session_retention --
+    # -- execution._session_log_retention::apply_session_retention --
     f"{_SL}::L104": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
@@ -997,7 +1003,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "the session directory regardless of its age, the same self-exclusion family as "
         "the dispatch reaper's protected-id set.",
     ),
-    # -- execution._session_retention::apply_execution_candidate_manifest_retention --
+    # -- execution._session_log_retention::apply_execution_candidate_manifest_retention --
     f"{_ECMR}::L159": _self_limiting(
         "The manifest currently being written is excluded from the retention pass that it "
         "triggered, so it cannot be reclaimed before publication completes."

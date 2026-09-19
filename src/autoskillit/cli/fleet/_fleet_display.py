@@ -87,6 +87,7 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
     """Aggregate dispatch measures only inside their source pair."""
     totals: dict[tuple[str, str], dict[str, object]] = {}
     fields = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
+    unknown_measure = TokenMeasure.unknown().to_dict()
     for d in state.dispatches:
         tu = d.token_usage
         if not tu:
@@ -101,17 +102,25 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
             totals[key] = {
                 "backend": backend,
                 "provider_used": provider_used,
-                **{field: tu[field] for field in fields},
+                **{field: tu.get(field, unknown_measure) for field in fields},
             }
             continue
         for field in fields:
-            try:
-                left = TokenMeasure.from_dict(row[field])
-                right = TokenMeasure.from_dict(tu[field])
-            except (TypeError, ValueError, KeyError):
-                row[field] = TokenMeasure.unknown().to_dict()
+            candidate = tu.get(field)
+            if candidate is None:
                 continue
-            row[field] = TokenMeasure.combine_or_unknown(left, right).to_dict()
+            try:
+                right = TokenMeasure.from_dict(candidate)
+            except (TypeError, ValueError):
+                logger.debug(
+                    "fleet_pair_totals_skipped_malformed_dispatch_field",
+                    extra={"backend": backend, "provider_used": provider_used, "field": field},
+                )
+                continue
+            row[field] = TokenMeasure.combine_or_unknown(
+                TokenMeasure.from_dict(row[field]),
+                right,
+            ).to_dict()
     return list(totals.values())
 
 

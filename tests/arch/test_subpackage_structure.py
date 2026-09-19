@@ -85,6 +85,7 @@ class TestCoreSubpackages:
             "_type_recipe_sections",
             "_type_retirement_backstops",
             "_type_session_env",
+            "_type_session_shape",
             "_type_skill_contract",
             "_type_skill_semantics",
             "_type_subprocess",

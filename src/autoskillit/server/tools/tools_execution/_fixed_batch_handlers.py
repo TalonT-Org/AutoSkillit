@@ -44,6 +44,7 @@ from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS, JoinLedgerError
 from autoskillit.hooks._runtime._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
+    JoinAdmissionOutcome,
     LoadedSkillEntry,
     SessionBinding,
     admit_join,
@@ -684,9 +685,13 @@ def _request_facts(
     admission = admit_join(
         binding_path, session_id=request_session_id, skill_name=normalized_skill_name
     )
-    if admission.outcome == "invalid_binding":
+    if admission.outcome is JoinAdmissionOutcome.INVALID_BINDING:
         raise SkillContractError("run_fixed_batch session binding is invalid")
-    if admission.outcome != "admitted" or admission.binding is None or admission.entry is None:
+    if (
+        admission.outcome is not JoinAdmissionOutcome.ADMITTED
+        or admission.binding is None
+        or admission.entry is None
+    ):
         raise SkillContractError("run_fixed_batch requires a valid request session binding")
     binding = admission.binding
     if binding.managed_leaf_id:

@@ -14,6 +14,7 @@ from autoskillit.execution import get_backend
 from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
 from autoskillit.hooks._runtime._hook_settings import validate_session_id, write_join_diagnostic
 from autoskillit.hooks._session_binding import (
+    JoinAdmissionOutcome,
     LoadedSkillEntry,
     SessionBinding,
     SessionBindingError,
@@ -39,7 +40,7 @@ def _admit_join_binding(
 ) -> tuple[SessionBinding, LoadedSkillEntry] | dict[str, object]:
     """Validate a join-bearing loaded entry for the requested session."""
     admission = admit_join(binding_path, session_id=session_id, skill_name=normalized_skill_name)
-    if admission.outcome == "no_binding":
+    if admission.outcome is JoinAdmissionOutcome.NO_BINDING:
         if admission.binding is None:
             wrong_session_error = _wrong_session_error(channel_dir, session_id)
             if wrong_session_error is not None:
@@ -51,7 +52,7 @@ def _admit_join_binding(
                 "or UserPromptExpansion slash-command invocation"
             ),
         }
-    if admission.outcome == "wrong_session":
+    if admission.outcome is JoinAdmissionOutcome.WRONG_SESSION:
         assert admission.binding is not None
         _emit_join_diagnostic(
             {
@@ -64,12 +65,12 @@ def _admit_join_binding(
             "success": False,
             "error": _session_mismatch_error(session_id, admission.binding.session_id),
         }
-    if admission.outcome == "invalid_binding":
+    if admission.outcome is JoinAdmissionOutcome.INVALID_BINDING:
         return {
             "success": False,
             "error": admission.error or "declare_join_batch requires a valid session binding",
         }
-    if admission.outcome == "skill_not_loaded":
+    if admission.outcome is JoinAdmissionOutcome.SKILL_NOT_LOADED:
         return {
             "success": False,
             "error": (
@@ -77,7 +78,7 @@ def _admit_join_binding(
                 "is not loaded in this session"
             ),
         }
-    if admission.outcome == "not_join_bearing":
+    if admission.outcome is JoinAdmissionOutcome.NOT_JOIN_BEARING:
         return {
             "success": False,
             "error": (f"declare_join_batch: skill {normalized_skill_name!r} is not join-bearing"),

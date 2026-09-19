@@ -17,7 +17,7 @@ from autoskillit.fleet import (
     read_state,
     write_initial_state,
 )
-from tests.fleet._reaper_test_support import BOOT_ID, _make_running_state
+from tests.fleet._reaper_test_support import BOOT_ID, make_running_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -34,7 +34,7 @@ def _reap(
 
 class TestReap:
     def test_reap_kills_orphan(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
+        sp = make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch.object(
@@ -81,7 +81,7 @@ class TestReap:
     def test_reap_keeps_incomplete_cleanup_running(
         self, tmp_path: Path, cleanup_result: ProcessCleanupResult
     ) -> None:
-        sp = _make_running_state(tmp_path)
+        sp = make_running_state(tmp_path)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch.object(dispatch_reaper, "read_starttime_ticks", return_value=1000),
@@ -99,7 +99,7 @@ class TestReap:
         assert state.dispatches[0].status == DispatchStatus.RUNNING
 
     def test_reap_keeps_cleanup_exception_running(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path)
+        sp = make_running_state(tmp_path)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch.object(dispatch_reaper, "read_starttime_ticks", return_value=1000),
@@ -118,7 +118,7 @@ class TestReap:
         assert state.dispatches[0].reason == ""
 
     def test_reap_skips_recycled_pid(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
+        sp = make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch.object(
@@ -142,7 +142,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_marks_dead_pid(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345)
+        sp = make_running_state(tmp_path, dispatched_pid=12345)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
             patch.object(
@@ -161,7 +161,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_dead_pid"
 
     def test_reap_idempotent(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345)
+        sp = make_running_state(tmp_path, dispatched_pid=12345)
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
             patch.object(
@@ -206,7 +206,7 @@ class TestReap:
         assert state.dispatches[0].status == DispatchStatus.SUCCESS
 
     def test_reap_skips_kill_after_reboot(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=1000,
@@ -229,7 +229,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_dry_run_does_not_modify_state(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
+        sp = make_running_state(tmp_path, dispatched_pid=12345, dispatched_starttime_ticks=1000)
         original_text = sp.read_text()
 
         with (
@@ -251,7 +251,7 @@ class TestReap:
         assert sp.read_text() == original_text
 
     def test_reap_sequential_idempotency(self, tmp_path: Path) -> None:
-        sp = _make_running_state(tmp_path, dispatched_pid=12345)
+        sp = make_running_state(tmp_path, dispatched_pid=12345)
 
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
@@ -271,7 +271,7 @@ class TestReap:
     def test_reap_does_not_substitute_create_time_for_persisted_ticks(
         self, tmp_path: Path
     ) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=1000,
@@ -291,7 +291,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_skips_recycled_pid_via_create_time(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=1000,
@@ -313,7 +313,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
     def test_reap_no_create_time_marks_recycled(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=0,
@@ -335,7 +335,7 @@ class TestReap:
     def test_reap_does_not_substitute_create_time_on_tick_read_failure(
         self, tmp_path: Path
     ) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=1000,
@@ -356,7 +356,7 @@ class TestReap:
 
     def test_reap_kills_orphan_via_create_time_when_ticks_zero(self, tmp_path: Path) -> None:
         """When dispatched_starttime_ticks=0, reaper falls back to create_time comparison."""
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatched_pid=12345,
             dispatched_starttime_ticks=0,
@@ -382,7 +382,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_orphan"
 
     def test_reap_skips_dispatch_in_skip_set(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="test-dispatch-id",
             dispatched_pid=12345,
@@ -437,7 +437,7 @@ class TestReap:
     def test_reap_self_referential_pid_survives_with_skip_guard(self, tmp_path: Path) -> None:
         import os
 
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="my-dispatch",
             dispatched_pid=os.getpid(),
@@ -478,7 +478,7 @@ class TestReap:
         """Reaper writes reaper_action.json into victim's session log dir (Test 1E)."""
         session_log_dir = tmp_path / "session-logs"
         session_log_dir.mkdir()
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="victim-dispatch-001",
             dispatched_pid=12345,
@@ -509,7 +509,7 @@ class TestReap:
 
     def test_reap_appends_to_central_reaper_events_log(self, tmp_path: Path) -> None:
         """Reaper appends event to reaper_events.jsonl (Test 1F)."""
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="victim-dispatch-002",
             dispatched_pid=12345,
@@ -775,7 +775,7 @@ class TestReap:
         assert 33333 in killed_pids, "dispatch-c from campaign-2 should be reaped"
 
     def test_reap_skips_cross_campaign_dispatch_with_fresh_heartbeat(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="dispatch-c",
             dispatched_pid=12345,
@@ -801,7 +801,7 @@ class TestReap:
         assert state.dispatches[0].status == DispatchStatus.RUNNING
 
     def test_reap_kills_cross_campaign_dispatch_with_stale_heartbeat(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="dispatch-c",
             dispatched_pid=12345,
@@ -835,7 +835,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_orphan"
 
     def test_reap_kills_cross_campaign_dispatch_with_no_heartbeat(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="dispatch-c",
             dispatched_pid=12345,
@@ -863,7 +863,7 @@ class TestReap:
         assert state.dispatches[0].reason == "reaped_orphan"
 
     def test_reap_skips_heartbeat_with_configurable_grace_period(self, tmp_path: Path) -> None:
-        sp = _make_running_state(
+        sp = make_running_state(
             tmp_path,
             dispatch_id="dispatch-c",
             dispatched_pid=12345,
@@ -892,7 +892,7 @@ class TestReap:
         assert state is not None
         assert state.dispatches[0].status == DispatchStatus.RUNNING
 
-        sp2 = _make_running_state(
+        sp2 = make_running_state(
             tmp_path / "sub",
             dispatch_id="dispatch-d",
             dispatched_pid=99999,

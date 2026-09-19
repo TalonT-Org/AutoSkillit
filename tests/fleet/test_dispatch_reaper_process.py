@@ -22,7 +22,7 @@ from autoskillit.fleet import (
     reap_stale_dispatches_async,
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
-from tests.fleet._reaper_test_support import _make_running_state
+from tests.fleet._reaper_test_support import make_running_state
 
 pytestmark = [
     pytest.mark.layer("fleet"),
@@ -118,7 +118,7 @@ def _dispatch_outcome(state_path: Path) -> tuple[DispatchStatus, str, str, float
 def test_reap_terminates_identified_real_child(tmp_path: Path) -> None:
     with _owned_sleeping_child(tmp_path, "orphan") as (process, marker):
         boot_id, ticks = _require_process_identity(process)
-        state_path = _make_running_state(
+        state_path = make_running_state(
             tmp_path,
             dispatched_pid=process.pid,
             dispatched_boot_id=boot_id,
@@ -135,7 +135,7 @@ def test_reap_terminates_identified_real_child(tmp_path: Path) -> None:
 def test_reap_skip_keeps_real_child_and_state_unchanged(tmp_path: Path) -> None:
     with _owned_sleeping_child(tmp_path, "skipped") as (process, marker):
         boot_id, ticks = _require_process_identity(process)
-        state_path = _make_running_state(
+        state_path = make_running_state(
             tmp_path,
             dispatch_id="skip-me",
             dispatched_pid=process.pid,
@@ -166,14 +166,14 @@ async def test_async_reap_forwards_skip_set_to_real_children(tmp_path: Path) -> 
     ):
         boot_id_a, ticks_a = _require_process_identity(process_a)
         boot_id_b, ticks_b = _require_process_identity(process_b)
-        state_path_a = _make_running_state(
+        state_path_a = make_running_state(
             state_dir_a,
             dispatch_id="a",
             dispatched_pid=process_a.pid,
             dispatched_boot_id=boot_id_a,
             dispatched_starttime_ticks=ticks_a,
         )
-        state_path_b = _make_running_state(
+        state_path_b = make_running_state(
             state_dir_b,
             dispatch_id="b",
             dispatched_pid=process_b.pid,
@@ -205,7 +205,7 @@ def test_degraded_identity_is_not_live_but_create_time_fallback_reaps(tmp_path: 
             dispatched_starttime_ticks=0,
         )
         assert not is_dispatch_session_alive(degraded_record)
-        state_path = _make_running_state(
+        state_path = make_running_state(
             tmp_path,
             dispatched_pid=process.pid,
             dispatched_boot_id="",

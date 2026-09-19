@@ -10,7 +10,7 @@ from autoskillit.fleet import DispatchRecord, write_initial_state
 BOOT_ID = "boot-abc-123"
 
 
-def _make_running_state(
+def make_running_state(
     tmp_path: Path,
     *,
     dispatch_name: str = "d1",

@@ -162,14 +162,14 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
 
     findings: list[RuleFinding] = []
     for audit_step_name in audit_steps:
-        if "audit_cycle_path" not in ctx.recipe.steps[audit_step_name].capture:
+        if "audit_cycle_path_raw" not in ctx.recipe.steps[audit_step_name].capture:
             findings.append(
                 make_finding(
                     rule_name="inventory-gate-not-bilateral",
                     step_name=audit_step_name,
                     message=(
                         f"Step '{audit_step_name}' invokes audit-impl but does not "
-                        "capture audit_cycle_path for both verdicts."
+                        "capture audit_cycle_path_raw for both verdicts."
                     ),
                 )
             )

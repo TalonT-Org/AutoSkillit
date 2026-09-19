@@ -22,10 +22,10 @@ def _is_check_loop_iteration_guard(step: RecipeStep) -> bool:
     it; the rule's dominator candidate filter must exclude them so parallel
     guards sharing a counter don't masquerade as resets.
     """
-    return (
-        step.tool == "run_python"
-        and step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
-    )
+    return step.tool == "run_python" and step.with_args.get("callable") in {
+        "autoskillit.smoke_utils.check_loop_iteration",
+        "autoskillit.smoke_utils.check_audit_remediation_outcome",
+    }
 
 
 def _collect_context_counter_guards(recipe: Recipe) -> dict[str, str]:

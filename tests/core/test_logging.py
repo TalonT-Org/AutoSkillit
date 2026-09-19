@@ -155,6 +155,13 @@ class TestConfigureLogging:
         reset (which also clears ``bind`` on cached proxies) is intentionally
         suppressed here because it would discard the proxy state this class's
         tests deliberately install via ``configure_logging()`` mid-test.
+
+        xdist execution model: under ``pytest -n 4`` (xdist, ``--dist load``) this
+        class executes inside a single worker process. MRO shadowing is resolved
+        per-worker, so the parent's broader reset does not leak across workers and
+        this class's per-worker state stays isolated. The empty body is safe under
+        xdist because the test class runs inside one worker process and the
+        shadowed parent's per-worker isolation is preserved by ``_reset_structlog``.
         """
         yield  # no-op: _reset_structlog handles reset before and after each test
 

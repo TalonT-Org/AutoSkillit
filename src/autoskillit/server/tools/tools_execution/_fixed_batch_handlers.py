@@ -46,7 +46,7 @@ from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
     SessionBinding,
-    SessionBindingError,
+    admit_join,
     binding_lock,
     normalize_skill_name,
     read_binding,
@@ -681,30 +681,19 @@ def _request_facts(
     validate_session_id(request_session_id)
     normalized_skill_name = normalize_skill_name(skill_name)
     binding_path = resolve_binding_path(str(tool_ctx.project_dir), request_session_id)
-    try:
-        binding = read_binding(binding_path)
-    except SessionBindingError as exc:
-        raise SkillContractError("run_fixed_batch session binding is invalid") from exc
-    if binding is None or binding.session_id != request_session_id or not binding.binding_valid:
+    admission = admit_join(
+        binding_path, session_id=request_session_id, skill_name=normalized_skill_name
+    )
+    if admission.outcome == "invalid_binding":
+        raise SkillContractError("run_fixed_batch session binding is invalid")
+    if admission.outcome != "admitted" or admission.binding is None or admission.entry is None:
         raise SkillContractError("run_fixed_batch requires a valid request session binding")
+    binding = admission.binding
     if binding.managed_leaf_id:
         raise SkillContractError("run_fixed_batch is unavailable to managed leaf sessions")
     if not binding.managed_parent_id:
         raise SkillContractError("run_fixed_batch binding lacks a managed parent identity")
-    selected_source = next(
-        (
-            entry
-            for entry in reversed(binding.loaded_skills)
-            if entry.skill_name == normalized_skill_name
-        ),
-        None,
-    )
-    if (
-        selected_source is None
-        or not selected_source.join_required
-        or not selected_source.binding_valid
-    ):
-        raise SkillContractError("run_fixed_batch requires the exact loaded join-bearing skill")
+    selected_source = admission.entry
     if not (
         selected_source.source_artifact_digest
         and selected_source.source_artifact_incarnation_id

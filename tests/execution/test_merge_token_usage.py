@@ -5,18 +5,13 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.execution.headless import _merge_token_usage
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _usage(**counts: object) -> dict[str, object]:
     return {"backend": "claude-code", "provider_used": "anthropic", **counts}
-
-
-def _observed(value: int) -> dict[str, object]:
-    from tests._helpers import observed_measure as _shared_observed
-
-    return _shared_observed(value)
 
 
 def test_observed_canonical_totals_combine_within_source_pair() -> None:

@@ -182,6 +182,9 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "_load_sessions returned empty dict — hook cannot read what flush_session_log wrote. "
         "Check key name: flush writes 'session_label' but hook may read 'step_name'."
     )
+    assert len(aggregated) == 1, (
+        f"Expected exactly one entry for order_id='test-order', got {len(aggregated)}"
+    )
     entry = next(iter(aggregated.values()))
     assert entry["step_name"] == "plan"
     assert entry["input_tokens"] == {"state": "measured", "value": 100}

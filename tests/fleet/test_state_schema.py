@@ -23,7 +23,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet.campaign_state.state import _write_state, reset_blocking_dispatch
-from tests._helpers import observed_measure
+from tests._helpers import UNKNOWN_MEASURE, observed_measure
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -305,8 +305,8 @@ class TestNormalizeDispatchTokenUsage:
 
     def test_empty_dict_returns_unknown_measures(self) -> None:
         result = normalize_dispatch_token_usage({})
-        assert result["input_tokens"] == {"state": "unknown", "value": None}
-        assert result["cache_write_tokens"] == {"state": "unknown", "value": None}
+        assert result["input_tokens"] == UNKNOWN_MEASURE
+        assert result["cache_write_tokens"] == UNKNOWN_MEASURE
 
     def test_string_values_are_not_observations(self) -> None:
         result = normalize_dispatch_token_usage(
@@ -317,8 +317,8 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": "2",
             }
         )
-        assert result["input_tokens"] == {"state": "unknown", "value": None}
-        assert result["output_tokens"] == {"state": "unknown", "value": None}
+        assert result["input_tokens"] == UNKNOWN_MEASURE
+        assert result["output_tokens"] == UNKNOWN_MEASURE
 
     def test_result_unpacks_into_dispatch_token_usage(self) -> None:
         dtu = DispatchTokenUsage(
@@ -580,8 +580,8 @@ class TestDispatchRecordSchemaV3:
 
     def test_normalize_defaults_missing_cache_keys_to_unknown(self) -> None:
         result = normalize_dispatch_token_usage({"input_tokens": 10, "output_tokens": 5})
-        assert result["cache_write_tokens"] == {"state": "unknown", "value": None}
-        assert result["cache_read_tokens"] == {"state": "unknown", "value": None}
+        assert result["cache_write_tokens"] == UNKNOWN_MEASURE
+        assert result["cache_read_tokens"] == UNKNOWN_MEASURE
 
     def test_campaign_id_roundtrip_via_dispatch_record(self, tmp_path: Path) -> None:
         sp = tmp_path / "state.json"

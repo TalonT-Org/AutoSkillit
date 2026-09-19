@@ -257,10 +257,10 @@ def test_token_types_importable_via_types_gateway():
         TurnTokenEntry,
     )
 
-    assert CanonicalTokenUsage is not None
-    assert TokenMeasure is not None
-    assert TokenMeasureState is not None
-    assert TurnTokenEntry is not None
+    assert isinstance(CanonicalTokenUsage, type)
+    assert isinstance(TokenMeasure, type)
+    assert isinstance(TokenMeasureState, type)
+    assert isinstance(TurnTokenEntry, type)
 
 
 def test_token_types_importable_from_core():
@@ -271,10 +271,10 @@ def test_token_types_importable_from_core():
         TurnTokenEntry,
     )
 
-    assert CanonicalTokenUsage is not None
-    assert TokenMeasure is not None
-    assert TokenMeasureState is not None
-    assert TurnTokenEntry is not None
+    assert isinstance(CanonicalTokenUsage, type)
+    assert isinstance(TokenMeasure, type)
+    assert isinstance(TokenMeasureState, type)
+    assert isinstance(TurnTokenEntry, type)
 
 
 def test_token_types_in_types_all():

@@ -10,6 +10,7 @@ import pytest
 
 import autoskillit.cli.fleet as _patch_cli_fleet
 from autoskillit.cli.fleet import fleet_status as _fleet_status
+from tests._helpers import observed_measure
 from tests.cli._fleet_helpers import (
     DispatchDescriptor,
     _make_state,
@@ -116,10 +117,10 @@ def test_fleet_status_json_includes_totals(
     with pytest.raises(SystemExit):
         _fleet_status("cid01", json_output=True)
     data = json.loads(capsys.readouterr().out)
-    assert data["totals"][0]["input_tokens"] == {"state": "measured", "value": 100}
-    assert data["totals"][0]["output_tokens"] == {"state": "measured", "value": 50}
-    assert data["totals"][0]["cache_read_tokens"] == {"state": "measured", "value": 20}
-    assert data["totals"][0]["cache_write_tokens"] == {"state": "measured", "value": 10}
+    assert data["totals"][0]["input_tokens"] == observed_measure(100)
+    assert data["totals"][0]["output_tokens"] == observed_measure(50)
+    assert data["totals"][0]["cache_read_tokens"] == observed_measure(20)
+    assert data["totals"][0]["cache_write_tokens"] == observed_measure(10)
 
 
 def test_fleet_status_json_no_ansi(
@@ -272,7 +273,7 @@ def test_pair_totals_preserve_source_and_measure() -> None:
     totals = _pair_totals(state)
     assert totals[0]["backend"] == "claude-code"
     assert totals[0]["provider_used"] == "anthropic"
-    assert totals[0]["input_tokens"] == {"state": "measured", "value": 5000}
+    assert totals[0]["input_tokens"] == observed_measure(5000)
 
 
 def test_build_status_rows_shows_nonzero_tokens() -> None:
@@ -321,7 +322,7 @@ def test_fleet_status_renders_three_provider_pairs_without_pooled_total() -> Non
     totals = _pair_totals(state)
     rows = _build_status_rows(state)
     assert len(totals) == 3
-    assert all(total["input_tokens"] == {"state": "measured", "value": 10} for total in totals)
+    assert all(total["input_tokens"] == observed_measure(10) for total in totals)
     assert sum("TOTAL (" in row[0] for row in rows) == 3
     assert any("claude-code/MiniMax" in row[0] and row[6] == "unavailable" for row in rows)
     assert any("claude-code/anthropic" in row[0] and row[6] == "0" for row in rows)

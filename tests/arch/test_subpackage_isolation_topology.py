@@ -268,6 +268,14 @@ _FENCE_PATTERN = re.compile(r"```([^\n]*)\n(.*?)\n```", re.DOTALL)
 _TESTS_ANCHOR_PATTERN = re.compile(r"^tests/$", re.MULTILINE)
 
 
+def _iter_top_level_test_dirs(tests_root: Path) -> list[str]:
+    """Return the sorted list of immediate-child directories of ``tests_root``,
+    excluding ``__pycache__`` and ``fixtures``."""
+    return sorted(
+        p.name for p in tests_root.iterdir() if p.is_dir() and p.name not in _EXCLUDED_TEST_DIRS
+    )
+
+
 def _extract_tests_tree_block(agents_md: str) -> str:
     """Return the body of the triple-backtick fence that contains the ``tests/`` tree."""
     for match in _FENCE_PATTERN.finditer(agents_md):
@@ -288,9 +296,7 @@ def test_test_suite_has_domain_subdirectories() -> None:
     test_package_style_domain_subdirectories_carry_init_py.
     """
     tests_root = SRC_ROOT.parents[1] / "tests"
-    top_level = sorted(
-        p.name for p in tests_root.iterdir() if p.is_dir() and p.name not in _EXCLUDED_TEST_DIRS
-    )
+    top_level = _iter_top_level_test_dirs(tests_root)
     assert top_level, f"No top-level directories found under {tests_root}"
 
     missing: list[str] = []
@@ -323,9 +329,7 @@ def test_test_suite_inventory_docstring_matches_actual_count() -> None:
     tree_block = _extract_tests_tree_block(agents_md)
     listed_dirs = set(_TREE_ENTRY_PATTERN.findall(tree_block))
 
-    actual_dirs = {
-        p.name for p in tests_root.iterdir() if p.is_dir() and p.name not in _EXCLUDED_TEST_DIRS
-    }
+    actual_dirs = set(_iter_top_level_test_dirs(tests_root))
     missing = sorted(actual_dirs - listed_dirs)
 
     assert not missing, (

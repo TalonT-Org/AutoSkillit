@@ -32,6 +32,15 @@ def test_orchestration_levels_has_l_identifiers():
         assert level in text
 
 
+def test_orchestration_levels_documents_two_axis_session_shape():
+    text = " ".join(ORCH_DOC.read_text().split())
+
+    assert "session_shape()" in text
+    assert "AUTOSKILLIT_SESSION_TYPE" in text
+    assert "AUTOSKILLIT_HEADLESS" in text
+    assert "apply to headless sessions only" not in text
+
+
 def test_glossary_has_orchestration_level_entries():
     text = GLOSSARY.read_text()
     for term in ["### L0", "### L1", "### L2", "### L3", "### food truck", "### Ghost Kitchen"]:

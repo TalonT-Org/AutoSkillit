@@ -17,6 +17,9 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 class TestCodexTomlFormatContract:
+    def test_user_prompt_expansion_is_not_emitted_for_codex(self):
+        assert "UserPromptExpansion" not in generate_codex_hooks_config()
+
     def test_codex_hooks_toml_uses_event_type_as_subtable_key(self):
         config = generate_codex_hooks_config()
         assert isinstance(config, dict), (

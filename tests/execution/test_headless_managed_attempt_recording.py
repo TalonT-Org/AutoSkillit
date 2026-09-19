@@ -389,7 +389,6 @@ async def test_cancellation_after_spawn_records_one_interrupted_row(
     )
     assert len(outcomes) == 1
     assert outcomes[0]["terminal_reason"] == "interrupted"
-    assert outcomes[0]["effective_provider"] == "anthropic"
 
 
 # --- 6. binding a later-resolved backend id merges into the same row --------

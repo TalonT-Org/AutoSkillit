@@ -35,7 +35,9 @@ from autoskillit.execution.session import (
 from autoskillit.execution.session._session_content import _normalize_model_output
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
-    classify_token_measure,
+    merge_token_usage_measures as _merge_token_usage,
+)
+from autoskillit.execution.session._turn_usage import (
     merge_turn_usage,
     valid_token_count,
 )
@@ -51,13 +53,6 @@ _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 # whose value segment is a bare literal — no alternation/character-class, i.e. not
 # "(a|b)". This is the structural soundness gate for deterministic enum inference.
 _ENUM_BINDING_RE: re.Pattern[str] = re.compile(r"^(\w+)(?:\[[^\]]*\]\*)?=(?:\[[^\]]*\]\*)?(\w+)$")
-
-_CANONICAL_TO_LEGACY: dict[str, str | None] = {
-    "input_tokens": None,
-    "output_tokens": None,
-    "cache_write_tokens": "cache_creation_input_tokens",
-    "cache_read_tokens": "cache_read_input_tokens",
-}
 
 
 class _PathHint(NamedTuple):
@@ -422,53 +417,6 @@ def _extract_missing_token_hints(
         hints.append(_EnumHint(enum_token, tuple(output.allowed_values)))
 
     return hints
-
-
-def _merge_token_usage(
-    base: dict[str, object] | None,
-    nudge: dict[str, object] | None,
-) -> dict[str, object] | None:
-    """Merge observations only inside the same backend/provider source pair."""
-    if base is None:
-        return nudge
-    if nudge is None:
-        return base
-    backend = base.get("backend")
-    provider_used = base.get("provider_used")
-    if (
-        not isinstance(backend, str)
-        or not backend
-        or not isinstance(provider_used, str)
-        or not provider_used
-    ):
-        raise ValueError("Base token usage has no source pair")
-    if (backend, provider_used) != (nudge.get("backend"), nudge.get("provider_used")):
-        raise ValueError("Cannot merge token usage from different source pairs")
-    merged = dict(base)
-    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
-        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
-        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
-        left = classify_token_measure(backend, provider_used, canonical, b)
-        right = classify_token_measure(backend, provider_used, canonical, n)
-        try:
-            merged[canonical] = left.combine(right).to_dict()
-        except ValueError:
-            merged[canonical] = TokenMeasure.unknown().to_dict()
-    left_peak = classify_token_measure(
-        backend, provider_used, "peak_context", base.get("peak_context")
-    )
-    right_peak = classify_token_measure(
-        backend, provider_used, "peak_context", nudge.get("peak_context")
-    )
-    try:
-        merged["peak_context"] = left_peak.maximum(right_peak).to_dict()
-    except ValueError:
-        merged["peak_context"] = TokenMeasure.unknown().to_dict()
-    for legacy in _CANONICAL_TO_LEGACY.values():
-        if legacy and legacy in merged:
-            del merged[legacy]
-    merged.pop("model_breakdown", None)
-    return merged
 
 
 def _merge_turn_usage_metrics(

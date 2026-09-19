@@ -118,6 +118,12 @@ _ACCOUNTING_MEASURES = frozenset(
 )
 _NO_CACHE_WRITE_BACKENDS = frozenset({AGENT_BACKEND_CODEX})
 _NO_CACHE_WRITE_PAIRS = frozenset({(AGENT_BACKEND_CLAUDE_CODE, "minimax")})
+_CANONICAL_TO_LEGACY: dict[str, str | None] = {
+    "input_tokens": None,
+    "output_tokens": None,
+    "cache_write_tokens": "cache_creation_input_tokens",
+    "cache_read_tokens": "cache_read_input_tokens",
+}
 
 
 def classify_token_measure(
@@ -139,6 +145,53 @@ def classify_token_measure(
     ):
         return TokenMeasure.unavailable()
     return TokenMeasure.unknown()
+
+
+def merge_token_usage_measures(
+    base: dict[str, object] | None,
+    nudge: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Merge observations only inside the same backend/provider source pair."""
+    if base is None:
+        return nudge
+    if nudge is None:
+        return base
+    backend = base.get("backend")
+    provider_used = base.get("provider_used")
+    if (
+        not isinstance(backend, str)
+        or not backend
+        or not isinstance(provider_used, str)
+        or not provider_used
+    ):
+        raise ValueError("Base token usage has no source pair")
+    if (backend, provider_used) != (nudge.get("backend"), nudge.get("provider_used")):
+        raise ValueError("Cannot merge token usage from different source pairs")
+    merged = dict(base)
+    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
+        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
+        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
+        left = classify_token_measure(backend, provider_used, canonical, b)
+        right = classify_token_measure(backend, provider_used, canonical, n)
+        try:
+            merged[canonical] = left.combine(right).to_dict()
+        except ValueError:
+            merged[canonical] = TokenMeasure.unknown().to_dict()
+    left_peak = classify_token_measure(
+        backend, provider_used, "peak_context", base.get("peak_context")
+    )
+    right_peak = classify_token_measure(
+        backend, provider_used, "peak_context", nudge.get("peak_context")
+    )
+    try:
+        merged["peak_context"] = left_peak.maximum(right_peak).to_dict()
+    except ValueError:
+        merged["peak_context"] = TokenMeasure.unknown().to_dict()
+    for legacy in _CANONICAL_TO_LEGACY.values():
+        if legacy and legacy in merged:
+            del merged[legacy]
+    merged.pop("model_breakdown", None)
+    return merged
 
 
 def first_nonempty_string(*values: Any) -> str | None:

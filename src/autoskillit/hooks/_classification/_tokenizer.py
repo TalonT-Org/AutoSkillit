@@ -135,7 +135,6 @@ def _skip_non_heredoc_syntax(command: str, index: int, line_end: int) -> int | N
 
 
 def _heredoc_openers_on_line(command: str, start: int, line_end: int) -> list[_HeredocOpener]:
-    """Find unquoted heredoc redirect operators on one command line."""
     openers: list[_HeredocOpener] = []
     index = start
     while index < line_end:
@@ -208,7 +207,7 @@ def _heredoc_terminator(
 
 
 def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
-    """Collect heredoc bodies and spans without treating their contents as commands."""
+    """Collect heredoc bodies and spans; body contents are not parsed as commands."""
     occurrences: list[_HeredocOccurrence] = []
     position = 0
     while position < len(command):
@@ -409,13 +408,7 @@ class EvaluatedSegment:
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
-    """Replace each heredoc with a placeholder, returning its bound literal.
-
-    Each placeholder replaces its own `<<` operator before the following
-    opening-line text, so a pipe between two same-line operators binds their
-    bodies to distinct segments. A literal span excludes its final line
-    ending; stripping also removes that ending while preserving a terminator.
-    """
+    """Replace each `<<EOF` heredoc with a placeholder; return the bound literals."""
     occurrences = _heredoc_occurrences(command)
     literals = [
         StdinLiteral(
@@ -437,7 +430,6 @@ def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
 
 
 def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral, ...]:
-    """Mark the final input redirect as the segment's effective stdin."""
     return tuple(
         replace(literal, feeds_stdin=index == len(literals) - 1)
         for index, literal in enumerate(literals)

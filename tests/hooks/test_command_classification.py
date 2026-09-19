@@ -3272,7 +3272,7 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
     assert result.subcommand != "<unresolved>"
 
 
-class TestDeferredStdinLiteralShapes:
+class TestStructuralHeredocShapes:
     """Regressions for structural heredoc delimiter and body handling."""
 
     def _assert_single_inert_cat_literal(self, command: str, expected_body: str) -> None:
@@ -3343,6 +3343,14 @@ class TestDeferredStdinLiteralShapes:
 
     def test_only_final_heredoc_feeds_cat_pipeline(self) -> None:
         command = "cat <<A <<B | bash\nignored\nA\ngit push --force origin main\nB\n"
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [segment.tokens for segment in segments] == [["cat"], ["bash"]]
+        assert [literal.text for literal in segments[0].stdin_literals] == [
+            "ignored",
+            "git push --force origin main",
+        ]
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
+        assert all(literal.kind == "heredoc" for literal in segments[0].stdin_literals)
         payloads = evaluated_payloads(command)
         assert [
             (payload.origin, payload.text) for payload in payloads if payload.origin == "pipe"
@@ -3359,6 +3367,13 @@ class TestDeferredStdinLiteralShapes:
             "print('safe')\n"
             "B\n"
         )
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert [segment.tokens for segment in segments] == [["python3", "-"]]
+        assert [literal.text for literal in segments[0].stdin_literals] == [
+            "import subprocess; subprocess.run(['git', 'push'])",
+            "print('safe')",
+        ]
+        assert [literal.feeds_stdin for literal in segments[0].stdin_literals] == [False, True]
         assert interpreter_invokes(command, target=("git", "push")) is False
 
     def test_herestring_overrides_heredoc_but_keeps_outer_expansion(self) -> None:

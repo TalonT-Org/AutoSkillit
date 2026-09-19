@@ -178,7 +178,6 @@ def _skip_non_heredoc_syntax(command: str, index: int, line_end: int) -> int | N
 
 
 def _heredoc_openers_on_line(command: str, start: int, line_end: int) -> list[_HeredocOpener]:
-    """Find unquoted heredoc redirect operators on one command line."""
     openers: list[_HeredocOpener] = []
     index = start
     while index < line_end:
@@ -250,7 +249,7 @@ def _heredoc_terminator(
 
 
 def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
-    """Collect heredoc deletion spans without treating their contents as commands."""
+    """Collect heredoc deletion spans; body contents are not parsed as commands."""
     occurrences: list[_HeredocOccurrence] = []
     position = 0
     while position < len(command):
@@ -350,8 +349,8 @@ def _strip_heredoc_bodies(command: str) -> str:
     )
 
 
-def _tokenizer_heredoc_projection(command: str) -> str:
-    """Remove heredoc syntax and bodies before shell tokenization."""
+def _remove_heredoc_syntax(command: str) -> str:
+    """Erase heredoc operators and bodies, leaving shell tokenizable syntax."""
     occurrences = _heredoc_occurrences(command)
     replacements = [(*occurrence.operator_span, "") for occurrence in occurrences]
     replacements.extend(
@@ -388,7 +387,7 @@ def _normalize_newlines(command: str) -> str:
 def _tokenize_command_segments(command: str) -> list[list[str]]:
     try:
         lexer = shlex.shlex(
-            _normalize_newlines(_tokenizer_heredoc_projection(command)),
+            _normalize_newlines(_remove_heredoc_syntax(command)),
             posix=True,
             punctuation_chars=";&|",
         )

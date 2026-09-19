@@ -32,13 +32,13 @@ def _drain_model_evidence(
     try:
         with anyio.CancelScope(shield=True):
             sink.close()
-    except Exception:
+    except (TypeError, ValueError, KeyError, AttributeError, OSError):
         logger.debug("local_otlp_sink_close_failed", exc_info=True)
         sink_closed = False
     evidence_session_id = terminal_session_id or captured_session_id
     try:
         resolved_parent_model, outcomes = sink.model_evidence_for(evidence_session_id)
-    except Exception:
+    except (TypeError, ValueError, KeyError, AttributeError, OSError):
         logger.warning("local_otlp_sink_model_evidence_failed", exc_info=True)
         resolved_parent_model, outcomes = "", ()
     resolved_identity = (
@@ -50,6 +50,6 @@ def _drain_model_evidence(
     if sink_closed:
         try:
             token_usage = sink.token_usage_for(evidence_session_id, backend, provider_used)
-        except Exception:
+        except (TypeError, ValueError, KeyError, AttributeError, OSError):
             logger.warning("local_otlp_sink_token_evidence_failed", exc_info=True)
     return evidence_session_id, resolved_identity, outcomes, token_usage

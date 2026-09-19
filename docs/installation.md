@@ -72,11 +72,8 @@ invocation that writes; it can rebuild a corrupt retirement cache after preservi
 the original bytes in a timestamped sidecar. It never rewrites a newer unsupported
 cache schema.
 
-Doctor runs 46 ungated checks: 37 numbered checks (1–23, excluding 5,
-and 30–44) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
-`7b`, `7c`, `17b`, `31b`). Enabling the fleet feature adds checks 24–29,
-for 52 total: 43 numbered and 9 lettered checks.
-Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
+`run_doctor` in `src/autoskillit/cli/doctor/__init__.py` enumerates the baseline
+checks and conditionally adds fleet checks:
 
 | # | Check | What it verifies |
 |---|-------|------------------|

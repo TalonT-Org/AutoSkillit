@@ -88,7 +88,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_verdict.py` | Skill verdict routing completeness — every emitted verdict value must be routed |
 | `rules_worktree.py` | Worktree retry lifecycle — every step that creates a worktree must have a downstream merge or cleanup |
 
-The 28-family count is enforced by `tests/docs/test_doc_counts.py`.
+The semantic-rule catalog is defined by the rule modules under `recipe/rules/`.
 
 ## Contract cards
 

@@ -1,10 +1,16 @@
 # Hooks
 
-AutoSkillit registers 58 Claude Code hook scripts: 38 PreToolUse, 12 PostToolUse,
-2 PostToolUseFailure, 2 SessionStart, 1 Stop, 1 SubagentStart, 1 SubagentStop, and
-1 SessionEnd. Every script is stdlib-only Python so it can run before the
+<<<<<<< HEAD
+AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
+PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
+Every script is stdlib-only Python so it can run before the
+=======
+AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
+PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
+Every script is stdlib-only Python so it can run before the
+>>>>>>> 2df98db29 (docs: remove mutable catalog totals)
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
-and are bound to event types in `src/autoskillit/hook_registry.py` via the
+and are bound to event types in `src/autoskillit/hook_registry/` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
@@ -16,9 +22,9 @@ history automatically, it returns `continue: false`, the
 `autoskillit_auto_compaction_denied` stop reason, and a visible `systemMessage` that
 explains the terminal headless result and explicit TUI continuation. A `manual` trigger
 does not match, so users may compact manually. This hook is excluded from the Claude
-Code count above.
+Code registry.
 
-## PreToolUse hooks (38)
+## PreToolUse hooks
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -451,7 +457,7 @@ closed when their identity is malformed or the record cannot be written, while
 malformed JSON and unrelated tools remain fail-open. Codex and headless terminal
 authority do not use this bridge.
 
-## PostToolUse hooks (11)
+## PostToolUse hooks
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools

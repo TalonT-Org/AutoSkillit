@@ -1,17 +1,17 @@
 # Skill catalog
 
-The complete list of bundled skills (141 total: 3 in `src/autoskillit/skills/`,
-138 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
-you need an exhaustive listing; this catalog groups by purpose.
+The complete list of bundled skills. `src/autoskillit/skills/` and
+`src/autoskillit/skills_extended/` are the source directories; this catalog groups
+their members by purpose.
 
-## Tier 1 — free range (2 configured)
+## Tier 1 — free range
 
 Plugin-scanned at `src/autoskillit/skills/`:
 
-- `open-kitchen` — reveals the 43 kitchen MCP tools
+- `open-kitchen` — reveals the kitchen MCP tool set
 - `close-kitchen` — re-hides them
 
-## Tier 2 — interactive cook + headless (105 configured)
+## Tier 2 — interactive cook + headless
 
 Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
@@ -38,7 +38,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Research and review
 `review-design`, `stage-data`, `download-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 
-## Tier 3 — pipeline / automation (32 configured)
+## Tier 3 — pipeline / automation
 
 Also under `src/autoskillit/skills_extended/`. Used by recipes for unattended
 runs:
@@ -58,9 +58,9 @@ runs:
 
 These exact-role skills are intentionally absent from all three configurable tiers.
 
-## arch-lens family (13)
+## arch-lens family
 
-13 architectural-diagram skills under `skills_extended/arch-lens-*/`. Each
+Architectural-diagram skills under `skills_extended/arch-lens-*/`. Each
 answers a specific question about the system:
 
 | Skill | Lens | Question |
@@ -79,9 +79,9 @@ answers a specific question about the system:
 | `arch-lens-scenarios` | Scenarios | Do the components work together? |
 | `arch-lens-security` | Security | Where are the trust boundaries? |
 
-## exp-lens family (18)
+## exp-lens family
 
-18 experiment-related diagram skills under `skills_extended/exp-lens-*/`:
+Experiment-related diagram skills under `skills_extended/exp-lens-*/`:
 
 | Skill | Lens |
 |-------|------|
@@ -104,9 +104,9 @@ answers a specific question about the system:
 | `exp-lens-validity-threats` | Validity threats |
 | `exp-lens-variance-stability` | Variance stability |
 
-## vis-lens family (12)
+## vis-lens family
 
-12 visualization-planning lenses under `skills_extended/vis-lens-*/`, orchestrated
+Visualization-planning lenses under `skills_extended/vis-lens-*/`, orchestrated
 via the decomposed phoropter pipeline: `select-vis-lenses` → `run_vis_lenses` →
 `synthesize-vis-plan`. Each answers a specific question about a figure or the figure set:
 
@@ -125,9 +125,9 @@ via the decomposed phoropter pipeline: `select-vis-lenses` → `run_vis_lenses` 
 | 11 | `vis-lens-story-arc` | Narrative | Do the figures tell a coherent story across the report? | P2 |
 | 12 | `vis-lens-reproducibility` | Replicative | Can the figures be reproduced from the data and code? | P2 |
 
-## Planner family (14)
+## Planner family
 
-14 progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
+Progressive-decomposition sub-skills under `skills_extended/planner-*/`. Invoked
 internally by the `planner` recipe to break a roadmap into GitHub milestones and issues:
 
 `planner-analyze`, `planner-assess-review-approach`, `planner-consolidate-wps`,
@@ -145,9 +145,5 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 141
-
-3 sources under `skills/` + 138 sources under `skills_extended/` = 141 bundled skills.
-Configured tier counts exclude exact-role/internal sources. The filesystem total is
-verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
-addition or removal is caught immediately.
+The catalog is verified against the bundled skill directories so listed membership
+does not drift from the source tree.

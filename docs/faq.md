@@ -7,35 +7,32 @@ Bundled recipes turn GitHub issues into merged PRs by chaining plan,
 dry-walkthrough, worktree, test, and PR-review skills. See
 [getting-started.md](getting-started.md).
 
-### How many MCP tools does it expose?
+### Which MCP tools does it expose?
 
-52. Fifteen are free-range: four always-visible (`open_kitchen`, `close_kitchen`,
-`disable_quota_guard`, `reload_session`) plus eleven fleet tools revealed only in
-fleet sessions via the `fleet`/`fleet-dispatch` tags. The remaining 37 are
-kitchen-tagged (gated behind `open_kitchen`). One kitchen tool, `test_check`,
-also carries the `headless` tag and is revealed only inside headless sessions.
-See [execution/tool-access.md](execution/tool-access.md).
+The tool registry distinguishes free-range, kitchen-tagged, headless, fleet,
+fleet-dispatch, exploration, and evidence-reader surfaces. `open_kitchen` reveals
+the derived kitchen set; `test_check` is available to headless sessions. See
+[execution/tool-access.md](execution/tool-access.md).
 
-### How many bundled skills are there?
+### Where are bundled skills defined?
 
-125: 3 in `src/autoskillit/skills/` (Tier 1) and 122 in
-`src/autoskillit/skills_extended/` (Tier 2 and 3). See
-[skills/catalog.md](skills/catalog.md).
+The bundled directories are `src/autoskillit/skills/` and
+`src/autoskillit/skills_extended/`; [skills/catalog.md](skills/catalog.md) lists
+the named skill families.
 
-### How many bundled recipes ship with the plugin?
+### Which bundled recipes ship with the plugin?
 
-5: `implementation`, `implementation-groups`, `merge-prs`, `remediation`,
-and `research`. See [recipes/overview.md](recipes/overview.md).
+See [recipes/overview.md](recipes/overview.md) for the bundled recipe catalog.
 
 ### What does the doctor command actually check?
 
-28+ things: base checks span 28 numbered slots (with sub-checks 2b/2c/2d, 4b, 7b) plus up to 5 additional fleet-specific checks. The full table lives in
-[installation.md](installation.md#post-install-verification).
+`run_doctor` assembles the baseline checks and conditionally adds fleet checks.
+The full table lives in [installation.md](installation.md#post-install-verification).
 
 ### Why are some MCP tools hidden by default?
 
-To keep normal Claude Code sessions clean. The 38 kitchen-tagged tools only
-appear after the orchestrator calls `open_kitchen`. See
+To keep normal Claude Code sessions clean. Kitchen-tagged tools only appear after
+the orchestrator calls `open_kitchen`. See
 [execution/tool-access.md](execution/tool-access.md).
 
 ### What is the difference between Tier 1, 2, and 3 skills?
@@ -59,7 +56,7 @@ Every recipe run starts by cloning the source repository into
 the orchestrator can never accidentally push back to the user's working
 tree. See [safety/workspace.md](safety/workspace.md).
 
-### What are the 11 `retry_reason` values?
+### What are the `retry_reason` values?
 
 `resume`, `stale`, `none`, `budget_exhausted`, `early_stop`, `zero_writes`,
 `empty_output`, `drain_race`, `path_contamination`, `contract_recovery`,

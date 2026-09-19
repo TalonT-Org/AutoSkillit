@@ -17,7 +17,7 @@ pipeline primarily connects the L2 orchestrator and L1 workers:
   free-range surfaces, spawns headless workers, and routes verdicts. Never reads or
   writes code itself.
 - **L1 — worker.** A headless Claude session launched by `run_skill`.
-  Sees the 8 free-range and 8 headless-tagged tools. A writable Codex worker may use
+  Sees the free-range and headless-tagged tools. A writable Codex worker may use
   `delegate_evidence_reader` for one bounded artifact; it still cannot call `run_skill`,
   `run_cmd`, or `run_python`.
 - **L3 — fleet.** Dispatches L2 food trucks through `dispatch_food_truck`.

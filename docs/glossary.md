@@ -16,14 +16,14 @@ canonical authority digest.
 
 ### arch-lens
 
-A skill family under `src/autoskillit/skills_extended/arch-lens-*/` (13 skills)
+A skill family under `src/autoskillit/skills_extended/arch-lens-*/`
 that produces architectural diagrams from a specific viewpoint (C4 container,
 module dependency, process flow, etc.). Always lowercase, always hyphenated.
 Common mistake: `Arch Lens` or `arch lens`.
 
 ### bundled recipes
 
-The 14 YAML recipes shipped under `src/autoskillit/recipes/`: `bem-wrapper`,
+The YAML recipes shipped under `src/autoskillit/recipes/` include `bem-wrapper`,
 `full-audit`, `implement-findings`, `implementation`, `implementation-groups`,
 `merge-prs`, `planner`, `promote-to-main-wrapper`, `remediation`,
 `research`, `research-archive`, `research-design`, `research-implement`,
@@ -58,7 +58,7 @@ directory; the kitchen is initially closed.
 
 ### exp-lens
 
-A skill family under `src/autoskillit/skills_extended/exp-lens-*/` (18 skills)
+A skill family under `src/autoskillit/skills_extended/exp-lens-*/`
 that produces experiment-related diagrams. Same spelling rules as `arch-lens`.
 
 ### family recipes
@@ -76,7 +76,7 @@ to remote jobs.
 
 ### free range tools
 
-The 4 MCP tools that are always visible regardless of kitchen state:
+The MCP tools that are always visible regardless of kitchen state include
 `open_kitchen`, `close_kitchen`, `disable_quota_guard`, and `reload_session`. Tagged
 only with `autoskillit`, never with `kitchen`. Always two words, no hyphen. Common
 mistake: `free-range tools`.
@@ -89,13 +89,13 @@ need to run outside the local machine.
 
 ### kitchen
 
-The collection of 38 kitchen-tagged MCP tools that the orchestrator must
+The collection of kitchen-tagged MCP tools that the orchestrator must
 explicitly reveal via `open_kitchen` before they can be called. Hidden at
 server startup via `mcp.disable(tags={'kitchen'})`.
 
 ### kitchen tools
 
-Synonym for the 38 kitchen-tagged MCP tools. Two words, no hyphen.
+Synonym for the kitchen-tagged MCP tools. Two words, no hyphen.
 
 ### kitchen_id
 
@@ -159,7 +159,7 @@ required.
 
 ### retry_reason
 
-The `RetryReason` StrEnum (`core/_type_enums.py`) carrying one of 11 values
+The `RetryReason` StrEnum (`core/_type_enums.py`) carrying values
 that direct the orchestrator's retry routing. Underscore required, never a
 space.
 
@@ -176,7 +176,7 @@ The Haiku-assisted contract-card freshness check implemented in
 
 ### Tier 1
 
-The free range **skill access tier** — 3 skills under `src/autoskillit/skills/`
+The free range **skill access tier** under `src/autoskillit/skills/`
 (`open-kitchen`, `close-kitchen`, `sous-chef`). Capitalised, space between
 `Tier` and the digit. Common mistake: `tier-1`, `tier 1` (lowercase).
 

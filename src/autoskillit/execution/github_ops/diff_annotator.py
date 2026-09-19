@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from typing import Literal
 
 import regex as re
 
 from autoskillit.core import DiffAnchorAuthority
+
+AnchorStatus = Literal["fresh", "moved", "stale"]
 
 _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _OLD_FILE_HEADER = re.compile(r"^--- a/(.+)$")
@@ -290,7 +293,9 @@ def extract_annotated_source_line(
     return annotated_source_line[1:]
 
 
-def validate_anchor(content: str, line: int, anchor_digest: str) -> tuple[str, int | None]:
+def validate_anchor(
+    content: str, line: int, anchor_digest: str
+) -> tuple[AnchorStatus, int | None]:
     """Resolve a stored anchor against live content without guessing a location."""
     if type(line) is not int or not anchor_digest:
         return ("stale", None)

@@ -283,3 +283,45 @@ def test_build_status_rows_shows_nonzero_tokens() -> None:
     rows = _build_status_rows(state)
     dispatch_row = rows[0]
     assert dispatch_row[3] == "10.0k"
+
+
+def test_fleet_status_renders_three_provider_pairs_without_pooled_total() -> None:
+    from autoskillit.cli.fleet._fleet_display import _build_status_rows, _pair_totals
+    from autoskillit.fleet import (
+        CampaignState,
+        DispatchRecord,
+        DispatchStatus,
+        normalize_dispatch_token_usage,
+    )
+
+    dispatches = []
+    for backend, provider, cache_write in (
+        ("claude-code", "anthropic", {"state": "measured_zero", "value": 0}),
+        ("claude-code", "MiniMax", {"state": "unavailable", "value": None}),
+        ("codex", "codex", {"state": "unavailable", "value": None}),
+    ):
+        dispatches.append(
+            DispatchRecord(
+                name="plan",
+                status=DispatchStatus.SUCCESS,
+                token_usage=normalize_dispatch_token_usage(
+                    {
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                        "cache_read_tokens": {"state": "unknown", "value": None},
+                        "cache_write_tokens": cache_write,
+                    },
+                    backend=backend,
+                    provider_used=provider,
+                ),
+            )
+        )
+    state = CampaignState("campaign", "test", "manifest.yaml", 0.0, dispatches=dispatches)
+
+    totals = _pair_totals(state)
+    rows = _build_status_rows(state)
+    assert len(totals) == 3
+    assert all(total["input_tokens"] == {"state": "measured", "value": 10} for total in totals)
+    assert sum("TOTAL (" in row[0] for row in rows) == 3
+    assert any("claude-code/MiniMax" in row[0] and row[6] == "unavailable" for row in rows)
+    assert any("claude-code/anthropic" in row[0] and row[6] == "0" for row in rows)

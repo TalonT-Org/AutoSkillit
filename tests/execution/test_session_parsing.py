@@ -26,6 +26,13 @@ from tests.execution.conftest import _assistant_ndjson, _result_ndjson
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
+def _observed(value: int) -> dict[str, object]:
+    return {"state": "measured_zero" if value == 0 else "measured", "value": value}
+
+
+_UNKNOWN = {"state": "unknown", "value": None}
+
+
 def _make_session_result(
     returncode: int = 0,
     stdout: str = "",
@@ -88,16 +95,16 @@ class TestExtractTokenUsage:
         )
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
-        assert usage["input_tokens"] == 100
-        assert usage["output_tokens"] == 50
-        assert usage["cache_write_tokens"] == 10
-        assert usage["cache_read_tokens"] == 5
+        assert usage["input_tokens"] == _observed(100)
+        assert usage["output_tokens"] == _observed(50)
+        assert usage["cache_write_tokens"] == _observed(10)
+        assert usage["cache_read_tokens"] == _observed(5)
         assert usage["model_breakdown"] == {
             "claude-sonnet-4-6": {
-                "input_tokens": 100,
-                "output_tokens": 50,
-                "cache_write_tokens": 10,
-                "cache_read_tokens": 5,
+                "input_tokens": _observed(100),
+                "output_tokens": _observed(50),
+                "cache_write_tokens": _observed(10),
+                "cache_read_tokens": _observed(5),
             }
         }
 
@@ -134,12 +141,12 @@ class TestExtractTokenUsage:
         stdout = line1 + "\n" + line2
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
-        assert usage["input_tokens"] == 300
-        assert usage["output_tokens"] == 100
-        assert usage["cache_write_tokens"] == 20
-        assert usage["cache_read_tokens"] == 10
+        assert usage["input_tokens"] == _observed(300)
+        assert usage["output_tokens"] == _observed(100)
+        assert usage["cache_write_tokens"] == _observed(20)
+        assert usage["cache_read_tokens"] == _observed(10)
         assert "claude-sonnet-4-6" in usage["model_breakdown"]
-        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 300
+        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == _observed(300)
 
     def test_multiple_models(self):
         """Assistant records with different models produce per-model breakdown."""
@@ -176,11 +183,11 @@ class TestExtractTokenUsage:
         assert usage is not None
         assert "claude-sonnet-4-6" in usage["model_breakdown"]
         assert "claude-opus-4-6" in usage["model_breakdown"]
-        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 100
-        assert usage["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == 200
+        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == _observed(100)
+        assert usage["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == _observed(200)
         # totals summed from both models (no result record present)
-        assert usage["input_tokens"] == 300
-        assert usage["output_tokens"] == 100
+        assert usage["input_tokens"] == _observed(300)
+        assert usage["output_tokens"] == _observed(100)
 
     def test_result_record_usage_preferred_for_totals(self):
         """When result record has usage, it provides the top-level totals."""
@@ -217,10 +224,10 @@ class TestExtractTokenUsage:
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
         # result record totals take precedence over assistant sum
-        assert usage["input_tokens"] == 999
-        assert usage["output_tokens"] == 888
-        assert usage["cache_write_tokens"] == 50
-        assert usage["cache_read_tokens"] == 25
+        assert usage["input_tokens"] == _observed(999)
+        assert usage["output_tokens"] == _observed(888)
+        assert usage["cache_write_tokens"] == _observed(50)
+        assert usage["cache_read_tokens"] == _observed(25)
         # model breakdown still comes from assistant records
         assert "claude-sonnet-4-6" in usage["model_breakdown"]
 
@@ -253,8 +260,8 @@ class TestExtractTokenUsage:
         stdout = assistant_line + "\n" + result_line
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
-        assert usage["input_tokens"] == 150
-        assert usage["output_tokens"] == 60
+        assert usage["input_tokens"] == _observed(150)
+        assert usage["output_tokens"] == _observed(60)
 
     def test_no_usage_data_returns_empty_usage_and_rows(self):
         """Stdout with no usage records returns no aggregate and an empty row series."""
@@ -269,7 +276,7 @@ class TestExtractTokenUsage:
         """Non-parseable stdout returns no aggregate and an empty row series."""
         assert extract_token_usage("not json at all\nstill not json") == (None, [])
 
-    def test_cache_tokens_default_to_zero(self):
+    def test_missing_cache_tokens_remain_unknown(self):
         """Missing cache token fields default to 0, not omitted."""
         stdout = json.dumps(
             {
@@ -286,11 +293,11 @@ class TestExtractTokenUsage:
         )
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
-        assert usage["cache_write_tokens"] == 0
-        assert usage["cache_read_tokens"] == 0
+        assert usage["cache_write_tokens"] == _UNKNOWN
+        assert usage["cache_read_tokens"] == _UNKNOWN
         breakdown = usage["model_breakdown"]["claude-sonnet-4-6"]
-        assert breakdown["cache_write_tokens"] == 0
-        assert breakdown["cache_read_tokens"] == 0
+        assert breakdown["cache_write_tokens"] == _UNKNOWN
+        assert breakdown["cache_read_tokens"] == _UNKNOWN
 
     def test_extracts_from_canonical_named_input(self):
         """extract_token_usage handles NDJSON with canonical field names."""
@@ -310,10 +317,10 @@ class TestExtractTokenUsage:
         )
         usage, _rows = extract_token_usage(stdout)
         assert usage is not None
-        assert usage["input_tokens"] == 100
-        assert usage["output_tokens"] == 50
-        assert usage["cache_write_tokens"] == 15
-        assert usage["cache_read_tokens"] == 8
+        assert usage["input_tokens"] == _observed(100)
+        assert usage["output_tokens"] == _observed(50)
+        assert usage["cache_write_tokens"] == _observed(15)
+        assert usage["cache_read_tokens"] == _observed(8)
 
     def test_ignores_non_assistant_non_result_records(self):
         """user and system records are skipped."""
@@ -499,7 +506,7 @@ class TestParseSessionResult:
         stdout = assistant + "\n" + result_rec
         result = parse_session_result(stdout)
         assert result.token_usage is not None
-        assert result.token_usage["input_tokens"] == 200
+        assert result.token_usage["input_tokens"] == _observed(200)
 
     def test_logs_unknown_result_keys_at_debug(self):
         record = json.dumps(
@@ -706,7 +713,7 @@ class TestExtractTokenUsageMalformedInput:
         malformed = "not json\n" + _assistant_ndjson(input_tokens=10, output_tokens=5)
         usage, rows = extract_token_usage(malformed)
         assert usage is not None
-        assert usage["input_tokens"] == 10
+        assert usage["input_tokens"] == _observed(10)
         assert len(rows) == 1
 
 
@@ -1336,3 +1343,50 @@ class TestSubagentExclusion:
         assert len(result.assistant_messages) == 1
         assert "parent says hello" in result.assistant_messages[0]
         assert "subagent says goodbye" not in " ".join(result.assistant_messages)
+
+
+@pytest.mark.parametrize(
+    ("backend", "provider", "field", "value", "expected"),
+    [
+        ("claude-code", "anthropic", "cache_write_tokens", 0, "measured_zero"),
+        ("claude-code", "anthropic", "cache_write_tokens", None, "unknown"),
+        ("claude-code", "MiniMax", "cache_write_tokens", None, "unavailable"),
+        ("codex", "codex", "cache_write_tokens", None, "unavailable"),
+        ("codex", "custom-profile", "cache_write_tokens", None, "unavailable"),
+        ("claude-code", "MiniMax", "input_tokens", None, "unknown"),
+    ],
+)
+def test_source_pair_classifies_token_presence(
+    backend: str, provider: str, field: str, value: int | None, expected: str
+) -> None:
+    from autoskillit.execution.session._turn_usage import classify_token_measure
+
+    assert classify_token_measure(backend, provider, field, value).state.value == expected
+
+
+def test_context_window_is_capacity_metadata_not_a_token_measure() -> None:
+    from autoskillit.execution.session._turn_usage import (
+        classify_token_measure,
+        valid_context_window,
+    )
+
+    assert valid_context_window(200_000) == 200_000
+    assert valid_context_window(0) is None
+    with pytest.raises(ValueError, match="Not an accounting token measure"):
+        classify_token_measure("claude-code", "anthropic", "context_window_tokens", 200_000)
+
+
+def test_same_message_id_from_different_source_pairs_remains_two_rows() -> None:
+    from autoskillit.execution.session._turn_usage import (
+        build_turn_token_entry,
+        merge_turn_usage,
+    )
+
+    anthropic = build_turn_token_entry(
+        backend="claude-code", provider_used="anthropic", message_id="same", input_tokens=1
+    )
+    minimax = build_turn_token_entry(
+        backend="claude-code", provider_used="MiniMax", message_id="same", input_tokens=2
+    )
+
+    assert merge_turn_usage([anthropic], [minimax]) == [anthropic, minimax]

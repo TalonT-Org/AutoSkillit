@@ -743,7 +743,11 @@ class TestChannelBAssistantRecovery:
             session_id="test",
             assistant_messages=["Done.\n%%ORDER_UP%%"],
         )
-        monkeypatch.setattr(headless_result_mod, "parse_session_result", lambda _: fake_session)
+        monkeypatch.setattr(
+            headless_result_mod,
+            "parse_session_result",
+            lambda _, **_kwargs: fake_session,
+        )
         result = SubprocessResult(
             returncode=0,
             stdout="",

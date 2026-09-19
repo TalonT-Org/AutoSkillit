@@ -9,7 +9,15 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from autoskillit.core import TurnTokenEntry, fast_dumps, fsync_directory, get_logger
+from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
+    AGENT_BACKEND_CODEX,
+    TokenMeasure,
+    TurnTokenEntry,
+    fast_dumps,
+    fsync_directory,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
@@ -21,14 +29,22 @@ def primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
     model_breakdown = token_usage.get("model_breakdown", {})
     if not isinstance(model_breakdown, dict) or not model_breakdown:
         return ""
-    return max(
-        model_breakdown,
-        key=lambda model: (
-            model_breakdown[model].get("output_tokens", 0)
-            if isinstance(model_breakdown[model], dict)
-            else 0
-        ),
-    )
+
+    def output_count(model: str) -> int:
+        bucket = model_breakdown[model]
+        if not isinstance(bucket, dict):
+            return -1
+        value = bucket.get("output_tokens")
+        if isinstance(value, dict):
+            try:
+                measured = TokenMeasure.from_dict(value).value
+            except ValueError:
+                return -1
+            return measured if measured is not None else -1
+        observed = valid_token_count(value)
+        return observed if observed is not None else -1
+
+    return max(model_breakdown, key=output_count)
 
 
 def resolve_session_label(step_name: str, dispatch_id: str) -> str:
@@ -74,13 +90,13 @@ def write_turn_usage_sidecar(path: Path, rows: list[TurnTokenEntry]) -> bool:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             fd = -1
             for row in rows:
-                output.write(fast_dumps(row, sort_keys=True) + "\n")
+                output.write(fast_dumps(serialize_turn_token_entry(row), sort_keys=True) + "\n")
             output.flush()
             os.fsync(output.fileno())
         os.replace(temp_path, path)
         fsync_directory(path.parent)
         return True
-    except (OSError, TypeError, ValueError):
+    except (KeyError, OSError, TypeError, ValueError):
         logger.debug("turn_usage_sidecar_write_failed", path=str(path), exc_info=True)
         return False
     finally:
@@ -95,6 +111,34 @@ def valid_token_count(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None
     return value
+
+
+_ACCOUNTING_MEASURES = frozenset(
+    {"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "peak_context"}
+)
+_NO_CACHE_WRITE_BACKENDS = frozenset({AGENT_BACKEND_CODEX})
+_NO_CACHE_WRITE_PAIRS = frozenset({(AGENT_BACKEND_CLAUDE_CODE, "minimax")})
+
+
+def classify_token_measure(
+    backend: str, provider_used: str, token_class: str, raw_value: object
+) -> TokenMeasure:
+    """Classify raw presence using the complete execution source pair."""
+    if not backend or not provider_used:
+        raise ValueError("Token observations require backend and provider_used")
+    if token_class not in _ACCOUNTING_MEASURES:
+        raise ValueError(f"Not an accounting token measure: {token_class}")
+    if isinstance(raw_value, dict):
+        return TokenMeasure.from_dict(raw_value)
+    observed = valid_token_count(raw_value)
+    if observed is not None:
+        return TokenMeasure.observed(observed)
+    if token_class == "cache_write_tokens" and (
+        backend in _NO_CACHE_WRITE_BACKENDS
+        or (backend, provider_used.casefold()) in _NO_CACHE_WRITE_PAIRS
+    ):
+        return TokenMeasure.unavailable()
+    return TokenMeasure.unknown()
 
 
 def first_nonempty_string(*values: Any) -> str | None:
@@ -126,9 +170,42 @@ def context_fraction(
     return cache_read_tokens / context_window_tokens
 
 
+def serialize_turn_token_entry(row: TurnTokenEntry) -> dict[str, object]:
+    """Project a raw turn into the versioned source-pair/measure sidecar schema."""
+    backend, provider_used = row["backend"], row["provider_used"]
+    cache_read = classify_token_measure(
+        backend, provider_used, "cache_read_tokens", row["cache_read_tokens"]
+    )
+    context_window = valid_context_window(row["context_window_tokens"])
+    return {
+        "backend": backend,
+        "provider_used": provider_used,
+        "message_id": row["message_id"],
+        "request_id": row["request_id"],
+        "timestamp": row["timestamp"],
+        "model": row["model"],
+        "input_tokens": classify_token_measure(
+            backend, provider_used, "input_tokens", row["input_tokens"]
+        ).to_dict(),
+        "output_tokens": classify_token_measure(
+            backend, provider_used, "output_tokens", row["output_tokens"]
+        ).to_dict(),
+        "cache_read_tokens": cache_read.to_dict(),
+        "cache_write_tokens": classify_token_measure(
+            backend, provider_used, "cache_write_tokens", row["cache_creation_tokens"]
+        ).to_dict(),
+        "peak_context": classify_token_measure(
+            backend, provider_used, "peak_context", row["cache_read_tokens"]
+        ).to_dict(),
+        "context_window_tokens": context_window,
+        "context_fraction": context_fraction(cache_read.value, context_window),
+    }
+
+
 def build_turn_token_entry(
     *,
     backend: str,
+    provider_used: str | None = None,
     message_id: str | None = None,
     request_id: str | None = None,
     timestamp: str | None = None,
@@ -140,8 +217,16 @@ def build_turn_token_entry(
     context_window_tokens: int | None = None,
 ) -> TurnTokenEntry:
     """Build a complete row from already validated source evidence."""
+    if not backend:
+        raise ValueError("Turn token usage requires a non-empty backend")
+    if provider_used is None:
+        provider_used = {AGENT_BACKEND_CLAUDE_CODE: "anthropic"}.get(backend, backend)
+    if not provider_used:
+        raise ValueError("Turn token usage requires a non-empty provider_used")
+    context_window_tokens = valid_context_window(context_window_tokens)
     return {
         "backend": backend,
+        "provider_used": provider_used,
         "message_id": message_id,
         "request_id": request_id,
         "timestamp": timestamp,
@@ -156,20 +241,21 @@ def build_turn_token_entry(
 
 
 def merge_turn_usage(*groups: Iterable[TurnTokenEntry]) -> list[TurnTokenEntry]:
-    """Merge later snapshots by non-empty message ID, preserving first-seen order."""
+    """Merge snapshots by source pair and message ID, preserving first-seen order."""
     merged: list[TurnTokenEntry] = []
-    positions: dict[str, int] = {}
+    positions: dict[tuple[str, str, str], int] = {}
     for group in groups:
         for row in group:
             message_id = row["message_id"]
-            if not message_id or message_id not in positions:
+            identity = (row["backend"], row["provider_used"], message_id or "")
+            if not message_id or identity not in positions:
                 copied: TurnTokenEntry = row.copy()
                 merged.append(copied)
                 if message_id:
-                    positions[message_id] = len(merged) - 1
+                    positions[identity] = len(merged) - 1
                 continue
 
-            current = merged[positions[message_id]]
+            current = merged[positions[identity]]
             if current["request_id"] is None and row["request_id"] is not None:
                 current["request_id"] = row["request_id"]
             if current["timestamp"] is None and row["timestamp"] is not None:

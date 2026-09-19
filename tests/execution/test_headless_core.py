@@ -2616,10 +2616,10 @@ class TestBuildSkillResultTokenUsage:
         assert "token_usage" in response
         usage = response["token_usage"]
         assert usage is not None
-        assert usage["input_tokens"] == 200
-        assert usage["output_tokens"] == 80
-        assert usage["cache_write_tokens"] == 8
-        assert usage["cache_read_tokens"] == 3
+        assert usage["input_tokens"] == {"state": "measured", "value": 200}
+        assert usage["output_tokens"] == {"state": "measured", "value": 80}
+        assert usage["cache_write_tokens"] == {"state": "measured", "value": 8}
+        assert usage["cache_read_tokens"] == {"state": "measured", "value": 3}
         assert "model_breakdown" in usage
         assert "claude-sonnet-4-6" in usage["model_breakdown"]
 

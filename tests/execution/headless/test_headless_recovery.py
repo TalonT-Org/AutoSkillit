@@ -90,7 +90,12 @@ async def _run_turn_usage_nudge(
         error="",
         raw={
             "subtype": "success",
-            "token_usage": {"turn_count": 1, "peak_context": 30},
+            "token_usage": {
+                "backend": "codex",
+                "provider_used": "codex",
+                "turn_count": 1,
+                "peak_context": 30,
+            },
         },
     )
     result_parser = Mock()
@@ -105,7 +110,12 @@ async def _run_turn_usage_nudge(
         needs_retry=True,
         retry_reason=RetryReason.EARLY_STOP,
         stderr="",
-        token_usage={"turn_count": 1, "peak_context": 10},
+        token_usage={
+            "backend": "codex",
+            "provider_used": "codex",
+            "turn_count": 1,
+            "peak_context": 10,
+        },
         turn_usage=[_turn_usage_entry(message_id=main_message_id, cache_read_tokens=10)],
     )
     result = await _attempt_contract_nudge(
@@ -716,8 +726,11 @@ class TestNudgeTurnUsage:
         assert [row["cache_read_tokens"] for row in result.turn_usage] == expected_cache_reads
         assert result.token_usage is not None
         assert result.token_usage["turn_count"] == len(expected_cache_reads)
-        assert result.token_usage["peak_context"] == max(expected_cache_reads)
-        assert extractor.call_args.kwargs == {}
+        assert result.token_usage["peak_context"] == {
+            "state": "measured",
+            "value": max(expected_cache_reads),
+        }
+        assert extractor.call_args.kwargs == {"provider_used": "codex"}
         _, _, start_ts, end_ts = extractor.call_args.args
         assert end_ts != "2000-01-01T00:00:00+00:00"
         start = datetime.fromisoformat(start_ts)

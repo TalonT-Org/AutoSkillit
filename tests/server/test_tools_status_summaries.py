@@ -583,6 +583,48 @@ class TestOrderIdFilterOnSummaryTools:
         assert "plan" in step_names
         assert "implement" not in step_names
 
+
+@pytest.mark.anyio
+async def test_get_token_summary_keeps_three_provider_pairs_separate(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    unavailable = {"state": "unavailable", "value": None}
+    unknown = {"state": "unknown", "value": None}
+    for backend, provider, cache_write, cache_read in (
+        ("claude-code", "anthropic", _observed(0), _observed(5)),
+        ("claude-code", "MiniMax", unavailable, unknown),
+        ("codex", "codex", unavailable, _observed(0)),
+    ):
+        tool_ctx_kitchen_open.token_log.record(
+            "plan",
+            {
+                "input_tokens": _observed(10),
+                "output_tokens": _observed(2),
+                "cache_write_tokens": cache_write,
+                "cache_read_tokens": cache_read,
+            },
+            order_id="same-order",
+            backend=backend,
+            provider_used=provider,
+        )
+
+    report = json.loads(await get_token_summary(order_id="same-order"))
+    assert "total" not in report
+    assert len(report["steps"]) == len(report["totals"]) == 3
+    pairs = {(row["backend"], row["provider_used"]) for row in report["totals"]}
+    assert pairs == {
+        ("claude-code", "anthropic"),
+        ("claude-code", "MiniMax"),
+        ("codex", "codex"),
+    }
+    assert all(row["input_tokens"] == _observed(10) for row in report["totals"])
+    table = await get_token_summary(format="table", order_id="same-order")
+    assert "claude-code/anthropic" in table
+    assert "claude-code/MiniMax" in table
+    assert "codex/codex" in table
+    assert "unknown" in table and "unavailable" in table
+
     @pytest.mark.anyio
     async def test_get_token_summary_no_order_id_returns_all(
         self, tool_ctx_kitchen_open, monkeypatch

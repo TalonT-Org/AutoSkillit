@@ -135,6 +135,18 @@ class TestFromCodexDictRoundTrip:
         assert result.provider_used == "codex"
         assert result.raw == raw
 
+    def test_explicit_codex_cache_write_zero_is_observed(self):
+        raw = {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+        }
+
+        result = CanonicalTokenUsage.from_codex_dict(raw)
+
+        assert result.cache_write_tokens == TokenMeasure.observed(0)
+
 
 class TestMergeCommutativity:
     def test_merge_sums_fields(self):

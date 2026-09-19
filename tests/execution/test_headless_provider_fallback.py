@@ -200,6 +200,9 @@ class TestPostStartProviderSafety:
             def model_evidence_for(self, _session_id: str):
                 return "", ()
 
+            def token_usage_for(self, _session_id: str, _backend: str, _provider: str):
+                return None
+
         monkeypatch.setattr(_execute_module, "LocalOtlpSink", DisabledSink, raising=False)
 
         return fake_runner, call_count, runner_envs, runner_pass_fds
@@ -233,6 +236,9 @@ class TestPostStartProviderSafety:
 
             def model_evidence_for(self, _session_id: str):
                 return "", ()
+
+            def token_usage_for(self, _session_id: str, _backend: str, _provider: str):
+                return None
 
         monkeypatch.setattr(_execute_module, "LocalOtlpSink", FakeSink, raising=False)
         authority = _Authority()

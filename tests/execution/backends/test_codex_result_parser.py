@@ -515,6 +515,20 @@ class TestCodexResultParserCumulativeTokens:
         assert canonical["cache_read_tokens"] == {"state": "measured", "value": 30}
         assert canonical["cache_write_tokens"] == {"state": "unavailable", "value": None}
 
+    def test_explicit_cache_write_zero_remains_measured_zero(self) -> None:
+        ndjson = _turn_completed_line(
+            {
+                "input_tokens": 100,
+                "output_tokens": 5,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+            }
+        )
+
+        canonical = CodexResultParser().parse_stdout(ndjson).raw["canonical_token_usage"]
+
+        assert canonical["cache_write_tokens"] == {"state": "measured_zero", "value": 0}
+
     def test_no_turn_completed_yields_none_canonical(self) -> None:
         """Scenario 4: no turn.completed event — canonical_token_usage is None."""
         ndjson = _item_completed_message_line("some output")

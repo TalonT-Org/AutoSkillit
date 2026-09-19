@@ -157,6 +157,36 @@ def _ratio(tokens: Any, loc: int) -> str:
     return f"{tokens / loc:.1f}" if isinstance(tokens, int) and loc > 0 else "—"
 
 
+def _ratio_total(steps: list[dict], field: str) -> str:
+    """Use only scopes that observed the required measure in a ratio denominator."""
+    tokens = 0
+    eligible_loc = 0
+    missing_states: set[str] = set()
+    for step in steps:
+        loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+        raw = step.get(field)
+        if isinstance(raw, dict):
+            state, value = raw.get("state"), raw.get("value")
+            if state not in {"measured", "measured_zero"} or not isinstance(value, int):
+                missing_states.add(str(state or "unknown"))
+                continue
+            raw = value
+        if not isinstance(raw, int) or isinstance(raw, bool):
+            missing_states.add("unknown")
+            continue
+        tokens += raw
+        eligible_loc += loc
+    if "unknown" in missing_states:
+        return "unknown"
+    if eligible_loc:
+        return _ratio(tokens, eligible_loc)
+    if missing_states == {"unavailable"}:
+        return "unavailable"
+    if missing_states == {"not_applicable"}:
+        return "not_applicable"
+    return "—"
+
+
 _LEGACY_TO_CANONICAL: dict[str, str] = {
     "cache_creation_input_tokens": "cache_write_tokens",
     "cache_read_input_tokens": "cache_read_tokens",
@@ -425,7 +455,6 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
         steps = [_normalize_keys(s) for s in steps]
-        total = _normalize_keys(total)
 
         lines = [
             "## Token Efficiency",
@@ -433,27 +462,35 @@ class TelemetryFormatter:
             _EFFICIENCY_MD_HEADER,
             _EFFICIENCY_MD_SEP,
         ]
+        grouped: dict[str, list[dict]] = {}
         for step in steps:
+            source = _source_label(step)
+            grouped.setdefault(source, []).append(step)
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             cr = step.get("cache_read_tokens")
             cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
+            name = step.get("step_name", "?")
+            if source:
+                name = f"{name} ({source})"
             lines.append(
-                f"| {step.get('step_name', '?')} | {loc}"
+                f"| {name} | {loc}"
                 f" | {'—' if cr is None else _ratio(cr, loc)}"
                 f" | {'—' if cw is None else _ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
-        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("cache_read_tokens")
-        total_cw = total.get("cache_write_tokens")
-        total_out = total.get("output_tokens", 0)
-        lines.append(
-            f"| **Total** | **{total_loc}**"
-            f" | {'—' if total_cr is None else _ratio(total_cr, total_loc)}"
-            f" | {'—' if total_cw is None else _ratio(total_cw, total_loc)}"
-            f" | {_ratio(total_out, total_loc)} |"
-        )
+        for source, source_steps in grouped.items():
+            total_loc = sum(
+                step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+                for step in source_steps
+            )
+            label = f"Total ({source})" if source else "Total"
+            lines.append(
+                f"| **{label}** | **{total_loc}**"
+                f" | {_ratio_total(source_steps, 'cache_read_tokens')}"
+                f" | {_ratio_total(source_steps, 'cache_write_tokens')}"
+                f" | {_ratio_total(source_steps, 'output_tokens')} |"
+            )
         return "\n".join(lines)
 
     @staticmethod
@@ -547,17 +584,22 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
         steps = [_normalize_keys(s) for s in steps]
-        total = _normalize_keys(total)
 
         rows: list[tuple[str, str, str, str, str]] = []
+        grouped: dict[str, list[dict]] = {}
         for step in steps:
+            source = _source_label(step)
+            grouped.setdefault(source, []).append(step)
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             cr = step.get("cache_read_tokens")
             cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
+            name = step.get("step_name", "?")
+            if source:
+                name = f"{name} ({source})"
             rows.append(
                 (
-                    step.get("step_name", "?"),
+                    name,
                     str(loc),
                     "—" if cr is None else _ratio(cr, loc),
                     "—" if cw is None else _ratio(cw, loc),
@@ -565,14 +607,18 @@ class TelemetryFormatter:
                 )
             )
 
-        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("cache_read_tokens")
-        total_cw = total.get("cache_write_tokens")
-        total_row = (
-            "Total",
-            str(total_loc),
-            "—" if total_cr is None else _ratio(total_cr, total_loc),
-            "—" if total_cw is None else _ratio(total_cw, total_loc),
-            _ratio(total.get("output_tokens", 0), total_loc),
-        )
-        return _render_terminal_table(_EFFICIENCY_COLUMNS, rows + [total_row])
+        for source, source_steps in grouped.items():
+            total_loc = sum(
+                step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+                for step in source_steps
+            )
+            rows.append(
+                (
+                    f"Total ({source})" if source else "Total",
+                    str(total_loc),
+                    _ratio_total(source_steps, "cache_read_tokens"),
+                    _ratio_total(source_steps, "cache_write_tokens"),
+                    _ratio_total(source_steps, "output_tokens"),
+                )
+            )
+        return _render_terminal_table(_EFFICIENCY_COLUMNS, rows)

@@ -493,6 +493,39 @@ relaxed, on the app-server transport:
 
 ---
 
+### 4.9 Provider token accounting and native evidence
+
+The selected ACP backend and serving provider/profile form one reporting
+identity: `(backend, provider_used)`. Native Claude Code resolves to
+`(claude-code, anthropic)` and native Codex to `(codex, codex)` before launch;
+an explicitly selected profile is retained through normal, crash, cancellation,
+and managed-attempt results. The empty no-provider sentinel is reserved for
+failures before selection and does not identify a persisted token row.
+
+Each input, output, cache-read, cache-write, and peak-context measure carries
+one `TokenMeasure` state and optional value. Positive and observed-zero values
+are distinct from producer `unavailable`, expected-but-missing `unknown`, and
+semantically meaningless `not_applicable`. `context_window_tokens` remains
+positive model capacity, with `context_fraction` derived only when cache-read
+usage and capacity are both known. Turn snapshots deduplicate by the full
+`(backend, provider_used, message_id)` identity; recovery rejects cross-pair
+merges and combines compatible measures without missing-to-zero arithmetic.
+
+The run-scoped OTLP sink prefers correlated Claude Code `api_request` token
+evidence identified by native `session.id` and `request_id`. The parser is the
+fallback when no verified request identity or complete sink evidence exists.
+The two sources are selected, never added or numerically cross-checked. Codex
+0.153.4 retains parser accounting because its token log lacks a stable
+request/event ID and its token metric lacks `conversation.id`. This is an
+evidence-based exception to OTLP preference, not a cross-provider normalization.
+
+Durable token descriptor v4, turn sidecar v2, session index v14, fleet state
+v13, and campaign summary v2 carry structured measures and source identity.
+Legacy numeric zero is ambiguous and decodes as `unknown`. Aggregation and
+human-facing ratios remain inside one source pair.
+
+---
+
 ## Cross-Reference Summary
 
 | Section | Source of truth | File |
@@ -504,6 +537,7 @@ relaxed, on the app-server transport:
 | §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
+| §4.9 Token evidence | `TokenMeasure`, source-pair classifier, OTLP sink | `src/autoskillit/core/types/_type_token.py`, `src/autoskillit/execution/session/_turn_usage.py`, `src/autoskillit/execution/evidence/otlp_sink.py` |
 | §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |

@@ -23,6 +23,7 @@ The moved modules each retain their original contract:
   `resolve_trace_target`.
 - **`otlp_sink.py`** — `LocalOtlpSink` plus internal OTLP/HTTP primitives
   (not in `execution.__all__`).
+- **`_otlp_tokens.py`** — Bounded request-correlated token projection from native OTLP logs.
 - **`recording.py`** — `RecordingSubprocessRunner`, `ReplayingSubprocessRunner`,
   `ScenarioReplayError`, `build_replay_runner`, plus scenario env vars.
 - **`_recording_skills.py`** — `restore_skill_snapshot`,

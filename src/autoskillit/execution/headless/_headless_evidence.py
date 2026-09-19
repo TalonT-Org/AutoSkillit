@@ -289,14 +289,14 @@ def _build_error_path_telemetry(
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...] = (),
     child_outcomes: tuple[ChildOutcomeDict, ...] = (),
+    token_usage: dict[str, Any] | None = None,
 ) -> SessionTelemetry:
-    """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
+    """Build crash/cancel telemetry while retaining any drained token evidence."""
+    _api_usage = None
     if github_api_log is not None:
         _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
-    else:
-        _api_usage = None
     return SessionTelemetry(
-        token_usage=None,
+        token_usage=token_usage,
         turn_usage=[],
         timing_seconds=None,
         audit_record=None,

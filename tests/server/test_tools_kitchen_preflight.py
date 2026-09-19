@@ -630,9 +630,8 @@ class TestPreflightGateClosure:
 
         with (
             patch.object(server_state, "_ctx", tool_ctx),
-            patch.object(
-                _patch_tools_tools_kitchen,
-                "_require_orchestrator_exact",
+            patch(
+                "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
                 return_value=None,
             ),
             patch.object(
@@ -696,9 +695,8 @@ class TestPreflightGateClosure:
         with (
             patch.object(server_state, "_ctx", tool_ctx),
             patch.object(_preflight, "HOOK_REGISTRY", [synthetic]),
-            patch.object(
-                _patch_tools_tools_kitchen,
-                "_require_orchestrator_exact",
+            patch(
+                "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
                 return_value=None,
             ),
             patch.object(

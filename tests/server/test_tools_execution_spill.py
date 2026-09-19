@@ -333,7 +333,10 @@ async def test_decorated_dispatch_preserves_routing_scalars_artifact_and_small_i
 ):
     from autoskillit.server.tools import tools_fleet_dispatch
 
-    monkeypatch.setattr(tools_fleet_dispatch, "_require_fleet", lambda _name: None)
+    monkeypatch.setattr(
+        "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.setattr(
         tools_fleet_dispatch,
         "find_caller_session_id",

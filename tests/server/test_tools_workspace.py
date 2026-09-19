@@ -475,6 +475,7 @@ class TestTestCheck:
         # Simulate running inside a headless session — set all private vars
         for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
             monkeypatch.setenv(var, "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
 
         await test_check(worktree_path=self.wt)
 

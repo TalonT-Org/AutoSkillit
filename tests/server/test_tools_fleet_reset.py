@@ -76,9 +76,8 @@ def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
         lambda: None,
     )
     monkeypatch.setattr(
-        tools_fleet_reset,
-        "_require_fleet",
-        lambda _name: None,
+        "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+        lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
         tools_fleet_reset,
@@ -208,9 +207,8 @@ class TestResetDispatchErrors:
             lambda: None,
         )
         monkeypatch.setattr(
-            tools_fleet_reset,
-            "_require_fleet",
-            lambda _name: json.dumps({"success": False, "error": "not_fleet"}),
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            lambda *args, **kwargs: json.dumps({"success": False, "error": "not_fleet"}),
         )
         monkeypatch.setattr(
             tools_fleet_reset,
@@ -236,6 +234,10 @@ class TestResetDispatchErrors:
             tools_fleet_reset,
             "_require_enabled",
             lambda: json.dumps({"success": False, "error": "gate_closed"}),
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
             tools_fleet_reset,
@@ -344,9 +346,8 @@ class TestResetDispatchEdgeCases:
             lambda: None,
         )
         monkeypatch.setattr(
-            tools_fleet_reset,
-            "_require_fleet",
-            lambda _name: None,
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
             tools_fleet_reset,
@@ -424,9 +425,8 @@ class TestResetDispatchEdgeCases:
             lambda: None,
         )
         monkeypatch.setattr(
-            tools_fleet_reset,
-            "_require_fleet",
-            lambda _name: None,
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
             tools_fleet_reset,

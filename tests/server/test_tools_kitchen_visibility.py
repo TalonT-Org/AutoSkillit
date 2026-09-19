@@ -218,10 +218,8 @@ async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.reset_visibility = AsyncMock()
 
-    with patch.object(
-        _patch_tools_tools_kitchen,
-        "_require_orchestrator_exact",
-        return_value=None,
+    with patch(
+        "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope", return_value=None
     ):
         with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
             await close_kitchen(ctx=mock_ctx)

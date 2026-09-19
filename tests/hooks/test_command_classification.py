@@ -41,6 +41,8 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     _GH_API_FLAG_SPEC,
     _GH_HELP_FLAGS,
     _GH_ISSUE_EDIT_FLAG_SPEC,
+    _GH_ISSUE_EDIT_REFERENCE_FLAGS,
+    _GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS,
     GitHubMutationAnalysis,
     GitHubMutationKind,
     GitHubMutationRecord,
@@ -2587,17 +2589,7 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.request_count == 1
 
-    @pytest.mark.parametrize(
-        "flag",
-        [
-            "--add-blocked-by",
-            "--add-blocking",
-            "--add-sub-issue",
-            "--remove-blocked-by",
-            "--remove-blocking",
-            "--remove-sub-issue",
-        ],
-    )
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_LIST_FLAGS))
     @pytest.mark.parametrize("form", ["separated", "equals", "csv", "repeated"])
     def test_issue_edit_relationship_flags_are_one_request(self, flag: str, form: str) -> None:
         if form == "separated":
@@ -2646,18 +2638,7 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.request_count == 1
 
-    @pytest.mark.parametrize(
-        "flag",
-        [
-            "--add-blocked-by",
-            "--add-blocking",
-            "--add-sub-issue",
-            "--parent",
-            "--remove-blocked-by",
-            "--remove-blocking",
-            "--remove-sub-issue",
-        ],
-    )
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
     @pytest.mark.parametrize("form", ["separated", "equals"])
     def test_issue_edit_reference_flags_reject_dynamic_values(self, flag: str, form: str) -> None:
         argument = f"{flag} $RELATED" if form == "separated" else f"{flag}=$RELATED"
@@ -2668,18 +2649,7 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count is None
         assert analysis.reason_code == "dynamic_target"
 
-    @pytest.mark.parametrize(
-        "flag",
-        [
-            "--add-blocked-by",
-            "--add-blocking",
-            "--add-sub-issue",
-            "--parent",
-            "--remove-blocked-by",
-            "--remove-blocking",
-            "--remove-sub-issue",
-        ],
-    )
+    @pytest.mark.parametrize("flag", sorted(_GH_ISSUE_EDIT_REFERENCE_FLAGS))
     @pytest.mark.parametrize("value", ["4726,", ",4726"])
     def test_issue_edit_reference_flags_reject_malformed_csv(self, flag: str, value: str) -> None:
         analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}={value}")
@@ -2708,16 +2678,7 @@ class TestAnalyzeGitHubMutations:
     def test_every_issue_edit_spec_flag_is_recognized(self, flag: str) -> None:
         value = ""
         if _GH_ISSUE_EDIT_FLAG_SPEC[flag] == _FlagArity.VALUE:
-            reference_flags = {
-                "--parent",
-                "--add-blocked-by",
-                "--add-blocking",
-                "--add-sub-issue",
-                "--remove-blocked-by",
-                "--remove-blocking",
-                "--remove-sub-issue",
-            }
-            value = " 4726" if flag in reference_flags else " value"
+            value = " 4726" if flag in _GH_ISSUE_EDIT_REFERENCE_FLAGS else " value"
 
         analysis = analyze_github_mutations(f"gh issue edit 4734 {flag}{value}")
 

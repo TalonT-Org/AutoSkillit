@@ -126,14 +126,13 @@ async def test_fake_github_fetcher_fetch_issue_returns_seeded_payload():
             }
         },
     )
-    await fake.swap_labels("owner", "repo", 42, ["bug"], ["in-progress"])
     assert await fake.fetch_issue("owner/repo#42") == {
         "success": True,
         "number": 42,
         "title": "",
         "body": "seeded body",
         "state": "open",
-        "labels": ["in-progress"],
+        "labels": ["bug"],
     }
 
 

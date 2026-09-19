@@ -120,18 +120,13 @@ async def kitchen_status() -> str:
             from autoskillit.server._tracker_authority import (  # circular-break
                 _release_context_tracker,
                 _select_tracker_authority,
-            )
-            from autoskillit.server.tools._pipeline_deps import (  # circular-break
-                _derive_phase_a_deps,
+                select_tracker_authority_expected,
             )
 
-            expected = bool(
-                ctx.active_recipe_projection and _derive_phase_a_deps(ctx.active_recipe_projection)
-            )
             target, authority, key, _lease = _select_tracker_authority(
                 ctx,
                 ctx.kitchen_id,
-                expected=expected,
+                expected=select_tracker_authority_expected(ctx, ""),
             )
             try:
                 if target is None or authority is None:

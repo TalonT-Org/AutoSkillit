@@ -23,8 +23,26 @@ from autoskillit.core import (
     unregister_active_kitchen,
 )
 from autoskillit.pipeline import ToolContext, get_kitchen_process_identity
+from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 
 logger = get_logger(__name__)
+
+
+def select_tracker_authority_expected(tool_ctx: ToolContext, order_id: str) -> bool:
+    """Resolve whether a kitchen-scoped tracker is 'expected' for this dispatch.
+
+    A tracker is expected when an explicit order id or dispatch env var is
+    present, or when the active recipe projection declares phase-A dependencies
+    that the tracker must enforce. Centralized here so callers cannot drift.
+    """
+    if order_id or os.environ.get(DISPATCH_ID_ENV_VAR, ""):
+        return True
+    if tool_ctx.active_recipe_projection is None:
+        return False
+    try:
+        return bool(_derive_phase_a_deps(tool_ctx.active_recipe_projection))
+    except (AttributeError, TypeError):
+        return False
 
 
 def read_tracker_identity(
@@ -38,6 +56,12 @@ def read_tracker_identity(
     kitchen_id = authority.data.get("kitchen_id")
     incarnation_id = authority.data.get("tracker_incarnation_id")
     if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
+        logger.warning(
+            "tracker_identity_malformed",
+            target=str(target.path),
+            kitchen_id_type=type(kitchen_id).__name__,
+            incarnation_id_type=type(incarnation_id).__name__,
+        )
         return None
     return kitchen_id, incarnation_id
 
@@ -108,6 +132,11 @@ def _select_tracker_authority(
     try:
         authority = read_tracker_authority(target, lease)
     except Exception:
+        logger.warning(
+            "tracker_authority_read_failed",
+            target=str(target.path),
+            exc_info=True,
+        )
         _release_context_tracker(tool_ctx, key)
         raise
     return target, authority, key, lease
@@ -135,7 +164,9 @@ def _restore_reserved_tracker_authority(
     )
     if current_key is not None and current_key.target == target:
         with tool_ctx.tracker_leases_lock:
-            lease = tool_ctx.tracker_leases[current_key]
+            lease = tool_ctx.tracker_leases.get(current_key)
+        if lease is None:
+            return None, None, None, None
         return target, read_tracker_authority(target, lease), current_key, lease
     key, lease = _retain_context_tracker(
         tool_ctx,
@@ -180,7 +211,10 @@ def _retain_kitchen_tracker_authority(
 def _register_active_kitchen(tool_ctx: ToolContext) -> KitchenProcessIdentity:
     """Register the retained kitchen process while preserving refusal semantics."""
     identity = tool_ctx.kitchen_process_identity
-    assert identity is not None
+    if identity is None:
+        raise RuntimeError(
+            "_register_active_kitchen requires tool_ctx.kitchen_process_identity to be set"
+        )
     if not register_active_kitchen(identity):
         logger.warning(
             "active_kitchen_registration_refused",
@@ -234,17 +268,25 @@ def _completion_tracker_binding(
     target = tracker_target or select_tracker_target(tool_ctx, order_id, expected=bool(order_id))
     if target is None or not target.path.exists():
         return "", "", "", ""
+    target_order_id = target.target_order_id
+    if not isinstance(target_order_id, str) or not target_order_id:
+        logger.warning(
+            "completion_tracker_binding_invalid_target_order_id",
+            target=str(target.path),
+            target_order_id=target_order_id,
+        )
+        return "", "", "", ""
     key, lease = _retain_context_tracker(
         tool_ctx,
         target,
         owner_kind="manual",
-        owner_id=target.target_order_id,
+        owner_id=target_order_id,
     )
     try:
         tracker_identity = read_tracker_identity(target, lease)
         if tracker_identity is None:
             return "", "", "", ""
         kitchen_id, incarnation_id = tracker_identity
-        return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
+        return target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
     finally:
         _release_context_tracker(tool_ctx, key)

@@ -15,7 +15,6 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.config import ExecutionCandidateSpec
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
-    DISPATCH_ID_ENV_VAR,
     ApiFailureOutcome,
     CandidatePreSpawnRejection,
     ExecutionCandidateAttempt,
@@ -41,6 +40,7 @@ from autoskillit.server._notify import track_response_size
 from autoskillit.server._tracker_authority import (
     _release_context_tracker,
     _select_tracker_authority,
+    select_tracker_authority_expected,
 )
 from autoskillit.server.lifecycle._guards import (
     _require_enabled,
@@ -55,7 +55,6 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
 )
-from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.server.tools.tools_execution._gates import _authority_blocks_dependency_check
 from autoskillit.server.tools.tools_execution._managed_leaf import (  # noqa: F401
@@ -72,14 +71,8 @@ logger = get_logger(__name__)
 
 
 def _tracker_authority_expected(state: _RunSkillDispatchState, order_id: str) -> bool:
-    if order_id or os.environ.get(DISPATCH_ID_ENV_VAR, ""):
-        return True
-    if state.tool_ctx.active_recipe_projection is None:
-        return False
-    try:
-        return bool(_derive_phase_a_deps(state.tool_ctx.active_recipe_projection))
-    except (AttributeError, TypeError):
-        return False
+    """Thin shim — see ``select_tracker_authority_expected`` for the canonical impl."""
+    return select_tracker_authority_expected(state.tool_ctx, order_id)
 
 
 def _restore_resume_dispatch(state: _RunSkillDispatchState) -> str | None:

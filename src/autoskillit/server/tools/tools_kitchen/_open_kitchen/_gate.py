@@ -21,7 +21,7 @@ from autoskillit.server._tracker_authority import (
 )
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
-from autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve import (
+from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
     prune_stale_kitchen_state,
 )
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (

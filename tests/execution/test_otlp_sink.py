@@ -1376,6 +1376,13 @@ def test_native_token_persistence_failure_returns_none(
     _post_native_logs(local_sink, payload)
     local_sink.close()
 
+    # The OSError is bubbled into the writer thread and bumps the dropped_io
+    # counter; token_usage_for short-circuits to None when any drop counter
+    # is non-zero. Asserting both verifies that the failure is logged in a
+    # structured way rather than just observing the user-visible None.
+    assert local_sink._counters.get("dropped_io", 0) >= 1, (
+        "Persistence failure should have incremented dropped_io counter"
+    )
     assert (
         local_sink.token_usage_for(
             "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"

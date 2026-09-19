@@ -1016,7 +1016,8 @@ def test_flush_session_log_provider_fallback_absent_from_token_usage(tmp_path):
     assert "provider_fallback" not in tu
 
 
-def test_flush_session_log_provider_used_is_nonempty_in_token_usage(tmp_path):
+def test_flush_session_log_provider_used_resolves_to_anthropic_by_default(tmp_path):
+    """Default provider_used is resolved via the canonical helper and persisted."""
     _flush(
         tmp_path,
         session_id="prov-tu-def",
@@ -1025,7 +1026,10 @@ def test_flush_session_log_provider_used_is_nonempty_in_token_usage(tmp_path):
         proc_snapshots=None,
     )
     tu = json.loads((tmp_path / "sessions" / "prov-tu-def" / "token_usage.json").read_text())
-    assert tu["provider_used"]
+    # The claude-code backend resolves to anthropic via the canonical
+    # resolve_provider_used helper. Asserting the specific value guards
+    # against a regression where empty/None is silently persisted.
+    assert tu["provider_used"] == "anthropic"
 
 
 def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):

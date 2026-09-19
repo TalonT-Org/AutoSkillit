@@ -61,6 +61,7 @@ _GH_ISSUE_EDIT_FLAG_SPEC: Mapping[str, _FlagArity] = {
             "--add-assignee",
             "--add-label",
             "--add-project",
+            "--attach",
             "--body",
             "--body-file",
             "--milestone",

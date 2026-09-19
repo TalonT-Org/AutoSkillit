@@ -27,7 +27,7 @@ from autoskillit.fleet.campaign_state.state_transitions import (
     _validate_transition,
 )
 
-FLEET_STATE_SCHEMA_VERSION = 12
+FLEET_STATE_SCHEMA_VERSION = 13
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 

@@ -175,6 +175,7 @@ def build_dispatch_result(
     reason: str,
     dispatch_id: str,
     skill_result: SkillResult,
+    backend_name: str,
     dispatch_checkpoint: SessionCheckpoint | None,
     started_at: float,
     ended_at: float,
@@ -185,7 +186,11 @@ def build_dispatch_result(
     common: _DispatchCommonFields = {
         "dispatch_id": dispatch_id,
         "dispatched_session_id": skill_result.session_id or "",
-        "token_usage": normalize_dispatch_token_usage(skill_result.token_usage or {}),
+        "token_usage": normalize_dispatch_token_usage(
+            skill_result.token_usage or {},
+            backend=backend_name,
+            provider_used=skill_result.provider.provider_used,
+        ),
         "lifespan_started": skill_result.lifespan_started,
         "stderr": truncate_text(
             _sanitize_managed_capture_diagnostics(skill_result.stderr or ""),

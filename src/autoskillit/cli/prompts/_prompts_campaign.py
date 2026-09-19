@@ -448,13 +448,13 @@ On campaign completion (all dispatches done) OR halt (failure or quota exhaustio
 2. Emit the campaign summary block (see CAMPAIGN SUMMARY CONTRACT below).
 3. End the session — no additional tool calls after the summary.
 
-## CAMPAIGN SUMMARY CONTRACT v1
+## CAMPAIGN SUMMARY CONTRACT v2
 
 Emit this EXACT block as your final output. No other text after the block.
 
 ---campaign-summary::{campaign_id}---
 {{
-  "schema_version": 1,
+  "schema_version": 2,
   "campaign_id": "{campaign_id}",
   "campaign_name": "{campaign_recipe.name}",
   "dispatch_count": <total dispatches>,
@@ -467,10 +467,13 @@ Emit this EXACT block as your final output. No other text after the block.
       "status": "<success|failure|skipped>",
       "elapsed_seconds": <float>,
       "token_usage": {{
-        "input": <int>,
-        "output": <int>,
-        "cache_read": <int>,
-        "cache_creation": <int>
+        "backend": "<backend>",
+        "provider_used": "<provider>",
+        "input_tokens": {{"state": "<state>", "value": <int-or-null>}},
+        "output_tokens": {{"state": "<state>", "value": <int-or-null>}},
+        "cache_read_tokens": {{"state": "<state>", "value": <int-or-null>}},
+        "cache_write_tokens": {{"state": "<state>", "value": <int-or-null>}},
+        "peak_context": {{"state": "<state>", "value": <int-or-null>}}
       }},
       "dispatched_session_id": "<session_id>",
       "dispatch_id": "<dispatch_id>"
@@ -488,12 +491,15 @@ Emit this EXACT block as your final output. No other text after the block.
 ---end-campaign-summary::{campaign_id}---
 
 Fields:
-- schema_version: always 1
+- schema_version: always 2
 - dispatch_count / completed_count / failure_count / skipped_count: integer tallies
 - per_dispatch: one entry per dispatch, in execution order;
   status is one of success, failure, skipped
 - elapsed_seconds: use the elapsed_seconds field from the dispatch_food_truck return envelope
 - dispatch_id: use the dispatch_id field from the dispatch_food_truck return envelope
+- token_usage: copy the dispatch envelope's backend, provider_used, and measure records;
+  states are measured, measured_zero, unavailable, unknown, or not_applicable;
+  only measured states carry numeric values
 - error_records: one entry per failed dispatch; empty list if no failures
 - NO aggregate token fields (no total_input_tokens, no total_output_tokens, no total_duration)
 

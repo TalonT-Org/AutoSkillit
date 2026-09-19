@@ -459,7 +459,11 @@ async def finalize_state_write(
         reason=reason or "",  # type: ignore[arg-type]
         retry_reason=skill_result.retry_reason or "",
         infra_exit_category=skill_result.infra.exit_category or "",
-        token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+        token_usage=normalize_dispatch_token_usage(
+            skill_result.token_usage or {},
+            backend=effective_backend_name,
+            provider_used=skill_result.provider.provider_used,
+        ),
         started_at=started_at,
         ended_at=ended_at,
         sidecar_path=(
@@ -514,6 +518,7 @@ async def finalize_state_write(
         reason=reason or "",
         dispatch_id=dispatch_id,
         skill_result=skill_result,
+        backend_name=effective_backend_name,
         dispatch_checkpoint=dispatch_checkpoint,
         started_at=started_at,
         ended_at=ended_at,

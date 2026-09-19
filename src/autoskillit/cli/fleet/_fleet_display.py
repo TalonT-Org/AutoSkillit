@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import TerminalColumn, get_logger
+from autoskillit.core import TerminalColumn, TokenMeasure, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 
 logger = get_logger(__name__)
@@ -83,21 +83,33 @@ def _fmt_elapsed(dispatch: DispatchRecord) -> str:
     return f"{hours}h {mins}m"
 
 
-def _aggregate_totals(state: CampaignState) -> dict[str, int]:
-    """Sum token_usage across all dispatches."""
-    totals: dict[str, int] = {
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_creation": 0,
-    }
+def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
+    """Aggregate dispatch measures only inside their source pair."""
+    totals: dict[tuple[str, str], dict[str, object]] = {}
+    fields = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
     for d in state.dispatches:
         tu = d.token_usage
-        totals["input"] += tu.get("input", 0)
-        totals["output"] += tu.get("output", 0)
-        totals["cache_read"] += tu.get("cache_read", 0)
-        totals["cache_creation"] += tu.get("cache_creation", 0)
-    return totals
+        if not tu:
+            continue
+        key = (str(tu["backend"]), str(tu["provider_used"]))
+        row = totals.get(key)
+        if row is None:
+            totals[key] = {
+                "backend": key[0],
+                "provider_used": key[1],
+                **{field: tu[field] for field in fields},
+            }
+            continue
+        for field in fields:
+            try:
+                row[field] = (
+                    TokenMeasure.from_dict(row[field])
+                    .combine(TokenMeasure.from_dict(tu[field]))
+                    .to_dict()
+                )
+            except ValueError:
+                row[field] = TokenMeasure.unknown().to_dict()
+    return list(totals.values())
 
 
 def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
@@ -105,15 +117,16 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
     rows: list[tuple[str, ...]] = []
     for d in state.dispatches:
         tu = d.token_usage
+        source = f"{tu['backend']}/{tu['provider_used']}" if tu else ""
         rows.append(
             (
-                d.name,
+                f"{d.name} ({source})" if source else d.name,
                 str(d.status),
                 _fmt_elapsed(d),
-                TelemetryFormatter._humanize(tu.get("input", 0)),
-                TelemetryFormatter._humanize(tu.get("output", 0)),
-                TelemetryFormatter._humanize(tu.get("cache_read", 0)),
-                TelemetryFormatter._humanize(tu.get("cache_creation", 0)),
+                TelemetryFormatter._humanize(tu.get("input_tokens")),
+                TelemetryFormatter._humanize(tu.get("output_tokens")),
+                TelemetryFormatter._humanize(tu.get("cache_read_tokens")),
+                TelemetryFormatter._humanize(tu.get("cache_write_tokens")),
                 d.dispatched_session_log_dir or "-",
             )
         )
@@ -125,20 +138,19 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
         )
         status = str(raw.get("status", "unknown")) if isinstance(raw, Mapping) else "unknown"
         rows.append((name, status, "-", "-", "-", "-", "-", "-"))
-    totals = _aggregate_totals(state)
-    rows.append(("─" * 6, "", "", "", "", "", "", ""))
-    rows.append(
-        (
-            "TOTAL",
-            "",
-            "",
-            TelemetryFormatter._humanize(totals["input"]),
-            TelemetryFormatter._humanize(totals["output"]),
-            TelemetryFormatter._humanize(totals["cache_read"]),
-            TelemetryFormatter._humanize(totals["cache_creation"]),
-            "",
+    for total in _pair_totals(state):
+        rows.append(
+            (
+                f"TOTAL ({total['backend']}/{total['provider_used']})",
+                "",
+                "",
+                TelemetryFormatter._humanize(total["input_tokens"]),
+                TelemetryFormatter._humanize(total["output_tokens"]),
+                TelemetryFormatter._humanize(total["cache_read_tokens"]),
+                TelemetryFormatter._humanize(total["cache_write_tokens"]),
+                "",
+            )
         )
-    )
     return rows
 
 

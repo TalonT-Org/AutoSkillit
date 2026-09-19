@@ -5,7 +5,109 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
-__all__ = ["CanonicalTokenUsage", "TurnTokenEntry"]
+from ._type_enums import TokenMeasureState
+
+__all__ = [
+    "CanonicalTokenUsage",
+    "SerializedTokenMeasure",
+    "TokenMeasure",
+    "TurnTokenEntry",
+]
+
+
+class SerializedTokenMeasure(TypedDict):
+    """Durable representation of one accounting measure."""
+
+    state: str
+    value: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class TokenMeasure:
+    """One token accounting observation with an explicit availability state."""
+
+    state: TokenMeasureState
+    value: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.value is not None and (
+            isinstance(self.value, bool) or not isinstance(self.value, int) or self.value < 0
+        ):
+            raise ValueError("Token measure values must be non-negative integers")
+        if self.state is TokenMeasureState.MEASURED:
+            if self.value is None or self.value == 0:
+                raise ValueError("measured token measures require a positive value")
+        elif self.state is TokenMeasureState.MEASURED_ZERO:
+            if self.value != 0:
+                raise ValueError("measured_zero token measures require value 0")
+        elif self.value is not None:
+            raise ValueError(f"{self.state.value} token measures cannot carry a value")
+
+    @classmethod
+    def observed(cls, value: int) -> TokenMeasure:
+        """Build an explicitly observed measurement, including an observed zero."""
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError("Observed token values must be non-negative integers")
+        return cls(
+            TokenMeasureState.MEASURED_ZERO if value == 0 else TokenMeasureState.MEASURED,
+            value,
+        )
+
+    @classmethod
+    def unavailable(cls) -> TokenMeasure:
+        return cls(TokenMeasureState.UNAVAILABLE)
+
+    @classmethod
+    def unknown(cls) -> TokenMeasure:
+        return cls(TokenMeasureState.UNKNOWN)
+
+    @classmethod
+    def not_applicable(cls) -> TokenMeasure:
+        return cls(TokenMeasureState.NOT_APPLICABLE)
+
+    @classmethod
+    def from_dict(cls, raw: object) -> TokenMeasure:
+        """Decode a durable measure record without accepting ambiguous numerics."""
+        if not isinstance(raw, dict):
+            raise ValueError("Token measure must be a mapping")
+        if set(raw) != {"state", "value"}:
+            raise ValueError("Token measure must contain exactly state and value")
+        state = raw["state"]
+        value = raw["value"]
+        if not isinstance(state, str):
+            raise ValueError("Token measure state must be a string")
+        try:
+            parsed_state = TokenMeasureState(state)
+        except ValueError as exc:
+            raise ValueError(f"Unknown token measure state: {state!r}") from exc
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+            raise ValueError("Token measure value must be an integer or null")
+        return cls(parsed_state, value)
+
+    def to_dict(self) -> SerializedTokenMeasure:
+        return {"state": self.state.value, "value": self.value}
+
+    def combine(self, other: TokenMeasure) -> TokenMeasure:
+        """Combine compatible observations without converting absence into zero."""
+        if self.value is not None and other.value is not None:
+            return self.observed(self.value + other.value)
+        if self.state is other.state:
+            return self
+        raise ValueError(
+            "Cannot combine token measures with incompatible availability states: "
+            f"{self.state.value!r} vs {other.state.value!r}"
+        )
+
+    def maximum(self, other: TokenMeasure) -> TokenMeasure:
+        """Return the observed maximum or reject incompatible availability evidence."""
+        if self.value is not None and other.value is not None:
+            return self.observed(max(self.value, other.value))
+        if self.state is other.state:
+            return self
+        raise ValueError(
+            "Cannot compare token measures with incompatible availability states: "
+            f"{self.state.value!r} vs {other.state.value!r}"
+        )
 
 
 class TurnTokenEntry(TypedDict):

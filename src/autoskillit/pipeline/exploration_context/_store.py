@@ -92,6 +92,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     class CapacityExceeded(RuntimeError):
         """exploration context store capacity exceeded."""
 
+    class CapabilityUnavailable(ValueError):
+        """the supplied capability is absent or has been replaced."""
+
     def _raise_for_snapshot_unavailable(self, exc: SnapshotUnavailable) -> NoReturn:
         """Translate a capture-layer failure into the one matching store exception.
 
@@ -176,7 +179,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             raise ValueError("ttl_seconds must be in (0, max_ttl_seconds]")
         with self._lock:
             if self._closed:
-                raise RuntimeError("exploration context store is closed")
+                raise self.StoreClosed("exploration context store is closed")
             self._cleanup_expired_locked()
             return self._issue_locked(
                 owner_id=owner_id,
@@ -208,7 +211,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             raise ValueError("source_identity is too long")
         canonical_cwd = cwd.resolve()
         if repository_root.resolve() != self._trusted_root:
-            raise ValueError("repository_root does not match the trusted project root")
+            raise self.TrustedRootMismatch(
+                "repository_root does not match the trusted project root"
+            )
         canonical_repository_root = self._trusted_root
         bindings = self._bind_launches(
             owner_id=owner_id,
@@ -267,9 +272,11 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         canonical_cwd = cwd.resolve()
         canonical_repository_root = repository_root.resolve()
         if canonical_repository_root != self._trusted_root:
-            raise ValueError("repository_root does not match the trusted project root")
+            raise self.TrustedRootMismatch(
+                "repository_root does not match the trusted project root"
+            )
         if self._service is None:
-            raise RuntimeError("exploration service is not configured")
+            raise self.ServiceNotConfigured("exploration service is not configured")
         try:
             issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
         except SnapshotUnavailable as exc:
@@ -278,11 +285,11 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         shared_source_identity = launch_adapter._shared_source_identity(source_identities)
         with self._lock:
             if self._closed:
-                raise RuntimeError("exploration context store is closed")
+                raise self.StoreClosed("exploration context store is closed")
             self._cleanup_expired_locked()
             replaced_count = len(self._session_capabilities.get(session_id, ()))
             if len(self._leases) - replaced_count + 1 > self._max_active_leases:
-                raise RuntimeError("exploration context store capacity exceeded")
+                raise self.CapacityExceeded("exploration context store capacity exceeded")
             capability = self._new_capability_locked()
             expires_at = time.time_ns() + int(self._max_ttl_seconds * 1_000_000_000)
             authority_path = self._launch_authorities.write(
@@ -446,7 +453,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     ) -> tuple[str, EvidencePage]:
         """Collect against the injected root, then bind its immutable generation."""
         if self._service is None:
-            raise RuntimeError("exploration service is not configured")
+            raise self.ServiceNotConfigured("exploration service is not configured")
         context = self._service.collect(query, root=self._trusted_root)
         capability = self.issue(
             owner_id=owner_id,
@@ -466,11 +473,11 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     ) -> tuple[str, EvidencePage]:
         """Atomically update one server-issued capability with an evidence generation."""
         if self._service is None:
-            raise RuntimeError("exploration service is not configured")
+            raise self.ServiceNotConfigured("exploration service is not configured")
         with self._lock:
             lease = self._resolve_capability_locked(capability)
             if lease is None or lease.cwd is None or lease.repository_root is None:
-                raise ValueError("exploration capability is unavailable")
+                raise self.CapabilityUnavailable("exploration capability is unavailable")
             (
                 owner_id,
                 role,
@@ -492,7 +499,10 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             )
         context = self._service.collect(query, root=repository_root)
         if context.snapshot.digest != snapshot_digest:
-            raise ValueError("repository snapshot changed since exploration authority issuance")
+            raise self.SnapshotStale(
+                SnapshotCaptureReason.IDENTITY_DRIFT,
+                "repository snapshot changed since exploration authority issuance",
+            )
         page = self._service.page(context, page_size=page_size)
         with self._lock:
             current = self._resolve_capability_locked(capability)
@@ -515,7 +525,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 source_identity,
                 snapshot_digest,
             ):
-                raise ValueError("exploration capability was replaced")
+                raise self.CapabilityUnavailable("exploration capability was replaced")
             self._leases[capability] = _CapabilityLease(
                 owner_id=owner_id,
                 role=role,
@@ -660,7 +670,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         snapshot_digest: str = "",
     ) -> str:
         if len(self._leases) >= self._max_active_leases:
-            raise RuntimeError("exploration context store capacity exceeded")
+            raise self.CapacityExceeded("exploration context store capacity exceeded")
         capability = self._new_capability_locked()
         self._leases[capability] = _CapabilityLease(
             owner_id=owner_id,

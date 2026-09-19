@@ -35,7 +35,7 @@ from autoskillit.core import (
 )
 from autoskillit.exploration import resolve_repository_profile
 from autoskillit.pipeline import (
-    EXPLORATION_STORE_FAILURE_CODES,
+    EXPLORATION_TYPED_FAILURE_CODES,
     is_explorer_binding_eligible,
     resolve_exploration_store_failure_code,
 )
@@ -197,7 +197,7 @@ def _issue_explorer_binding_env(
             },
             authority_home=authority_home,
         )
-    except tuple(EXPLORATION_STORE_FAILURE_CODES) as exc:
+    except tuple(EXPLORATION_TYPED_FAILURE_CODES) as exc:
         code = resolve_exploration_store_failure_code(exc)
         reason = getattr(exc, "reason", None)
         raise ExplorationBindingFailed(code, reason, str(exc)) from exc

@@ -12,6 +12,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit import consume_exploration_request_record
 from autoskillit.core import (
+    EXPLORATION_FAILURE_CODE_RESPONSES,
     ContinuationCursor,
     EvidencePage,
     ExplorationContextStoreProtocol,
@@ -21,7 +22,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.pipeline import (
-    EXPLORATION_STORE_FAILURE_CODES,
+    EXPLORATION_TYPED_FAILURE_CODES,
     EXPLORER_SESSION_SCOPE,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
@@ -41,10 +42,6 @@ _FAILURE_CONTEXT_UNAVAILABLE = ExplorationFailureCode.CONTEXT_UNAVAILABLE
 _FAILURE_BROKER_UNAVAILABLE = ExplorationFailureCode.BROKER_UNAVAILABLE
 _FAILURE_UNEXPECTED_INTERNAL_ERROR = ExplorationFailureCode.UNEXPECTED_INTERNAL_ERROR
 logger = get_logger(__name__)
-
-
-class BindSessionScopedFailed(Exception):
-    """store.bind_session_scoped raised for a reason the store doesn't already name."""
 
 
 class EnableComponentsFailed(Exception):
@@ -87,9 +84,23 @@ class _GraphPayload(TypedDict):
     conflicts: list[str]
 
 
-def _failure(code: str) -> str:
+def _failure(code: ExplorationFailureCode, *, exc: BaseException | None = None) -> str:
     """Return a small, typed failure which discloses no repository state."""
-    return json.dumps({"status": "error", "code": code}, separators=(",", ":"))
+    detail: dict[str, object] = {}
+    if exc is not None:
+        detail["exception_type"] = type(exc).__name__
+        detail.update(_reason_field(exc))
+        if stage := getattr(exc, "stage", None):
+            detail["stage"] = stage
+    return json.dumps(
+        {
+            "status": "error",
+            "code": code,
+            "response": EXPLORATION_FAILURE_CODE_RESPONSES[code],
+            "detail": detail,
+        },
+        separators=(",", ":"),
+    )
 
 
 def _reason_field(exc: BaseException) -> dict[str, object]:
@@ -153,7 +164,6 @@ async def _activate_session_exploration(
     # file): a per-session authority directory prevents concurrent sessions from
     # colliding on the fixed authority filename.
     authority_home = _get_ctx().temp_dir / "exploration-session-authority" / session_id
-    authority_home.mkdir(parents=True, exist_ok=True)
     try:
         bind_session_scoped_durable(
             store,
@@ -164,10 +174,8 @@ async def _activate_session_exploration(
             repository_root=repository_root,
             source_identity=f"interactive:{session_id}",
         )
-    except tuple(EXPLORATION_STORE_FAILURE_CODES):
+    except tuple(EXPLORATION_TYPED_FAILURE_CODES):
         raise
-    except Exception as exc:
-        raise BindSessionScopedFailed(str(exc)) from exc
     exploration_enabled = False
     try:
         try:
@@ -207,7 +215,7 @@ def _try_session_scoped_submit(
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
         )
         return page
-    except (RuntimeError, ValueError):
+    except tuple(EXPLORATION_TYPED_FAILURE_CODES):
         return None
 
 
@@ -231,7 +239,7 @@ def _try_session_scoped_page(
             cursor=cursor,
         )
         return page if status is CapabilityResolutionStatus.OK else None
-    except (RuntimeError, ValueError):
+    except tuple(EXPLORATION_TYPED_FAILURE_CODES):
         return None
 
 
@@ -582,7 +590,7 @@ async def enable_exploration(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),
         )
-    except tuple(EXPLORATION_STORE_FAILURE_CODES) as exc:
+    except tuple(EXPLORATION_TYPED_FAILURE_CODES) as exc:
         code = resolve_exploration_store_failure_code(exc)
         logger.warning(
             "enable_exploration_store_failure",
@@ -591,16 +599,7 @@ async def enable_exploration(
             exc_info=True,
             **_reason_field(exc),
         )
-        return _failure(code)
-    except BindSessionScopedFailed as exc:
-        logger.warning(
-            "enable_exploration_bind_session_scoped_failed",
-            code=ExplorationFailureCode.BIND_FAILED,
-            exception_type=type(exc).__name__,
-            exc_info=True,
-            **_reason_field(exc),
-        )
-        return _failure(ExplorationFailureCode.BIND_FAILED)
+        return _failure(code, exc=exc)
     except EnableComponentsFailed as exc:
         logger.warning(
             "enable_exploration_enable_components_failed",
@@ -609,7 +608,7 @@ async def enable_exploration(
             exc_info=True,
             **_reason_field(exc),
         )
-        return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED)
+        return _failure(ExplorationFailureCode.ENABLE_COMPONENTS_FAILED, exc=exc)
     except Exception as exc:  # truly unexpected — preserve the "Never raises" contract
         logger.warning(
             "enable_exploration_unexpected",
@@ -618,4 +617,4 @@ async def enable_exploration(
             exc_info=True,
             **_reason_field(exc),
         )
-        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR)
+        return _failure(_FAILURE_UNEXPECTED_INTERNAL_ERROR, exc=exc)

@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass
 
 from autoskillit.core import (
-    EXPLORATION_FALLBACK_CODES,
     PLUGINLESS_EXPLORER_ROLE,
     AgentDef,
     ExplorationDispatchConventions,
@@ -16,15 +15,11 @@ from autoskillit.core import (
     ExplorationVectorDisposition,
     agent_definition_digest,
     load_bundled_agent_definitions,
+    render_exploration_failure_guidance,
 )
 
-_EXPLORATION_FALLBACK_CODES = tuple(sorted(code.value for code in EXPLORATION_FALLBACK_CODES))
-
-_EXPLORATION_FALLBACK_SENTENCE = (
-    f"If enable_exploration() fails with one of {list(_EXPLORATION_FALLBACK_CODES)}, "
-    f"dispatch the {PLUGINLESS_EXPLORER_ROLE!r} specialist (Read/Grep/Glob only, no "
-    "broker tools) for each selected vector role instead of the broker-bound explorer. "
-    "For any other failure code, surface the code to the user rather than improvising."
+_EXPLORATION_FALLBACK_SENTENCE = render_exploration_failure_guidance(
+    fallback_dispatch=f"the {PLUGINLESS_EXPLORER_ROLE!r} specialist (Read/Grep/Glob only)"
 )
 
 _PARENT_ROUTING_INSTRUCTIONS = (

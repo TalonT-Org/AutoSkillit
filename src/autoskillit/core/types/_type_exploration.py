@@ -88,6 +88,23 @@ EXPLORATION_FALLBACK_CODES: frozenset[ExplorationFailureCode] = frozenset(
 )
 
 
+def render_exploration_failure_guidance(*, fallback_dispatch: str) -> str:
+    """Render the exhaustive parent action for every exploration failure tier."""
+    grouped: dict[ExplorationFailureResponse, list[str]] = {
+        response: [] for response in ExplorationFailureResponse
+    }
+    for code, response in EXPLORATION_FAILURE_CODE_RESPONSES.items():
+        grouped[response].append(code.value)
+    fallback = ", ".join(sorted(grouped[ExplorationFailureResponse.FALLBACK]))
+    retry = ", ".join(sorted(grouped[ExplorationFailureResponse.RETRY_THEN_SURFACE]))
+    surface = ", ".join(sorted(grouped[ExplorationFailureResponse.SURFACE]))
+    return (
+        f"For {fallback}, dispatch {fallback_dispatch}. "
+        f"For {retry}, retry once and then surface the failure. "
+        f"For {surface}, surface the failure directly."
+    )
+
+
 class BrokerAuthorityStatus(StrEnum):
     """Exhaustive, truthful states for ``kitchen_status()``'s broker_authority field.
 
@@ -619,6 +636,7 @@ __all__ = [
     "EvidenceRecord",
     "EXPLORATION_FAILURE_CODE_RESPONSES",
     "EXPLORATION_FALLBACK_CODES",
+    "render_exploration_failure_guidance",
     "ExplorationApplicability",
     "ExplorationContextStoreProtocol",
     "ExplorationFailureResponse",

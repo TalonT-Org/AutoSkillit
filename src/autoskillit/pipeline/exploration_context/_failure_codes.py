@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from autoskillit.core import ExplorationFailureCode
+from autoskillit.pipeline.exploration_context_durable import DurableBindFailed
 
 from ._store import OwnerBoundExplorationContextStore
 
@@ -38,6 +39,18 @@ EXPLORATION_STORE_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailure
             OwnerBoundExplorationContextStore.CapacityExceeded: (
                 ExplorationFailureCode.CAPACITY_EXCEEDED
             ),
+            OwnerBoundExplorationContextStore.CapabilityUnavailable: (
+                ExplorationFailureCode.CONTEXT_UNAVAILABLE
+            ),
+        }
+    )
+)
+
+EXPLORATION_TYPED_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailureCode] = (
+    MappingProxyType(
+        {
+            **EXPLORATION_STORE_FAILURE_CODES,
+            DurableBindFailed: ExplorationFailureCode.BIND_FAILED,
         }
     )
 )
@@ -46,9 +59,9 @@ EXPLORATION_STORE_FAILURE_CODES: Mapping[type[BaseException], ExplorationFailure
 def resolve_exploration_store_failure_code(exc: BaseException) -> ExplorationFailureCode:
     """Resolve the nearest mapped ancestor's code by walking the MRO."""
     for klass in type(exc).__mro__:
-        if klass in EXPLORATION_STORE_FAILURE_CODES:
-            return EXPLORATION_STORE_FAILURE_CODES[klass]
+        if klass in EXPLORATION_TYPED_FAILURE_CODES:
+            return EXPLORATION_TYPED_FAILURE_CODES[klass]
     raise AssertionError(
         f"{type(exc)!r} matched the exploration store-exception allowlist but has no "
-        "mapped ancestor in EXPLORATION_STORE_FAILURE_CODES"
+        "mapped ancestor in EXPLORATION_TYPED_FAILURE_CODES"
     )

@@ -21,7 +21,6 @@ from typing import assert_never
 import regex as re
 
 from autoskillit.core import (
-    EXPLORATION_FALLBACK_CODES,
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     PLUGINLESS_EXPLORER_ROLE,
     SKILL_PROJECTION_VERSION,
@@ -44,6 +43,7 @@ from autoskillit.core import (
     SkillSourceIdentity,
     dump_yaml_str,
     normalize_parent_sandbox_mode,
+    render_exploration_failure_guidance,
     temp_dir_display_str,
 )
 from autoskillit.workspace.skills import (
@@ -517,16 +517,16 @@ def _prepare_exploration_replacements(
             assert context.backend is not None
             conventions = context.backend.exploration_dispatch_renderer.conventions
             dispatch_role = f"{conventions.role_prefix}{PLUGINLESS_EXPLORER_ROLE}"
-            fallback_codes = sorted(code.value for code in EXPLORATION_FALLBACK_CODES)
+            guidance = render_exploration_failure_guidance(
+                fallback_dispatch=f"the {dispatch_role!r} specialist"
+            )
             replacements.update(
                 {
                     vector.id: (
-                        "Explorer provisioning is unavailable in this context "
-                        f"({fallback_codes}); dispatch the {dispatch_role!r} "
-                        f"specialist ({conventions.launcher}({conventions.role_argument}="
-                        f"{dispatch_role!r})) for this exploration vector's task "
-                        "instead — it is read-only (Read/Grep/Glob) and does not "
-                        "require enable_exploration."
+                        "Explorer provisioning is unavailable in this context. "
+                        f"{guidance} Launch with {conventions.launcher}("
+                        f"{conventions.role_argument}={dispatch_role!r}) for this "
+                        "exploration vector's task."
                     )
                     for vector in active_vectors
                     if vector.id not in replacements

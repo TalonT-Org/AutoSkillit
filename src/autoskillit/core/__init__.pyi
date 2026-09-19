@@ -1487,6 +1487,9 @@ from .types._type_exploration import (
     EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
 )
 from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
+from .types._type_exploration import (
+    render_exploration_failure_guidance as render_exploration_failure_guidance,
+)
 from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
 from .types._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
 from .types._type_exploration import CapabilityResolution as CapabilityResolution

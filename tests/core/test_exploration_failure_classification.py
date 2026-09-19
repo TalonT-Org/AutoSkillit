@@ -17,9 +17,19 @@ from autoskillit.core import (
     PLUGINLESS_EXPLORER_ROLE,
     ExplorationFailureCode,
     ExplorationFailureResponse,
+    render_exploration_failure_guidance,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+def test_guidance_renderer_names_each_response_tier() -> None:
+    guidance = render_exploration_failure_guidance(fallback_dispatch="pluginless explorer")
+
+    for code, response in EXPLORATION_FAILURE_CODE_RESPONSES.items():
+        assert code.value in guidance
+        if response is ExplorationFailureResponse.FALLBACK:
+            assert "dispatch pluginless explorer" in guidance
 
 
 def test_every_exploration_failure_code_is_classified_exactly_once() -> None:

@@ -69,13 +69,13 @@ def _sink_env() -> dict[str, str]:
 def _mock_backend(**kw: Any) -> Mock:
     """Build a mock backend with all-False/empty capability baseline.
 
-    Defaults the Claude-format-parse capability to True so the mock is
-    consistent with the hardcoded ``name="claude-code"`` value. Override
-    ``supports_claude_format_stdout=False`` when the test wants the
-    non-Claude parse path.
+    Defaults Claude-native capabilities to True so the mock is consistent
+    with its hardcoded ``name="claude-code"`` value. Override either flag
+    when the test needs a non-Claude path.
     """
     kw.setdefault("write_detection_strategy", "tool_names")
     kw.setdefault("supports_claude_format_stdout", True)
+    kw.setdefault("anthropic_provider_capable", True)
     caps = BackendCapabilities(**kw)
     backend = Mock()
     backend.name = "claude-code"

@@ -97,7 +97,7 @@ def _require_process_identity(process: subprocess.Popen[bytes]) -> tuple[str, in
     return boot_id, ticks
 
 
-def _reaped_dispatch(state_path: Path):
+def _reaped_dispatch(state_path: Path) -> DispatchRecord:
     state = read_state(state_path)
     assert state is not None
     dispatch = state.dispatches[0]

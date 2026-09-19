@@ -26,6 +26,7 @@ class TestTestGateBypassRefusal:
         [
             "custom-gate verify",
             "task test-check",
+            "task test-local-gate",
             "task test-all",
             "task test-filtered",
             "pytest -q",

@@ -178,6 +178,30 @@ class TestTaskfile:
         assert re.search(r"\$PYTEST_CMD[^\n]*\$\{PYTEST_IGNORE_PATHS:-\}", test_all_commands)
         assert "lint-imports" in test_all_commands
 
+        wrapper_sequence = (
+            r"task test-all\n"
+            r"\s*LOCAL_GATE_EXIT=\$\?\n"
+            r"\s*set \+o pipefail\n"
+            r"\s*set -e\n"
+            r"\s*if \[ \"\$LOCAL_GATE_EXIT\" -ne 0 \]; then\n"
+            r"(?:\s*echo \"\"\n)?"
+            r"\s*echo \"TEST_RESULT=FAIL\"\n"
+            r"\s*echo \"LOCAL_GATE_EXIT_CODE=\$LOCAL_GATE_EXIT\"\n"
+            r"\s*exit 1\n"
+            r"\s*else\n"
+            r"(?:\s*echo \"\"\n)?"
+            r"\s*echo \"TEST_RESULT=PASS\"\n"
+            r"\s*exit 0\n"
+            r"\s*fi"
+        )
+        assert re.search(wrapper_sequence, commands)
+
+        after_restoring_errexit = commands.split("set -e", maxsplit=1)[1]
+        before_result_branch = after_restoring_errexit.split(
+            'if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then', maxsplit=1
+        )[0]
+        assert "exit" not in before_result_branch
+
     def test_regen_contracts_task_exists(self):
         """TF-12 — regen-contracts task exists in Taskfile.yml."""
         data = self._load()

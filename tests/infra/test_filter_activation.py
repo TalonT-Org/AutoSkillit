@@ -23,6 +23,21 @@ def test_project_config_has_operational_test_gate_tuple():
     assert test_check["filter_mode"] == "conservative"
     assert test_check["base_ref"] == "develop"
 
+    configured_command = " ".join(test_check["command"])
+    root_instructions = (REPO_ROOT / "AGENTS.md").read_text()
+    contributor_guide = (REPO_ROOT / "docs/developer/contributing.md").read_text()
+
+    for guidance in (root_instructions, contributor_guide):
+        assert f"`{configured_command}`" in guidance
+        assert "`task test-check`" in guidance
+
+    assert "Multi-part plan green-gate invariant" in root_instructions
+    assert "MCP `test_check`" in contributor_guide
+    assert "pre-merge" in contributor_guide
+    assert "post-rebase" in contributor_guide
+    assert "generic/default" in root_instructions
+    assert "generic/default" in contributor_guide
+
 
 def test_hook_registry_tests_in_infra():
     """AC4: test_hook_registry.py must live in tests/hooks/."""

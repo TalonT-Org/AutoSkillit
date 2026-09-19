@@ -315,6 +315,7 @@ class TestFailOpen:
 
 class TestDenyMessage:
     def test_deny_message_contains_corrective_guidance(self, monkeypatch):
+        from autoskillit.hooks.guards import test_runner_guard  # noqa: PLC0415
         from autoskillit.hooks.guards.test_runner_guard import (  # noqa: PLC0415
             TEST_RUNNER_DENY_TRIGGER,
         )
@@ -323,7 +324,11 @@ class TestDenyMessage:
         output = _run_hook(event, monkeypatch, headless=True)
         data = json.loads(output)
         reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "task test-check" in reason
+        for guidance in (test_runner_guard.__doc__, reason):
+            assert guidance is not None
+            assert "test_check.command" in guidance
+            assert "task test-local-gate" in guidance
+            assert "task test-check" in guidance
         assert "AUTOSKILLIT_TEST_FILTER" in reason
         assert TEST_RUNNER_DENY_TRIGGER in reason
 

@@ -262,6 +262,21 @@ class AssignedRequirementDef:
 
 @dataclass(frozen=True, slots=True)
 class CoverageResultDef:
+    """Aggregate coverage verdict produced by ``evaluate_coverage``.
+
+    Fields form two related but distinct signals:
+    - ``unassigned`` — leaf requirements with no allocation row.
+    - ``uncovered`` — container requirements that have at least one child in
+      ``unassigned`` (i.e. a container whose allocation is incomplete).
+    - ``container_allocated`` — container requirements that have at least one
+      allocation row, regardless of whether all their children are allocated.
+      Containers in this set may overlap with ``uncovered`` when children are
+      partially assigned.
+    - ``duplicate``, ``unknown`` — double-allocation and unrecognized-id rows.
+    - ``parts_without_obligations`` — parts with no allocation rows (only set
+      for ``UNENUMERATED``/``NO_ISSUE`` inventory modes).
+    """
+
     status: CoverageStatus
     unassigned: tuple[str, ...] = ()
     uncovered: tuple[str, ...] = ()

@@ -348,6 +348,10 @@ def test_no_stale_smoke_utils_exemption_rationale() -> None:
     silently returning under the same REQ-CNST-004-E1 label anywhere under tests/.
     """
     tests_root = SRC_ROOT.parents[1] / "tests"
+    assert not (tests_root / "test_smoke_utils.py").is_file(), (
+        "Bare-monolith tests/test_smoke_utils.py returned; the REQ-CNST-004-E1 split "
+        "into tests/smoke_utils/ shards must not be reverted."
+    )
     guard_path = Path(__file__).resolve()
     forbidden_substrings = ("REQ-CNST-004-E1", "Exempt at 1348 lines", "tests/test_smoke_utils.py")
     missing: list[tuple[str, str]] = []

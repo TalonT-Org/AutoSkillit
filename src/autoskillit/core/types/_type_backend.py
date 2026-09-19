@@ -262,7 +262,6 @@ class BackendCapabilities:
     # (Claude subagents share the parent process — the per-child terminal model
     # structurally cannot apply; this flag routes to the session-scoped model).
     session_scoped_explorer_capable: bool = field(default=False)
-    # True when backend's git metadata directories (.git/worktrees/) are writable
     # True when the backend can make outbound GitHub API write calls without sandbox restriction
     github_api_callable: bool = field(default=False)
     # Native skill invocation prefix character used by this backend's model/CLI.

@@ -155,7 +155,6 @@ def test_reap_skip_keeps_real_child_and_state_unchanged(tmp_path: Path) -> None:
         assert _dispatch_outcome(state_path) == original_outcome
 
 
-@pytest.mark.anyio
 async def test_async_reap_forwards_skip_set_to_real_children(tmp_path: Path) -> None:
     state_dir_a = tmp_path / "a"
     state_dir_b = tmp_path / "b"

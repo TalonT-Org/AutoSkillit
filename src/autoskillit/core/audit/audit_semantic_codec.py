@@ -10,10 +10,12 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from ..io import YAMLError, load_yaml
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
 from ..types._type_audit_admission import (
@@ -24,6 +26,17 @@ from ..types._type_audit_admission import (
     StandaloneAuditEvidence,
 )
 from ..types._type_audit_artifact_ref import ArtifactRef
+from ..types._type_audit_cycle_authority import (
+    AuditAssessmentRow,
+    AuditCycleAuthority,
+    AuditDisposition,
+)
+from ..types._type_audit_cycle_disposition import (
+    AdmissionReason,
+    AuditFindingWaiver,
+    InventoryAdmissionDecision,
+    PlanDispositionRow,
+)
 
 __all__ = [
     "AuditSemanticCodecError",
@@ -487,3 +500,212 @@ def load_standalone_audit_evidence(
             "standalone audit artifact does not round-trip exactly",
         )
     return result
+
+
+_REQUIREMENTS_HEADER = ("Requirement ID", "Disposition", "Implementation Step")
+_STEP_HEADING_RE = re.compile(
+    r"^###\s+(Step\s+[1-9][0-9]*(?:\.[1-9][0-9]*)*)(?::[^\n]*)?$",
+    re.MULTILINE,
+)
+
+
+def _extract_section(markdown: str, heading: str) -> str:
+    pattern = re.compile(rf"^## {re.escape(heading)}[ \t]*$", re.MULTILINE)
+    matches = tuple(pattern.finditer(markdown))
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one ## {heading} section")
+    start = matches[0].end()
+    next_heading = re.search(r"^##\s+", markdown[start:], re.MULTILINE)
+    end = start + next_heading.start() if next_heading is not None else len(markdown)
+    return markdown[start:end]
+
+
+def _split_table_row(line: str) -> tuple[str, ...]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        raise ValueError("Requirements Map rows must be pipe-delimited")
+    return tuple(cell.strip() for cell in stripped[1:-1].split("|"))
+
+
+def parse_requirements_map(markdown: str) -> tuple[PlanDispositionRow, ...]:
+    """Parse the plan's exact Requirements Map table."""
+    section = _extract_section(markdown, "Requirements Map")
+    lines = tuple(line for line in section.splitlines() if line.strip())
+    if len(lines) < 3:
+        raise ValueError("Requirements Map must contain a header, separator, and rows")
+    if _split_table_row(lines[0]) != _REQUIREMENTS_HEADER:
+        raise ValueError(
+            "Requirements Map header must be "
+            "| Requirement ID | Disposition | Implementation Step |"
+        )
+    separator = _split_table_row(lines[1])
+    if len(separator) != 3 or any(re.fullmatch(r":?-{3,}:?", cell) is None for cell in separator):
+        raise ValueError("Requirements Map separator is invalid")
+    rows: list[PlanDispositionRow] = []
+    for line in lines[2:]:
+        cells = _split_table_row(line)
+        if len(cells) != 3:
+            raise ValueError("Requirements Map rows must have exactly three columns")
+        requirement_id, disposition, implementation_step = cells
+        step = None if implementation_step in {"", "-", "—"} else implementation_step
+        rows.append(
+            PlanDispositionRow.create(
+                requirement_id=requirement_id,
+                disposition=disposition,
+                implementation_step=step,
+            )
+        )
+    ids = tuple(row.requirement_id for row in rows)
+    if len(ids) != len(set(ids)):
+        raise ValueError("Requirements Map contains duplicate requirement IDs")
+    return tuple(rows)
+
+
+def implementation_step_blocks(markdown: str) -> dict[str, str]:
+    """Return each numbered Implementation Steps block by its canonical name."""
+    section = _extract_section(markdown, "Implementation Steps")
+    matches = tuple(_STEP_HEADING_RE.finditer(section))
+    if not matches:
+        raise ValueError("Implementation Steps must contain ### Step N directives")
+    blocks: dict[str, str] = {}
+    for index, matched in enumerate(matches):
+        step_name = matched.group(1)
+        if step_name in blocks:
+            raise ValueError(f"duplicate implementation step {step_name}")
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(section)
+        blocks[step_name] = section[matched.start() : end]
+    return blocks
+
+
+def load_audit_finding_waivers(
+    *,
+    waiver_root: Path | None,
+    reader: _ArtifactByteReader,
+    max_size_bytes: int,
+) -> tuple[AuditFindingWaiver, ...]:
+    """Load the human-maintained waiver ledger from its explicit root."""
+    if waiver_root is None:
+        return ()
+    ledger_path = waiver_root / ".autoskillit/waivers/audit-findings.yaml"
+    try:
+        _, data = reader(ledger_path, waiver_root, max_size_bytes=max_size_bytes)
+    except FileNotFoundError:
+        return ()
+    except (ContainmentError, OSError) as exc:
+        raise ValueError(f"waiver ledger containment/read failed: {exc}") from exc
+    try:
+        raw = load_yaml(data.decode("utf-8", errors="strict"))
+        if not isinstance(raw, dict) or set(raw) != {"waivers"}:
+            raise ValueError("waiver ledger must be a mapping with only waivers")
+        entries = raw["waivers"]
+        if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+            raise ValueError("waiver ledger waivers must be a list of mappings")
+        waivers = tuple(AuditFindingWaiver.from_dict(entry) for entry in entries)
+        if len({waiver.waiver_id for waiver in waivers}) != len(waivers):
+            raise ValueError("waiver ledger contains duplicate waiver IDs")
+        return waivers
+    except (UnicodeDecodeError, YAMLError, TypeError, ValueError) as exc:
+        raise ValueError(f"waiver ledger is invalid: {exc}") from exc
+
+
+def _waiver_rejection(
+    *,
+    assessment: AuditAssessmentRow,
+    authority: AuditCycleAuthority,
+    waiver_id: str | None,
+    waiver_by_id: dict[str, AuditFindingWaiver],
+    as_of: date | None = None,
+) -> InventoryAdmissionDecision | None:
+    if (
+        waiver_id is not None
+        and assessment.assessment.disposition is not AuditDisposition.REQUIRES_DECISION
+    ):
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_NOT_APPLICABLE,
+            f"{assessment.requirement_id} cannot be waived by decision",
+        )
+    if assessment.assessment.disposition is not AuditDisposition.REQUIRES_DECISION:
+        return None
+    if waiver_id is None:
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.UNMAPPED_REQUIREMENT,
+            f"{assessment.requirement_id} requires waived-by-decision@<id>",
+        )
+    waiver = waiver_by_id.get(waiver_id)
+    if waiver is None:
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_NOT_FOUND,
+            f"{assessment.requirement_id} names unknown waiver {waiver_id!r}",
+        )
+    if (
+        waiver.requirement_id != assessment.requirement_id
+        or waiver.finding_row_digest != assessment.row_digest
+    ):
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_DIGEST_MISMATCH,
+            f"{assessment.requirement_id} does not match waiver {waiver_id!r}",
+        )
+    if waiver.plan_set_id != authority.plan_set_id or waiver.scope_id != authority.scope_id:
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_SCOPE_MISMATCH,
+            f"{assessment.requirement_id} waiver scope does not match authority",
+        )
+    if waiver.part_id != authority.part_id:
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_PART_MISMATCH,
+            f"{assessment.requirement_id} waiver part does not match authority",
+        )
+    try:
+        is_stale = waiver.is_stale(as_of=as_of or date.today())
+    except ValueError as exc:
+        return InventoryAdmissionDecision.reject(AdmissionReason.WAIVER_LEDGER_INVALID, str(exc))
+    if is_stale:
+        return InventoryAdmissionDecision.reject(
+            AdmissionReason.WAIVER_EXPIRED,
+            f"{assessment.requirement_id} waiver {waiver_id!r} has expired",
+        )
+    return None
+
+
+def validate_waiver_rows(
+    *,
+    authority: AuditCycleAuthority,
+    plan_rows: tuple[PlanDispositionRow, ...],
+    waivers: tuple[AuditFindingWaiver, ...],
+    as_of: date | None = None,
+) -> tuple[
+    InventoryAdmissionDecision | None,
+    tuple[tuple[AuditAssessmentRow, PlanDispositionRow], ...],
+]:
+    """Validate decision waivers and return the rows for legacy admission checks."""
+    if not all(isinstance(waiver, AuditFindingWaiver) for waiver in waivers):
+        return (
+            InventoryAdmissionDecision.reject(
+                AdmissionReason.WAIVER_LEDGER_INVALID,
+                "waiver ledger contains invalid records",
+            ),
+            (),
+        )
+    waiver_by_id = {waiver.waiver_id: waiver for waiver in waivers}
+    if len(waiver_by_id) != len(waivers):
+        return (
+            InventoryAdmissionDecision.reject(
+                AdmissionReason.WAIVER_LEDGER_INVALID,
+                "waiver ledger contains duplicate waiver IDs",
+            ),
+            (),
+        )
+    legacy_rows: list[tuple[AuditAssessmentRow, PlanDispositionRow]] = []
+    for assessment, disposition in zip(authority.assessments, plan_rows, strict=True):
+        rejection = _waiver_rejection(
+            assessment=assessment,
+            authority=authority,
+            waiver_id=disposition.waiver_id,
+            waiver_by_id=waiver_by_id,
+            as_of=as_of,
+        )
+        if rejection is not None:
+            return rejection, ()
+        if assessment.assessment.disposition is not AuditDisposition.REQUIRES_DECISION:
+            legacy_rows.append((assessment, disposition))
+    return None, tuple(legacy_rows)

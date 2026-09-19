@@ -37,7 +37,6 @@ _REPORT_DOMAIN = "autoskillit:audit-cycle:plan-disposition:v1:sha256"
 _SATISFIED_RE = re.compile(r"^satisfied-by-round-([1-9][0-9]*)$")
 _WAIVED_RE = re.compile(r"^waived-by-decision@([A-Za-z0-9][A-Za-z0-9._-]{0,63})$")
 _MIN_RATIONALE_LENGTH = 20
-_WAIVER_REVIEW_INTERVAL = timedelta(days=180)
 
 # Shared by the private verified-copy disposition producer and the read-side
 # _resolve_plan_disposition (recipe/_cmd_rpc_guards.py) so the two sides of the
@@ -267,7 +266,7 @@ class AuditFindingWaiver:
             raise ValueError("AuditFindingWaiver.as_of must be a date")
         if self.review_date > as_of:
             raise ValueError("AuditFindingWaiver.review_date cannot be after as_of")
-        return as_of - self.review_date > _WAIVER_REVIEW_INTERVAL
+        return as_of - self.review_date > timedelta(days=180)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:

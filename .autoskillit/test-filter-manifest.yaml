@@ -359,6 +359,9 @@ src/autoskillit/core/__init__.pyi:
   - arch/
   - contracts/
 
+.autoskillit/waivers/audit-findings.yaml:
+  - core/
+
 tests/**/CLAUDE.md: []
 tests/**/AGENTS.md: []
 src/**/AGENTS.md: []

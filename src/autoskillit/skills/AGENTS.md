@@ -1,6 +1,6 @@
 # skills/
 
-Three lifecycle/bootstrap skills that gate every orchestrator session:
+The lifecycle/bootstrap skills that gate every orchestrator session are
 `open-kitchen`, `sous-chef`, and `close-kitchen`. The `skills/` directory
 holds only the always-loaded kernel skills; the bulk of the skill catalog
 lives in `skills_extended/`. Authoritative accounting lives in
@@ -12,7 +12,7 @@ shares the same shape.
 
 ## Architecture Notes
 
-The three skills are tightly coupled by the **open-kitchen → sous-chef
+These skills are tightly coupled by the **open-kitchen → sous-chef
 auto-load invariant**: every orchestrator session that calls
 `/autoskillit:open-kitchen` immediately receives `sous-chef` as a
 bootstrap document injected into context. `sous-chef` is **internal** —

@@ -9,6 +9,11 @@ import pytest
 pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+INVENTORY_COUNT_GUIDANCE = (
+    "Avoid exact counts of evolving repository inventories in prose and docstrings; "
+    "name the members or source of truth, and reserve numeric claims for "
+    "behavior-defining limits or contracts."
+)
 
 
 @pytest.fixture()
@@ -133,6 +138,12 @@ class TestAgentsMdUniversalProjectRules:
 
 
 class TestAgentsMdContentQuality:
+    def test_agents_md_has_inventory_count_guidance_in_code_section(self, agents_md: str) -> None:
+        parts = agents_md.split("### **3.1. Code and Implementation**", 1)
+        assert len(parts) == 2, "Code and Implementation section not found"
+        code_section = parts[1].split("### ", 1)[0]
+        assert INVENTORY_COUNT_GUIDANCE in code_section
+
     def test_agents_md_does_not_require_tests_after_every_task(self, agents_md: str) -> None:
         assert "Always run tests at end of task" not in agents_md
 

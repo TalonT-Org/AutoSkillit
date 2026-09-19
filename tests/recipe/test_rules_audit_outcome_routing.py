@@ -103,23 +103,23 @@ def test_rule_rejects_child_authored_verdict_routing() -> None:
     assert "child-authored result.verdict" in findings[0].message
 
 
-def test_rule_rejects_semantic_and_infrastructure_route_conflation() -> None:
+def test_rule_rejects_no_go_and_infrastructure_route_conflation() -> None:
     recipe = _recipe()
     conditions = recipe.steps["audit_impl"].on_result.conditions
-    semantic_route = next(
+    no_go_route = next(
         condition.route
         for condition in conditions
-        if condition.when and "SEMANTIC_REJECTED" in condition.when
+        if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
     )
     conflict = next(
         condition for condition in conditions if condition.when and "CONFLICT" in condition.when
     )
-    conflict.route = semantic_route
+    conflict.route = no_go_route
 
     findings = _findings(recipe)
 
     assert len(findings) == 1
-    assert "semantic correction must not share" in findings[0].message
+    assert "NO GO must not share" in findings[0].message
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
@@ -142,7 +142,7 @@ def test_semantic_rejection_never_uses_a_go_continuation(recipe_name: str) -> No
     assert semantic_route not in go_routes
 
 
-def test_implementation_semantic_rejection_uses_bounded_remediation_loop() -> None:
+def test_implementation_semantic_rejection_uses_bounded_integrity_loop() -> None:
     recipe = _recipe("implementation")
     conditions = recipe.steps["audit_impl"].on_result.conditions
     semantic_route = next(
@@ -151,13 +151,13 @@ def test_implementation_semantic_rejection_uses_bounded_remediation_loop() -> No
         if condition.when and "SEMANTIC_REJECTED" in condition.when
     )
 
-    assert semantic_route == "check_audit_remediation_loop"
+    assert semantic_route == "check_audit_integrity_retry"
     loop_step = recipe.steps[semantic_route]
     assert loop_step.with_args == {
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
-        "current_iteration": "${{ context.audit_remediation_count }}",
-        "max_iterations": "${{ inputs.audit_remediation_max_retries }}",
-        "step_name": "check_audit_remediation_loop",
+        "current_iteration": "${{ context.audit_integrity_fault_count }}",
+        "max_iterations": "${{ inputs.audit_integrity_max_retries }}",
+        "step_name": "check_audit_integrity_retry",
     }
     loop_routes = loop_step.on_result.conditions
     assert loop_routes[0].when == "${{ result.max_exceeded }} == true"

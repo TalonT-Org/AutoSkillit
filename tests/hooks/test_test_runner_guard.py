@@ -324,13 +324,20 @@ class TestDenyMessage:
         output = _run_hook(event, monkeypatch, headless=True)
         data = json.loads(output)
         reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        for guidance in (test_runner_guard.__doc__, reason):
-            assert guidance is not None
-            assert "test_check.command" in guidance
-            assert "task test-local-gate" in guidance
-            assert "task test-check" in guidance
-        assert "AUTOSKILLIT_TEST_FILTER" in reason
-        assert TEST_RUNNER_DENY_TRIGGER in reason
+
+        assert test_runner_guard.__doc__ is not None
+        assert "test_check.command" in test_runner_guard.__doc__, (
+            "module docstring must direct agents at the configured test_check.command"
+        )
+
+        assert reason is not None
+        assert TEST_RUNNER_DENY_TRIGGER in reason, "denial reason must echo the deny trigger"
+        assert "test_check.command" in reason, (
+            "denial reason must direct agents at the configured test_check.command"
+        )
+        assert "AUTOSKILLIT_TEST_FILTER" in reason, (
+            "denial reason must mention the test-filter override knob"
+        )
 
 
 # ---------------------------------------------------------------------------

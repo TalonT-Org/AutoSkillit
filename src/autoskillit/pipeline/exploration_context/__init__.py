@@ -20,7 +20,7 @@ from autoskillit.pipeline.exploration_context_durable import (
     EXPLORATION_SESSION_ENV,
 )
 
-from ._constants import EXPLORER_INELIGIBLE_SESSION_TYPES, EXPLORER_ROLE_NAMES
+from ._constants import EXPLORER_ROLE_NAMES, EXPLORER_SESSION_SCOPE
 from ._eligibility import (
     exploration_auto_provision_eligible,
     is_explorer_binding_eligible,
@@ -41,7 +41,7 @@ __all__ = [
     "CapabilityResolutionStatus",
     "EXPLORATION_STORE_FAILURE_CODES",
     "EXPLORER_ROLE_NAMES",
-    "EXPLORER_INELIGIBLE_SESSION_TYPES",
+    "EXPLORER_SESSION_SCOPE",
     "EXPLORATION_AUTHORITY_PATH_ENV",
     "EXPLORATION_CAPABILITY_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",

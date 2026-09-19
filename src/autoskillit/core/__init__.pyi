@@ -1287,6 +1287,8 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionSummary as SessionSummary
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
+from .types import SessionScope as SessionScope
+from .types import SessionShape as SessionShape
 from .types import Severity as Severity
 from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
 from .types import (
@@ -1466,6 +1468,10 @@ from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import review_receipt_validation_error as review_receipt_validation_error
 from .types import select_child_session_deadline as select_child_session_deadline
 from .types import session_type as session_type
+from .types import session_shape as session_shape
+from .types import hookdef_session_scope as hookdef_session_scope
+from .types import ALL_SESSION_SHAPES as ALL_SESSION_SHAPES
+from .types import SESSION_SCOPE_ANY as SESSION_SCOPE_ANY
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import strip_markdown_code_regions as strip_markdown_code_regions

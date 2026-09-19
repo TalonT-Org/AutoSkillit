@@ -7,14 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import TokenMeasure
 from autoskillit.pipeline.tokens import DefaultTokenLog
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
-
-
-def _observed(value: int) -> dict[str, int | str]:
-    return TokenMeasure.observed(value).to_dict()
 
 
 # ---------------------------------------------------------------------------

@@ -7,15 +7,10 @@ import json
 import pytest
 
 from autoskillit.execution.session._session_model import extract_token_usage
+from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
-
-
-def _observed(value: int) -> dict[str, object]:
-    return {"state": "measured_zero" if value == 0 else "measured", "value": value}
-
-
-_UNKNOWN = {"state": "unknown", "value": None}
 
 
 def _assistant(

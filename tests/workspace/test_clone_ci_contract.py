@@ -29,6 +29,19 @@ def _remote_url(repository: str, name: str) -> str:
     ).stdout.strip()
 
 
+def _has_remote(repository: str, name: str) -> bool:
+    """Return whether a remote with the given name is configured on the repository."""
+    return (
+        subprocess.run(
+            ["git", "-C", repository, "remote", "get-url", name],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).returncode
+        == 0
+    )
+
+
 @pytest.mark.anyio
 async def test_resolve_remote_repo_after_clone_uses_upstream(local_with_remote: Path) -> None:
     """
@@ -58,11 +71,5 @@ async def test_resolve_remote_repo_after_local_only_clone_returns_none(git_repo:
     clone_path = result["clone_path"]
 
     assert _remote_url(clone_path, "origin") == f"file://{clone_path}"
-    upstream = subprocess.run(
-        ["git", "-C", clone_path, "remote", "get-url", "upstream"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert upstream.returncode != 0
+    assert not _has_remote(clone_path, "upstream")
     assert await resolve_remote_repo(clone_path) is None

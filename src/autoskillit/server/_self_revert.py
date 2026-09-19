@@ -203,8 +203,6 @@ class _ScanState:
         if result.termination is TerminationReason.OUTPUT_LIMIT:
             return None, "self-revert scan reached its output limit"
         rc, stdout, stderr = _process_runner_result(result, _SCAN_TIMEOUT_SECONDS)
-        stdout = stdout or ""
-        stderr = stderr or ""
         self.output_used += len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
         if self.output_used > _SCAN_MAX_OUTPUT_BYTES:
             return None, "self-revert scan reached its output limit"

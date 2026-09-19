@@ -45,8 +45,9 @@ def decide_termination_action(
 
     Priority:
     1. timeout_fired → IMMEDIATE_KILL (always overrides)
-    2. process_exited → NO_KILL (process already gone, no signal needed)
-    3. termination-reason dispatch:
+    2. output limit → IMMEDIATE_KILL (preserves overflow provenance even if exit raced)
+    3. process_exited → NO_KILL (process already gone, no signal needed)
+    4. termination-reason dispatch:
        - COMPLETED: channel won but process alive → DRAIN_THEN_KILL_IF_ALIVE
        - NATURAL_EXIT: fallback case → NO_KILL
        - IDLE_STALL / STALE / TIMED_OUT: infra kill → IMMEDIATE_KILL
@@ -55,6 +56,8 @@ def decide_termination_action(
     as a pure decision table without any async or process infrastructure.
     """
     if timeout_fired:
+        return TerminationAction.IMMEDIATE_KILL
+    if termination is TerminationReason.OUTPUT_LIMIT:
         return TerminationAction.IMMEDIATE_KILL
     if process_exited and (
         pending_task_ids or schedule_wakeup_violation or completion_ceiling_expired
@@ -69,7 +72,6 @@ def decide_termination_action(
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
         case (
             TerminationReason.IDLE_STALL
-            | TerminationReason.OUTPUT_LIMIT
             | TerminationReason.STALE
             | TerminationReason.TIMED_OUT
             | TerminationReason.HEALTH_INSPECTOR

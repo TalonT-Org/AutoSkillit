@@ -17,7 +17,9 @@ import regex as re
 
 # Events that do not require a tool-name matcher pattern (Stop fires once
 # per turn; SessionStart fires before any tool call).
-_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset({"SessionStart", "Stop", "PreToolUse"})
+_MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset(
+    {"SessionStart", "Stop", "PreToolUse", "UserPromptExpansion"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +37,7 @@ class HookDef:
         "SubagentStop",
         "SessionEnd",
         "PreCompact",
+        "UserPromptExpansion",
     ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None

@@ -515,6 +515,13 @@ def _build_hook_registry() -> list[HookDef]:
             enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
         ),
         HookDef(
+            event_type="UserPromptExpansion",
+            scripts=["skill_load_post_hook.py"],
+            codex_status="not-applicable",
+            mechanism="additionalContext",
+            enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+        ),
+        HookDef(
             matcher=r"Read|Write|Edit|Bash|Grep|Glob",
             scripts=["guards/skill_load_guard.py"],
             session_scope="headless_only",

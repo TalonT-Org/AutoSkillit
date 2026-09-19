@@ -121,12 +121,19 @@ def main() -> None:
         sys.exit(0)
 
     session_id: str = data.get("session_id", "")
-    if data.get("tool_name") != "Skill" or not session_id:
+    event_name = data.get("hook_event_name")
+    if event_name == "PostToolUse" and data.get("tool_name") == "Skill":
+        tool_input_value = data.get("tool_input", {})
+        tool_input: dict[str, object] = (
+            tool_input_value if isinstance(tool_input_value, dict) else {}
+        )
+        skill_name_value = tool_input.get("skill", "")
+    elif event_name == "UserPromptExpansion" and data.get("expansion_type") == "slash_command":
+        skill_name_value = data.get("command_name", "")
+    else:
         sys.exit(0)
-
-    tool_input_value = data.get("tool_input", {})
-    tool_input: dict[str, object] = tool_input_value if isinstance(tool_input_value, dict) else {}
-    skill_name_value = tool_input.get("skill", "")
+    if not session_id:
+        sys.exit(0)
     skill_name: str = (
         normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
     )
@@ -169,7 +176,17 @@ def main() -> None:
             "This is mandatory regardless of what the skill's Output section specifies."
         )
     if context_parts:
-        payload = json.dumps({"additionalContext": "\n\n".join(context_parts)})
+        context = "\n\n".join(context_parts)
+        payload = json.dumps(
+            {"additionalContext": context}
+            if event_name == "PostToolUse"
+            else {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptExpansion",
+                    "additionalContext": context,
+                }
+            }
+        )
         sys.stdout.write(payload + "\n")
 
     sys.exit(0)

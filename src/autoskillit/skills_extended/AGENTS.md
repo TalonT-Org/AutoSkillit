@@ -57,6 +57,5 @@ out-of-scope for this plan):
 
 Files with no registration support their folder; one immediate-child
 subdirectory per skill. The authoritative enumeration is the directory
-listing itself — see `docs/skills/catalog.md` for the canonical skill
-catalog. For the canonical visibility matrix see
-`docs/skills/visibility.md`.
+listing itself (catalog pointer in the intro above). For the canonical
+visibility matrix see `docs/skills/visibility.md`.

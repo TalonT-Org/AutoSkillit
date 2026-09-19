@@ -1,7 +1,7 @@
 """Sub-directory AGENTS.md coverage for skills/ and skills_extended/.
 
-The paired AGENTS.md (content) + CLAUDE.md (single-line `@AGENTS.md\\n`
-sibling shim) convention is enforced by
+The paired AGENTS.md (content) + CLAUDE.md (single-line `@AGENTS.md` plus
+trailing newline sibling shim) convention is enforced by
 tests/docs/test_sub_claude_md_completeness.py.
 """
 
@@ -24,8 +24,8 @@ SKILLS_EXTENDED_AGENTS_MD = SKILLS_EXTENDED_DIR / "AGENTS.md"
 SKILLS_EXTENDED_CLAUDE_MD = SKILLS_EXTENDED_DIR / "CLAUDE.md"
 
 
-def _read_or_skip(path: Path) -> str | None:
-    """Return file contents or None if the file is missing.
+def _read_or_skip(path: Path) -> str:
+    """Skip if the file is missing; otherwise return its contents.
 
     Tests that require the file to exist use this so a missing file
     surfaces as a clean skip (with a clear reason) rather than an
@@ -38,12 +38,12 @@ def _read_or_skip(path: Path) -> str | None:
 
 @pytest.fixture()
 def skills_agents_md() -> str:
-    return _read_or_skip(SKILLS_AGENTS_MD)  # type: ignore[return-value]
+    return _read_or_skip(SKILLS_AGENTS_MD)
 
 
 @pytest.fixture()
 def skills_extended_agents_md() -> str:
-    return _read_or_skip(SKILLS_EXTENDED_AGENTS_MD)  # type: ignore[return-value]
+    return _read_or_skip(SKILLS_EXTENDED_AGENTS_MD)
 
 
 class TestSkillsAgentsMd:

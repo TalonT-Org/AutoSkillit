@@ -304,8 +304,6 @@ scripts/benchmark-testmon.py:
   - infra/
 scripts/check_contract_freshness.py:
   - infra/
-scripts/check_doc_counts.py:
-  - infra/
 scripts/check_tool_annotations.py:
   - arch/
 scripts/check_policy_relaxation.py:

@@ -149,7 +149,10 @@ def _is_protected_target(path: str) -> bool:
 def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
     segments = all_evaluated_segments(command)
     if segments is None:
-        return [], False
+        # Fail-closed: an unparseable shell command is an unresolved write target,
+        # matching the docstring's contract that shell-local indirection into an
+        # installation tree must not bypass the protection floor.
+        return [], True
     targets: list[str] = []
     unresolved_target = False
     for segment in segments:
@@ -165,8 +168,15 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
         targets.extend(redirects)
         unresolved_target = unresolved_target or unresolved
     interpreter_paths = extract_interpreter_write_paths(command)
-    if interpreter_paths is not None:
-        unresolved_target = unresolved_target or not interpreter_paths
+    if interpreter_paths is None:
+        # Symmetric with the bash path: an interpreter extractor that cannot
+        # classify the write is unresolved, not "no interpreter writes".
+        unresolved_target = True
+    elif not interpreter_paths:
+        # Empty list means the extractor ran but found no classified write
+        # targets — treat that as unresolved too, mirroring the bash branch.
+        unresolved_target = True
+    else:
         for path in interpreter_paths:
             resolved = resolve_write_target(path, cwd)
             if resolved is None:

@@ -66,9 +66,10 @@ def test_absent_peer_returns_original_usage_unchanged() -> None:
     assert _merge_token_usage(None, None) is None
 
 
-def test_invalid_counter_does_not_become_zero() -> None:
+@pytest.mark.parametrize("invalid_input", [None, 1.5, [], "", "not_a_number", True, -1])
+def test_invalid_counter_does_not_become_zero(invalid_input: object) -> None:
     result = _merge_token_usage(
-        _usage(input_tokens="not_a_number", output_tokens=50),
+        _usage(input_tokens=invalid_input, output_tokens=50),
         _usage(input_tokens=200, output_tokens=100),
     )
 

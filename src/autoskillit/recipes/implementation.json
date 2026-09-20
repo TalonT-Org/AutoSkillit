@@ -984,7 +984,7 @@
         },
         {
           "when": "${{ result.outcome }} == STUCK_REPEATING",
-          "route": "release_audit_remediation_stuck"
+          "route": "register_clone_failure"
         },
         {
           "when": "${{ result.outcome }} == EXHAUSTED",
@@ -992,7 +992,7 @@
         },
         {
           "when": "${{ result.outcome }} == AWAITING_DECISION",
-          "route": "await_audit_decision"
+          "route": "register_clone_failure"
         },
         {
           "when": "${{ result.outcome }} == INTEGRITY_FAULT",

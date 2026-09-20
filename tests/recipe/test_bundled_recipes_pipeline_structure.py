@@ -250,18 +250,7 @@ class TestPipelineVariantInvariants:
 
     def test_audit_impl_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
-        if recipe.name == "remediation":
-            assert step.on_context_limit == "check_audit_remediation_loop", (
-                "remediation audit_impl on_context_limit must route through the existing "
-                "loop-governing step (mirrors on_rate_limit) rather than the decorative "
-                "register_clone_failure alias of on_failure (issue #4305)"
-            )
-            return
-        assert step.on_context_limit == "register_clone_failure", (
-            "audit_impl on context limit must register the clone before escalating — "
-            "clone-terminal-requires-registration requires all terminal paths go through "
-            "register_clone_status"
-        )
+        assert step.on_context_limit == "check_audit_integrity_retry"
 
     def test_audit_impl_has_on_rate_limit_in_remediation(self, recipe) -> None:
         if recipe.name != "remediation":

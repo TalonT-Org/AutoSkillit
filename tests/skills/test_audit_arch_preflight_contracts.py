@@ -105,33 +105,33 @@ def test_concrete_bash_tool_call():
     )
 
 
-@pytest.mark.parametrize(
-    ("skill_md", "workflow_contract"),
-    [
-        (
-            LOCAL_SKILL_MD,
-            "Process every principle in sequential batches of at most 6.",
-        ),
-        (
-            SKILL_MD,
-            "Assign every principle to the declared single worker.",
-        ),
-    ],
-)
-def test_principle_auditor_dispatch_is_bounded(skill_md: Path, workflow_contract: str) -> None:
-    """Both audit-arch variants bound and join their principle work."""
-    text = skill_md.read_text()
+def test_local_skill_md_dispatches_in_bounded_batches() -> None:
+    """Local variant bounds principle work to <=6 auditors per parallel batch
+    and joins each batch before starting the next.
+    """
+    text = LOCAL_SKILL_MD.read_text()
     never_block = text.split("**NEVER:**", maxsplit=1)[1].split("**ALWAYS:**", maxsplit=1)[0]
     workflow = text.split("## Audit Workflow", maxsplit=1)[1]
 
     assert "Launch more than 6 principle auditors in one parallel batch" in never_block
-    assert workflow_contract in workflow
+    assert "Process every principle in sequential batches of at most 6." in workflow
+    assert "Start all independent child delegations before awaiting any result" not in text
+    assert "join each batch before starting the next" in text
+
+
+def test_source_skill_md_dispatches_to_single_worker() -> None:
+    """Source variant assigns every principle to a single declared worker
+    (count: 1 frontmatter, no concurrency field) and joins before synthesis.
+    """
+    text = SKILL_MD.read_text()
+    never_block = text.split("**NEVER:**", maxsplit=1)[1].split("**ALWAYS:**", maxsplit=1)[0]
+    workflow = text.split("## Audit Workflow", maxsplit=1)[1]
+
+    assert "Launch more than 6 principle auditors in one parallel batch" in never_block
+    assert "Assign every principle to the declared single worker." in workflow
     assert "Start all independent child delegations before awaiting any result" not in text
 
-    if skill_md == LOCAL_SKILL_MD:
-        assert "join each batch before starting the next" in text
-    else:
-        frontmatter = text.split("---", maxsplit=2)[1]
-        assert "count: 1" in frontmatter
-        assert "concurrency:" not in frontmatter
-        assert "Join that worker before synthesis." in text
+    frontmatter = text.split("---", maxsplit=2)[1]
+    assert "count: 1" in frontmatter
+    assert "concurrency:" not in frontmatter
+    assert "Join that worker before synthesis." in text

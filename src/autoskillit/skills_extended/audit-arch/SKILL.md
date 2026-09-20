@@ -42,7 +42,7 @@ Audit the codebase for adherence to architectural standards and rules.
 
 - Modify any source code files
 - Update an existing report - always generate new
-- Launch more than 6 principle auditors in one parallel batch. The declared single worker is the only principle auditor for this workflow.
+- Launch more than 6 principle auditors in one parallel batch. The declared single worker is the only principle auditor for this workflow; the 6-batch cap is a defensive floor that never engages under count: 1.
 - Detach child delegations instead of joining them (joining every child is required)
 
 **ALWAYS:**

@@ -481,7 +481,13 @@ def check_audit_remediation_outcome(
     try:
         current = _load_remediation_authority(current_authority_path, require_no_go=True)
         prior = _load_remediation_authority(prior_authority_path) if prior_authority_path else None
-    except ValueError:
+    except ValueError as exc:
+        logger.warning(
+            "audit remediation authority load failed (current=%r prior=%r): %s",
+            current_authority_path,
+            prior_authority_path,
+            exc,
+        )
         outcome = RemediationOutcome.INTEGRITY_FAULT
         unresolved_requirement_ids = ""
     else:

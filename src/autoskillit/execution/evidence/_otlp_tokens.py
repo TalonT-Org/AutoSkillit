@@ -157,6 +157,14 @@ def aggregate_token_observations(
 ) -> dict[str, Any]:
     """Aggregate verified requests without combining source pairs or missing values."""
     fields = CANONICAL_ACCOUNTING_FIELDS
+    unknowns = {field: TokenMeasure.unknown().to_dict() for field in fields}
+    if not observations:
+        return {
+            "backend": backend,
+            "provider_used": provider_used,
+            **unknowns,
+            "peak_context": TokenMeasure.unknown().to_dict(),
+        }
     totals: dict[str, TokenMeasure] = {}
     peak: TokenMeasure | None = None
     for observation in observations:

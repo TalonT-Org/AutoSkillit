@@ -168,15 +168,17 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
         targets.extend(redirects)
         unresolved_target = unresolved_target or unresolved
     interpreter_paths = extract_interpreter_write_paths(command)
-    if interpreter_paths is None:
-        # Symmetric with the bash path: an interpreter extractor that cannot
-        # classify the write is unresolved, not "no interpreter writes".
+    # `extract_interpreter_write_paths` returns:
+    #   None  — command is not an interpreter write (no interpreter prefix or
+    #           no write API). This is the common case for `cat`, `ls`, `pwd`,
+    #           `uv`, `pip`, etc. — treat as no interpreter contributions.
+    #   []    — interpreter write detected but not all paths are static
+    #           literals. Fail-closed: an unresolved interpreter write target
+    #           could be a shell-local indirection into an installation tree.
+    #   [...] — all write target paths are static literals.
+    if interpreter_paths is not None and not interpreter_paths:
         unresolved_target = True
-    elif not interpreter_paths:
-        # Empty list means the extractor ran but found no classified write
-        # targets — treat that as unresolved too, mirroring the bash branch.
-        unresolved_target = True
-    else:
+    elif interpreter_paths:
         for path in interpreter_paths:
             resolved = resolve_write_target(path, cwd)
             if resolved is None:

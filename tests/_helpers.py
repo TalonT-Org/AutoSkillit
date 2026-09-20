@@ -411,4 +411,3 @@ def observed_measure(value: int) -> dict[str, object]:
 
 
 UNKNOWN_MEASURE: dict[str, object] = _TokenMeasure.unknown().to_dict()
-

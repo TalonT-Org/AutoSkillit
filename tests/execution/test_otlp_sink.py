@@ -1309,9 +1309,7 @@ def test_native_token_request_id_deduplicates_replayed_event(local_sink: Any) ->
     assert usage is not None
     assert usage["input_tokens"] == {"state": "measured", "value": 2}
     assert usage["output_tokens"] == {"state": "measured", "value": 4}
-    session_records = local_sink._token_evidence[
-        "00000000-0000-4000-8000-000000000001"
-    ]
+    session_records = local_sink._token_evidence["00000000-0000-4000-8000-000000000001"]
     assert len(session_records) == 1, "Replayed event must collapse to a single row"
 
 

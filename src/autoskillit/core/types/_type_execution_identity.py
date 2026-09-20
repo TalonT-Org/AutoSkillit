@@ -47,9 +47,7 @@ def default_provider_for(
     precedence consistent and lets new defaults propagate from one place.
     """
     return (
-        provider_name
-        or profile_name
-        or resolve_provider_used(backend, anthropic_provider_capable)
+        provider_name or profile_name or resolve_provider_used(backend, anthropic_provider_capable)
     )
 
 

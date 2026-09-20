@@ -167,7 +167,7 @@ def _ratio(tokens: Any, loc: int) -> str:
     if isinstance(tokens, dict):
         value = tokens.get("value")
         if value is None:
-            return str(tokens.get("state", "unknown"))
+            return str(tokens.get("state", TokenMeasureState.UNKNOWN.value))
         tokens = value
     return f"{tokens / loc:.1f}" if isinstance(tokens, int) and loc > 0 else "—"
 

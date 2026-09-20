@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
-from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
+from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_CODEX
 from ._type_enums import TokenMeasureState
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
@@ -254,7 +254,7 @@ class CanonicalTokenUsage:
     @classmethod
     def from_codex_dict(cls, d: dict[str, Any]) -> CanonicalTokenUsage:
         return cls(
-            backend="codex",
+            backend=AGENT_BACKEND_CODEX,
             provider_used="codex",
             input_tokens=cls._observed_or_unknown(d, "input_tokens"),
             output_tokens=cls._observed_or_unknown(d, "output_tokens"),

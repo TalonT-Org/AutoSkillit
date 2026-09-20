@@ -209,6 +209,9 @@ class SkillAuthority(Protocol):
     def frontmatter(self) -> SkillFrontmatterAuthority | None: ...
 
     @property
+    def write_paths(self) -> tuple[str, ...] | None: ...
+
+    @property
     def invalidities(self) -> tuple[SkillInvalidityAuthority, ...]: ...
 
 

@@ -24,7 +24,6 @@ from autoskillit.core import (
     RepositoryProfileId,
     SemanticAdaptationContext,
     SkillExecutionRole,
-    SkillFrontmatterAuthority,
     SkillResolver,
     pkg_root,
 )
@@ -71,16 +70,6 @@ def resolve_ephemeral_root() -> Path:
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
 
 
-def _parse_write_paths(parsed: SkillFrontmatterAuthority) -> list[str]:
-    """Extract write paths from the contract's single frontmatter parse."""
-    if not parsed.is_valid or parsed.data is None:
-        return []
-    raw = parsed.data.get("write_paths", [])
-    if not isinstance(raw, list):
-        return []
-    return [str(p) for p in raw if p and isinstance(p, str)]
-
-
 def resolve_closure_write_dirs(
     closure: tuple[ResolvedSkillAuthority, ...],
     cwd: str,
@@ -95,8 +84,8 @@ def resolve_closure_write_dirs(
     raw_paths = tuple(
         write_path
         for info in closure
-        if info.frontmatter is not None
-        for write_path in _parse_write_paths(info.frontmatter)
+        if info.write_paths is not None
+        for write_path in info.write_paths
     )
     if not raw_paths:
         return []

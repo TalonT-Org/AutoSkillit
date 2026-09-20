@@ -1281,13 +1281,14 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_outcome_invariants.py",
             "execution/test_finding_dispositions.py",
             "execution/test_headless_enum_recovery.py",
-            # Fleet file-level entries (9 of N import autoskillit.recipe):
+            # Fleet file-level entries importing autoskillit.recipe:
             "fleet/test_fleet_e2e.py",
             "fleet/test_fleet_e2e_codex.py",
             "fleet/test_campaign_capture.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_pack_enforcement_e2e.py",
             "fleet/test_dispatch_ingredient_validation.py",
+            "fleet/test_food_truck_prompt_authority.py",
             "fleet/test_dispatch_recipe_kind_gate.py",
             "fleet/test_dispatch_state_handle.py",
             "fleet/test_research_campaign_dispatch.py",

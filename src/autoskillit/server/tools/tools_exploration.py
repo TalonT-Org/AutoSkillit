@@ -541,7 +541,9 @@ async def resume_exploration_context(
 )
 @session_scoped(
     EXPLORER_SESSION_SCOPE,
-    refusal=lambda *_: _failure(ExplorationFailureCode.SESSION_TYPE_INELIGIBLE),
+    refusal=lambda _tool_name, _shape, _scope: _failure(
+        ExplorationFailureCode.SESSION_TYPE_INELIGIBLE
+    ),
 )
 @_cancellation_shield()
 async def enable_exploration(

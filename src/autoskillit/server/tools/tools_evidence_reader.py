@@ -292,8 +292,9 @@ def _reader_transport(tool_ctx: ToolContext) -> dict[str, object]:
 
 
 def _delegate_caller_session(ctx: Context, tool_ctx: ToolContext) -> str:
+    shape = session_shape()
     if (
-        not (shape := session_shape()).headless
+        not shape.headless
         or shape.tier is not SessionType.SKILL
         or not isinstance(tool_ctx.backend, CodexBackend)
     ):

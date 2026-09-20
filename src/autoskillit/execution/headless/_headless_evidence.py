@@ -24,12 +24,10 @@ from autoskillit.core import (
     WriteEvidence,
     extract_skill_name,
     get_logger,
+    is_parent_assistant_record,
 )
 from autoskillit.execution.session._exit_classification import _CODEX_ERROR_CODE_API_STATUS
-from autoskillit.execution.session._session_model import (
-    ClaudeSessionResult,
-    _is_parent_assistant_record,
-)
+from autoskillit.execution.session._session_model import ClaudeSessionResult
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, GitHubApiLog
@@ -236,7 +234,7 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
             ):
                 return True
             continue
-        if not _is_parent_assistant_record(obj):
+        if not is_parent_assistant_record(obj):
             continue
         for block in obj.get("message", {}).get("content", []):
             if (

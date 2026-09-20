@@ -20,6 +20,7 @@ _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
     {
         ".claude-plugin",
         ".mcp.json",
+        "_parent_assistant_turns.py",
         "_recipe_delivery_framing.py",
         "agents",
         "assets",

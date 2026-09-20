@@ -20,6 +20,7 @@ from autoskillit.core import (
     TokenMeasure,
     TurnTokenEntry,
     get_logger,
+    is_parent_assistant_record,
 )
 from autoskillit.execution.session._provider_parse import _parse_provider_records
 from autoskillit.execution.session._turn_usage import (
@@ -244,14 +245,6 @@ class ClaudeSessionResult:
         return bool(self.tool_uses)
 
 
-def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
-    """Return true for parent assistant records, excluding subagents and synthetic turns."""
-    if obj.get("type") != "assistant" or obj.get("subagent_type"):
-        return False
-    message = obj.get("message")
-    return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
-
-
 def _collect_token_usage_evidence(
     stdout: str,
     provider_used: str,
@@ -273,7 +266,7 @@ def _collect_token_usage_evidence(
             continue
 
         record_type = obj.get("type")
-        if _is_parent_assistant_record(obj):
+        if is_parent_assistant_record(obj):
             msg = obj.get("message")
             if not isinstance(msg, dict):
                 continue

@@ -234,6 +234,23 @@ def test_skips_message_less_system_metadata(tmp_path: Path) -> None:
             _claude_record(_BG_RESULT),
             _claude_record("foreign", sessionId="different-session"),
         ],
+        [
+            _claude_record(_BG_RESULT),
+            _claude_record(
+                "child",
+                subagent_type="Explore",
+                message={"content": "ignored"},
+            ),
+        ],
+        [
+            _claude_record(
+                _BG_RESULT,
+            ),
+            _claude_record(
+                "synthetic",
+                message={"model": "<synthetic>", "content": "ignored"},
+            ),
+        ],
         [_codex_record(_BG_RESULT), _codex_record("child", agent_id="child")],
         [
             _codex_record(_BG_RESULT),
@@ -245,6 +262,8 @@ def test_skips_message_less_system_metadata(tmp_path: Path) -> None:
         "claude-meta",
         "claude-agent",
         "claude-foreign-session",
+        "claude-subagent-without-role",
+        "claude-synthetic-without-role",
         "codex-agent",
         "codex-foreign-session",
     ],

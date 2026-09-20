@@ -757,7 +757,7 @@ def normalize_dispatch_token_usage(
     backend = backend or str(raw.get("backend") or "unknown")
     provider_used = provider_used or str(raw.get("provider_used") or "")
     if not provider_used:
-        provider_used = resolve_provider_used(backend, anthropic_provider_capable=True)
+        provider_used = resolve_provider_used(backend, anthropic_provider_capable=False)
 
     def measure(*keys: str) -> SerializedTokenMeasure:
         for key in keys:

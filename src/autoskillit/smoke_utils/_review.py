@@ -533,6 +533,13 @@ def merge_audit_cycle_path(
     prior_authority_path: str = "",
 ) -> dict[str, str]:
     """Preserve a trusted authority path unless this round published a replacement."""
+    if not isinstance(current_authority_path, str) or not isinstance(prior_authority_path, str):
+        raise ValueError(
+            f"authority paths must be strings, got {type(current_authority_path).__name__} "
+            f"and {type(prior_authority_path).__name__}"
+        )
+    if not current_authority_path and not prior_authority_path:
+        raise ValueError("merge_audit_cycle_path requires at least one non-empty authority path")
     return {"audit_cycle_path": current_authority_path or prior_authority_path}
 
 

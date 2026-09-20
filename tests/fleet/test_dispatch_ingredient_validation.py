@@ -222,7 +222,7 @@ class TestServerAuthoritativeOverrides:
             if event.get("event") == "fleet_dispatch_server_authoritative_overrides_stripped"
         ]
         assert len(stripped_events) == 1
-        assert stripped_events[0]["keys"] == ["base_branch"]
+        assert stripped_events[0]["stripped_ingredient_names"] == ["base_branch"]
 
     @pytest.mark.anyio
     async def test_config_authoritative_injection_skips_undeclared_ingredients(self, tool_ctx):

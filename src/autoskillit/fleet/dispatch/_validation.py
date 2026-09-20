@@ -193,7 +193,7 @@ async def run_pre_launch_gating(
     if stripped:
         logger.warning(
             "fleet_dispatch_server_authoritative_overrides_stripped",
-            keys=sorted(stripped),
+            stripped_ingredient_names=sorted(stripped),
             recipe=recipe,
         )
 

@@ -705,6 +705,9 @@ def test_direct_executor_callers_check_backend_compat() -> None:
 
 def test_fleet_tools_declare_fleet_scope() -> None:
     """Every fleet-only tool is registered with the shared fleet scope."""
+    # TOOL_SESSION_SCOPES is populated only by the @session_scoped decorator at
+    # tool-module import time. Import the relevant tool modules here so the
+    # registry is non-empty regardless of xdist test ordering.
     from autoskillit.core.types._type_constants_registries import FLEET_TOOLS
     from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, TOOL_SESSION_SCOPES
 

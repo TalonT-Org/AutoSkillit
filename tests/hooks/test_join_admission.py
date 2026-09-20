@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.hooks._session_binding import (
     JoinAdmissionOutcome,
+    LoadedSkillEntry,
     SessionBinding,
     admit_join,
     write_binding,
@@ -49,3 +50,42 @@ def test_malformed_binding_is_fail_closed(tmp_path) -> None:
 
     assert admission.outcome is JoinAdmissionOutcome.INVALID_BINDING
     assert admission.enforce
+
+
+def test_valid_binding_admits_requesting_skill(tmp_path) -> None:
+    """A valid binding with matching session_id and a binding-valid loaded skill is admitted."""
+    path = tmp_path / "binding.flag"
+    write_binding(
+        path,
+        SessionBinding(
+            schema_version=3,
+            session_id="session",
+            join_required=True,
+            binding_valid=True,
+            artifact_digest="",
+            loaded_skills=(
+                LoadedSkillEntry(
+                    skill_name="scope",
+                    ts="",
+                    join_required=True,
+                    child_spawn_cardinality={},
+                    semantic_digest="",
+                    adaptation_digest="",
+                    projected_digest="",
+                    canonical_digest="",
+                    source_artifact_digest="",
+                    source_artifact_incarnation_id="",
+                    binding_valid=True,
+                    binding_error=None,
+                ),
+            ),
+        ),
+    )
+
+    admission = admit_join(path, session_id="session", skill_name="scope")
+
+    assert admission.outcome is JoinAdmissionOutcome.ADMITTED
+    assert admission.enforce
+    assert admission.binding is not None
+    assert admission.entry is not None
+    assert admission.entry.skill_name == "scope"

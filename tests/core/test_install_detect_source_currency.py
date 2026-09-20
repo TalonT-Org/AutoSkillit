@@ -10,6 +10,15 @@ from autoskillit.core.install.install_detect import SourceCurrencyStatus, source
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+_VCS_INFO = {
+    "install_type": "git-vcs",
+    "requested_revision": "develop",
+    "commit_id": "installed",
+    "editable": False,
+    "url": "https://example.test/repo.git",
+}
+
+
 def test_source_currency_without_generation_is_unknown(tmp_path) -> None:
     result = source_currency(tmp_path, generation_root=None)
 
@@ -71,3 +80,26 @@ def test_source_currency_reports_foreign_commit(monkeypatch, tmp_path) -> None:
 
     result = source_currency(tmp_path, generation_root=tmp_path / "generation")
     assert result.status is SourceCurrencyStatus.NOT_SOURCE_CHECKOUT
+
+
+def test_source_currency_classifies_diverged_head(monkeypatch, tmp_path) -> None:
+    """A checkout whose HEAD is not a descendant of the installed commit is DIVERGED."""
+    monkeypatch.setattr(install_detect, "parse_direct_url", lambda _root: _VCS_INFO)
+
+    def fake_git(_checkout, *args):
+        if args == ("rev-parse", "HEAD"):
+            return "head"
+        if args[:2] == ("cat-file", "-e"):
+            return ""
+        if args[:2] == ("merge-base", "--is-ancestor"):
+            return None
+        if args[:2] == ("rev-list", "--count"):
+            raise AssertionError("rev-list must not be called on the DIVERGED branch")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(install_detect, "_git", fake_git)
+
+    result = source_currency(tmp_path, generation_root=tmp_path / "generation")
+
+    assert result.status is SourceCurrencyStatus.DIVERGED
+    assert result.behind_by is None

@@ -1,8 +1,9 @@
 # Skill catalog
 
-The complete list of bundled skills. `src/autoskillit/skills/` and
-`src/autoskillit/skills_extended/` are the source directories; this catalog groups
-their members by purpose.
+The bundled skills grouped by purpose. `src/autoskillit/skills/` and
+`src/autoskillit/skills_extended/` are the source directories. Configurable
+tier counts cover the three tiers below; exact-role/internal skills are
+listed at the bottom and intentionally excluded from the tier totals.
 
 ## Tier 1 — free range
 

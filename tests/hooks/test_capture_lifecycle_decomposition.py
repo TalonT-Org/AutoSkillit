@@ -3,8 +3,8 @@
 The single-file ``hooks/_capture_lifecycle.py`` was converted
 into a regular package ``hooks/_capture_lifecycle/`` containing:
 
-- ``__init__.py`` — pure re-export facade (the original ``__all__`` plus
-  the lazy re-aliases from lines 56–74 plus the module-level constants).
+- ``__init__.py`` — pure re-export facade (the public ``__all__``
+  plus lazy re-aliases and module-level constants).
 - ``_store.py`` — the ``CaptureLifecycleStore`` class body with the four
   admission helpers reduced to 1-line wrappers that delegate to
   ``_admission.py``.
@@ -12,7 +12,7 @@ into a regular package ``hooks/_capture_lifecycle/`` containing:
   ``_acquire_flock``, ``_admission_reason``, ``_admit_new_record``,
   ``_scan_and_adopt_orphans`` (the four methods named in issue #4727).
 
-These tests verify that the public-API surface at the original import
+These tests verify that the public-API surface at the package import
 path remains intact, that the class-method wrappers preserve the bound-method
 contract, and that ``register_module_aliases`` registers both spellings under
 ``sys.modules``.
@@ -29,9 +29,9 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
 def test_public_api_importable_from_package_facade() -> None:
-    """Every name in the original ``__all__`` (lines 75–92) plus the lazy
-    re-aliases (lines 56–74) plus the module-level constants must be
-    importable from ``autoskillit.hooks._capture_lifecycle``.
+    """Every public name in ``__all__`` plus the lazy re-aliases plus the
+    module-level constants must be importable from
+    ``autoskillit.hooks._capture_lifecycle``.
     """
     from autoskillit.hooks import _capture_lifecycle as facade
 
@@ -53,7 +53,7 @@ def test_public_api_importable_from_package_facade() -> None:
         "CleanupBlocker",
         "CleanupProgress",
         "SweepBudgetSpec",
-        # Lazy re-aliases (lines 56-74)
+        # Lazy re-aliases
         "DueKey",
         "SweepAttempt",
         "_ObservedArtifact",
@@ -68,10 +68,9 @@ def test_public_api_importable_from_package_facade() -> None:
         "PublishedCaptureReference",
         "UnavailableCaptureReference",
         "VerifiedCaptureSnapshot",
-        # Module-level constants (lines 93-101) — also
-        # ``LEDGER_NAME`` / ``LOCK_NAME`` which are imported by
-        # ``tests/cli/test_capture_store.py`` and
-        # ``tests/hooks/test_hook_lifecycle_contract.py``.
+        # Module-level constants (includes ``LEDGER_NAME`` / ``LOCK_NAME``
+        # imported by ``tests/cli/test_capture_store.py`` and
+        # ``tests/hooks/test_hook_lifecycle_contract.py``).
         "FRAME_MAGIC",
         "LEDGER_NAME",
         "LOCK_NAME",

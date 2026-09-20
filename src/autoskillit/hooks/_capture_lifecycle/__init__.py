@@ -4,10 +4,8 @@ The package was carved out of ``hooks/_capture_lifecycle.py``
 (see issue #4727) so the lock-retry primitive, the capacity-admission
 check, and the orphan-adoption call are physically separate from the
 ``CaptureLifecycleStore`` class. This ``__init__.py`` is a pure re-export
-facade — every name in the original ``__all__`` plus the lazy re-aliases
-from the deleted file is reproduced verbatim, and every
-module-level constant that callers relied on remains importable from
-``autoskillit.hooks._capture_lifecycle``.
+facade: every name in ``__all__`` plus module-level constants remain
+importable from ``autoskillit.hooks._capture_lifecycle``.
 
 The import discriminator mirrors ``_capture/_reconcile.py``: under
 ``TYPE_CHECKING`` (mypy / pyright) the imports use fully-qualified paths
@@ -263,7 +261,7 @@ __all__ = [
     "CleanupBlocker",
     "CleanupProgress",
     "SweepBudgetSpec",
-    # Lazy re-aliases (lines 56-74)
+    # Lazy re-aliases
     "CaptureAuthorityError",
     "CaptureFailureEvidence",
     "CaptureFinalManifest",
@@ -286,9 +284,10 @@ __all__ = [
     "MAX_ACTIVE_RECORDS",
     "_RETENTION_SECONDS",
     "_REFERENCE_LIFETIME_SECONDS",
-    # Private re-exports — preserved by the ``__init__.py`` for test
-    # backward compatibility. Sub-ticket F will retire these entries once
-    # the test fixtures stop reaching into ``capture_lifecycle._XXX``.
+    # Private re-exports — submodule paths also work
+    # (``from autoskillit.hooks._capture_lifecycle._store import ...``); the
+    # entries here exist so tests can import private names without
+    # depending on internal submodule layout.
     "_COMPACTION_THRESHOLD_BYTES",
     "_STORE_FACTORY_TOKEN",
     "_capture_capacity",

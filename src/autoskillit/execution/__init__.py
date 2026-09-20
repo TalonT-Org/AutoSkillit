@@ -61,6 +61,15 @@ from autoskillit.execution.child_outcomes import (
     normalize_backend_name,
     reconcile_child_outcome_snapshots,
 )
+from autoskillit.execution.evidence._otlp_tokens import (
+    TokenObservation,
+    aggregate_token_observations,
+    has_attribute,
+    project_token_observations,
+    record_attributes,
+    unique_bool_attribute,
+    unique_string_attribute,
+)
 from autoskillit.execution.evidence.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -388,6 +397,14 @@ __all__ = [
     "read_boot_id",
     "read_starttime_ticks",
     "start_linux_tracing",
+    # _otlp_tokens
+    "TokenObservation",
+    "aggregate_token_observations",
+    "has_attribute",
+    "project_token_observations",
+    "record_attributes",
+    "unique_bool_attribute",
+    "unique_string_attribute",
     # backends
     "BACKEND_REGISTRY",
     "CODEX_MCP_REQUIRED_KEYS",

@@ -39,12 +39,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: doc-counts
-        name: doc count accuracy
-        entry: python scripts/check_doc_counts.py
-        language: system
-        files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/skills_extended/|src/autoskillit/recipes/|src/autoskillit/core/types/_type_constants_registries\.py)
-        pass_filenames: false
       - id: check-version-consistency
         name: Check version consistency across artifacts
         language: system

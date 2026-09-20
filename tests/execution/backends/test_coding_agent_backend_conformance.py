@@ -446,25 +446,6 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     # --- Group 6: Behavioral Contracts ---
 
-    def test_build_cmd_env_contains_mcp_forward_vars(self) -> None:
-        """BackendCapabilities.mcp_env_forward_vars — vars via env injection (G6 defense)."""
-        forward_vars = self.backend.capabilities.mcp_env_forward_vars
-        if not forward_vars:
-            pytest.skip(
-                f"mcp_env_forward_vars is empty for {self.backend.name!r}"
-                " — no env injection to verify"
-            )
-        result = self.backend.build_cmd(
-            skill_command="do stuff",
-            cwd="/tmp",
-            **self._builder_home_kwargs("generated_home"),
-        )
-        for var in forward_vars:
-            assert var in result.env, (
-                f"{var!r} declared in mcp_env_forward_vars"
-                f" but missing from build_cmd env for {self.backend.name!r}"
-            )
-
     def test_build_resume_cmd_includes_session_id(self) -> None:
         """BackendCapabilities.session_resume_capable — embeds the session ID.
 

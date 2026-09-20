@@ -195,11 +195,11 @@ class CodingAgentBackend(Protocol):
     implementations (e.g., ClaudeCodeBackend) satisfy this Protocol.
 
     Env Forwarding Contract:
-        Backends with non-empty ``capabilities.mcp_env_forward_vars`` must
-        ensure those vars appear in ``spec.env`` for all cmd-builders. The
-        canonical injection mechanism is via ``extras`` in ``build_env()``,
-        which bypasses ``AUTOSKILLIT_PRIVATE_ENV_VARS`` stripping. Enforced
-        by ``tests/arch/test_mcp_env_forward_coverage.py``.
+        Backends managing MCP server registration forward every private
+        environment name present in the agent process except
+        ``CODEX_MCP_ENV_SERVER_EXCLUDED_VARS``. Their
+        ``capabilities.mcp_env_forward_vars`` equals the derived set. Enforced
+        by the Codex MCP server env and builder coverage architecture tests.
     """
 
     @property

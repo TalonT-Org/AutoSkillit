@@ -322,9 +322,17 @@ def run_update_checks(home: Path | None = None) -> None:
     import autoskillit as _pkg
 
     # ``autoskillit.__version__`` is unconditionally set at import time to a
-    # non-empty string from ``importlib.metadata.version()``; the only way
-    # it could be malformed is a corrupt distribution, which Version() catches.
-    current = _pkg.__version__
+    # non-empty string from ``importlib.metadata.version()``; the isinstance
+    # and strip guards exist for tests that ``delattr(__version__)`` and to
+    # survive a hypothetical future where the import-time assignment is moved.
+    current = getattr(_pkg, "__version__", None)
+    if not isinstance(current, str) or not current.strip():
+        print(
+            "Installation integrity failure: autoskillit has no valid __version__. "
+            "Run `autoskillit install` before checking for updates.",
+            flush=True,
+        )
+        return
     try:
         Version(current)
     except InvalidVersion:

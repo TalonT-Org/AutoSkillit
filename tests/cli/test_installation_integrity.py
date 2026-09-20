@@ -59,7 +59,7 @@ def test_untracked_addition_detected_and_runtime_bytecode_ignored(tmp_path: Path
 
     checks = [finding.check for finding in findings]
     assert "installation_untracked_file" in checks
-    assert "installation_untracked_file" == checks.count("installation_untracked_file")
+    assert checks.count("installation_untracked_file") == 1
 
     untracked = next(
         finding for finding in findings if finding.check == "installation_untracked_file"

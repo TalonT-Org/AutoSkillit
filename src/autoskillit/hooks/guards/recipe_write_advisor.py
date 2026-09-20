@@ -24,7 +24,8 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _hook_settings import enforce_session_scope  # noqa: E402
+
+from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
 
 # Inlined subset of SKILL_FILE_ADVISORY_MAP (recipe-related entries only).
 # Must stay in sync with core._type_constants.SKILL_FILE_ADVISORY_MAP.
@@ -49,6 +50,9 @@ def main() -> None:
 
     tool_name = data.get("tool_name", "")
     if tool_name not in ("Write", "Edit"):
+        sys.exit(0)
+
+    if not enforce_session_scope("guards/recipe_write_advisor.py"):
         sys.exit(0)
 
     file_path = data.get("tool_input", {}).get("file_path", "")

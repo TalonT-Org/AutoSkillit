@@ -104,6 +104,36 @@ def render_hooks_json_text(
     return json.dumps(generate_hooks_json(registry, lifecycle_contracts), indent=2) + "\n"
 
 
+def render_hook_scope_table(
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+) -> str:
+    """Render the standalone hook-script scope authority from the registry.
+
+    Hook subprocesses cannot import the package registry, so the committed
+    runtime table is their stdlib-only projection of this metadata.
+    """
+    scopes_by_script: dict[str, str] = {}
+    for hook_def in registry:
+        for script in hook_def.scripts:
+            prior_scope = scopes_by_script.setdefault(script, hook_def.session_scope)
+            if prior_scope != hook_def.session_scope:
+                raise ValueError(
+                    f"hook script {script!r} has conflicting session scopes "
+                    f"{prior_scope!r} and {hook_def.session_scope!r}"
+                )
+
+    rows = "\n".join(
+        f"    {script!r}: {scope!r}," for script, scope in sorted(scopes_by_script.items())
+    )
+    return (
+        '"""Generated hook-session-scope table. Do not edit manually.\n\n'
+        'Run `task sync-hook-scope-table` after changing HOOK_REGISTRY.\n"""\n\n'
+        "HOOK_SCOPE_BY_SCRIPT: dict[str, str] = {\n"
+        f"{rows}\n"
+        "}\n"
+    )
+
+
 def generate_hooks_json(
     registry: Sequence[HookDef] = HOOK_REGISTRY,
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,

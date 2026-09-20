@@ -47,7 +47,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     enforce_session_scope,
-    hook_session_shape,
+    get_session_type,
+    is_headless_session,
 )
 from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_binding_path,
@@ -142,8 +143,9 @@ def _is_guarded_non_anthropic_skill_session() -> bool:
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if not profile or profile.casefold() == "anthropic":
         return False
-    headless, session_type = hook_session_shape()
-    return headless and session_type == "skill"
+    if not is_headless_session():
+        return False
+    return get_session_type() == "skill"
 
 
 def main() -> None:
@@ -152,6 +154,9 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except Exception:
+        sys.exit(0)
+
+    if not enforce_session_scope("guards/skill_load_guard.py"):
         sys.exit(0)
 
     if _is_bypassed(data):

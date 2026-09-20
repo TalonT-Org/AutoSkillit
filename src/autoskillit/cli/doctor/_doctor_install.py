@@ -154,6 +154,26 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
                 "Not a source-tracked install — drift check not applicable",
             )
 
+        from packaging.version import InvalidVersion, Version
+
+        current = getattr(_pkg, "__version__", None)
+        if not isinstance(current, str) or not current.strip():
+            return DoctorResult(
+                Severity.ERROR,
+                check_name,
+                "Installation integrity failure: autoskillit has no valid __version__. "
+                "Run `autoskillit install` before checking for source drift.",
+            )
+        try:
+            Version(current)
+        except InvalidVersion:
+            return DoctorResult(
+                Severity.ERROR,
+                check_name,
+                "Installation integrity failure: autoskillit has an invalid __version__. "
+                "Run `autoskillit install` before checking for source drift.",
+            )
+
         target = resolve_target_identity(info, _home, network=True)
 
         if target is None:
@@ -163,7 +183,6 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
                 "Source drift reference SHA unavailable — check network connectivity",
             )
 
-        current = getattr(_pkg, "__version__", "0.0.0")
         installed = release_identity(info, version=current)
         if not update_available(installed, target):
             return DoctorResult(Severity.OK, check_name, "No source drift detected")

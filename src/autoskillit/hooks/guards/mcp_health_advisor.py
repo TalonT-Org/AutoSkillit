@@ -27,7 +27,8 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _hook_settings import enforce_session_scope  # noqa: E402
+
+from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _active_kitchens_path() -> Path:
@@ -91,6 +92,9 @@ def main() -> None:
     try:
         _ = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
+        sys.exit(0)
+
+    if not enforce_session_scope("guards/mcp_health_advisor.py"):
         sys.exit(0)
 
     cwd = os.getcwd()

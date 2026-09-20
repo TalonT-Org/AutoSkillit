@@ -19,7 +19,11 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _hook_settings import enforce_session_scope, hook_session_shape  # noqa: E402
+
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    get_session_type,
+    is_headless_session,
+)
 
 FLEET_DISPATCH_DENY_TRIGGER: str = "dispatch_food_truck cannot be called from headless sessions"
 
@@ -37,15 +41,19 @@ def main() -> None:
         sys.stderr.write("fleet_dispatch_guard: unexpected JSON root type — failing open\n")
         sys.exit(0)
 
-    _headless, session_type = hook_session_shape()
-    if session_type and session_type != "fleet":
+    if not is_headless_session():
+        sys.exit(0)
+
+    current_session_type = get_session_type()
+    if current_session_type and current_session_type != "fleet":
         payload = json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"dispatch_food_truck requires fleet session (current: {session_type})"
+                        "dispatch_food_truck requires fleet session "
+                        f"(current: {current_session_type})"
                     ),
                 }
             }

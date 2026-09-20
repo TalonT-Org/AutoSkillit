@@ -48,6 +48,16 @@ _TERMINAL_STATUS_RE = re.compile(
     re.IGNORECASE,
 )
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+
+from _hook_settings import get_session_type  # type: ignore[import-not-found]  # noqa: E402
+
 
 def _bounded_tail(path: Path) -> str | None:
     try:
@@ -296,8 +306,7 @@ def main() -> None:
         return
     if not isinstance(data, dict):
         return
-    _headless, session_type = hook_session_shape()
-    if session_type != "orchestrator" or data.get("agent_id") or data.get("agentId"):
+    if get_session_type() != "orchestrator" or data.get("agent_id") or data.get("agentId"):
         return
 
     session_id = data.get("session_id")

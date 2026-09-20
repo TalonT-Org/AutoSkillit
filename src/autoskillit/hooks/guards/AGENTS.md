@@ -66,7 +66,7 @@ Guards fail-**open** for malformed/unparseable input (JSON decode failure = exit
 except `join_stop_guard.py`. Stop fails closed because releasing without a truthful session
 identity can lose an unresolved required-join wave.
 
-The following guards fail-**closed** for the conditions below, as a
+Ten guards fail-**closed** for the conditions below, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -81,6 +81,7 @@ defense-in-depth measure against privilege escalation:
 | `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError); or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved, or a Python subprocess/os call whose argument could not be resolved to a literal argv or string while `live_command_text` still mentions "git" | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. `_git_command_classification._contains_blocked_git_op` reads the command exclusively through `all_evaluated_segments`, the evaluated-segment blocklist authority (rectify #4941 Part A): it cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, and separately denies when an unresolved interpreter payload cannot rule out a hidden `git` invocation, rather than silently falling through to "not blocked" |
 | `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 | `unsafe_install_guard.py` | An unrecognized global pip flag leaves `pip`'s `install` token position unresolved | `_find_pip_install` cannot tell whether the command is a pip install at all; treating that the same as "definitely not an install" would silently skip the editable/system-install checks entirely, so it is threaded through as a distinct `"unresolved-pip-flags"` kind and denied unconditionally, matching the pre-existing `"unresolved-subprocess"` kind's treatment |
+| `installation_integrity_guard.py` | A detected write target cannot be resolved | An unresolved write target could be a shell-local indirection into an installation tree, so it must not bypass the installation protection floor. |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open, except on Stop where a
 false release loses the active wave. Unknown-tier (valid input, unrecognized value) = fail-closed.

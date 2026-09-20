@@ -39,23 +39,34 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _FD_REDIRECT_RE,
     _GIT_GLOBAL_FLAG_SPEC,
-    _REDIRECT_OP_ONLY_RE,
-    _REDIRECT_TOKEN_RE,
+    WRITE_VERBS,
     _FlagArity,
     all_evaluated_segments,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
+    extract_write_verb_targets,
     is_gh_command,
     resolve_write_target,
+)
+from _guard_decision_diagnostics import (  # type: ignore[import-not-found]  # noqa: E402
+    record_guard_decision,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
     parse_hook_command,
 )
-from _hook_settings import enforce_session_scope  # noqa: E402
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    enforce_session_scope,
+    is_headless_session,
+    read_session_binding,
+)
+from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+    SessionBindingError,
+    read_manifest,
+    resolve_projection_manifest_path,
+)
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -66,18 +77,6 @@ _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
         "/dev/stdout",
         "/dev/stderr",
         "/dev/stdin",
-    }
-)
-
-_WRITE_VERBS: frozenset[str] = frozenset(
-    {
-        "sed",
-        "tee",
-        "mv",
-        "cp",
-        "patch",
-        "rm",
-        "unlink",
     }
 )
 
@@ -132,47 +131,6 @@ def _extract_git_write_targets(segment: list[str], cwd: str) -> list[str] | None
     return None
 
 
-def _non_flag_operands(args: list[str]) -> list[str]:
-    operands: list[str] = []
-    skip_next = False
-    for token in args:
-        if skip_next:
-            skip_next = False
-            continue
-        if token.startswith("-") or token.startswith("&") or _FD_REDIRECT_RE.match(token):
-            continue
-        if _REDIRECT_OP_ONLY_RE.match(token):
-            skip_next = True
-            continue
-        if _REDIRECT_TOKEN_RE.match(token):
-            continue
-        operands.append(token)
-    return operands
-
-
-def _extract_write_verb_targets(verb: str, segment: list[str], cwd: str) -> list[str]:
-    operands = _non_flag_operands(segment[1:])
-    if verb == "sed":
-        has_inplace = any(t.startswith("-i") or t == "--in-place" for t in segment[1:])
-        if not has_inplace:
-            return []
-        operands = operands[-1:]
-    elif verb in ("mv", "cp"):
-        if len(operands) < 2:
-            return []
-        operands = operands[-1:]
-    elif verb == "patch":
-        for operand in operands:
-            resolved = resolve_write_target(operand, cwd)
-            if resolved is not None:
-                # A pseudo-device still consumes patch's first resolvable operand.
-                if resolved in _PSEUDO_DEVICE_PATHS:
-                    return []
-                return [resolved]
-        return []
-    return _resolve_real_targets(operands, cwd)
-
-
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     """Return None for non-writes, [] for writes without real paths, or target paths."""
     if is_gh_command(segment):
@@ -180,8 +138,9 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     verb = command_verb(segment)
     if verb == "git" and len(segment) >= 2:
         return _extract_git_write_targets(segment, cwd)
-    if verb in _WRITE_VERBS:
-        return _extract_write_verb_targets(verb, segment, cwd)
+    if verb in WRITE_VERBS:
+        targets, _unresolved_target = extract_write_verb_targets(verb, segment, cwd)
+        return [target for target in targets if target not in _PSEUDO_DEVICE_PATHS]
     return None
 
 
@@ -271,7 +230,25 @@ def _extract_paths_from_patch(command: str) -> list[str]:
     return paths
 
 
-def _deny(reason: str) -> None:
+def _record(data: object, *, activation: str, scope: str, decision: str, reason: str) -> None:
+    record_guard_decision(
+        data,
+        guard="write_guard",
+        activation_source=activation,
+        scope=scope,
+        decision=decision,
+        reason=reason,
+    )
+
+
+def _deny(data: object, reason: str, *, reason_code: str) -> None:
+    _record(
+        data,
+        activation="headless",
+        scope="write_prefix",
+        decision="deny",
+        reason=reason_code,
+    )
     json.dump(
         {
             "hookSpecificOutput": {
@@ -285,7 +262,76 @@ def _deny(reason: str) -> None:
     sys.exit(0)
 
 
-def _write_prefix_policy() -> tuple[list[str], str]:
+def _normalize_prefixes(raw_prefixes: list[str]) -> list[str]:
+    return [os.path.realpath(prefix).rstrip("/") + "/" for prefix in raw_prefixes]
+
+
+def _intersect_prefixes(left: list[str], right: list[str]) -> list[str]:
+    result: list[str] = []
+    for left_prefix in left:
+        for right_prefix in right:
+            if left_prefix.startswith(right_prefix):
+                result.append(left_prefix)
+            elif right_prefix.startswith(left_prefix):
+                result.append(right_prefix)
+    return list(dict.fromkeys(result))
+
+
+def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
+    payload_cwd = data.get("cwd")
+    session_id = data.get("session_id")
+    if not isinstance(payload_cwd, str) or not os.path.isabs(payload_cwd):
+        return [], "", "none"
+    if not isinstance(session_id, str) or not session_id:
+        return [], "", "none"
+    binding = read_session_binding(payload_cwd, session_id)
+    if binding is None:
+        return [], "", "none"
+    loaded_skills = binding.get("loaded_skills")
+    if not isinstance(loaded_skills, list):
+        return [], "", "unresolved"
+    manifest_path = resolve_projection_manifest_path(Path(__file__))
+    if manifest_path is None:
+        return [], "", "unresolved"
+    try:
+        manifest = read_manifest(manifest_path)
+    except SessionBindingError:
+        return [], "", "unresolved"
+    skills = manifest.get("skills")
+    if not isinstance(skills, dict):
+        return [], "", "unresolved"
+
+    effective: list[str] | None = None
+    for loaded in loaded_skills:
+        if not isinstance(loaded, dict) or not isinstance(loaded.get("skill_name"), str):
+            return [], "", "unresolved"
+        entry = skills.get(loaded["skill_name"])
+        if not isinstance(entry, dict):
+            return [], "", "unresolved"
+        if "write_paths" not in entry:
+            continue
+        raw_paths = entry["write_paths"]
+        if not isinstance(raw_paths, list) or any(not isinstance(path, str) for path in raw_paths):
+            return [], "", "unresolved"
+        paths = [
+            path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/.autoskillit/temp")
+            for path in raw_paths
+        ]
+        prefixes = _normalize_prefixes(paths)
+        effective = prefixes if effective is None else _intersect_prefixes(effective, prefixes)
+
+    if effective is None:
+        return [], "", "none"
+    return (
+        effective,
+        ", ".join(prefix.rstrip("/") for prefix in effective),
+        ("active" if effective else "empty"),
+    )
+
+
+def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
+    if not is_headless_session():
+        return _interactive_prefix_policy(data)
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
     if prefixes_str:
         raw_prefixes = [p for p in prefixes_str.split(":") if p]
@@ -293,8 +339,8 @@ def _write_prefix_policy() -> tuple[list[str], str]:
         singular = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
         raw_prefixes = [singular] if singular else []
 
-    norm_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in raw_prefixes]
-    return norm_prefixes, ", ".join(raw_prefixes)
+    norm_prefixes = _normalize_prefixes(raw_prefixes)
+    return norm_prefixes, ", ".join(raw_prefixes), ("active" if norm_prefixes else "none")
 
 
 def _paths_validation_error(
@@ -364,20 +410,39 @@ def _interpreter_validation_error(
 
 
 def main() -> None:
-    enforce_session_scope("headless_only")
+    try:
+        data: object = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, ValueError, OSError):
+        data = None
+
+    if not enforce_session_scope("guards/write_guard.py"):
+        sys.exit(0)
 
     if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
+        _record(data, activation="backend", scope="workspace", decision="allow", reason="codex")
         sys.exit(0)
 
-    norm_prefixes, display_prefix = _write_prefix_policy()
-    if not norm_prefixes:
-        sys.exit(0)
-
-    try:
-        data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError, OSError):
+    if not isinstance(data, dict):
         _deny(
-            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input)."
+            data,
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input).",
+            reason_code="malformed_input",
+        )
+        return
+
+    norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data)
+    activation = "headless" if is_headless_session() else "skill_binding"
+    if policy_state == "none":
+        _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
+        sys.exit(0)
+    if policy_state in {"empty", "unresolved"}:
+        _deny(
+            data,
+            (
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"({policy_state} boundary)."
+            ),
+            reason_code=policy_state,
         )
         return
 
@@ -394,6 +459,13 @@ def main() -> None:
     )
 
     if tool_name not in effective_tool_names and "run_cmd" not in tool_name:
+        _record(
+            data,
+            activation=activation,
+            scope="write_prefix",
+            decision="allow",
+            reason="tool_exempt",
+        )
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
@@ -405,30 +477,37 @@ def main() -> None:
             command, parsed.execution_cwd, norm_prefixes, display_prefix
         )
         if reason is not None:
-            _deny(reason)
+            _deny(data, reason, reason_code="scope_violation")
             return
         reason = _bash_validation_error(
             command, parsed.execution_cwd, norm_prefixes, display_prefix
         )
         if reason is not None:
-            _deny(reason)
+            _deny(data, reason, reason_code="scope_violation")
             return
+        _record(
+            data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
+        )
         sys.exit(0)
 
     if tool_name == "apply_patch":
         command = extract_apply_patch_text(data) or ""
         reason = _patch_validation_error(command, norm_prefixes, display_prefix)
         if reason is not None:
-            _deny(reason)
+            _deny(data, reason, reason_code="scope_violation")
             return
+        _record(
+            data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
+        )
         sys.exit(0)
 
     # Write or Edit
     file_path = tool_input.get("file_path", "")
     reason = _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
     if reason is not None:
-        _deny(reason)
+        _deny(data, reason, reason_code="scope_violation")
         return
+    _record(data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope")
     sys.exit(0)
 
 

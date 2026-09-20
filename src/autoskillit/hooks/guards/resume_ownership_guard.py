@@ -20,7 +20,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import is_headless_session  # type: ignore[import-not-found]  # noqa: E402
 
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 
@@ -76,6 +76,9 @@ def main() -> None:
         if not isinstance(data, dict):
             sys.exit(0)
     except (json.JSONDecodeError, TypeError, ValueError):
+        sys.exit(0)
+
+    if not is_headless_session():
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})

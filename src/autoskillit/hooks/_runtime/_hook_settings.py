@@ -147,6 +147,59 @@ def merge_hook_configs(base: dict, overlay: dict) -> dict:
     return merged
 
 
+def is_headless_session() -> bool:
+    """Return the runtime session class used by hook-scope enforcement."""
+    return os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+
+
+def get_session_type() -> str:
+    """Return the launcher-supplied session tier without interpreting it."""
+    return os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+
+
+def _deny_scope_authority_unavailable(script_identity: str) -> None:
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    "AutoSkillit hook session-scope authority is unavailable for "
+                    f"{script_identity!r}."
+                ),
+            }
+        }
+    )
+    sys.stdout.write(payload + "\n")
+    sys.stdout.flush()
+
+
+def enforce_session_scope(script_identity: str) -> bool:
+    """Return whether a registered PreToolUse guard applies to this session.
+
+    A missing, unreadable, malformed, or incomplete generated table denies the
+    tool call before returning ``False``. A normal scope mismatch simply skips
+    the guard because its registry declaration does not apply to this session.
+    """
+    try:
+        table_module_name = (
+            f"{__package__}._hook_scope_table" if __package__ else "_hook_scope_table"
+        )
+        table_module = importlib.import_module(table_module_name)
+        scope = table_module.HOOK_SCOPE_BY_SCRIPT[script_identity]
+        if scope not in {"any", "headless_only", "interactive_only"}:
+            raise ValueError(f"invalid scope {scope!r}")
+    except Exception:
+        _deny_scope_authority_unavailable(script_identity)
+        return False
+
+    if scope == "any":
+        return True
+    if scope == "headless_only":
+        return is_headless_session()
+    return not is_headless_session()
+
+
 def _default_state_root() -> Path:
     """Bare-default state root: ``AUTOSKILLIT_STATE_ROOT`` env var, else process cwd.
 

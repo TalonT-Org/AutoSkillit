@@ -25,7 +25,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
-from _hook_settings import enforce_session_scope  # noqa: E402
+from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
 
 ASK_USER_QUESTION_DENY_TRIGGER: str = "AskUserQuestion is not available in headless sessions"
 
@@ -70,6 +70,9 @@ def main() -> None:
     tool_name = payload.get("tool_name", "")
     if tool_name != "AskUserQuestion":
         sys.exit(0)  # defensive; matcher should pre-filter
+
+    if not enforce_session_scope("guards/ask_user_question_guard.py"):
+        sys.exit(0)
 
     session_id = payload.get("session_id", "")
     if not session_id:

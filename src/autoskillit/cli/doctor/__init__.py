@@ -88,6 +88,7 @@ from ._doctor_skills import (
 )
 from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
 from ._doctor_types import DoctorResult, _print_doctor_results, _run_check
+from ._install_integrity import verify_installations
 
 logger = get_logger(__name__)
 
@@ -130,6 +131,7 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_plugin_cache_exists)))
     results.extend(_run_check(functools.partial(_check_plugin_cache_integrity)))
     results.extend(_run_check(functools.partial(_check_install_state_consistency)))
+    results.extend(_run_check(functools.partial(verify_installations)))
     results.extend(_run_check(functools.partial(_check_autoskillit_on_path)))
     results.extend(_run_check(functools.partial(_check_project_config)))
     results.extend(_run_check(functools.partial(_check_config_layers_for_secrets)))

@@ -65,6 +65,8 @@ class HookDef:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
+        if self.session_scope not in ("any", "headless_only", "interactive_only"):
+            raise ValueError("HookDef.session_scope is invalid")
         for field_name in (
             "produces_resources",
             "reclaims_resources",

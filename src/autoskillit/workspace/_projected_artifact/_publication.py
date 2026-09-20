@@ -31,7 +31,7 @@ from autoskillit.core import (
     validate_agent_tool_canonical,
     write_versioned_json,
 )
-from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.hook_registry import render_hook_scope_table, render_hooks_json_text
 from autoskillit.workspace._installed._projection_cache import is_projected_asset
 from autoskillit.workspace._installed._shared_asset_store import (
     link_or_copy_asset,
@@ -163,17 +163,20 @@ def _copy_non_skill_plugin_assets(
 
 
 def write_generated_hooks_json(plugin_root: Path) -> None:
-    """Write a freshly rendered ``hooks/hooks.json`` into *plugin_root*.
+    """Write freshly rendered hook authorities into *plugin_root*.
 
     Only writes when the hooks directory already exists (meaning hook scripts
     were copied from the source root).  This is the single named operation
-    for "publish current hook manifest into a plugin root" — used by
+    for publishing current hook authorities into a plugin root — used by
     projection staging, marketplace publication, and self-heal republish.
     """
     hooks_dir = plugin_root / "hooks"
     if not hooks_dir.is_dir():
         return
     atomic_write(hooks_dir / "hooks.json", render_hooks_json_text())
+    runtime_dir = hooks_dir / "_runtime"
+    runtime_dir.mkdir(exist_ok=True)
+    atomic_write(runtime_dir / "_hook_scope_table.py", render_hook_scope_table())
 
 
 def _manifest_skill_entry(
@@ -209,6 +212,15 @@ def _manifest_skill_entry(
         "semantic_digest": document.semantic_digest,
         "adaptation_digest": document.adaptation_digest,
     }
+    frontmatter = skill.frontmatter
+    if (
+        frontmatter is not None
+        and frontmatter.data is not None
+        and "write_paths" in frontmatter.data
+    ):
+        write_paths = frontmatter.data["write_paths"]
+        if isinstance(write_paths, list) and all(isinstance(path, str) for path in write_paths):
+            entry["write_paths"] = list(write_paths)
     return entry
 
 

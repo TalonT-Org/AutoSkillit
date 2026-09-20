@@ -147,7 +147,8 @@ def _is_direct_pytest(cmd: str) -> bool:
 
 
 def main() -> None:
-    enforce_session_scope("headless_only")
+    if not enforce_session_scope("guards/test_runner_guard.py"):
+        sys.exit(0)
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:

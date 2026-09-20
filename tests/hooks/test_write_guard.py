@@ -50,6 +50,38 @@ class TestWriteGuardNoHeadless:
         result = _run_hook(_build_event("Write", "/clone/src/foo.py"))
         assert result == ""
 
+    def test_loaded_skill_boundary_applies_interactively(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        from autoskillit.hooks.guards import write_guard
+
+        _set_headless(monkeypatch, headless=False)
+        monkeypatch.setattr(
+            write_guard,
+            "read_session_binding",
+            lambda _cwd, _session_id: {"loaded_skills": [{"skill_name": "review-pr"}]},
+        )
+        monkeypatch.setattr(
+            write_guard, "resolve_projection_manifest_path", lambda _path: tmp_path
+        )
+        monkeypatch.setattr(
+            write_guard,
+            "read_manifest",
+            lambda _path: {
+                "skills": {"review-pr": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/review-pr/"]}}
+            },
+        )
+        event = {
+            "tool_name": "Write",
+            "cwd": str(tmp_path),
+            "session_id": "interactive-test",
+            "tool_input": {"file_path": str(tmp_path / "outside.py")},
+        }
+
+        result = _run_hook(event)
+
+        assert json.loads(result)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
 
 class TestWriteGuardCodexBackendEarlyExit:
     """Codex backend bypasses prefix enforcement — workspace-write sandbox handles

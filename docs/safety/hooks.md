@@ -1,8 +1,8 @@
 # Hooks
 
-AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
-PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
-Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 58 Claude Code hook scripts: 39 PreToolUse, 11 PostToolUse,
+2 PostToolUseFailure, 2 SessionStart, 1 Stop, 1 SubagentStart, 1 SubagentStop, and
+1 SessionEnd. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry/` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
@@ -18,7 +18,7 @@ explains the terminal headless result and explicit TUI continuation. A `manual` 
 does not match, so users may compact manually. This hook is excluded from the Claude
 Code registry.
 
-## PreToolUse hooks
+## PreToolUse hooks (39)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -371,6 +371,12 @@ SessionStart scan phase above keeps new debris from ever accumulating again.
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks
 file must be regenerated through `generate_hooks_json()`, never edited by
 hand.
+
+### `installation_integrity_guard.py`
+**Guarded tools:** `Write`, `Edit`, `Bash`, `apply_patch`, `run_cmd`
+Denies writes into AutoSkillit installation trees, including `site-packages`,
+plugin generations, uv tool installs, and uv cache archives. This protection
+applies in every session class and backend.
 
 ### `recipe_write_advisor.py`
 **Matched tools:** `Write`, `Edit`

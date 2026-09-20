@@ -3,6 +3,8 @@ name: review-pr
 categories:
 - github
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/review-pr/'
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -108,7 +110,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Publish every fixed-name file through a same-directory `mktemp` path and atomic
   `mv`; a redirect may target only that temporary path, never the fixed destination.
   Never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or
-  `python3 -c` invocation, as these are blocked by the write guard
+  `python3 -c` invocation; keep artifact writes within the declared review output directory.
 
 ## Workflow
 

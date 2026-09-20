@@ -60,6 +60,7 @@ from ._rendering import (
     _build_hook_command,
     _build_hook_entry,
     generate_hooks_json,
+    render_hook_scope_table,
     render_hooks_json_text,
     render_relocatable_hook_command,
 )
@@ -123,6 +124,7 @@ __all__ = [
     "is_hook_payload_quarantined",
     "iter_all_scope_paths",
     "quarantine_hook_payload",
+    "render_hook_scope_table",
     "render_hooks_json_text",
     "render_relocatable_hook_command",
     "validate_lifecycle_contracts",

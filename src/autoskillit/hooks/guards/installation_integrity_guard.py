@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Deny writes that target an AutoSkillit installation tree."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    WRITE_VERBS,
+    all_evaluated_segments,
+    command_verb,
+    extract_redirect_targets_with_status,
+    extract_write_verb_targets,
+    resolve_write_target,
+)
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    extract_apply_patch_text,
+    parse_hook_command,
+)
+from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
+    PolicyEvent,
+    render_provenance_prefix,
+)
+
+
+def _deny(reason_code: str, detail: str) -> None:
+    prefix = render_provenance_prefix(
+        PolicyEvent(
+            hook_id="installation-integrity-guard",
+            hook_version=1,
+            event="PreToolUse",
+            decision="deny",
+            reason_code=reason_code,
+        )
+    )
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"{prefix} {detail}",
+            }
+        },
+        sys.stdout,
+    )
+    sys.exit(0)
+
+
+def _path_is_within(path: str, root: Path) -> bool:
+    try:
+        return os.path.commonpath(
+            (os.path.realpath(path), os.path.realpath(root))
+        ) == os.path.realpath(root)
+    except ValueError:
+        return False
+
+
+def _known_roots() -> tuple[Path, ...]:
+    home = Path.home()
+    return (
+        Path(__file__).resolve().parents[2],
+        home / ".autoskillit" / "plugin-generations",
+        home / ".local" / "share" / "uv" / "tools" / "autoskillit",
+        home / ".local" / "bin" / "autoskillit",
+    )
+
+
+def _has_install_layout(path: str) -> bool:
+    parts = Path(os.path.normpath(path)).parts
+    return (
+        any(
+            parts[index : index + 2]
+            in (("site-packages", "autoskillit"), ("dist-packages", "autoskillit"))
+            for index in range(len(parts) - 1)
+        )
+        or any(part.startswith("archive-v") for part in parts)
+        and "autoskillit" in parts
+    )
+
+
+def _nearest_existing_ancestor(path: str) -> str:
+    candidate = Path(path)
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return os.path.realpath(candidate)
+
+
+def _matches_protected_inode(path: str) -> bool:
+    try:
+        target = os.stat(path)
+    except OSError:
+        return False
+    for root in _known_roots():
+        if not root.exists():
+            continue
+        entries = (root,) if root.is_file() else root.rglob("*")
+        for entry in entries:
+            try:
+                protected = entry.stat()
+            except OSError:
+                continue
+            if (protected.st_dev, protected.st_ino) == (target.st_dev, target.st_ino):
+                return True
+    return False
+
+
+def _is_protected_target(path: str) -> bool:
+    normalized = os.path.realpath(path)
+    ancestor = _nearest_existing_ancestor(path)
+    if _has_install_layout(normalized) or _has_install_layout(ancestor):
+        return True
+    if any(
+        _path_is_within(normalized, root) or _path_is_within(ancestor, root)
+        for root in _known_roots()
+    ):
+        return True
+    return _matches_protected_inode(normalized)
+
+
+def _patch_paths(command: str) -> list[str]:
+    paths: list[str] = []
+    for line in command.splitlines():
+        if line.startswith("+++ b/"):
+            paths.append(line[6:])
+        elif line.startswith(("*** Update File: ", "*** Add File: ", "*** Delete File: ")):
+            paths.append(line.partition(": ")[2].strip())
+    return paths
+
+
+def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
+    segments = all_evaluated_segments(command)
+    if segments is None:
+        return [], False
+    targets: list[str] = []
+    unresolved_target = False
+    for segment in segments:
+        verb = command_verb(segment)
+        if verb in WRITE_VERBS:
+            found, unresolved = extract_write_verb_targets(verb, segment, cwd)
+            targets.extend(found)
+            unresolved_target = unresolved_target or unresolved
+        redirects, unresolved = extract_redirect_targets_with_status(segment, cwd)
+        targets.extend(redirects)
+        unresolved_target = unresolved_target or unresolved
+    return targets, unresolved_target
+
+
+def main() -> None:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError, ValueError):
+        sys.exit(0)
+
+    tool_name = data.get("tool_name", "")
+    if tool_name not in {"Write", "Edit", "Bash", "apply_patch"} and "run_cmd" not in tool_name:
+        sys.exit(0)
+
+    targets: list[str] = []
+    unresolved_target = False
+    if tool_name in {"Write", "Edit"}:
+        path = data.get("tool_input", {}).get("file_path", "")
+        if isinstance(path, str) and path:
+            resolved = resolve_write_target(path)
+            if resolved is None:
+                unresolved_target = True
+            else:
+                targets.append(resolved)
+    elif tool_name == "apply_patch":
+        command = extract_apply_patch_text(data) or ""
+        for path in _patch_paths(command):
+            resolved = resolve_write_target(path)
+            if resolved is None:
+                unresolved_target = True
+            else:
+                targets.append(resolved)
+    else:
+        parsed = parse_hook_command(data)
+        targets, unresolved_target = _bash_targets(parsed.command or "", parsed.execution_cwd)
+
+    if unresolved_target:
+        _deny("unresolved-write-target", "Write target could not be resolved safely.")
+    if any(_is_protected_target(path) for path in targets):
+        _deny(
+            "protected-installation-target", "Writing an AutoSkillit installation is prohibited."
+        )
+
+
+if __name__ == "__main__":
+    main()

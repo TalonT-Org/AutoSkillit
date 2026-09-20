@@ -49,6 +49,24 @@ def _no_go_route_findings(
 ) -> list[RuleFinding]:
     """Validate one audit NO GO route's producer, dominance, and successor bindings."""
     findings: list[RuleFinding] = []
+    gate_step = ctx.recipe.steps.get(no_go_start)
+    if gate_step is not None and gate_step.with_args.get("callable") == (
+        "autoskillit.smoke_utils.check_audit_remediation_outcome"
+    ):
+        if gate_step.on_result is not None:
+            progressing_routes = {
+                condition.route
+                for condition in gate_step.on_result.conditions
+                if condition.when is not None and "PROGRESSING" in condition.when
+            }
+            if len(progressing_routes) == 1:
+                no_go_start = progressing_routes.pop()
+    if no_go_start == "merge_audit_cycle_path":
+        merge_step = ctx.recipe.steps.get(no_go_start)
+        if merge_step is not None:
+            no_go_routes = _no_go_routes(merge_step)
+            if len(set(no_go_routes)) == 1:
+                no_go_start = no_go_routes[0]
     reachable = bfs_reachable(ctx.step_graph, no_go_start) | {no_go_start}
     reachable_planners = sorted(make_plan_steps & reachable)
     if not reachable_planners:
@@ -162,14 +180,14 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
 
     findings: list[RuleFinding] = []
     for audit_step_name in audit_steps:
-        if "audit_cycle_path" not in ctx.recipe.steps[audit_step_name].capture:
+        if "audit_cycle_path_raw" not in ctx.recipe.steps[audit_step_name].capture:
             findings.append(
                 make_finding(
                     rule_name="inventory-gate-not-bilateral",
                     step_name=audit_step_name,
                     message=(
                         f"Step '{audit_step_name}' invokes audit-impl but does not "
-                        "capture audit_cycle_path for both verdicts."
+                        "capture audit_cycle_path_raw for both verdicts."
                     ),
                 )
             )

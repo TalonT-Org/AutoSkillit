@@ -214,6 +214,7 @@ def test_output_path_tokens_synchronized() -> None:
         {
             "audit_cycle_path",
             "audit_semantic_result_path",
+            "semantic_result_path",
             "plan_path",
             "plan_disposition_path",
             "plan_parts",

@@ -310,8 +310,8 @@ or reconstruct any inventory, remediation, authority, or report.
    `trusted_go_successor`) and omit Step 4.7. Absence is distinct from an authoritative
    empty inventory; do not convert one into the other.
 2. If preflight is `PASS`, copy its exact ordered rows into the walkthrough record. Preserve
-   every `satisfied-by-round-N` and `carried@step` value and the cited implementation step
-   without reclassification.
+   every `satisfied-by-round-N`, `carried@step`, and `waived-by-decision@waiver-id` value and
+   the cited implementation step without reclassification.
 3. If preflight is `REJECT`, or any returned row is `UNMAPPED`, do not stamp or edit the plan
    to cure the decision. Output:
 
@@ -342,7 +342,8 @@ For each issue found:
 2. Do NOT add any "gap analysis" or "issues" sections to the plan
 3. The plan should read as if it was correct from the start
 4. Never add carry-forward padding, add/remove Requirements Map rows, or change a
-   `satisfied-by-round-N`/`carried@step` result to make Step 4.7 pass. Step 5 cannot
+   `satisfied-by-round-N`, `carried@step`, or `waived-by-decision@waiver-id` result to make
+   Step 4.7 pass. Step 5 cannot
    override the evaluator.
 
 ### Step 6: Mark Plan as Verified

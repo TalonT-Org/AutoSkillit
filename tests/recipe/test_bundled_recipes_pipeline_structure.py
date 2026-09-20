@@ -250,18 +250,10 @@ class TestPipelineVariantInvariants:
 
     def test_audit_impl_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
-        if recipe.name == "remediation":
-            assert step.on_context_limit == "check_audit_remediation_loop", (
-                "remediation audit_impl on_context_limit must route through the existing "
-                "loop-governing step (mirrors on_rate_limit) rather than the decorative "
-                "register_clone_failure alias of on_failure (issue #4305)"
-            )
-            return
-        assert step.on_context_limit == "register_clone_failure", (
-            "audit_impl on context limit must register the clone before escalating — "
-            "clone-terminal-requires-registration requires all terminal paths go through "
-            "register_clone_status"
+        expected = (
+            "salvage_plan" if recipe.name == "remediation" else "check_audit_integrity_retry"
         )
+        assert step.on_context_limit == expected
 
     def test_audit_impl_has_on_rate_limit_in_remediation(self, recipe) -> None:
         if recipe.name != "remediation":
@@ -332,11 +324,7 @@ class TestImplementationPipelineStructure:
         """
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure == "register_clone_failure", (
-            "audit_impl must declare on_failure: register_clone_failure. "
-            "Tool-level failures produce no result object — on_result conditions cannot fire. "
-            "Clone must be registered before escalating via register_clone_failure."
-        )
+        assert step.on_failure == "check_audit_integrity_retry"
 
     def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:
         """T_IP6: plan step note must contain *_part_*.md glob pattern for multi-part discovery."""

@@ -42,8 +42,8 @@ def test_unbounded_cycle_pure_loop_is_error() -> None:
     assert cycle_findings[0].severity == Severity.ERROR
 
 
-def test_cycle_with_only_on_failure_exit_is_warning() -> None:
-    """A→B→A but A.on_failure outside cycle → WARNING (conditional exit)."""
+def test_cycle_with_only_on_failure_exit_is_error() -> None:
+    """A failure exit does not bound a successful retry cycle."""
     recipe = _make_recipe(
         {
             "A": RecipeStep(
@@ -59,7 +59,7 @@ def test_cycle_with_only_on_failure_exit_is_warning() -> None:
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert len(cycle_findings) == 1
-    assert cycle_findings[0].severity == Severity.WARNING
+    assert cycle_findings[0].severity == Severity.ERROR
 
 
 def test_cycle_with_retry_exit_is_error() -> None:

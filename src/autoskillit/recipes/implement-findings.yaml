@@ -196,7 +196,7 @@ steps:
     action: route
     on_result:
     - when: "${{ result.next }} == more_groups"
-      route: process_groups
+      route: check_group_iteration
     - when: "${{ result.next }} == all_done"
       route: batch_cleanup
     - route: batch_cleanup
@@ -204,6 +204,23 @@ steps:
       Routing step — no tool call. The agent evaluates whether more groups
       remain in the queue (result.next = more_groups) or all groups have
       been processed (route to batch_cleanup).
+
+  check_group_iteration:
+    tool: run_python
+    with:
+      step_name: check_group_iteration
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: "${{ context.group_iteration_count }}"
+      max_iterations: "${{ context.total_groups }}"
+    capture:
+      group_iteration_count: "${{ result.next_iteration }}"
+    on_result:
+    - when: "${{ result.max_exceeded }} == true"
+      route: escalate_stop
+    - route: process_groups
+    on_failure: escalate_stop
+    optional_context_refs:
+    - group_iteration_count
 
   batch_cleanup:
     tool: batch_cleanup_clones

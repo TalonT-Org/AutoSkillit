@@ -211,7 +211,7 @@ class TestResearchDesignRecipeStructure:
         assert step.on_result is not None
         fallback = next((c for c in step.on_result.conditions if c.when is None), None)
         assert fallback is not None, "Missing fallback route"
-        assert fallback.route == "vis_dial"
+        assert fallback.route == "escalate_stop"
 
     def test_synthesize_no_on_success(self, recipe) -> None:
         assert recipe.steps["synthesize"].on_success is None

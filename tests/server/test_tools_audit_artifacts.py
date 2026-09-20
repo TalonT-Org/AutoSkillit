@@ -658,9 +658,10 @@ def test_preflight_report_admission_uses_per_call_allowed_root_verifier(
     )
 
     class _SelectedRootVerifier:
-        def __init__(self, allowed_root: Path) -> None:
+        def __init__(self, allowed_root: Path, *, waiver_root: Path | None = None) -> None:
             constructed.append(self)
             assert allowed_root == selected_root
+            assert waiver_root == default_root
 
         def load_authority(self, path: str) -> Any:
             authority_calls.append((self, path))

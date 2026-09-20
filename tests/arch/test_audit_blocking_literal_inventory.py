@@ -26,13 +26,21 @@ _EXPECTED_LITERALS = Counter(
                     "ODD",
                     "CONFLICT",
                     "UNPRESCRIBED_SUBSTITUTION",
+                    "UNSATISFIABLE_BY_CODE",
                 }
             ),
         ): 1,
         (
             "core/types/_type_closure_report.py",
             "<module>",
-            frozenset({"MISSING", "CONFLICT", "UNPRESCRIBED_SUBSTITUTION"}),
+            frozenset(
+                {
+                    "MISSING",
+                    "CONFLICT",
+                    "UNPRESCRIBED_SUBSTITUTION",
+                    "UNSATISFIABLE_BY_CODE",
+                }
+            ),
         ): 1,
     }
 )

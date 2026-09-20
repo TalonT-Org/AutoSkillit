@@ -29,6 +29,14 @@
       "description": "Post-merge quality gate",
       "default": "false"
     },
+    "audit_remediation_max_retries": {
+      "description": "Maximum audit remediation attempts before stopping",
+      "default": "3"
+    },
+    "audit_integrity_max_retries": {
+      "description": "Maximum retries after an audit semantic or infrastructure failure",
+      "default": "2"
+    },
     "closure_authority_path": {
       "description": "Absolute path to frozen requirements authority JSON for closure-mode audit",
       "default": ""
@@ -561,11 +569,36 @@
       "on_result": [
         {
           "when": "${{ context.push_error_type }} == queued_branch",
-          "route": "wait_dequeue_retry"
+          "route": "check_dequeue_retry_loop"
         },
         {
           "route": "register_clone_failure"
         }
+      ]
+    },
+    "check_dequeue_retry_loop": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_dequeue_retry_loop",
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.dequeue_retry_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "dequeue_retry_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "wait_dequeue_retry"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "dequeue_retry_count"
       ]
     },
     "wait_dequeue_retry": {
@@ -1510,7 +1543,7 @@
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}",
-        "audit_cycle_path": "${{ result.audit_cycle_path }}",
+        "audit_cycle_path_raw": "${{ result.audit_cycle_path }}",
         "audit_status": "${{ result.audit_status }}",
         "audit_verdict": "${{ result.audit_verdict }}",
         "audit_attempt_id": "${{ result.audit_attempt_id }}"
@@ -1518,51 +1551,51 @@
       "on_result": [
         {
           "when": "${{ result.audit_status }} == SEMANTIC_REJECTED",
-          "route": "remediate"
+          "route": "check_audit_integrity_retry"
         },
         {
           "when": "${{ result.audit_status }} == CONFLICT",
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         },
         {
           "when": "${{ result.audit_status }} == STORAGE_FAILURE",
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         },
         {
           "when": "${{ result.audit_status }} == QUARANTINED",
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         },
         {
           "when": "${{ result.audit_status }} == NON_PUBLISHED_STANDALONE",
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         },
         {
           "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO",
-          "route": "compute_domain_partitions"
+          "route": "merge_audit_cycle_path"
         },
         {
           "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO",
-          "route": "compute_domain_partitions"
+          "route": "merge_audit_cycle_path"
         },
         {
           "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
-          "route": "remediate"
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
-          "route": "remediate"
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "result.error",
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         },
         {
-          "route": "register_clone_failure"
+          "route": "check_audit_integrity_retry"
         }
       ],
-      "on_failure": "register_clone_failure",
-      "on_context_limit": "register_clone_failure",
-      "on_rate_limit": "register_clone_failure",
+      "on_failure": "check_audit_integrity_retry",
+      "on_context_limit": "check_audit_integrity_retry",
+      "on_rate_limit": "check_audit_integrity_retry",
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
       "on_skip": "open_integration_pr",
@@ -1572,6 +1605,174 @@
         "audit_attempt_id"
       ],
       "note": "DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files exist in plans_dir. Only execute if inputs.audit_impl is 'true'; if false, skip directly to open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr. NO GO replaces the prior authority before completion. NO GO re-enters plan with the exact current authority and the successor audit consumes it as prior.\n"
+    },
+    "merge_audit_cycle_path": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "merge_audit_cycle_path",
+        "callable": "autoskillit.smoke_utils.merge_audit_cycle_path",
+        "current_authority_path": "${{ context.audit_cycle_path_raw }}",
+        "prior_authority_path": "${{ context.audit_cycle_path }}"
+      },
+      "capture": {
+        "audit_cycle_path": "${{ result.audit_cycle_path }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == GO",
+          "route": "compute_domain_partitions"
+        },
+        {
+          "when": "${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == GO",
+          "route": "compute_domain_partitions"
+        },
+        {
+          "when": "${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == NO GO",
+          "route": "reset_audit_ci_skip_conflict"
+        },
+        {
+          "when": "${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == NO GO",
+          "route": "reset_audit_ci_skip_conflict"
+        },
+        {
+          "route": "check_audit_integrity_retry"
+        }
+      ],
+      "on_failure": "check_audit_integrity_retry",
+      "optional_context_refs": [
+        "audit_cycle_path_raw",
+        "audit_cycle_path"
+      ],
+      "note": "Promotes published audit authority; this is the sole writer of audit_cycle_path."
+    },
+    "check_audit_remediation_loop": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_audit_remediation_loop",
+        "callable": "autoskillit.smoke_utils.check_audit_remediation_outcome",
+        "current_authority_path": "${{ context.audit_cycle_path_raw }}",
+        "prior_authority_path": "${{ context.audit_cycle_path }}",
+        "current_iteration": "${{ context.audit_remediation_count }}",
+        "max_iterations": "${{ inputs.audit_remediation_max_retries }}"
+      },
+      "capture": {
+        "audit_remediation_count": "${{ result.next_iteration }}",
+        "audit_unresolved_requirement_ids": "${{ result.unresolved_requirement_ids }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.outcome }} == PROGRESSING",
+          "route": "merge_audit_cycle_path"
+        },
+        {
+          "when": "${{ result.outcome }} == STUCK_REPEATING",
+          "route": "release_audit_remediation_stuck"
+        },
+        {
+          "when": "${{ result.outcome }} == EXHAUSTED",
+          "route": "escalate_stop"
+        },
+        {
+          "when": "${{ result.outcome }} == AWAITING_DECISION",
+          "route": "await_audit_decision"
+        },
+        {
+          "when": "${{ result.outcome }} == INTEGRITY_FAULT",
+          "route": "check_audit_integrity_retry"
+        },
+        {
+          "route": "check_audit_integrity_retry"
+        }
+      ],
+      "on_failure": "check_audit_integrity_retry",
+      "optional_context_refs": [
+        "audit_remediation_count",
+        "audit_cycle_path_raw",
+        "audit_cycle_path"
+      ],
+      "note": "Classifies the audit remediation cycle before continuing it."
+    },
+    "reset_audit_ci_skip_conflict": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "ci_skip_conflict_count": "${{ result.value }}"
+      },
+      "on_success": "reset_audit_conflict_ci_loop",
+      "on_failure": "check_audit_integrity_retry"
+    },
+    "reset_audit_conflict_ci_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "conflict_ci_loop_count": "${{ result.value }}"
+      },
+      "on_success": "reset_audit_test_fix_loop",
+      "on_failure": "check_audit_integrity_retry"
+    },
+    "reset_audit_test_fix_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "test_fix_loop_count": "${{ result.value }}"
+      },
+      "on_success": "reset_audit_pr_merge_loop",
+      "on_failure": "check_audit_integrity_retry"
+    },
+    "reset_audit_pr_merge_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "pr_merge_loop_count": "${{ result.value }}"
+      },
+      "on_success": "remediate",
+      "on_failure": "check_audit_integrity_retry"
+    },
+    "check_audit_integrity_retry": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_audit_integrity_retry",
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.audit_integrity_fault_count }}",
+        "max_iterations": "${{ inputs.audit_integrity_max_retries }}"
+      },
+      "capture": {
+        "audit_integrity_fault_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "audit_impl"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "audit_integrity_fault_count"
+      ],
+      "note": "Bounded retry path for audit semantic and infrastructure failures."
+    },
+    "release_audit_remediation_stuck": {
+      "action": "stop",
+      "message": "Audit remediation stopped because the same unresolved findings repeated. Emit the L3 result sentinel JSON block now with success=false and reason=\"audit_remediation_stuck\"."
+    },
+    "await_audit_decision": {
+      "action": "stop",
+      "message": "Audit remediation requires a human waiver or decision. The preceding gate output lists the unresolved requirement IDs. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
     },
     "remediate": {
       "action": "route",

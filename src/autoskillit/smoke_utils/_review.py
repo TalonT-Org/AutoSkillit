@@ -4,14 +4,43 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 from autoskillit.core import (
+    AuditAssessment,
+    AuditCycleAuthority,
+    AuditCycleVerifier,
+    AuditVerdict,
     get_logger,
     is_valid_github_review_head_sha,
 )
 
 logger = get_logger(__name__)
+
+
+class RemediationOutcome(StrEnum):
+    PROGRESSING = "PROGRESSING"
+    STUCK_REPEATING = "STUCK_REPEATING"
+    EXHAUSTED = "EXHAUSTED"
+    AWAITING_DECISION = "AWAITING_DECISION"
+    INTEGRITY_FAULT = "INTEGRITY_FAULT"
+
+
+def _load_remediation_authority(path: str, *, require_no_go: bool = False) -> AuditCycleAuthority:
+    if not path:
+        raise ValueError("audit authority path is required")
+    try:
+        authority_path = Path(path)
+        if not authority_path.is_absolute():
+            raise ValueError("audit authority path must be absolute")
+        authority = AuditCycleVerifier(authority_path.parent).load_authority(authority_path)
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"invalid audit authority {path!r}: {exc}") from exc
+    if require_no_go and authority.verdict is not AuditVerdict.NO_GO:
+        raise ValueError("remediation requires a NO GO authority")
+    return authority
 
 
 def annotate_pr_diff(
@@ -441,6 +470,79 @@ def check_loop_iteration(
     }
 
 
+def check_audit_remediation_outcome(
+    current_iteration: str = "",
+    max_iterations: str = "2",
+    current_authority_path: str = "",
+    prior_authority_path: str = "",
+) -> dict[str, str]:
+    """Classify a remediation round from its current and prior audit authorities."""
+    budget = check_loop_iteration(current_iteration, max_iterations)
+    try:
+        current = _load_remediation_authority(current_authority_path, require_no_go=True)
+        prior = _load_remediation_authority(prior_authority_path) if prior_authority_path else None
+    except ValueError as exc:
+        logger.warning(
+            "audit remediation authority load failed (current=%r prior=%r): %s",
+            current_authority_path,
+            prior_authority_path,
+            exc,
+        )
+        outcome = RemediationOutcome.INTEGRITY_FAULT
+        unresolved_requirement_ids = ""
+    else:
+        blocking = tuple(row for row in current.assessments if row.assessment.blocking)
+        unresolved_requirement_ids = ",".join(sorted(row.requirement_id for row in blocking))
+        current_digests = sorted(row.row_digest for row in blocking)
+        prior_digests = (
+            sorted(row.row_digest for row in prior.assessments if row.assessment.blocking)
+            if prior is not None
+            else None
+        )
+        if blocking and all(
+            row.assessment is AuditAssessment.UNSATISFIABLE_BY_CODE for row in blocking
+        ):
+            outcome = RemediationOutcome.AWAITING_DECISION
+        elif prior_digests is not None and current_digests == prior_digests:
+            outcome = RemediationOutcome.STUCK_REPEATING
+        elif budget["max_exceeded"] == "true":
+            outcome = RemediationOutcome.EXHAUSTED
+        else:
+            outcome = RemediationOutcome.PROGRESSING
+    match outcome:
+        case RemediationOutcome.INTEGRITY_FAULT:
+            next_iteration = current_iteration.strip() or "0"
+        case (
+            RemediationOutcome.PROGRESSING
+            | RemediationOutcome.STUCK_REPEATING
+            | RemediationOutcome.EXHAUSTED
+            | RemediationOutcome.AWAITING_DECISION
+        ):
+            next_iteration = budget["next_iteration"]
+        case unreachable:
+            assert_never(unreachable)
+    return {
+        "outcome": outcome.value,
+        "next_iteration": next_iteration,
+        "unresolved_requirement_ids": unresolved_requirement_ids,
+    }
+
+
+def merge_audit_cycle_path(
+    current_authority_path: str = "",
+    prior_authority_path: str = "",
+) -> dict[str, str]:
+    """Preserve a trusted authority path unless this round published a replacement."""
+    if not isinstance(current_authority_path, str) or not isinstance(prior_authority_path, str):
+        raise ValueError(
+            f"authority paths must be strings, got {type(current_authority_path).__name__} "
+            f"and {type(prior_authority_path).__name__}"
+        )
+    if not current_authority_path and not prior_authority_path:
+        raise ValueError("merge_audit_cycle_path requires at least one non-empty authority path")
+    return {"audit_cycle_path": current_authority_path or prior_authority_path}
+
+
 def check_loop_with_progress(
     current_iteration: str = "",
     max_iterations: str = "5",
@@ -464,7 +566,7 @@ def check_loop_with_progress(
         raise ValueError(f"max_iterations must be numeric, got: {max_iterations!r}") from exc
 
     current_fixed = issues_fixed_count.strip() or "0"
-    prev_fixed = prev_issues_fixed_count.strip()
+    prev_fixed = prev_issues_fixed_count.strip() or "0"
     zero_progress = current_fixed == "0" and prev_fixed == "0"
 
     return {

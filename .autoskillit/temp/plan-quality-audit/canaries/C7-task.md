@@ -1,1 +1,0 @@
-Rename the `audit-cohesion` skill to `cohesion-audit` across all skill references, test files, and documentation. Ensure backward-compatible re-exports exist.

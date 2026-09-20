@@ -30,6 +30,7 @@ def test_step47_consumes_preflight_and_preserves_rows() -> None:
     assert "`audit_cycle_inventory` preflight evidence" in section
     assert "`satisfied-by-round-N`" in section
     assert "`carried@step`" in section
+    assert "`waived-by-decision@waiver-id`" in section
     assert "requirements_inventory.json" not in section
 
 

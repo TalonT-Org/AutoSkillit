@@ -71,15 +71,13 @@ def _route_partition_violations(
         violations.append("semantic rejection and infrastructure statuses must route first")
 
     go_routes = {keyed[(status, "GO")][1] for status in _PUBLISHED_STATUSES}
-    correction_routes = {
-        keyed[("SEMANTIC_REJECTED", None)][1],
-        *(keyed[(status, "NO GO")][1] for status in _PUBLISHED_STATUSES),
-    }
+    correction_routes = {keyed[(status, "NO GO")][1] for status in _PUBLISHED_STATUSES}
+    semantic_route = keyed[("SEMANTIC_REJECTED", None)][1]
     infrastructure_routes = {keyed[(status, None)][1] for status in _INFRASTRUCTURE_STATUSES}
     if len(go_routes) != 1:
         violations.append("PUBLISHED and EXACT_REPLAY GO must share one route")
     if len(correction_routes) != 1:
-        violations.append("semantic rejection and published/replayed NO GO must share one route")
+        violations.append("PUBLISHED and EXACT_REPLAY NO GO must share one route")
     if len(infrastructure_routes) != 1:
         violations.append("conflict, storage, quarantine, and standalone must share one route")
 
@@ -93,10 +91,14 @@ def _route_partition_violations(
         violations.append("generic result.error must route to infrastructure failure")
     if len(default_routes) != 1 or default_routes != infrastructure_routes:
         violations.append("the catch-all route must be the infrastructure failure route")
-    if go_routes & correction_routes or go_routes & infrastructure_routes:
-        violations.append("semantic success must not share correction or infrastructure routes")
+    if go_routes & infrastructure_routes:
+        violations.append("semantic success must not share the infrastructure failure route")
+    if semantic_route not in infrastructure_routes:
+        violations.append("semantic rejection must route through the integrity path")
     if correction_routes & infrastructure_routes:
-        violations.append("semantic correction must not share the infrastructure failure route")
+        violations.append(
+            "published/replayed NO GO must not share the infrastructure failure route"
+        )
     return violations
 
 

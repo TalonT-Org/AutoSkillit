@@ -210,6 +210,7 @@ def _prepared_effect(
                 "CONFLICT",
                 "NAMED_DEVIATION",
                 "UNPRESCRIBED_SUBSTITUTION",
+                "UNSATISFIABLE_BY_CODE",
             },
         ),
         (

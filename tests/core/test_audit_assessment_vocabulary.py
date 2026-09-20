@@ -83,6 +83,7 @@ def test_audit_assessment_members_and_dispositions_are_closed() -> None:
         AuditAssessment.CONFLICT: AuditDisposition.BLOCKING,
         AuditAssessment.NAMED_DEVIATION: AuditDisposition.PRE_SUBMISSION_ONLY,
         AuditAssessment.UNPRESCRIBED_SUBSTITUTION: AuditDisposition.BLOCKING,
+        AuditAssessment.UNSATISFIABLE_BY_CODE: AuditDisposition.REQUIRES_DECISION,
     }
 
     assert {member.name for member in AuditAssessment} == set(expected_dispositions)
@@ -93,12 +94,14 @@ def test_audit_assessment_members_and_dispositions_are_closed() -> None:
         "CONFLICT",
         "NAMED_DEVIATION",
         "UNPRESCRIBED_SUBSTITUTION",
+        "UNSATISFIABLE_BY_CODE",
     }
     assert {member: member.disposition for member in AuditAssessment} == expected_dispositions
     assert {member.value for member in AuditAssessment if member.blocking} == {
         "MISSING",
         "CONFLICT",
         "UNPRESCRIBED_SUBSTITUTION",
+        "UNSATISFIABLE_BY_CODE",
     }
 
 

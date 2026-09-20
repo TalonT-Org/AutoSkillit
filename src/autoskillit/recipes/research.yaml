@@ -67,6 +67,9 @@ ingredients:
 
       '
     default: 'true'
+  audit_integrity_max_retries:
+    description: Maximum retries after an audit semantic or infrastructure failure
+    default: '2'
   closure_authority_path:
     description: Absolute path to frozen requirements authority JSON for closure-mode audit
     default: ''
@@ -725,34 +728,34 @@ steps:
       closure_target_sha: ''
     capture:
       remediation_path: ${{ result.remediation_path }}
-      audit_cycle_path: ${{ result.audit_cycle_path }}
+      audit_cycle_path_raw: ${{ result.audit_cycle_path }}
       audit_status: ${{ result.audit_status }}
       audit_verdict: ${{ result.audit_verdict }}
       audit_attempt_id: ${{ result.audit_attempt_id }}
     on_result:
     - when: ${{ result.audit_status }} == SEMANTIC_REJECTED
-      route: remediate
+      route: check_audit_integrity_retry
     - when: ${{ result.audit_status }} == CONFLICT
-      route: escalate_stop
+      route: check_audit_integrity_retry
     - when: ${{ result.audit_status }} == STORAGE_FAILURE
-      route: escalate_stop
+      route: check_audit_integrity_retry
     - when: ${{ result.audit_status }} == QUARANTINED
-      route: escalate_stop
+      route: check_audit_integrity_retry
     - when: ${{ result.audit_status }} == NON_PUBLISHED_STANDALONE
-      route: escalate_stop
+      route: check_audit_integrity_retry
     - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO
-      route: run_experiment
+      route: merge_audit_cycle_path
     - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO
-      route: run_experiment
+      route: merge_audit_cycle_path
     - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO
-      route: remediate
+      route: check_audit_retry_loop
     - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO
-      route: remediate
+      route: check_audit_retry_loop
     - when: result.error
-      route: escalate_stop
-    - route: escalate_stop
-    on_failure: escalate_stop
-    on_context_limit: escalate_stop
+      route: check_audit_integrity_retry
+    - route: check_audit_integrity_retry
+    on_failure: check_audit_integrity_retry
+    on_context_limit: check_audit_integrity_retry
     skip_when_false: inputs.audit_impl
     on_skip: run_experiment
     optional_context_refs:
@@ -765,11 +768,35 @@ steps:
       skip directly to run_experiment.
 
       '
+  merge_audit_cycle_path:
+    tool: run_python
+    with:
+      step_name: merge_audit_cycle_path
+      callable: autoskillit.smoke_utils.merge_audit_cycle_path
+      current_authority_path: ${{ context.audit_cycle_path_raw }}
+      prior_authority_path: ${{ context.audit_cycle_path }}
+    capture:
+      audit_cycle_path: ${{ result.audit_cycle_path }}
+    on_result:
+    - when: ${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == GO
+      route: run_experiment
+    - when: ${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == GO
+      route: run_experiment
+    - when: ${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == NO GO
+      route: remediate
+    - when: ${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == NO GO
+      route: remediate
+    - route: check_audit_integrity_retry
+    on_failure: check_audit_integrity_retry
+    optional_context_refs:
+    - audit_cycle_path_raw
+    - audit_cycle_path
+    note: Promotes published audit authority; this is the sole writer of audit_cycle_path.
   remediate:
     action: route
     with:
       audit_cycle_path: ${{ context.audit_cycle_path }}
-    on_success: check_audit_retry_loop
+    on_success: pre_remediation_cleanup
     note: 'Carries the exact current NO GO authority into the retry. The successor audit consumes it as prior_audit_cycle_path
       and GO replaces it.
 
@@ -777,22 +804,57 @@ steps:
   check_audit_retry_loop:
     tool: run_python
     with:
-      callable: autoskillit.smoke_utils.check_loop_iteration
+      callable: autoskillit.smoke_utils.check_audit_remediation_outcome
+      current_authority_path: ${{ context.audit_cycle_path_raw }}
+      prior_authority_path: ${{ context.audit_cycle_path }}
       current_iteration: ${{ context.audit_retry_count }}
       max_iterations: '2'
     capture:
       audit_retry_count: ${{ result.next_iteration }}
+      audit_unresolved_requirement_ids: ${{ result.unresolved_requirement_ids }}
+    on_result:
+    - when: ${{ result.outcome }} == PROGRESSING
+      route: merge_audit_cycle_path
+    - when: ${{ result.outcome }} == STUCK_REPEATING
+      route: release_audit_remediation_stuck
+    - when: ${{ result.outcome }} == EXHAUSTED
+      route: escalate_stop
+    - when: ${{ result.outcome }} == AWAITING_DECISION
+      route: await_audit_decision
+    - when: ${{ result.outcome }} == INTEGRITY_FAULT
+      route: check_audit_integrity_retry
+    - route: check_audit_integrity_retry
+    on_failure: check_audit_integrity_retry
+    optional_context_refs:
+    - audit_retry_count
+    - audit_cycle_path_raw
+    - audit_cycle_path
+    note: 'Classifies the audit remediation cycle before continuing it. Allows up to 2 remediation attempts before escalating.
+
+      '
+  check_audit_integrity_retry:
+    tool: run_python
+    with:
+      step_name: check_audit_integrity_retry
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.audit_integrity_fault_count }}
+      max_iterations: ${{ inputs.audit_integrity_max_retries }}
+    capture:
+      audit_integrity_fault_count: ${{ result.next_iteration }}
     on_result:
     - when: ${{ result.max_exceeded }} == true
       route: escalate_stop
-    - route: pre_remediation_cleanup
+    - route: audit_impl
     on_failure: escalate_stop
     optional_context_refs:
-    - audit_retry_count
-    note: 'Guards the audit_impl → remediate → plan_phase remediation cycle. Allows up to 2 remediation attempts before escalating.
-      This prevents unbounded re-planning when audit_impl repeatedly returns NO GO.
-
-      '
+    - audit_integrity_fault_count
+    note: Bounded retry path for audit semantic and infrastructure failures.
+  release_audit_remediation_stuck:
+    action: stop
+    message: 'Audit remediation stopped because the same unresolved findings repeated. Emit the L3 result sentinel JSON block now with success=false and reason="audit_remediation_stuck".'
+  await_audit_decision:
+    action: stop
+    message: 'Audit remediation requires a human waiver or decision. The preceding gate output lists the unresolved requirement IDs. Emit the L3 result sentinel JSON block now with success=false and reason="awaiting_audit_decision".'
   pre_remediation_cleanup:
     tool: run_cmd
     with:

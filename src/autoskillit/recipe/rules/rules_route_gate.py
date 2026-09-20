@@ -24,7 +24,9 @@ def _reachable_stops(ctx: ValidationContext, target: str) -> set[str]:
             continue
         if step.action == "stop" and not node.startswith("escalate"):
             stops.add(node)
-        if step.action == "route":
+        if step.action == "route" or step.with_args.get("callable") == (
+            "autoskillit.smoke_utils.check_audit_remediation_outcome"
+        ):
             continue
         for neighbor in graph.get(node, set()):
             if neighbor not in visited:

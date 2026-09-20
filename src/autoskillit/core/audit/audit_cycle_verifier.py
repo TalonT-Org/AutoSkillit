@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..io.io import decode_versioned_json_bytes
-from ..io.markdown_sections import STEP_HEADING_RE, extract_section, split_table_row
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
 from ..logging import get_logger
 from ..types._type_audit_artifact_ref import ArtifactRef
@@ -18,9 +17,15 @@ from ..types._type_audit_cycle_authority import (
 )
 from ..types._type_audit_cycle_disposition import (
     AdmissionReason,
+    AuditFindingWaiver,
     InventoryAdmissionDecision,
     PlanDispositionReport,
-    PlanDispositionRow,
+)
+from .audit_semantic_codec import (
+    implementation_step_blocks,
+    load_audit_finding_waivers,
+    parse_requirements_map,
+    validate_waiver_rows,
 )
 from .closure_hashing import compute_bytes_hash
 
@@ -32,7 +37,6 @@ __all__ = [
     "VerifiedAuditCycle",
 ]
 
-_REQUIREMENTS_HEADER = ("Requirement ID", "Disposition", "Implementation Step")
 logger = get_logger(__name__)
 
 
@@ -63,54 +67,6 @@ def _reject(reason: AdmissionReason, detail: str) -> InventoryAdmissionDecision:
     return InventoryAdmissionDecision.reject(reason, detail)
 
 
-def _parse_requirements_map(markdown: str) -> tuple[PlanDispositionRow, ...]:
-    section = extract_section(markdown, "Requirements Map")
-    lines = tuple(line for line in section.splitlines() if line.strip())
-    if len(lines) < 3:
-        raise ValueError("Requirements Map must contain a header, separator, and rows")
-    if split_table_row(lines[0]) != _REQUIREMENTS_HEADER:
-        raise ValueError(
-            "Requirements Map header must be "
-            "| Requirement ID | Disposition | Implementation Step |"
-        )
-    separator = split_table_row(lines[1])
-    if len(separator) != 3 or any(re.fullmatch(r":?-{3,}:?", cell) is None for cell in separator):
-        raise ValueError("Requirements Map separator is invalid")
-    rows: list[PlanDispositionRow] = []
-    for line in lines[2:]:
-        cells = split_table_row(line)
-        if len(cells) != 3:
-            raise ValueError("Requirements Map rows must have exactly three columns")
-        requirement_id, disposition, implementation_step = cells
-        step = None if implementation_step in {"", "-", "—"} else implementation_step
-        rows.append(
-            PlanDispositionRow.create(
-                requirement_id=requirement_id,
-                disposition=disposition,
-                implementation_step=step,
-            )
-        )
-    ids = tuple(row.requirement_id for row in rows)
-    if len(ids) != len(set(ids)):
-        raise ValueError("Requirements Map contains duplicate requirement IDs")
-    return tuple(rows)
-
-
-def _implementation_step_blocks(markdown: str) -> dict[str, str]:
-    section = extract_section(markdown, "Implementation Steps")
-    matches = tuple(STEP_HEADING_RE.finditer(section))
-    if not matches:
-        raise ValueError("Implementation Steps must contain ### Step N directives")
-    blocks: dict[str, str] = {}
-    for index, matched in enumerate(matches):
-        step_name = matched.group(1)
-        if step_name in blocks:
-            raise ValueError(f"duplicate implementation step {step_name}")
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(section)
-        blocks[step_name] = section[matched.start() : end]
-    return blocks
-
-
 class InventoryAdmissionEvaluator:
     """Pure, total evaluator for one verified authority/report/plan tuple."""
 
@@ -127,6 +83,7 @@ class InventoryAdmissionEvaluator:
         current_plan_ref: ArtifactRef | None = None,
         inventory_requirement_ids: tuple[str, ...] = (),
         current_plan_text: str = "",
+        waivers: tuple[AuditFindingWaiver, ...] = (),
     ) -> InventoryAdmissionDecision:
         try:
             return self._evaluate(
@@ -140,6 +97,7 @@ class InventoryAdmissionEvaluator:
                 current_plan_ref=current_plan_ref,
                 inventory_requirement_ids=inventory_requirement_ids,
                 current_plan_text=current_plan_text,
+                waivers=waivers,
             )
         except Exception as exc:
             logger.error("inventory admission evaluation failed", exc_info=True)
@@ -158,6 +116,7 @@ class InventoryAdmissionEvaluator:
         current_plan_ref: ArtifactRef | None,
         inventory_requirement_ids: tuple[str, ...],
         current_plan_text: str,
+        waivers: tuple[AuditFindingWaiver, ...],
     ) -> InventoryAdmissionDecision:
         authority_decision = self._verify_authority_consistency(
             authority=authority,
@@ -186,6 +145,7 @@ class InventoryAdmissionEvaluator:
             current_plan_ref=current_plan_ref,
             inventory_requirement_ids=inventory_requirement_ids,
             current_plan_text=current_plan_text,
+            waivers=waivers,
         )
 
     @staticmethod
@@ -302,6 +262,7 @@ class InventoryAdmissionEvaluator:
         current_plan_ref: ArtifactRef | None,
         inventory_requirement_ids: tuple[str, ...],
         current_plan_text: str,
+        waivers: tuple[AuditFindingWaiver, ...],
     ) -> InventoryAdmissionDecision:
         if report is None:
             return _reject(
@@ -394,7 +355,7 @@ class InventoryAdmissionEvaluator:
                 else "inventory, assessment, and disposition IDs/order must match exactly",
             )
         try:
-            plan_rows = _parse_requirements_map(current_plan_text)
+            plan_rows = parse_requirements_map(current_plan_text)
         except ValueError as exc:
             return _reject(AdmissionReason.REQUIREMENTS_MAP_INVALID, str(exc))
         plan_requirement_ids = tuple(row.requirement_id for row in plan_rows)
@@ -411,15 +372,22 @@ class InventoryAdmissionEvaluator:
                 if plan_requirement_ids != inventory_requirement_ids
                 else "Requirements Map and disposition report rows differ",
             )
+        waiver_issue, legacy_rows = validate_waiver_rows(
+            authority=authority,
+            plan_rows=plan_rows,
+            waivers=waivers,
+        )
+        if waiver_issue is not None:
+            return waiver_issue
         try:
             step_blocks = (
-                _implementation_step_blocks(current_plan_text)
+                implementation_step_blocks(current_plan_text)
                 if any(row.disposition == "carried@step" for row in plan_rows)
                 else {}
             )
         except ValueError as exc:
             return _reject(AdmissionReason.IMPLEMENTATION_STEP_MISSING, str(exc))
-        for assessment, disposition in zip(authority.assessments, plan_rows, strict=True):
+        for assessment, disposition in legacy_rows:
             step = disposition.implementation_step
             blocking = assessment.assessment.blocking
             carried = disposition.disposition == "carried@step"
@@ -473,10 +441,12 @@ class AuditCycleVerifier:
         *,
         max_size_bytes: int = 10_000_000,
         reader: ArtifactByteReader = read_stable_contained_bytes,
+        waiver_root: Path | None = None,
     ) -> None:
         self._allowed_root = allowed_root
         self._max_size_bytes = max_size_bytes
         self._reader = reader
+        self._waiver_root = waiver_root
 
     def _read_path(self, path: str | Path) -> bytes:
         try:
@@ -486,6 +456,19 @@ class AuditCycleVerifier:
                 AdmissionReason.INVENTORY_INVALID, f"artifact containment/read failed: {exc}"
             ) from exc
         return data
+
+    def _load_waivers(self) -> tuple[AuditFindingWaiver, ...]:
+        try:
+            return load_audit_finding_waivers(
+                waiver_root=self._waiver_root,
+                reader=self._reader,
+                max_size_bytes=self._max_size_bytes,
+            )
+        except ValueError as exc:
+            raise AuditCycleVerificationError(
+                AdmissionReason.WAIVER_LEDGER_INVALID,
+                str(exc),
+            ) from exc
 
     def verify_artifact_ref(self, ref: ArtifactRef) -> bytes:
         data = self._read_path(ref.locator)
@@ -590,6 +573,7 @@ class AuditCycleVerifier:
             report_path=report_path,
             trusted_head=trusted_head,
             current_plan_path=current_plan_path,
+            waivers=self._load_waivers(),
         )
 
     def _verify_active_tuple(
@@ -599,6 +583,7 @@ class AuditCycleVerifier:
         report_path: str | Path,
         trusted_head: AuditCycleHead,
         current_plan_path: str | Path,
+        waivers: tuple[AuditFindingWaiver, ...] = (),
     ) -> VerifiedAuditCycle:
         if authority.authority_digest != trusted_head.current_authority_digest:
             raise AuditCycleVerificationError(
@@ -614,6 +599,7 @@ class AuditCycleVerifier:
             expected_scope_id=trusted_head.scope_id,
             expected_part_id=trusted_head.part_id,
             current_plan_ref=report.current_plan_ref,
+            waivers=waivers,
         )
         if provenance.reason is not AdmissionReason.INVENTORY_INVALID:
             raise AuditCycleVerificationError(
@@ -729,11 +715,13 @@ class AuditCycleVerifier:
                     expected_scope_id=expected_scope_id,
                     expected_part_id=expected_part_id,
                 )
+            waivers = self._load_waivers()
             verified = self._verify_active_tuple(
                 authority=authority,
                 report_path=report_path,
                 trusted_head=trusted_head,
                 current_plan_path=current_plan_path,
+                waivers=waivers,
             )
             return evaluator.evaluate(
                 authority=verified.authority,
@@ -746,6 +734,7 @@ class AuditCycleVerifier:
                 current_plan_ref=verified.report.current_plan_ref,
                 inventory_requirement_ids=verified.inventory_requirement_ids,
                 current_plan_text=verified.current_plan_text,
+                waivers=waivers,
             )
         except AuditCycleVerificationError as exc:
             return _reject(exc.reason, str(exc))

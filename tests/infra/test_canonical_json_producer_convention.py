@@ -121,21 +121,21 @@ _TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (508, 525)),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (491,)),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
         skill_md_refs=(),
     ),
     "disposition_report": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (449, 546)),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (508,)),
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_disposition_report",
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "inventory": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", 661),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (647,)),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
@@ -149,14 +149,14 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 410),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 423),
         producer_symbol="write_audit_semantic_result",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_semantic_result",
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 103, 117),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 457),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 470),
         producer_symbol="write_standalone_audit_evidence",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_standalone_evidence",

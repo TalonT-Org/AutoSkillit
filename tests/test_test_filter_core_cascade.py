@@ -238,13 +238,13 @@ class TestModuleCascadeCore:
             {"core", "pipeline", "recipe", "server"}
         )
         assert MODULE_CASCADE_CORE["_type_audit_cycle_authority"] == frozenset(
-            {"core", "pipeline", "recipe", "server"}
+            {"core", "pipeline", "recipe", "server", "smoke_utils"}
         )
         assert MODULE_CASCADE_CORE["_type_audit_cycle_disposition"] == frozenset(
             {"core", "pipeline", "recipe", "server"}
         )
         assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == frozenset(
-            {"core", "recipe", "server"}
+            {"core", "recipe", "server", "smoke_utils"}
         )
 
     def test_audit_admission_shard_cascades(self) -> None:

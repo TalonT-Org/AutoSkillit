@@ -28,7 +28,9 @@ def _audit_cycle_steps(
     dry_inputs: dict[str, str] | None = None,
 ) -> dict[str, RecipeStep]:
     audit_capture = (
-        {"audit_cycle_path": _cap("${{ result.audit_cycle_path }}")} if capture_authority else {}
+        {"audit_cycle_path_raw": _cap("${{ result.audit_cycle_path }}")}
+        if capture_authority
+        else {}
     )
     return {
         "audit_impl": RecipeStep(
@@ -143,7 +145,7 @@ def test_inventory_gate_bilateral_rejects_missing_authority_capture() -> None:
     )
     assert len(findings) == 1
     assert findings[0].step_name == "audit_impl"
-    assert "capture audit_cycle_path" in findings[0].message
+    assert "capture audit_cycle_path_raw" in findings[0].message
 
 
 def test_inventory_gate_bilateral_rejects_non_dominating_disposition_producer() -> None:

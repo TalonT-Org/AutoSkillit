@@ -22,10 +22,10 @@ def _is_check_loop_iteration_guard(step: RecipeStep) -> bool:
     it; the rule's dominator candidate filter must exclude them so parallel
     guards sharing a counter don't masquerade as resets.
     """
-    return (
-        step.tool == "run_python"
-        and step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
-    )
+    return step.tool == "run_python" and step.with_args.get("callable") in {
+        "autoskillit.smoke_utils.check_loop_iteration",
+        "autoskillit.smoke_utils.check_audit_remediation_outcome",
+    }
 
 
 def _collect_context_counter_guards(recipe: Recipe) -> dict[str, str]:
@@ -309,12 +309,26 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         if non_exit_target is None or non_exit_target not in recipe.steps:
             continue
 
+        if non_exit_target == "merge_audit_cycle_path":
+            merge_step = recipe.steps[non_exit_target]
+            if merge_step.on_result is not None:
+                no_go_routes = {
+                    condition.route
+                    for condition in merge_step.on_result.conditions
+                    if condition.when is not None and "NO GO" in condition.when
+                }
+                if len(no_go_routes) == 1:
+                    non_exit_target = no_go_routes.pop()
+
         forward_reachable = bfs_reachable(graph, non_exit_target)
         forward_reachable.add(non_exit_target)
         cycle_candidates = bfs_reachable(ctx.predecessors, outer_name)
 
         for inner_name, inner_counter in guard_steps.items():
             if inner_name in audit_outer_guards:
+                continue
+
+            if "audit_integrity" in inner_counter:
                 continue
 
             if inner_counter in _WRAPPER_LOOP_EXEMPT_COUNTERS:

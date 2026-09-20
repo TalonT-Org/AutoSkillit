@@ -511,11 +511,11 @@
       "on_result": [
         {
           "when": "${{ result.zero_progress }} == true",
-          "route": "escalate_stop"
+          "route": "stop_zero_progress_failure"
         },
         {
           "when": "${{ result.max_exceeded }} == true",
-          "route": "escalate_stop"
+          "route": "stop_refinement_budget_failure"
         },
         {
           "route": "validate"
@@ -552,7 +552,15 @@
     },
     "escalate_stop": {
       "action": "stop",
-      "message": "Planner pipeline failed — human intervention needed. Review the latest step output for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"planner pipeline failed\"}"
+      "message": "Planner pipeline failed — human intervention needed. Review the latest step output for details. Emit the L3 result sentinel JSON block now with success=false."
+    },
+    "stop_zero_progress_failure": {
+      "action": "stop",
+      "message": "Planner refinement stopped because no issues were fixed. Emit the L3 result sentinel JSON block now with success=false and reason=\"zero_progress\"."
+    },
+    "stop_refinement_budget_failure": {
+      "action": "stop",
+      "message": "Planner refinement exhausted its retry budget. Emit the L3 result sentinel JSON block now with success=false and reason=\"refinement_budget_exhausted\"."
     }
   }
 }

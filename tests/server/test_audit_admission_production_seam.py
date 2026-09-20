@@ -222,7 +222,7 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
         assert isinstance(template, str)
         capture_spec[name] = CaptureEntrySpec(from_=template, value_type="string")
     captured = _extract_captures(capture_spec, published)
-    assert captured["audit_cycle_path"] == published["audit_cycle_path"]
+    assert captured["audit_cycle_path_raw"] == published["audit_cycle_path"]
     assert captured["audit_status"] == "PUBLISHED"
     assert captured["audit_verdict"] == "GO"
     assert captured["audit_attempt_id"] == published["audit_attempt_id"]
@@ -295,4 +295,5 @@ async def test_substantive_go_without_semantic_publication_is_rejected(
     assert rejected["audit_status"] == "SEMANTIC_REJECTED"
     assert rejected["audit_verdict"] is None
     assert rejected["audit_cycle_path"] is None
+    assert Path(rejected["semantic_result_path"]).is_relative_to(audit_root)
     assert "audit_semantic_result_path" not in rejected

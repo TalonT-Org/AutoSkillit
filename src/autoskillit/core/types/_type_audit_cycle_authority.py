@@ -60,6 +60,7 @@ class AuditVerdict(StrEnum):
 class AuditDisposition(StrEnum):
     NON_BLOCKING = "NON_BLOCKING"
     BLOCKING = "BLOCKING"
+    REQUIRES_DECISION = "REQUIRES_DECISION"
     PRE_SUBMISSION_ONLY = "PRE_SUBMISSION_ONLY"
 
 
@@ -70,6 +71,7 @@ class AuditAssessment(StrEnum):
     CONFLICT = "CONFLICT"
     NAMED_DEVIATION = "NAMED_DEVIATION"
     UNPRESCRIBED_SUBSTITUTION = "UNPRESCRIBED_SUBSTITUTION"
+    UNSATISFIABLE_BY_CODE = "UNSATISFIABLE_BY_CODE"
 
     @property
     def disposition(self) -> AuditDisposition:
@@ -82,6 +84,8 @@ class AuditAssessment(StrEnum):
                 | AuditAssessment.UNPRESCRIBED_SUBSTITUTION
             ):
                 return AuditDisposition.BLOCKING
+            case AuditAssessment.UNSATISFIABLE_BY_CODE:
+                return AuditDisposition.REQUIRES_DECISION
             case AuditAssessment.NAMED_DEVIATION:
                 return AuditDisposition.PRE_SUBMISSION_ONLY
             case _ as unreachable:
@@ -89,7 +93,10 @@ class AuditAssessment(StrEnum):
 
     @property
     def blocking(self) -> bool:
-        return self.disposition is AuditDisposition.BLOCKING
+        return self.disposition in (
+            AuditDisposition.BLOCKING,
+            AuditDisposition.REQUIRES_DECISION,
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Self, assert_never
 
 from ..audit.closure_hashing import canonical_json_bytes, compute_canonical_hash
 from ._type_audit_admission_validation import (
@@ -22,6 +23,7 @@ from ._type_audit_cycle_authority import (
 __all__ = [
     "AdmissionReason",
     "AdmissionStatus",
+    "AuditFindingWaiver",
     "InventoryAdmissionDecision",
     "PlanDispositionReport",
     "PlanDispositionRow",
@@ -33,6 +35,8 @@ __all__ = [
 _DISPOSITION_ROW_DOMAIN = "autoskillit:audit-cycle:disposition-row:v1:sha256"
 _REPORT_DOMAIN = "autoskillit:audit-cycle:plan-disposition:v1:sha256"
 _SATISFIED_RE = re.compile(r"^satisfied-by-round-([1-9][0-9]*)$")
+_WAIVED_RE = re.compile(r"^waived-by-decision@([A-Za-z0-9][A-Za-z0-9._-]{0,63})$")
+_MIN_RATIONALE_LENGTH = 20
 
 # Shared by the private verified-copy disposition producer and the read-side
 # _resolve_plan_disposition (recipe/_cmd_rpc_guards.py) so the two sides of the
@@ -82,7 +86,47 @@ class AdmissionReason(StrEnum):
     SATISFIED_ROUND_MISMATCH = "satisfied_round_mismatch"
     UNMAPPED_REQUIREMENT = "unmapped_requirement"
     IMPLEMENTATION_STEP_MISSING = "implementation_step_missing"
+    WAIVER_NOT_FOUND = "waiver_not_found"
+    WAIVER_LEDGER_INVALID = "waiver_ledger_invalid"
+    WAIVER_DIGEST_MISMATCH = "waiver_digest_mismatch"
+    WAIVER_SCOPE_MISMATCH = "waiver_scope_mismatch"
+    WAIVER_PART_MISMATCH = "waiver_part_mismatch"
+    WAIVER_EXPIRED = "waiver_expired"
+    WAIVER_NOT_APPLICABLE = "waiver_not_applicable"
     INTERNAL_ERROR = "internal_error"
+
+
+@dataclass(frozen=True, slots=True)
+class CarriedToStep:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class SatisfiedByRound:
+    audit_round: int
+
+
+@dataclass(frozen=True, slots=True)
+class WaivedByDecision:
+    waiver_id: str
+
+
+def _parse_disposition(
+    disposition: str,
+) -> CarriedToStep | SatisfiedByRound | WaivedByDecision:
+    if not isinstance(disposition, str):
+        raise ValueError("disposition must be a string")
+    if disposition == "carried@step":
+        return CarriedToStep()
+    satisfied = _SATISFIED_RE.fullmatch(disposition)
+    if satisfied is not None:
+        return SatisfiedByRound(int(satisfied.group(1)))
+    waived = _WAIVED_RE.fullmatch(disposition)
+    if waived is not None:
+        return WaivedByDecision(waived.group(1))
+    raise ValueError(
+        "disposition must be carried@step, satisfied-by-round-N, or waived-by-decision@<id>"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,23 +138,44 @@ class PlanDispositionRow:
 
     def __post_init__(self) -> None:
         _require_nonempty("PlanDispositionRow.requirement_id", self.requirement_id)
-        if self.disposition == "carried@step":
-            if self.implementation_step is None:
-                raise ValueError("carried@step requires implementation_step")
-            _require_nonempty("PlanDispositionRow.implementation_step", self.implementation_step)
-        elif _SATISFIED_RE.fullmatch(self.disposition):
-            if self.implementation_step is not None:
-                raise ValueError("satisfied-by-round-N cannot name implementation_step")
-        else:
-            raise ValueError("disposition must be carried@step or satisfied-by-round-N")
+        match _parse_disposition(self.disposition):
+            case CarriedToStep():
+                if self.implementation_step is None:
+                    raise ValueError("carried@step requires implementation_step")
+                _require_nonempty(
+                    "PlanDispositionRow.implementation_step", self.implementation_step
+                )
+            case SatisfiedByRound():
+                if self.implementation_step is not None:
+                    raise ValueError("satisfied-by-round-N cannot name implementation_step")
+            case WaivedByDecision():
+                if self.implementation_step is not None:
+                    raise ValueError("waived-by-decision@<id> cannot name implementation_step")
+            case unreachable:
+                assert_never(unreachable)
         _require_digest("PlanDispositionRow.row_digest", self.row_digest)
         if self.row_digest != self.compute_digest():
             raise ValueError("PlanDispositionRow.row_digest does not match row content")
 
     @property
     def satisfied_round(self) -> int | None:
-        matched = _SATISFIED_RE.fullmatch(self.disposition)
-        return int(matched.group(1)) if matched is not None else None
+        match _parse_disposition(self.disposition):
+            case SatisfiedByRound(audit_round):
+                return audit_round
+            case CarriedToStep() | WaivedByDecision():
+                return None
+            case unreachable:
+                assert_never(unreachable)
+
+    @property
+    def waiver_id(self) -> str | None:
+        match _parse_disposition(self.disposition):
+            case WaivedByDecision(waiver_id):
+                return waiver_id
+            case CarriedToStep() | SatisfiedByRound():
+                return None
+            case unreachable:
+                assert_never(unreachable)
 
     @classmethod
     def create(
@@ -158,6 +223,77 @@ class PlanDispositionRow:
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"invalid PlanDispositionRow: {exc}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class AuditFindingWaiver:
+    waiver_id: str
+    requirement_id: str
+    finding_row_digest: str
+    plan_set_id: str
+    scope_id: str
+    part_id: str
+    rationale: str
+    issue: int
+    approved_by: str
+    added_date: date
+    review_date: date
+
+    def __post_init__(self) -> None:
+        if _WAIVED_RE.fullmatch(f"waived-by-decision@{self.waiver_id}") is None:
+            raise ValueError("AuditFindingWaiver.waiver_id has invalid format")
+        for name in ("requirement_id", "plan_set_id", "scope_id", "part_id", "approved_by"):
+            _require_nonempty(f"AuditFindingWaiver.{name}", getattr(self, name))
+        _require_digest("AuditFindingWaiver.finding_row_digest", self.finding_row_digest)
+        if (
+            not isinstance(self.rationale, str)
+            or len(self.rationale.strip()) < _MIN_RATIONALE_LENGTH
+        ):
+            raise ValueError(
+                "AuditFindingWaiver.rationale must contain at least "
+                f"{_MIN_RATIONALE_LENGTH} non-whitespace characters"
+            )
+        _require_positive_int("AuditFindingWaiver.issue", self.issue)
+        for name in ("added_date", "review_date"):
+            value = getattr(self, name)
+            if not isinstance(value, date) or isinstance(value, datetime):
+                raise ValueError(f"AuditFindingWaiver.{name} must be a date")
+        if self.review_date < self.added_date:
+            raise ValueError("AuditFindingWaiver.review_date must not precede added_date")
+
+    def is_stale(self, *, as_of: date) -> bool:
+        if not isinstance(as_of, date) or isinstance(as_of, datetime):
+            raise ValueError("AuditFindingWaiver.as_of must be a date")
+        if self.review_date > as_of:
+            raise ValueError("AuditFindingWaiver.review_date cannot be after as_of")
+        return as_of - self.review_date > timedelta(days=180)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        expected_fields = {
+            "waiver_id",
+            "requirement_id",
+            "finding_row_digest",
+            "plan_set_id",
+            "scope_id",
+            "part_id",
+            "rationale",
+            "issue",
+            "approved_by",
+            "added_date",
+            "review_date",
+        }
+        if set(data) != expected_fields:
+            missing = sorted(expected_fields - set(data))
+            unknown = sorted(set(data) - expected_fields)
+            raise ValueError(
+                "AuditFindingWaiver fields must match the ledger schema "
+                f"(missing={missing}, unknown={unknown})"
+            )
+        try:
+            return cls(**data)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid AuditFindingWaiver: {exc}") from exc
 
 
 @dataclass(frozen=True, slots=True)

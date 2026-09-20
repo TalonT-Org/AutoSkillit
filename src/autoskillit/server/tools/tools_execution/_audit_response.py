@@ -40,6 +40,7 @@ def _audit_response(
     verdict: AuditVerdict | None,
     path: Path | None,
     error: str | None,
+    semantic_result_path: Path | None = None,
     kill_reason: KillReason = KillReason.NATURAL_EXIT,
 ) -> str:
     success = status in {
@@ -59,6 +60,9 @@ def _audit_response(
             "audit_status": status.value,
             "audit_verdict": verdict.value if verdict is not None else None,
             "audit_cycle_path": str(path) if path is not None else None,
+            "semantic_result_path": (
+                str(semantic_result_path) if semantic_result_path is not None else None
+            ),
             "audit_attempt_id": attempt_id.value,
         },
         ensure_ascii=False,

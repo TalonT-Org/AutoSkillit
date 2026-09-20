@@ -580,7 +580,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "bash_write_targets": frozenset({"core", "execution", "recipe", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_audit_artifact_ref": frozenset({"core", "pipeline", "recipe", "server"}),
-    "_type_audit_cycle_authority": frozenset({"core", "pipeline", "recipe", "server"}),
+    "_type_audit_cycle_authority": frozenset(
+        {"core", "pipeline", "recipe", "server", "smoke_utils"}
+    ),
     "_type_audit_cycle_disposition": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_binding": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
@@ -593,7 +595,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "context_admission_indeterminate": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
     "context_admission_generation": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
     "context_admission_expiry_rollover": _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE,
-    "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
+    "audit_cycle_verifier": frozenset({"core", "recipe", "server", "smoke_utils"}),
     "audit_semantic_codec": frozenset({"core", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
     "_tool_registry_builders": frozenset({"core", "recipe", "server"}),

@@ -215,7 +215,10 @@ def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:
     if step.tool != "run_python":
         return False
     callable_str = step.with_args.get("callable", "")
-    return callable_str == "autoskillit.smoke_utils.check_loop_iteration"
+    return callable_str in {
+        "autoskillit.smoke_utils.check_loop_iteration",
+        "autoskillit.smoke_utils.check_audit_remediation_outcome",
+    }
 
 
 def _build_graph_without_nodes(

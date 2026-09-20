@@ -861,6 +861,7 @@ from .types import (
 )
 from .types import AuditFinalCommitOutcome as AuditFinalCommitOutcome
 from .types import AuditFinalCommitRequest as AuditFinalCommitRequest
+from .types import AuditFindingWaiver as AuditFindingWaiver
 from .types import AuditIdentityReservation as AuditIdentityReservation
 from .types import AuditLog as AuditLog
 from .types import AuditMaterializationResult as AuditMaterializationResult

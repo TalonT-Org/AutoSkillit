@@ -334,6 +334,8 @@ RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
         "diff_path",
         "investigation_path",
         "raw_output_artifact_path",
+        "current_authority_path",
+        "prior_authority_path",
         "requirements_path",
     }
 )

@@ -601,6 +601,9 @@ skills:
     - name: audit_cycle_path
       type: file_path
       server_computed: true
+    - name: semantic_result_path
+      type: file_path
+      server_computed: true
     - name: audit_status
       type: string
       server_computed: true
@@ -3008,6 +3011,48 @@ callable_contracts:
     - name: prev_issues_fixed_count
       type: str
       required: false
+    outputs:
+    - name: next_iteration
+      type: str
+    - name: max_exceeded
+      type: str
+    - name: zero_progress
+      type: str
+    - name: prev_issues_fixed_count
+      type: str
+  autoskillit.smoke_utils.check_audit_remediation_outcome:
+    inputs:
+    - name: current_iteration
+      type: str
+      required: false
+    - name: max_iterations
+      type: str
+      required: false
+    - name: current_authority_path
+      type: str
+      required: false
+    - name: prior_authority_path
+      type: str
+      required: false
+    outputs:
+    - name: outcome
+      type: str
+      allowed_values: [PROGRESSING, STUCK_REPEATING, EXHAUSTED, AWAITING_DECISION, INTEGRITY_FAULT]
+    - name: next_iteration
+      type: str
+    - name: unresolved_requirement_ids
+      type: str
+  autoskillit.smoke_utils.merge_audit_cycle_path:
+    inputs:
+    - name: current_authority_path
+      type: str
+      required: false
+    - name: prior_authority_path
+      type: str
+      required: false
+    outputs:
+    - name: audit_cycle_path
+      type: str
 
   autoskillit.smoke_utils.consolidate_health_reports:
     inputs:
@@ -3114,6 +3159,8 @@ callable_contracts:
     - name: review_mode
       type: str
     - name: head_sha
+      type: str
+    - name: pr_head_sha
       type: str
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:
@@ -3472,6 +3519,8 @@ callable_contracts:
     outputs:
     - name: status
       type: str
+    - name: stderr
+      type: str
   autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix:
     inputs:
     - name: work_dir
@@ -3598,6 +3647,8 @@ callable_contracts:
     outputs:
     - name: current_pr_number
       type: str
+    - name: error
+      type: str
   autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
     inputs:
     - name: work_dir
@@ -3676,6 +3727,8 @@ callable_contracts:
     - name: issue_urls
       type: str
     - name: issue_count
+      type: str
+    - name: skipped_bodies
       type: str
   autoskillit.recipe._cmd_rpc.create_audit_run_dir:
     inputs:
@@ -3768,6 +3821,19 @@ callable_contracts:
     - name: output_dir
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: eval_run_dir
+      type: str
+    - name: canary_count
+      type: str
+    - name: variant_count
+      type: str
+    - name: manifest_index_path
+      type: str
   autoskillit.smoke_utils.build_agent_eval_context:
     inputs:
     - name: canary_id
@@ -3779,6 +3845,13 @@ callable_contracts:
     - name: eval_run_dir
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: eval_context_path
+      type: str
   autoskillit.smoke_utils.compile_eval_scorecard:
     inputs:
     - name: eval_run_dir
@@ -3790,6 +3863,23 @@ callable_contracts:
     - name: variant_manifest
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: scorecard_path
+      type: str
+    - name: pass_rate
+      type: str
+    - name: total_runs
+      type: str
+    - name: passed_runs
+      type: str
+    - name: vacuous_passes
+      type: str
+    - name: effective_pass_rate
+      type: str
   autoskillit.smoke_utils.extract_investigation:
     inputs:
     - name: investigation_path

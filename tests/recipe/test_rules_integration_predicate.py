@@ -235,10 +235,12 @@ class TestLoopBudgetSeparation:
         recipe = self.recipes[recipe_name]
         step = recipe.steps["check_audit_remediation_loop"]
         assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+        assert (
+            step.with_args["callable"] == "autoskillit.smoke_utils.check_audit_remediation_outcome"
+        )
         assert "audit_remediation_count" in step.capture
-        exceeded = [c for c in step.on_result.conditions if c.when and "max_exceeded" in c.when]
-        assert any(c.route == "release_issue_failure" for c in exceeded)
+        outcomes = {c.when for c in step.on_result.conditions if c.when}
+        assert "${{ result.outcome }} == EXHAUSTED" in outcomes
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_audit_impl_no_go_routes_to_audit_loop(self, recipe_name: str) -> None:
@@ -247,13 +249,9 @@ class TestLoopBudgetSeparation:
         correction_routes = [
             condition.route
             for condition in audit_step.on_result.conditions
-            if condition.when
-            and (
-                "SEMANTIC_REJECTED" in condition.when
-                or ("audit_verdict" in condition.when and "NO GO" in condition.when)
-            )
+            if condition.when and ("audit_verdict" in condition.when and "NO GO" in condition.when)
         ]
-        assert len(correction_routes) == 3
+        assert len(correction_routes) == 2
         assert set(correction_routes) == {"check_audit_remediation_loop"}
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

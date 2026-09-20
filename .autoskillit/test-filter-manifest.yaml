@@ -293,6 +293,10 @@ install.sh:
 scripts/verify-test-filter.sh:
   - infra/
 
+scripts/check_staged_autoskillit_temp.sh:
+  - arch/
+  - infra/
+
 scripts/post-probe-failure.sh:
   - infra/
 
@@ -358,6 +362,9 @@ src/autoskillit/core/__init__.pyi:
   - core/
   - arch/
   - contracts/
+
+.autoskillit/waivers/*.yaml:
+  - core/
 
 tests/**/CLAUDE.md: []
 tests/**/AGENTS.md: []

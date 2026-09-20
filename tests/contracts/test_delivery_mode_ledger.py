@@ -181,7 +181,7 @@ _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
     ("consolidate-health-reports", "claude-code"): 13_300,
     ("consolidate-health-reports", "codex"): 12_000,
     ("full-audit", "claude-code"): 37_000,
-    ("implement-findings", "claude-code"): 34_000,
+    ("implement-findings", "claude-code"): 35_000,
     ("implementation", "claude-code"): 11_600,
     ("implementation", "codex"): 11_600,
     ("planner", "claude-code"): 80_000,
@@ -190,7 +190,7 @@ _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
     ("remediation", "codex"): 10_000,
     ("research-archive", "claude-code"): 31_000,
     ("research-design", "claude-code"): 68_000,
-    ("research-implement", "claude-code"): 108_000,
+    ("research-implement", "claude-code"): 114_000,
     ("research-review", "claude-code"): 77_000,
 }
 

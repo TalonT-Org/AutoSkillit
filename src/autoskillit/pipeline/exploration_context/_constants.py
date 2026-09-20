@@ -1,16 +1,9 @@
 """Bounded-length caps, role/session exception sets, and the shared-source-identity hash domain.
 
 These constants are private to the ``exploration_context`` package.  The
-<<<<<<< HEAD
-five ``_MAX_*`` caps govern input validation across the store and its
+``_MAX_*`` caps govern input validation across the store and its
 launch adapter; ``EXPLORER_ROLE_NAMES`` and ``EXPLORER_SESSION_SCOPE`` are
 public re-aggregations of bundled-core definitions.
-=======
-the ``_MAX_*`` caps govern input validation across the store and its
-launch adapter; ``EXPLORER_ROLE_NAMES`` and
-``EXPLORER_INELIGIBLE_SESSION_TYPES`` are public re-aggregations of
-bundled-core definitions.
->>>>>>> c4a78f0de (docs: remove incidental source inventory claims)
 """
 
 from __future__ import annotations

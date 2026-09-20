@@ -149,15 +149,15 @@ def test_check_loop_iteration_max_iterations_two_single_push_boundary() -> None:
     assert r3["max_exceeded"] == "true"
 
 
-def test_check_loop_with_progress_zero_progress_first_iteration() -> None:
-    """First zero-progress iteration returns zero_progress=false (needs 2 consecutive)."""
+def test_check_loop_with_progress_blank_prior_count_is_zero() -> None:
+    """A blank prior fixed-count is normalized to zero."""
     result = check_loop_with_progress(
         current_iteration="1",
         max_iterations="5",
         issues_fixed_count="0",
         prev_issues_fixed_count="",
     )
-    assert result["zero_progress"] == "false"
+    assert result["zero_progress"] == "true"
     assert result["next_iteration"] == "2"
     assert result["max_exceeded"] == "false"
 

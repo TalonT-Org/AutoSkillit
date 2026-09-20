@@ -2686,6 +2686,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "UNSATISFIABLE_BY_CODE": AmbientEnvDisposition(
+        var="UNSATISFIABLE_BY_CODE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
     "NATIVE_SHELL_CAPTURE_MODE_ENV_VAR": AmbientEnvDisposition(
         var="NATIVE_SHELL_CAPTURE_MODE_ENV_VAR",
         disposition="scrub",

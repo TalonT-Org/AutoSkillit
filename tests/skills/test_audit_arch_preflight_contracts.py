@@ -5,6 +5,7 @@ import pytest
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/audit-arch/SKILL.md"
+LOCAL_SKILL_MD = Path(__file__).parents[2] / ".claude/skills/audit-arch/SKILL.md"
 
 
 def test_preflight_checklist_section_exists():
@@ -17,12 +18,12 @@ def test_preflight_checklist_section_exists():
 
 
 def test_preflight_checklist_precedes_launch_subagents():
-    """T-AA-002: Checklist step appears before 'Launch parallel subagents'."""
+    """T-AA-002: Checklist step appears before the worker assignment."""
     text = SKILL_MD.read_text()
     checklist_idx = text.index("Pre-Flight Verification Checklist")
-    launch_idx = text.index("Launch parallel subagents")
+    launch_idx = text.index("2. **Assign every principle to the declared single worker.**")
     assert checklist_idx < launch_idx, (
-        "Pre-Flight Verification Checklist must appear BEFORE 'Launch parallel subagents' "
+        "Pre-Flight Verification Checklist must appear BEFORE the worker assignment "
         "in the Audit Workflow"
     )
 
@@ -102,3 +103,37 @@ def test_concrete_bash_tool_call():
         "Pre-flight checklist must name the Bash tool explicitly for the git log "
         "invocation (IMP-005)"
     )
+
+
+def test_local_skill_md_dispatches_in_bounded_batches() -> None:
+    """Local variant bounds principle work to <=6 auditors per parallel batch
+    and joins each batch before starting the next.
+    """
+    text = LOCAL_SKILL_MD.read_text()
+    never_block = text.split("**NEVER:**", maxsplit=1)[1].split("**ALWAYS:**", maxsplit=1)[0]
+    workflow = text.split("## Audit Workflow", maxsplit=1)[1]
+
+    assert "Launch more than 6 principle auditors in one parallel batch" in never_block
+    assert "Process every principle in sequential batches of at most 6." in workflow
+    assert "Start all independent child delegations before awaiting any result" not in text
+    assert "Start ALL independent child delegations before awaiting any result" not in text
+    assert "join each batch before starting the next" in text
+
+
+def test_source_skill_md_dispatches_to_single_worker() -> None:
+    """Source variant assigns every principle to a single declared worker
+    (count: 1 frontmatter, no concurrency field) and joins before synthesis.
+    """
+    text = SKILL_MD.read_text()
+    never_block = text.split("**NEVER:**", maxsplit=1)[1].split("**ALWAYS:**", maxsplit=1)[0]
+    workflow = text.split("## Audit Workflow", maxsplit=1)[1]
+
+    assert "Launch more than 6 principle auditors in one parallel batch" in never_block
+    assert "Assign every principle to the declared single worker." in workflow
+    assert "Start all independent child delegations before awaiting any result" not in text
+    assert "Start ALL independent child delegations before awaiting any result" not in text
+
+    frontmatter = text.split("---", maxsplit=2)[1]
+    assert "count: 1" in frontmatter
+    assert "concurrency:" not in frontmatter
+    assert "Join that worker before synthesis." in text

@@ -1,14 +1,8 @@
 # Hooks
 
-<<<<<<< HEAD
 AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
 PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
 Every script is stdlib-only Python so it can run before the
-=======
-AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
-PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
-Every script is stdlib-only Python so it can run before the
->>>>>>> 2df98db29 (docs: remove mutable catalog totals)
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry/` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then

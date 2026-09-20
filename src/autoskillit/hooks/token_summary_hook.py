@@ -123,26 +123,14 @@ def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
     return m.group() if m else None
 
 
-def _measure(raw: Any, *, legacy: bool = False) -> dict[str, Any]:
-    return measure_decode(raw, legacy=legacy)
-
-
-def _combine_measure(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    return combine_measures(left, right)
-
-
-def _maximum_measure(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
-    return maximum_measures(left, right)
-
-
 def _record_measure(
     entry: dict[str, Any], field: str, raw: Any, *, legacy: bool, maximum: bool = False
 ) -> None:
-    observed = _measure(raw, legacy=legacy)
+    observed = measure_decode(raw, legacy=legacy)
     if entry["invocation_count"] == 0:
         entry[field] = observed
         return
-    operation = _maximum_measure if maximum else _combine_measure
+    operation = maximum_measures if maximum else combine_measures
     entry[field] = operation(entry[field], observed)
 
 
@@ -268,15 +256,15 @@ def _load_sessions(
                 "backend": backend,
                 "provider_used": provider_used,
                 "model": "",
-                "input_tokens": _measure(None),
-                "output_tokens": _measure(None),
-                "cache_write_tokens": _measure(None),
-                "cache_read_tokens": _measure(None),
+                "input_tokens": measure_decode(None),
+                "output_tokens": measure_decode(None),
+                "cache_write_tokens": measure_decode(None),
+                "cache_read_tokens": measure_decode(None),
                 "elapsed_seconds": 0.0,
                 "invocation_count": 0,
                 "loc_insertions": 0,
                 "loc_deletions": 0,
-                "peak_context": _measure(None),
+                "peak_context": measure_decode(None),
                 "turn_count": 0,
             },
         )
@@ -341,12 +329,12 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
             name = f"{name}*"
             has_non_anthropic = True
         count = entry.get("invocation_count", 1)
-        inp = _measure(entry.get("input_tokens"))
-        out = _measure(entry.get("output_tokens"))
-        cache_rd = _measure(entry.get("cache_read_tokens"))
-        peak_ctx = _measure(entry.get("peak_context"))
+        inp = measure_decode(entry.get("input_tokens"))
+        out = measure_decode(entry.get("output_tokens"))
+        cache_rd = measure_decode(entry.get("cache_read_tokens"))
+        peak_ctx = measure_decode(entry.get("peak_context"))
         turns = entry.get("turn_count", 0)
-        cache_wr = _measure(entry.get("cache_write_tokens"))
+        cache_wr = measure_decode(entry.get("cache_write_tokens"))
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
@@ -372,8 +360,8 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
                 ("cache_read_tokens", cache_rd),
                 ("cache_write_tokens", cache_wr),
             ):
-                total[field] = _combine_measure(total[field], value)
-            total["peak_context"] = _maximum_measure(total["peak_context"], peak_ctx)
+                total[field] = combine_measures(total[field], value)
+            total["peak_context"] = maximum_measures(total["peak_context"], peak_ctx)
             total["elapsed_seconds"] += elapsed
 
     for source, total in totals.items():
@@ -421,9 +409,9 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     totals: dict[str, dict[str, Any]] = {}
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-        cr = _measure(entry.get("cache_read_tokens"))
-        cw = _measure(entry.get("cache_write_tokens"))
-        out = _measure(entry.get("output_tokens"))
+        cr = measure_decode(entry.get("cache_read_tokens"))
+        cw = measure_decode(entry.get("cache_write_tokens"))
+        out = measure_decode(entry.get("output_tokens"))
         source = _source_label(entry)
         label = f"{entry['step_name']} ({source})" if source else entry["step_name"]
         lines.append(
@@ -483,26 +471,26 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
             model_data[key] = {
                 "model": f"{source}: {model}" if source else model,
                 "_steps": set(),
-                "input_tokens": _measure(entry.get("input_tokens")),
-                "output_tokens": _measure(entry.get("output_tokens")),
-                "cache_write_tokens": _measure(entry.get("cache_write_tokens")),
-                "cache_read_tokens": _measure(entry.get("cache_read_tokens")),
+                "input_tokens": measure_decode(entry.get("input_tokens")),
+                "output_tokens": measure_decode(entry.get("output_tokens")),
+                "cache_write_tokens": measure_decode(entry.get("cache_write_tokens")),
+                "cache_read_tokens": measure_decode(entry.get("cache_read_tokens")),
                 "elapsed_seconds": 0.0,
             }
         md = model_data[key]
         md["_steps"].add(entry.get("step_name", ""))
         if not first:
-            md["input_tokens"] = _combine_measure(
-                md["input_tokens"], _measure(entry.get("input_tokens"))
+            md["input_tokens"] = combine_measures(
+                md["input_tokens"], measure_decode(entry.get("input_tokens"))
             )
-            md["output_tokens"] = _combine_measure(
-                md["output_tokens"], _measure(entry.get("output_tokens"))
+            md["output_tokens"] = combine_measures(
+                md["output_tokens"], measure_decode(entry.get("output_tokens"))
             )
-            md["cache_write_tokens"] = _combine_measure(
-                md["cache_write_tokens"], _measure(entry.get("cache_write_tokens"))
+            md["cache_write_tokens"] = combine_measures(
+                md["cache_write_tokens"], measure_decode(entry.get("cache_write_tokens"))
             )
-            md["cache_read_tokens"] = _combine_measure(
-                md["cache_read_tokens"], _measure(entry.get("cache_read_tokens"))
+            md["cache_read_tokens"] = combine_measures(
+                md["cache_read_tokens"], measure_decode(entry.get("cache_read_tokens"))
             )
         md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
 

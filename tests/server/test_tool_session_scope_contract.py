@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from autoskillit.core import SessionShape, SessionType
@@ -60,7 +62,8 @@ def test_session_scoped_calls_inner_when_admitted(monkeypatch: pytest.MonkeyPatc
     registered_before = dict(TOOL_SESSION_SCOPES)
     try:
         assert TOOL_SESSION_SCOPES["_decorated_admit_call"] is SCOPE_FLEET
-        assert _decorated_admit_call() is not None  # coroutine, not awaited here
+        result = asyncio.run(_decorated_admit_call())
+        assert result == "inner-called"
     finally:
         TOOL_SESSION_SCOPES.pop("_decorated_admit_call", None)
         TOOL_SESSION_SCOPES.clear()
@@ -69,7 +72,6 @@ def test_session_scoped_calls_inner_when_admitted(monkeypatch: pytest.MonkeyPatc
 
 def test_session_scoped_returns_refusal_when_denied(monkeypatch: pytest.MonkeyPatch) -> None:
     """The decorator must return a refusal envelope when the shape is outside the scope."""
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
 
     @session_scoped(SCOPE_FLEET)
@@ -78,8 +80,7 @@ def test_session_scoped_returns_refusal_when_denied(monkeypatch: pytest.MonkeyPa
 
     registered_before = dict(TOOL_SESSION_SCOPES)
     try:
-        refusal = _decorated_refusal_call()
-        assert refusal is not None
+        refusal = asyncio.run(_decorated_refusal_call())
         assert isinstance(refusal, str)
         assert "fleet" in refusal.lower()
     finally:

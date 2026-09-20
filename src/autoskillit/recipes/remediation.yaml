@@ -1364,7 +1364,7 @@ steps:
       route: check_audit_integrity_retry
     - route: check_audit_integrity_retry
     on_failure: check_audit_integrity_retry
-    on_context_limit: check_audit_integrity_retry
+    on_context_limit: salvage_plan
     on_rate_limit: check_audit_integrity_retry
     optional: true
     skip_when_false: inputs.audit_impl

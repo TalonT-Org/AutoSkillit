@@ -391,10 +391,12 @@ def quarantine_delete(
             valid_name=quarantine_name_pattern,
         )
         try:
-            if verified is None or verified.nlink != 1:
-                raise Tampered
             expected_size = record.size
-            if expected_size and verified.size != expected_size:
+            if (
+                verified is None
+                or verified.nlink != 1
+                or (expected_size and verified.size != expected_size)
+            ):
                 raise Tampered
         finally:
             if verified is not None:

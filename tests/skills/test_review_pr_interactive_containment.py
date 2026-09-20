@@ -101,7 +101,7 @@ def test_review_pr_boundary_denies_outside_and_allows_inside(tmp_path: Path) -> 
     assert not _denied(_run(plugin, project, project / ".autoskillit/temp/review-pr/report.md"))
 
 
-def test_missing_or_stale_binding_leaves_skill_scope_inactive(tmp_path: Path) -> None:
+def test_unmatched_session_id_binding_leaves_skill_scope_inactive(tmp_path: Path) -> None:
     project, plugin = _runtime(tmp_path, {"review-pr": ["{{AUTOSKILLIT_TEMP}}/review-pr/"]})
     ordinary = project / "src" / "ordinary.py"
     assert not _denied(_run(plugin, project, ordinary))

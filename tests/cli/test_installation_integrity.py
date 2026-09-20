@@ -7,7 +7,6 @@ import hashlib
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -101,7 +100,7 @@ def test_generation_and_legacy_uv_tool_installations_are_enumerated(
 
 
 def test_missing_version_is_integrity_failure_before_update_resolution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
@@ -110,13 +109,12 @@ def test_missing_version_is_integrity_failure_before_update_resolution(
         url="https://example.test/autoskillit.git",
         editable_source=None,
     )
-    stdout = MagicMock()
-    stdin = MagicMock()
-    stdin.isatty.return_value = True
-    stdout.isatty.return_value = True
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.setattr(sys, "stdin", stdin)
-    monkeypatch.setattr(sys, "stdout", stdout)
+    # isatty must report True so the function does not early-exit, but we
+    # leave sys.stdout itself in place so pytest's capsys fixture can capture
+    # the printed output.
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
     monkeypatch.setattr(_update_checks, "detect_install", lambda: info)
     calls: list[object] = []
     monkeypatch.setattr(
@@ -128,7 +126,7 @@ def test_missing_version_is_integrity_failure_before_update_resolution(
 
     _update_checks.run_update_checks(home=tmp_path)
 
-    rendered = "".join(str(call.args[0]) for call in stdout.write.call_args_list)
+    rendered = capsys.readouterr().out
     assert "integrity failure" in rendered.lower()
     assert not calls
 

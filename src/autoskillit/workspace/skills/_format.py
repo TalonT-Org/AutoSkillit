@@ -121,12 +121,12 @@ def parse_frontmatter_content(content: str) -> SkillFrontmatterParseResult:
             body=body,
         )
     raw_write_paths = loaded.get("write_paths")
-    write_paths = (
-        tuple(raw_write_paths)
-        if isinstance(raw_write_paths, list)
-        and not _validate_frontmatter_write_paths(raw_write_paths)
-        else None
-    )
+    if isinstance(raw_write_paths, list) and not _validate_frontmatter_write_paths(
+        raw_write_paths
+    ):
+        write_paths: tuple[str, ...] | None = tuple(raw_write_paths)
+    else:
+        write_paths = None
     return SkillFrontmatterParseResult(
         content=content,
         data=loaded,

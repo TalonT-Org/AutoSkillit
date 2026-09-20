@@ -425,15 +425,10 @@ async def _prepare_owned_dispatch_session(
         root_boundary = state.invocation.root.write_paths
         if state.output_dir and root_boundary is not None:
             declared_dirs = _te_pkg.resolve_closure_write_dirs((state.invocation.root,), state.cwd)
-            if not state.write_watch_dirs:
-                return json.dumps(
-                    ToolFailureEnvelope(
-                        success=False,
-                        error="run_skill output_dir produced no resolvable write directory",
-                        stage="validate_args:run_skill",
-                        retriable=False,
-                    )
-                )
+            # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
+            # before this branch runs, and the only intervening mutation is `extend`,
+            # so [0] is safe here. Reaching this branch implies state.output_dir is
+            # truthy, which guarantees at least one entry.
             requested = destination_location(state.write_watch_dirs[0])
             if not any(requested.is_relative_to(directory) for directory in declared_dirs):
                 return json.dumps(

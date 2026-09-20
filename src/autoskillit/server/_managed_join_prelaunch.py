@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext
-from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
+from autoskillit.execution.backends import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 from autoskillit.server._managed_join_attestation import (
     DefaultManagedJoinAttestationAuthority,

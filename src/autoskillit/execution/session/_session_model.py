@@ -360,6 +360,10 @@ def extract_token_usage(
         else:
             for name, measure in measures.items():
                 bucket[name] = TokenMeasure.combine_or_unknown(bucket[name], measure)
+        # peak_context is approximated as max(cache_read_tokens) for Claude
+        # snapshots where the CLI does not report context length directly.
+        # Replacing this with a dedicated context-length field is a SEMANTIC
+        # change, not a bug fix — preserve the proxy relationship.
         peak = classify_token_measure(
             AGENT_BACKEND_CLAUDE_CODE,
             provider_used,

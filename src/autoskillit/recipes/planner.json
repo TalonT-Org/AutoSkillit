@@ -560,7 +560,7 @@
     },
     "stop_refinement_budget_failure": {
       "action": "stop",
-      "message": "Planner refinement exhausted its retry budget. Emit the L3 result sentinel JSON block now with success=false and reason=\"refinement_budget_exhausted\". Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {\"success\": false, \"reason\": \"planner pipeline failed\"}"
+      "message": "Planner refinement exhausted its retry budget. Emit the L3 result sentinel JSON block now with success=false and reason=\"refinement_budget_exhausted\"."
     }
   }
 }

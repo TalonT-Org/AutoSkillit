@@ -601,6 +601,9 @@ skills:
     - name: audit_cycle_path
       type: file_path
       server_computed: true
+    - name: semantic_result_path
+      type: file_path
+      server_computed: true
     - name: audit_status
       type: string
       server_computed: true

@@ -295,4 +295,5 @@ async def test_substantive_go_without_semantic_publication_is_rejected(
     assert rejected["audit_status"] == "SEMANTIC_REJECTED"
     assert rejected["audit_verdict"] is None
     assert rejected["audit_cycle_path"] is None
+    assert Path(rejected["semantic_result_path"]).is_relative_to(audit_root)
     assert "audit_semantic_result_path" not in rejected

@@ -10,13 +10,17 @@ import pytest
 
 from autoskillit.core import (
     AUDIT_SEMANTIC_SCHEMA_VERSION,
+    AdmissionReason,
     ArtifactRef,
     AuditAdmissionStoreAuthority,
     AuditAssessment,
     AuditAssessmentRow,
+    AuditAttemptId,
     AuditCycleVerificationError,
     AuditCycleVerifier,
     AuditMaterializationStatus,
+    AuditOutcomeStatus,
+    AuditPrepareRequest,
     AuditReservationRequest,
     AuditSemanticResult,
     AuditVerdict,
@@ -26,6 +30,7 @@ from autoskillit.core import (
     compute_bytes_hash,
 )
 from autoskillit.pipeline import DefaultAuditAdmissionLedger
+from autoskillit.server import _audit_authority_materializer as materializer_module
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
@@ -33,6 +38,7 @@ from autoskillit.server.recipe import _recipe_execution
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_standalone_audit_evidence_sync,
 )
+from autoskillit.server.tools.tools_execution._audit_response import _audit_response
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -85,6 +91,21 @@ def _semantic_path(
     reservation.semantic_result_path.parent.mkdir(parents=True, exist_ok=True)
     reservation.semantic_result_path.write_bytes(canonical_json_bytes(semantic.to_dict()))
     return reservation.semantic_result_path
+
+
+def test_audit_response_exposes_reserved_semantic_path(tmp_path: Path) -> None:
+    semantic_path = tmp_path / "semantic-result.json"
+    response = json.loads(
+        _audit_response(
+            status=AuditOutcomeStatus.SEMANTIC_REJECTED,
+            attempt_id=AuditAttemptId("attempt-1"),
+            verdict=None,
+            path=None,
+            error="reference validation failed",
+            semantic_result_path=semantic_path,
+        )
+    )
+    assert response["semantic_result_path"] == str(semantic_path)
 
 
 def test_prompt_contract_mode_is_bound_before_child_dispatch() -> None:
@@ -252,3 +273,63 @@ def test_full_reference_substitution_is_rejected_before_authority_write(
 
     assert result.status is AuditMaterializationStatus.SEMANTIC_REJECTED
     assert not reserved.reservation.authority_path.exists()
+
+
+def test_reference_verification_rejection_records_prepared_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ledger = _ledger(tmp_path)
+    execution_id = RecipeExecutionId("verification-rejected-execution")
+    installation = ledger.create_or_get_installation(
+        recipe_execution_id=execution_id,
+        snapshot_digest=_digest("snapshot"),
+    )
+    plan_ref = _artifact(
+        tmp_path / "plan.md",
+        b"# Plan\n",
+        media_type="text/markdown",
+    )
+    reserved = ledger.reserve(
+        AuditReservationRequest(
+            recipe_execution_id=execution_id,
+            installation_version=installation,
+            step_name="audit",
+            invocation_template_digest=_digest("template"),
+            slot_intent_digest=_digest("intent"),
+            runtime_binding_digest=_digest("runtime"),
+            audited_plan_refs=(plan_ref,),
+            cycle_id="cycle",
+            scope_id="scope",
+            part_id="part",
+            allowed_root=tmp_path.resolve(),
+        )
+    )
+    assert reserved.reservation is not None
+    semantic_path = _semantic_path(reserved.reservation, audited_plan_refs=(plan_ref,))
+    prepared_requests: list[AuditPrepareRequest] = []
+    original_prepare = ledger.prepare
+
+    def record_prepare(request: AuditPrepareRequest):
+        prepared_requests.append(request)
+        return original_prepare(request)
+
+    def reject_references(*_args: object, **_kwargs: object) -> None:
+        raise AuditCycleVerificationError(
+            AdmissionReason.INVENTORY_INVALID,
+            "reference validation failed",
+        )
+
+    monkeypatch.setattr(ledger, "prepare", record_prepare)
+    monkeypatch.setattr(materializer_module, "_verify_semantic_references", reject_references)
+
+    result = DefaultAuditAuthorityMaterializer(ledger).materialize(
+        reservation=reserved.reservation,
+        semantic_result_path=semantic_path,
+        preflight_step_names=("consume-plan",),
+    )
+
+    assert result.status is AuditMaterializationStatus.SEMANTIC_REJECTED
+    assert len(prepared_requests) == 1
+    assert prepared_requests[0].accepted is False
+    assert prepared_requests[0].semantic_digest == compute_bytes_hash(semantic_path.read_bytes())

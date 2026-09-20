@@ -278,6 +278,7 @@ class DefaultAuditAuthorityMaterializer:
     ) -> AuditMaterializationResult:
         attempt_id = reservation.current_attempt_id
         installation_version = reservation.slot_key.installation_version
+        semantic_digest = compute_bytes_hash(b"")
         try:
             resolved_semantic_path, semantic_bytes = read_stable_contained_bytes(
                 semantic_result_path,
@@ -432,11 +433,10 @@ class DefaultAuditAuthorityMaterializer:
                 error=str(exc),
             )
         except AuditCycleVerificationError as exc:
-            return AuditMaterializationResult(
-                status=AuditMaterializationStatus.SEMANTIC_REJECTED,
+            return self._semantic_rejection(
                 attempt_id=attempt_id,
-                verdict=None,
-                path=None,
+                installation_version=installation_version,
+                semantic_digest=semantic_digest,
                 error=str(exc),
             )
         except (AuditAdmissionStorageError, OSError, UnicodeError, ValueError) as exc:

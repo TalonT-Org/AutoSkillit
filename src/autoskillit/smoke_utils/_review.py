@@ -487,9 +487,9 @@ def check_audit_remediation_outcome(
     else:
         blocking = tuple(row for row in current.assessments if row.assessment.blocking)
         unresolved_requirement_ids = ",".join(sorted(row.requirement_id for row in blocking))
-        current_digests = {row.row_digest for row in blocking}
+        current_digests = sorted(row.row_digest for row in blocking)
         prior_digests = (
-            {row.row_digest for row in prior.assessments if row.assessment.blocking}
+            sorted(row.row_digest for row in prior.assessments if row.assessment.blocking)
             if prior is not None
             else None
         )

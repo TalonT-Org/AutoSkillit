@@ -49,6 +49,12 @@ def _no_go_route_findings(
 ) -> list[RuleFinding]:
     """Validate one audit NO GO route's producer, dominance, and successor bindings."""
     findings: list[RuleFinding] = []
+    if no_go_start == "merge_audit_cycle_path":
+        merge_step = ctx.recipe.steps.get(no_go_start)
+        if merge_step is not None:
+            no_go_routes = _no_go_routes(merge_step)
+            if len(set(no_go_routes)) == 1:
+                no_go_start = no_go_routes[0]
     reachable = bfs_reachable(ctx.step_graph, no_go_start) | {no_go_start}
     reachable_planners = sorted(make_plan_steps & reachable)
     if not reachable_planners:

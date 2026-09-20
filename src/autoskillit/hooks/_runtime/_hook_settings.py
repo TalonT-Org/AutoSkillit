@@ -23,6 +23,10 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._session_binding import JoinAdmission
 
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
@@ -554,14 +558,14 @@ def admit_hook_session_scope(
     shape: tuple[bool, str],
 ) -> bool:
     """Return whether a HookDef scope admits a raw hook-process shape."""
+    if session_scope not in {"any", "headless_only", "interactive_only"}:
+        msg = f"Unknown hook session scope: {session_scope!r}"
+        raise ValueError(msg)
     headless, tier = shape
     if session_scope == "headless_only" and not headless:
         return False
     if session_scope == "interactive_only" and headless:
         return False
-    if session_scope != "any" and session_scope not in {"headless_only", "interactive_only"}:
-        msg = f"Unknown hook session scope: {session_scope!r}"
-        raise ValueError(msg)
     return tier not in exempt_tiers
 
 
@@ -578,7 +582,7 @@ def enforce_session_scope(
         raise SystemExit(0)
 
 
-def session_join_admission(payload_cwd: str, session_id: str):
+def session_join_admission(payload_cwd: str, session_id: str) -> JoinAdmission:
     """Return the authoritative join decision for the payload session."""
     module_name = (
         f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"

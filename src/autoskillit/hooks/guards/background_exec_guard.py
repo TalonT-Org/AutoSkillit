@@ -57,8 +57,8 @@ def _governed_skill_session() -> bool:
 
     Active for Claude-code sessions on the skill tier, so orchestrator, fleet,
     and Codex sessions are excluded from governance. The headless axis is not
-    consulted here — the caller in main() is gated upstream by
-    enforce_session_scope('headless_only').
+    consulted here — the caller in main() short-circuits interactive sessions
+    via `if not headless: sys.exit(0)` before this helper runs.
     """
     backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":

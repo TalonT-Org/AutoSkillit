@@ -200,7 +200,7 @@ def test_session_class_env_read_inventory_is_complete() -> None:
     assert actual == _EXPECTED_SCOPE_READS
 
 
-def test_unresolved_session_env_read_canary_fails_closed() -> None:
+def test_scope_read_sites_marks_dynamic_env_key_as_unresolved() -> None:
     assert _scope_read_sites("os.environ.get(dynamic_key)", "guards/canary.py") == {
         ("guards/canary.py", "<unresolved>")
     }

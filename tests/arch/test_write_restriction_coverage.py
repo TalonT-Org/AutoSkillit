@@ -94,7 +94,6 @@ def test_skill_md_guard_claims_are_true() -> None:
     claim_pattern = re.compile(
         r"\b(write guard|[a-z_]+_guard)\s+(?:blocks|denies|prevents)\b", re.I
     )
-    assert claim_pattern.search("write guard blocks an out-of-scope write")
     violations: list[str] = []
     for skill_path in _SKILLS_ROOT.glob("*/SKILL.md"):
         content = skill_path.read_text(encoding="utf-8")

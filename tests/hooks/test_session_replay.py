@@ -123,7 +123,7 @@ def matched_hook_defs(tool_name: str) -> list[HookDef]:
     ]
 
 
-def test_interactive_replay_dispatches_headless_guard_and_scope_allows(tmp_path: Path) -> None:
+def test_interactive_replay_dispatches_ask_user_question_guard(tmp_path: Path) -> None:
     assert any(
         "guards/ask_user_question_guard.py" in hook.scripts
         for hook in matched_hook_defs("AskUserQuestion")

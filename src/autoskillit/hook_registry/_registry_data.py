@@ -7,7 +7,7 @@ from pathlib import Path
 from autoskillit.core import pkg_root
 
 from ._hooks_defs import HookDef, LifecycleContractDef
-from ._protection_waivers import PROTECTION_WAIVERS as PROTECTION_WAIVERS
+from ._protection_waivers import PROTECTION_WAIVERS  # noqa: F401  (re-exported)
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
 """Source hooks used by machine-local settings and development checks."""

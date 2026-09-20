@@ -57,9 +57,17 @@ def test_untracked_addition_detected_and_runtime_bytecode_ignored(tmp_path: Path
 
     findings = _findings(tmp_path / "install")
 
-    messages = "\n".join(finding.message for finding in findings)
-    assert "_run_aggregate.py" in messages
-    assert "module.cpython-314.pyc" not in messages
+    checks = [finding.check for finding in findings]
+    assert "installation_untracked_file" in checks
+    assert "installation_untracked_file" == checks.count("installation_untracked_file")
+
+    untracked = next(
+        finding for finding in findings if finding.check == "installation_untracked_file"
+    )
+    assert "_run_aggregate.py" in untracked.message
+    assert "module.cpython-314.pyc" not in untracked.message
+    for finding in findings:
+        assert "module.cpython-314.pyc" not in finding.message
 
 
 def test_hardlinked_cache_entry_reports_both_paths(tmp_path: Path) -> None:

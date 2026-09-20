@@ -4,11 +4,17 @@ import json
 import pathlib
 import statistics
 import sys
-from collections import Counter, OrderedDict
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import islice
-from typing import NamedTuple
+
+from autoskillit._parent_assistant_turns import (
+    _TOOL_USE_CAP,
+    AssistantTurn,
+    is_parent_assistant_record,
+    iter_merged_assistant_turns,
+)
 
 from ..logging import get_logger
 
@@ -24,6 +30,7 @@ __all__ = [
     "compute_gap_stats",
     "filter_sessions_by_recipe",
     "format_top_bigrams",
+    "is_parent_assistant_record",
     "iter_merged_assistant_turns",
     "parse_raw_cc_jsonl",
     "parse_sessions_from_summary_dir",
@@ -32,15 +39,8 @@ __all__ = [
     "render_mermaid",
 ]
 
-_TOOL_USE_CAP = 8
 _MAX_NGRAM_LEN = 5
 logger = get_logger(__name__)
-
-
-class AssistantTurn(NamedTuple):
-    request_id: str
-    timestamp: str
-    tool_names: tuple[str, ...]
 
 
 @dataclass
@@ -72,92 +72,6 @@ class AnalysisResult:
     global_dfg: DFG
     by_recipe: dict[str, DFG]
     session_count: int
-
-
-def _resolve_turn_id(rec: dict[str, object]) -> str:
-    """Extract canonical turn dedup key: requestId > message.id > empty."""
-    rid = rec.get("requestId", "")
-    if isinstance(rid, str) and rid:
-        return rid
-    message = rec.get("message")
-    if isinstance(message, dict):
-        mid = message.get("id", "")
-        if isinstance(mid, str) and mid:
-            return mid
-    return ""
-
-
-def _is_parent_assistant(rec: dict[str, object]) -> bool:
-    if rec.get("type") != "assistant":
-        return False
-    if rec.get("subagent_type"):
-        return False
-    msg = rec.get("message")
-    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
-        return False
-    return True
-
-
-def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Iterator[AssistantTurn]:
-    """Yield one AssistantTurn per logical assistant turn, merging across records.
-
-    When multiple JSONL records share the same canonical turn ID (requestId or
-    message.id) (e.g., extended thinking emits a thinking-only record followed
-    by a tool-bearing record), tool calls are accumulated across all records for
-    that turn ID. The cap is applied after accumulation.
-
-    Records with neither requestId nor message.id are yielded individually (no dedup possible).
-    Turns are yielded in the order their turn ID (or no-rid record) was first
-    encountered — preserving file-order interleaving for correct DFG bigram analysis.
-    """
-    pending: OrderedDict[str, tuple[str, list[str]]] = OrderedDict()
-    insertion_order: list[tuple[str, str]] = []
-    no_rid_turns: dict[str, AssistantTurn] = {}
-    no_rid_counter = 0
-
-    for raw_line in text.splitlines():
-        raw_line = raw_line.strip()
-        if not raw_line:
-            continue
-        try:
-            rec = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(rec, dict) or not _is_parent_assistant(rec):
-            continue
-
-        rid = _resolve_turn_id(rec)
-        ts = rec.get("timestamp", "")
-        message = rec.get("message")
-        content = message.get("content", []) if isinstance(message, dict) else []
-        tools = [
-            str(blk["name"])
-            for blk in content
-            if isinstance(blk, dict)
-            and blk.get("type") == "tool_use"
-            and isinstance(blk.get("name"), str)
-            and blk["name"]
-        ]
-
-        if rid:
-            if rid in pending:
-                existing_ts, existing_tools = pending[rid]
-                pending[rid] = (existing_ts or ts, existing_tools + tools)
-            else:
-                pending[rid] = (ts, tools)
-                insertion_order.append(("rid", rid))
-        else:
-            key = str(no_rid_counter)
-            no_rid_counter += 1
-            no_rid_turns[key] = AssistantTurn(f"turn-{key}", ts, tuple(tools[:cap]))
-            insertion_order.append(("no_rid", key))
-
-    for kind, key in insertion_order:
-        if kind == "rid":
-            ts, tools = pending[key]
-            yield AssistantTurn(key, ts, tuple(tools[:cap]))
-        else:
-            yield no_rid_turns[key]
 
 
 def parse_raw_cc_jsonl(

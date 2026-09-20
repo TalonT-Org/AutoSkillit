@@ -1,10 +1,10 @@
-"""Unit tests for _is_parent_assistant_record predicate."""
+"""Unit tests for the canonical parent-assistant predicate."""
 
 from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.session._session_model import _is_parent_assistant_record
+from autoskillit.core import is_parent_assistant_record
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -17,7 +17,7 @@ def test_parent_record_identified():
             "usage": {"input_tokens": 100, "output_tokens": 50},
         },
     }
-    assert _is_parent_assistant_record(obj) is True
+    assert is_parent_assistant_record(obj) is True
 
 
 def test_subagent_record_excluded():
@@ -29,7 +29,7 @@ def test_subagent_record_excluded():
             "usage": {"input_tokens": 100, "output_tokens": 50},
         },
     }
-    assert _is_parent_assistant_record(obj) is False
+    assert is_parent_assistant_record(obj) is False
 
 
 def test_synthetic_model_excluded():
@@ -37,12 +37,12 @@ def test_synthetic_model_excluded():
         "type": "assistant",
         "message": {"model": "<synthetic>", "usage": {"input_tokens": 0, "output_tokens": 0}},
     }
-    assert _is_parent_assistant_record(obj) is False
+    assert is_parent_assistant_record(obj) is False
 
 
 def test_non_assistant_excluded():
     obj = {"type": "result", "usage": {"input_tokens": 100, "output_tokens": 50}}
-    assert _is_parent_assistant_record(obj) is False
+    assert is_parent_assistant_record(obj) is False
 
 
 def test_empty_subagent_type_treated_as_parent():
@@ -55,4 +55,4 @@ def test_empty_subagent_type_treated_as_parent():
             "usage": {"input_tokens": 100, "output_tokens": 50},
         },
     }
-    assert _is_parent_assistant_record(obj) is True
+    assert is_parent_assistant_record(obj) is True

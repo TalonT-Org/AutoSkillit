@@ -505,10 +505,35 @@ class TestIterMergedAssistantTurns:
             }
         )
         turns = self._parse(rec1, rec2)
-        assert len(turns) == 1
-        assert turns[0].request_id == mid
-        assert turns[0].timestamp == "2026-05-30T08:33:53.843Z"
-        assert turns[0].tool_names == ("Bash",)
+        assert turns == [
+            AssistantTurn(
+                mid,
+                "2026-05-30T08:33:53.843Z",
+                ("Bash",),
+            )
+        ]
+
+    def test_message_id_only_records_merge_into_five_turns(self) -> None:
+        """Nine MiniMax snapshots for five IDs must remain five logical turns."""
+        turns = self._parse(
+            self._make_record(message_id="mid-A", thinking=True),
+            self._make_record(message_id="mid-A", tools=["A"]),
+            self._make_record(message_id="mid-B", tools=["B"]),
+            self._make_record(message_id="mid-C", tools=["C1"]),
+            self._make_record(message_id="mid-C", tools=["C2"]),
+            self._make_record(message_id="mid-D", thinking=True),
+            self._make_record(message_id="mid-D", tools=["D"]),
+            self._make_record(message_id="mid-E", tools=["E1"]),
+            self._make_record(message_id="mid-E", tools=["E2"]),
+        )
+
+        assert turns == [
+            AssistantTurn("mid-A", "", ("A",)),
+            AssistantTurn("mid-B", "", ("B",)),
+            AssistantTurn("mid-C", "", ("C1", "C2")),
+            AssistantTurn("mid-D", "", ("D",)),
+            AssistantTurn("mid-E", "", ("E1", "E2")),
+        ]
 
     def test_request_id_takes_precedence_over_message_id(self) -> None:
         """When both requestId and message.id are present, requestId wins."""

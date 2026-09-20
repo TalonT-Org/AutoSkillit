@@ -45,6 +45,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     all_evaluated_segments,
     command_verb,
     extract_interpreter_write_paths,
+    extract_patch_paths,
     extract_redirect_targets,
     extract_write_verb_targets,
     is_gh_command,
@@ -216,18 +217,7 @@ def _extract_paths_from_patch(command: str) -> list[str]:
 
     Supports unified diff ('+++ b/') and Codex apply_patch ('*** Update/Add/Delete File:').
     """
-    if not command:
-        return []
-    paths: list[str] = []
-    for line in command.split("\n"):
-        if line.startswith("+++ b/"):
-            paths.append(line[6:])
-        else:
-            for marker in _CODEX_FILE_MARKERS:
-                if line.startswith(marker):
-                    paths.append(line[len(marker) :].strip())
-                    break
-    return paths
+    return extract_patch_paths(command)
 
 
 def _record(data: object, *, activation: str, scope: str, decision: str, reason: str) -> None:

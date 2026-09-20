@@ -116,6 +116,15 @@ def test_allows_non_install_writes_and_reads(tmp_path: Path) -> None:
     assert stdout == ""
 
 
+def test_allow_non_install_direct_write(tmp_path: Path) -> None:
+    code, stdout = _run(
+        {"tool_name": "Write", "tool_input": {"file_path": str(tmp_path / "project.py")}}
+    )
+
+    assert code == 0
+    assert stdout == ""
+
+
 def test_applies_to_codex_and_headless(tmp_path: Path) -> None:
     target = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
     event = _bash(f"cat > {target} <<'EOF'\nEOF")

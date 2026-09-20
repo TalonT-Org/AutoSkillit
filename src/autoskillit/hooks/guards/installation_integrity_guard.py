@@ -19,6 +19,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     WRITE_VERBS,
     all_evaluated_segments,
     command_verb,
+    extract_patch_paths,
     extract_redirect_targets_with_status,
     extract_write_verb_targets,
     resolve_write_target,
@@ -32,7 +33,7 @@ from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
     render_provenance_prefix,
 )
 
-INSTALLATION_INTEGRITY_DENY_TRIGGER = "protected AutoSkillit installation"
+INSTALLATION_INTEGRITY_DENY_TRIGGER = "protected installation"
 
 
 def _deny(reason_code: str, detail: str) -> None:
@@ -105,15 +106,7 @@ def _matches_protected_inode(path: str) -> bool:
     for root in _known_roots():
         if not root.exists():
             continue
-        entries = (
-            (root,)
-            if root.is_file()
-            else (
-                Path(base) / name
-                for base, directories, files in os.walk(root)
-                for name in (*directories, *files)
-            )
-        )
+        entries = _tree_entries(root)
         for entry in entries:
             try:
                 protected = entry.stat()
@@ -122,6 +115,18 @@ def _matches_protected_inode(path: str) -> bool:
             if (protected.st_dev, protected.st_ino) == (target.st_dev, target.st_ino):
                 return True
     return False
+
+
+def _tree_entries(root: Path):
+    pending = [root]
+    while pending:
+        candidate = pending.pop()
+        yield candidate
+        try:
+            if candidate.is_dir():
+                pending.extend(candidate.iterdir())
+        except OSError:
+            continue
 
 
 def _is_protected_target(path: str) -> bool:
@@ -135,16 +140,6 @@ def _is_protected_target(path: str) -> bool:
     ):
         return True
     return _matches_protected_inode(normalized)
-
-
-def _patch_paths(command: str) -> list[str]:
-    paths: list[str] = []
-    for line in command.splitlines():
-        if line.startswith("+++ b/"):
-            paths.append(line[6:])
-        elif line.startswith(("*** Update File: ", "*** Add File: ", "*** Delete File: ")):
-            paths.append(line.partition(": ")[2].strip())
-    return paths
 
 
 def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
@@ -187,7 +182,7 @@ def main() -> None:
                 targets.append(resolved)
     elif tool_name == "apply_patch":
         command = extract_apply_patch_text(data) or ""
-        for path in _patch_paths(command):
+        for path in extract_patch_paths(command):
             resolved = resolve_write_target(path)
             if resolved is None:
                 unresolved_target = True

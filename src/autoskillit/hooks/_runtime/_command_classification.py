@@ -361,6 +361,17 @@ def extract_redirect_targets_with_status(
     return targets, unresolved_target
 
 
+def extract_patch_paths(command: str) -> list[str]:
+    """Extract target paths from unified and Codex apply_patch input."""
+    paths: list[str] = []
+    for line in command.splitlines():
+        if line.startswith("+++ b/"):
+            paths.append(line[6:])
+        elif line.startswith(("*** Update File: ", "*** Add File: ", "*** Delete File: ")):
+            paths.append(line.partition(": ")[2].strip())
+    return paths
+
+
 def _non_flag_operands(args: list[str]) -> list[str]:
     operands: list[str] = []
     skip_next = False

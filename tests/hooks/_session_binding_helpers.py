@@ -16,6 +16,7 @@ _PROJECTED_HOOK_FILES_FLAT = (
     "_session_binding.py",
 )
 _PROJECTED_HOOK_FILES_RUNTIME = (
+    "_guard_decision_diagnostics.py",
     "_hook_payload.py",
     "_hook_settings.py",
 )

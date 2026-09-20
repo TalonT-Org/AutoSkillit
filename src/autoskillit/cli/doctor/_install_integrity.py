@@ -11,8 +11,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import Severity
-from autoskillit.core.io import is_python_bytecode_path
+from autoskillit.core import Severity, is_python_bytecode_path
 
 from ._doctor_types import DoctorResult
 

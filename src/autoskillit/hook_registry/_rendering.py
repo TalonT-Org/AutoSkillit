@@ -123,7 +123,8 @@ def render_hook_scope_table(
                 )
 
     rows = "\n".join(
-        f"    {script!r}: {scope!r}," for script, scope in sorted(scopes_by_script.items())
+        f"    {json.dumps(script)}: {json.dumps(scope)},"
+        for script, scope in sorted(scopes_by_script.items())
     )
     return (
         '"""Generated hook-session-scope table. Do not edit manually.\n\n'

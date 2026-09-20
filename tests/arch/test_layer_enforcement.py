@@ -62,6 +62,7 @@ _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
         "smoke_utils",
         "quota_constraints",
         "_llm_triage",
+        "_parent_assistant_turns",
         "__init__",
         "__main__",
     }

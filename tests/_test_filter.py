@@ -473,7 +473,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # One process-wide owner/token-bound capacity authority shared by fleet
     # dispatch and the managed fixed-batch service.
     "_managed_worker_capacity": frozenset({"cli", "core", "fleet", "server"}),
-    "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
+    "tool_sequence_analysis": frozenset({"core", "execution", "fleet", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
     "_type_results": _TYPE_RESULTS_CASCADE,
     "_type_results_records": _TYPE_RESULTS_CASCADE,
@@ -1457,6 +1457,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
+    "_parent_assistant_turns": frozenset(
+        {"arch", "contracts", "core", "execution", "fleet", "hooks"}
+    ),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"recipe", "smoke_utils"}),
@@ -1601,6 +1604,9 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "hook_registry": frozenset({"hooks", "core"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
+    "_parent_assistant_turns": frozenset(
+        {"arch", "contracts", "core", "execution", "fleet", "hooks"}
+    ),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "smoke_utils": frozenset({"smoke_utils"}),
     "version": frozenset({"test_version.py"}),

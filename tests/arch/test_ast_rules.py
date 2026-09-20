@@ -563,9 +563,9 @@ def test_hooks_are_stdlib_only() -> None:
 
 
 def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> None:
-    """quota_constraints.py and _recipe_delivery_framing.py must stay stdlib-only.
+    """Hook-callable root authorities must stay stdlib-only.
 
-    src/autoskillit/AGENTS.md documents these two root-level modules as
+    src/autoskillit/AGENTS.md documents these root-level modules as
     "stdlib-only hook-callable authorities" — safe for hook subprocesses running
     outside the package venv, loaded via bare-name sys.path bootstrap
     (hooks/guards/quota_guard.py, hooks/quota_post_hook.py). Unlike hooks/*.py
@@ -577,7 +577,11 @@ def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> No
     Exemption: imports inside `if TYPE_CHECKING:` blocks are annotation-only
     and are never executed at runtime, so they do not break the constraint.
     """
-    stdlib_only_modules = ("quota_constraints.py", "_recipe_delivery_framing.py")
+    stdlib_only_modules = (
+        "quota_constraints.py",
+        "_parent_assistant_turns.py",
+        "_recipe_delivery_framing.py",
+    )
     violations: list[str] = []
     for name in stdlib_only_modules:
         path = SRC_ROOT / name

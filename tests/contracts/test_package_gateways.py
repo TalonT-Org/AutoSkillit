@@ -409,6 +409,7 @@ def test_root_module_allowlist() -> None:
             "__init__.py",
             "__main__.py",
             "_llm_triage.py",
+            "_parent_assistant_turns.py",
             "_probe_canary.py",
             "_recipe_delivery_framing.py",
             "_test_filter.py",
@@ -433,6 +434,32 @@ def test_root_module_allowlist() -> None:
         f"{sorted(missing)}. "
         "Remove the file from the allowlist in test_root_module_allowlist()."
     )
+
+
+def test_parent_assistant_predicate_reexports_share_one_identity() -> None:
+    import importlib
+
+    from autoskillit import _parent_assistant_turns
+    from autoskillit.core import is_parent_assistant_record
+    from autoskillit.core.pipeline import is_parent_assistant_record as pipeline_predicate
+    from autoskillit.core.tool_sequence_analysis import (
+        is_parent_assistant_record as shim_predicate,
+    )
+
+    consumers = (
+        "autoskillit.execution.session._session_model",
+        "autoskillit.execution.headless._headless_evidence",
+        "autoskillit.execution.headless._headless_recovery",
+        "autoskillit.execution.session_log.session_log",
+        "autoskillit.fleet.result_parser",
+    )
+    canonical = _parent_assistant_turns.is_parent_assistant_record
+
+    assert is_parent_assistant_record is canonical
+    assert pipeline_predicate is canonical
+    assert shim_predicate is canonical
+    for module_name in consumers:
+        assert importlib.import_module(module_name).is_parent_assistant_record is canonical
 
 
 # ── REQ-GATEWAY-PARITY: gateway re-exports pre-move names ──────────────────────

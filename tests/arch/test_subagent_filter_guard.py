@@ -1,4 +1,4 @@
-"""AST guard: all assistant-record processing must use the subagent filter predicate."""
+"""AST guard: parent-assistant filtering has one shared authority."""
 
 from __future__ import annotations
 
@@ -10,51 +10,60 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-
-_GUARDED_FILES = [
+AUTHORITY = SRC / "_parent_assistant_turns.py"
+ANALYZER = SRC / "core" / "pipeline" / "tool_sequence_analysis.py"
+_CONSUMERS = [
     SRC / "execution" / "session" / "_session_model.py",
     SRC / "execution" / "headless" / "_headless_recovery.py",
     SRC / "execution" / "headless" / "_headless_evidence.py",
-    SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
+    SRC / "execution" / "session_log" / "session_log.py",
     SRC / "fleet" / "result_parser.py",
+    SRC / "hooks" / "guards" / "fabricated_completion_guard.py",
 ]
 
-_PREDICATE_NAMES = {"_is_parent_assistant_record", "_is_parent_assistant"}
 
-
-@pytest.mark.parametrize("path", _GUARDED_FILES, ids=[p.name for p in _GUARDED_FILES])
-def test_assistant_record_branches_use_subagent_filter(path: Path) -> None:
-    """Every file that parses 'type == assistant' records must use the predicate."""
-    source = path.read_text()
-    tree = ast.parse(source)
-    body_dump = ast.dump(tree)
-    assert any(name in body_dump for name in _PREDICATE_NAMES), (
-        f"{path.name} processes assistant NDJSON records but does not call "
-        f"_is_parent_assistant_record or _is_parent_assistant — "
-        f"subagent records will contaminate results"
+def _imports_predicate(tree: ast.AST) -> bool:
+    return any(
+        isinstance(node, ast.ImportFrom)
+        and any(alias.name == "is_parent_assistant_record" for alias in node.names)
+        for node in ast.walk(tree)
     )
 
 
-_REQUIRED_CHECKS = ["subagent_type", "<synthetic>"]
+def test_parent_assistant_predicate_has_one_complete_definition() -> None:
+    tree = ast.parse(AUTHORITY.read_text(encoding="utf-8"))
+    definitions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "is_parent_assistant_record"
+    ]
+
+    assert len(definitions) == 1
+    definition_dump = ast.dump(definitions[0])
+    for exclusion in ("subagent_type", "<synthetic>"):
+        assert exclusion in definition_dump
 
 
-def test_predicate_copies_are_structurally_complete() -> None:
-    """Both IL-0 and IL-1 predicate copies must check all exclusion conditions."""
-    for path in [
-        SRC / "execution" / "session" / "_session_model.py",
-        SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
-        SRC / "fleet" / "result_parser.py",
-    ]:
-        source = path.read_text()
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name in _PREDICATE_NAMES:
-                body_dump = ast.dump(node)
-                for check in _REQUIRED_CHECKS:
-                    assert check in body_dump, (
-                        f"{path.name}:{node.name} must check '{check}' — "
-                        f"incomplete predicate allows contamination"
-                    )
-                break
-        else:
-            pytest.fail(f"No predicate function found in {path.name}")
+def test_turn_iterator_calls_the_canonical_predicate() -> None:
+    tree = ast.parse(AUTHORITY.read_text(encoding="utf-8"))
+    iterator = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "iter_merged_assistant_turns"
+    )
+    assert "is_parent_assistant_record" in ast.dump(iterator)
+
+
+def test_analyzer_reexports_the_canonical_predicate() -> None:
+    tree = ast.parse(ANALYZER.read_text(encoding="utf-8"))
+    assert _imports_predicate(tree)
+    assert "is_parent_assistant_record" in ast.dump(tree)
+
+
+@pytest.mark.parametrize("path", _CONSUMERS, ids=[path.name for path in _CONSUMERS])
+def test_consumers_import_the_canonical_predicate(path: Path) -> None:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    assert _imports_predicate(tree), f"{path.name} must import the canonical predicate"
+    assert "is_parent_assistant_record" in ast.dump(tree), (
+        f"{path.name} must use the canonical predicate"
+    )

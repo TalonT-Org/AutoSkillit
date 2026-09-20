@@ -40,7 +40,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |
 | Doctor read-only | `test_doctor_readonly.py` | `run_doctor()` performing filesystem writes (REQ-DOCTOR-READONLY) |
 | Persisted enum decoding | `test_persisted_enum_decoding.py` | Bare persisted-enum construction in registered decoders instead of tolerant construction or record quarantine |
-| No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `core/pipeline/tool_sequence_analysis.py` — dedup is pre-applied |
+| No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup outside `_parent_assistant_turns.py` — transcript dedup belongs to its canonical iterator |
 | GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
 | Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
@@ -51,7 +51,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | No hardcoded model IDs in translation tests | `test_no_hardcoded_model_ids_in_translation_tests.py` | String literal alias-resolved model IDs in `assert` comparisons in `test_model_translation.py` — assertions must reference `CODEX_MODEL_ALIASES[key]` to prevent co-authoring of wrong values |
 | No error-dict returns | `test_no_error_dict_return.py` | `load_and_validate()` returning `{"error": ...}` dict — errors must propagate via exceptions |
 | No hook tracker writes | `test_tracker_write_provenance.py` | Hook scripts referencing `pipeline_tracker` and performing file writes — step completion is server-authoritative, only `server/tools/` may mutate tracker state |
-| No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `core/pipeline/tool_sequence_analysis.py` |
+| No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable outside `_parent_assistant_turns.py` |
 | No Path.cwd() in server tools | `test_no_path_cwd_in_tools.py` | `Path.cwd()` in server tool handlers — use injected project path instead |
 | No raw SIGTERM handler | `test_no_raw_signal_handler.py` | `signal.signal(SIGTERM, ...)` in `cli/app.py` — must use `anyio.open_signal_receiver` |
 | PTY coherence | `test_pty_coherence.py` | Dispatch paths that allocate PTY without respecting dispatch-type `pty_override=False` |
@@ -59,12 +59,12 @@ classified `REJECT` with `category: "arch_violation"`.
 | Registry key casing | `test_registry_key_casing.py` | Uppercase keys in `FEATURE_REGISTRY`, `RETIRED_FEATURES`, or `PACK_REGISTRY` |
 | Retired config key registry invariants | `test_retired_config_key_invariants.py` | `RETIRED_CONFIG_KEYS` entry reusing a retired name for a live field, a remap target that is not itself a currently-valid key (chained rename), or a remap touching a `_SECRETS_ONLY_KEYS` entry |
 | Retired profile key registry invariants | `test_retired_profile_key_invariants.py` | `RETIRED_PROFILE_KEYS` entries that are not lowercase strings or reuse a live `ProviderProfileDef` field; retirement after the `raw_env` copy, dropping unrelated unknown profile keys, or failure to apply across every profile |
-| Turn ID resolution | `test_resolve_turn_id_guard.py` | Direct `request_id` dict `.get()` outside `_resolve_turn_id()` — all turn ID resolution must go through the single resolver |
+| Turn ID resolution | `test_resolve_turn_id_guard.py` | Direct `requestId` dict `.get()` outside `_parent_assistant_turns.py`'s `_resolve_turn_id()` — all turn ID resolution must go through the single resolver |
 | No hardcoded @-mentions in SKILL.md | `test_skills_mention_guard.py` | `@word` tokens at word-boundary in SKILL.md prose — includes Python decorator examples (`@dataclass`, `@mcp`); use prose descriptions or remove the `@` prefix |
 | FastMCP tag hygiene | `test_transforms_hygiene.py` | Test fixtures touching `mcp._transforms` without using the canonical `ALL_VISIBILITY_TAGS` constant |
 | Watcher dispatch marker | `test_watcher_signal_consistency.py` | Process watchers that skip `_has_active_dispatch_marker()` check |
 | Write restriction enforcement | `test_write_restriction_coverage.py` | Skills with prose write restrictions (`never modify source`, `read-only`, `output dir`) lacking runtime `WriteBehaviorSpec` enforcement |
-| Subagent filter guard | `test_subagent_filter_guard.py` | NDJSON assistant-record consumers missing `_is_parent_assistant_record` or `_is_parent_assistant` predicate — subagent records contaminate parent metrics |
+| Subagent filter guard | `test_subagent_filter_guard.py` | Parent-assistant consumers bypassing `_parent_assistant_turns.py`'s `is_parent_assistant_record` predicate — subagent or synthetic records contaminate parent metrics |
 | Env-var-set constant consumption | `test_canonical_constant_consumption.py` | `*_ENV_FORWARD_VARS` or `*_REQUIRED_ENV` constant with zero production importers — every canonical env-var-set must be consumed |
 | MCP env forward coverage | `test_mcp_env_forward_coverage.py` | `mcp_env_forward_vars` values missing from `CmdSpec.env` in any cmd-builder (skill, food-truck, headless, resume, interactive) |
 | Rule severity consistency | `test_rule_severity_consistency.py` | Direct `RuleFinding()` construction in `@semantic_rule`/`@block_rule` bodies — must use `make_finding()`/`make_block_finding()`; `_KNOWN_NON_CONFORMING_RULES` entries without `# tracking: #NNNN` comments |
@@ -83,4 +83,3 @@ classified `REJECT` with `category: "arch_violation"`.
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing
 the specific constraint and enforcement test.
-

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from autoskillit.core import pkg_root
 
-from ._hooks_defs import HookDef, LifecycleContractDef
+from ._hooks_defs import HookDef, LifecycleContractDef, ProtectionWaiverDef
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
 """Source hooks used by machine-local settings and development checks."""
@@ -653,5 +654,61 @@ LIFECYCLE_CONTRACTS: tuple[LifecycleContractDef, ...] = (
         backend="claude_code",
         session_scope="interactive_only",
         required_owner_roles=frozenset({"same_runner"}),
+    ),
+)
+
+_SCOPED_DENY_GUARDS: tuple[tuple[str, Literal["headless_only", "interactive_only"]], ...] = (
+    ("guards/ask_user_question_guard.py", "headless_only"),
+    ("guards/compose_pr_body_guard.py", "headless_only"),
+    ("guards/planner_gh_discovery_guard.py", "headless_only"),
+    ("guards/test_runner_guard.py", "headless_only"),
+    ("guards/planner_result_naming_guard.py", "headless_only"),
+    ("guards/recipe_write_advisor.py", "interactive_only"),
+    ("guards/mcp_health_advisor.py", "interactive_only"),
+    ("guards/skill_orchestration_guard.py", "headless_only"),
+    ("guards/recipe_read_guard.py", "headless_only"),
+    ("guards/skill_load_guard.py", "headless_only"),
+)
+
+_PROTECTION_BACKENDS: tuple[Literal["claude_code", "codex"], ...] = (
+    "claude_code",
+    "codex",
+)
+
+PROTECTION_WAIVERS: tuple[ProtectionWaiverDef, ...] = tuple(
+    ProtectionWaiverDef(
+        guard_script=script,
+        excluded_scope=scope,
+        backend=backend,
+        risk="session-scope exclusion",
+        covering_mechanism="declared session scope",
+        justification="The registered scope defines the only session class this policy governs.",
+    )
+    for script, scope in _SCOPED_DENY_GUARDS
+    for backend in _PROTECTION_BACKENDS
+) + (
+    ProtectionWaiverDef(
+        guard_script="guards/background_exec_guard.py",
+        excluded_scope="headless_only",
+        backend="codex",
+        risk="managed-route scope exclusion",
+        covering_mechanism="managed Codex route",
+        justification="Managed Codex routes are headless sessions only.",
+    ),
+    ProtectionWaiverDef(
+        guard_script="guards/join_followup_guard.py",
+        excluded_scope="headless_only",
+        backend="codex",
+        risk="managed-route scope exclusion",
+        covering_mechanism="managed Codex route",
+        justification="Join follow-up applies only to managed headless parents.",
+    ),
+    ProtectionWaiverDef(
+        guard_script="guards/join_stop_guard.py",
+        excluded_scope="headless_only",
+        backend="codex",
+        risk="managed-route scope exclusion",
+        covering_mechanism="managed Codex route",
+        justification="Join stop applies only to managed headless parents.",
     ),
 )

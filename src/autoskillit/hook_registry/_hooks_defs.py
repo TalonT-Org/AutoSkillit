@@ -114,6 +114,19 @@ class LifecycleContractDef:
             raise ValueError("LifecycleContractDef.required_owner_roles contains an invalid role")
 
 
+@dataclass(frozen=True, slots=True)
+class ProtectionWaiverDef:
+    """Declared coverage for an intentional deny-guard exclusion."""
+
+    guard_script: str
+    excluded_scope: Literal["headless_only", "interactive_only"]
+    backend: Literal["claude_code", "codex"]
+    risk: str
+    covering_mechanism: str
+    justification: str
+    covering_guard_script: str | None = None
+
+
 class HookDriftResult(NamedTuple):
     """Bidirectional hook drift counts."""
 

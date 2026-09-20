@@ -53,6 +53,12 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         hint="fix the YAML frontmatter parse error named in the detail message",
     ),
     SkillContractRemediationDef(
+        kind=SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
+        introduced_in="0.10.1193",
+        action=RemediationAction.ADVISORY,
+        hint="declare write_paths as a list of allowed AutoSkillit temp directories",
+    ),
+    SkillContractRemediationDef(
         kind=SkillInvalidityKind.FIELD_SHAPE,
         introduced_in="0.10.929",
         action=RemediationAction.ADVISORY,

@@ -192,12 +192,11 @@ class SkillSource(StrEnum):
 class SkillInvalidityKind(StrEnum):
     """One enumerable reason a skill contract failed validation.
 
-    Mechanically enumerable so a forcing-function registry
-    (``SKILL_CONTRACT_REMEDIATIONS``) can require every kind to declare how
-    pre-existing artifacts are handled before a new validation may ship.
+    The remediation registry requires every kind to declare its handling.
     """
 
     FRONTMATTER_PARSE = "frontmatter_parse"
+    WRITE_BOUNDARY_INVALID = "write_boundary_invalid"
     FIELD_SHAPE = "field_shape"
     EXPLORATION_CONTRACT_INVALID = "exploration_contract_invalid"
     RESOURCE_CONTRACT_INVALID = "resource_contract_invalid"

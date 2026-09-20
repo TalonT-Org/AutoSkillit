@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from ._hooks_defs import HookDef, LifecycleContractDef
+from ._hooks_defs import HookDef, LifecycleContractDef, ProtectionWaiverDef
 
 # The RISKY_* constants are NOT imported here directly. They are resolved
 # lazily through ``autoskillit.hook_registry.__getattr__`` (PEP 562) which
@@ -38,6 +38,7 @@ from ._hooks_defs import HookDef, LifecycleContractDef
 # packages have finished initializing.
 __all__ = [
     "hook_applies_to_backend",
+    "validate_protection_coverage",
     "validate_lifecycle_contracts",
 ]
 
@@ -85,6 +86,23 @@ def _contract_session_scopes(
     if contract.session_scope == "interactive_only":
         return ("interactive",)
     return ("headless", "interactive")
+
+
+def validate_protection_coverage(
+    registry: Sequence[HookDef],
+    waivers: Sequence[ProtectionWaiverDef],
+    *,
+    backend: Literal["claude_code", "codex"],
+) -> None:
+    """Fail closed when a scoped deny guard has no declared exclusion coverage."""
+    covered = {(waiver.guard_script, waiver.excluded_scope, waiver.backend) for waiver in waivers}
+    for hook_def in registry:
+        if hook_def.mechanism != "deny" or hook_def.session_scope == "any":
+            continue
+        for script in hook_def.scripts:
+            key = (script, hook_def.session_scope, backend)
+            if key not in covered:
+                raise ValueError(f"deny guard {script!r} has no protection waiver for {backend}")
 
 
 def validate_lifecycle_contracts(

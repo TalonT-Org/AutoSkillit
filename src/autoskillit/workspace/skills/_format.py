@@ -46,6 +46,7 @@ class SkillFrontmatterParseResult:
 
     content: str
     data: dict[str, Any] | None
+    write_paths: tuple[str, ...] | None = None
     execution_role: SkillExecutionRole | None = None
     frontmatter_text: str = ""
     body: str = ""
@@ -119,9 +120,17 @@ def parse_frontmatter_content(content: str) -> SkillFrontmatterParseResult:
             frontmatter_text=yaml_block,
             body=body,
         )
+    raw_write_paths = loaded.get("write_paths")
+    write_paths = (
+        tuple(raw_write_paths)
+        if isinstance(raw_write_paths, list)
+        and not _validate_frontmatter_write_paths(raw_write_paths)
+        else None
+    )
     return SkillFrontmatterParseResult(
         content=content,
         data=loaded,
+        write_paths=write_paths,
         execution_role=execution_role,
         frontmatter_text=yaml_block,
         body=body,

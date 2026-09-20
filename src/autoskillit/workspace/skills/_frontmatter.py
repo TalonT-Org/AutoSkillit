@@ -142,6 +142,13 @@ def _skill_info_from_frontmatter(
 
     data = parsed.data
     invalidities: list[SkillInvalidity] = []
+    if "write_paths" in data and parsed.write_paths is None:
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
+                "write_paths must be an allowed list of write directories",
+            )
+        )
     categories_raw = data.get("categories", [])
     if not isinstance(categories_raw, list):
         invalidities.append(
@@ -247,6 +254,7 @@ def _skill_info_from_frontmatter(
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
         frontmatter=parsed,
+        write_paths=parsed.write_paths,
         invalidities=tuple(invalidities),
     )
     from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415  # deferred import to break the cycle with _frontmatter → skill_capabilities

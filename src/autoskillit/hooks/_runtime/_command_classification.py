@@ -372,7 +372,7 @@ def extract_patch_paths(command: str) -> list[str]:
     return paths
 
 
-def _non_flag_operands(args: list[str]) -> list[str]:
+def non_flag_operands(args: list[str]) -> list[str]:
     operands: list[str] = []
     skip_next = False
     for token in args:
@@ -394,7 +394,7 @@ def extract_write_verb_targets(
     verb: str, segment: list[str], cwd: str = ""
 ) -> tuple[list[str], bool]:
     """Return write-verb targets and whether a write target could not resolve."""
-    operands = _non_flag_operands(segment[1:])
+    operands = non_flag_operands(segment[1:])
     if verb == "sed":
         has_inplace = any(token.startswith("-i") or token == "--in-place" for token in segment[1:])
         if not has_inplace:

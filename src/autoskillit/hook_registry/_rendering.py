@@ -22,6 +22,7 @@ from ._registry_data import (
     HOOK_REGISTRY,
     LIFECYCLE_CONTRACTS,
     PLUGIN_ROOT_TOKEN,
+    PROTECTION_WAIVERS,
     RETIRED_SCRIPT_BASENAMES,
 )
 
@@ -144,13 +145,14 @@ def generate_hooks_json(
     Multiple HookDef entries with the same (event_type, matcher) are consolidated
     into a single settings.json entry so Claude Code sees no duplicate matchers.
     """
-    from ._risky_operations import validate_lifecycle_contracts
+    from ._risky_operations import validate_lifecycle_contracts, validate_protection_coverage
 
     validate_lifecycle_contracts(
         registry,
         lifecycle_contracts,
         backend="claude_code",
     )
+    validate_protection_coverage(registry, PROTECTION_WAIVERS, backend="claude_code")
     # Preserve insertion order; merge scripts from same (event_type, matcher) key.
     groups: dict[tuple[str, str], dict] = {}
     for hook_def in registry:

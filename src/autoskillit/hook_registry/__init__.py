@@ -40,6 +40,7 @@ from ._hooks_defs import (
     HookDef,
     HookEnvVarDef,
     LifecycleContractDef,
+    ProtectionWaiverDef,
 )
 from ._quarantine import (
     is_hook_payload_quarantined,
@@ -53,6 +54,7 @@ from ._registry_data import (  # noqa: F401  (_build_hook_registry consumed by a
     LIFECYCLE_CONTRACTS,
     NEW_SUBDIR_BASENAMES,
     PLUGIN_ROOT_TOKEN,
+    PROTECTION_WAIVERS,
     RETIRED_SCRIPT_BASENAMES,
     _build_hook_registry,
 )
@@ -68,6 +70,7 @@ from ._risky_operations import (
     _contract_session_scopes,
     hook_applies_to_backend,
     validate_lifecycle_contracts,
+    validate_protection_coverage,
 )
 
 # HOOK_REGISTRY is left empty here and populated by the wiring in
@@ -102,6 +105,8 @@ __all__ = [
     "LIFECYCLE_CONTRACTS",
     "NEW_SUBDIR_BASENAMES",
     "PLUGIN_ROOT_TOKEN",
+    "PROTECTION_WAIVERS",
+    "ProtectionWaiverDef",
     "RETIRED_SCRIPT_BASENAMES",
     "RISKY_GH_SUBCOMMANDS",
     "RISKY_GIT_OPERATIONS",
@@ -128,6 +133,7 @@ __all__ = [
     "render_hooks_json_text",
     "render_relocatable_hook_command",
     "validate_lifecycle_contracts",
+    "validate_protection_coverage",
     "validate_plugin_cache_hooks",
 ]
 

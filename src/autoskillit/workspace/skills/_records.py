@@ -82,6 +82,7 @@ class SkillInfo:
     canonical_content: str = ""
     canonical_digest: str = ""
     frontmatter: SkillFrontmatterParseResult | None = None
+    write_paths: tuple[str, ...] | None = None
     invalidities: tuple[SkillInvalidity, ...] = ()
 
     def __post_init__(self) -> None:
@@ -181,6 +182,7 @@ class SkillCatalogEntry:
     canonical_content: str
     canonical_digest: str
     frontmatter: SkillFrontmatterParseResult
+    write_paths: tuple[str, ...] | None = None
     invalidities: tuple[SkillInvalidity, ...] = ()
 
     @classmethod
@@ -213,6 +215,7 @@ class SkillCatalogEntry:
             canonical_content=skill.canonical_content,
             canonical_digest=skill.canonical_digest,
             frontmatter=skill.frontmatter,
+            write_paths=skill.write_paths,
         )
 
 

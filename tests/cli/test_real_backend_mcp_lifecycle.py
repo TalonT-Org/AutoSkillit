@@ -8,6 +8,7 @@ import json
 import os
 import secrets
 import select
+import shlex
 import shutil
 import signal
 import socket
@@ -283,8 +284,13 @@ def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     wrapper = bin_dir / "autoskillit"
+    # shlex.quote the interpreter path: a worktree whose directory name
+    # contains literal ``"`` characters would otherwise be split by the
+    # /bin/sh parser when concatenated into the wrapper script, leaving the
+    # daemon unable to launch the MCP server and the lifecycle test's
+    # ``daemon is not None`` assertion failing.
     wrapper.write_text(
-        "#!/bin/sh\nexec setsid " + str(Path(sys.executable)) + " -m autoskillit\n",
+        "#!/bin/sh\nexec setsid " + shlex.quote(str(Path(sys.executable))) + " -m autoskillit\n",
         encoding="utf-8",
     )
     wrapper.chmod(0o755)

@@ -29,6 +29,7 @@ from autoskillit.core.types import (
     CodingAgentBackend,
     DatabaseReader,
     ExecutionIdentity,
+    GitHubFetcher,
     HeadlessExecutor,
     LaunchAdapter,
     LaunchPreparation,
@@ -50,6 +51,7 @@ from autoskillit.core.types import (
     RecipePathValidationResult,
     RecipeRepository,
     ResolvedLaunchContract,
+    RetryReason,
     SemanticAdaptationContext,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillProjectionPreparation,
@@ -764,7 +766,7 @@ _DEFAULT_SKILL_RESULT = SkillResult(
     is_error=False,
     exit_code=0,
     needs_retry=False,
-    retry_reason="none",
+    retry_reason=RetryReason.NONE,
     stderr="",
     token_usage=None,
 )
@@ -1113,6 +1115,9 @@ class InMemoryRecipeRepository(RecipeRepository):
         defer_unresolved: bool = False,
         backend_name: str | None = None,
         effective_backend_map: dict[str, str] | None = None,
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+        backend_origin_map: dict[str, str] | None = None,
+        include_finalized_projection: bool = False,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -1127,6 +1132,9 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "defer_unresolved": defer_unresolved,
                 "backend_name": backend_name,
                 "effective_backend_map": effective_backend_map,
+                "backend_capabilities_map": backend_capabilities_map,
+                "backend_origin_map": backend_origin_map,
+                "include_finalized_projection": include_finalized_projection,
             }
         )
         if self._stale:
@@ -1170,8 +1178,10 @@ class InMemoryRecipeRepository(RecipeRepository):
             {"valid": False, "findings": [{"error": "not configured"}]},
         )
 
-    def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
-        self.calls.append({"method": "list_all", "project_dir": project_dir})
+    def list_all(
+        self, project_dir: Any | None = None, *, features: dict[str, bool] | None = None
+    ) -> dict[str, Any]:
+        self.calls.append({"method": "list_all", "project_dir": project_dir, "features": features})
         return self._all_recipes
 
     async def apply_triage_gate(
@@ -1184,6 +1194,268 @@ class InMemoryRecipeRepository(RecipeRepository):
         triage_fn: Callable[..., Awaitable[Sequence[dict[str, Any]]]] | None = None,
     ) -> dict[str, Any]:
         return result
+
+
+class FakeGitHubFetcher(GitHubFetcher):
+    """In-memory GitHub issue and label service for tool tests."""
+
+    def __init__(
+        self,
+        *,
+        has_token: bool = True,
+        issues: Mapping[tuple[str, str, int], Mapping[str, object]] | None = None,
+        repository_labels: Mapping[tuple[str, str], Sequence[str]] | None = None,
+    ) -> None:
+        self._has_token = has_token
+        self.issues: dict[tuple[str, str, int], dict[str, Any]] = {}
+        for key, issue in (issues or {}).items():
+            if key[2] <= 0:
+                raise ValueError(f"issue number must be positive, got {key[2]}")
+            seeded_issue = dict(issue)
+            body = seeded_issue.get("body", "")
+            title = seeded_issue.get("title", "")
+            state = seeded_issue.get("state", "open")
+            if not isinstance(body, str):
+                raise TypeError(f"issue body must be str, got {type(body).__name__}")
+            if not isinstance(title, str):
+                raise TypeError(f"issue title must be str, got {type(title).__name__}")
+            if not isinstance(state, str):
+                raise TypeError(f"issue state must be str, got {type(state).__name__}")
+            seeded_issue["body"] = body
+            seeded_issue["title"] = title
+            seeded_issue["state"] = state
+            labels = seeded_issue.get("labels", [])
+            if not isinstance(labels, Sequence) or isinstance(labels, str):
+                raise TypeError(
+                    f"issue labels must be a Sequence[str], got {type(labels).__name__}"
+                )
+            if not all(isinstance(label, str) for label in labels):
+                raise TypeError("issue labels must contain only str entries")
+            seeded_issue["labels"] = set(labels)
+            self.issues[key] = seeded_issue
+        self.repository_labels: dict[tuple[str, str], set[str]] = {}
+        for repo_key, labels in (repository_labels or {}).items():
+            if not isinstance(labels, Sequence) or isinstance(labels, str):
+                raise TypeError(
+                    f"repository_labels must map keys to Sequence[str], "
+                    f"got {type(labels).__name__}"
+                )
+            if not all(isinstance(label, str) for label in labels):
+                raise TypeError("repository_labels must contain only str entries")
+            self.repository_labels[repo_key] = set(labels)
+        self.failure_results: dict[str, dict[str, Any]] = {}
+        self.call_log: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    @property
+    def has_token(self) -> bool:
+        return self._has_token
+
+    def _record(self, operation: str, *args: object, **kwargs: object) -> None:
+        self.call_log.append((operation, args, kwargs))
+
+    def _failure_result(self, operation: str) -> dict[str, Any] | None:
+        result = self.failure_results.get(operation)
+        if result is None:
+            return None
+        if not isinstance(result, Mapping):
+            raise TypeError(
+                f"failure_results[{operation!r}] must be a Mapping, got {type(result).__name__}"
+            )
+        return dict(result)
+
+    @staticmethod
+    def _issue_key(
+        issue_ref_or_owner: str,
+        repo: str | None = None,
+        number: int | None = None,
+    ) -> tuple[str, str, int] | None:
+        if (repo is None) != (number is None):
+            return None
+        if repo is not None and number is not None:
+            return issue_ref_or_owner, repo, number
+        match = re.fullmatch(
+            r"(?:https?://github\.com/)?([^/]+)/([^/#]+)(?:/issues/|#)(\d+)",
+            issue_ref_or_owner,
+        )
+        if match is None:
+            return None
+        return match.group(1), match.group(2), int(match.group(3))
+
+    def _issue_or_failure(
+        self, issue_ref_or_owner: str, repo: str | None = None, number: int | None = None
+    ) -> tuple[tuple[str, str, int] | None, dict[str, Any] | None]:
+        key = self._issue_key(issue_ref_or_owner, repo, number)
+        if key is None:
+            return None, {"success": False, "error": "invalid issue reference"}
+        issue = self.issues.get(key)
+        if issue is None:
+            return key, {"success": False, "error": f"issue not found: {key[2]}"}
+        return key, None
+
+    async def fetch_issue(
+        self,
+        issue_ref_or_owner: str,
+        repo: str | None = None,
+        number: int | None = None,
+        *,
+        include_comments: bool = True,
+    ) -> dict[str, Any]:
+        self._record(
+            "fetch_issue",
+            issue_ref_or_owner,
+            repo,
+            number,
+            include_comments=include_comments,
+        )
+        if result := self._failure_result("fetch_issue"):
+            return result
+        key, failure = self._issue_or_failure(issue_ref_or_owner, repo, number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        issue = self.issues[key]
+        return {
+            "success": True,
+            "number": key[2],
+            "title": issue.get("title", ""),
+            "body": issue.get("body", ""),
+            "state": issue.get("state", "open"),
+            "labels": sorted(issue["labels"]),
+        }
+
+    async def search_issues(
+        self, query: str, owner: str, repo: str, *, state: str = "open"
+    ) -> dict[str, Any]:
+        self._record("search_issues", query, owner, repo, state=state)
+        if result := self._failure_result("search_issues"):
+            return result
+        return {"success": True, "total_count": 0, "items": []}
+
+    async def create_issue(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: str,
+        *,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self._record("create_issue", owner, repo, title, body, labels=labels)
+        if result := self._failure_result("create_issue"):
+            return result
+        number = max((key[2] for key in self.issues if key[:2] == (owner, repo)), default=0) + 1
+        self.issues[(owner, repo, number)] = {
+            "title": title,
+            "body": body,
+            "state": "open",
+            "labels": set(labels or []),
+        }
+        return {
+            "success": True,
+            "issue_number": number,
+            "url": f"https://github.com/{owner}/{repo}/issues/{number}",
+        }
+
+    async def update_issue_body(
+        self, owner: str, repo: str, issue_number: int, new_body: str
+    ) -> dict[str, Any]:
+        self._record("update_issue_body", owner, repo, issue_number, new_body)
+        if result := self._failure_result("update_issue_body"):
+            return result
+        key, failure = self._issue_or_failure(owner, repo, issue_number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        self.issues[key]["body"] = new_body
+        return {
+            "success": True,
+            "issue_url": f"https://github.com/{owner}/{repo}/issues/{issue_number}",
+        }
+
+    async def fetch_title(self, issue_url: str) -> dict[str, object]:
+        self._record("fetch_title", issue_url)
+        if result := self._failure_result("fetch_title"):
+            return result
+        key, failure = self._issue_or_failure(issue_url)
+        if failure is not None:
+            return failure
+        assert key is not None
+        title = str(self.issues[key].get("title", ""))
+        return {"success": True, "number": key[2], "title": title, "slug": title.lower()}
+
+    async def add_labels(
+        self, owner: str, repo: str, issue_number: int, labels: list[str]
+    ) -> dict[str, Any]:
+        self._record("add_labels", owner, repo, issue_number, labels)
+        if result := self._failure_result("add_labels"):
+            return result
+        key, failure = self._issue_or_failure(owner, repo, issue_number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        self.issues[key]["labels"].update(labels)
+        return {"success": True, "labels": sorted(self.issues[key]["labels"])}
+
+    async def remove_label(
+        self, owner: str, repo: str, issue_number: int, label: str
+    ) -> dict[str, Any]:
+        self._record("remove_label", owner, repo, issue_number, label)
+        if result := self._failure_result("remove_label"):
+            return result
+        key, failure = self._issue_or_failure(owner, repo, issue_number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        self.issues[key]["labels"].discard(label)
+        return {"success": True, "labels": sorted(self.issues[key]["labels"])}
+
+    async def swap_labels(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        remove_labels: list[str],
+        add_labels: list[str],
+    ) -> dict[str, Any]:
+        self._record("swap_labels", owner, repo, issue_number, remove_labels, add_labels)
+        if result := self._failure_result("swap_labels"):
+            return result
+        key, failure = self._issue_or_failure(owner, repo, issue_number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        labels = self.issues[key]["labels"]
+        labels.difference_update(remove_labels)
+        labels.update(add_labels)
+        return {"success": True, "labels": sorted(labels)}
+
+    async def ensure_label(
+        self,
+        owner: str,
+        repo: str,
+        label: str,
+        color: str = "ededed",
+        description: str = "",
+    ) -> dict[str, Any]:
+        self._record("ensure_label", owner, repo, label, color=color, description=description)
+        if result := self._failure_result("ensure_label"):
+            return result
+        labels = self.repository_labels.setdefault((owner, repo), set())
+        if label in labels:
+            return {"success": True, "created": False}
+        labels.add(label)
+        return {"success": True, "created": True}
+
+    async def close_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
+        self._record("close_issue", owner, repo, issue_number)
+        if result := self._failure_result("close_issue"):
+            return result
+        key, failure = self._issue_or_failure(owner, repo, issue_number)
+        if failure is not None:
+            return failure
+        assert key is not None
+        self.issues[key]["state"] = "closed"
+        return {"success": True}
 
 
 # ---------------------------------------------------------------------------

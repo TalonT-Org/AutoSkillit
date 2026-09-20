@@ -3,273 +3,132 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
 
 import pytest
 
 from autoskillit.server.tools.tools_issue_labels import release_issue
+from tests.server._tools_issue_labels_test_helpers import (
+    calls_for,
+    make_release_issue_fake,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-class TestReleaseIssueStagedLifecycle:
-    @pytest.mark.anyio
-    async def test_release_issue_non_default_branch_applies_staged(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """Non-default target_branch: swap_labels atomically removes in-progress, adds staged."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.swap_labels.return_value = {"success": True, "labels": ["bug", "staged"]}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-            )
-        )
-        assert result["success"] is True
-        assert result["staged"] is True
-        assert result["staged_label"] == "staged"
-        mock_client.remove_label.assert_not_called()
-        mock_client.add_labels.assert_not_called()
-        mock_client.ensure_label.assert_called_once_with(
-            "owner",
-            "repo",
-            "staged",
-            color="0075ca",
-            description="Issue resolved, PR staged for promotion",
-        )
-        mock_client.swap_labels.assert_called_once()
-
-    @pytest.mark.anyio
-    async def test_release_issue_default_branch_no_staged(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """release_issue with target_branch='main' uses swap_labels to remove in-progress."""
-        mock_client = AsyncMock()
-        mock_client.swap_labels.return_value = {"success": True, "labels": []}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="main",
-            )
-        )
-        assert result["success"] is True
-        assert result.get("staged") is False
-        mock_client.remove_label.assert_not_called()
-        mock_client.ensure_label.assert_not_called()
-        mock_client.add_labels.assert_not_called()
-        mock_client.swap_labels.assert_called_once()
-
-    @pytest.mark.anyio
-    async def test_release_issue_no_target_branch_no_staged(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """release_issue without target_branch: uses swap_labels, no staged label."""
-        mock_client = AsyncMock()
-        mock_client.swap_labels.return_value = {"success": True, "labels": []}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-            )
-        )
-        assert result["success"] is True
-        assert result.get("staged") is False
-
-    @pytest.mark.anyio
-    async def test_release_issue_staged_label_idempotent(self, tool_ctx_kitchen_open, monkeypatch):
-        """ensure_label treats 422 (already exists) as success — applies it without error."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": False}  # 422 path
-        mock_client.swap_labels.return_value = {"success": True, "labels": ["staged"]}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-            )
-        )
-        assert result["success"] is True
-        assert result["staged"] is True
-
-    @pytest.mark.anyio
-    async def test_release_issue_custom_staged_label(self, tool_ctx_kitchen_open, monkeypatch):
-        """staged_label parameter overrides the default 'staged' label name."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.swap_labels.return_value = {
-            "success": True,
-            "labels": ["awaiting-promotion"],
-        }
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-                staged_label="awaiting-promotion",
-            )
-        )
-        assert result["success"] is True
-        assert result["staged"] is True
-        assert result["staged_label"] == "awaiting-promotion"
-        mock_client.ensure_label.assert_called_once_with(
-            "owner",
-            "repo",
-            "awaiting-promotion",
-            color="0075ca",
-            description="Implementation staged and waiting for promotion to main",
-        )
-
-    @pytest.mark.anyio
-    async def test_release_issue_ensure_label_failure_returns_error(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """When ensure_label fails, release_issue returns an error without applying the label."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": False, "error": "API error"}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-            )
-        )
-        assert result["success"] is False
-        assert "staged label" in result["error"]
-        mock_client.swap_labels.assert_not_called()
-
-    @pytest.mark.anyio
-    async def test_release_issue_add_labels_failure_returns_error(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """When swap_labels fails after ensure_label, release_issue returns an error."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.swap_labels.return_value = {"success": False, "error": "Labels limit"}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-            )
-        )
-        assert result["success"] is False
-        assert "staged label" in result["error"]
-
-    @pytest.mark.anyio
-    async def test_release_issue_staged_null_when_not_staged(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """staged_label field is None in response when staging was not applied."""
-        mock_client = AsyncMock()
-        mock_client.swap_labels.return_value = {"success": True, "labels": []}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="main",
-            )
-        )
-        assert result["staged_label"] is None
-
-    @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "default_base_branch,promotion_target,target_branch,expected_staged",
-        [
-            # production scenario: default_base_branch overridden to develop for routing
-            ("develop", "main", "develop", True),
-            # develop explicitly set as promotion_target: landing there = done
-            ("develop", "develop", "develop", False),
-            # non-default target against main promotion target
-            ("main", "main", "develop", True),
-            # promotion_target overridden to something other than main
-            ("main", "stable", "stable", False),
-            ("main", "stable", "develop", True),
-        ],
+async def _release(**kwargs):
+    return json.loads(
+        await release_issue(issue_url="https://github.com/owner/repo/issues/42", **kwargs)
     )
-    async def test_release_issue_staging_uses_promotion_target(
-        self,
-        tool_ctx_kitchen_open,
-        monkeypatch,
-        default_base_branch,
-        promotion_target,
-        target_branch,
-        expected_staged,
-    ):
-        """Regression: staging comparison uses promotion_target, not default_base_branch.
 
-        When default_base_branch == target_branch (e.g. both "develop"),
-        staged label must still be applied if promotion_target != target_branch.
-        Conversely, no staged label when target_branch == promotion_target, regardless
-        of default_base_branch.
-        """
-        tool_ctx_kitchen_open.config.branching.default_base_branch = default_base_branch
-        tool_ctx_kitchen_open.config.branching.promotion_target = promotion_target
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": False}
-        mock_client.swap_labels.return_value = {
-            "success": True,
-            "labels": [tool_ctx_kitchen_open.config.github.staged_label],
-        }
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch=target_branch,
-            )
-        )
-        assert result["staged"] is expected_staged, (
-            f"staged must be {expected_staged} when "
-            f"target_branch={target_branch!r}, promotion_target={promotion_target!r}, "
-            f"default_base_branch={default_base_branch!r}"
-        )
-        if expected_staged:
-            assert result.get("staged_label") is not None, (
-                f"staged_label must not be None when staged=True "
-                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
-            )
-        else:
-            assert result.get("staged_label") is None, (
-                f"staged_label must be None when staged=False "
-                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
-            )
 
-    @pytest.mark.anyio
-    async def test_release_issue_staged_uses_swap_labels(self, tool_ctx_kitchen_open, monkeypatch):
-        """release_issue staged path: uses swap_labels; remove_label/add_labels not called."""
-        mock_client = AsyncMock()
-        mock_client.ensure_label.return_value = {"success": True, "created": True}
-        mock_client.swap_labels.return_value = {"success": True, "labels": ["bug", "staged"]}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-                target_branch="develop",
-            )
+@pytest.mark.anyio
+async def test_release_issue_non_default_branch_applies_staged(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake(["bug", "in-progress"])
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="develop")
+    assert result["success"] and result["staged"] and result["staged_label"] == "staged"
+    assert not calls_for(fake, "remove_label") and not calls_for(fake, "add_labels")
+    assert calls_for(fake, "ensure_label") == [
+        (
+            "ensure_label",
+            ("owner", "repo", "staged"),
+            {"color": "0075ca", "description": "Issue resolved, PR staged for promotion"},
         )
-        assert result["success"] is True
-        assert result["staged"] is True
-        mock_client.swap_labels.assert_called_once()
-        mock_client.remove_label.assert_not_called()
-        mock_client.add_labels.assert_not_called()
+    ]
+    assert len(calls_for(fake, "swap_labels")) == 1
 
-    @pytest.mark.anyio
-    async def test_release_issue_no_stage_uses_swap_labels(
-        self, tool_ctx_kitchen_open, monkeypatch
-    ):
-        """release_issue without target_branch uses swap_labels; remove_label not called."""
-        mock_client = AsyncMock()
-        mock_client.swap_labels.return_value = {"success": True, "labels": ["bug"]}
-        monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", mock_client)
-        result = json.loads(
-            await release_issue(
-                issue_url="https://github.com/owner/repo/issues/42",
-            )
+
+@pytest.mark.anyio
+async def test_release_issue_default_branch_no_staged(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="main")
+    assert result["success"] and result["staged"] is False
+    assert result["staged_label"] is None
+    assert not calls_for(fake, "ensure_label") and len(calls_for(fake, "swap_labels")) == 1
+    assert not calls_for(fake, "remove_label") and not calls_for(fake, "add_labels")
+
+
+@pytest.mark.anyio
+async def test_release_issue_no_target_branch_no_staged(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release()
+    assert result["success"] and result["staged"] is False
+    assert len(calls_for(fake, "swap_labels")) == 1
+    assert not calls_for(fake, "remove_label")
+
+
+@pytest.mark.anyio
+async def test_release_issue_staged_label_idempotent(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake(repository_labels=["staged"])
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="develop")
+    assert result["success"] and result["staged"] and len(calls_for(fake, "ensure_label")) == 1
+
+
+@pytest.mark.anyio
+async def test_release_issue_custom_staged_label(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="develop", staged_label="awaiting-promotion")
+    assert result["success"] and result["staged_label"] == "awaiting-promotion"
+    assert calls_for(fake, "ensure_label") == [
+        (
+            "ensure_label",
+            ("owner", "repo", "awaiting-promotion"),
+            {
+                "color": "0075ca",
+                "description": "Implementation staged and waiting for promotion to main",
+            },
         )
-        assert result["success"] is True
-        assert result["staged"] is False
-        mock_client.swap_labels.assert_called_once()
-        mock_client.remove_label.assert_not_called()
+    ]
+
+
+@pytest.mark.anyio
+async def test_release_issue_ensure_label_failure_returns_error(
+    tool_ctx_kitchen_open, monkeypatch
+):
+    fake = make_release_issue_fake()
+    fake.failure_results["ensure_label"] = {"success": False, "error": "API error"}
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="develop")
+    assert not result["success"] and "staged label" in result["error"]
+    assert not calls_for(fake, "swap_labels")
+
+
+@pytest.mark.anyio
+async def test_release_issue_add_labels_failure_returns_error(tool_ctx_kitchen_open, monkeypatch):
+    fake = make_release_issue_fake()
+    fake.failure_results["swap_labels"] = {"success": False, "error": "Labels limit"}
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch="develop")
+    assert not result["success"] and "staged label" in result["error"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "default_base_branch,promotion_target,target_branch,expected_staged",
+    [
+        ("develop", "main", "develop", True),
+        ("develop", "develop", "develop", False),
+        ("main", "main", "develop", True),
+        ("main", "stable", "stable", False),
+        ("main", "stable", "develop", True),
+    ],
+)
+async def test_release_issue_staging_uses_promotion_target(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    default_base_branch,
+    promotion_target,
+    target_branch,
+    expected_staged,
+):
+    tool_ctx_kitchen_open.config.branching.default_base_branch = default_base_branch
+    tool_ctx_kitchen_open.config.branching.promotion_target = promotion_target
+    fake = make_release_issue_fake()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_client", fake)
+    result = await _release(target_branch=target_branch)
+    assert result["staged"] is expected_staged
+    assert (result["staged_label"] is not None) is expected_staged

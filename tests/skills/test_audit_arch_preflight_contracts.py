@@ -126,7 +126,7 @@ def test_principle_auditor_dispatch_is_bounded(skill_md: Path, workflow_contract
 
     assert "Launch more than 6 principle auditors in one parallel batch" in never_block
     assert workflow_contract in workflow
-    assert "Start ALL independent child delegations before awaiting any result" not in text
+    assert "Start all independent child delegations before awaiting any result" not in text
 
     if skill_md == LOCAL_SKILL_MD:
         assert "join each batch before starting the next" in text

@@ -175,5 +175,6 @@ def generate_hooks_json(
         registry,
         RETIRED_SCRIPT_BASENAMES,
         lifecycle_contracts,
+        PROTECTION_WAIVERS,
     )
     return {"hooks": by_event, "_autoskillit_registry_hash": registry_hash}

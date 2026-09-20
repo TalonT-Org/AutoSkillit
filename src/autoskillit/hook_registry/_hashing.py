@@ -13,13 +13,14 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from ._hooks_defs import HookDef, LifecycleContractDef
+from ._hooks_defs import HookDef, LifecycleContractDef, ProtectionWaiverDef
 
 
 def _canonical_registry_payload(
     registry: Sequence[HookDef],
     retired: frozenset[str],
     lifecycle_contracts: Sequence[LifecycleContractDef],
+    waivers: Sequence[ProtectionWaiverDef] = (),
 ) -> str:
     registry_rows = sorted(
         [
@@ -65,12 +66,28 @@ def _canonical_registry_payload(
             row["session_scope"],
         ),
     )
+    waiver_rows = sorted(
+        [
+            {
+                "backend": waiver.backend,
+                "covering_guard_script": waiver.covering_guard_script,
+                "covering_mechanism": waiver.covering_mechanism,
+                "excluded_scope": waiver.excluded_scope,
+                "guard_script": waiver.guard_script,
+                "justification": waiver.justification,
+                "risk": waiver.risk,
+            }
+            for waiver in waivers
+        ],
+        key=lambda row: (row["guard_script"], row["excluded_scope"], row["backend"]),
+    )
     return json.dumps(
         {
-            "format_version": 4,
+            "format_version": 5,
             "lifecycle_contracts": lifecycle_rows,
             "registry": registry_rows,
             "retired": sorted(retired),
+            "protection_waivers": waiver_rows,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -81,9 +98,10 @@ def compute_registry_hash(
     registry: Sequence[HookDef],
     retired: frozenset[str],
     lifecycle_contracts: Sequence[LifecycleContractDef],
+    waivers: Sequence[ProtectionWaiverDef] = (),
 ) -> str:
     """Compute a stable sha256 over the hook and lifecycle registries."""
-    payload = _canonical_registry_payload(registry, retired, lifecycle_contracts)
+    payload = _canonical_registry_payload(registry, retired, lifecycle_contracts, waivers)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

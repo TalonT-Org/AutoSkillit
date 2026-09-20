@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import shutil
 import subprocess
@@ -118,3 +119,18 @@ def test_projection_publication_writes_generated_scope_table(tmp_path: Path) -> 
     assert (plugin_root / "hooks" / "_runtime" / "_hook_scope_table.py").read_text(
         encoding="utf-8"
     ) == render_hook_scope_table()
+
+
+def test_guard_session_scope_reads_are_centralized() -> None:
+    forbidden = {"AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_SESSION_TYPE"}
+    violations: list[str] = []
+    for path in HOOKS_DIR.rglob("*.py"):
+        if path == HOOKS_DIR / "_runtime" / "_hook_settings.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or node.value not in forbidden:
+                continue
+            violations.append(f"{path.relative_to(HOOKS_DIR)}:{node.lineno}:{node.value}")
+
+    assert not violations, "session-class reads must use _hook_settings: " + ", ".join(violations)

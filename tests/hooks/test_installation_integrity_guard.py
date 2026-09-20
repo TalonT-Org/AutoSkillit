@@ -51,6 +51,8 @@ def _bash(command: str) -> dict[str, object]:
     [
         "cat > {target} <<'PYEOF'\nPYEOF",
         "cp /tmp/source {target}",
+        "mv /tmp/source {target}",
+        "patch -i {target}",
         "tee {target} </dev/null",
         "sed -i 's/a/b/' {target}",
         "install /tmp/source {target}",
@@ -102,6 +104,23 @@ def test_blocks_symlinked_install_target(tmp_path: Path) -> None:
     assert _decision(stdout) == "deny"
 
 
+def test_blocks_relative_target_after_cd_into_install_tree(tmp_path: Path) -> None:
+    package = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    package.mkdir(parents=True)
+    code, stdout = _run(_bash(f"cd {package} && cat > __init__.py <<'EOF'\nEOF"))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
+def test_blocks_normalized_install_target(tmp_path: Path) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/../site-packages/autoskillit/__init__.py"
+    code, stdout = _run(_bash(f"cat > {target} <<'EOF'\nEOF"))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
 def test_allows_non_install_writes_and_reads(tmp_path: Path) -> None:
     project_file = tmp_path / "project/src/autoskillit/__init__.py"
     package_file = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
@@ -120,6 +139,14 @@ def test_allow_non_install_direct_write(tmp_path: Path) -> None:
     code, stdout = _run(
         {"tool_name": "Write", "tool_input": {"file_path": str(tmp_path / "project.py")}}
     )
+
+    assert code == 0
+    assert stdout == ""
+
+
+@pytest.mark.parametrize("command", ["uv tool install autoskillit", "pip install -e ."])
+def test_allows_install_commands_without_a_write_target(command: str) -> None:
+    code, stdout = _run(_bash(command))
 
     assert code == 0
     assert stdout == ""

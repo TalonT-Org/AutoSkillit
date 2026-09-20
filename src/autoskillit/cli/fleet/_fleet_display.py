@@ -94,7 +94,12 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
             continue
         backend = tu.get("backend")
         provider_used = tu.get("provider_used")
-        if not isinstance(backend, str) or not isinstance(provider_used, str):
+        if (
+            not isinstance(backend, str)
+            or not isinstance(provider_used, str)
+            or not backend
+            or not provider_used
+        ):
             continue
         key = (backend, provider_used)
         row = totals.get(key)
@@ -108,7 +113,7 @@ def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
                 "backend": backend,
                 "provider_used": provider_used,
                 **{
-                    field: tu[field] if field in tu and tu[field] is not None else unknown_measure
+                    field: tu[field] if isinstance(tu.get(field), dict) else unknown_measure
                     for field in fields
                 },
             }

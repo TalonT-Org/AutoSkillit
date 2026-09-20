@@ -66,7 +66,7 @@ def _path_is_within(path: str, root: Path) -> bool:
         return os.path.commonpath(
             (os.path.realpath(path), os.path.realpath(root))
         ) == os.path.realpath(root)
-    except ValueError:
+    except (OSError, ValueError):
         return False
 
 
@@ -82,22 +82,21 @@ def _known_roots() -> tuple[Path, ...]:
 
 def _has_install_layout(path: str) -> bool:
     parts = Path(os.path.normpath(path)).parts
-    return (
-        any(
-            parts[index : index + 2]
-            in (("site-packages", "autoskillit"), ("dist-packages", "autoskillit"))
-            for index in range(len(parts) - 1)
-        )
-        or any(part.startswith("archive-v") for part in parts)
-        and "autoskillit" in parts
-    )
+    return any(
+        parts[index : index + 2]
+        in (("site-packages", "autoskillit"), ("dist-packages", "autoskillit"))
+        for index in range(len(parts) - 1)
+    ) or (any(part.startswith("archive-v") for part in parts) and "autoskillit" in parts)
 
 
 def _nearest_existing_ancestor(path: str) -> str:
     candidate = Path(path)
     while not candidate.exists() and candidate != candidate.parent:
         candidate = candidate.parent
-    return os.path.realpath(candidate)
+    try:
+        return os.path.realpath(candidate)
+    except OSError:
+        return str(candidate)
 
 
 def _matches_protected_inode(path: str) -> bool:
@@ -123,18 +122,28 @@ def _matches_protected_inode(path: str) -> bool:
 
 def _tree_entries(root: Path):
     pending = [root]
+    seen_dirs: set[Path] = set()
     while pending:
         candidate = pending.pop()
         yield candidate
         try:
-            if candidate.is_dir():
+            # ``Path.is_dir()`` follows symlinks, so a self-referential
+            # symlink would cause unbounded recursion. Skip symlinked
+            # directories and dedupe by resolved path.
+            if candidate.is_symlink():
+                continue
+            if candidate.is_dir() and candidate not in seen_dirs:
+                seen_dirs.add(candidate)
                 pending.extend(candidate.iterdir())
         except OSError:
             continue
 
 
 def _is_protected_target(path: str) -> bool:
-    normalized = os.path.realpath(path)
+    try:
+        normalized = os.path.realpath(path)
+    except OSError:
+        return True
     ancestor = _nearest_existing_ancestor(path)
     if _has_install_layout(normalized) or _has_install_layout(ancestor):
         return True
@@ -168,14 +177,9 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
         targets.extend(redirects)
         unresolved_target = unresolved_target or unresolved
     interpreter_paths = extract_interpreter_write_paths(command)
-    # `extract_interpreter_write_paths` returns:
-    #   None  — command is not an interpreter write (no interpreter prefix or
-    #           no write API). This is the common case for `cat`, `ls`, `pwd`,
-    #           `uv`, `pip`, etc. — treat as no interpreter contributions.
-    #   []    — interpreter write detected but not all paths are static
-    #           literals. Fail-closed: an unresolved interpreter write target
-    #           could be a shell-local indirection into an installation tree.
-    #   [...] — all write target paths are static literals.
+    # ``extract_interpreter_write_paths``: None=non-write, []=interpreter write
+    # detected but not all targets are static literals (fail-closed below),
+    # [...]=literal targets only.
     if interpreter_paths is not None and not interpreter_paths:
         unresolved_target = True
     elif interpreter_paths:

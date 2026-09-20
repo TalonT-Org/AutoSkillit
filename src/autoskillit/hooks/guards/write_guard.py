@@ -116,6 +116,12 @@ def _extract_git_write_targets(segment: list[str], cwd: str) -> list[str] | None
     return None
 
 
+_UNRESOLVED_TARGET: list[str] = []
+"""Sentinel returned by ``_extract_segment_targets`` when a write verb's
+target contains an unresolvable operand (e.g. shell variable). Distinct
+from a None return (non-write) and a real ``[]`` (write with no path)."""
+
+
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     """Return None for non-writes, [] for writes without real paths, or target paths."""
     if is_gh_command(segment):
@@ -124,7 +130,9 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     if verb == "git" and len(segment) >= 2:
         return _extract_git_write_targets(segment, cwd)
     if verb in WRITE_VERBS:
-        targets, _unresolved_target = extract_write_verb_targets(verb, segment, cwd)
+        targets, unresolved_target = extract_write_verb_targets(verb, segment, cwd)
+        if unresolved_target:
+            return _UNRESOLVED_TARGET
         return [target for target in targets if target not in _PSEUDO_DEVICE_PATHS]
     return None
 
@@ -139,7 +147,9 @@ def _effective_execution_cwd(execution_cwd: str) -> str:
 
 
 def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[str] | None:
-    """Return absolute target paths from a bash command, or None if no write command found.
+    """Return absolute target paths from a bash command, None if no write, or
+    ``_UNRESOLVED_TARGET`` if a write verb's target could not be statically
+    resolved (fail-closed: callers must deny).
 
     ``execution_cwd`` (the run_cmd tool's own cwd argument, or Bash's session
     cwd) is preferred for resolving relative targets when non-empty; falls
@@ -173,6 +183,8 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
             cwd = updated_execution_cwd(segment, cwd)
             continue
         result = _extract_segment_targets(segment, cwd)
+        if result is _UNRESOLVED_TARGET:
+            return _UNRESOLVED_TARGET
         if result is not None:
             found_any_write = True
             all_targets.extend(result)
@@ -194,6 +206,22 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
             seen.add(t)
             unique.append(t)
     return unique
+
+
+def _bash_validation_error(
+    command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    targets = _extract_bash_write_targets(command, execution_cwd)
+    if targets is _UNRESOLVED_TARGET:
+        # Fail-closed: a write verb whose target contains an unresolvable
+        # operand could be a shell-local indirection into a protected path.
+        return (
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+            "(unresolved write target)."
+        )
+    if not targets:
+        return None
+    return _paths_validation_error(targets, norm_prefixes, display_prefix)
 
 
 def _extract_paths_from_patch(command: str) -> list[str]:
@@ -237,10 +265,17 @@ def _deny(data: object, reason: str, *, reason_code: str) -> None:
 
 
 def _normalize_prefixes(raw_prefixes: list[str]) -> list[str]:
-    return [os.path.realpath(prefix).rstrip("/") + "/" for prefix in raw_prefixes]
+    normalized: list[str] = []
+    for prefix in raw_prefixes:
+        try:
+            real = os.path.realpath(prefix)
+        except OSError:
+            continue
+        normalized.append(real.rstrip("/") + "/")
+    return normalized
 
 
-def _intersect_prefixes(left: list[str], right: list[str]) -> list[str]:
+def _narrow_compatible_prefixes(left: list[str], right: list[str]) -> list[str]:
     result: list[str] = []
     for left_prefix in left:
         for right_prefix in right:
@@ -300,7 +335,9 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
             for path in raw_paths
         ]
         prefixes = _normalize_prefixes(paths)
-        effective = prefixes if effective is None else _intersect_prefixes(effective, prefixes)
+        effective = (
+            prefixes if effective is None else _narrow_compatible_prefixes(effective, prefixes)
+        )
 
     if effective is None:
         return [], "", "none"
@@ -356,15 +393,6 @@ def _patch_validation_error(
             f"(no target paths found in patch)."
         )
     return _paths_validation_error(paths, norm_prefixes, display_prefix)
-
-
-def _bash_validation_error(
-    command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
-) -> str | None:
-    targets = _extract_bash_write_targets(command, execution_cwd)
-    if not targets:
-        return None
-    return _paths_validation_error(targets, norm_prefixes, display_prefix)
 
 
 def _interpreter_validation_error(

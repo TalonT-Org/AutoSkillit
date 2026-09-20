@@ -116,6 +116,7 @@ def test_local_skill_md_dispatches_in_bounded_batches() -> None:
     assert "Launch more than 6 principle auditors in one parallel batch" in never_block
     assert "Process every principle in sequential batches of at most 6." in workflow
     assert "Start all independent child delegations before awaiting any result" not in text
+    assert "Start ALL independent child delegations before awaiting any result" not in text
     assert "join each batch before starting the next" in text
 
 
@@ -130,6 +131,7 @@ def test_source_skill_md_dispatches_to_single_worker() -> None:
     assert "Launch more than 6 principle auditors in one parallel batch" in never_block
     assert "Assign every principle to the declared single worker." in workflow
     assert "Start all independent child delegations before awaiting any result" not in text
+    assert "Start ALL independent child delegations before awaiting any result" not in text
 
     frontmatter = text.split("---", maxsplit=2)[1]
     assert "count: 1" in frontmatter

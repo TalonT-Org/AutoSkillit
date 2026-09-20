@@ -27,6 +27,11 @@ SCOPE_ORCHESTRATOR_OR_HIGHER = SessionScope.of(headless="interactive_only") | Se
 SCOPE_FLEET = SessionScope.of(tiers={SessionType.FLEET})
 
 TOOL_SESSION_SCOPES: dict[str, SessionScope] = {}
+# SCOPE_ANY aliases the canonical SESSION_SCOPE_ANY (defined in core.types) so
+# this module's vocabulary — SCOPE_FLEET, SCOPE_ORCHESTRATOR_EXACT,
+# SCOPE_ORCHESTRATOR_OR_HIGHER, SCOPE_ANY — reads consistently at every
+# `@session_scoped(...)` decorator site. The values are `is`-equal; do not
+# remove this alias without migrating the 25+ tool modules that import it.
 SCOPE_ANY = SESSION_SCOPE_ANY
 
 

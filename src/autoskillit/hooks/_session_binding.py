@@ -241,7 +241,6 @@ class JoinAdmission(NamedTuple):
     enforce: bool
     binding: SessionBinding | None
     entry: LoadedSkillEntry | None
-    join_bearing_skills: frozenset[str]
     error: str | None
 
     @property
@@ -472,18 +471,12 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
             True,
             None,
             None,
-            frozenset(),
             str(exc),
         )
     if binding is None:
-        return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, frozenset(), None)
+        return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, None)
     if binding.session_id != session_id:
-        return JoinAdmission(
-            JoinAdmissionOutcome.WRONG_SESSION, False, binding, None, frozenset(), None
-        )
-    join_bearing = frozenset(
-        entry.skill_name for entry in binding.loaded_skills if entry.join_required
-    )
+        return JoinAdmission(JoinAdmissionOutcome.WRONG_SESSION, False, binding, None, None)
     if not binding.binding_valid:
         error = next(
             (entry.binding_error for entry in binding.loaded_skills if entry.binding_error),
@@ -494,7 +487,6 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
             True,
             binding,
             None,
-            join_bearing,
             error,
         )
     entry = next(
@@ -507,7 +499,6 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
             binding.join_required,
             binding,
             None,
-            join_bearing,
             None,
         )
     if not entry.join_required or not entry.binding_valid:
@@ -516,10 +507,9 @@ def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission
             binding.join_required,
             binding,
             entry,
-            join_bearing,
             None,
         )
-    return JoinAdmission(JoinAdmissionOutcome.ADMITTED, True, binding, entry, join_bearing, None)
+    return JoinAdmission(JoinAdmissionOutcome.ADMITTED, True, binding, entry, None)
 
 
 def atomic_write(path: Path, content: str) -> None:

@@ -93,6 +93,22 @@ def is_recipe_scan_path(rel_to_root: PurePosixPath) -> bool:
     )
 
 
+def _yaml_safe_double_quoted(value: str) -> str:
+    """Escape ``\\"`` and ``\\\\`` so the substitution survives a YAML re-parse.
+
+    The substituted value lands inside a YAML scalar — most commonly a
+    double-quoted ``"bash {{AUTOSKILLIT_SCRIPTS}}/script.sh ..."`` context —
+    where a literal ``"`` would prematurely close the scalar. Escaping those
+    two characters keeps the resulting text valid in every scalar style the
+    placeholder can land in: plain, single-quoted, and double-quoted. The
+    YAML parser's later un-escape (``\\"`` -> ``"``, ``\\\\`` -> ``\\``)
+    preserves the original path value verbatim when the substituted text is
+    re-parsed by ``_resolve_skip_guards_in_content`` and
+    ``_validate_route_consistency``.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
     """Replace the temp placeholder after rejecting YAML-unsafe path text."""
     if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
@@ -106,6 +122,35 @@ def substitute_scripts_placeholder(text: str) -> str:
         return text
     scripts_dir = pkg_root() / "recipes" / "scripts"
     return text.replace(_SCRIPTS_PLACEHOLDER, str(scripts_dir))
+
+
+def substitute_temp_placeholder_yaml_safe(text: str, temp_dir_relpath: str) -> str:
+    """Like :func:`substitute_temp_placeholder`, but escape the substituted value.
+
+    Used by the raw-text pipeline path where the substitution result is later
+    re-parsed as YAML by ``_resolve_skip_guards_in_content`` and
+    ``_validate_route_consistency``. Without this, a directory name containing
+    a literal ``"`` (e.g. a worktree whose path embeds quote chars) would
+    close the surrounding YAML scalar prematurely and raise a parser error.
+    """
+    if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
+        raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+    return text.replace(_TEMP_PLACEHOLDER, _yaml_safe_double_quoted(temp_dir_relpath))
+
+
+def substitute_scripts_placeholder_yaml_safe(text: str) -> str:
+    """Like :func:`substitute_scripts_placeholder`, but escape the substituted value.
+
+    Used by the raw-text pipeline path where the substitution result is later
+    re-parsed as YAML by ``_resolve_skip_guards_in_content`` and
+    ``_validate_route_consistency``. Without this, a directory name containing
+    a literal ``"`` (e.g. a worktree whose path embeds quote chars) would
+    close the surrounding YAML scalar prematurely and raise a parser error.
+    """
+    if _SCRIPTS_PLACEHOLDER not in text:
+        return text
+    scripts_dir = pkg_root() / "recipes" / "scripts"
+    return text.replace(_SCRIPTS_PLACEHOLDER, _yaml_safe_double_quoted(str(scripts_dir)))
 
 
 def assert_no_raw_placeholders(

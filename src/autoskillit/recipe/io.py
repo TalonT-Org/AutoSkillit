@@ -41,7 +41,13 @@ from autoskillit.recipe.helpers._io_loading import (
     substitute_scripts_placeholder as substitute_scripts_placeholder,
 )
 from autoskillit.recipe.helpers._io_loading import (
+    substitute_scripts_placeholder_yaml_safe as substitute_scripts_placeholder_yaml_safe,
+)
+from autoskillit.recipe.helpers._io_loading import (
     substitute_temp_placeholder as substitute_temp_placeholder,
+)
+from autoskillit.recipe.helpers._io_loading import (
+    substitute_temp_placeholder_yaml_safe as substitute_temp_placeholder_yaml_safe,
 )
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (

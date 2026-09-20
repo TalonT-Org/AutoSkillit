@@ -135,6 +135,9 @@ def record_guard_decision(
         # persistently silent failure (binding_lock contention, channel-dir
         # perm denial) should be diagnosable. Surface to stderr so operators
         # can correlate missing decision records with environmental causes.
+        # This file is listed in tests/arch/_rules._PRINT_EXEMPT (alongside
+        # _hook_settings.py) because the stdlib-only import boundary
+        # precludes autoskillit.core.get_logger.
         print(
             f"guard_decision_record_failed: guard={guard!r} error={exc!r}",
             file=sys.stderr,

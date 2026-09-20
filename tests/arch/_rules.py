@@ -85,6 +85,7 @@ _PRINT_EXEMPT = frozenset(
         "branch_protection_guard.py",
         "exploration_request_identity_guard.py",
         "_hook_settings.py",
+        "_guard_decision_diagnostics.py",
         "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",

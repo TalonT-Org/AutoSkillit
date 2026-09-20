@@ -90,6 +90,7 @@ _ARCH_HELPER_TEST_DIRS: frozenset[str] = frozenset(
 TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_DIRS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_DIRS,
+    "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
 }
 
 # Matches lines that only change a version string: -version = "0.9.x" / +version = "0.9.y"

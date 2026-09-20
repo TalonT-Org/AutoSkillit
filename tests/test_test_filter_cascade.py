@@ -16,6 +16,25 @@ from tests._test_filter import (
 pytestmark = [pytest.mark.medium]
 
 
+def test_reaper_test_support_cascades_to_fleet(tmp_path: Path) -> None:
+    tests_root = tmp_path / "tests"
+    fleet_dir = tests_root / "fleet"
+    fleet_dir.mkdir(parents=True)
+    helper_path = fleet_dir / "_reaper_test_support.py"
+    helper_path.touch()
+    (fleet_dir / "test_dispatch_reaper.py").touch()
+
+    result = build_test_scope(
+        changed_files={"tests/fleet/_reaper_test_support.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=tests_root,
+    )
+
+    assert result is not None
+    assert fleet_dir in result
+    assert helper_path not in result
+
+
 class TestCascadeNewEntries:
     """REQ-FILT-003: four new packages must not force a full test run."""
 

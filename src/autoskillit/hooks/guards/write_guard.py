@@ -269,7 +269,7 @@ def _normalize_prefixes(raw_prefixes: list[str]) -> list[str]:
     for prefix in raw_prefixes:
         try:
             real = os.path.realpath(prefix)
-        except OSError:
+        except (OSError, ValueError):
             continue
         normalized.append(real.rstrip("/") + "/")
     return normalized

@@ -142,7 +142,7 @@ def _tree_entries(root: Path):
 def _is_protected_target(path: str) -> bool:
     try:
         normalized = os.path.realpath(path)
-    except OSError:
+    except (OSError, ValueError):
         return True
     ancestor = _nearest_existing_ancestor(path)
     if _has_install_layout(normalized) or _has_install_layout(ancestor):

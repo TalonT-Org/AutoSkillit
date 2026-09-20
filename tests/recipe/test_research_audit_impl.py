@@ -203,7 +203,9 @@ class TestResearchImplementRemediationLoop:
     def test_has_check_audit_retry_loop_step(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+        assert (
+            step.with_args["callable"] == "autoskillit.smoke_utils.check_audit_remediation_outcome"
+        )
 
     def test_check_audit_retry_loop_max_iterations(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
@@ -212,25 +214,20 @@ class TestResearchImplementRemediationLoop:
     def test_check_audit_retry_loop_max_exceeded_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
-        max_cond = next(
-            (c for c in conditions if c.when and "max_exceeded" in c.when and "== true" in c.when),
-            None,
-        )
-        assert max_cond is not None
-        assert max_cond.route == "escalate_stop"
+        exhausted = next(c for c in conditions if c.when and "EXHAUSTED" in c.when)
+        assert exhausted.route == "escalate_stop"
 
     def test_check_audit_retry_loop_default_routes_to_pre_remediation_cleanup(
         self, recipe
     ) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
-        default_cond = next((c for c in conditions if c.when is None), None)
-        assert default_cond is not None
-        assert default_cond.route == "pre_remediation_cleanup"
+        progressing = next(c for c in conditions if c.when and "PROGRESSING" in c.when)
+        assert progressing.route == "pre_remediation_cleanup"
 
     def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
-        assert step.on_failure == "escalate_stop"
+        assert step.on_failure == "check_audit_integrity_retry"
 
 
 class TestResearchRemediationLoop:
@@ -259,7 +256,7 @@ class TestResearchRemediationLoop:
         conditions = step.on_result.conditions
         error_cond = next((c for c in conditions if c.when and "result.error" in c.when), None)
         assert error_cond is not None
-        assert error_cond.route == "escalate_stop"
+        assert error_cond.route == "check_audit_integrity_retry"
 
     def test_has_remediate_step(self, recipe) -> None:
         assert "remediate" in recipe.steps
@@ -276,7 +273,9 @@ class TestResearchRemediationLoop:
     def test_has_check_audit_retry_loop_step(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         assert step.tool == "run_python"
-        assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+        assert (
+            step.with_args["callable"] == "autoskillit.smoke_utils.check_audit_remediation_outcome"
+        )
 
     def test_check_audit_retry_loop_max_iterations(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
@@ -285,25 +284,20 @@ class TestResearchRemediationLoop:
     def test_check_audit_retry_loop_max_exceeded_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
-        max_cond = next(
-            (c for c in conditions if c.when and "max_exceeded" in c.when and "== true" in c.when),
-            None,
-        )
-        assert max_cond is not None
-        assert max_cond.route == "escalate_stop"
+        exhausted = next(c for c in conditions if c.when and "EXHAUSTED" in c.when)
+        assert exhausted.route == "escalate_stop"
 
     def test_check_audit_retry_loop_default_routes_to_pre_remediation_cleanup(
         self, recipe
     ) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
-        default_cond = next((c for c in conditions if c.when is None), None)
-        assert default_cond is not None
-        assert default_cond.route == "pre_remediation_cleanup"
+        progressing = next(c for c in conditions if c.when and "PROGRESSING" in c.when)
+        assert progressing.route == "pre_remediation_cleanup"
 
     def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
-        assert step.on_failure == "escalate_stop"
+        assert step.on_failure == "check_audit_integrity_retry"
 
     def test_has_pre_remediation_cleanup_step(self, recipe) -> None:
         step = recipe.steps["pre_remediation_cleanup"]

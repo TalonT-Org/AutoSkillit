@@ -213,7 +213,8 @@
         "check_dirty_main_retry",
         "check_ref_push_loop",
         "ref_push",
-        "check_audit_remediation_loop"
+        "check_audit_remediation_loop",
+        "check_audit_integrity_retry"
       ]
     },
     {
@@ -252,7 +253,8 @@
         "merge_gate_test",
         "check_merge_test_fix_loop",
         "rebase_conflict_fix",
-        "audit_impl"
+        "audit_impl",
+        "merge_audit_cycle_path"
       ]
     },
     {
@@ -441,6 +443,8 @@
         "done_unconfirmed",
         "release_issue_success",
         "patch_token_summary",
+        "release_audit_remediation_stuck",
+        "await_audit_decision",
         "release_issue_failure",
         "register_clone_success",
         "register_clone_failure",
@@ -3900,11 +3904,11 @@
     },
     "release_audit_remediation_stuck": {
       "action": "stop",
-      "message": "Audit remediation stopped because the same unresolved findings repeated."
+      "message": "Audit remediation stopped because the same unresolved findings repeated. Emit the L3 result sentinel JSON block now with success=false and reason=\"audit_remediation_stuck\"."
     },
     "await_audit_decision": {
       "action": "stop",
-      "message": "Audit remediation requires a human waiver or decision before it can continue."
+      "message": "Audit remediation requires a human waiver or decision. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
     },
     "release_issue_failure": {
       "tool": "release_issue",

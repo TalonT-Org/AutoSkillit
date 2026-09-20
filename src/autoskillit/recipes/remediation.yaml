@@ -202,6 +202,7 @@ delivery_segments:
   - check_ref_push_loop
   - ref_push
   - check_audit_remediation_loop
+  - check_audit_integrity_retry
 - name: R6
   steps:
   - reset_test_fix_counter
@@ -229,6 +230,7 @@ delivery_segments:
   - check_merge_test_fix_loop
   - rebase_conflict_fix
   - audit_impl
+  - merge_audit_cycle_path
 - name: R10
   steps:
   - remediate
@@ -357,6 +359,8 @@ delivery_segments:
   - done_unconfirmed
   - release_issue_success
   - patch_token_summary
+  - release_audit_remediation_stuck
+  - await_audit_decision
   - release_issue_failure
   - register_clone_success
   - register_clone_failure

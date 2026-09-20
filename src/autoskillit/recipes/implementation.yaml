@@ -190,6 +190,7 @@ delivery_segments:
   - check_ref_push_loop
   - ref_push
   - check_audit_remediation_loop
+  - check_audit_integrity_retry
 - name: I4
   steps:
   - reset_test_fix_counter
@@ -218,6 +219,7 @@ delivery_segments:
   - inter_part_push
   - next_or_done
   - audit_impl
+  - merge_audit_cycle_path
 - name: I8
   steps:
   - remediate
@@ -331,6 +333,8 @@ delivery_segments:
   - register_clone_unconfirmed
   - analyze_pipeline_health_unconfirmed
   - done_unconfirmed
+  - release_audit_remediation_stuck
+  - await_audit_decision
   - release_issue_failure
   - register_clone_success
   - register_clone_failure

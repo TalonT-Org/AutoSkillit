@@ -197,7 +197,7 @@ steps:
       route: revise_design
     - when: "${{ result.verdict }} == STOP"
       route: resolve_design_review
-    - route: vis_dial
+    - route: escalate_stop
 
   vis_dial:
     tool: run_skill

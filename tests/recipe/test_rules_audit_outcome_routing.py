@@ -161,9 +161,9 @@ def test_implementation_semantic_rejection_uses_bounded_integrity_loop() -> None
     }
     loop_routes = loop_step.on_result.conditions
     assert loop_routes[0].when == "${{ result.max_exceeded }} == true"
-    assert loop_routes[0].route == "release_issue_failure"
+    assert loop_routes[0].route == "register_clone_failure"
     assert loop_routes[1].when is None
-    assert loop_routes[1].route == "reset_test_fix_counter"
+    assert loop_routes[1].route == "audit_impl"
 
 
 def test_rule_rejects_status_routing_after_verdict_branches() -> None:

@@ -409,6 +409,12 @@ its slice, the full diff, and the `implementation_ref`. Each subagent checks:
 
 Each subagent returns structured findings:
 
+If a requirement is unmet but no working-tree code change can satisfy it, classify it
+`UNSATISFIABLE_BY_CODE` and describe the decision required. Do not recast it as `MISSING`
+to keep the code-remediation loop running. A plan passage presented as a verbatim quote
+must be byte-identical to the plan file; label any shortened or reworded passage as a
+paraphrase.
+
 - `COVERED` — requirement satisfied in the diff
 - `MISSING` — required change absent from diff
 - `ODD` — change in diff with no plan backing
@@ -473,12 +479,14 @@ Collect evaluator verdicts. Apply results to the Step 3 findings:
 | `REJECT` | Finding retains its blocking status |
 | `NO_MATCH` | No effect — deviation note is informational only |
 
-Before semantic submission or closure-report generation, normalize every blocking finding
+Before semantic submission or closure-report generation, normalize every code-addressable blocking finding
 matched by `ACCEPT` or `ACCEPT_WITH_NOTE` to `COVERED`. Its `evidence_summary` must state that
 the independent deviation evaluator accepted an intent-preserving alternative and include
 the evaluator verdict, without repeating untrusted manifest prose. This transition is what
 makes an accepted deviation GO-compatible with the typed GO invariant; unmatched or rejected
 blocking findings retain their original assessment.
+An `UNSATISFIABLE_BY_CODE` finding stays blocking and requires the separate human
+waiver decision; a deviation manifest cannot turn it into `COVERED`.
 
 ### Step 4 — Verdict
 

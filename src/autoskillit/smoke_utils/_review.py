@@ -6,8 +6,12 @@ import hashlib
 import json
 from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 from autoskillit.core import (
+    AuditAssessment,
+    AuditCycleAuthority,
+    AuditVerdict,
     get_logger,
     is_valid_github_review_head_sha,
 )
@@ -23,30 +27,22 @@ class RemediationOutcome(StrEnum):
     INTEGRITY_FAULT = "INTEGRITY_FAULT"
 
 
-_BLOCKING_ASSESSMENTS = frozenset(
-    {"MISSING", "CONFLICT", "UNPRESCRIBED_SUBSTITUTION", "UNSATISFIABLE_BY_CODE"}
-)
-
-
-def _blocking_rows_from_authority(path: str) -> dict[str, str]:
+def _load_remediation_authority(path: str, *, require_no_go: bool = False) -> AuditCycleAuthority:
+    if not path:
+        raise ValueError("audit authority path is required")
     try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        rows = raw["assessments"]
-    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        data = Path(path).read_bytes()
+        if len(data) > 10_000_000:
+            raise ValueError("audit authority exceeds size limit")
+        raw = json.loads(data)
+        authority = AuditCycleAuthority.from_dict(raw)
+        if authority.canonical_bytes != data:
+            raise ValueError("audit authority is not canonical JSON")
+    except (OSError, TypeError, ValueError, KeyError, AttributeError) as exc:
         raise ValueError(f"invalid audit authority {path!r}: {exc}") from exc
-    if not isinstance(rows, list):
-        raise ValueError("audit authority assessments must be a list")
-    blocking: dict[str, str] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            raise ValueError("audit authority assessment must be a mapping")
-        assessment = row.get("assessment")
-        digest = row.get("row_digest")
-        if not isinstance(assessment, str) or not isinstance(digest, str) or not digest:
-            raise ValueError("audit authority assessment is malformed")
-        if assessment in _BLOCKING_ASSESSMENTS:
-            blocking[digest] = assessment
-    return blocking
+    if require_no_go and authority.verdict is not AuditVerdict.NO_GO:
+        raise ValueError("remediation requires a NO GO authority")
+    return authority
 
 
 def annotate_pr_diff(
@@ -485,36 +481,47 @@ def check_audit_remediation_outcome(
     """Classify a remediation round from its current and prior audit authorities."""
     budget = check_loop_iteration(current_iteration, max_iterations)
     try:
-        current = _blocking_rows_from_authority(current_authority_path)
+        current = _load_remediation_authority(current_authority_path, require_no_go=True)
+        prior = _load_remediation_authority(prior_authority_path) if prior_authority_path else None
     except ValueError:
-        return {
-            "outcome": RemediationOutcome.INTEGRITY_FAULT.value,
-            "next_iteration": current_iteration.strip() or "0",
-        }
-    if current and set(current.values()) == {"UNSATISFIABLE_BY_CODE"}:
-        outcome = RemediationOutcome.AWAITING_DECISION
-    elif prior_authority_path:
-        try:
-            prior = _blocking_rows_from_authority(prior_authority_path)
-        except ValueError:
-            outcome = RemediationOutcome.INTEGRITY_FAULT
-        else:
-            outcome = (
-                RemediationOutcome.STUCK_REPEATING
-                if set(current) == set(prior)
-                else (
-                    RemediationOutcome.EXHAUSTED
-                    if budget["max_exceeded"] == "true"
-                    else RemediationOutcome.PROGRESSING
-                )
-            )
+        outcome = RemediationOutcome.INTEGRITY_FAULT
+        unresolved_requirement_ids = ""
     else:
-        outcome = (
-            RemediationOutcome.EXHAUSTED
-            if budget["max_exceeded"] == "true"
-            else RemediationOutcome.PROGRESSING
+        blocking = tuple(row for row in current.assessments if row.assessment.blocking)
+        unresolved_requirement_ids = ",".join(sorted(row.requirement_id for row in blocking))
+        current_digests = {row.row_digest for row in blocking}
+        prior_digests = (
+            {row.row_digest for row in prior.assessments if row.assessment.blocking}
+            if prior is not None
+            else None
         )
-    return {"outcome": outcome.value, "next_iteration": budget["next_iteration"]}
+        if blocking and all(
+            row.assessment is AuditAssessment.UNSATISFIABLE_BY_CODE for row in blocking
+        ):
+            outcome = RemediationOutcome.AWAITING_DECISION
+        elif prior_digests is not None and current_digests == prior_digests:
+            outcome = RemediationOutcome.STUCK_REPEATING
+        elif budget["max_exceeded"] == "true":
+            outcome = RemediationOutcome.EXHAUSTED
+        else:
+            outcome = RemediationOutcome.PROGRESSING
+    match outcome:
+        case RemediationOutcome.INTEGRITY_FAULT:
+            next_iteration = current_iteration.strip() or "0"
+        case (
+            RemediationOutcome.PROGRESSING
+            | RemediationOutcome.STUCK_REPEATING
+            | RemediationOutcome.EXHAUSTED
+            | RemediationOutcome.AWAITING_DECISION
+        ):
+            next_iteration = budget["next_iteration"]
+        case unreachable:
+            assert_never(unreachable)
+    return {
+        "outcome": outcome.value,
+        "next_iteration": next_iteration,
+        "unresolved_requirement_ids": unresolved_requirement_ids,
+    }
 
 
 def merge_audit_cycle_path(

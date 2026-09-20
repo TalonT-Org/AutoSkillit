@@ -45,7 +45,14 @@ def test_loaded_audit_remediation_chain_delivers_one_bound_authority(
     assert audit_steps
     assert make_plan_steps
     for step_name, invocation in audit_steps:
-        assert "audit_cycle_path" in recipe.steps[step_name].capture
+        assert recipe.steps[step_name].capture["audit_cycle_path_raw"].from_ == (
+            "${{ result.audit_cycle_path }}"
+        )
+        assert "audit_cycle_path" not in recipe.steps[step_name].capture
+        writers = [
+            name for name, step in recipe.steps.items() if "audit_cycle_path" in step.capture
+        ]
+        assert writers == ["merge_audit_cycle_path"]
         prior = invocation.skill_input("prior_audit_cycle_path")
         assert prior is not None and prior.is_present
         assert prior.context_dependencies == ("audit_cycle_path",)

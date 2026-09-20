@@ -173,7 +173,7 @@ Design an approach that provides **immunity** rather than a fix:
 - The solution should address the broader pattern, not just the single instance
 - Testing improvements should catch this and related issues by design
 
-**Test-Driven Approach:** The plan must lead with tests. Before any implementation step, define a test that reproduces the issue or captures the gap. Each subsequent implementation step should make that test pass. This applies to the initial fix and to any broader architectural changes—write the failing test first, then the code that makes it green.
+**Test-Driven Approach:** The plan must lead with tests. Before any implementation step, define a test that reproduces the issue or captures the gap. Each subsequent implementation step should make that test pass. This applies to the initial fix and to any broader architectural changes—write the failing test first, then the code that makes it green. A red-test-run log is the required evidence. This is not a commit-sequencing requirement and must never be audited against `git log` ordering: commit discipline forbids history rewriting, so commit order cannot establish the required evidence.
 
 Draft the complete immunity plan from Step 3's selected approach using the Output template before spawning adversarial reviewers.
 

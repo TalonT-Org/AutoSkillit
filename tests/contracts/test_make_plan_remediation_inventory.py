@@ -34,6 +34,7 @@ def test_requirements_map_uses_evaluator_vocabulary() -> None:
     assert "| Requirement ID | Disposition | Implementation Step |" in content
     assert "satisfied-by-round-N" in content
     assert "carried@step" in content
+    assert "waived-by-decision@waiver-id" in content
 
 
 def test_plan_and_report_are_immutably_associated() -> None:

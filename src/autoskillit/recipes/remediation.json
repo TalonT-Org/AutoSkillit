@@ -444,7 +444,9 @@
         "release_issue_success",
         "patch_token_summary",
         "release_audit_remediation_stuck",
+        "stop_audit_remediation_stuck",
         "await_audit_decision",
+        "stop_await_audit_decision",
         "release_issue_failure",
         "register_clone_success",
         "register_clone_failure",
@@ -1102,16 +1104,17 @@
         "max_iterations": "${{ inputs.audit_remediation_max_retries }}"
       },
       "capture": {
-        "audit_remediation_count": "${{ result.next_iteration }}"
+        "audit_remediation_count": "${{ result.next_iteration }}",
+        "audit_unresolved_requirement_ids": "${{ result.unresolved_requirement_ids }}"
       },
       "on_result": [
         {
           "when": "${{ result.outcome }} == PROGRESSING",
-          "route": "reset_test_fix_counter"
+          "route": "merge_audit_cycle_path"
         },
         {
           "when": "${{ result.outcome }} == STUCK_REPEATING",
-          "route": "register_clone_failure"
+          "route": "release_audit_remediation_stuck"
         },
         {
           "when": "${{ result.outcome }} == EXHAUSTED",
@@ -1119,7 +1122,7 @@
         },
         {
           "when": "${{ result.outcome }} == AWAITING_DECISION",
-          "route": "register_clone_failure"
+          "route": "await_audit_decision"
         },
         {
           "when": "${{ result.outcome }} == INTEGRITY_FAULT",
@@ -1674,11 +1677,11 @@
         },
         {
           "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
-          "route": "merge_audit_cycle_path"
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
-          "route": "merge_audit_cycle_path"
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "result.error",
@@ -1689,7 +1692,7 @@
         }
       ],
       "on_failure": "check_audit_integrity_retry",
-      "on_context_limit": "check_audit_integrity_retry",
+      "on_context_limit": "salvage_plan",
       "on_rate_limit": "check_audit_integrity_retry",
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
@@ -1723,11 +1726,11 @@
         },
         {
           "when": "${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == NO GO",
-          "route": "check_audit_remediation_loop"
+          "route": "reset_test_fix_counter"
         },
         {
           "when": "${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == NO GO",
-          "route": "check_audit_remediation_loop"
+          "route": "reset_test_fix_counter"
         },
         {
           "route": "check_audit_integrity_retry"
@@ -3903,12 +3906,32 @@
       "note": "Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.\n"
     },
     "release_audit_remediation_stuck": {
+      "tool": "register_clone_status",
+      "with": {
+        "clone_path": "${{ context.work_dir }}",
+        "status": "error",
+        "step_name": "release_audit_remediation_stuck"
+      },
+      "on_success": "stop_audit_remediation_stuck",
+      "on_failure": "stop_audit_remediation_stuck"
+    },
+    "stop_audit_remediation_stuck": {
       "action": "stop",
       "message": "Audit remediation stopped because the same unresolved findings repeated. Emit the L3 result sentinel JSON block now with success=false and reason=\"audit_remediation_stuck\"."
     },
     "await_audit_decision": {
+      "tool": "register_clone_status",
+      "with": {
+        "clone_path": "${{ context.work_dir }}",
+        "status": "error",
+        "step_name": "await_audit_decision"
+      },
+      "on_success": "stop_await_audit_decision",
+      "on_failure": "stop_await_audit_decision"
+    },
+    "stop_await_audit_decision": {
       "action": "stop",
-      "message": "Audit remediation requires a human waiver or decision. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
+      "message": "Audit remediation requires a human waiver or decision for ${{ context.audit_unresolved_requirement_ids }}. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
     },
     "release_issue_failure": {
       "tool": "release_issue",

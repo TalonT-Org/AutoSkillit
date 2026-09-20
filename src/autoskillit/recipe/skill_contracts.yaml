@@ -3037,6 +3037,8 @@ callable_contracts:
       allowed_values: [PROGRESSING, STUCK_REPEATING, EXHAUSTED, AWAITING_DECISION, INTEGRITY_FAULT]
     - name: next_iteration
       type: str
+    - name: unresolved_requirement_ids
+      type: str
   autoskillit.smoke_utils.merge_audit_cycle_path:
     inputs:
     - name: current_authority_path

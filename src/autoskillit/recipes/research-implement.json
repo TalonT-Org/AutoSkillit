@@ -461,11 +461,11 @@
         },
         {
           "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
-          "route": "merge_audit_cycle_path"
+          "route": "check_audit_retry_loop"
         },
         {
           "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
-          "route": "merge_audit_cycle_path"
+          "route": "check_audit_retry_loop"
         },
         {
           "when": "result.error",
@@ -507,11 +507,11 @@
         },
         {
           "when": "${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == NO GO",
-          "route": "check_audit_retry_loop"
+          "route": "remediate"
         },
         {
           "when": "${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == NO GO",
-          "route": "check_audit_retry_loop"
+          "route": "remediate"
         },
         {
           "route": "check_audit_integrity_retry"
@@ -529,7 +529,7 @@
       "with": {
         "audit_cycle_path": "${{ context.audit_cycle_path }}"
       },
-      "on_success": "check_audit_retry_loop",
+      "on_success": "pre_remediation_cleanup",
       "note": "Carries the exact current NO GO authority into the bounded retry. The successor audit receives it as prior_audit_cycle_path; GO replaces it.\n"
     },
     "check_audit_retry_loop": {
@@ -542,12 +542,13 @@
         "max_iterations": "2"
       },
       "capture": {
-        "audit_retry_count": "${{ result.next_iteration }}"
+        "audit_retry_count": "${{ result.next_iteration }}",
+        "audit_unresolved_requirement_ids": "${{ result.unresolved_requirement_ids }}"
       },
       "on_result": [
         {
           "when": "${{ result.outcome }} == PROGRESSING",
-          "route": "pre_remediation_cleanup"
+          "route": "merge_audit_cycle_path"
         },
         {
           "when": "${{ result.outcome }} == STUCK_REPEATING",
@@ -609,7 +610,7 @@
     },
     "await_audit_decision": {
       "action": "stop",
-      "message": "Audit remediation requires a human waiver or decision. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
+      "message": "Audit remediation requires a human waiver or decision for ${{ context.audit_unresolved_requirement_ids }}. Emit the L3 result sentinel JSON block now with success=false and reason=\"awaiting_audit_decision\"."
     },
     "pre_remediation_cleanup": {
       "tool": "run_cmd",

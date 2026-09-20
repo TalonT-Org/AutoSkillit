@@ -177,7 +177,7 @@ class TestResearchImplementRemediationLoop:
             if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
         ]
         assert len(nogo_conditions) == 2
-        assert {condition.route for condition in nogo_conditions} == {"merge_audit_cycle_path"}
+        assert {condition.route for condition in nogo_conditions} == {"check_audit_retry_loop"}
         default_cond = next(condition for condition in conditions if condition.when is None)
         assert default_cond.route == "check_audit_integrity_retry"
 
@@ -198,7 +198,7 @@ class TestResearchImplementRemediationLoop:
 
     def test_remediate_routes_to_check_audit_retry_loop(self, recipe) -> None:
         step = recipe.steps["remediate"]
-        assert step.on_success == "check_audit_retry_loop"
+        assert step.on_success == "pre_remediation_cleanup"
 
     def test_has_check_audit_retry_loop_step(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
@@ -247,7 +247,7 @@ class TestResearchRemediationLoop:
             if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
         ]
         assert len(nogo_conditions) == 2
-        assert {condition.route for condition in nogo_conditions} == {"merge_audit_cycle_path"}
+        assert {condition.route for condition in nogo_conditions} == {"check_audit_retry_loop"}
         default_cond = next(condition for condition in conditions if condition.when is None)
         assert default_cond.route == "check_audit_integrity_retry"
 
@@ -268,7 +268,7 @@ class TestResearchRemediationLoop:
 
     def test_remediate_routes_to_check_audit_retry_loop(self, recipe) -> None:
         step = recipe.steps["remediate"]
-        assert step.on_success == "check_audit_retry_loop"
+        assert step.on_success == "pre_remediation_cleanup"
 
     def test_has_check_audit_retry_loop_step(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]

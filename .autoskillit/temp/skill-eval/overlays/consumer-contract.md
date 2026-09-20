@@ -1,1 +1,0 @@
-For each output this plan produces, enumerate all callers/parsers/extractors in the codebase and verify the format matches their expectations. Include at least one round-trip test.

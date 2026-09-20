@@ -1372,9 +1372,9 @@ steps:
     - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO
       route: merge_audit_cycle_path
     - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO
-      route: merge_audit_cycle_path
+      route: check_audit_remediation_loop
     - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO
-      route: merge_audit_cycle_path
+      route: check_audit_remediation_loop
     - when: result.error
       route: check_audit_integrity_retry
     - route: check_audit_integrity_retry
@@ -1413,9 +1413,9 @@ steps:
     - when: ${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == GO
       route: compute_domain_partitions
     - when: ${{ context.audit_status }} == PUBLISHED and ${{ context.audit_verdict }} == NO GO
-      route: check_audit_remediation_loop
+      route: reset_audit_ci_skip_conflict
     - when: ${{ context.audit_status }} == EXACT_REPLAY and ${{ context.audit_verdict }} == NO GO
-      route: check_audit_remediation_loop
+      route: reset_audit_ci_skip_conflict
     - route: check_audit_integrity_retry
     on_failure: check_audit_integrity_retry
     optional_context_refs:
@@ -1433,9 +1433,10 @@ steps:
       max_iterations: ${{ inputs.audit_remediation_max_retries }}
     capture:
       audit_remediation_count: ${{ result.next_iteration }}
+      audit_unresolved_requirement_ids: ${{ result.unresolved_requirement_ids }}
     on_result:
     - when: ${{ result.outcome }} == PROGRESSING
-      route: remediate
+      route: merge_audit_cycle_path
     - when: ${{ result.outcome }} == STUCK_REPEATING
       route: release_audit_remediation_stuck
     - when: ${{ result.outcome }} == EXHAUSTED
@@ -1451,6 +1452,42 @@ steps:
     - audit_cycle_path_raw
     - audit_cycle_path
     note: Classifies the audit remediation cycle before continuing it.
+  reset_audit_ci_skip_conflict:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      ci_skip_conflict_count: ${{ result.value }}
+    on_success: reset_audit_conflict_ci_loop
+    on_failure: check_audit_integrity_retry
+  reset_audit_conflict_ci_loop:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      conflict_ci_loop_count: ${{ result.value }}
+    on_success: reset_audit_test_fix_loop
+    on_failure: check_audit_integrity_retry
+  reset_audit_test_fix_loop:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      test_fix_loop_count: ${{ result.value }}
+    on_success: reset_audit_pr_merge_loop
+    on_failure: check_audit_integrity_retry
+  reset_audit_pr_merge_loop:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      pr_merge_loop_count: ${{ result.value }}
+    on_success: remediate
+    on_failure: check_audit_integrity_retry
   check_audit_integrity_retry:
     tool: run_python
     with:
@@ -1473,7 +1510,7 @@ steps:
     message: 'Audit remediation stopped because the same unresolved findings repeated. Emit the L3 result sentinel JSON block now with success=false and reason="audit_remediation_stuck".'
   await_audit_decision:
     action: stop
-    message: 'Audit remediation requires a human waiver or decision. Emit the L3 result sentinel JSON block now with success=false and reason="awaiting_audit_decision".'
+    message: 'Audit remediation requires a human waiver or decision for ${{ context.audit_unresolved_requirement_ids }}. Emit the L3 result sentinel JSON block now with success=false and reason="awaiting_audit_decision".'
   remediate:
     action: route
     with:

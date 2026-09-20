@@ -232,7 +232,7 @@
           "route": "resolve_design_review"
         },
         {
-          "route": "vis_dial"
+          "route": "escalate_stop"
         }
       ]
     },

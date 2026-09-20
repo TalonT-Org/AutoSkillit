@@ -370,11 +370,13 @@ orchestrators can capture the plan and, in remediation mode, its verified dispos
    |---|---|---|
    | REQ-001 | satisfied-by-round-1 | — |
    | REQ-007 | carried@step | Step 3 |
+   | REQ-011 | waived-by-decision@waiver-id | — |
    ```
 
    `carried@step` must cite the concrete current `Step N`/`Step N.M` that implements the
-   same REQ ID. `satisfied-by-round-N` must name the verified prior audit round. No other
-   vocabulary, duplicate IDs, omitted rows, or invented padding is allowed.
+   same REQ ID. `satisfied-by-round-N` must name the verified prior audit round.
+   `waived-by-decision@waiver-id` must name the admitted waiver. No other vocabulary,
+   duplicate IDs, omitted rows, or invented padding is allowed.
 5. After the final plan bytes are stable, call `write_audit_disposition_bundle(...)` with
    only the verified current `authority_path`, final plan path/media type/schema version,
    and the exact ordered child-owned disposition rows. Do not copy or submit execution,

@@ -38,6 +38,10 @@ Return one finding per requirement using these verdict labels:
 - `UNPRESCRIBED_SUBSTITUTION` — the requirement's goal is met, but via a mechanism or test topology the plan did not prescribe. Use this instead of `COVERED` when all three hold: (a) the plan text names a concrete mechanism, symbol, or test topology; (b) the diff achieves the goal by different means; and (c) the difference is substantive, not a naming or formatting variation. When the plan prescribes no particular mechanism — renames, docstrings, and ordinary refactors — a satisfied requirement is `COVERED`, never `UNPRESCRIBED_SUBSTITUTION`. Mocking, stubbing, or simulating behavior the plan required to be exercised for real always satisfies (b).
 - `UNSATISFIABLE_BY_CODE` — the finding is real and blocking, but no code change can resolve it; it requires a human decision.
 
+Use `MISSING` only when a working-tree change can satisfy the unmet requirement. Copy
+any plan passage presented as a verbatim quote byte-for-byte from the plan; identify
+reworded text as a paraphrase.
+
 ## Verdict
 
 After all findings, emit a summary line:

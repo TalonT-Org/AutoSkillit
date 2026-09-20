@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.cli.doctor._install_integrity as _integrity
+import autoskillit.cli.doctor._doctor_install as _integrity
 import autoskillit.cli.update._update_checks as _update_checks
 from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.core import Severity

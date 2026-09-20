@@ -24,7 +24,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _guard_decision_diagnostics import (  # type: ignore[import-not-found]  # noqa: E402
+from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
 from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
@@ -32,7 +32,7 @@ from _hook_settings import (  # noqa: E402
     resolve_quota_log_dir,
     write_quota_log_event,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
     SessionBinding,

@@ -1,5 +1,7 @@
 ---
 name: audit-arch
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-arch/'
 categories:
 - audit
 description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch",

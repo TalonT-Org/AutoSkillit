@@ -1,5 +1,7 @@
 ---
 name: promote-to-main
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/promote-to-main/'
 categories:
 - github
 uses_capabilities:

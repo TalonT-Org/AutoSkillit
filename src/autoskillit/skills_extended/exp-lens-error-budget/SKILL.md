@@ -1,5 +1,7 @@
 ---
 name: exp-lens-error-budget
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/'
 categories:
 - exp-lens
 uses_capabilities: []

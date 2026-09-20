@@ -1,5 +1,7 @@
 ---
 name: resolve-design-review
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/resolve-design-review/'
 categories:
 - research
 uses_capabilities: []

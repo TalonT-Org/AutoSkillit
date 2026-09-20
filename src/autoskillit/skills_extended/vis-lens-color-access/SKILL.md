@@ -1,5 +1,7 @@
 ---
 name: vis-lens-color-access
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-color-access/'
 categories:
 - vis-lens
 uses_capabilities: []

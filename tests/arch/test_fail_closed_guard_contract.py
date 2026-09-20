@@ -24,7 +24,7 @@ _TESTS_ROOT = _REPO_ROOT / "tests"
 # each deny test with an approve-named allow test.
 _ALLOW_TEST_NAME_RE = re.compile(r"test_.*(allow|permit|not_blocked|approve)")
 _GUARD_RESULT_NAMES = frozenset(
-    {"buf", "decision", "hook_out", "out", "output", "response", "result"}
+    {"buf", "decision", "hook_out", "out", "output", "response", "result", "stdout"}
 )
 _GUARD_RESULT_ATTRIBUTES = frozenset({"permissionDecision", "stdout"})
 

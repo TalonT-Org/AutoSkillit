@@ -1,5 +1,7 @@
 ---
 name: validate-test-audit
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/validate-test-audit/'
 categories:
 - audit
 uses_capabilities: []

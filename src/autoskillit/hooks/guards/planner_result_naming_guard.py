@@ -29,7 +29,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 PLANNER_NAMING_DENY_TRIGGER: str = "Non-canonical planner result filename"
 

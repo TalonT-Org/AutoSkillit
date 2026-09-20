@@ -1,5 +1,7 @@
 ---
 name: synthesize-vis-plan
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/'
 categories: [research, vis-lens]
 description: >
   Synthesize step of the vis-lens phoropter: reads captured yaml:figure-spec

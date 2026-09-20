@@ -35,7 +35,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 COMPOSE_PR_BODY_DENY_TRIGGER: str = "PR body provenance validation failed"
 

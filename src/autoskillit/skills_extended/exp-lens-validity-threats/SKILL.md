@@ -1,5 +1,7 @@
 ---
 name: exp-lens-validity-threats
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/'
 categories:
 - exp-lens
 uses_capabilities: []

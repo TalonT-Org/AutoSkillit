@@ -2,8 +2,10 @@
 
 These tests ensure that:
 1. HookDef declares an exempt_session_types field
-2. Any exempt hook has test coverage for the exempt session-type path
-3. exempt_session_types is included in the canonical registry payload (hash input)
+2. Any hook declared with exempt_session_types consumes the shared session-type accessor
+3. Any exempt hook has test coverage for the exempt session-type path
+4. _EXEMPT_SESSION_TYPES in guard scripts matches HookDef.exempt_session_types
+5. exempt_session_types is included in the canonical registry payload (hash input)
 
 These form a closed loop that makes the "guard blocks legitimate orchestrator session"
 bug class structurally impossible without explicit, tested, declared exemptions.
@@ -66,7 +68,22 @@ def test_at_least_one_hookdef_has_exempt_session_types() -> None:
     """Vacuousness guard: parametrized tests must have at least one test case."""
     assert len(_exempt_session_type_hooks()) >= 1, (
         "HOOK_REGISTRY must have at least one HookDef with non-empty exempt_session_types. "
-        "test_exempt_session_type_guard_has_test_cases would collect zero test cases."
+        "test_exempt_session_type_guard_contains_session_type_check would collect zero test cases."
+    )
+
+
+@pytest.mark.parametrize("hookdef,script", _exempt_session_type_hooks())
+def test_exempt_session_type_guard_contains_session_type_check(
+    hookdef: HookDef, script: str
+) -> None:
+    """Every exempt guard must consult the shared session-type accessor."""
+    script_path = HOOKS_DIR / script
+    assert script_path.exists(), f"Hook script not found: {script_path}"
+    source = script_path.read_text(encoding="utf-8")
+    assert "get_session_type" in source, (
+        f"{script} is declared with exempt_session_types="
+        f"{hookdef.exempt_session_types!r} "  # type: ignore[attr-defined]
+        "but does not consult get_session_type()."
     )
 
 

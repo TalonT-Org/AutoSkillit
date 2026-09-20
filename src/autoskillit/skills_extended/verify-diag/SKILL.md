@@ -1,5 +1,7 @@
 ---
 name: verify-diag
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/verify-diag/'
 categories:
 - arch-lens
 description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy,

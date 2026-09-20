@@ -20,7 +20,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     get_session_type,
     is_headless_session,
 )

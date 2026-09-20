@@ -1,5 +1,7 @@
 ---
 name: planner-consolidate-wps
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Analyze WP complexity per phase and emit consolidation group manifests for trivial WP merging (L1+L0 pattern)

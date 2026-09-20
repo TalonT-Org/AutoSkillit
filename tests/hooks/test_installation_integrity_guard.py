@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -85,6 +86,32 @@ def test_blocks_install_tree_apply_patch(tmp_path: Path) -> None:
     assert _decision(stdout) == "deny"
 
 
+def test_blocks_interpreter_write_into_install_tree(tmp_path: Path) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
+    code, stdout = _run(_bash(f"python3 -c \"open('{target}', 'w').write('')\""))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
+def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    original = home / ".local/share/uv/tools/autoskillit/lib/site-packages/autoskillit/core.py"
+    original.parent.mkdir(parents=True)
+    original.write_text("source", encoding="utf-8")
+    alias = tmp_path / "ordinary-project" / "linked.py"
+    alias.parent.mkdir()
+    os.link(original, alias)
+
+    code, stdout = _run(
+        {"tool_name": "Write", "tool_input": {"file_path": str(alias)}},
+        env={"HOME": str(home)},
+    )
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
 def test_blocks_shell_local_variable_target(tmp_path: Path) -> None:
     target = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
     code, stdout = _run(_bash(f"FOO={target.parent}; cat > $FOO/__init__.py <<'EOF'\nEOF"))
@@ -107,7 +134,9 @@ def test_blocks_symlinked_install_target(tmp_path: Path) -> None:
 def test_blocks_relative_target_after_cd_into_install_tree(tmp_path: Path) -> None:
     package = tmp_path / "lib/python3.13/site-packages/autoskillit"
     package.mkdir(parents=True)
-    code, stdout = _run(_bash(f"cd {package} && cat > __init__.py <<'EOF'\nEOF"))
+    event = _bash(f"cd {package} && cat > __init__.py <<'EOF'\nEOF")
+    event["cwd"] = str(tmp_path)
+    code, stdout = _run(event)
 
     assert code == 0
     assert _decision(stdout) == "deny"
@@ -142,6 +171,15 @@ def test_allow_non_install_direct_write(tmp_path: Path) -> None:
 
     assert code == 0
     assert stdout == ""
+
+
+def test_allows_project_relative_and_temp_writes(tmp_path: Path) -> None:
+    for target in ("project.py", ".autoskillit/temp/report.md"):
+        code, stdout = _run(
+            {"tool_name": "Write", "cwd": str(tmp_path), "tool_input": {"file_path": target}}
+        )
+        assert code == 0
+        assert stdout == ""
 
 
 @pytest.mark.parametrize("command", ["uv tool install autoskillit", "pip install -e ."])

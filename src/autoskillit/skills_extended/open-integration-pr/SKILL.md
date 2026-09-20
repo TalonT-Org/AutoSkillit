@@ -1,5 +1,7 @@
 ---
 name: open-integration-pr
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/open-integration-pr/'
 categories:
 - github
 uses_capabilities:

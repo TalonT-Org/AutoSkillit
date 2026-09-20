@@ -1,5 +1,7 @@
 ---
 name: planner-refine-phases
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Refine elaborated phases with cross-phase visibility via parallel L0 subagents (L1+L0 pattern)

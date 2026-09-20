@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.hook_registry import PROTECTION_WAIVERS
 from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
 from .conftest import make_hook_event
@@ -36,6 +37,27 @@ def _run_hook(event: dict | str) -> str:
     return buf.getvalue()
 
 
+def _run_integrity_guard(event: dict) -> str:
+    from autoskillit.hooks.guards.installation_integrity_guard import main
+
+    buf = io.StringIO()
+    with patch("sys.stdin", io.StringIO(json.dumps(event))), redirect_stdout(buf):
+        try:
+            main()
+        except SystemExit:
+            pass
+    return buf.getvalue()
+
+
+def _protected_install_path(tmp_path) -> str:
+    return str(tmp_path / "lib" / "site-packages" / "autoskillit" / "__init__.py")
+
+
+def _assert_installation_floor_denies(tmp_path) -> None:
+    output = _run_integrity_guard(_build_event("Write", _protected_install_path(tmp_path)))
+    assert json.loads(output)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def _set_headless(monkeypatch: pytest.MonkeyPatch, *, headless: bool) -> None:
     if headless:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
@@ -44,11 +66,14 @@ def _set_headless(monkeypatch: pytest.MonkeyPatch, *, headless: bool) -> None:
 
 
 class TestWriteGuardNoHeadless:
-    def test_no_headless_env_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
+    def test_no_loaded_boundary_allows_interactive_write(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
         _set_headless(monkeypatch, headless=False)
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/clone/.autoskillit/temp/")
         result = _run_hook(_build_event("Write", "/clone/src/foo.py"))
         assert result == ""
+        _assert_installation_floor_denies(tmp_path)
 
     def test_loaded_skill_boundary_applies_interactively(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -91,6 +116,12 @@ class TestWriteGuardCodexBackendEarlyExit:
 
     @pytest.fixture(autouse=True)
     def _enable_headless_codex(self, monkeypatch: pytest.MonkeyPatch):
+        assert any(
+            waiver.guard_script == "guards/write_guard.py"
+            and waiver.backend == "codex"
+            and waiver.covering_mechanism == "codex-sandbox"
+            for waiver in PROTECTION_WAIVERS
+        )
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
@@ -116,7 +147,7 @@ class TestWriteGuardCodexBackendEarlyExit:
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_codex_no_headless_still_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
-        """Non-headless exit fires before the codex exit — both paths return empty."""
+        """The Codex prefix bypass applies to either session class."""
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         result = _run_hook(_build_event("Write", "/outside/foo.py"))
         assert result == ""
@@ -128,19 +159,21 @@ class TestWriteGuardCodexBackendEarlyExit:
 
 
 class TestWriteGuardNoEnv:
-    def test_no_env_var_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
+    def test_no_env_var_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
         result = _run_hook(_build_event("Write", "/src/foo.py"))
         assert result == ""
+        _assert_installation_floor_denies(tmp_path)
 
-    def test_no_json_allows_when_no_prefix(self, monkeypatch: pytest.MonkeyPatch):
+    def test_no_json_allows_when_no_prefix(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
         result = _run_hook("not json at all")
         assert result == ""
+        _assert_installation_floor_denies(tmp_path)
 
 
 class TestWriteGuardEnvIsolation:
@@ -468,11 +501,12 @@ class TestWriteGuardBashBypass:
         result = _run_hook(event)
         assert result == ""
 
-    def test_bash_no_prefix_allows_all(self, monkeypatch: pytest.MonkeyPatch):
+    def test_bash_no_prefix_allows_all(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
         event = _build_bash_event("sed -i 's/x/y/' /clone/src/main.rs")
         result = _run_hook(event)
         assert result == ""
+        _assert_installation_floor_denies(tmp_path)
 
 
 _ECHO_REDIRECT_INNER = "echo x > /outside/redirect-target.txt"

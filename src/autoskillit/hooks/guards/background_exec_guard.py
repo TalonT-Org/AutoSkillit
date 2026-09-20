@@ -35,7 +35,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     get_session_type,
     is_headless_session,
     payload_managed_codex_route,

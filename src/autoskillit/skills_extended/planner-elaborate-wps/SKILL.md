@@ -1,5 +1,7 @@
 ---
 name: planner-elaborate-wps
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 uses_capabilities: []
 categories:
 - planner

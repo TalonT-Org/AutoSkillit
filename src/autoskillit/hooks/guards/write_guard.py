@@ -1,26 +1,8 @@
-"""PreToolUse hook: blocks tool calls outside the allowed prefix
-in write-scoped sessions.
+"""PreToolUse write boundary for headless launcher and interactive skill sessions.
 
-Two gate mechanisms operate together:
-1. Named-tool gate: controlled by AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES (default:
-   Write, Edit, Bash, apply_patch). Tool calls not in this set pass through
-   immediately with no prefix check.
-2. run_cmd bypass: any tool whose name contains the substring "run_cmd" is
-   unconditionally routed into the Bash command analysis path regardless of
-   AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES. This ensures Codex's run_cmd tool is
-   always subject to command-level write checks. The env var cannot suppress
-   or extend this bypass.
-
-Bypass conditions:
-- AUTOSKILLIT_HEADLESS not set: non-headless session, exit 0.
-- AUTOSKILLIT_AGENT_BACKEND == 'codex': codex enforces writes via
-  workspace-write sandbox + post-hoc file_changes detection (hard
-  enforcement), making PreToolUse deny (soft) redundant. Exit 0.
-- No allowed-write prefixes configured: exit 0.
-
-Enforcement strength by backend:
-  claude_code  — PreToolUse deny (soft, best-effort)
-  codex        — workspace-write sandbox + post-hoc file_changes (hard)
+Headless sessions use launcher supplied prefixes. Interactive Claude sessions use
+the intersection of loaded skills' projected write_paths. Codex relies on its
+workspace sandbox for this boundary; installation writes have a separate guard.
 """
 
 from __future__ import annotations
@@ -50,20 +32,22 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     extract_write_verb_targets,
     is_gh_command,
     resolve_write_target,
+    updated_execution_cwd,
 )
-from _guard_decision_diagnostics import (  # type: ignore[import-not-found]  # noqa: E402
+from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    TEMP_RELATIVE_DIR,
     extract_apply_patch_text,
     parse_hook_command,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     is_headless_session,
     read_session_binding,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     SessionBindingError,
     read_manifest,
     resolve_projection_manifest_path,
@@ -185,6 +169,9 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
     found_any_write = False
 
     for segment in segments:
+        if command_verb(segment) == "cd":
+            cwd = updated_execution_cwd(segment, cwd)
+            continue
         result = _extract_segment_targets(segment, cwd)
         if result is not None:
             found_any_write = True
@@ -207,9 +194,6 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
             seen.add(t)
             unique.append(t)
     return unique
-
-
-_CODEX_FILE_MARKERS = ("*** Update File: ", "*** Add File: ", "*** Delete File: ")
 
 
 def _extract_paths_from_patch(command: str) -> list[str]:
@@ -295,16 +279,24 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
     for loaded in loaded_skills:
         if not isinstance(loaded, dict) or not isinstance(loaded.get("skill_name"), str):
             return [], "", "unresolved"
+        if loaded.get("binding_valid") is not True:
+            return [], "", "unresolved"
         entry = skills.get(loaded["skill_name"])
         if not isinstance(entry, dict):
             return [], "", "unresolved"
         if "write_paths" not in entry:
-            continue
+            return [], "", "unresolved"
         raw_paths = entry["write_paths"]
+        if raw_paths is None:
+            continue
         if not isinstance(raw_paths, list) or any(not isinstance(path, str) for path in raw_paths):
             return [], "", "unresolved"
         paths = [
-            path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/.autoskillit/temp")
+            (
+                os.path.join(payload_cwd, path)
+                if path.startswith(f"{TEMP_RELATIVE_DIR}/")
+                else path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/{TEMP_RELATIVE_DIR}")
+            )
             for path in raw_paths
         ]
         prefixes = _normalize_prefixes(paths)

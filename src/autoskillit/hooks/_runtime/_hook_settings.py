@@ -164,8 +164,7 @@ def _deny_scope_authority_unavailable(script_identity: str) -> None:
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
-                    "AutoSkillit hook session-scope authority is unavailable for "
-                    f"{script_identity!r}."
+                    f"Hook session-scope authority is unavailable for {script_identity!r}."
                 ),
             }
         }

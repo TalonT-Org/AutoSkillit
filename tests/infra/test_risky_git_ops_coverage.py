@@ -135,7 +135,7 @@ def test_every_risky_git_op_is_detected_through_every_evaluation_shape(shape, op
     every executing evaluation shape (direct, -c, eval, heredoc, herestring,
     pipe, substitution, Python subprocess), must still be denied.
     """
-    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415
+    from autoskillit.hooks._runtime._git_command_classification import (  # noqa: PLC0415
         _contains_blocked_git_op,
     )
 
@@ -156,7 +156,7 @@ def test_inert_shapes_never_flag_a_risky_git_op(shape, op) -> None:
     never executes it must never trip the blocklist, however the delivery
     shape happens to render the operation's text.
     """
-    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415
+    from autoskillit.hooks._runtime._git_command_classification import (  # noqa: PLC0415
         _contains_blocked_git_op,
     )
 

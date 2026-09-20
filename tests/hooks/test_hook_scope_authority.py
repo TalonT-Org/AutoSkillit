@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -94,8 +95,6 @@ def test_runtime_scope_mapping_matches_registry(
     monkeypatch.setattr(_hook_scope_table, "HOOK_SCOPE_BY_SCRIPT", {script: scope})
     if headless:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    else:
-        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
     hook_def = HookDef(matcher="Bash", session_scope=scope)  # type: ignore[arg-type]
     assert _hook_settings.enforce_session_scope(script) is hook_applies_to_backend(
@@ -121,16 +120,106 @@ def test_projection_publication_writes_generated_scope_table(tmp_path: Path) -> 
     ) == render_hook_scope_table()
 
 
-def test_guard_session_scope_reads_are_centralized() -> None:
-    forbidden = {"AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_SESSION_TYPE"}
-    violations: list[str] = []
-    for path in HOOKS_DIR.rglob("*.py"):
-        if path == HOOKS_DIR / "_runtime" / "_hook_settings.py":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Constant) or node.value not in forbidden:
-                continue
-            violations.append(f"{path.relative_to(HOOKS_DIR)}:{node.lineno}:{node.value}")
+_SESSION_CLASS_KEYS = frozenset({"AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_SESSION_TYPE"})
+_NON_SCOPE_DYNAMIC_KEYS = frozenset(
+    {
+        "NATIVE_SHELL_CAPTURE_MODE_ENV_VAR",
+        "MANAGED_LAUNCH_ID_ENV_VAR",
+        "MANAGED_ATTEMPT_ID_ENV_VAR",
+        "MANAGED_LINEAGE_DIGEST_ENV_VAR",
+        "MANAGED_LINEAGE_REF_ENV_VAR",
+        "DISPATCH_ID_ENV_VAR",
+    }
+)
+_EXPECTED_SCOPE_READS = {
+    ("_runtime/_hook_settings.py", "AUTOSKILLIT_HEADLESS"),
+    ("_runtime/_hook_settings.py", "AUTOSKILLIT_SESSION_TYPE"),
+}
 
-    assert not violations, "session-class reads must use _hook_settings: " + ", ".join(violations)
+
+def _env_read_argument(node: ast.AST) -> ast.AST | None:
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.args:
+        owner = node.func.value
+        if isinstance(owner, ast.Name) and owner.id == "os" and node.func.attr == "getenv":
+            return node.args[0]
+        if (
+            isinstance(owner, ast.Attribute)
+            and isinstance(owner.value, ast.Name)
+            and owner.value.id == "os"
+            and owner.attr == "environ"
+            and node.func.attr in {"get", "pop"}
+        ):
+            return node.args[0]
+    if isinstance(node, ast.Subscript):
+        owner = node.value
+        if (
+            isinstance(owner, ast.Attribute)
+            and isinstance(owner.value, ast.Name)
+            and owner.value.id == "os"
+            and owner.attr == "environ"
+        ):
+            return node.slice
+    return None
+
+
+def _scope_read_sites(source: str, filename: str) -> set[tuple[str, str]]:
+    sites: set[tuple[str, str]] = set()
+    for node in ast.walk(ast.parse(source, filename=filename)):
+        argument = _env_read_argument(node)
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            if argument.value in _SESSION_CLASS_KEYS:
+                sites.add((filename, argument.value))
+        elif isinstance(argument, ast.Name) and argument.id in _NON_SCOPE_DYNAMIC_KEYS:
+            continue
+        elif argument is not None:
+            sites.add((filename, "<unresolved>"))
+    return sites
+
+
+def test_no_guard_reads_session_class_env_directly() -> None:
+    violations = {
+        site
+        for path in HOOKS_DIR.rglob("*.py")
+        if path != HOOKS_DIR / "_runtime" / "_hook_settings.py"
+        for site in _scope_read_sites(
+            path.read_text(encoding="utf-8"), str(path.relative_to(HOOKS_DIR))
+        )
+    }
+    assert not violations, f"session-class reads must use _hook_settings: {sorted(violations)}"
+
+
+def test_session_class_env_read_inventory_is_complete() -> None:
+    helper = HOOKS_DIR / "_runtime" / "_hook_settings.py"
+    actual = {
+        site
+        for site in _scope_read_sites(
+            helper.read_text(encoding="utf-8"), "_runtime/_hook_settings.py"
+        )
+        if site[1] != "<unresolved>"
+    }
+    assert actual == _EXPECTED_SCOPE_READS
+
+
+def test_unresolved_session_env_read_canary_fails_closed() -> None:
+    assert _scope_read_sites("os.environ.get(dynamic_key)", "guards/canary.py") == {
+        ("guards/canary.py", "<unresolved>")
+    }
+
+
+def test_adr_scope_claims_match_registry() -> None:
+    docs_root = Path(__file__).resolve().parents[2] / "docs" / "decisions"
+    claim_owners = {
+        "0001-prohibit-background-subagent-execution.md": "guards/background_exec_guard.py",
+        "0006-output-containment.md": "capture_lifecycle_hook.py",
+    }
+    claims = {
+        path.name: match.group(1)
+        for path in docs_root.glob("*.md")
+        for match in re.finditer(
+            r'session_scope="(any|headless_only|interactive_only)"',
+            path.read_text(encoding="utf-8"),
+        )
+    }
+    assert set(claims) == set(claim_owners)
+    scopes = {script: hook.session_scope for hook in HOOK_REGISTRY for script in hook.scripts}
+    assert all(claims[doc] == scopes[script] for doc, script in claim_owners.items())

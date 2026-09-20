@@ -1,5 +1,7 @@
 ---
 name: report-bug
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/report-bug/'
 categories:
 - github
 description: Investigate a bug from provided error context, write a structured markdown report to the given path, and output

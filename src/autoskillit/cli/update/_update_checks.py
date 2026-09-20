@@ -24,6 +24,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
 
+from packaging.version import InvalidVersion, Version
+
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli.install._install_info import (
     InstallType,
@@ -316,8 +318,6 @@ def run_update_checks(home: Path | None = None) -> None:
         InstallType.LOCAL_EDITABLE,
     ) and not os.environ.get("AUTOSKILLIT_FORCE_UPDATE_CHECK"):
         return
-
-    from packaging.version import InvalidVersion, Version
 
     import autoskillit as _pkg
 

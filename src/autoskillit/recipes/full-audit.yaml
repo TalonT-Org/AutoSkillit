@@ -72,7 +72,7 @@ steps:
       skill_command: "/autoskillit:audit-tests"
       cwd: "${{ inputs.workspace }}"
       step_name: "run_audits"
-      output_dir: "{{AUTOSKILLIT_TEMP}}"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/audit-tests"
     note: >
       PREFER-COMPLETION AUDIT DISPATCH — Dispatch audits using prefer-completion
       scheduling capped at ${{ inputs.max_parallel }} concurrent slots:

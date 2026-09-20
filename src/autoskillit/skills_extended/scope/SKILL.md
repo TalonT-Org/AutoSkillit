@@ -1,5 +1,7 @@
 ---
 name: scope
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/scope/'
 categories:
 - research
 uses_capabilities: []

@@ -22,8 +22,6 @@ def _run_write_guard(
     root: Path,
 ) -> dict[str, object]:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(root / "allowed"))
     with patch("sys.stdin.read", return_value=json.dumps(event)):
         with pytest.raises(SystemExit) as exit_code:
@@ -39,8 +37,6 @@ def test_write_guard_records_allowed_and_denied_decisions_without_payloads(
     sentinel_env = "environment-value-must-not-persist"
     sentinel_command = "command-payload-must-not-persist"
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
     monkeypatch.setenv("SENTINEL_ENV", sentinel_env)
     allowed = tmp_path / "allowed" / "ok.py"
     denied = tmp_path / "outside.py"
@@ -82,7 +78,6 @@ def test_guard_decision_retention_is_bounded(
     from autoskillit.hooks._runtime import _guard_decision_diagnostics as diagnostics
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     path = tmp_path / ".autoskillit" / "temp" / "guard_decisions.jsonl"
     data = {"cwd": str(tmp_path), "session_id": "session"}
     for _ in range(1005):
@@ -105,8 +100,6 @@ def test_skill_load_post_hook_records_binding_write_failure(
     from autoskillit.hooks import skill_load_post_hook
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
     monkeypatch.setattr(
         skill_load_post_hook,
         "_write_skill_binding",

@@ -1,5 +1,7 @@
 ---
 name: make-groups
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-groups/'
 uses_capabilities: []
 description: Break a large plan, architecture proposal, or feature document into sequenced implementation groups for the make-plan
   pipeline. Use when user says "make groups", "group requirements", "sequence groups", or wants to decompose a large document

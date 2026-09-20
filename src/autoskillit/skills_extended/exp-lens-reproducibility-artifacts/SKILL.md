@@ -1,5 +1,7 @@
 ---
 name: exp-lens-reproducibility-artifacts
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-reproducibility-artifacts/'
 categories:
 - exp-lens
 uses_capabilities: []

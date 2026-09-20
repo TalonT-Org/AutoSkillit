@@ -113,6 +113,12 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
     def _is_session_type_env_read(node: ast.expr) -> bool:
         if (
             isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "get_session_type"
+        ):
+            return True
+        if (
+            isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "get"
             and node.args
@@ -193,9 +199,6 @@ def test_session_type_hook_strings_match_enum() -> None:
         try:
             source = py_file.read_text()
         except (OSError, UnicodeDecodeError):
-            continue
-
-        if "AUTOSKILLIT_SESSION_TYPE" not in source:
             continue
 
         try:

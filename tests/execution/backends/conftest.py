@@ -23,7 +23,7 @@ import autoskillit.hooks  # noqa: F401,I001  (side effect: populates HOOK_REGIST
 # ``autoskillit.hooks`` here at conftest load triggers that post-import
 # population so the cached invariants match the test-time list. The import
 # is a side-effect-only dependency (no symbol from the module is referenced).
-from autoskillit.hook_registry import HOOK_REGISTRY  # noqa: I001
+from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS  # noqa: I001
 
 
 @pytest.fixture
@@ -129,6 +129,13 @@ def record_probe_row(row: dict) -> None:
     _probe_rows.append(row)
 
 
+def normalize_probe_mode(row: dict) -> tuple[str, str]:
+    """Translate matrix mode names to waiver session class and backend."""
+    session_class = "interactive" if row["session_mode"] == "interactive" else "headless"
+    backend = "claude_code" if row["backend"] == "claude-code" else "codex"
+    return session_class, backend
+
+
 def validate_strength_matrix(rows: list[dict]) -> list[str]:
     """Return invariant failures for a completed deny-strength matrix."""
 
@@ -162,6 +169,35 @@ def validate_strength_matrix(rows: list[dict]) -> list[str]:
     }
     if leaked := not_applicable & {row["hook"] for row in rows}:
         failures.append(f"not-applicable hooks appeared in matrix: {sorted(leaked)}")
+
+    hooks_by_stem = {
+        Path(script).stem: (hook, script)
+        for hook in HOOK_REGISTRY
+        if hook.event_type == "PreToolUse" and hook.mechanism == "deny"
+        for script in hook.scripts
+    }
+    covered = {
+        (waiver.guard_script, waiver.excluded_scope, waiver.backend)
+        for waiver in PROTECTION_WAIVERS
+    }
+    for row in rows:
+        if row.get("strength") != "none" or row.get("hook") not in hooks_by_stem:
+            continue
+        hook, script = hooks_by_stem[row["hook"]]
+        session_class, backend = normalize_probe_mode(row)
+        excluded_scope = None
+        if hook.session_scope == "headless_only" and session_class == "interactive":
+            excluded_scope = "interactive"
+        elif hook.session_scope == "interactive_only" and session_class == "headless":
+            excluded_scope = "headless"
+        elif script == "guards/write_guard.py" and backend == "codex":
+            excluded_scope = "all"
+        elif script == "guards/git_ops_guard.py" and session_class == "interactive":
+            excluded_scope = "interactive"
+        if excluded_scope is not None and (script, excluded_scope, backend) not in covered:
+            failures.append(
+                f"{script} has strength none in {session_class}/{backend} without a waiver"
+            )
     return failures
 
 

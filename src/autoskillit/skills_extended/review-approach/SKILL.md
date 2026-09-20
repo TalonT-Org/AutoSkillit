@@ -1,5 +1,7 @@
 ---
 name: review-approach
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/review-approach/'
 uses_capabilities: []
 description: Research modern solutions and approaches for issues or features proposed in a report or plan. Use when user says
   "review approach", "review approaches", "research solutions", or wants external validation of a proposed direction.

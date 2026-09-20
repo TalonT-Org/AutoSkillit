@@ -13,6 +13,7 @@ from autoskillit.hook_registry import (
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
     _load_settings_data,
+    published_hook_defs,
     validate_lifecycle_contracts,
     validate_protection_coverage,
 )
@@ -145,9 +146,7 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     # Consolidate HookDef entries sharing the same (event_type, matcher) into a
     # single settings.json entry so Claude Code sees no duplicate matchers.
     groups: dict[tuple[str, str], dict] = {}
-    for hook_def in HOOK_REGISTRY:
-        if hook_def.runtime_only:
-            continue
+    for hook_def in published_hook_defs(HOOK_REGISTRY):
         key = (hook_def.event_type, hook_def.matcher)
         hooks_list = [
             _build_hook_command(hooks_dir, script, hook_def.timeout_seconds)

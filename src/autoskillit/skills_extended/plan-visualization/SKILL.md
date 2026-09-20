@@ -1,5 +1,7 @@
 ---
 name: plan-visualization
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/plan-visualization/'
 categories:
 - research
 - vis-lens

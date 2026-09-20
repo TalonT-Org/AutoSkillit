@@ -1,5 +1,7 @@
 ---
 name: planner-refine-assignments
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Refine elaborated assignments for a single phase via parallel L0 subagents (L1+L0 pattern), using per-phase context

@@ -1713,7 +1713,7 @@
           "prep_path": "${{ context.prep_path }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "output_dir": ".",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/compose-pr",
         "step_name": "compose_pr"
       },
       "capture": {

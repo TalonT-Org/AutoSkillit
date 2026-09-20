@@ -142,7 +142,11 @@ def _skill_info_from_frontmatter(
 
     data = parsed.data
     invalidities: list[SkillInvalidity] = []
-    if "write_paths" in data and parsed.write_paths is None:
+    absent_write_paths = object()
+    if (
+        data.get("write_paths", absent_write_paths) is not absent_write_paths
+        and parsed.write_paths is None
+    ):
         invalidities.append(
             SkillInvalidity(
                 SkillInvalidityKind.WRITE_BOUNDARY_INVALID,

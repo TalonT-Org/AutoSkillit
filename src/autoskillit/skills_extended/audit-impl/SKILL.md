@@ -1,5 +1,7 @@
 ---
 name: audit-impl
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-impl/'
 categories:
 - audit
 uses_capabilities:

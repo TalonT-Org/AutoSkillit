@@ -92,7 +92,10 @@ def test_hooks_py_covers_full_registry(tmp_path):
 
     # Verify PreToolUse entries cover all PreToolUse registry entries
     pretooluse_scripts = {
-        s for h in HOOK_REGISTRY if h.event_type == "PreToolUse" for s in h.scripts
+        s
+        for h in HOOK_REGISTRY
+        if h.event_type == "PreToolUse" and not h.runtime_only
+        for s in h.scripts
     }
     registered_pretooluse = [
         h["command"]
@@ -318,7 +321,9 @@ def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
 
     # Verify PreToolUse entry count matches unique (event_type, matcher) pairs.
     # HookDef entries sharing a matcher are consolidated into one settings.json entry.
-    pretooluse_matchers = {h.matcher for h in HOOK_REGISTRY if h.event_type == "PreToolUse"}
+    pretooluse_matchers = {
+        h.matcher for h in HOOK_REGISTRY if h.event_type == "PreToolUse" and not h.runtime_only
+    }
     pretooluse = data["hooks"].get("PreToolUse", [])
     assert len(pretooluse) == len(pretooluse_matchers), (
         f"Expected {len(pretooluse_matchers)} PreToolUse entries, got {len(pretooluse)}"
@@ -331,7 +336,7 @@ def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
         f"Expected {len(posttooluse_matchers)} PostToolUse entries, got {len(posttooluse)}"
     )
 
-    # All scripts from all event types must be present
+    # Published scripts from all event types must be present.
     all_commands = [
         h["command"]
         for event_entries in data["hooks"].values()
@@ -339,6 +344,8 @@ def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
         for h in entry.get("hooks", [])
     ]
     for hook_def in HOOK_REGISTRY:
+        if hook_def.runtime_only:
+            continue
         for script in hook_def.scripts:
             logical_name = script.removesuffix(".py")
             assert any(logical_name in c for c in all_commands), (
@@ -576,7 +583,7 @@ def test_register_all_writes_hooks_when_plugin_not_active(tmp_path, monkeypatch)
         for h in entry.get("hooks", [])
     ]
     # Should contain all scripts from HOOK_REGISTRY
-    expected_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
+    expected_scripts = {s for h in HOOK_REGISTRY if not h.runtime_only for s in h.scripts}
     registered_scripts = {cmd.split()[-1] for cmd in all_commands if "_dispatch.py" in cmd}
     expected_logical = {s.removesuffix(".py") for s in expected_scripts}
     assert expected_logical <= registered_scripts, (

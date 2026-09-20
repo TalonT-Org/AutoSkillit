@@ -1,5 +1,7 @@
 ---
 name: audit-docs
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-docs/'
 categories:
 - audit
 description: 'Audit documentation for drift, staleness, and inconsistency against the actual codebase. Use when user says

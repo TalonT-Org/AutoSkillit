@@ -1,5 +1,7 @@
 ---
 name: planner-refine-wps
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Refine elaborated work packages with cross-phase visibility via per-phase L0 subagents (L1+L0 pattern)

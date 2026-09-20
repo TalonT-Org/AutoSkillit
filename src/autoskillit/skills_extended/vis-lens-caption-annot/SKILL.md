@@ -1,5 +1,7 @@
 ---
 name: vis-lens-caption-annot
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-caption-annot/'
 categories:
 - vis-lens
 uses_capabilities: []

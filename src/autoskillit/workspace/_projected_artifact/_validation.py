@@ -203,6 +203,7 @@ def _expected_manifest_entry(info: SkillContractRecord, content: str) -> dict[st
         "uses_capabilities": sorted(info.uses_capabilities),
         "execution_role": (info.execution_role.value if info.execution_role is not None else None),
         "activate_deps": list(info.activate_deps),
+        "write_paths": list(info.write_paths) if info.write_paths is not None else None,
     }
     semantic_plan = info.semantic_plan
     expected_entry["join_required"] = bool(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deny writes that target an AutoSkillit installation tree."""
+"""Deny writes that target a protected installation tree."""
 
 from __future__ import annotations
 
@@ -19,10 +19,12 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     WRITE_VERBS,
     all_evaluated_segments,
     command_verb,
+    extract_interpreter_write_paths,
     extract_patch_paths,
     extract_redirect_targets_with_status,
     extract_write_verb_targets,
     resolve_write_target,
+    updated_execution_cwd,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
@@ -103,6 +105,8 @@ def _matches_protected_inode(path: str) -> bool:
         target = os.stat(path)
     except OSError:
         return False
+    if target.st_nlink <= 1:
+        return False
     for root in _known_roots():
         if not root.exists():
             continue
@@ -150,6 +154,9 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
     unresolved_target = False
     for segment in segments:
         verb = command_verb(segment)
+        if verb == "cd":
+            cwd = updated_execution_cwd(segment, cwd)
+            continue
         if verb in WRITE_VERBS:
             found, unresolved = extract_write_verb_targets(verb, segment, cwd)
             targets.extend(found)
@@ -157,6 +164,15 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
         redirects, unresolved = extract_redirect_targets_with_status(segment, cwd)
         targets.extend(redirects)
         unresolved_target = unresolved_target or unresolved
+    interpreter_paths = extract_interpreter_write_paths(command)
+    if interpreter_paths is not None:
+        unresolved_target = unresolved_target or not interpreter_paths
+        for path in interpreter_paths:
+            resolved = resolve_write_target(path, cwd)
+            if resolved is None:
+                unresolved_target = True
+            else:
+                targets.append(resolved)
     return targets, unresolved_target
 
 
@@ -165,6 +181,8 @@ def main() -> None:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, OSError, ValueError):
         sys.exit(0)
+    if not isinstance(data, dict):
+        sys.exit(0)
 
     tool_name = data.get("tool_name", "")
     if tool_name not in {"Write", "Edit", "Bash", "apply_patch"} and "run_cmd" not in tool_name:
@@ -172,10 +190,12 @@ def main() -> None:
 
     targets: list[str] = []
     unresolved_target = False
+    payload_cwd = data.get("cwd", "")
+    cwd = payload_cwd if isinstance(payload_cwd, str) and os.path.isabs(payload_cwd) else ""
     if tool_name in {"Write", "Edit"}:
         path = data.get("tool_input", {}).get("file_path", "")
         if isinstance(path, str) and path:
-            resolved = resolve_write_target(path)
+            resolved = resolve_write_target(path, cwd)
             if resolved is None:
                 unresolved_target = True
             else:
@@ -183,7 +203,7 @@ def main() -> None:
     elif tool_name == "apply_patch":
         command = extract_apply_patch_text(data) or ""
         for path in extract_patch_paths(command):
-            resolved = resolve_write_target(path)
+            resolved = resolve_write_target(path, cwd)
             if resolved is None:
                 unresolved_target = True
             else:

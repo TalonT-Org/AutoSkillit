@@ -12,6 +12,8 @@ import pytest
 
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
+    HOOKS_DIR,
+    PROTECTION_WAIVERS,
     HookDef,
     hook_applies_to_backend,
 )
@@ -125,3 +127,8 @@ def test_scoped_guard_has_both_session_type_test_cases(guard_script: str) -> Non
     assert has_headless_false, (
         f"{test_file.name} must test the headless=False path for scoped guard '{guard_script}'."
     )
+    guard = next(hook for hook in HOOK_REGISTRY if guard_script in hook.scripts)
+    if guard.mechanism == "deny":
+        assert any(waiver.guard_script == guard_script for waiver in PROTECTION_WAIVERS), (
+            f"{guard_script} lacks a registered scope-exclusion waiver"
+        )

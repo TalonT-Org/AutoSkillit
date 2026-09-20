@@ -1,5 +1,7 @@
 ---
 name: planner-assess-review-approach
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 requires_resources:

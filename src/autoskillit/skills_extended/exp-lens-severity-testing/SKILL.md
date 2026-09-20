@@ -1,5 +1,7 @@
 ---
 name: exp-lens-severity-testing
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/'
 categories:
 - exp-lens
 uses_capabilities: []

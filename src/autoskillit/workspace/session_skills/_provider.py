@@ -25,6 +25,7 @@ from autoskillit.core import (
     SemanticAdaptationContext,
     SkillExecutionRole,
     SkillResolver,
+    destination_location,
     pkg_root,
 )
 from autoskillit.workspace.session_skills._projection import (
@@ -39,7 +40,11 @@ from autoskillit.workspace.skills import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend, ResolvedSkillAuthority
+    from autoskillit.core import (
+        CodingAgentBackend,
+        ResolvedSkillAuthority,
+        SkillFrontmatterAuthority,
+    )
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -70,6 +75,11 @@ def resolve_ephemeral_root() -> Path:
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
 
 
+def _parse_write_paths(parsed: SkillFrontmatterAuthority) -> list[str]:
+    """Expose the typed write-boundary contract to closure callers."""
+    return list(parsed.write_paths or ())
+
+
 def resolve_closure_write_dirs(
     closure: tuple[ResolvedSkillAuthority, ...],
     cwd: str,
@@ -84,16 +94,19 @@ def resolve_closure_write_dirs(
     raw_paths = tuple(
         write_path
         for info in closure
-        if info.write_paths is not None
-        for write_path in info.write_paths
+        if info.frontmatter is not None
+        for write_path in _parse_write_paths(info.frontmatter)
     )
     if not raw_paths:
         return []
     temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
-    seen: set[Path] = set(existing) if existing else set()
+    seen: set[Path] = {destination_location(path) for path in existing or ()}
     result: list[Path] = []
     for rwp in raw_paths:
         resolved = Path(rwp.replace("{{AUTOSKILLIT_TEMP}}", temp_prefix))
+        if not resolved.is_absolute():
+            resolved = Path(cwd) / resolved
+        resolved = destination_location(resolved)
         if resolved not in seen:
             seen.add(resolved)
             result.append(resolved)

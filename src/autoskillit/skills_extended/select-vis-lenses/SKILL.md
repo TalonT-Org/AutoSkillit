@@ -1,5 +1,7 @@
 ---
 name: select-vis-lenses
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/select-vis-lenses/'
 categories:
 - research
 - vis-lens

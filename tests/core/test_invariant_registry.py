@@ -108,10 +108,10 @@ def test_recipe_read_enforcement_layer() -> None:
 
 
 def test_write_path_prefix_enforcement_layer() -> None:
-    """write-path-prefix must have enforcement_layer='server-side'."""
+    """write-path-prefix is enforced by the PreToolUse write guard."""
     from autoskillit.core import INVARIANT_REGISTRY
 
-    assert INVARIANT_REGISTRY["write-path-prefix"].enforcement_layer == "server-side"
+    assert INVARIANT_REGISTRY["write-path-prefix"].enforcement_layer == "hook-deny"
 
 
 def test_all_gate_targets_are_nonempty() -> None:

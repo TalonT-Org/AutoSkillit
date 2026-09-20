@@ -1,5 +1,7 @@
 ---
 name: exp-lens-causal-assumptions
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-causal-assumptions/'
 categories:
 - exp-lens
 uses_capabilities: []

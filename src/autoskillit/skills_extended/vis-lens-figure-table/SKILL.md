@@ -1,5 +1,7 @@
 ---
 name: vis-lens-figure-table
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-figure-table/'
 categories:
 - vis-lens
 uses_capabilities: []

@@ -136,6 +136,11 @@ def render_hook_scope_table(
     )
 
 
+def published_hook_defs(registry: Sequence[HookDef]) -> tuple[HookDef, ...]:
+    """Return hooks included in both Claude publication forms."""
+    return tuple(hook_def for hook_def in registry if not hook_def.runtime_only)
+
+
 def generate_hooks_json(
     registry: Sequence[HookDef] = HOOK_REGISTRY,
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
@@ -155,9 +160,7 @@ def generate_hooks_json(
     validate_protection_coverage(registry, PROTECTION_WAIVERS, backend="claude_code")
     # Preserve insertion order; merge scripts from same (event_type, matcher) key.
     groups: dict[tuple[str, str], dict] = {}
-    for hook_def in registry:
-        if hook_def.runtime_only:
-            continue
+    for hook_def in published_hook_defs(registry):
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
             _build_hook_command(None, script, hook_def.timeout_seconds, relocatable=True)

@@ -1,5 +1,7 @@
 ---
 name: exp-lens-benchmark-representativeness
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/'
 categories:
 - exp-lens
 uses_capabilities: []

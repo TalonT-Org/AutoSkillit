@@ -1,5 +1,7 @@
 ---
 name: plan-experiment
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/plan-experiment/'
 categories:
 - research
 uses_capabilities: []

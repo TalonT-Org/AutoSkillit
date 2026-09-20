@@ -52,6 +52,7 @@ from ._doctor_install import (
     _check_source_version_drift,
     _check_stale_entry_points,
     _check_update_dismissal_state,
+    verify_installations,
 )
 from ._doctor_mcp import (
     _check_claude_mcp_timeouts,
@@ -88,7 +89,6 @@ from ._doctor_skills import (
 )
 from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
 from ._doctor_types import DoctorResult, _print_doctor_results, _run_check
-from ._install_integrity import verify_installations
 
 logger = get_logger(__name__)
 

@@ -176,7 +176,7 @@ class TestHookDefCodexStatus:
         )
         assert new_hash != HOOK_REGISTRY_HASH
 
-    def test_format_version_is_4(self):
+    def test_format_version_is_5(self):
         import json
 
         payload = json.loads(
@@ -186,7 +186,7 @@ class TestHookDefCodexStatus:
                 LIFECYCLE_CONTRACTS,
             )
         )
-        assert payload["format_version"] == 4
+        assert payload["format_version"] == 5
 
     def test_enforcement_strength_round_trip(self):
         es = {"claude_code": "hard", "codex": "works-as-is"}

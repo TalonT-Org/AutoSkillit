@@ -1,5 +1,7 @@
 ---
 name: planner-generate-phases
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories: [planner]
 description: Generate high-level phases from project analysis (Pass 1 entry point)
 hooks:

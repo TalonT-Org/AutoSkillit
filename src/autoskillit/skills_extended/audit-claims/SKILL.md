@@ -1,5 +1,7 @@
 ---
 name: audit-claims
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-claims/'
 categories:
 - research
 description: >

@@ -117,7 +117,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("exploration/snapshot/_capture.py", "_git", 94, "<unresolved>", "UNRESOLVABLE"),
     ("fleet/_reset.py", "_delete_reset_branches", 258, "push", "BARE"),
     (
-        "hooks/guards/_git_command_classification.py",
+        "hooks/_runtime/_git_command_classification.py",
         "_git_result",
         224,
         "<unresolved>",

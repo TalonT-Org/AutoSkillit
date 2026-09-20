@@ -1,5 +1,7 @@
 ---
 name: compose-pr
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/compose-pr/'
 uses_capabilities:
 - github_api_write
 categories:

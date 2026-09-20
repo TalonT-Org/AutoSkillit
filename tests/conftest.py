@@ -33,7 +33,7 @@ from autoskillit.core.types import (
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
 from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
 
-# Mirror the standalone hook process import mode: guards' sibling modules
+# Mirror the standalone hook process import mode: runtime sibling modules
 # (e.g. _git_command_classification.py) use bare-name imports that resolve
 # only when src/autoskillit/hooks is on sys.path; the orchestrator bootstraps
 # this in production. Centralized here as module-level code -- not a fixture

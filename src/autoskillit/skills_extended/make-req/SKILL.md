@@ -1,5 +1,7 @@
 ---
 name: make-req
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-req/'
 description: Decompose a task, plan, roadmap, or feature description into a structured set of requirements grouped for independent
   planning. Use when user says "make req", "make requirements", "decompose requirements", "extract requirements", or wants
   to break down a task into what needs to be true.

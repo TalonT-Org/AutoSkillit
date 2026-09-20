@@ -1,5 +1,7 @@
 ---
 name: planner-reconcile-deps
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories: [planner]
 description: Post-Pass-3 global dependency DAG construction — detects implicit dependencies individual WP sessions could not see
 hooks:

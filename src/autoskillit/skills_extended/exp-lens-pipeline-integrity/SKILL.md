@@ -1,5 +1,7 @@
 ---
 name: exp-lens-pipeline-integrity
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-pipeline-integrity/'
 categories:
 - exp-lens
 uses_capabilities: []

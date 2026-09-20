@@ -1,5 +1,7 @@
 ---
 name: audit-cohesion
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-cohesion/'
 categories:
 - audit
 uses_capabilities: []

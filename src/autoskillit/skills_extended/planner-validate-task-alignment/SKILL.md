@@ -1,5 +1,7 @@
 ---
 name: planner-validate-task-alignment
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 uses_capabilities: []

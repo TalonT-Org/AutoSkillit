@@ -20,8 +20,12 @@ def _canonical_registry_payload(
     registry: Sequence[HookDef],
     retired: frozenset[str],
     lifecycle_contracts: Sequence[LifecycleContractDef],
-    waivers: Sequence[ProtectionWaiverDef] = (),
+    waivers: Sequence[ProtectionWaiverDef] | None = None,
 ) -> str:
+    if waivers is None:
+        from ._registry_data import PROTECTION_WAIVERS
+
+        waivers = PROTECTION_WAIVERS
     registry_rows = sorted(
         [
             {
@@ -98,7 +102,7 @@ def compute_registry_hash(
     registry: Sequence[HookDef],
     retired: frozenset[str],
     lifecycle_contracts: Sequence[LifecycleContractDef],
-    waivers: Sequence[ProtectionWaiverDef] = (),
+    waivers: Sequence[ProtectionWaiverDef] | None = None,
 ) -> str:
     """Compute a stable sha256 over the hook and lifecycle registries."""
     payload = _canonical_registry_payload(registry, retired, lifecycle_contracts, waivers)

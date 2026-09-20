@@ -25,7 +25,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 # Inlined subset of SKILL_FILE_ADVISORY_MAP (recipe-related entries only).
 # Must stay in sync with core._type_constants.SKILL_FILE_ADVISORY_MAP.

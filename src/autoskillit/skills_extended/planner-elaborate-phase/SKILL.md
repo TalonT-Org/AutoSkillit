@@ -1,5 +1,7 @@
 ---
 name: planner-elaborate-phase
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Elaborate a single phase into a full result, parallel-safe — receives plan snapshot + target phase ID

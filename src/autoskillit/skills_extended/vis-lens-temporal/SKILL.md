@@ -1,5 +1,7 @@
 ---
 name: vis-lens-temporal
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-temporal/'
 categories:
 - vis-lens
 uses_capabilities: []

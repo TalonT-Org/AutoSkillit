@@ -1,5 +1,7 @@
 ---
 name: vis-lens-antipattern
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/'
 categories:
 - vis-lens
 uses_capabilities: []

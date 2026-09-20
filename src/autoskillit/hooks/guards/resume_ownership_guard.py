@@ -20,7 +20,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import is_headless_session  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import is_headless_session  # noqa: E402
 
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 

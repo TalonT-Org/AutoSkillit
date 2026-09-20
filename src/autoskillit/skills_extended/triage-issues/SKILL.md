@@ -1,5 +1,7 @@
 ---
 name: triage-issues
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/triage-issues/'
 categories:
 - github
 uses_capabilities:

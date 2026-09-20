@@ -45,12 +45,12 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     get_session_type,
     is_headless_session,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     resolve_binding_path,
     resolve_channel_dir,
 )

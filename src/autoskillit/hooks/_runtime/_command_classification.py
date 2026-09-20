@@ -219,6 +219,13 @@ def resolve_write_target(path: str, cwd: str = "") -> str | None:
     return None
 
 
+def updated_execution_cwd(segment: list[str], cwd: str) -> str:
+    """Apply a literal shell cd segment to later relative target resolution."""
+    if command_verb(segment) != "cd" or len(segment) < 2:
+        return cwd
+    return resolve_write_target(segment[1], cwd) or ""
+
+
 def _consume_output_redirect(
     tokens: Sequence[str], syntax: Sequence[bool], index: int
 ) -> tuple[int, str | None, int] | None:

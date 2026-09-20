@@ -1,5 +1,7 @@
 ---
 name: exp-lens-measurement-validity
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/'
 categories:
 - exp-lens
 uses_capabilities: []

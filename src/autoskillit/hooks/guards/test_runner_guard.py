@@ -32,7 +32,7 @@ from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     EXEMPT_SKILLS_BY_GUARD,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 TEST_RUNNER_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["test_runner_guard"]
 

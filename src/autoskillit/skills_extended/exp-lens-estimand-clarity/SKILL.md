@@ -1,5 +1,7 @@
 ---
 name: exp-lens-estimand-clarity
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-estimand-clarity/'
 categories:
 - exp-lens
 uses_capabilities: []

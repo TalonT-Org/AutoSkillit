@@ -1,5 +1,7 @@
 ---
 name: exp-lens-fair-comparison
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/'
 categories:
 - exp-lens
 uses_capabilities: []

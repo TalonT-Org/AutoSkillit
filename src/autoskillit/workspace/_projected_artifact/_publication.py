@@ -219,16 +219,8 @@ def _manifest_skill_entry(
         "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
         "semantic_digest": document.semantic_digest,
         "adaptation_digest": document.adaptation_digest,
+        "write_paths": list(skill.write_paths) if skill.write_paths is not None else None,
     }
-    frontmatter = skill.frontmatter
-    if (
-        frontmatter is not None
-        and frontmatter.data is not None
-        and "write_paths" in frontmatter.data
-    ):
-        write_paths = frontmatter.data["write_paths"]
-        if isinstance(write_paths, list) and all(isinstance(path, str) for path in write_paths):
-            entry["write_paths"] = list(write_paths)
     return entry
 
 

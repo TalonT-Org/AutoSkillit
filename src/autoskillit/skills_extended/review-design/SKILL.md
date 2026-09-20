@@ -1,5 +1,7 @@
 ---
 name: review-design
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/review-design/'
 categories:
 - research
 uses_capabilities: []

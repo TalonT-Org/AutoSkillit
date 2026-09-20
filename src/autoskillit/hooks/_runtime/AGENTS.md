@@ -35,6 +35,9 @@ logic, with zero consumers outside this one file.
 
 **Inter-peer coupling** (bare-name imports within the move set):
 
+- `_git_command_classification.py` — Git operation classification used by
+  `guards/git_ops_guard.py`; it shares the runtime command and mutation primitives.
+
 - `_github_mutation_analysis.py`, `_command_classification.py` → `hooks/_classification/`
   (a sibling subpackage outside the move set, not itself moved)
 

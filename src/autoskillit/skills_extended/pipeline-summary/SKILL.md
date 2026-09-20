@@ -1,5 +1,7 @@
 ---
 name: pipeline-summary
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/pipeline-summary/'
 categories: [github]
 uses_capabilities: [github_api_write]
 description: Create a GitHub issue and PR summarizing pipeline bugs and fixes. Use when a pipeline run completes with accumulated bug fixes on a feature branch.
@@ -138,4 +140,3 @@ Output: `pr_url={url}`
 ## Output
 - Always: `summary_path={workspace}/run-summary.md`
 - If GitHub available: `issue_url={url}` and `pr_url={url}`
-

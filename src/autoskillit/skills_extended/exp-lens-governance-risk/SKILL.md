@@ -1,5 +1,7 @@
 ---
 name: exp-lens-governance-risk
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/'
 categories:
 - exp-lens
 uses_capabilities: []

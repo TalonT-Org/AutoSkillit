@@ -37,7 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     get_session_type,
     read_merged_hook_config,
 )

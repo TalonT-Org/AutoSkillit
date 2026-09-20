@@ -188,7 +188,14 @@ def enforce_session_scope(script_identity: str) -> bool:
         scope = table_module.HOOK_SCOPE_BY_SCRIPT[script_identity]
         if scope not in {"any", "headless_only", "interactive_only"}:
             raise ValueError(f"invalid scope {scope!r}")
-    except Exception:
+    except (ImportError, KeyError, ValueError) as exc:
+        # Surface the underlying failure mode to stderr so operators can
+        # diagnose missing scope tables vs. unknown script identities vs.
+        # malformed scopes, rather than collapsing every cause into a deny.
+        print(
+            f"hook_scope_authority_unavailable: script={script_identity!r} error={exc!r}",
+            file=sys.stderr,
+        )
         _deny_scope_authority_unavailable(script_identity)
         return False
 

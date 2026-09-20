@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,6 +26,10 @@ _DECISION_FILE = "guard_decisions.jsonl"
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_RECORDS = 1000
 _MAX_SESSION_ID_CHARS = 128
+# Whitelisted guards allowed to emit decision records. The set is intentionally
+# narrow (a hidden producer/consumer coupling): adding a new guard requires
+# updating this frozenset in lockstep with the producer, otherwise records are
+# silently dropped. See ``record_guard_decision`` for the producer contract.
 _ALLOWED_GUARDS = frozenset({"write_guard", "skill_load_post_hook"})
 _ALLOWED_ACTIVATION_SOURCES = frozenset({"inactive", "headless", "skill_post_hook"})
 _ALLOWED_SCOPES = frozenset({"none", "workspace", "write_prefix", "session_binding"})
@@ -125,5 +130,12 @@ def record_guard_decision(
         path = _decision_path(data)
         with binding_lock(path):
             atomic_write(path, _retained_records(path, encoded).decode("utf-8"))
-    except (OSError, TimeoutError, TypeError, ValueError):
-        return
+    except (OSError, TimeoutError, TypeError, ValueError) as exc:
+        # Recording failures must remain invisible to enforcement, but a
+        # persistently silent failure (binding_lock contention, channel-dir
+        # perm denial) should be diagnosable. Surface to stderr so operators
+        # can correlate missing decision records with environmental causes.
+        print(
+            f"guard_decision_record_failed: guard={guard!r} error={exc!r}",
+            file=sys.stderr,
+        )

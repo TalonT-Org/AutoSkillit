@@ -366,8 +366,14 @@ def _owned_installation_roots(home: Path) -> tuple[tuple[str, Path], ...]:
         roots.extend(
             (f"uv cache {path.name}", path) for path in sorted(cache_root.glob("archive-v*"))
         )
-    except OSError:
+    except FileNotFoundError:
+        # No uv cache directory yet — a normal "fresh install" state.
         pass
+    except OSError as exc:
+        # Cache directory exists but is unreadable. Surface as a debug
+        # diagnostic so an operator can distinguish missing cache from a
+        # permission/IO problem.
+        logger.debug("uv cache directory unreadable", exc_info=exc)
     return tuple(roots)
 
 
@@ -395,7 +401,18 @@ def _discover_installations(
         try:
             canonical_root = package_root.resolve(strict=True)
             canonical_record = record_path.resolve(strict=True)
-        except OSError:
+        except FileNotFoundError:
+            # Candidate installation vanished between discovery and resolve —
+            # benign race; nothing to verify.
+            continue
+        except OSError as exc:
+            # Filesystem error on a candidate path. Log so an operator can
+            # distinguish a transient I/O issue from a stable symlink loop.
+            logger.debug(
+                "installation candidate unresolvable",
+                extra={"label": label, "package_root": str(package_root)},
+                exc_info=exc,
+            )
             continue
         key = str(canonical_root)
         alias = f"{label}: {package_root}"

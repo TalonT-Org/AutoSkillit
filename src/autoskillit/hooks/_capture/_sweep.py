@@ -393,6 +393,9 @@ def quarantine_delete(
         try:
             if verified is None or verified.nlink != 1:
                 raise Tampered
+            expected_size = record.size
+            if expected_size and verified.size != expected_size:
+                raise Tampered
         finally:
             if verified is not None:
                 os.close(verified.fd)

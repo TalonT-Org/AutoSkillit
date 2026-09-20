@@ -15,7 +15,7 @@ re-exporting the canonical symbol list per REQ-IMP-001.
 | Shard | Phase | Owns |
 |---|---|---|
 | `_api.py` | Orchestrator | `execute_dispatch`, `_run_dispatch`, `DispatchSpawnFailed` |
-| `_validation.py` | A — pre-launch gating | recipe load, validation, kind check, ingredient assembly, `apply_config_authoritative_overrides` |
+| `_validation.py` | A — pre-launch gating | recipe load, validation, kind check, ingredient assembly, `strip_server_authoritative_overrides` |
 | `_lineage.py` | B — identity + lineage | `DispatchStateHandle` creation, prior-success short-circuit, captured-ingredient interpolation, launch tuple, `prepare_food_truck_lineage` |
 | `_execution.py` | C — execution | spawn/heartbeat/dispatch-fork triple-nested block, `_on_spawn`/`_on_session_id`/`_on_launch_resolved` LOCAL closures, spawn-error gate |
 | `_cleanup.py` | D — cleanup | `handle_cancellation`, `handle_generic_exception`, `run_finally_label_cleanup`, `_post_dispatch_cleanup` |
@@ -60,7 +60,7 @@ exclusion) was deleted as part of issue #4851.
 `_pid` and `_cleanup` deferred-import `kill_process_tree` from
 `autoskillit.execution` (fail-closed spawn, post-cancel cleanup
 respectively). `_validation` deferred-imports
-`apply_config_authoritative_overrides` from `autoskillit.config`.
+`strip_server_authoritative_overrides` from `autoskillit.config`.
 These three transitive imports are exempted from IL-009 via
 `pyproject.toml` `ignore_imports`. Do not add new `execution` /
 `config` imports from this package without first updating the

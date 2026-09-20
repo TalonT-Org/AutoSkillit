@@ -174,13 +174,12 @@ def _setup_config_authority_recipe(tool_ctx, recipe):
     tool_ctx.executor = InMemoryHeadlessExecutor()
 
 
-class TestConfigAuthoritativeIngredientInjection:
+class TestServerAuthoritativeOverrides:
     @pytest.mark.anyio
-    async def test_config_authoritative_base_branch_injected_at_dispatch(self, tool_ctx):
-        """base_branch with authority='config' is injected from config even when not supplied."""
-        from unittest.mock import patch
+    async def test_config_authoritative_base_branch_from_llm_is_stripped(self, tool_ctx):
+        """A caller-supplied base_branch is removed before prompt rendering."""
+        import structlog.testing
 
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -204,58 +203,7 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={"base_branch": "develop"},
-        ):
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_capture_prompt_builder,
-                quota_refresher=_noop_quota_refresher,
-            )
-
-        assert captured["ingredients"]["base_branch"] == "develop"
-
-    @pytest.mark.anyio
-    async def test_config_authoritative_base_branch_overrides_llm_value(self, tool_ctx):
-        """base_branch with authority='config' overrides LLM-supplied value."""
-        from unittest.mock import patch
-
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
-        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-
-        _setup_config_authority_recipe(
-            tool_ctx,
-            Recipe(
-                name="test-recipe",
-                description="test",
-                kind=RecipeKind.STANDARD,
-                ingredients={
-                    "base_branch": RecipeIngredient(
-                        description="Merge target", default="", authority="config"
-                    )
-                },
-            ),
-        )
-        captured = {}
-
-        def _capture_prompt_builder(**kwargs):
-            captured.update(kwargs)
-            return "prompt"
-
-        from autoskillit.fleet._api import execute_dispatch
-
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={"base_branch": "develop"},
-        ):
+        with structlog.testing.capture_logs() as cap_logs:
             await execute_dispatch(
                 tool_ctx=tool_ctx,
                 recipe="test-recipe",
@@ -267,14 +215,18 @@ class TestConfigAuthoritativeIngredientInjection:
                 quota_refresher=_noop_quota_refresher,
             )
 
-        assert captured["ingredients"]["base_branch"] == "develop"
+        assert "base_branch" not in captured["ingredients"]
+        stripped_events = [
+            event
+            for event in cap_logs
+            if event.get("event") == "fleet_dispatch_server_authoritative_overrides_stripped"
+        ]
+        assert len(stripped_events) == 1
+        assert stripped_events[0]["keys"] == ["base_branch"]
 
     @pytest.mark.anyio
     async def test_config_authoritative_injection_skips_undeclared_ingredients(self, tool_ctx):
-        """Config injection only applies to ingredients the recipe declares."""
-        from unittest.mock import patch
-
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
+        """Stripping touches only SERVER_AUTHORITATIVE_INGREDIENTS names."""
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -296,29 +248,23 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={"base_branch": "develop"},
-        ):
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_capture_prompt_builder,
-                quota_refresher=_noop_quota_refresher,
-            )
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients={"base_branch": "main", "other_key": "caller-supplied"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_capture_prompt_builder,
+            quota_refresher=_noop_quota_refresher,
+        )
 
         assert "base_branch" not in captured["ingredients"]
+        assert captured["ingredients"]["other_key"] == "caller-supplied"
 
     @pytest.mark.anyio
-    async def test_config_authoritative_ingredients_injected_for_all_resolved_keys(self, tool_ctx):
-        """SERVER_AUTHORITATIVE_INGREDIENTS keys with authority='config' receive config values;
-        source_dir with authority='config' is caller-sovereign and is NOT overridden from
-        resolved defaults."""
+    async def test_server_authoritative_overrides_are_stripped_before_prompt(self, tool_ctx):
+        """Fleet removes server-authoritative values without resolving defaults."""
         from unittest.mock import patch
 
         import autoskillit.config.ingredient_defaults as ingredient_defaults
@@ -340,6 +286,18 @@ class TestConfigAuthoritativeIngredientInjection:
                     "local_review_rounds": RecipeIngredient(
                         description="Review rounds", default="1", authority="config"
                     ),
+                    "dispatch_id": RecipeIngredient(
+                        description="Dispatch identity",
+                        default="",
+                        authority="config",
+                        hidden=True,
+                    ),
+                    "is_fleet_dispatch": RecipeIngredient(
+                        description="Fleet dispatch flag",
+                        default="",
+                        authority="config",
+                        hidden=True,
+                    ),
                 },
             ),
         )
@@ -354,36 +312,34 @@ class TestConfigAuthoritativeIngredientInjection:
         with patch.object(
             ingredient_defaults,
             "resolve_ingredient_defaults",
-            return_value={
-                "base_branch": "develop",
-                "source_dir": "/repo/src",
-                "local_review_rounds": "3",
-            },
+            side_effect=AssertionError("Phase A must not resolve defaults"),
         ):
             await execute_dispatch(
                 tool_ctx=tool_ctx,
                 recipe="test-recipe",
                 task="t",
-                ingredients={},
+                ingredients={
+                    "base_branch": "main",
+                    "local_review_rounds": "9",
+                    "dispatch_id": "stale",
+                    "is_fleet_dispatch": "false",
+                    "source_dir": "/repo/src",
+                },
                 dispatch_name=None,
                 timeout_sec=None,
                 prompt_builder=_capture_prompt_builder,
                 quota_refresher=_noop_quota_refresher,
             )
 
-        assert captured["ingredients"]["base_branch"] == "develop"
-        # source_dir is caller-sovereign — the URL from resolve_ingredient_defaults must NOT
-        # be injected even when the recipe declares authority="config".
-        assert captured["ingredients"].get("source_dir") != "/repo/src"
-        assert captured["ingredients"]["local_review_rounds"] == "3"
+        for key in ("base_branch", "local_review_rounds", "dispatch_id", "is_fleet_dispatch"):
+            assert key not in captured["ingredients"]
+        assert captured["ingredients"]["source_dir"] == "/repo/src"
 
     @pytest.mark.anyio
     async def test_dispatch_with_config_authority_recipe_e2e(self, tool_ctx):
-        """State snapshot written by execute_dispatch records the config-injected base_branch."""
+        """State snapshot written by execute_dispatch records filtered overrides."""
         import json
-        from unittest.mock import patch
 
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -401,21 +357,16 @@ class TestConfigAuthoritativeIngredientInjection:
         )
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={"base_branch": "develop"},
-        ):
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={"base_branch": "main"},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=lambda **kw: "prompt",
-                quota_refresher=_noop_quota_refresher,
-            )
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients={"base_branch": "main"},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kw: "prompt",
+            quota_refresher=_noop_quota_refresher,
+        )
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         state_files = list(dispatches_dir.glob("*.json"))
@@ -423,21 +374,13 @@ class TestConfigAuthoritativeIngredientInjection:
         state = json.loads(state_files[0].read_text())
         snapshot = state.get("recipe_snapshot") or {}
         effective = snapshot.get("effective_ingredients", {})
-        assert effective.get("base_branch") == "develop", (
-            "State snapshot should record config value 'develop', got: "
-            f"{effective.get('base_branch')!r}"
-        )
+        assert "base_branch" not in effective
 
     @pytest.mark.anyio
     async def test_config_authoritative_key_absent_from_defaults_retains_caller_value(
         self, tool_ctx
     ):
-        """When a config-authority key is absent from resolved defaults AND not in
-        BACKEND_CAPABILITY_INGREDIENTS, the caller-supplied value is retained silently
-        (caller-sovereign path — no warning)."""
-        from unittest.mock import patch
-
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
+        """A caller-sovereign key passes through without a stripping warning."""
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -463,14 +406,7 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with (
-            patch.object(
-                ingredient_defaults,
-                "resolve_ingredient_defaults",
-                return_value={},  # key absent from all registries
-            ),
-            structlog.testing.capture_logs() as cap_logs,
-        ):
+        with structlog.testing.capture_logs() as cap_logs:
             await execute_dispatch(
                 tool_ctx=tool_ctx,
                 recipe="test-recipe",
@@ -483,86 +419,27 @@ class TestConfigAuthoritativeIngredientInjection:
             )
 
         assert captured["ingredients"]["truly_unknown_key"] == "caller-supplied"
-        assert not any("config-authority key" in e.get("event", "") for e in cap_logs)
-
-    @pytest.mark.anyio
-    async def test_apply_config_authoritative_overrides_source_dir_preserves_caller_local_path(
-        self, tool_ctx
-    ):
-        """When the recipe declares source_dir with authority='config' and the caller
-        supplies a local path, apply_config_authoritative_overrides must preserve the
-        caller's value — source_dir is caller-sovereign project identity."""
-        from unittest.mock import patch
-
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
-        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-
-        _setup_config_authority_recipe(
-            tool_ctx,
-            Recipe(
-                name="test-recipe",
-                description="test",
-                kind=RecipeKind.STANDARD,
-                ingredients={
-                    "source_dir": RecipeIngredient(
-                        description="Source directory", default="", authority="config"
-                    ),
-                },
-            ),
+        assert not any(
+            event.get("event") == "fleet_dispatch_server_authoritative_overrides_stripped"
+            for event in cap_logs
         )
-        captured: dict = {}
 
-        def _capture_prompt_builder(**kwargs):
-            captured.update(kwargs)
-            return "prompt"
+    def test_strip_server_authoritative_overrides_source_dir_preserves_caller_local_path(self):
+        """source_dir is caller-sovereign and retains a caller-supplied local path."""
+        from autoskillit.config import strip_server_authoritative_overrides
 
-        from autoskillit.fleet._api import execute_dispatch
+        result, stripped = strip_server_authoritative_overrides(
+            {"source_dir": "/home/user/myproject"}
+        )
 
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={
-                "source_dir": "https://github.com/TalonT-Org/AutoSkillit",
-                "base_branch": "main",
-            },
-        ):
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={"source_dir": "/home/user/myproject"},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_capture_prompt_builder,
-                quota_refresher=_noop_quota_refresher,
-            )
+        assert result["source_dir"] == "/home/user/myproject"
+        assert not stripped
 
-        assert captured["ingredients"]["source_dir"] == "/home/user/myproject"
+    def test_strip_server_authoritative_overrides_source_dir_not_injected_when_absent(self):
+        """source_dir remains absent when the caller does not supply it."""
+        from autoskillit.config import strip_server_authoritative_overrides
 
-    def test_apply_config_authoritative_overrides_source_dir_not_injected_when_absent(
-        self, tmp_path
-    ):
-        """When the caller does not supply source_dir, apply_config_authoritative_overrides
-        must not inject the URL returned by resolve_ingredient_defaults — source_dir is
-        caller-sovereign and must remain absent from the result."""
-        from types import SimpleNamespace
-        from unittest.mock import patch
-
-        import autoskillit.config.ingredient_defaults as ingredient_defaults
-        from autoskillit.config import apply_config_authoritative_overrides
-
-        recipe_ingredients = {
-            "source_dir": SimpleNamespace(authority="config"),
-        }
-        with patch.object(
-            ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={"source_dir": "https://github.com/TalonT-Org/AutoSkillit"},
-        ):
-            result = apply_config_authoritative_overrides(
-                {},
-                recipe_ingredients,
-                tmp_path,
-            )
+        result, stripped = strip_server_authoritative_overrides({})
 
         assert "source_dir" not in result
+        assert not stripped

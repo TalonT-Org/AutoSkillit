@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.config.ingredient_defaults as _patch_config_ingredient_defaults
 import autoskillit.config.settings as _patch_config_settings
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.medium]
@@ -225,36 +224,17 @@ def test_config_authority_keys_superset_of_server_authoritative() -> None:
     assert "source_dir" in CALLER_SOVEREIGN_INGREDIENTS
 
 
-def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(tmp_path):
-    """A config-authority key not in SERVER_AUTHORITATIVE_INGREDIENTS or
-    BACKEND_CAPABILITY_INGREDIENTS is caller-sovereign — the caller-supplied value
-    is retained silently (no warning)."""
-    from types import SimpleNamespace
+def test_strip_server_authoritative_overrides_retains_non_authoritative_keys():
+    """Caller-sovereign keys pass through while server-authoritative keys are reported."""
+    from autoskillit.config import strip_server_authoritative_overrides
 
-    import structlog.testing
-
-    from autoskillit.config import apply_config_authoritative_overrides
-
-    recipe_ingredients = {
-        "totally_unknown_key": SimpleNamespace(authority="config"),
-    }
-
-    with (
-        patch.object(
-            _patch_config_ingredient_defaults,
-            "resolve_ingredient_defaults",
-            return_value={},
-        ),
-        structlog.testing.capture_logs() as cap_logs,
-    ):
-        result = apply_config_authoritative_overrides(
-            {"totally_unknown_key": "caller-value"},
-            recipe_ingredients,
-            tmp_path,
-        )
+    result, stripped = strip_server_authoritative_overrides(
+        {"totally_unknown_key": "caller-value", "base_branch": "main"}
+    )
 
     assert result["totally_unknown_key"] == "caller-value"
-    assert not any("config-authority key" in e.get("event", "") for e in cap_logs)
+    assert "base_branch" not in result
+    assert stripped == frozenset({"base_branch"})
 
 
 # T4: REQ-ING-003

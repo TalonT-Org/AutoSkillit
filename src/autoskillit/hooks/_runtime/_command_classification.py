@@ -407,10 +407,21 @@ def extract_write_verb_targets(
         if not has_inplace:
             return [], False
         operands = operands[-1:]
-    elif verb in {"mv", "cp", "install"}:
+    elif verb in {"mv", "cp"}:
         if len(operands) < 2:
             return [], False
         operands = operands[-1:]
+    elif verb == "install":
+        # GNU install: `install -t DIR SRC...` puts the destination in a
+        # `-t` flag (filtered out by non_flag_operands); without `-t` the
+        # last operand is the destination. Pick the target directory in
+        # both shapes.
+        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
+            operands = operands[:1]
+        else:
+            if len(operands) < 2:
+                return [], False
+            operands = operands[-1:]
     elif verb == "patch":
         operands = operands[:1]
 

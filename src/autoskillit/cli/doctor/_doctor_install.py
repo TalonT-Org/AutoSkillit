@@ -163,14 +163,10 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
 
         from packaging.version import InvalidVersion, Version
 
-        current = getattr(_pkg, "__version__", None)
-        if not isinstance(current, str) or not current.strip():
-            return DoctorResult(
-                Severity.ERROR,
-                check_name,
-                "Installation integrity failure: autoskillit has no valid __version__. "
-                "Run `autoskillit install` before checking for source drift.",
-            )
+        # ``autoskillit.__version__`` is unconditionally set at import time to a
+        # non-empty string from ``importlib.metadata.version()``; the only way
+        # it could be malformed is a corrupt distribution, which Version() catches.
+        current = _pkg.__version__
         try:
             Version(current)
         except InvalidVersion:
@@ -493,13 +489,22 @@ def _verify_record(installation: _Installation) -> tuple[list[DoctorResult], set
             algorithm, expected = parsed_hash
             try:
                 observed = hashlib.new(algorithm, candidate.read_bytes()).digest()
-            except (OSError, ValueError):
+            except ValueError:
                 results.append(
                     DoctorResult(
                         Severity.ERROR,
-                        "installation_record_mismatch",
-                        "Missing or unreadable RECORD entry "
-                        f"{candidate} in {_display(installation)}",
+                        "installation_record_unknown_algorithm",
+                        f"Unknown RECORD hash algorithm {algorithm!r} "
+                        f"for {candidate} in {_display(installation)}",
+                    )
+                )
+                continue
+            except OSError:
+                results.append(
+                    DoctorResult(
+                        Severity.ERROR,
+                        "installation_record_unreadable_entry",
+                        f"Unreadable RECORD entry {candidate} in {_display(installation)}",
                     )
                 )
                 continue

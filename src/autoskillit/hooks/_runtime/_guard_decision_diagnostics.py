@@ -26,17 +26,15 @@ _DECISION_FILE = "guard_decisions.jsonl"
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_RECORDS = 1000
 _MAX_SESSION_ID_CHARS = 128
-# Whitelisted guards allowed to emit decision records. The set is intentionally
-# narrow (a hidden producer/consumer coupling): adding a new guard requires
-# updating this frozenset in lockstep with the producer, otherwise records are
-# silently dropped. See ``record_guard_decision`` for the producer contract.
+# producer/consumer lockstep with the record_guard_decision producers.
 _ALLOWED_GUARDS = frozenset({"write_guard", "skill_load_post_hook"})
-_ALLOWED_ACTIVATION_SOURCES = frozenset({"inactive", "headless", "skill_post_hook"})
+_ALLOWED_ACTIVATION_SOURCES = frozenset(
+    {"headless", "skill_binding", "backend", "skill_post_hook"}
+)
 _ALLOWED_SCOPES = frozenset({"none", "workspace", "write_prefix", "session_binding"})
 _ALLOWED_DECISIONS = frozenset({"allow", "deny"})
 _ALLOWED_REASONS = frozenset(
     {
-        "not_headless",
         "codex",
         "no_scope",
         "malformed_input",

@@ -32,7 +32,7 @@ repos:
         language: fail
         files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json|src/autoskillit/recipes/contracts/)'
 
-- id: reject-staged-autoskillit-temp
+      - id: reject-staged-autoskillit-temp
         name: Reject staged AutoSkillit temp artifacts
         entry: scripts/check_staged_autoskillit_temp.sh
         language: system

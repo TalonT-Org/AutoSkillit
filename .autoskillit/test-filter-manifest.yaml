@@ -293,6 +293,10 @@ install.sh:
 scripts/verify-test-filter.sh:
   - infra/
 
+scripts/check_staged_autoskillit_temp.sh:
+  - arch/
+  - infra/
+
 scripts/post-probe-failure.sh:
   - infra/
 

@@ -498,9 +498,9 @@ steps:
       prev_issues_fixed_count: "${{ result.prev_issues_fixed_count }}"
     on_result:
       - when: "${{ result.zero_progress }} == true"
-        route: stop_zero_progress
+        route: stop_zero_progress_failure
       - when: "${{ result.max_exceeded }} == true"
-        route: stop_refinement_budget
+        route: stop_refinement_budget_failure
       - route: validate
     on_failure: escalate_stop
     optional_context_refs:
@@ -533,12 +533,12 @@ steps:
   escalate_stop:
     action: stop
     message: >-
-      Planner pipeline failed — human intervention needed. Review the latest step output for details.
-  stop_zero_progress:
+      Planner pipeline failed — human intervention needed. Review the latest step output for details. Emit the L3 result sentinel JSON block now with success=false.
+  stop_zero_progress_failure:
     action: stop
     message: >-
       Planner refinement stopped because no issues were fixed. Emit the L3 result sentinel JSON block now with success=false and reason="zero_progress".
-  stop_refinement_budget:
+  stop_refinement_budget_failure:
     action: stop
     message: >-
       Planner refinement exhausted its retry budget. Emit the L3 result sentinel JSON block now with success=false and reason="refinement_budget_exhausted".

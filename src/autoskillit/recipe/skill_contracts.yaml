@@ -3810,6 +3810,19 @@ callable_contracts:
     - name: output_dir
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: eval_run_dir
+      type: str
+    - name: canary_count
+      type: str
+    - name: variant_count
+      type: str
+    - name: manifest_index_path
+      type: str
   autoskillit.smoke_utils.build_agent_eval_context:
     inputs:
     - name: canary_id
@@ -3821,6 +3834,13 @@ callable_contracts:
     - name: eval_run_dir
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: eval_context_path
+      type: str
   autoskillit.smoke_utils.compile_eval_scorecard:
     inputs:
     - name: eval_run_dir
@@ -3832,6 +3852,23 @@ callable_contracts:
     - name: variant_manifest
       type: str
       required: true
+    outputs:
+    - name: success
+      type: str
+    - name: error
+      type: str
+    - name: scorecard_path
+      type: str
+    - name: pass_rate
+      type: str
+    - name: total_runs
+      type: str
+    - name: passed_runs
+      type: str
+    - name: vacuous_passes
+      type: str
+    - name: effective_pass_rate
+      type: str
   autoskillit.smoke_utils.extract_investigation:
     inputs:
     - name: investigation_path

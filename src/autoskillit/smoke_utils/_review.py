@@ -11,6 +11,7 @@ from typing import assert_never
 from autoskillit.core import (
     AuditAssessment,
     AuditCycleAuthority,
+    AuditCycleVerifier,
     AuditVerdict,
     get_logger,
     is_valid_github_review_head_sha,
@@ -31,14 +32,11 @@ def _load_remediation_authority(path: str, *, require_no_go: bool = False) -> Au
     if not path:
         raise ValueError("audit authority path is required")
     try:
-        data = Path(path).read_bytes()
-        if len(data) > 10_000_000:
-            raise ValueError("audit authority exceeds size limit")
-        raw = json.loads(data)
-        authority = AuditCycleAuthority.from_dict(raw)
-        if authority.canonical_bytes != data:
-            raise ValueError("audit authority is not canonical JSON")
-    except (OSError, TypeError, ValueError, KeyError, AttributeError) as exc:
+        authority_path = Path(path)
+        if not authority_path.is_absolute():
+            raise ValueError("audit authority path must be absolute")
+        authority = AuditCycleVerifier(authority_path.parent).load_authority(authority_path)
+    except (OSError, ValueError) as exc:
         raise ValueError(f"invalid audit authority {path!r}: {exc}") from exc
     if require_no_go and authority.verdict is not AuditVerdict.NO_GO:
         raise ValueError("remediation requires a NO GO authority")

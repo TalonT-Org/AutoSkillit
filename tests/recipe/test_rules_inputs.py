@@ -476,6 +476,8 @@ def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
 
     assert {finding.step_name for finding in findings} == {
         "check_audit_remediation_loop",
+        "check_audit_integrity_retry",
+        "merge_audit_cycle_path",
         "reset_test_fix_counter",
         "reset_merge_test_fix_counter",
         "reset_merge_fix_counter",
@@ -488,6 +490,12 @@ def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
         "check_ref_push_loop_pre_remediation",
         "ref_push_pre_remediation",
         "remediate",
+        "make_plan",
+        "salvage_plan",
+        "release_audit_remediation_stuck",
+        "stop_audit_remediation_stuck",
+        "await_audit_decision",
+        "stop_await_audit_decision",
     }
 
 

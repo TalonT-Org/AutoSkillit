@@ -2793,7 +2793,7 @@ steps:
     on_failure: stop_await_audit_decision
   stop_await_audit_decision:
     action: stop
-    message: 'Audit remediation requires a human waiver or decision for ${{ context.audit_unresolved_requirement_ids }}. Emit the L3 result sentinel JSON block now with success=false and reason="awaiting_audit_decision".'
+    message: 'Audit remediation requires a human waiver or decision. The preceding gate output lists the unresolved requirement IDs. Emit the L3 result sentinel JSON block now with success=false and reason="awaiting_audit_decision".'
   release_issue_failure:
     tool: release_issue
     optional: true

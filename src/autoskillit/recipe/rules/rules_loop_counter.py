@@ -309,6 +309,17 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         if non_exit_target is None or non_exit_target not in recipe.steps:
             continue
 
+        if non_exit_target == "merge_audit_cycle_path":
+            merge_step = recipe.steps[non_exit_target]
+            if merge_step.on_result is not None:
+                no_go_routes = {
+                    condition.route
+                    for condition in merge_step.on_result.conditions
+                    if condition.when is not None and "NO GO" in condition.when
+                }
+                if len(no_go_routes) == 1:
+                    non_exit_target = no_go_routes.pop()
+
         forward_reachable = bfs_reachable(graph, non_exit_target)
         forward_reachable.add(non_exit_target)
         cycle_candidates = bfs_reachable(ctx.predecessors, outer_name)

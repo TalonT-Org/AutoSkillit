@@ -36,7 +36,6 @@ def test_public_api_importable_from_package_facade() -> None:
     from autoskillit.hooks import _capture_lifecycle as facade
 
     expected = {
-        # Original __all__ from the deleted module.
         "CaptureCapacityError",
         "CaptureCapacityReason",
         "CaptureCleanupOutcome",

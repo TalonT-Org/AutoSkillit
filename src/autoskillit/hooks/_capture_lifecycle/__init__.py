@@ -246,7 +246,6 @@ else:
 os = _os
 
 __all__ = [
-    # Original __all__ from the deleted module.
     "CaptureCapacityError",
     "CaptureCapacityReason",
     "CaptureCleanupOutcome",

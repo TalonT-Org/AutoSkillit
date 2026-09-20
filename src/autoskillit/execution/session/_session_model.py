@@ -10,6 +10,7 @@ from typing import Any, assert_never
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CANONICAL_ACCOUNTING_FIELDS,
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     CONTEXT_EXHAUSTION_MARKER,
     ClaudeContentBlockType,
@@ -32,10 +33,16 @@ from autoskillit.execution.session._turn_usage import (
 
 logger = get_logger(__name__)
 
-_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
-    ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
-    ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"),
+_API_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
 )
+# Routes the canonical accounting field set through the shared constant
+# so this module cannot drift from pipeline/tokens.py, _fleet_display.py,
+# and _otlp_tokens.py.
+_CANONICAL_TOKEN_FIELDS = CANONICAL_ACCOUNTING_FIELDS
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
         CliSubtype.UNKNOWN,

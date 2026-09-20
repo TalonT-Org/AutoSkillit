@@ -15,9 +15,8 @@ from uuid import uuid4
 from cyclopts import App, Parameter
 
 from autoskillit.cli.fleet._fleet_display import (
-    _aggregate_totals,
     _compute_exit_code,
-    _cross_check_tokens,
+    _pair_totals,
     _render_status_display,
     _watch_loop,
     render_fleet_error,
@@ -329,7 +328,7 @@ def _show_named_campaign_status(
         sys.exit(3)
 
     if json_output:
-        totals = _aggregate_totals(state)
+        totals = _pair_totals(state)
         data = {
             "campaign_id": state.campaign_id,
             "campaign_name": state.campaign_name,
@@ -338,7 +337,6 @@ def _show_named_campaign_status(
             "totals": totals,
         }
         print(json.dumps(data))
-        _cross_check_tokens(state, totals)
         sys.exit(_compute_exit_code(state))
 
     if watch and cleanup:
@@ -353,8 +351,6 @@ def _show_named_campaign_status(
     if reap or dry_run:
         _reap_stale_dispatches(state_path, dry_run=dry_run)
 
-    totals = _aggregate_totals(state)
-    _cross_check_tokens(state, totals)
     sys.exit(_compute_exit_code(state))
 
 

@@ -110,6 +110,7 @@ class TestExecutionTypesNotInResults:
             ChildOutcomeDict,
             ExecutionIdentity,
             ExecutionIdentityDict,
+            resolve_provider_used,
         )
         from autoskillit.core.types._type_execution_identity import __all__ as identity_all
 
@@ -127,7 +128,10 @@ class TestExecutionTypesNotInResults:
             "ChildOutcomeDict",
             "ExecutionIdentity",
             "ExecutionIdentityDict",
+            "default_provider_for",
+            "resolve_provider_used",
         }
+        assert resolve_provider_used("codex", False) == "codex"
         children = (
             ChildExecutionIdentity("b", "role", "plan", "definition"),
             ChildExecutionIdentity("a", "role", "plan", "definition"),

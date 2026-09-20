@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     SESSION_INDEX_SCHEMA_VERSION,
+    TOKEN_USAGE_SCHEMA_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
     ModelIdentity,
@@ -37,6 +38,10 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
+from autoskillit.execution.evidence._token_measure import (
+    build_token_usage_record,
+    serialized_token_measure,
+)
 from autoskillit.execution.evidence.anomaly_detection import (
     api_retry_exhaustion_anomaly,
     detect_anomalies,
@@ -610,42 +615,40 @@ def flush_session_log(
             and publish_artifacts
             and not sidecar_failed
         ):
-            effective_token_usage = token_usage or {}
-            _cw_raw = effective_token_usage.get("cache_write_tokens")
-            _cache_write = (
-                _cw_raw
-                if _cw_raw is not None
-                else (effective_token_usage.get("cache_creation_input_tokens") or 0)
+            tu_data = build_token_usage_record(
+                token_usage,
+                label=label,
+                backend=backend,
+                timing_seconds=timing_seconds,
+                order_id=order_id,
+                loc_insertions=loc_insertions,
+                loc_deletions=loc_deletions,
+                provider_used=provider_outcome.provider_used,
+                model_identifier=effective_model_id,
+                configured_model=model_identity.configured_model,
+                profile_name=model_identity.profile_name,
+                dispatch_id=dispatch_id,
+                campaign_id=campaign_id,
+                sidecar_published=sidecar_published,
+                turn_usage_count=len(turn_usage),
             )
-            _cr_raw = effective_token_usage.get("cache_read_tokens")
-            _cache_read = (
-                _cr_raw
-                if _cr_raw is not None
-                else (effective_token_usage.get("cache_read_input_tokens") or 0)
-            )
-            tu_data = {
-                "session_label": label,
-                "input_tokens": effective_token_usage.get("input_tokens") or 0,
-                "output_tokens": effective_token_usage.get("output_tokens") or 0,
-                "cache_write_tokens": _cache_write,
-                "cache_read_tokens": _cache_read,
-                "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
-                "order_id": order_id,
-                "loc_insertions": loc_insertions,
-                "loc_deletions": loc_deletions,
-                "peak_context": effective_token_usage.get("peak_context", 0),
-                "turn_count": effective_token_usage.get("turn_count", 0),
-                "provider_used": provider_outcome.provider_used,
-                "model_identifier": effective_model_id,
-                "configured_model": model_identity.configured_model,
-                "profile_name": model_identity.profile_name,
-                "dispatch_id": dispatch_id,
-                "campaign_id": campaign_id,
-                "turn_usage_file": "turn_usage.jsonl" if sidecar_published else None,
-                "turn_usage_count": len(turn_usage) if sidecar_published else 0,
-                "turn_usage_schema_version": 1,
+            summary["token_usage"] = {
+                key: tu_data[key]
+                for key in (
+                    "backend",
+                    "provider_used",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_write_tokens",
+                    "cache_read_tokens",
+                    "peak_context",
+                )
             }
-            write_versioned_json(session_dir / "token_usage.json", tu_data, schema_version=3)
+            write_versioned_json(
+                session_dir / "token_usage.json",
+                tu_data,
+                schema_version=TOKEN_USAGE_SCHEMA_VERSION,
+            )
 
         if timing_seconds is not None and publish_artifacts:
             atomic_write(
@@ -695,12 +698,18 @@ def flush_session_log(
             "peak_rss_kb": peak_rss_kb,
             "peak_oom_score": peak_oom_score,
             "step_name": step_name,
-            "input_tokens": (token_usage.get("input_tokens") or 0) if token_usage else 0,
-            "output_tokens": (token_usage.get("output_tokens") or 0) if token_usage else 0,
-            "cache_write_tokens": (token_usage.get("cache_write_tokens") or 0)
-            if token_usage
-            else 0,
-            "cache_read_tokens": (token_usage.get("cache_read_tokens") or 0) if token_usage else 0,
+            "input_tokens": serialized_token_measure(
+                token_usage.get("input_tokens") if token_usage else None
+            ),
+            "output_tokens": serialized_token_measure(
+                token_usage.get("output_tokens") if token_usage else None
+            ),
+            "cache_write_tokens": serialized_token_measure(
+                token_usage.get("cache_write_tokens") if token_usage else None
+            ),
+            "cache_read_tokens": serialized_token_measure(
+                token_usage.get("cache_read_tokens") if token_usage else None
+            ),
             "write_call_count": write_call_count,
             "fs_writes_detected": fs_writes_detected,
             "git_writes_detected": git_writes_detected,

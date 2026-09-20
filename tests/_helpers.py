@@ -396,3 +396,18 @@ def extract_always_block(skill_text: str) -> str:
 
 # Phoropter lens families with at least one ``skills_extended/{family}-*`` directory.
 IMPLEMENTED_FAMILIES: frozenset[str] = frozenset({"arch-lens", "exp-lens", "vis-lens"})
+
+
+# ---------------------------------------------------------------------------
+# Shared token-measure test helpers
+# ---------------------------------------------------------------------------
+
+from autoskillit.core import TokenMeasure as _TokenMeasure  # noqa: E402
+
+
+def observed_measure(value: int) -> dict[str, object]:
+    """Return the canonical observed-measure dict (measured_zero for value 0)."""
+    return _TokenMeasure.observed(value).to_dict()
+
+
+UNKNOWN_MEASURE: dict[str, object] = _TokenMeasure.unknown().to_dict()

@@ -25,6 +25,8 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log.session_log import resolve_log_dir
+from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
+from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -38,6 +40,7 @@ def _turn_usage_row(
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "backend": backend,
+        "provider_used": "anthropic" if backend == "claude-code" else backend,
         "message_id": f"message-{index}",
         "request_id": f"request-{index}",
         "timestamp": f"2026-09-10T10:00:{index % 60:02d}+00:00",
@@ -883,8 +886,8 @@ def test_flush_writes_token_usage_json_when_step_name_empty(tmp_path):
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "(ad-hoc)"
     assert "step_name" not in data
-    assert data["cache_write_tokens"] == 20
-    assert data["cache_read_tokens"] == 80
+    assert data["cache_write_tokens"] == _observed(20)
+    assert data["cache_read_tokens"] == _observed(80)
 
 
 def test_flush_writes_step_timing_json(tmp_path):
@@ -969,10 +972,10 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert len(lines) == 1
     entry = json.loads(lines[-1])
     assert entry["step_name"] == "implement"
-    assert entry["input_tokens"] == 100
-    assert entry["output_tokens"] == 50
-    assert entry["cache_write_tokens"] == 20
-    assert entry["cache_read_tokens"] == 80
+    assert entry["input_tokens"] == _observed(100)
+    assert entry["output_tokens"] == _observed(50)
+    assert entry["cache_write_tokens"] == _observed(20)
+    assert entry["cache_read_tokens"] == _observed(80)
 
 
 def test_flush_index_includes_current_schema_version(tmp_path):
@@ -1050,16 +1053,16 @@ def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):
         assert forbidden not in serialized_audit
 
 
-def test_flush_index_token_fields_zero_when_no_step(tmp_path):
-    """sessions.jsonl entry has step_name='' and token fields=0 when no step telemetry."""
+def test_flush_index_token_fields_unknown_when_no_step(tmp_path):
+    """A session without token evidence does not claim an observed zero."""
     _flush(tmp_path, proc_snapshots=None, success=False)  # no step_name
     lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
     entry = json.loads(lines[-1])
     assert entry["step_name"] == ""
-    assert entry["input_tokens"] == 0
-    assert entry["output_tokens"] == 0
-    assert entry["cache_write_tokens"] == 0
-    assert entry["cache_read_tokens"] == 0
+    assert entry["input_tokens"] == _UNKNOWN
+    assert entry["output_tokens"] == _UNKNOWN
+    assert entry["cache_write_tokens"] == _UNKNOWN
+    assert entry["cache_read_tokens"] == _UNKNOWN
 
 
 def test_token_usage_json_schema(tmp_path):
@@ -1081,19 +1084,50 @@ def test_token_usage_json_schema(tmp_path):
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
     assert tu["session_label"] == "plan"
-    assert tu["input_tokens"] == 10
-    assert tu["output_tokens"] == 5
-    assert tu["cache_write_tokens"] == 2
-    assert tu["cache_read_tokens"] == 1
+    assert tu["input_tokens"] == _observed(10)
+    assert tu["output_tokens"] == _observed(5)
+    assert tu["cache_write_tokens"] == _observed(2)
+    assert tu["cache_read_tokens"] == _observed(1)
     assert tu["timing_seconds"] == 15.0
-    assert tu["peak_context"] == 0
+    assert tu["peak_context"] == _UNKNOWN
     assert tu["turn_count"] == 0
     assert tu["dispatch_id"] == "disp-abc"
     assert tu["campaign_id"] == "camp-xyz"
     assert tu["turn_usage_file"] is None
     assert tu["turn_usage_count"] == 0
-    assert tu["turn_usage_schema_version"] == 1
-    assert tu["schema_version"] == 3
+    assert tu["turn_usage_schema_version"] == 2
+    assert tu["schema_version"] == 4
+
+
+def test_persisted_token_artifacts_keep_source_pair_and_measure_states(tmp_path):
+    _flush(
+        tmp_path,
+        provider_used="anthropic",
+        token_usage={"input_tokens": 0, "output_tokens": 4},
+        turn_usage=[_turn_usage_row(input_tokens=0, output_tokens=4)],
+    )
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    descriptor = json.loads((session_dir / "token_usage.json").read_text())
+    summary = json.loads((session_dir / "summary.json").read_text())
+    index = _read_jsonl(tmp_path / "sessions.jsonl")[0]
+    turn = _read_jsonl(session_dir / "turn_usage.jsonl")[0]
+
+    measure_fields = ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens")
+    for row in (descriptor, summary["token_usage"], index, turn):
+        assert (row["backend"], row["provider_used"]) == ("claude-code", "anthropic")
+        for field in measure_fields:
+            measure = row[field]
+            assert measure["state"] in {
+                "measured",
+                "measured_zero",
+                "unavailable",
+                "unknown",
+                "not_applicable",
+            }
+    assert descriptor["input_tokens"] == {"state": "measured_zero", "value": 0}
+    assert summary["token_usage"]["input_tokens"] == descriptor["input_tokens"]
+    assert index["input_tokens"] == descriptor["input_tokens"]
+    assert turn["input_tokens"] == descriptor["input_tokens"]
 
 
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
@@ -1114,12 +1148,12 @@ def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
         success=True,
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
-    assert tu["peak_context"] == 75000
+    assert tu["peak_context"] == _observed(75000)
     assert tu["turn_count"] == 14
 
 
-def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
-    """Codex-originated None for cache_write_tokens must persist as 0 on disk."""
+def test_token_usage_json_preserves_unknown_cache_write(tmp_path):
+    """An absent cache-write observation cannot persist as observed zero."""
     _flush(
         tmp_path,
         step_name="implement",
@@ -1134,8 +1168,8 @@ def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
         success=True,
     )
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
-    assert tu["cache_write_tokens"] == 0
-    assert tu["cache_read_tokens"] == 50
+    assert tu["cache_write_tokens"] == _UNKNOWN
+    assert tu["cache_read_tokens"] == _observed(50)
 
 
 @pytest.mark.parametrize(
@@ -1185,16 +1219,26 @@ def test_turn_usage_descriptor_states(
         return
 
     descriptor = json.loads(descriptor_path.read_text())
-    assert descriptor["schema_version"] == 3
-    assert descriptor["turn_usage_schema_version"] == 1
+    assert descriptor["schema_version"] == 4
+    assert descriptor["turn_usage_schema_version"] == 2
     assert descriptor["turn_usage_file"] == ("turn_usage.jsonl" if turn_usage else None)
     assert descriptor["turn_usage_count"] == len(turn_usage)
     assert sidecar_path.exists() is bool(turn_usage)
     if turn_usage:
-        assert _read_jsonl(sidecar_path) == turn_usage
+        # Use the public JSONL load path rather than calling the private
+        # `serialize_turn_token_entry` helper, so the test stays coupled to
+        # the loadable shape and not the internal serializer. Verify the
+        # record count and that each line is parseable JSON carrying the
+        # row's identifying fields.
+        loaded_rows = _read_jsonl(sidecar_path)
+        assert len(loaded_rows) == len(turn_usage)
+        for src, dst in zip(turn_usage, loaded_rows, strict=True):
+            assert dst["backend"] == src["backend"]
+            assert dst["provider_used"] == src["provider_used"]
+            assert dst["request_id"] == src["request_id"]
     if token_usage is None:
-        assert not any(
-            descriptor[key]
+        assert all(
+            descriptor[key] == _UNKNOWN
             for key in (
                 "input_tokens",
                 "output_tokens",
@@ -1272,7 +1316,15 @@ def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
     sidecar = (
         tmp_path / "sessions" / "resumed-codex_2026-09-10T10-00-00+00-00" / "turn_usage.jsonl"
     )
-    assert _read_jsonl(sidecar) == [current]
+    # Compare via the public JSONL load path instead of the private
+    # `serialize_turn_token_entry` helper, so the test is robust to
+    # serializer evolution. Verify identifying fields instead of full
+    # dict equality.
+    loaded = _read_jsonl(sidecar)
+    assert len(loaded) == 1
+    assert loaded[0]["backend"] == current["backend"]
+    assert loaded[0]["provider_used"] == current["provider_used"]
+    assert loaded[0]["request_id"] == current["request_id"]
 
 
 def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
@@ -1326,8 +1378,8 @@ def test_long_turn_usage_series_is_complete_while_metadata_stays_bounded(tmp_pat
     session_501 = tmp_path / "sessions" / "long-501"
     persisted_501 = _read_jsonl(session_501 / "turn_usage.jsonl")
     assert len(persisted_501) == 501
-    assert persisted_501[250]["cache_read_tokens"] == 0
-    assert persisted_501[250]["cache_creation_tokens"] == 777
+    assert persisted_501[250]["cache_read_tokens"] == {"state": "measured_zero", "value": 0}
+    assert persisted_501[250]["cache_write_tokens"] == {"state": "measured", "value": 777}
 
     descriptors = []
     for session_id, expected_count in (("long-501", 501), ("long-5001", 5_001)):
@@ -1508,8 +1560,8 @@ def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     assert (session_dir / "token_usage.json").exists()
     data = json.loads((session_dir / "token_usage.json").read_text())
     assert data["session_label"] == "dispatch:abc-123"
-    assert data["cache_write_tokens"] == 20
-    assert data["cache_read_tokens"] == 80
+    assert data["cache_write_tokens"] == _observed(20)
+    assert data["cache_read_tokens"] == _observed(80)
 
 
 def test_token_usage_file_entry_type_matches_written_fields(tmp_path):

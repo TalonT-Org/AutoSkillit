@@ -19,6 +19,27 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
 )
+from autoskillit.execution.evidence._otlp_tokens import (
+    TokenObservation as _TokenObservation,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    aggregate_token_observations as _aggregate_token_observations,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    has_attribute as _has_attribute,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    project_token_observations as _token_observations,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    record_attributes as _record_attributes,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    unique_bool_attribute as _unique_bool_attribute,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    unique_string_attribute as _unique_string_attribute,
+)
 from autoskillit.execution.session_log.session_log import resolve_log_dir
 
 logger = get_logger(__name__)
@@ -29,6 +50,8 @@ _MAX_GENERATION_BYTES = 20 * 1024 * 1024
 _QUEUE_CAPACITY = 128
 _MODEL_EVIDENCE_SESSION_CAPACITY = 256
 _MODEL_EVIDENCE_OUTCOME_CAPACITY = 64
+_TOKEN_EVIDENCE_SESSION_CAPACITY = 256
+_TOKEN_EVIDENCE_REQUEST_CAPACITY = 256
 _HANDLER_DRAIN_SECONDS = 1.0
 _THREAD_JOIN_SECONDS = 2.0
 _WRITER_POLL_SECONDS = 0.05
@@ -131,44 +154,11 @@ def _build_env(base_url: str) -> dict[str, str]:
             {
                 f"{prefix}_HEADERS": "",
                 f"{prefix}_CERTIFICATE": "",
-                f"{prefix}_COMPRESSION": "none",
+                f"{prefix}_COMPRESSION": "gzip",
                 f"{prefix}_TIMEOUT": "",
             }
         )
     return env
-
-
-def _record_attributes(record: object) -> list[object] | None:
-    if not isinstance(record, dict):
-        return None
-    attributes = record.get("attributes")
-    return attributes if isinstance(attributes, list) else None
-
-
-def _unique_string_attribute(attributes: list[object], key: str) -> str | None:
-    matches = [item for item in attributes if isinstance(item, dict) and item.get("key") == key]
-    if len(matches) != 1:
-        return None
-    value = matches[0].get("value")
-    if not isinstance(value, dict):
-        return None
-    scalar = value.get("stringValue")
-    return scalar if isinstance(scalar, str) and scalar else None
-
-
-def _unique_bool_attribute(attributes: list[object], key: str) -> bool | None:
-    matches = [item for item in attributes if isinstance(item, dict) and item.get("key") == key]
-    if len(matches) != 1:
-        return None
-    value = matches[0].get("value")
-    if not isinstance(value, dict):
-        return None
-    scalar = value.get("boolValue")
-    return scalar if isinstance(scalar, bool) else None
-
-
-def _has_attribute(attributes: list[object], key: str) -> bool:
-    return any(isinstance(item, dict) and item.get("key") == key for item in attributes)
 
 
 def _claude_model_observation(
@@ -392,7 +382,8 @@ class _OtlpHandler(BaseHTTPRequestHandler):
             + b"\n"
         )
         observations = _model_observations(signal, sanitized_payload)
-        enqueue_status = sink._enqueue(line, observations)
+        token_observations = _token_observations(signal, sanitized_payload)
+        enqueue_status = sink._enqueue(line, observations, token_observations)
         if enqueue_status == "queue_full":
             self._send_status(503, "OTLP receiver queue is full")
             return
@@ -464,6 +455,8 @@ class LocalOtlpSink:
                 list[tuple[int, SubagentModelOutcomeDict]],
             ],
         ] = {}
+        self._token_evidence: dict[str, dict[str, dict[str, int | None] | None]] = {}
+        self._token_evidence_overflow_sessions: set[str] = set()
         self._counters = {name: 0 for name in _COUNTER_NAMES}
 
     @classmethod
@@ -555,6 +548,7 @@ class LocalOtlpSink:
         self,
         line: bytes,
         observations: tuple[_ModelObservation, ...] = (),
+        token_observations: tuple[_TokenObservation, ...] = (),
     ) -> str:
         with self._condition:
             self._counters["received"] += 1
@@ -581,7 +575,59 @@ class LocalOtlpSink:
                     self._model_evidence[session_id] = (parent, outcomes)
                 if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
                     outcomes.append((ordinal, outcome))
+            # project_token_observations returns an empty tuple when the
+            # payload is not a logs signal or carries no valid observations;
+            # see _otlp_tokens.py:78. Iterating the empty tuple is a no-op,
+            # so no explicit None-handling branch is needed.
+            for session_id, request_id, usage in token_observations:
+                requests = self._token_evidence.get(session_id)
+                if requests is None:
+                    if len(self._token_evidence) >= _TOKEN_EVIDENCE_SESSION_CAPACITY:
+                        self._token_evidence_overflow_sessions.add(session_id)
+                        continue
+                    requests = {}
+                    self._token_evidence[session_id] = requests
+                if request_id in requests:
+                    if requests[request_id] != usage:
+                        requests[request_id] = None
+                elif len(requests) < _TOKEN_EVIDENCE_REQUEST_CAPACITY:
+                    requests[request_id] = usage
+                else:
+                    self._token_evidence_overflow_sessions.add(session_id)
             return "accepted"
+
+    def token_usage_for(
+        self, session_id: str, backend: str, provider_used: str
+    ) -> dict[str, Any] | None:
+        """Return correlated accounting only when the sink retained complete evidence."""
+        # Boundary validation: this method is MCP-facing (tools_execution_results_telemetry
+        # routes through it), so empty/invalid identifiers must short-circuit to None
+        # rather than propagating into the aggregator and surfacing as ValueError
+        # at a far-removed caller.
+        if not backend or not provider_used:
+            return None
+        with self._condition:
+            if not self._started_successfully or not session_id:
+                return None
+            if session_id in self._token_evidence_overflow_sessions:
+                return None
+            if any(
+                self._counters[name]
+                for name in (
+                    "dropped_queue_full",
+                    "dropped_shutdown",
+                    "dropped_lock_contention",
+                    "dropped_io",
+                )
+            ):
+                return None
+            if self._writer_thread is not None and self._writer_thread.is_alive():
+                return None
+            requests = self._token_evidence.get(session_id)
+            if not requests or any(value is None for value in requests.values()):
+                return None
+            snapshot = tuple(value for value in requests.values() if value is not None)
+        return _aggregate_token_observations(snapshot, backend, provider_used)
 
     def model_evidence_for(
         self,

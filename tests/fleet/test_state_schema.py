@@ -23,6 +23,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet.campaign_state.state import _write_state, reset_blocking_dispatch
+from tests._helpers import UNKNOWN_MEASURE, observed_measure
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -80,8 +81,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
         assert dispatch_raw["issue_url"] == "https://github.com/org/repo/issues/42"
 
-    def test_schema_version_is_12(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 12
+    def test_schema_version_is_13(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 13
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -297,13 +298,17 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": 3,
             }
         )
-        assert result == {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
+        assert result["input_tokens"] == observed_measure(10)
+        assert result["output_tokens"] == observed_measure(5)
+        assert result["cache_write_tokens"] == observed_measure(2)
+        assert result["cache_read_tokens"] == observed_measure(3)
 
-    def test_empty_dict_returns_zeros(self) -> None:
+    def test_empty_dict_returns_unknown_measures(self) -> None:
         result = normalize_dispatch_token_usage({})
-        assert result == {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
+        assert result["input_tokens"] == UNKNOWN_MEASURE
+        assert result["cache_write_tokens"] == UNKNOWN_MEASURE
 
-    def test_string_values_coerced_to_int(self) -> None:
+    def test_string_values_are_not_observations(self) -> None:
         result = normalize_dispatch_token_usage(
             {
                 "input_tokens": "7",
@@ -312,7 +317,8 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": "2",
             }
         )
-        assert result == {"input": 7, "output": 3, "cache_creation": 1, "cache_read": 2}
+        assert result["input_tokens"] == UNKNOWN_MEASURE
+        assert result["output_tokens"] == UNKNOWN_MEASURE
 
     def test_result_unpacks_into_dispatch_token_usage(self) -> None:
         dtu = DispatchTokenUsage(
@@ -325,10 +331,10 @@ class TestNormalizeDispatchTokenUsage:
                 }
             )
         )
-        assert dtu.input == 10
-        assert dtu.output == 5
-        assert dtu.cache_creation == 2
-        assert dtu.cache_read == 3
+        assert dtu.input_tokens == observed_measure(10)
+        assert dtu.output_tokens == observed_measure(5)
+        assert dtu.cache_write_tokens == observed_measure(2)
+        assert dtu.cache_read_tokens == observed_measure(3)
 
     def test_importable_from_fleet_package(self) -> None:
         from autoskillit.fleet import normalize_dispatch_token_usage as imported
@@ -344,7 +350,8 @@ class TestNormalizeDispatchTokenUsage:
         result = normalize_dispatch_token_usage(
             {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
         )
-        assert result == {"input": 10, "output": 5, "cache_creation": 2, "cache_read": 3}
+        assert result["input_tokens"] == observed_measure(10)
+        assert result["cache_write_tokens"] == observed_measure(2)
 
     def test_mixed_old_and_new_canonical_wins(self) -> None:
         result = normalize_dispatch_token_usage(
@@ -359,7 +366,8 @@ class TestNormalizeDispatchTokenUsage:
                 "cache_read_input_tokens": 66,
             }
         )
-        assert result == {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
+        assert result["input_tokens"] == observed_measure(0)
+        assert result["cache_write_tokens"] == observed_measure(0)
 
     def test_existing_full_mapping_unchanged(self) -> None:
         raw = {
@@ -369,7 +377,9 @@ class TestNormalizeDispatchTokenUsage:
             "cache_read_input_tokens": 30,
         }
         result = normalize_dispatch_token_usage(raw)
-        assert result == {"input": 100, "output": 50, "cache_creation": 20, "cache_read": 30}
+        assert result["input_tokens"] == observed_measure(100)
+        assert result["cache_write_tokens"] == observed_measure(20)
+        assert result["cache_read_tokens"] == observed_measure(30)
 
 
 class TestDispatchRecordToDict:
@@ -563,15 +573,15 @@ class TestDispatchRecordSchemaV3:
                 "cache_read_input_tokens": 300,
             }
         )
-        assert result["cache_creation"] == 200
-        assert result["cache_read"] == 300
+        assert result["cache_write_tokens"] == observed_measure(200)
+        assert result["cache_read_tokens"] == observed_measure(300)
         assert "cache_creation_input_tokens" not in result
         assert "cache_read_input_tokens" not in result
 
-    def test_normalize_defaults_missing_cache_keys_to_zero(self) -> None:
+    def test_normalize_defaults_missing_cache_keys_to_unknown(self) -> None:
         result = normalize_dispatch_token_usage({"input_tokens": 10, "output_tokens": 5})
-        assert result["cache_creation"] == 0
-        assert result["cache_read"] == 0
+        assert result["cache_write_tokens"] == UNKNOWN_MEASURE
+        assert result["cache_read_tokens"] == UNKNOWN_MEASURE
 
     def test_campaign_id_roundtrip_via_dispatch_record(self, tmp_path: Path) -> None:
         sp = tmp_path / "state.json"

@@ -4,13 +4,29 @@ Both MCP tools (get_token_summary, get_timing_summary, write_telemetry_files) an
 the PostToolUse hook delegate formatting to this module. The hook's inline formatter
 (pretty_output.py) cannot import this module (stdlib-only constraint), so it
 maintains an output-equivalent inline implementation guarded by test 1g.
+
+TokenMeasureState taxonomy literals are imported from the canonical
+TokenMeasureState StrEnum in core.types; the hook layer's stdlib-only
+mirror in hooks/_runtime/_token_measure.py must redeclare them as
+string literals (enforced by tests/arch/test_hooks_are_stdlib_only.py).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-from autoskillit.core import ModelTotalEntry, TerminalColumn, _render_terminal_table
+from autoskillit.core import (
+    ModelTotalEntry,
+    TerminalColumn,
+    TokenMeasureState,
+    _render_terminal_table,
+)
+
+# Measured-with-numeric-value states: cache_write, cache_read, etc. aggregate
+# to numeric totals; the other states are categorical and only contribute
+# to the missing_states set during ratio aggregation.
+_NUMERIC_MEASURE_STATES = frozenset({TokenMeasureState.MEASURED, TokenMeasureState.MEASURED_ZERO})
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
@@ -72,6 +88,8 @@ _TOKEN_MD_SEP = "|" + "|".join("-" * (len(h) + 2) for h in _tok_md_headers) + "|
 _TOKEN_DISPLAY_FIELDS: frozenset[str] = frozenset(
     {
         "step_name",
+        "backend",
+        "provider_used",
         "model",
         "input_tokens",
         "output_tokens",
@@ -93,6 +111,8 @@ _TOKEN_EXCLUDED_FIELDS: frozenset[str] = frozenset(
 
 _TOKEN_FIELD_TO_COLUMN: dict[str, str] = {
     "step_name": "STEP",
+    "backend": "STEP",
+    "provider_used": "STEP",
     "model": "MODEL",
     "input_tokens": "UNCACHED",
     "output_tokens": "OUTPUT",
@@ -143,8 +163,43 @@ def _is_non_anthropic(model: str) -> bool:
     return bool(model) and not model.startswith("claude-")
 
 
-def _ratio(tokens: int, loc: int) -> str:
-    return f"{tokens / loc:.1f}" if loc > 0 else "—"
+def _ratio(tokens: Any, loc: int) -> str:
+    if isinstance(tokens, dict):
+        value = tokens.get("value")
+        if value is None:
+            return str(tokens.get("state", TokenMeasureState.UNKNOWN.value))
+        tokens = value
+    return f"{tokens / loc:.1f}" if isinstance(tokens, int) and loc > 0 else "—"
+
+
+def _ratio_total(steps: list[dict], field: str) -> str:
+    """Use only scopes that observed the required measure in a ratio denominator."""
+    tokens = 0
+    eligible_loc = 0
+    missing_states: set[str] = set()
+    for step in steps:
+        loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+        raw = step.get(field)
+        if isinstance(raw, dict):
+            state, value = raw.get("state"), raw.get("value")
+            if state not in _NUMERIC_MEASURE_STATES or not isinstance(value, int):
+                missing_states.add(str(state or TokenMeasureState.UNKNOWN.value))
+                continue
+            raw = value
+        if not isinstance(raw, int) or isinstance(raw, bool):
+            missing_states.add(TokenMeasureState.UNKNOWN.value)
+            continue
+        tokens += raw
+        eligible_loc += loc
+    if TokenMeasureState.UNKNOWN.value in missing_states:
+        return TokenMeasureState.UNKNOWN.value
+    if eligible_loc:
+        return _ratio(tokens, eligible_loc)
+    if missing_states == {TokenMeasureState.UNAVAILABLE.value}:
+        return TokenMeasureState.UNAVAILABLE.value
+    if missing_states == {TokenMeasureState.NOT_APPLICABLE.value}:
+        return TokenMeasureState.NOT_APPLICABLE.value
+    return "—"
 
 
 _LEGACY_TO_CANONICAL: dict[str, str] = {
@@ -162,20 +217,28 @@ def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _h_cache(val: int | None) -> str:
-    """Humanize a cache token count; None → '—' (provider lacks cache)."""
-    if val is None:
-        return "—"
-    return TelemetryFormatter._humanize(val)
+def _source_label(row: Mapping[str, Any]) -> str:
+    backend = row.get("backend")
+    provider = row.get("provider_used")
+    return f"{backend}/{provider}" if backend and provider else ""
 
 
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
 
     @staticmethod
-    def _humanize(n: int | float | None) -> str:
+    def _humanize(n: Any) -> str:
         """Format a number as compact string (45.2k, 1.2M, etc.)."""
-        if n is None or n == 0:
+        if isinstance(n, dict):
+            state = n.get("state")
+            value = n.get("value")
+            if state in _NUMERIC_MEASURE_STATES and isinstance(value, int):
+                n = value
+            else:
+                return str(state or TokenMeasureState.UNKNOWN.value)
+        if n is None:
+            return TokenMeasureState.UNKNOWN.value
+        if n == 0:
             return "0"
         if not isinstance(n, (int, float)):
             return "0"
@@ -215,6 +278,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                name = f"{name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 name = f"{name}*"
@@ -222,11 +288,11 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = _h_cache(step.get("cache_read_tokens"))
+            cache_rd = h(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
             turns = step.get("turn_count", 0)
-            cache_wr = _h_cache(step.get("cache_write_tokens"))
-            wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+            cache_wr = h(step.get("cache_write_tokens"))
+            wc = step.get("elapsed_seconds", 0.0)
             lines.append(
                 f"| {name} | {model} | {count} | {inp} | {out} | {cache_rd} | {peak_ctx}"
                 f" | {turns} | {cache_wr} | {fmt_dur(wc)} |"
@@ -234,12 +300,14 @@ class TelemetryFormatter:
 
         total_in = h(total.get("input_tokens", 0))
         total_out = h(total.get("output_tokens", 0))
-        total_cache_rd = _h_cache(total.get("cache_read_tokens"))
+        total_cache_rd = h(total.get("cache_read_tokens"))
         total_peak = h(total.get("peak_context", 0))
-        total_cache_wr = _h_cache(total.get("cache_write_tokens"))
+        total_cache_wr = h(total.get("cache_write_tokens"))
         total_time = total.get("total_elapsed_seconds", 0.0)
+        total_label = f"Total ({_source_label(total)})" if _source_label(total) else "Total"
         lines.append(
-            f"| **Total** | | | {total_in} | {total_out} | {total_cache_rd}"
+            f"| **{total_label}** | | | {total_in}"
+            f" | {total_out} | {total_cache_rd}"
             f" | {total_peak} | | {total_cache_wr} | {fmt_dur(total_time)} |"
         )
         if has_non_anthropic:
@@ -280,6 +348,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             step_name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                step_name = f"{step_name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 step_name = f"{step_name}*"
@@ -291,11 +362,11 @@ class TelemetryFormatter:
                     str(step.get("invocation_count", 1)),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
-                    _h_cache(step.get("cache_read_tokens")),
+                    h(step.get("cache_read_tokens")),
                     h(step.get("peak_context", 0)),
                     str(step.get("turn_count", 0)),
-                    _h_cache(step.get("cache_write_tokens")),
-                    fmt_dur(step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))),
+                    h(step.get("cache_write_tokens")),
+                    fmt_dur(step.get("elapsed_seconds", 0.0)),
                 )
             )
 
@@ -305,10 +376,10 @@ class TelemetryFormatter:
             "",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
-            _h_cache(total.get("cache_read_tokens")),
+            h(total.get("cache_read_tokens")),
             h(total.get("peak_context", 0)),
             "",
-            _h_cache(total.get("cache_write_tokens")),
+            h(total.get("cache_write_tokens")),
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
 
@@ -348,6 +419,9 @@ class TelemetryFormatter:
         has_non_anthropic = False
         for step in steps:
             name = step.get("step_name", "?")
+            source = _source_label(step)
+            if source:
+                name = f"{name} ({source})"
             model = step.get("model", "")
             if _is_non_anthropic(model):
                 name = f"{name}*"
@@ -355,11 +429,11 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cache_rd = _h_cache(step.get("cache_read_tokens"))
+            cache_rd = h(step.get("cache_read_tokens"))
             peak_ctx = h(step.get("peak_context", 0))
-            cache_wr = _h_cache(step.get("cache_write_tokens"))
+            cache_wr = h(step.get("cache_write_tokens"))
             turns = step.get("turn_count", 0)
-            wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
+            wc = step.get("elapsed_seconds", 0.0)
             model_tag = f" model:{model}" if model else ""
             lines.append(
                 f"{name} x{count}"
@@ -370,9 +444,9 @@ class TelemetryFormatter:
             lines.append("")
             lines.append(f"total_uncached: {h(total.get('input_tokens', 0))}")
             lines.append(f"total_out: {h(total.get('output_tokens', 0))}")
-            lines.append(f"total_cache_read: {_h_cache(total.get('cache_read_tokens'))}")
+            lines.append(f"total_cache_read: {h(total.get('cache_read_tokens'))}")
             lines.append(f"total_peak_context: {h(total.get('peak_context', 0))}")
-            lines.append(f"total_cache_write: {_h_cache(total.get('cache_write_tokens'))}")
+            lines.append(f"total_cache_write: {h(total.get('cache_write_tokens'))}")
         if mcp_responses:
             mcp_total = mcp_responses.get("total", {})
             if mcp_total:
@@ -391,7 +465,6 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
         steps = [_normalize_keys(s) for s in steps]
-        total = _normalize_keys(total)
 
         lines = [
             "## Token Efficiency",
@@ -399,35 +472,61 @@ class TelemetryFormatter:
             _EFFICIENCY_MD_HEADER,
             _EFFICIENCY_MD_SEP,
         ]
+        grouped: dict[str, list[dict]] = {}
         for step in steps:
+            source = _source_label(step)
+            grouped.setdefault(source, []).append(step)
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             cr = step.get("cache_read_tokens")
             cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
+            name = step.get("step_name", "?")
+            if source:
+                name = f"{name} ({source})"
             lines.append(
-                f"| {step.get('step_name', '?')} | {loc}"
+                f"| {name} | {loc}"
                 f" | {'—' if cr is None else _ratio(cr, loc)}"
                 f" | {'—' if cw is None else _ratio(cw, loc)} | {_ratio(out, loc)} |"
             )
 
-        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("cache_read_tokens")
-        total_cw = total.get("cache_write_tokens")
-        total_out = total.get("output_tokens", 0)
-        lines.append(
-            f"| **Total** | **{total_loc}**"
-            f" | {'—' if total_cr is None else _ratio(total_cr, total_loc)}"
-            f" | {'—' if total_cw is None else _ratio(total_cw, total_loc)}"
-            f" | {_ratio(total_out, total_loc)} |"
-        )
+        for source, source_steps in grouped.items():
+            total_loc = sum(
+                step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+                for step in source_steps
+            )
+            label = f"Total ({source})" if source else "Total"
+            lines.append(
+                f"| **{label}** | **{total_loc}**"
+                f" | {_ratio_total(source_steps, 'cache_read_tokens')}"
+                f" | {_ratio_total(source_steps, 'cache_write_tokens')}"
+                f" | {_ratio_total(source_steps, 'output_tokens')} |"
+            )
         return "\n".join(lines)
 
     @staticmethod
     def format_pr_telemetry_block(
         steps: list[dict],
-        total: dict,
+        total: dict | list[dict],
         model_totals: list[ModelTotalEntry],
     ) -> str:
+        if isinstance(total, list):
+            parts: list[str] = []
+            for source_total in total:
+                source_steps = [
+                    step
+                    for step in steps
+                    if (step.get("backend"), step.get("provider_used"))
+                    == (source_total.get("backend"), source_total.get("provider_used"))
+                ]
+                token = TelemetryFormatter.format_token_table(source_steps, source_total)
+                efficiency = TelemetryFormatter.format_efficiency_table(source_steps, source_total)
+                parts.append(token)
+                if efficiency:
+                    parts.append(efficiency)
+            model = TelemetryFormatter.format_model_table(model_totals)
+            if model:
+                parts.append(model)
+            return "\n\n".join(parts)
         token = TelemetryFormatter.format_token_table(steps, total)
         efficiency = TelemetryFormatter.format_efficiency_table(steps, total)
         model = TelemetryFormatter.format_model_table(model_totals)
@@ -453,11 +552,15 @@ class TelemetryFormatter:
             _MODEL_MD_SEP,
         ]
         for m in model_totals:
+            model = m.get("model", "")
+            source = _source_label(m)
+            if source:
+                model = f"{source}: {model}"
             lines.append(
-                f"| {m.get('model', '')} | {m.get('step_count', 0)}"
+                f"| {model} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
-                f" | {_h_cache(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
-                f" | {_h_cache(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
                 f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
             )
         return "\n".join(lines)
@@ -478,8 +581,8 @@ class TelemetryFormatter:
                     str(m.get("step_count", 0)),
                     h(m.get("input_tokens", 0)),
                     h(m.get("output_tokens", 0)),
-                    _h_cache(m.get("cache_read_tokens")),  # type: ignore[arg-type]
-                    _h_cache(m.get("cache_write_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_read_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_write_tokens")),  # type: ignore[arg-type]
                     fmt_dur(m.get("elapsed_seconds", 0.0)),
                 )
             )
@@ -491,17 +594,22 @@ class TelemetryFormatter:
         if not any(s.get("loc_insertions", 0) + s.get("loc_deletions", 0) > 0 for s in steps):
             return ""
         steps = [_normalize_keys(s) for s in steps]
-        total = _normalize_keys(total)
 
         rows: list[tuple[str, str, str, str, str]] = []
+        grouped: dict[str, list[dict]] = {}
         for step in steps:
+            source = _source_label(step)
+            grouped.setdefault(source, []).append(step)
             loc = step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
             cr = step.get("cache_read_tokens")
             cw = step.get("cache_write_tokens")
             out = step.get("output_tokens", 0)
+            name = step.get("step_name", "?")
+            if source:
+                name = f"{name} ({source})"
             rows.append(
                 (
-                    step.get("step_name", "?"),
+                    name,
                     str(loc),
                     "—" if cr is None else _ratio(cr, loc),
                     "—" if cw is None else _ratio(cw, loc),
@@ -509,14 +617,18 @@ class TelemetryFormatter:
                 )
             )
 
-        total_loc = total.get("loc_insertions", 0) + total.get("loc_deletions", 0)
-        total_cr = total.get("cache_read_tokens")
-        total_cw = total.get("cache_write_tokens")
-        total_row = (
-            "Total",
-            str(total_loc),
-            "—" if total_cr is None else _ratio(total_cr, total_loc),
-            "—" if total_cw is None else _ratio(total_cw, total_loc),
-            _ratio(total.get("output_tokens", 0), total_loc),
-        )
-        return _render_terminal_table(_EFFICIENCY_COLUMNS, rows + [total_row])
+        for source, source_steps in grouped.items():
+            total_loc = sum(
+                step.get("loc_insertions", 0) + step.get("loc_deletions", 0)
+                for step in source_steps
+            )
+            rows.append(
+                (
+                    f"Total ({source})" if source else "Total",
+                    str(total_loc),
+                    _ratio_total(source_steps, "cache_read_tokens"),
+                    _ratio_total(source_steps, "cache_write_tokens"),
+                    _ratio_total(source_steps, "output_tokens"),
+                )
+            )
+        return _render_terminal_table(_EFFICIENCY_COLUMNS, rows)

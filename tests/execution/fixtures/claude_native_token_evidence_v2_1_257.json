@@ -1,0 +1,34 @@
+{
+  "producer": "claude-code",
+  "cli_version": "2.1.257",
+  "sanitization": "Captured from a native CLI run; identifiers replaced and unrelated attributes removed.",
+  "payload": {
+    "resourceLogs": [
+      {
+        "scopeLogs": [
+          {
+            "scope": {"name": "com.anthropic.claude_code.events"},
+            "logRecords": [
+              {
+                "attributes": [
+                  {"key": "session.id", "value": {"stringValue": "00000000-0000-4000-8000-000000000001"}},
+                  {"key": "event.name", "value": {"stringValue": "api_request"}},
+                  {"key": "event.sequence", "value": {"intValue": 65}},
+                  {"key": "prompt.id", "value": {"stringValue": "00000000-0000-4000-8000-000000000002"}},
+                  {"key": "request_id", "value": {"stringValue": "req_native_claude_0000001"}},
+                  {"key": "client_request_id", "value": {"stringValue": "00000000-0000-4000-8000-000000000003"}},
+                  {"key": "model", "value": {"stringValue": "claude-fable-5-1"}},
+                  {"key": "query_source", "value": {"stringValue": "sdk"}},
+                  {"key": "input_tokens", "value": {"intValue": 2}},
+                  {"key": "output_tokens", "value": {"intValue": 4}},
+                  {"key": "cache_read_tokens", "value": {"intValue": 0}},
+                  {"key": "cache_creation_tokens", "value": {"intValue": 36520}}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

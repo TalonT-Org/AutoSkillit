@@ -231,7 +231,7 @@ def test_dispatch_record_persists_provenance_in_current_schema() -> None:
 
     restored = DispatchRecord.from_dict(record.to_dict())
 
-    assert FLEET_STATE_SCHEMA_VERSION == 12
+    assert FLEET_STATE_SCHEMA_VERSION == 13
     assert restored.effect_provenance["operation_id"] == "operation-7"
     assert restored.effect_provenance["retry_disposition"] == "resume_by_identity"
 

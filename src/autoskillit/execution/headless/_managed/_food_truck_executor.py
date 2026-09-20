@@ -40,6 +40,7 @@ from autoskillit.core import (
     SkillProjectionPreparation,
     SkillResult,
     ValidatedAddDir,
+    default_provider_for,
     plugin_launch_binding_scope,
     temp_dir_display_str,
 )
@@ -186,25 +187,26 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 )
             )
         )
-        dispatch_provider_binding = (
-            ProviderBinding(
-                provider=provider_name or profile_name or dispatch_backend.name,
-                profile=profile_name or "default",
-                required_backend=dispatch_backend.name,
-                normalized_endpoint=(
-                    merged_extras.get("ANTHROPIC_BASE_URL")
-                    or merged_extras.get("OPENAI_BASE_URL")
-                    or ""
-                ),
-                key_path="fleet.provider",
-                provider_source=authority_source,
-                profile_source=authority_source,
-                endpoint_source=authority_source,
-                environment={},
-                secret_environment_keys=secret_provider_keys,
-            )
-            if provider_name or profile_name or merged_extras
-            else None
+        dispatch_provider_binding = ProviderBinding(
+            provider=default_provider_for(
+                dispatch_backend.name,
+                dispatch_backend.capabilities.anthropic_provider_capable,
+                profile_name=profile_name,
+                provider_name=provider_name,
+            ),
+            profile=profile_name or "default",
+            required_backend=dispatch_backend.name,
+            normalized_endpoint=(
+                merged_extras.get("ANTHROPIC_BASE_URL")
+                or merged_extras.get("OPENAI_BASE_URL")
+                or ""
+            ),
+            key_path="fleet.provider",
+            provider_source=authority_source,
+            profile_source=authority_source,
+            endpoint_source=authority_source,
+            environment={},
+            secret_environment_keys=secret_provider_keys,
         )
         semantic_digest = hashlib.sha256(orchestrator_prompt.encode()).hexdigest()
         launch_preparation = self._ctx.launch_resolver.prepare(
@@ -429,7 +431,11 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                         on_spawn=on_spawn,
                         skip_clone_guard=True,
                         pty_override=False,
-                        provider_name=provider_name,
+                        provider_name=default_provider_for(
+                            backend.name,
+                            backend.capabilities.anthropic_provider_capable,
+                            provider_name=provider_name,
+                        ),
                         provider_extras=merged_extras or None,
                         enable_deadline_extension=effective_deadline_ext,
                         max_extension_seconds=effective_max_ext,

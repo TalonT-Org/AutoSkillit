@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.pipeline.tokens import DefaultTokenLog
+from tests._helpers import observed_measure as _observed
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -74,7 +75,7 @@ class TestLoadFromLogDirCwdFilter:
         steps = log.get_report()
         assert len(steps) == 1
         assert steps[0]["step_name"] == "plan"
-        assert steps[0]["input_tokens"] == 100
+        assert steps[0]["input_tokens"] == _observed(100)
 
     def test_cwd_filter_empty_loads_all(self, tmp_path):
         """Empty cwd_filter loads all sessions (backward compatibility)."""
@@ -206,7 +207,7 @@ class TestTokenLogStepNameNormalization:
         entry = report[0]
         assert entry["step_name"] == "plan"
         assert entry["invocation_count"] == 2
-        assert entry["input_tokens"] == 200
+        assert entry["input_tokens"] == _observed(200)
 
     def test_canonical_name_and_suffixed_name_merge(self):
         """
@@ -283,7 +284,7 @@ def test_load_from_log_dir_normalizes_suffixed_step_names(tmp_path):
     assert len(report) == 1, f"Expected 1 canonical entry, got: {[e['step_name'] for e in report]}"
     assert report[0]["step_name"] == "plan"
     assert report[0]["invocation_count"] == 2
-    assert report[0]["input_tokens"] == 200
+    assert report[0]["input_tokens"] == _observed(200)
 
 
 class TestOrderIdScoping:
@@ -338,11 +339,11 @@ class TestOrderIdScoping:
 
         assert len(report_a) == 1
         assert report_a[0]["step_name"] == "plan"
-        assert report_a[0]["input_tokens"] == 111
+        assert report_a[0]["input_tokens"] == _observed(111)
 
         assert len(report_b) == 1
         assert report_b[0]["step_name"] == "implement"
-        assert report_b[0]["input_tokens"] == 222
+        assert report_b[0]["input_tokens"] == _observed(222)
 
     def test_get_report_no_filter_aggregates_all_orders(self):
         """A-4: get_report() with no order_id aggregates across all orders (backward compat)."""
@@ -353,7 +354,7 @@ class TestOrderIdScoping:
         all_entries = log.get_report()
         assert len(all_entries) == 1
         assert all_entries[0]["step_name"] == "plan"
-        assert all_entries[0]["input_tokens"] == 300  # 100 + 200
+        assert all_entries[0]["input_tokens"] == _observed(300)
         assert all_entries[0]["invocation_count"] == 2
 
     def test_compute_total_order_id_filter(self):
@@ -363,8 +364,8 @@ class TestOrderIdScoping:
         log.record("plan", self._make_usage(input_tokens=200), order_id="issue-186")
 
         total_185 = log.compute_total(order_id="issue-185")
-        assert total_185["input_tokens"] == 100
-        assert total_185["output_tokens"] == 50
+        assert total_185[0]["input_tokens"] == _observed(100)
+        assert total_185[0]["output_tokens"] == _observed(50)
 
     def test_compute_total_no_filter_aggregates_all(self):
         """A-6: compute_total() with no filter aggregates all orders (backward compat)."""
@@ -373,7 +374,7 @@ class TestOrderIdScoping:
         log.record("plan", self._make_usage(input_tokens=200), order_id="issue-186")
 
         total = log.compute_total()
-        assert total["input_tokens"] == 300
+        assert total[0]["input_tokens"] == _observed(300)
 
     def test_unscoped_record_aggregates_with_no_filter(self):
         """A-7: unscoped record and scoped record both appear in get_report() with no filter."""
@@ -384,7 +385,7 @@ class TestOrderIdScoping:
         all_entries = log.get_report()
         assert len(all_entries) == 1  # same step_name → aggregated
         assert all_entries[0]["invocation_count"] == 2
-        assert all_entries[0]["input_tokens"] == 300
+        assert all_entries[0]["input_tokens"] == _observed(300)
 
 
 # --- Group N: campaign_id_filter tests ---

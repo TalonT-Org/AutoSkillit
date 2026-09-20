@@ -10,6 +10,7 @@ import pytest
 
 import autoskillit.cli.fleet as _patch_cli_fleet
 from autoskillit.cli.fleet import fleet_status as _fleet_status
+from tests._helpers import observed_measure
 from tests.cli._fleet_helpers import (
     DispatchDescriptor,
     _make_state,
@@ -116,10 +117,10 @@ def test_fleet_status_json_includes_totals(
     with pytest.raises(SystemExit):
         _fleet_status("cid01", json_output=True)
     data = json.loads(capsys.readouterr().out)
-    assert data["totals"]["input"] == 100
-    assert data["totals"]["output"] == 50
-    assert data["totals"]["cache_read"] == 20
-    assert data["totals"]["cache_creation"] == 10
+    assert data["totals"][0]["input_tokens"] == observed_measure(100)
+    assert data["totals"][0]["output_tokens"] == observed_measure(50)
+    assert data["totals"][0]["cache_read_tokens"] == observed_measure(20)
+    assert data["totals"][0]["cache_write_tokens"] == observed_measure(10)
 
 
 def test_fleet_status_json_no_ansi(
@@ -167,34 +168,6 @@ def test_exit_code_3_on_missing_state(monkeypatch: pytest.MonkeyPatch, tmp_path:
     with pytest.raises(SystemExit) as exc_info:
         _fleet_status("cid01")
     assert exc_info.value.code == 3
-
-
-def test_cross_check_warns_on_divergence(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
-    from autoskillit.cli.fleet import _aggregate_totals, _cross_check_tokens
-    from autoskillit.pipeline.tokens import DefaultTokenLog
-
-    (tmp_path / "sessions.jsonl").write_text("")
-    state = _make_state_with_tokens(input_total=10000)
-    state_totals = _aggregate_totals(state)
-
-    monkeypatch.setattr("autoskillit.execution.resolve_log_dir", lambda *a: tmp_path)
-    monkeypatch.setattr(DefaultTokenLog, "load_from_log_dir", lambda self, *a, **kw: 1)
-    monkeypatch.setattr(
-        DefaultTokenLog,
-        "compute_total",
-        lambda self, **kw: {
-            "input_tokens": 8000,
-            "output_tokens": 0,
-            "cache_write_tokens": 0,
-            "cache_read_tokens": 0,
-            "total_elapsed_seconds": 0.0,
-        },
-    )
-    _cross_check_tokens(state, state_totals)
-    assert "diverge" in capsys.readouterr().err.lower()
 
 
 def test_watch_exits_on_terminal_campaign(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -292,18 +265,15 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "fleet" in checked_features
 
 
-def test_aggregate_totals_uses_canonical_keys() -> None:
-    """_aggregate_totals reads canonical keys (input/output) from DispatchRecord.
-
-    Regression guard: previously this function read input_tokens/output_tokens
-    but normalize_dispatch_token_usage writes input/output, so totals were
-    always 0 unless callers populated the long-named keys manually.
-    """
-    from autoskillit.cli.fleet._fleet_display import _aggregate_totals
+def test_pair_totals_preserve_source_and_measure() -> None:
+    """Fleet status totals retain the backend/provider boundary."""
+    from autoskillit.cli.fleet._fleet_display import _pair_totals
 
     state = _make_state_with_tokens(input_total=5000)
-    totals = _aggregate_totals(state)
-    assert totals["input"] == 5000
+    totals = _pair_totals(state)
+    assert totals[0]["backend"] == "claude-code"
+    assert totals[0]["provider_used"] == "anthropic"
+    assert totals[0]["input_tokens"] == observed_measure(5000)
 
 
 def test_build_status_rows_shows_nonzero_tokens() -> None:
@@ -314,3 +284,45 @@ def test_build_status_rows_shows_nonzero_tokens() -> None:
     rows = _build_status_rows(state)
     dispatch_row = rows[0]
     assert dispatch_row[3] == "10.0k"
+
+
+def test_fleet_status_renders_three_provider_pairs_without_pooled_total() -> None:
+    from autoskillit.cli.fleet._fleet_display import _build_status_rows, _pair_totals
+    from autoskillit.fleet import (
+        CampaignState,
+        DispatchRecord,
+        DispatchStatus,
+        normalize_dispatch_token_usage,
+    )
+
+    dispatches = []
+    for backend, provider, cache_write in (
+        ("claude-code", "anthropic", {"state": "measured_zero", "value": 0}),
+        ("claude-code", "MiniMax", {"state": "unavailable", "value": None}),
+        ("codex", "codex", {"state": "unavailable", "value": None}),
+    ):
+        dispatches.append(
+            DispatchRecord(
+                name="plan",
+                status=DispatchStatus.SUCCESS,
+                token_usage=normalize_dispatch_token_usage(
+                    {
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                        "cache_read_tokens": {"state": "unknown", "value": None},
+                        "cache_write_tokens": cache_write,
+                    },
+                    backend=backend,
+                    provider_used=provider,
+                ),
+            )
+        )
+    state = CampaignState("campaign", "test", "manifest.yaml", 0.0, dispatches=dispatches)
+
+    totals = _pair_totals(state)
+    rows = _build_status_rows(state)
+    assert len(totals) == 3
+    assert all(total["input_tokens"] == observed_measure(10) for total in totals)
+    assert sum("TOTAL (" in row[0] for row in rows) == 3
+    assert any("claude-code/MiniMax" in row[0] and row[6] == "unavailable" for row in rows)
+    assert any("claude-code/anthropic" in row[0] and row[6] == "0" for row in rows)

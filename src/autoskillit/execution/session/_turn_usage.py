@@ -9,7 +9,17 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from autoskillit.core import TurnTokenEntry, fast_dumps, fsync_directory, get_logger
+from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
+    AGENT_BACKEND_CODEX,
+    CANONICAL_ACCOUNTING_FIELDS,
+    TokenMeasure,
+    TurnTokenEntry,
+    fast_dumps,
+    fsync_directory,
+    get_logger,
+    resolve_provider_used,
+)
 
 logger = get_logger(__name__)
 
@@ -21,14 +31,26 @@ def primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
     model_breakdown = token_usage.get("model_breakdown", {})
     if not isinstance(model_breakdown, dict) or not model_breakdown:
         return ""
-    return max(
-        model_breakdown,
-        key=lambda model: (
-            model_breakdown[model].get("output_tokens", 0)
-            if isinstance(model_breakdown[model], dict)
-            else 0
-        ),
-    )
+
+    def output_count(model: str) -> int:
+        bucket = model_breakdown[model]
+        if not isinstance(bucket, dict):
+            return -1
+        value = bucket.get("output_tokens")
+        if isinstance(value, dict):
+            try:
+                measured = TokenMeasure.from_dict(value).value
+            except ValueError as exc:
+                logger.debug(
+                    "primary_model_identifier_malformed_measure",
+                    extra={"model": model, "error": str(exc)},
+                )
+                return -1
+            return measured if measured is not None else -1
+        observed = valid_token_count(value)
+        return observed if observed is not None else -1
+
+    return max(model_breakdown, key=output_count)
 
 
 def resolve_session_label(step_name: str, dispatch_id: str) -> str:
@@ -71,17 +93,41 @@ def write_turn_usage_sidecar(path: Path, rows: list[TurnTokenEntry]) -> bool:
             prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
         )
         temp_path = Path(raw_temp_path)
+        # Track whether any row failed to serialize so we can exit before
+        # promoting the partial sidecar to its final path. Returning False
+        # from inside the os.fdopen block used to skip os.replace/fsync,
+        # leaving a half-written sidecar that downstream loaders then
+        # picked up as if it were complete.
+        row_serialize_failed = False
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             fd = -1
             for row in rows:
-                output.write(fast_dumps(row, sort_keys=True) + "\n")
+                try:
+                    payload = fast_dumps(serialize_turn_token_entry(row), sort_keys=True)
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning(
+                        "turn_usage_sidecar_row_serialize_failed",
+                        path=str(path),
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
+                    row_serialize_failed = True
+                    break
+                output.write(payload + "\n")
             output.flush()
             os.fsync(output.fileno())
+        if row_serialize_failed:
+            return False
         os.replace(temp_path, path)
         fsync_directory(path.parent)
         return True
-    except (OSError, TypeError, ValueError):
-        logger.debug("turn_usage_sidecar_write_failed", path=str(path), exc_info=True)
+    except OSError as exc:
+        logger.warning(
+            "turn_usage_sidecar_write_failed",
+            path=str(path),
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return False
     finally:
         if fd >= 0:
@@ -95,6 +141,79 @@ def valid_token_count(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None
     return value
+
+
+_ACCOUNTING_MEASURES = frozenset({*CANONICAL_ACCOUNTING_FIELDS, "peak_context"})
+_NO_CACHE_WRITE_BACKENDS = frozenset({AGENT_BACKEND_CODEX})
+_NO_CACHE_WRITE_PAIRS = frozenset({(AGENT_BACKEND_CLAUDE_CODE, "minimax")})
+_CANONICAL_TO_LEGACY: dict[str, str | None] = {
+    "input_tokens": None,
+    "output_tokens": None,
+    "cache_write_tokens": "cache_creation_input_tokens",
+    "cache_read_tokens": "cache_read_input_tokens",
+}
+
+
+def classify_token_measure(
+    backend: str, provider_used: str, token_class: str, raw_value: object
+) -> TokenMeasure:
+    """Classify raw presence using the complete execution source pair."""
+    if not backend or not provider_used:
+        raise ValueError("Token observations require backend and provider_used")
+    if token_class not in _ACCOUNTING_MEASURES:
+        raise ValueError(f"Not an accounting token measure: {token_class}")
+    if isinstance(raw_value, dict):
+        return TokenMeasure.from_dict(raw_value)
+    observed = valid_token_count(raw_value)
+    if observed is not None:
+        return TokenMeasure.observed(observed)
+    if token_class == "cache_write_tokens" and (
+        backend in _NO_CACHE_WRITE_BACKENDS
+        or (backend, provider_used.casefold()) in _NO_CACHE_WRITE_PAIRS
+    ):
+        return TokenMeasure.unavailable()
+    return TokenMeasure.unknown()
+
+
+def merge_token_usage_measures(
+    base: dict[str, object] | None,
+    nudge: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Merge observations only inside the same backend/provider source pair."""
+    if base is None:
+        return nudge
+    if nudge is None:
+        return base
+    backend = base.get("backend")
+    provider_used = base.get("provider_used")
+    if (
+        not isinstance(backend, str)
+        or not backend
+        or not isinstance(provider_used, str)
+        or not provider_used
+    ):
+        raise ValueError("Base token usage has no source pair")
+    if (backend, provider_used) != (nudge.get("backend"), nudge.get("provider_used")):
+        raise ValueError("Cannot merge token usage from different source pairs")
+    merged = dict(base)
+    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
+        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
+        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
+        left = classify_token_measure(backend, provider_used, canonical, b)
+        right = classify_token_measure(backend, provider_used, canonical, n)
+        merged[canonical] = TokenMeasure.combine_or_unknown(left, right).to_dict()
+    left_peak = classify_token_measure(
+        backend, provider_used, "peak_context", base.get("peak_context")
+    )
+    right_peak = classify_token_measure(
+        backend, provider_used, "peak_context", nudge.get("peak_context")
+    )
+    merged["peak_context"] = TokenMeasure.maximum_or_unknown(left_peak, right_peak).to_dict()
+    for legacy in _CANONICAL_TO_LEGACY.values():
+        if legacy and legacy in merged:
+            del merged[legacy]
+    merged.pop("model_breakdown", None)
+    return merged
 
 
 def first_nonempty_string(*values: Any) -> str | None:
@@ -126,9 +245,42 @@ def context_fraction(
     return cache_read_tokens / context_window_tokens
 
 
+def serialize_turn_token_entry(row: TurnTokenEntry) -> dict[str, object]:
+    """Project one TurnTokenEntry into the sidecar schema, classifying measures."""
+    backend, provider_used = row["backend"], row["provider_used"]
+    cache_read = classify_token_measure(
+        backend, provider_used, "cache_read_tokens", row["cache_read_tokens"]
+    )
+    context_window = valid_context_window(row["context_window_tokens"])
+    return {
+        "backend": backend,
+        "provider_used": provider_used,
+        "message_id": row["message_id"],
+        "request_id": row["request_id"],
+        "timestamp": row["timestamp"],
+        "model": row["model"],
+        "input_tokens": classify_token_measure(
+            backend, provider_used, "input_tokens", row["input_tokens"]
+        ).to_dict(),
+        "output_tokens": classify_token_measure(
+            backend, provider_used, "output_tokens", row["output_tokens"]
+        ).to_dict(),
+        "cache_read_tokens": cache_read.to_dict(),
+        "cache_write_tokens": classify_token_measure(
+            backend, provider_used, "cache_write_tokens", row["cache_creation_tokens"]
+        ).to_dict(),
+        "peak_context": classify_token_measure(
+            backend, provider_used, "peak_context", row["cache_read_tokens"]
+        ).to_dict(),
+        "context_window_tokens": context_window,
+        "context_fraction": context_fraction(cache_read.value, context_window),
+    }
+
+
 def build_turn_token_entry(
     *,
     backend: str,
+    provider_used: str | None = None,
     message_id: str | None = None,
     request_id: str | None = None,
     timestamp: str | None = None,
@@ -140,8 +292,16 @@ def build_turn_token_entry(
     context_window_tokens: int | None = None,
 ) -> TurnTokenEntry:
     """Build a complete row from already validated source evidence."""
+    if not backend:
+        raise ValueError("Turn token usage requires a non-empty backend")
+    if provider_used is None:
+        provider_used = resolve_provider_used(backend, anthropic_provider_capable=True)
+    if not provider_used:
+        raise ValueError("Turn token usage requires a non-empty provider_used")
+    context_window_tokens = valid_context_window(context_window_tokens)
     return {
         "backend": backend,
+        "provider_used": provider_used,
         "message_id": message_id,
         "request_id": request_id,
         "timestamp": timestamp,
@@ -156,20 +316,21 @@ def build_turn_token_entry(
 
 
 def merge_turn_usage(*groups: Iterable[TurnTokenEntry]) -> list[TurnTokenEntry]:
-    """Merge later snapshots by non-empty message ID, preserving first-seen order."""
+    """Merge snapshots by source pair and message ID, preserving first-seen order."""
     merged: list[TurnTokenEntry] = []
-    positions: dict[str, int] = {}
+    positions: dict[tuple[str, str, str], int] = {}
     for group in groups:
         for row in group:
             message_id = row["message_id"]
-            if not message_id or message_id not in positions:
+            identity = (row["backend"], row["provider_used"], message_id or "")
+            if not message_id or identity not in positions:
                 copied: TurnTokenEntry = row.copy()
                 merged.append(copied)
                 if message_id:
-                    positions[message_id] = len(merged) - 1
+                    positions[identity] = len(merged) - 1
                 continue
 
-            current = merged[positions[message_id]]
+            current = merged[positions[identity]]
             if current["request_id"] is None and row["request_id"] is not None:
                 current["request_id"] = row["request_id"]
             if current["timestamp"] is None and row["timestamp"] is not None:

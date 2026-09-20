@@ -1016,7 +1016,8 @@ def test_flush_session_log_provider_fallback_absent_from_token_usage(tmp_path):
     assert "provider_fallback" not in tu
 
 
-def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path):
+def test_flush_session_log_provider_used_is_nonempty_in_token_usage(tmp_path):
+    """flush_session_log persists a non-empty provider_used identifier."""
     _flush(
         tmp_path,
         session_id="prov-tu-def",
@@ -1025,7 +1026,14 @@ def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path)
         proc_snapshots=None,
     )
     tu = json.loads((tmp_path / "sessions" / "prov-tu-def" / "token_usage.json").read_text())
-    assert tu["provider_used"] == ""
+    # The default flush path must produce a non-empty string identifier
+    # for provider_used; assert that it is a non-empty string so a
+    # regression that persists None or empty is caught without coupling
+    # to a specific value (which depends on backend + capability flags).
+    provider = tu["provider_used"]
+    assert isinstance(provider, str) and provider, (
+        f"provider_used must be a non-empty string, got {provider!r}"
+    )
 
 
 def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):

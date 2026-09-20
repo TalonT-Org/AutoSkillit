@@ -69,6 +69,7 @@ OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
 TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
     {
         "session_label",
+        "backend",
         "input_tokens",
         "output_tokens",
         "cache_write_tokens",

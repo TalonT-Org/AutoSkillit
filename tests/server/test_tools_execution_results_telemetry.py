@@ -51,7 +51,7 @@ class TestRunSkillStepName:
         report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
-        assert report[0]["input_tokens"] == 200
+        assert report[0]["input_tokens"] == {"state": "measured", "value": 200}
 
     @pytest.mark.anyio
     async def test_no_step_name_records_with_ad_hoc_label(self, tool_ctx_kitchen_open):
@@ -63,7 +63,7 @@ class TestRunSkillStepName:
         report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "(ad-hoc)"
-        assert report[0]["input_tokens"] == 200
+        assert report[0]["input_tokens"] == {"state": "measured", "value": 200}
 
     @pytest.mark.anyio
     async def test_dispatch_id_env_records_with_dispatch_label(
@@ -79,7 +79,7 @@ class TestRunSkillStepName:
         report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "dispatch:abc-123"
-        assert report[0]["input_tokens"] == 200
+        assert report[0]["input_tokens"] == {"state": "measured", "value": 200}
 
     @pytest.mark.anyio
     async def test_null_token_usage_does_not_record(self, tool_ctx):
@@ -115,7 +115,7 @@ class TestRunSkillStepName:
         report = tool_ctx_kitchen_open.token_log.get_report()
         assert len(report) == 1
         assert report[0]["step_name"] == "implement"
-        assert report[0]["input_tokens"] == 200
+        assert report[0]["input_tokens"] == {"state": "measured", "value": 200}
 
 
 class TestGatedToolObservability:

@@ -17,6 +17,7 @@ from autoskillit.core import (
     RetryReason,
     SkillContractView,
     SkillResult,
+    TokenMeasure,
     TurnTokenEntry,
     extract_bash_write_targets,
     get_logger,
@@ -33,7 +34,13 @@ from autoskillit.execution.session import (
 )
 from autoskillit.execution.session._session_content import _normalize_model_output
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
-from autoskillit.execution.session._turn_usage import merge_turn_usage, valid_token_count
+from autoskillit.execution.session._turn_usage import (
+    merge_token_usage_measures as _merge_token_usage,
+)
+from autoskillit.execution.session._turn_usage import (
+    merge_turn_usage,
+    valid_token_count,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
@@ -46,13 +53,6 @@ _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 # whose value segment is a bare literal — no alternation/character-class, i.e. not
 # "(a|b)". This is the structural soundness gate for deterministic enum inference.
 _ENUM_BINDING_RE: re.Pattern[str] = re.compile(r"^(\w+)(?:\[[^\]]*\]\*)?=(?:\[[^\]]*\]\*)?(\w+)$")
-
-_CANONICAL_TO_LEGACY: dict[str, str | None] = {
-    "input_tokens": None,
-    "output_tokens": None,
-    "cache_write_tokens": "cache_creation_input_tokens",
-    "cache_read_tokens": "cache_read_input_tokens",
-}
 
 
 class _PathHint(NamedTuple):
@@ -419,32 +419,6 @@ def _extract_missing_token_hints(
     return hints
 
 
-# Group B migration target: token aggregation to backend-agnostic layer.
-def _merge_token_usage(
-    base: dict[str, object] | None,
-    nudge: dict[str, object] | None,
-) -> dict[str, object] | None:
-    """Additively merge token usage dicts from main session and nudge."""
-    if base is None:
-        return nudge
-    if nudge is None:
-        return base
-    merged = dict(base)
-    for canonical, legacy in _CANONICAL_TO_LEGACY.items():
-        b = base.get(canonical) if canonical in base else base.get(legacy) if legacy else None
-        n = nudge.get(canonical) if canonical in nudge else nudge.get(legacy) if legacy else None
-        if b is None and n is None:
-            continue
-        bv = b if b is not None else 0
-        nv = n if n is not None else 0
-        if isinstance(bv, (int, float)) and isinstance(nv, (int, float)):
-            merged[canonical] = bv + nv
-    for legacy in _CANONICAL_TO_LEGACY.values():
-        if legacy and legacy in merged:
-            del merged[legacy]
-    return merged
-
-
 def _merge_turn_usage_metrics(
     base_rows: list[TurnTokenEntry],
     nudge_rows: list[TurnTokenEntry],
@@ -473,7 +447,9 @@ def _merge_turn_usage_metrics(
             for row in rows
             if (count := valid_token_count(row["cache_read_tokens"])) is not None
         ]
-        usage["peak_context"] = max(cache_reads, default=0)
+        usage["peak_context"] = (
+            TokenMeasure.observed(max(cache_reads)) if cache_reads else TokenMeasure.unknown()
+        ).to_dict()
     return rows, usage
 
 
@@ -483,11 +459,31 @@ def _with_native_turn_usage(
     session_id: str,
     start_ts: str,
     end_ts: str,
+    provider_used: str,
 ) -> AgentSessionResult:
     """Attach interval-bounded native rows only for non-Claude-format backends."""
+    usage = result.raw.get("canonical_token_usage") or result.raw.get("token_usage")
+    if isinstance(usage, dict):
+        result = dataclasses.replace(
+            result,
+            raw={
+                **result.raw,
+                "canonical_token_usage": {
+                    **usage,
+                    "backend": backend.name,
+                    "provider_used": provider_used,
+                },
+            },
+        )
     if backend.capabilities.supports_claude_format_stdout:
         return result
-    rows = extract_codex_turn_usage(backend.session_locator(), session_id, start_ts, end_ts)
+    rows = extract_codex_turn_usage(
+        backend.session_locator(),
+        session_id,
+        start_ts,
+        end_ts,
+        provider_used=provider_used,
+    )
     return dataclasses.replace(result, raw={**result.raw, "turn_usage": rows})
 
 

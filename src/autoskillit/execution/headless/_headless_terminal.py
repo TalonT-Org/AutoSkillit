@@ -25,6 +25,21 @@ from autoskillit.core import (
 )
 
 
+def reconcile_token_evidence(
+    skill_result: SkillResult,
+    otlp_token_usage: dict[str, Any] | None,
+    provider_outcome: ProviderOutcome,
+) -> SkillResult:
+    """Preserve parser-observed turn_count; OTLP carries no per-turn identity for it."""
+    if otlp_token_usage is None:
+        return dataclasses.replace(skill_result, provider=provider_outcome)
+    selected = dict(otlp_token_usage)
+    parser_usage = skill_result.token_usage or {}
+    if "turn_count" in parser_usage:
+        selected["turn_count"] = parser_usage["turn_count"]
+    return dataclasses.replace(skill_result, provider=provider_outcome, token_usage=selected)
+
+
 def finalize_terminal_selection(
     *,
     execution_selection: ExecutionSelection | None,
@@ -52,11 +67,13 @@ def finalize_terminal_selection(
             )
 
     terminal_attempt = selection.attempts[-1] if selection and selection.attempts else None
-    terminal_provider = (
-        current_launch_contract.provider or provider_name
-        if current_launch_contract is not None
-        else provider_name
-    )
+    terminal_provider = provider_name
+    if current_launch_contract is not None:
+        contract_provider = current_launch_contract.provider
+        if contract_provider and contract_provider != current_launch_contract.effective_backend:
+            terminal_provider = contract_provider
+        elif not terminal_provider:
+            terminal_provider = contract_provider
     provider_fallback = selection.provider_fallback if selection is not None else False
     terminal_binding_matches = bool(
         terminal_attempt is not None

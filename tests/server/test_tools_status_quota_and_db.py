@@ -126,8 +126,8 @@ class TestWriteTelemetryFiles:
         assert "# Timing Summary" not in content
 
     @pytest.mark.anyio
-    async def test_token_file_uses_wall_clock_seconds(self, tool_ctx_kitchen_open, tmp_path):
-        """write_telemetry_files merges wall_clock_seconds from timing log."""
+    async def test_token_file_uses_pair_elapsed_seconds(self, tool_ctx_kitchen_open, tmp_path):
+        """The token file uses elapsed time from its own source-pair row."""
         tool_ctx_kitchen_open.token_log.record(
             "deploy",
             {
@@ -141,8 +141,7 @@ class TestWriteTelemetryFiles:
         tool_ctx_kitchen_open.timing_log.record("deploy", 120.0)
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         content = Path(result["token_summary_path"]).read_text()
-        # Should show 2m 0s (wall_clock=120), not 5s (elapsed)
-        assert "2m 0s" in content
+        assert "5s" in content
 
     @pytest.mark.anyio
     async def test_creates_output_dir_if_missing(self, tool_ctx_kitchen_open, tmp_path):

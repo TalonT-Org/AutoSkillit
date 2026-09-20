@@ -26,6 +26,8 @@ ROOT_PUBLIC_NAMES = (
     "is_recipe_path_validation_report",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
+    "TOKEN_USAGE_SCHEMA_VERSION",
+    "TURN_USAGE_SCHEMA_VERSION",
     "LoadReport",
     "LoadResult",
     "ManagedSessionHome",
@@ -50,6 +52,8 @@ RUNTIME_TYPE_NAMES = tuple(
         "CloneResult",
         "RecipePathValidationResult",
         "SESSION_INDEX_SCHEMA_VERSION",
+        "TOKEN_USAGE_SCHEMA_VERSION",
+        "TURN_USAGE_SCHEMA_VERSION",
     }
 )
 

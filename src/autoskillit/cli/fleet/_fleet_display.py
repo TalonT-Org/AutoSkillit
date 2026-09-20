@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import TerminalColumn, get_logger
+from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TerminalColumn, TokenMeasure, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 
 logger = get_logger(__name__)
@@ -83,37 +83,82 @@ def _fmt_elapsed(dispatch: DispatchRecord) -> str:
     return f"{hours}h {mins}m"
 
 
-def _aggregate_totals(state: CampaignState) -> dict[str, int]:
-    """Sum token_usage across all dispatches."""
-    totals: dict[str, int] = {
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_creation": 0,
-    }
+def _pair_totals(state: CampaignState) -> list[dict[str, object]]:
+    """Aggregate dispatch measures only inside their source pair."""
+    totals: dict[tuple[str, str], dict[str, object]] = {}
+    fields = CANONICAL_ACCOUNTING_FIELDS
+    unknown_measure = TokenMeasure.unknown().to_dict()
     for d in state.dispatches:
         tu = d.token_usage
-        totals["input"] += tu.get("input", 0)
-        totals["output"] += tu.get("output", 0)
-        totals["cache_read"] += tu.get("cache_read", 0)
-        totals["cache_creation"] += tu.get("cache_creation", 0)
-    return totals
+        if not tu:
+            continue
+        backend = tu.get("backend")
+        provider_used = tu.get("provider_used")
+        if (
+            not isinstance(backend, str)
+            or not isinstance(provider_used, str)
+            or not backend
+            or not provider_used
+        ):
+            continue
+        key = (backend, provider_used)
+        row = totals.get(key)
+        if row is None:
+            # First-row init: `dict.get(k, default)` returns None when k is
+            # present with None value, which would silently make
+            # TokenMeasure.from_dict fail downstream. Map both missing keys
+            # AND stored None values to unknown_measure so the merge branch
+            # never sees a raw None.
+            totals[key] = {
+                "backend": backend,
+                "provider_used": provider_used,
+                **{
+                    field: tu[field] if isinstance(tu.get(field), dict) else unknown_measure
+                    for field in fields
+                },
+            }
+            continue
+        for field in fields:
+            candidate = tu.get(field)
+            if candidate is None:
+                continue
+            try:
+                right = TokenMeasure.from_dict(candidate)
+            except (TypeError, ValueError) as exc:
+                logger.debug(
+                    "fleet_pair_totals_skipped_malformed_dispatch_field",
+                    extra={
+                        "backend": backend,
+                        "provider_used": provider_used,
+                        "field": field,
+                        "error": str(exc),
+                    },
+                )
+                continue
+            row[field] = TokenMeasure.combine_or_unknown(
+                TokenMeasure.from_dict(row[field]),
+                right,
+            ).to_dict()
+    return list(totals.values())
 
 
 def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
     """Build table rows from campaign state dispatches, including separator and TOTAL rows."""
     rows: list[tuple[str, ...]] = []
     for d in state.dispatches:
-        tu = d.token_usage
+        tu = d.token_usage or {}
+        backend = tu.get("backend")
+        provider_used = tu.get("provider_used")
+        source = f"{backend}/{provider_used}" if backend and provider_used else ""
         rows.append(
             (
-                d.name,
+                f"{d.name} ({source})" if source else d.name,
                 str(d.status),
                 _fmt_elapsed(d),
-                TelemetryFormatter._humanize(tu.get("input", 0)),
-                TelemetryFormatter._humanize(tu.get("output", 0)),
-                TelemetryFormatter._humanize(tu.get("cache_read", 0)),
-                TelemetryFormatter._humanize(tu.get("cache_creation", 0)),
+                TelemetryFormatter._humanize(tu.get("input_tokens")),
+                TelemetryFormatter._humanize(tu.get("output_tokens")),
+                TelemetryFormatter._humanize(tu.get("cache_read_tokens")),
+                TelemetryFormatter._humanize(tu.get("cache_write_tokens")),
                 d.dispatched_session_log_dir or "-",
             )
         )
@@ -125,60 +170,20 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
         )
         status = str(raw.get("status", "unknown")) if isinstance(raw, Mapping) else "unknown"
         rows.append((name, status, "-", "-", "-", "-", "-", "-"))
-    totals = _aggregate_totals(state)
-    rows.append(("─" * 6, "", "", "", "", "", "", ""))
-    rows.append(
-        (
-            "TOTAL",
-            "",
-            "",
-            TelemetryFormatter._humanize(totals["input"]),
-            TelemetryFormatter._humanize(totals["output"]),
-            TelemetryFormatter._humanize(totals["cache_read"]),
-            TelemetryFormatter._humanize(totals["cache_creation"]),
-            "",
-        )
-    )
-    return rows
-
-
-def _load_log_totals(state: CampaignState) -> dict[str, int] | None:
-    """Load token totals from sessions.jsonl for the campaign. Returns None if unavailable."""
-    from autoskillit.execution import resolve_log_dir
-    from autoskillit.pipeline import DefaultTokenLog
-
-    log_root = resolve_log_dir("")
-    sessions_index = log_root / "sessions.jsonl"
-    if not sessions_index.exists():
-        return None
-
-    token_log = DefaultTokenLog()
-    loaded = token_log.load_from_log_dir(log_root, campaign_id_filter=state.campaign_id)
-    if loaded == 0:
-        return None
-
-    return token_log.compute_total()
-
-
-def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> None:
-    """Warn on >5% token divergence between state.json and sessions.jsonl."""
-    log_totals = _load_log_totals(state)
-    if log_totals is None:
-        return
-
-    for label, state_key, log_key in [
-        ("input", "input", "input_tokens"),
-        ("output", "output", "output_tokens"),
-        ("cache_read", "cache_read", "cache_read_tokens"),
-        ("cache_creation", "cache_creation", "cache_write_tokens"),
-    ]:
-        sv = state_totals.get(state_key, 0)
-        lv = log_totals.get(log_key, 0)
-        if sv > 0 and abs(sv - lv) / sv > 0.05:
-            sys.stderr.write(
-                f"WARNING: {label} diverge {abs(sv - lv) / sv:.1%} (>5%)"
-                f" (state={sv}, sessionlog={lv}); state.json wins\n"
+    for total in _pair_totals(state):
+        rows.append(
+            (
+                f"TOTAL ({total['backend']}/{total['provider_used']})",
+                "",
+                "",
+                TelemetryFormatter._humanize(total["input_tokens"]),
+                TelemetryFormatter._humanize(total["output_tokens"]),
+                TelemetryFormatter._humanize(total["cache_read_tokens"]),
+                TelemetryFormatter._humanize(total["cache_write_tokens"]),
+                "",
             )
+        )
+    return rows
 
 
 def _render_status_display(state: CampaignState) -> int:

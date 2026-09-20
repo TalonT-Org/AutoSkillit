@@ -1191,10 +1191,14 @@ def test_close_rejects_handler_that_reaches_enqueue_after_shutdown_gate(
     response: list[tuple[int, str, dict[str, Any]]] = []
     original_enqueue = sink._enqueue
 
-    def delayed_enqueue(line: bytes, observations: tuple[Any, ...] = ()) -> str:
+    def delayed_enqueue(
+        line: bytes,
+        observations: tuple[Any, ...] = (),
+        token_observations: tuple[Any, ...] = (),
+    ) -> str:
         entered_enqueue.set()
         assert release_enqueue.wait(2)
-        return original_enqueue(line, observations)
+        return original_enqueue(line, observations, token_observations)
 
     def post_request() -> None:
         response.append(
@@ -1270,3 +1274,120 @@ def test_close_terminates_when_the_bounded_queue_is_full(tmp_path: Path, monkeyp
         release_writer.set()
         sink.close()
         close_thread.join(3)
+
+
+def test_native_claude_token_fixture_projects_measured_zero_and_cache_write(
+    local_sink: Any,
+) -> None:
+    fixture = _native_fixture("claude_native_token_evidence_v2_1_257.json")
+    assert fixture["producer"] == "claude-code"
+    assert isinstance(fixture["cli_version"], str) and fixture["cli_version"]
+    payload = fixture["payload"]
+    _post_native_logs(local_sink, payload)
+    local_sink.close()
+
+    usage = local_sink.token_usage_for(
+        "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"
+    )
+    assert usage is not None
+    assert (usage["backend"], usage["provider_used"]) == ("claude-code", "anthropic")
+    assert usage["input_tokens"] == {"state": "measured", "value": 2}
+    assert usage["cache_read_tokens"] == {"state": "measured_zero", "value": 0}
+    assert usage["cache_write_tokens"] == {"state": "measured", "value": 36520}
+    assert usage["peak_context"] == {"state": "measured_zero", "value": 0}
+
+
+def test_native_token_request_id_deduplicates_replayed_event(local_sink: Any) -> None:
+    payload = _native_fixture("claude_native_token_evidence_v2_1_257.json")["payload"]
+    _post_native_logs(local_sink, payload)
+    _post_native_logs(local_sink, payload)
+    local_sink.close()
+
+    usage = local_sink.token_usage_for(
+        "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"
+    )
+    assert usage is not None
+    assert usage["input_tokens"] == {"state": "measured", "value": 2}
+    assert usage["output_tokens"] == {"state": "measured", "value": 4}
+    session_records = local_sink._token_evidence["00000000-0000-4000-8000-000000000001"]
+    assert len(session_records) == 1, "Replayed event must collapse to a single row"
+
+
+@pytest.mark.parametrize("missing", ["request_id", "session.id"])
+def test_native_token_event_without_verified_identity_is_not_summed(
+    local_sink: Any, missing: str
+) -> None:
+    payload = _native_fixture("claude_native_token_evidence_v2_1_257.json")["payload"]
+    _remove_attribute(_native_records(payload)[0], missing)
+    _post_native_logs(local_sink, payload)
+    local_sink.close()
+
+    assert (
+        local_sink.token_usage_for(
+            "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"
+        )
+        is None
+    )
+
+
+def test_native_token_alias_and_missing_field_keep_distinct_states(local_sink: Any) -> None:
+    payload = _native_fixture("claude_native_token_evidence_v2_1_257.json")["payload"]
+    record = _native_records(payload)[0]
+    _attribute(record, "cache_creation_tokens")["key"] = "cacheCreation"
+    _remove_attribute(record, "cache_read_tokens")
+    _post_native_logs(local_sink, payload)
+    local_sink.close()
+
+    usage = local_sink.token_usage_for(
+        "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"
+    )
+    assert usage is not None
+    assert usage["cache_write_tokens"] == {"state": "measured", "value": 36520}
+    assert usage["cache_read_tokens"] == {"state": "unknown", "value": None}
+
+
+def test_native_codex_token_fixture_has_no_correlatable_accounting(local_sink: Any) -> None:
+    fixture = _native_fixture("codex_native_token_evidence_v0_153_4.json")
+    assert fixture["producer"] == "codex"
+    assert isinstance(fixture["cli_version"], str) and fixture["cli_version"]
+    _post_native_logs(local_sink, fixture["log_payload"])
+    status, _, response = _request(
+        local_sink,
+        "POST",
+        "/v1/metrics",
+        json.dumps(fixture["metric_payload"]).encode(),
+        {"Content-Type": "application/json"},
+    )
+    assert (status, response) == (200, {})
+    local_sink.close()
+
+    assert (
+        local_sink.token_usage_for("00000000-0000-4000-8000-000000000004", "codex", "codex")
+        is None
+    )
+
+
+def test_native_token_persistence_failure_returns_none(
+    local_sink: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_persist(_line: bytes) -> None:
+        raise OSError("simulated persistence failure")
+
+    monkeypatch.setattr(local_sink, "_persist_line", fail_persist)
+    payload = _native_fixture("claude_native_token_evidence_v2_1_257.json")["payload"]
+    _post_native_logs(local_sink, payload)
+    local_sink.close()
+
+    # The OSError is bubbled into the writer thread and bumps the dropped_io
+    # counter; token_usage_for short-circuits to None when any drop counter
+    # is non-zero. Asserting both verifies that the failure is logged in a
+    # structured way rather than just observing the user-visible None.
+    assert local_sink._counters.get("dropped_io", 0) >= 1, (
+        "Persistence failure should have incremented dropped_io counter"
+    )
+    assert (
+        local_sink.token_usage_for(
+            "00000000-0000-4000-8000-000000000001", "claude-code", "anthropic"
+        )
+        is None
+    )

@@ -35,6 +35,7 @@ from autoskillit.core import (
     SkillResult,
     WriteBehaviorSpec,
     collect_version_snapshot,
+    default_provider_for,
     get_logger,
     is_git_main_checkout,
     is_git_worktree,
@@ -53,6 +54,7 @@ from autoskillit.execution.headless._headless_git import (
     _detect_session_git_writes,
 )
 from autoskillit.execution.headless._headless_helpers import (
+    _capture_native_session_ids,
     _compute_post_session_metrics,
     _detect_fs_writes,
     _stat_snapshot,
@@ -61,10 +63,7 @@ from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
     _run_headless_attempt,
 )
-from autoskillit.execution.headless._headless_model_evidence import (
-    _capture_native_session_ids,
-    _drain_model_evidence,
-)
+from autoskillit.execution.headless._headless_model_evidence import _drain_model_evidence
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.headless._managed import _attempt as _diag
 from autoskillit.execution.headless._managed import (
@@ -162,22 +161,16 @@ async def _execute_claude_headless(
     child_role: str | None = None,
     child_attribution_skill: str = "",
 ) -> SkillResult | CandidatePreSpawnRejection:
-    """Shared subprocess execution for headless Claude sessions.
-
-    Acquires one plugin binding per attempt (or reuses ``retained_binding`` when
-    the caller owns one), builds that attempt's CmdSpec, and holds it until reaped.
-    """
+    """Run a headless attempt while owning its plugin binding through process reaping."""
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    # Share the spec-builder authority for adapter digest and inactive-team policy.
     force_inactive_agent_teams = ctx.config.agent_backend.force_inactive_agent_teams
     base_effective_idle = _diag._resolve_idle_output_timeout(
         idle_output_timeout, cfg.idle_output_timeout
     )
 
-    current_provider_name: str = provider_name
     current_provider_extras: dict[str, str] = dict(provider_extras or {})
 
     runner = ctx.runner
@@ -188,6 +181,11 @@ async def _execute_claude_headless(
         ctx.backend
         if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
         else launch_resolver.backend_for(launch_preparation)
+    )
+    current_provider_name = default_provider_for(
+        _step_backend.name,
+        _step_backend.capabilities.anthropic_provider_capable,
+        provider_name=provider_name,
     )
 
     linux_tracing_cfg = ctx.config.linux_tracing
@@ -566,25 +564,7 @@ async def _execute_claude_headless(
 
         assert skill_result is not None
         skill_result = _diag._bind_effective_execution_identity(
-            skill_result,
-            _step_backend,
-            execution_identity,
-        )
-        (
-            evidence_session_id,
-            resolved_model_identity,
-            subagent_model_outcomes,
-        ) = _drain_model_evidence(
-            sink,
-            terminal_session_id=skill_result.session_id,
-            captured_session_id=resolved_session_ids[0],
-            model_identity=model_identity,
-        )
-        child_outcomes = collect_and_project_child_outcomes(
-            step_backend=_step_backend,
-            cwd=cwd,
-            evidence_session_id=evidence_session_id,
-            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
+            skill_result, _step_backend, execution_identity
         )
         terminal_selection, provider_outcome = _terminal.finalize_terminal_selection(
             execution_selection=execution_selection,
@@ -596,28 +576,44 @@ async def _execute_claude_headless(
             skill_result=skill_result,
             backend=_step_backend,
         )
+        (
+            evidence_session_id,
+            resolved_model_identity,
+            subagent_model_outcomes,
+            otlp_token_usage,
+        ) = _drain_model_evidence(
+            sink,
+            terminal_session_id=skill_result.session_id,
+            captured_session_id=resolved_session_ids[0],
+            model_identity=model_identity,
+            backend=_step_backend.name,
+            provider_used=provider_outcome.provider_used,
+        )
+        skill_result = _terminal.reconcile_token_evidence(
+            skill_result, otlp_token_usage, provider_outcome
+        )
+        child_outcomes = collect_and_project_child_outcomes(
+            step_backend=_step_backend,
+            cwd=cwd,
+            evidence_session_id=evidence_session_id,
+            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
+        )
         recipe_identity = _terminal.build_recipe_identity(
             name=recipe_name,
             content_hash=recipe_content_hash,
             composite_hash=recipe_composite_hash,
             version=recipe_version,
         )
-
         if result is not None:
             assert spec is not None
             _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
-            timing_seconds = result.elapsed_seconds
-
-            # Extract the audit record (if any) added by this session.
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
-
             from autoskillit.execution.session_log.session_log import _resolve_session_label
 
-            _token_label = _resolve_session_label(step_name, dispatch_id)
             try:
                 ctx.token_log.record(
-                    _token_label,
+                    _resolve_session_label(step_name, dispatch_id),
                     skill_result.token_usage,
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
@@ -626,12 +622,15 @@ async def _execute_claude_headless(
                     loc_insertions=_metrics.loc_insertions,
                     loc_deletions=_metrics.loc_deletions,
                     model=resolved_model_identity.effective_model,
+                    backend=_step_backend.name,
+                    provider_used=skill_result.provider.provider_used,
                 )
-            except Exception:
-                logger.debug("token_log_record_failed", exc_info=True)
+            except (TypeError, ValueError, KeyError, AttributeError):
+                logger.warning("token_log_record_failed", exc_info=True)
+
             terminal_telemetry = _build_session_telemetry(
                 skill_result=skill_result,
-                timing_seconds=timing_seconds,
+                timing_seconds=result.elapsed_seconds,
                 audit_record=audit_record,
                 github_api_log=ctx.github_api_log,
                 loc_insertions=_metrics.loc_insertions,
@@ -645,6 +644,7 @@ async def _execute_claude_headless(
         else:
             terminal_telemetry = _build_error_path_telemetry(
                 ctx.github_api_log,
+                token_usage=skill_result.token_usage,
                 session_id=evidence_session_id,
                 step_name=step_name,
                 order_id=order_id,

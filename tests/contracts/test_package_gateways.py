@@ -444,7 +444,15 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
     "execution_github_ops": frozenset(
         {"_github_http", "ci", "github", "pr_analysis", "diff_annotator", "remote_resolver"}
     ),
-    "execution_evidence": frozenset({"anomaly_detection", "linux_tracing", "otlp_sink"}),
+    "execution_evidence": frozenset(
+        {
+            "anomaly_detection",
+            "linux_tracing",
+            "otlp_sink",
+            "_token_measure",
+            "_otlp_tokens",
+        }
+    ),
     "execution_recording": frozenset({"recording", "_recording_skills"}),
     "execution_session_log": frozenset(
         {"session_log", "_session_log_recovery", "_session_log_retention", "session_index"}
@@ -462,6 +470,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
             "_command_classification",
             "_github_mutation_analysis",
             "_exploration_request_record",
+            "_token_measure",
         }
     ),
 }
@@ -614,6 +623,13 @@ def test_gateway_reexports_pre_move_names(
                     "read_boot_id",
                     "read_starttime_ticks",
                     "start_linux_tracing",
+                    "TokenObservation",
+                    "aggregate_token_observations",
+                    "has_attribute",
+                    "project_token_observations",
+                    "record_attributes",
+                    "unique_bool_attribute",
+                    "unique_string_attribute",
                 }
             ),
         ),

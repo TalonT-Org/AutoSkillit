@@ -39,8 +39,10 @@ def test_load_sessions_canonical_names_preferred(tmp_path: Path) -> None:
 
     result = _load_sessions(log_root, "k1")
 
-    assert result["implement"]["cache_write_tokens"] == 25
-    assert result["implement"]["cache_read_tokens"] == 12
+    entry = next(iter(result.values()))
+    assert entry["step_name"] == "implement"
+    assert entry["cache_write_tokens"] == {"state": "measured", "value": 25}
+    assert entry["cache_read_tokens"] == {"state": "measured", "value": 12}
 
 
 class TestSessionsJsonlV1BackwardCompat:
@@ -106,7 +108,7 @@ class TestSessionsJsonlV1BackwardCompat:
         result = _load_sessions(log_root, "k1", order_id="target")
 
         assert len(result) == 1
-        assert "implement" in result
+        assert next(iter(result.values()))["step_name"] == "implement"
 
     def test_mixed_v1_v2_entries_load_without_error(self, tmp_path: Path) -> None:
         log_root = tmp_path / "logs"
@@ -170,5 +172,7 @@ class TestSessionsJsonlV1BackwardCompat:
 
         result = _load_sessions(log_root, "k1")
 
-        assert result["plan"]["cache_write_tokens"] == 20
-        assert result["plan"]["invocation_count"] == 2
+        entry = next(iter(result.values()))
+        assert entry["step_name"] == "plan"
+        assert entry["cache_write_tokens"] == {"state": "measured", "value": 20}
+        assert entry["invocation_count"] == 2

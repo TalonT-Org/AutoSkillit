@@ -39,7 +39,7 @@ def test_tsa_humanize_preserves_decimal() -> None:
 
     assert _humanize(999) == "999"
     assert _humanize(0) == "0"
-    assert _humanize(None) == "0"
+    assert _humanize(None) == "unknown"
     assert _humanize(45.7) == "45.7", (
         "str(int(n)) truncates decimals — must be str(n) to match telemetry_fmt.py"
     )

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
+from tests._helpers import observed_measure
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -66,9 +67,9 @@ def test_compute_model_totals_single_model() -> None:
     assert len(totals) == 1
     assert totals[0]["model"] == "claude-sonnet-4-6"
     assert totals[0]["step_count"] == 2
-    assert totals[0]["input_tokens"] == 300
-    assert totals[0]["cache_write_tokens"] == 0
-    assert totals[0]["cache_read_tokens"] == 0
+    assert totals[0]["input_tokens"] == observed_measure(300)
+    assert totals[0]["cache_write_tokens"] == observed_measure(0)
+    assert totals[0]["cache_read_tokens"] == observed_measure(0)
 
 
 def test_compute_model_totals_mixed_models() -> None:
@@ -82,7 +83,7 @@ def test_compute_model_totals_mixed_models() -> None:
     assert len(totals) == 2
     by_model = {t["model"]: t for t in totals}
     assert by_model["claude-sonnet-4-6"]["step_count"] == 1
-    assert by_model["MiniMax-M2.7"]["input_tokens"] == 500
+    assert by_model["MiniMax-M2.7"]["input_tokens"] == observed_measure(500)
 
 
 def test_compute_model_totals_no_model_returns_unknown() -> None:

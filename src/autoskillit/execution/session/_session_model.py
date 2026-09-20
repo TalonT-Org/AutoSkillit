@@ -10,18 +10,21 @@ from typing import Any, assert_never
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CANONICAL_ACCOUNTING_FIELDS,
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     CONTEXT_EXHAUSTION_MARKER,
     ClaudeContentBlockType,
     CliSubtype,
     RetryReason,
     SessionOutcome,
+    TokenMeasure,
     TurnTokenEntry,
     get_logger,
 )
 from autoskillit.execution.session._provider_parse import _parse_provider_records
 from autoskillit.execution.session._turn_usage import (
     build_turn_token_entry,
+    classify_token_measure,
     first_nonempty_string,
     first_valid_token_count,
     merge_turn_usage,
@@ -30,10 +33,16 @@ from autoskillit.execution.session._turn_usage import (
 
 logger = get_logger(__name__)
 
-_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
-    ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
-    ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"),
+_API_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
 )
+# Routes the canonical accounting field set through the shared constant
+# so this module cannot drift from pipeline/tokens.py, _fleet_display.py,
+# and _otlp_tokens.py.
+_CANONICAL_TOKEN_FIELDS = CANONICAL_ACCOUNTING_FIELDS
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
         CliSubtype.UNKNOWN,
@@ -245,9 +254,10 @@ def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
 
 def _collect_token_usage_evidence(
     stdout: str,
-) -> tuple[dict[str, int] | None, list[TurnTokenEntry], dict[str, set[int]]]:
+    provider_used: str,
+) -> tuple[dict[str, int | None] | None, list[TurnTokenEntry], dict[str, set[int]]]:
     """Collect result totals, assistant rows, and model windows from NDJSON stdout."""
-    result_usage: dict[str, int] | None = None
+    result_usage: dict[str, int | None] | None = None
     candidate_rows: list[TurnTokenEntry] = []
     model_windows: dict[str, set[int]] = {}
 
@@ -279,6 +289,7 @@ def _collect_token_usage_evidence(
             candidate_rows.append(
                 build_turn_token_entry(
                     backend=AGENT_BACKEND_CLAUDE_CODE,
+                    provider_used=provider_used,
                     message_id=first_nonempty_string(msg.get("id")),
                     request_id=first_nonempty_string(obj.get("requestId")),
                     timestamp=first_nonempty_string(obj.get("timestamp")),
@@ -293,7 +304,7 @@ def _collect_token_usage_evidence(
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 result_usage = {
-                    canon_f: first_valid_token_count(usage, api_f, canon_f) or 0
+                    canon_f: first_valid_token_count(usage, api_f, canon_f)
                     for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
                 }
             model_usage = obj.get("modelUsage")
@@ -308,33 +319,61 @@ def _collect_token_usage_evidence(
     return result_usage, candidate_rows, model_windows
 
 
-def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
+def extract_token_usage(
+    stdout: str, *, provider_used: str = "anthropic"
+) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
     """Extract token usage from Claude CLI NDJSON output.
 
     Takes raw stdout (not ClaudeSessionResult) — called during parse_session_result
     construction before the object exists. Returns aggregates and deduplicated rows.
     """
+    if not provider_used:
+        raise ValueError("Token extraction requires provider_used")
     if not stdout.strip():
         return None, []
 
-    result_usage, candidate_rows, model_windows = _collect_token_usage_evidence(stdout)
+    result_usage, candidate_rows, model_windows = _collect_token_usage_evidence(
+        stdout, provider_used
+    )
     raw_rows = merge_turn_usage(candidate_rows)
     if not raw_rows and result_usage is None:
         return None, []
 
-    model_buckets: dict[str, dict[str, int]] = {}
-    peak_context = 0
+    model_buckets: dict[str, dict[str, TokenMeasure]] = {}
+    peak_context: TokenMeasure | None = None
     turn_usage: list[TurnTokenEntry] = []
     for row in raw_rows:
         model = row["model"]
-        bucket = model_buckets.setdefault(
-            model or "unknown", {f: 0 for f in _CANONICAL_TOKEN_FIELDS}
+        raw_values = {
+            "input_tokens": row["input_tokens"],
+            "output_tokens": row["output_tokens"],
+            "cache_read_tokens": row["cache_read_tokens"],
+            "cache_write_tokens": row["cache_creation_tokens"],
+        }
+        measures = {
+            name: classify_token_measure(AGENT_BACKEND_CLAUDE_CODE, provider_used, name, raw_value)
+            for name, raw_value in raw_values.items()
+        }
+        bucket = model_buckets.get(model or "unknown")
+        if bucket is None:
+            model_buckets[model or "unknown"] = measures
+        else:
+            for name, measure in measures.items():
+                bucket[name] = TokenMeasure.combine_or_unknown(bucket[name], measure)
+        # peak_context is approximated as max(cache_read_tokens) for Claude
+        # snapshots where the CLI does not report context length directly.
+        # Replacing this with a dedicated context-length field is a SEMANTIC
+        # change, not a bug fix — preserve the proxy relationship.
+        peak = classify_token_measure(
+            AGENT_BACKEND_CLAUDE_CODE,
+            provider_used,
+            "peak_context",
+            row["cache_read_tokens"],
         )
-        bucket["input_tokens"] += row["input_tokens"] or 0
-        bucket["output_tokens"] += row["output_tokens"] or 0
-        bucket["cache_read_tokens"] += row["cache_read_tokens"] or 0
-        bucket["cache_write_tokens"] += row["cache_creation_tokens"] or 0
-        peak_context = max(peak_context, row["cache_read_tokens"] or 0)
+        if peak_context is None:
+            peak_context = peak
+        else:
+            peak_context = TokenMeasure.maximum_or_unknown(peak_context, peak)
 
         raw_input = row["input_tokens"]
         cache_read = row["cache_read_tokens"]
@@ -349,6 +388,7 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
         turn_usage.append(
             build_turn_token_entry(
                 backend=row["backend"],
+                provider_used=provider_used,
                 message_id=row["message_id"],
                 request_id=row["request_id"],
                 timestamp=row["timestamp"],
@@ -361,18 +401,32 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
             )
         )
 
+    totals: dict[str, TokenMeasure]
     if result_usage is not None:
-        totals = dict(result_usage)
+        totals = {
+            name: classify_token_measure(
+                AGENT_BACKEND_CLAUDE_CODE, provider_used, name, result_usage.get(name)
+            )
+            for name in _CANONICAL_TOKEN_FIELDS
+        }
     else:
-        totals = {f: 0 for f in _CANONICAL_TOKEN_FIELDS}
+        totals = {}
         for bucket in model_buckets.values():
-            for f in _CANONICAL_TOKEN_FIELDS:
-                totals[f] += bucket[f]
+            for name in _CANONICAL_TOKEN_FIELDS:
+                if name not in totals:
+                    totals[name] = bucket[name]
+                    continue
+                totals[name] = TokenMeasure.combine_or_unknown(totals[name], bucket[name])
 
     return {
-        **totals,
-        "model_breakdown": dict(model_buckets) if model_buckets else {},
-        "peak_context": peak_context,
+        "backend": AGENT_BACKEND_CLAUDE_CODE,
+        "provider_used": provider_used,
+        **{name: measure.to_dict() for name, measure in totals.items()},
+        "model_breakdown": {
+            model: {name: measure.to_dict() for name, measure in bucket.items()}
+            for model, bucket in model_buckets.items()
+        },
+        "peak_context": (peak_context or TokenMeasure.unknown()).to_dict(),
         "turn_count": len(raw_rows),
     }, turn_usage
 
@@ -394,7 +448,7 @@ _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
 )
 
 
-def parse_session_result(stdout: str) -> ClaudeSessionResult:
+def parse_session_result(stdout: str, *, provider_used: str = "anthropic") -> ClaudeSessionResult:
     """Parse Claude Code NDJSON stdout into a typed result."""
     if not stdout.strip():
         return ClaudeSessionResult(
@@ -421,7 +475,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             else CliSubtype.UNPARSEABLE
         )
         is_error, result_text, session_id, errors = True, stdout, "", []
-    token_usage, turn_usage = extract_token_usage(stdout)
+    token_usage, turn_usage = extract_token_usage(stdout, provider_used=provider_used)
     return ClaudeSessionResult(
         subtype=subtype,
         is_error=is_error,

@@ -43,5 +43,5 @@ def test_load_from_log_dir_v1_fields_no_double_count(tmp_path: Path) -> None:
 
     assert n == 1
     assert len(report) == 1
-    assert report[0]["cache_write_tokens"] == 10
-    assert report[0]["cache_read_tokens"] == 5
+    assert report[0]["cache_write_tokens"] == {"state": "measured", "value": 10}
+    assert report[0]["cache_read_tokens"] == {"state": "measured", "value": 5}

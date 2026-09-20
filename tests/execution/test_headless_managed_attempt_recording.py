@@ -184,6 +184,9 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
         def model_evidence_for(self, _session_id: str):
             return "", ()
 
+        def token_usage_for(self, _session_id: str, _backend: str, _provider: str):
+            return None
+
     monkeypatch.setattr(_execute_module, "LocalOtlpSink", DisabledSink, raising=False)
 
 

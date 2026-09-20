@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import ModelTotalEntry
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+from tests._helpers import observed_measure
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -84,11 +85,10 @@ class TestFormatTokenTable:
         result = TelemetryFormatter.format_token_table(_STEPS, _TOTAL)
         assert "**Total**" in result
 
-    def test_prefers_wall_clock_seconds(self) -> None:
-        """wall_clock_seconds should be used over elapsed_seconds."""
+    def test_uses_pair_elapsed_seconds(self) -> None:
+        """Token rows use their own elapsed time."""
         result = TelemetryFormatter.format_token_table(_STEPS, _TOTAL)
-        # investigate has wall_clock=45s, elapsed=40s; should show 45s
-        assert "45s" in result
+        assert "40s" in result
 
     def test_falls_back_to_elapsed_when_no_wall_clock(self) -> None:
         steps = [
@@ -219,6 +219,7 @@ class TestFormatTokenTable:
                 "turn_count": 5,
                 "invocation_count": 1,
                 "wall_clock_seconds": 45.7,
+                "elapsed_seconds": 45.7,
             },
         ]
         total = {
@@ -385,10 +386,9 @@ class TestFormatCompactKv:
         assert "total_cache_read:" in result
         assert "total_cache_write:" in result
 
-    def test_prefers_wall_clock_seconds(self) -> None:
+    def test_uses_pair_elapsed_seconds(self) -> None:
         result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
-        # investigate: wall_clock=45.0, elapsed=40.0 → t:45.0s
-        assert "t:45.0s" in result
+        assert "t:40.0s" in result
 
     def test_includes_mcp_responses(self) -> None:
         mcp = {"total": {"total_invocations": 42, "total_estimated_response_tokens": 5000}}
@@ -411,8 +411,8 @@ class TestFormatCompactKv:
 
 
 class TestHumanize:
-    def test_none_returns_zero(self) -> None:
-        assert TelemetryFormatter._humanize(None) == "0"
+    def test_none_is_unknown(self) -> None:
+        assert TelemetryFormatter._humanize(None) == "unknown"
 
     def test_zero_returns_zero(self) -> None:
         assert TelemetryFormatter._humanize(0) == "0"
@@ -717,10 +717,10 @@ def test_efficiency_markdown_terminal_column_parity() -> None:
 
 
 class TestCacheColumnSuppression:
-    """Cache columns render '—' when value is None (non-Anthropic provider)."""
+    """Cache columns render 'unknown' when value is None (non-Anthropic provider)."""
 
-    def test_none_cache_read_produces_dash_in_token_table(self) -> None:
-        """format_token_table renders '—' for None cache_read_tokens."""
+    def test_none_cache_read_produces_unknown_in_token_table(self) -> None:
+        """format_token_table renders 'unknown' for None cache_read_tokens."""
         steps = [
             {
                 "step_name": "plan",
@@ -739,9 +739,9 @@ class TestCacheColumnSuppression:
             "cache_read_tokens": None,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
-        assert "—" in result  # dash for None cache
+        assert "unknown" in result
 
-    def test_none_cache_write_produces_dash_in_token_table(self) -> None:
+    def test_none_cache_write_produces_unknown_in_token_table(self) -> None:
         steps = [
             {
                 "step_name": "plan",
@@ -760,9 +760,9 @@ class TestCacheColumnSuppression:
             "cache_read_tokens": 200,
         }
         result = TelemetryFormatter.format_token_table(steps, total)
-        assert "—" in result
+        assert "unknown" in result
 
-    def test_none_cache_produces_dash_in_terminal_table(self) -> None:
+    def test_none_cache_produces_unknown_in_terminal_table(self) -> None:
         steps = [
             {
                 "step_name": "plan",
@@ -781,9 +781,9 @@ class TestCacheColumnSuppression:
             "cache_read_tokens": None,
         }
         result = TelemetryFormatter.format_token_table_terminal(steps, total)
-        assert "—" in result
+        assert "unknown" in result
 
-    def test_none_cache_produces_dash_in_compact_kv(self) -> None:
+    def test_none_cache_produces_unknown_in_compact_kv(self) -> None:
         steps = [
             {
                 "step_name": "plan",
@@ -803,8 +803,8 @@ class TestCacheColumnSuppression:
             "cache_read_tokens": None,
         }
         result = TelemetryFormatter.format_compact_kv(steps, total)
-        assert "cr:—" in result
-        assert "cw:—" in result
+        assert "cr:unknown" in result
+        assert "cw:unknown" in result
 
     def test_none_cache_produces_dash_in_efficiency_table(self) -> None:
         steps = [
@@ -827,7 +827,7 @@ class TestCacheColumnSuppression:
         result = TelemetryFormatter.format_efficiency_table(steps, total)
         assert "—" in result
 
-    def test_none_cache_produces_dash_in_model_table(self) -> None:
+    def test_none_cache_produces_unknown_in_model_table(self) -> None:
         model_totals = [
             {
                 "model": "gpt-4o",
@@ -840,7 +840,7 @@ class TestCacheColumnSuppression:
             }
         ]
         result = TelemetryFormatter.format_model_table(model_totals)
-        assert "—" in result
+        assert "unknown" in result
 
     def test_mixed_none_and_int_cache_per_row(self) -> None:
         """Steps with cache=None and steps with cache=int render correctly in same table."""
@@ -872,7 +872,7 @@ class TestCacheColumnSuppression:
         }
         result = TelemetryFormatter.format_token_table(steps, total)
         assert "5.0k" in result  # anthropic step cache_read rendered
-        assert "—" in result  # openai step shows dash
+        assert "unknown" in result
 
     def test_zero_cache_still_shows_zero_not_dash(self) -> None:
         """Explicit 0 should render as '0', not '—'. Only None triggers dash."""
@@ -1315,3 +1315,48 @@ def test_pr_telemetry_sections_exhaustive() -> None:
             f"Header {header!r} found in TelemetryFormatter PR-bound formatter"
             " but missing from PR_TELEMETRY_SECTIONS"
         )
+
+
+def test_efficiency_totals_exclude_unavailable_and_surface_unknown_by_pair() -> None:
+    steps = [
+        {
+            "step_name": "one",
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "cache_read_tokens": observed_measure(100),
+            "cache_write_tokens": observed_measure(0),
+            "output_tokens": observed_measure(20),
+            "loc_insertions": 10,
+            "loc_deletions": 0,
+        },
+        {
+            "step_name": "two",
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "cache_read_tokens": {"state": "unavailable", "value": None},
+            "cache_write_tokens": observed_measure(0),
+            "output_tokens": observed_measure(10),
+            "loc_insertions": 90,
+            "loc_deletions": 0,
+        },
+        {
+            "step_name": "three",
+            "backend": "claude-code",
+            "provider_used": "MiniMax",
+            "cache_read_tokens": {"state": "unknown", "value": None},
+            "cache_write_tokens": {"state": "unavailable", "value": None},
+            "output_tokens": observed_measure(0),
+            "loc_insertions": 5,
+            "loc_deletions": 0,
+        },
+    ]
+
+    table = TelemetryFormatter.format_efficiency_table(steps, {})
+    anthropic_total = next(
+        line for line in table.splitlines() if line.startswith("| **Total (claude-code/anthropic)")
+    )
+    minimax_total = next(
+        line for line in table.splitlines() if line.startswith("| **Total (claude-code/MiniMax)")
+    )
+    assert "| 10.0 |" in anthropic_total
+    assert "| unknown |" in minimax_total

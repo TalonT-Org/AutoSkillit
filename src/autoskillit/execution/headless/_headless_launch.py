@@ -471,12 +471,15 @@ async def _attempt_contract_nudge(
         nudge_observed_session_id or skill_result.session_id,
         nudge_start_ts,
         nudge_end_ts,
+        skill_result.provider.provider_used or backend.name,
     )
     if managed_lineage_observer is not None and nudge_session.session_id:
         managed_lineage_observer.bind_candidate(nudge_session.session_id)
     if on_session_id_resolved is not None and nudge_session.session_id:
         on_session_id_resolved(nudge_session.session_id)
-    nudge_usage = nudge_session.raw.get("token_usage")
+    nudge_usage = nudge_session.raw.get("canonical_token_usage") or nudge_session.raw.get(
+        "token_usage"
+    )
     nudge_turn_usage = nudge_session.raw.get("turn_usage", []) or []
     combined_turn_usage, combined_usage = _merge_turn_usage_metrics(
         skill_result.turn_usage,

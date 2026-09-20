@@ -77,9 +77,13 @@ def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
 class TestProviderFieldsReachFlush:
     """Verify provider fields are forwarded from _execute_claude_headless to flush_session_log."""
 
+    @pytest.mark.parametrize(
+        ("provider_name", "expected"),
+        [("minimax", "minimax"), ("", "anthropic")],
+    )
     @pytest.mark.anyio
     async def test_normal_path_provider_used_in_flush_kwargs(
-        self, minimal_ctx, tmp_path, monkeypatch
+        self, minimal_ctx, tmp_path, monkeypatch, provider_name: str, expected: str
     ):
         from autoskillit.execution.headless import _execute_claude_headless
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
@@ -96,14 +100,14 @@ class TestProviderFieldsReachFlush:
             minimal_ctx,
             timeout=30.0,
             stale_threshold=5.0,
-            provider_name="minimax",
+            provider_name=provider_name,
             step_name="implement",
             **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
         assert len(flush_calls) == 1
         outcome = flush_calls[0]["provider_outcome"]
-        assert outcome.provider_used == "minimax"
+        assert outcome.provider_used == expected
         assert outcome.fallback_activated is False
 
     @pytest.mark.anyio
@@ -183,9 +187,13 @@ class TestProviderFieldsReachFlush:
         assert outcome.provider_used == "minimax"
         assert outcome.fallback_activated is False
 
+    @pytest.mark.parametrize(
+        ("provider_name", "expected"),
+        [("minimax", "minimax"), ("", "anthropic")],
+    )
     @pytest.mark.anyio
     async def test_crash_path_provider_used_in_flush_kwargs(
-        self, minimal_ctx, tmp_path, monkeypatch
+        self, minimal_ctx, tmp_path, monkeypatch, provider_name: str, expected: str
     ):
         from autoskillit.execution.headless import _execute_claude_headless
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
@@ -215,7 +223,7 @@ class TestProviderFieldsReachFlush:
             minimal_ctx,
             timeout=30.0,
             stale_threshold=5.0,
-            provider_name="minimax",
+            provider_name=provider_name,
             **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
@@ -223,12 +231,16 @@ class TestProviderFieldsReachFlush:
         crashed_calls = [f for f in flush_calls if f.get("termination_reason") == "CRASHED"]
         assert len(crashed_calls) == 1
         outcome = crashed_calls[0]["provider_outcome"]
-        assert outcome.provider_used == "minimax"
+        assert outcome.provider_used == expected
         assert "comm_aliases" in crashed_calls[0]
 
+    @pytest.mark.parametrize(
+        ("provider_name", "expected"),
+        [("openai", "openai"), ("", "anthropic")],
+    )
     @pytest.mark.anyio
     async def test_cancel_path_provider_used_in_flush_kwargs(
-        self, minimal_ctx, tmp_path, monkeypatch
+        self, minimal_ctx, tmp_path, monkeypatch, provider_name: str, expected: str
     ):
         import anyio
 
@@ -261,14 +273,14 @@ class TestProviderFieldsReachFlush:
                 minimal_ctx,
                 timeout=30.0,
                 stale_threshold=5.0,
-                provider_name="openai",
+                provider_name=provider_name,
                 **_launch_kwargs(minimal_ctx, str(tmp_path)),
             )
 
         cancelled_calls = [f for f in flush_calls if f.get("termination_reason") == "CANCELLED"]
         assert len(cancelled_calls) == 1
         outcome = cancelled_calls[0]["provider_outcome"]
-        assert outcome.provider_used == "openai"
+        assert outcome.provider_used == expected
         assert "comm_aliases" in cancelled_calls[0]
 
     @pytest.mark.anyio

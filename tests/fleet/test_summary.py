@@ -77,7 +77,7 @@ class TestCampaignSummarySchema:
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
         assert isinstance(result, CampaignSummary)
-        assert result.schema_version == 1
+        assert result.schema_version == 2
         assert result.campaign_id == _VALID_CAMPAIGN_ID
         assert result.campaign_name == "Test Campaign"
         assert result.dispatch_count == 2
@@ -113,13 +113,21 @@ class TestCampaignSummarySchema:
         errors = validate_campaign_summary(data)
         assert any("status" in e for e in errors)
 
-    def test_per_dispatch_token_usage_exactly_4_keys(self):
+    def test_per_dispatch_token_usage_has_source_pair_and_measures(self):
         import dataclasses
 
         from autoskillit.fleet import DispatchTokenUsage
 
         fields = {f.name for f in dataclasses.fields(DispatchTokenUsage)}
-        assert fields == {"input", "output", "cache_read", "cache_creation"}
+        assert fields == {
+            "backend",
+            "provider_used",
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "peak_context",
+        }
 
     def test_sentinel_anchored_to_campaign_id(self):
         from autoskillit.fleet import ParseFailure, ParseFailureKind, parse_campaign_summary
@@ -136,7 +144,7 @@ class TestCampaignSummarySchema:
         assert isinstance(result, ParseFailure)
         assert result.kind == ParseFailureKind.SENTINEL_MISSING
 
-    def test_campaign_summary_schema_version_is_1(self):
+    def test_campaign_summary_reads_v1_as_v2(self):
         from autoskillit.fleet import (
             CampaignSummary,
             parse_campaign_summary,
@@ -145,11 +153,11 @@ class TestCampaignSummarySchema:
 
         result = parse_campaign_summary(_VALID_SENTINEL_TEXT, _VALID_CAMPAIGN_ID)
         assert isinstance(result, CampaignSummary)
-        assert result.schema_version == 1
+        assert result.schema_version == 2
 
         data_v2 = {**_VALID_SUMMARY_DICT, "schema_version": 2}
         errors = validate_campaign_summary(data_v2)
-        assert any("schema_version" in e for e in errors)
+        assert any("token_usage" in e for e in errors)
 
     def test_campaign_summary_count_fields_required(self):
         from autoskillit.fleet import validate_campaign_summary
@@ -180,8 +188,8 @@ class TestCampaignSummarySchema:
         assert restored.dispatch_count == original.dispatch_count
         assert restored.per_dispatch[0].name == original.per_dispatch[0].name
         assert (
-            restored.per_dispatch[0].token_usage.input
-            == original.per_dispatch[0].token_usage.input
+            restored.per_dispatch[0].token_usage.input_tokens
+            == original.per_dispatch[0].token_usage.input_tokens
         )
         assert restored.error_records[0].code == original.error_records[0].code
 

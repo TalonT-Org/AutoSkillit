@@ -222,7 +222,7 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
         assert isinstance(template, str)
         capture_spec[name] = CaptureEntrySpec(from_=template, value_type="string")
     captured = _extract_captures(capture_spec, published)
-    assert captured["audit_cycle_path"] == published["audit_cycle_path"]
+    assert captured["audit_cycle_path_raw"] == published["audit_cycle_path"]
     assert captured["audit_status"] == "PUBLISHED"
     assert captured["audit_verdict"] == "GO"
     assert captured["audit_attempt_id"] == published["audit_attempt_id"]

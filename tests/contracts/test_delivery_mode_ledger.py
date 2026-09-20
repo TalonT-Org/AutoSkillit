@@ -190,7 +190,7 @@ _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
     ("remediation", "codex"): 10_000,
     ("research-archive", "claude-code"): 31_000,
     ("research-design", "claude-code"): 68_000,
-    ("research-implement", "claude-code"): 108_000,
+    ("research-implement", "claude-code"): 114_000,
     ("research-review", "claude-code"): 77_000,
 }
 

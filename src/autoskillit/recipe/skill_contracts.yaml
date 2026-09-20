@@ -3157,6 +3157,8 @@ callable_contracts:
       type: str
     - name: head_sha
       type: str
+    - name: pr_head_sha
+      type: str
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:
     - name: batch_branch
@@ -3514,6 +3516,8 @@ callable_contracts:
     outputs:
     - name: status
       type: str
+    - name: stderr
+      type: str
   autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix:
     inputs:
     - name: work_dir
@@ -3632,6 +3636,8 @@ callable_contracts:
     inputs:
     - name: current_pr_number
       type: str
+    - name: error
+      type: str
       required: true
       nullable: false
     - name: pr_order_file
@@ -3718,6 +3724,8 @@ callable_contracts:
     - name: issue_urls
       type: str
     - name: issue_count
+      type: str
+    - name: skipped_bodies
       type: str
   autoskillit.recipe._cmd_rpc.create_audit_run_dir:
     inputs:

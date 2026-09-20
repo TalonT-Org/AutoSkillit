@@ -13,7 +13,7 @@ from autoskillit.core import (
     AuditCycleAuthority,
     AuditVerdict,
 )
-from autoskillit.smoke_utils import check_audit_remediation_outcome
+from autoskillit.smoke_utils import check_audit_remediation_outcome, merge_audit_cycle_path
 
 pytestmark = [pytest.mark.medium]
 
@@ -96,4 +96,10 @@ def test_integrity_fault_preserves_code_budget(tmp_path: Path) -> None:
         "outcome": "INTEGRITY_FAULT",
         "next_iteration": "2",
         "unresolved_requirement_ids": "",
+    }
+
+
+def test_empty_current_path_preserves_prior_authority() -> None:
+    assert merge_audit_cycle_path("", "/trusted/prior.json") == {
+        "audit_cycle_path": "/trusted/prior.json"
     }

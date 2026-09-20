@@ -223,7 +223,7 @@ class TestResearchImplementRemediationLoop:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
         progressing = next(c for c in conditions if c.when and "PROGRESSING" in c.when)
-        assert progressing.route == "pre_remediation_cleanup"
+        assert progressing.route == "merge_audit_cycle_path"
 
     def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]
@@ -293,7 +293,7 @@ class TestResearchRemediationLoop:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
         progressing = next(c for c in conditions if c.when and "PROGRESSING" in c.when)
-        assert progressing.route == "pre_remediation_cleanup"
+        assert progressing.route == "merge_audit_cycle_path"
 
     def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]

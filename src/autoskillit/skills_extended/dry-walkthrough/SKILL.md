@@ -343,7 +343,8 @@ For each issue found:
 3. The plan should read as if it was correct from the start
 4. Never add carry-forward padding, add/remove Requirements Map rows, or change a
    `satisfied-by-round-N`, `carried@step`, or `waived-by-decision@waiver-id` result to make
-   Step 4.7 pass. Step 5 cannot override the evaluator.
+   Step 4.7 pass. Step 5 cannot
+   override the evaluator.
 
 ### Step 6: Mark Plan as Verified
 

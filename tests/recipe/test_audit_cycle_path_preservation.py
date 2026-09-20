@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.smoke_utils import merge_audit_cycle_path
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -32,7 +31,3 @@ def test_only_published_authority_replaces_prior_path(name: str) -> None:
     writers = [step for step in recipe.steps.values() if "audit_cycle_path" in step.capture]
     assert len(writers) == 1
     assert writers[0].name == "merge_audit_cycle_path"
-
-    assert merge_audit_cycle_path("", "/trusted/prior.json") == {
-        "audit_cycle_path": "/trusted/prior.json"
-    }

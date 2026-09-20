@@ -115,7 +115,7 @@ class TestOnContextLimitField:
         errors = validate_recipe_structure(recipe)
         assert not errors, f"Expected no errors but got: {errors}"
 
-    def test_unbounded_cycle_without_retries_produces_warning(self) -> None:
+    def test_unbounded_cycle_without_retries_produces_error(self) -> None:
         """verify → assess → verify cycle with retries=0 must produce a warning."""
         recipe = Recipe(
             name="test",
@@ -142,9 +142,9 @@ class TestOnContextLimitField:
             },
         )
         findings = run_semantic_rules(recipe)
-        warnings = [f for f in findings if f.severity == Severity.WARNING]
+        errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(
-            "unbounded" in f.message.lower() or "cycle" in f.message.lower() for f in warnings
+            "unbounded" in f.message.lower() or "cycle" in f.message.lower() for f in errors
         )
 
     def test_cycle_with_retries_warns_when_success_stays_in_cycle(self) -> None:

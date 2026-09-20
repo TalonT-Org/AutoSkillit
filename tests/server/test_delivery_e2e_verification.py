@@ -257,9 +257,9 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     # implementation recipe paths. Pin the refreshed values so this
     # test stays a stable drift signal.
     assert totals == {
-        "raw_chars": 18_545,
-        "utf8_bytes": 18_547,
-        "client_serialized_chars": 20_634,
-        "estimated_tokens": 4_634,
+        "raw_chars": 18_572,
+        "utf8_bytes": 18_574,
+        "client_serialized_chars": 20_663,
+        "estimated_tokens": 4_641,
         "responses": 5,
     }

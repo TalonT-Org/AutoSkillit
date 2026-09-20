@@ -10,6 +10,8 @@ import pytest
 
 import autoskillit.execution.backends.codex as _patch_backends_codex
 from autoskillit.core import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    CODEX_MCP_ENV_SERVER_EXCLUDED_VARS,
     CODEX_SESSIONS_SUBDIR,
     BackendCapabilities,
     BackendConventions,
@@ -445,6 +447,21 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert exc_info.value.backend_name == self.backend.name
 
     # --- Group 6: Behavioral Contracts ---
+
+    def test_build_cmd_private_env_is_forwarded_or_excluded(self) -> None:
+        """BackendCapabilities.mcp_env_forward_vars covers emitted private names."""
+        capabilities = self.backend.capabilities
+        if not capabilities.mcp_config_capable:
+            pytest.skip("backend does not manage MCP registration")
+        result = self.backend.build_cmd(
+            skill_command="do stuff",
+            cwd="/tmp",
+            **self._builder_home_kwargs("generated_home"),
+        )
+        missing = (
+            set(result.env) & AUTOSKILLIT_PRIVATE_ENV_VARS
+        ) - capabilities.mcp_env_forward_vars
+        assert missing <= CODEX_MCP_ENV_SERVER_EXCLUDED_VARS
 
     def test_build_resume_cmd_includes_session_id(self) -> None:
         """BackendCapabilities.session_resume_capable — embeds the session ID.

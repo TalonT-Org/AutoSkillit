@@ -13,7 +13,9 @@ from autoskillit.recipe.api_orchestration._api_orchestration_match import (  # n
     _resolve_recipe_match,
     annotations,
     find_recipe_by_name,
+    substitute_scripts_placeholder,
     substitute_scripts_placeholder_yaml_safe,
+    substitute_temp_placeholder,
     substitute_temp_placeholder_yaml_safe,
 )
 

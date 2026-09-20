@@ -210,7 +210,7 @@ FAILURE PREDICATE — DEGRADED RESPONSE:
     2. Stop. Do not improvise a recovery path, do not route to on_failure,
        and do not retry the tool.
 
-FAILURE TIER ROUTING FOR PREDICATE-FORMAT STEPS:
+TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.
 - Skill-level error ("error:" line present in result): Follow the matching on_result

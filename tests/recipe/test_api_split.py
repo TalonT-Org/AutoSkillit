@@ -80,7 +80,8 @@ _EXPECTED_RUNTIME_NAMES = {
     "_api_orchestration_match": _frozen_names(
         """
         RecipeInfo RecipeNotFoundError RecipeSource annotations find_recipe_by_name
-        substitute_scripts_placeholder substitute_temp_placeholder
+        substitute_scripts_placeholder substitute_scripts_placeholder_yaml_safe
+        substitute_temp_placeholder substitute_temp_placeholder_yaml_safe
         """
     ),
     "_api_orchestration_parse": _frozen_names(

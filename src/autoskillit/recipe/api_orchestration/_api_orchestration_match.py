@@ -41,9 +41,7 @@ def _resolve_recipe_match(
         raise RecipeNotFoundError(f"No recipe named '{name}' found")
 
     raw_declared = match.content if match.content is not None else match.path.read_text()
-    raw = substitute_temp_placeholder_yaml_safe(
-        raw_declared, pipeline_inputs.temp_dir_relpath
-    )
+    raw = substitute_temp_placeholder_yaml_safe(raw_declared, pipeline_inputs.temp_dir_relpath)
     raw = substitute_scripts_placeholder_yaml_safe(raw)
 
     if match.source == RecipeSource.BUILTIN:

@@ -58,14 +58,15 @@ def _build_hook_command(
     else:
         if hooks_dir is None:
             raise ValueError("hooks_dir is required when relocatable=False")
-        # Quote the dispatcher path so that paths containing shell-special
-        # characters (e.g. a worktree directory whose name includes literal
-        # " quotes) round-trip cleanly through shlex.split when downstream
-        # consumers — find_broken_hook_scripts, _dispatch.py, etc. — parse
-        # the command. shlex.quote emits single-quoted form, which preserves
-        # the literal " inside.
-        quoted_path = shlex.quote(str(hooks_dir / "_dispatch.py"))
-        command = f"python3 -B {quoted_path} {shlex.quote(logical_name)}"
+        # Backslash-escape literal " and \ characters in the dispatcher
+        # path so the surrounding shell command survives shlex.split round
+        # trips (e.g. when downstream consumers — find_broken_hook_scripts,
+        # _dispatch.py, sync_hooks test fixtures — parse the command).
+        # Plain string concatenation (no surrounding quotes) preserves the
+        # unquoted-path form expected by tests that scan
+        # ``parts[-2].endswith("_dispatch.py")``.
+        escaped_path = str(hooks_dir / "_dispatch.py").replace("\\", "\\\\").replace('"', '\\"')
+        command = f"python3 -B {escaped_path} {logical_name}"
     cmd: dict = {
         "type": "command",
         "command": command,

@@ -451,7 +451,6 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
             "otlp_sink",
             "_token_measure",
             "_otlp_tokens",
-            "reader",
         }
     ),
     "execution_recording": frozenset({"recording", "_recording_skills"}),

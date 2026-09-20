@@ -134,7 +134,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 352),
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 370),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 599),
+    ("src/autoskillit/server/tools/tools_status.py", 584),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
     ("src/autoskillit/server/tools/tools_github.py", 343),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)

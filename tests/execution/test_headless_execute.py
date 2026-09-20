@@ -172,9 +172,8 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
 async def test_correlated_otlp_tokens_replace_parser_totals_before_logging_and_flush(
     minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution.evidence.session_log as session_log
-
     import autoskillit.execution.headless._headless_execute as execute_module
+    import autoskillit.execution.session_log.session_log as session_log
     from autoskillit.execution.headless import _execute_claude_headless
     from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _launch_preparation, _mock_backend

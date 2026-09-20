@@ -40,7 +40,7 @@ HEADLESS_SIZE_BUDGETS = {
     # every token and persistence consumer.
     # #4623: ManagedAttemptRecorder wiring (Step 5) and child_outcomes telemetry (Step 6);
     # approved relaxation, see _acceptance_policy_surfaces.py POLICY_RELAXATION_APPROVALS.
-    "headless/_headless_execute.py": 740,
+    "headless/_headless_execute.py": 738,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

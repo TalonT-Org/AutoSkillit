@@ -609,7 +609,6 @@ async def _execute_claude_headless(
             _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
-
             from autoskillit.execution.session_log.session_log import _resolve_session_label
 
             try:

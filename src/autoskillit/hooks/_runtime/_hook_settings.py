@@ -582,7 +582,7 @@ def enforce_session_scope(
         raise SystemExit(0)
 
 
-def session_join_admission(payload_cwd: str, session_id: str) -> JoinAdmission:
+def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission":
     """Return the authoritative join decision for the payload session."""
     module_name = (
         f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"

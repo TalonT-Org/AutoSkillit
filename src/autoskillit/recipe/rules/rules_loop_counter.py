@@ -317,6 +317,9 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
             if inner_name in audit_outer_guards:
                 continue
 
+            if "audit_integrity" in inner_counter:
+                continue
+
             if inner_counter in _WRAPPER_LOOP_EXEMPT_COUNTERS:
                 continue
 

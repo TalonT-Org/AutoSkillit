@@ -127,11 +127,17 @@ class SessionScope:
             raise ValueError(msg)
         tier_set = frozenset(tiers)
         exempt_tier_set = frozenset(exempt_tiers)
+
+        def _headless_matches(shape_headless: bool) -> bool:
+            if headless == "any":
+                return True
+            return shape_headless == (headless == "headless_only")
+
         return cls(
             frozenset(
                 shape
                 for shape in ALL_SESSION_SHAPES
-                if (headless == "any" or shape.headless == (headless == "headless_only"))
+                if _headless_matches(shape.headless)
                 and (not tier_set or shape.tier in tier_set)
                 and shape.tier not in exempt_tier_set
             )

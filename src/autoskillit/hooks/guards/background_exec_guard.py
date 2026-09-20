@@ -53,10 +53,12 @@ MANAGED_CODEX_CHILD_DENY_TRIGGER: str = (
 
 
 def _governed_skill_session() -> bool:
-    """Whether this hook is acting in a governed Claude skill session.
+    """Whether this hook is acting in a governed Claude skill session tier.
 
-    Active for Claude-code sessions outside the orchestrator/fleet tiers, so
-    orchestrator, fleet, and Codex sessions are excluded from governance.
+    Active for Claude-code sessions on the skill tier, so orchestrator, fleet,
+    and Codex sessions are excluded from governance. The headless axis is not
+    consulted here — the caller in main() is gated upstream by
+    enforce_session_scope('headless_only').
     """
     backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":

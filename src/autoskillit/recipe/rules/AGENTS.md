@@ -28,7 +28,6 @@ Files with no registration support their folder; files with several registration
 - `rules_backend_compat.py` — Support module: Backend compatibility is adapted from typed skill semantics at execution time.
 - `rules_blocks.py` — Registers block-level semantic validation rules for recipe pipelines.
 - `rules_bypass.py` — Registers semantic validation rules for skip_when_false bypass routing contracts.
-- `rules_clone.py` — Registers semantic validation rules for clone, push, and multipart-plan capture.
 - `rules_cmd.py` — Registers semantic rules for run_cmd echo-capture alignment in recipe steps.
 - `rules_contracts.py` — Registers semantic rules for skill contract completeness.
 - `rules_features.py` — Registers semantic rules for feature-gated tool and skill references.

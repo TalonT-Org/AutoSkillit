@@ -14,7 +14,7 @@ carrying every value Phase C needs to spawn the executor.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -52,6 +52,7 @@ from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
 
 if TYPE_CHECKING:
+    from autoskillit.core import SemanticAdaptationContext
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe.schema import Recipe
 
@@ -68,6 +69,7 @@ class ReadyLineage:
     state_path: Path
     capture_decision: Any
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None
+    managed_join_parent_id: str | None
     preflight: Any
     resume_session_id: str | None
     resume_checkpoint: SessionCheckpoint | None
@@ -137,6 +139,7 @@ def prepare_launch(
     campaign_id: str,
     effective_backend: CodingAgentBackend | None,
     tool_ctx: ToolContext,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> tuple[str, Any, Any, Path]:
     """Build the (prompt, plugin_authority, capability_preparation, authoritative_cwd) tuple.
 
@@ -171,6 +174,11 @@ def prepare_launch(
             recipe_packs=tool_ctx.active_recipe_packs,
             recipe_features=tool_ctx.active_recipe_features,
         )
+        if adaptation_context is not None:
+            capability_preparation = replace(
+                capability_preparation,
+                adaptation_context=adaptation_context,
+            )
     authoritative_cwd = (
         capability_preparation.cwd if capability_preparation is not None else tool_ctx.project_dir
     ).resolve()
@@ -277,6 +285,8 @@ async def run_lineage_preparation(
     provenance: DispatchProvenanceTracker,
     native_shell_capture_mode: NativeShellCaptureMode | None,
     timeout_sec: int | None,
+    managed_join_parent_id: str | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> LineagePreparationResult | DispatchResult:
     """Mint the per-dispatch state handle, prepare the managed lineage, build the launch tuple.
 
@@ -471,6 +481,7 @@ async def run_lineage_preparation(
                 campaign_id=campaign_id,
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
+                adaptation_context=adaptation_context,
             ),
             prepare_launch=lambda for_dispatch_id: prepare_launch(
                 for_dispatch_id=for_dispatch_id,
@@ -484,6 +495,7 @@ async def run_lineage_preparation(
                 campaign_id=campaign_id,
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
+                adaptation_context=adaptation_context,
             ),
             create_fresh_handle=lambda: create_fresh_handle(
                 dispatches_dir=dispatches_dir,
@@ -505,6 +517,7 @@ async def run_lineage_preparation(
             ),
             native_shell_capture_mode=native_shell_capture_mode,
             lineage_backend_name=lineage_backend_name,
+            launch_id=managed_join_parent_id,
         )
     except FoodTruckLineageInitializationError:
         return complete_failure_with_state(
@@ -547,6 +560,7 @@ async def run_lineage_preparation(
             state_path=state_path,
             capture_decision=capture_decision,
             managed_lineage_ref=managed_lineage_ref,
+            managed_join_parent_id=managed_join_parent_id,
             preflight=preflight,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,

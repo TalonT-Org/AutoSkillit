@@ -313,17 +313,18 @@ adapter family.
 
 ## Section 4: BackendConventions Classification
 
-Both fields on `BackendConventions` (`src/autoskillit/core/types/_type_backend.py:38–49`)
-appear below. The classification legend matches Section 2.
+`BackendConventions` no longer includes `project_local_skill_search_dirs`.
+Project-local overrides are resolved against the canonical resolver-owned
+directory tuple, independently of backend conventions. The remaining field
+appears below. The classification legend matches Section 2.
 
 | # | Field | Classification | opencode value | Rationale |
 |---|---|---|---|---|
 | 1 | `skills_subdir` | TRIVIAL | `Path("skills")` | Conventional default; opencode could use `.opencode/skills/` or `.agents/skills/` if a skill-injection mechanism emerges. Caveat: the value is only meaningful if `skill_injection_capable=True` — which is a GAP for opencode. Setting it now is harmless but inert. |
-| 2 | `project_local_skill_search_dirs` | GAP | `()` | opencode has no documented project-local skill discovery. A Protocol extension that surfaces a registration hook (rather than a directory scan) would be required. Maps to PCR-004. |
 
 The dependency between row 1 (`TRIVIAL`) and the `skill_injection_capable`
 GAP (Section 3 row 4) is significant: the `skills_subdir` value can be set
-without Protocol change, but no consumer can read it until PCR-004 lands.
+without Protocol change, but no backend loader can use it until PCR-004 lands.
 
 ---
 
@@ -406,7 +407,7 @@ single PCR with multiple affected surfaces. The PCR ID is sequential.
 | PCR-001 | sandbox-write-enablement | §2 rows 4, 12, 13; §3 row 8, 27 | `opencode run` hard-codes `--sandbox deny`; every `build_*_cmd` method that requires headless write capability (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`) is structurally blocked. `food_truck_capable=False` and `default_skill_sandbox_mode="workspace-write"` are aspirational only. | **Protocol change**: a new capability flag (`sandbox_policy_override_capable: bool`) that distinguishes backends whose sandbox can be relaxed via a flag from those whose sandbox is hard-coded. `build_*_cmd` returns must distinguish "capability blocked" from "config rejected". | sst/opencode#13851 | Codex applies `--dangerously-bypass-approvals-and-sandbox` (`codex.py` lines 98–107); Claude Code applies `--dangerously-skip-permissions`. Both have explicit bypass flags; opencode does not. |
 | PCR-002 | session-resume-mechanism | §2 row 11; §3 row 3 | No documented `--resume <session_id>` flag; SQLite session IDs are not first-class CLI arguments. `build_resume_cmd` cannot produce a `CmdSpec` that targets an existing session. `session_resume_capable=False`. | **Protocol change**: a new `ResumeSpec` variant (`SqliteBackedResume(session_db_path: Path, session_id: str)`) under `_type_resume.py`, or a generalised `backend-specific-resume` callable on the Protocol surface. | opencode resume feature | Claude Code uses `--resume <session_id>` flag; Codex uses `resume <session_id>` positional subcommand (`codex.py` lines 978–979). |
 | PCR-003 | orchestrator-session-support | §2 row 13; §3 row 8 | `build_food_truck_cmd` requires orchestrator-level L2 session support (driven by fleet dispatch); opencode has no equivalent and the sandbox blocker compounds. `food_truck_capable=False`. | **Protocol change**: a new `food_truck_capable` distinction between "no orchestrator support at all" (`False`) and "blocked by sandbox" (new variant or sub-flag). Same proposal as PCR-001 — likely merged into a single new capability. | sst/opencode#13851 | Codex supports food-truck via `build_food_truck_cmd` (lines 821–823) but discards `plugin_source` / `output_format` / `exit_after_stop_delay_ms`. |
-| PCR-004 | skill-registration-discovery | §2 rows 9, 12; §3 row 4; §4 row 2 | No documented `--add-dir` / `--plugin-dir` / skill-discovery mechanism. `skill_injection_capable=False` and `project_local_skill_search_dirs=()`. | **Protocol change**: a new `skill_registration: Callable[[SkillManifest], None]` field on the Protocol, decoupling registration from CLI flags. | opencode skill-injection feature | Claude Code uses `--add-dir` / `--plugin-dir`; Codex has no equivalent and uses an empty frozenset. |
+| PCR-004 | skill-registration-discovery | §2 rows 9, 12; §3 row 4 | No documented `--add-dir` / `--plugin-dir` / skill-discovery mechanism. `skill_injection_capable=False`; `project_local_skill_search_dirs` was removed because project-local override discovery is resolver-owned. | **Protocol change**: a new `skill_registration: Callable[[SkillManifest], None]` field on the Protocol, decoupling registration from CLI flags. | opencode skill-injection feature | Claude Code uses `--add-dir` / `--plugin-dir`; Codex has no equivalent native registration mechanism. |
 | PCR-005 | exit-code-semantics | §3 row 6 | Exit codes are undocumented; daily release cadence with no schema versioning. `exit_code_is_terminal=False` is conservative but may yield false positives when opencode exits with a non-zero status on benign conditions. | **Protocol change**: a new `exit_code_is_terminal: Literal["true","false","unknown"]` (string union) to distinguish "verified terminal" from "undocumented". | opencode exit-code documentation | Codex has verified semantics (`exit_code_is_terminal=True`); Claude Code has verified semantics (`False`). |
 | PCR-006 | mcp-config-wiring | §3 row 7 | opencode may have an MCP-style config; the absence of documentation makes `mcp_config_capable` ambiguous. SHIM-REQUIRED rather than GAP because the Protocol surface is sufficient; the implementation simply awaits research. | **No Protocol change**. Implementation work only. | opencode MCP documentation | Codex: `mcp_config_capable=True`; Claude Code: `False`. |
 | PCR-007 | triage-probe-mechanism | §3 row 11 | No lightweight probe mechanism documented. `triage_capable=False` blocks `_llm_triage.py` from dispatching to opencode. | **Protocol change**: a new `triage_cmd_builder: Callable[[str], CmdSpec]` field that backends can implement to expose lightweight probes without requiring a full skill session. | opencode probe feature | Claude Code uses `claude -p` for triage (`_llm_triage.py`); Codex has no triage path. |

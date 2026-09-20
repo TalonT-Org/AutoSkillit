@@ -38,6 +38,7 @@ from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     hook_session_shape,
     payload_managed_codex_route,
+    resolve_binding_session_id,
     session_join_required,
 )
 
@@ -186,7 +187,7 @@ def main() -> None:
         sys.exit(0)  # fail-open: missing or malformed tool_input
 
     tool_name = data.get("tool_name")
-    session_id = data.get("session_id")
+    session_id = resolve_binding_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     denial_reason = _managed_route_denial(payload_cwd, session_id, tool_name, tool_input)
     if denial_reason is not None:

@@ -147,14 +147,12 @@ class BackendConventions:
     """Per-backend filesystem layout conventions for skill discovery.
 
     Distinct from :class:`BackendCapabilities` (which declares behavioral
-    capability flags). Conventions describe directory layout: where the
-    backend looks for skills, and which project-local directories to scan.
+    capability flags). Conventions describe backend-owned directory layout:
+    where the backend looks for skills.
     """
 
     #: Relative path from backend session root to the skills directory.
     skills_subdir: Path = Path("skills")
-    #: Project-relative directories to scan for project-local skills.
-    project_local_skill_search_dirs: tuple[str, ...] = ()
     #: Backend-owned profile skill source admitted into generated session homes.
     profile_skills_source: Path | None = None
     #: Persistent generated-home root below the configured project temp directory.

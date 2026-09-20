@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.core import SkillExecutionRole, SkillSemanticOperation, SkillVisibilitySpec
+from autoskillit.execution.backends import BACKEND_REGISTRY, CodexBackend
+from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from tests.contracts import _skill_admission_ledger as admission_ledger
 
 pytestmark = pytest.mark.medium
@@ -93,6 +95,31 @@ def test_managed_codex_admission_rows_are_complete_and_join_refusal_free(
 
     assert len(rows) == expected_count
     assert all(statuses["codex"] == "admitted" for statuses in rows.values())
+
+
+def test_bundled_join_required_skills_refuse_without_context() -> None:
+    source_catalog = DefaultSkillResolver().list_effective(
+        None,
+        SkillExecutionRole.SESSION,
+        visibility=SkillVisibilitySpec(),
+        cook_session=True,
+    )
+    join_required = {
+        skill.name
+        for skill in source_catalog.skills
+        if skill.semantic_plan is not None
+        and skill.semantic_plan.join is not None
+        and skill.semantic_plan.join.required
+    }
+    compilation = compile_session_skill_catalog(source_catalog, CodexBackend())
+    refusals = {
+        unavailable.skill: unavailable.operation for unavailable in compilation.unavailable
+    }
+
+    assert join_required
+    assert {skill: refusals.get(skill) for skill in join_required} == {
+        skill: SkillSemanticOperation.REQUIRED_JOIN for skill in join_required
+    }
 
 
 def test_ledger_is_sorted() -> None:

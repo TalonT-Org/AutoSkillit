@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         ManagedSessionHome,
         PluginLaunchBinding,
         ResumeSpec,
+        SemanticAdaptationContext,
         SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
@@ -570,20 +571,31 @@ def _run_interactive_session(
     return None
 
 
-def _order_launch_env(launch_id: str) -> dict[str, str]:
+def _order_launch_env(
+    launch_id: str,
+    managed_join_parent_id: str | None = None,
+) -> dict[str, str]:
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
+        MANAGED_JOIN_PARENT_ID_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         SessionType,
     )
 
-    return {
+    env = {
         SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,
         LAUNCH_ID_ENV_VAR: launch_id,
     }
+    if managed_join_parent_id is not None:
+        env[MANAGED_JOIN_PARENT_ID_ENV_VAR] = managed_join_parent_id
+    return env
 
 
-def _write_order_entry(project_dir: Path, recipe_name: str | None) -> tuple[str, dict[str, str]]:
+def _write_order_entry(
+    project_dir: Path,
+    recipe_name: str | None,
+    managed_join_parent_id: str | None = None,
+) -> tuple[str, dict[str, str]]:
     import uuid
 
     from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
@@ -591,7 +603,7 @@ def _write_order_entry(project_dir: Path, recipe_name: str | None) -> tuple[str,
 
     launch_id = uuid.uuid4().hex[:16]
     write_registry_entry(project_dir, launch_id, SESSION_TYPE_ORDER, recipe_name)
-    return launch_id, _order_launch_env(launch_id)
+    return launch_id, _order_launch_env(launch_id, managed_join_parent_id)
 
 
 def _launch_cook_session(
@@ -607,6 +619,7 @@ def _launch_cook_session(
     workspace_temp_dir: str | None,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     from autoskillit.cli.session._session_reload import admit_reload
@@ -722,11 +735,20 @@ def _launch_cook_session(
     ) as projection_binding:
         if projection_binding is None:
             raise RuntimeError("retained projection mode did not produce a binding")
+        managed_codex_route = None
+        if adaptation_context is not None:
+            from autoskillit.execution.backends._codex_hooks import (
+                managed_codex_route_for_launch_context,
+            )
+
+            managed_codex_route = managed_codex_route_for_launch_context("interactive")
         projection_context = provider.catalog_projection_context(
             skill_compilation.catalog,
             launch_project_dir,
             backend=backend,
             durable_scripts_root=projection_binding.identity.managed_path,
+            adaptation_context=adaptation_context,
+            managed_codex_route=managed_codex_route,
         )
         with manager.managed_session(
             launch_id,

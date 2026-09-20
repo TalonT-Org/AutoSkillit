@@ -457,7 +457,6 @@ def _run_finalized_profile_cook(
     class _Backend:
         name = "codex"
         conventions = BackendConventions(
-            project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
             persistent_session_root_subdir=Path("codex-sessions"),
             skill_sigil="$",
         )

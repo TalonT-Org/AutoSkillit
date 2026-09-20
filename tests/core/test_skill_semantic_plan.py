@@ -161,21 +161,18 @@ def test_skill_semantic_adaptation_result_enforces_exact_diagnostic_boundary() -
 
 def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
     from autoskillit.core import (
-        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
         BackendCapabilities,
         JoinSpec,
-        ManagedJoinAttestation,
         SemanticAdaptationContext,
         SkillSemanticPlan,
         required_join_is_unsupported,
     )
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
-    attestation = ManagedJoinAttestation(
-        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+    context = DefaultManagedJoinAttestationAuthority().issue(
         backend="codex",
         launch_context="direct",
         parent_session_id="parent-1",
-        activation_epoch=4,
         direct_tool_mode=True,
         resolved_model="gpt-5.6-sol",
         resolved_reasoning_effort="high",
@@ -184,9 +181,9 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
         hook_registry_digest="b" * 64,
         skill_load_applies=True,
         guards_apply=True,
-        provenance="autoskillit-server",
     )
-    context = SemanticAdaptationContext(managed_join_attestation=attestation)
+    attestation = context.managed_join_attestation
+    assert attestation is not None
 
     assert context.admits_managed_join_for("codex")
     assert not context.admits_managed_join_for("claude")

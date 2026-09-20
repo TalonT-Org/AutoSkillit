@@ -27,6 +27,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import NamedTuple, Protocol, TypeVar
 
 import pytest
@@ -40,6 +41,8 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CLAUDE_CODE_CAPABILITIES,
+    CODEX_HOME_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     DefaultManagedWorkerCapacity,
@@ -124,9 +127,19 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from autoskillit.hooks._join_ledger import WAVE_CANCELLED, can_release_stop
-from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.hooks._session_binding import (
+    PROJECTION_MANIFEST_SCHEMA_VERSION,
+    LoadedSkillEntry,
+    read_binding,
+    resolve_binding_path,
+)
 from autoskillit.pipeline import DefaultBackgroundSupervisor
-from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+from autoskillit.server._managed_join_attestation import (
+    DefaultManagedJoinAttestationAuthority,
+    ManagedJoinRecordStore,
+)
+from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
+from autoskillit.server.tools.tools_execution import _fixed_batch_handlers
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     DefaultManagedFixedBatchSupervisor,
     ManagedFixedBatchLaunchBinding,
@@ -140,6 +153,7 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 from autoskillit.workspace import AgentSkillDocument, DefaultSkillResolver
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
+from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -1862,38 +1876,76 @@ def _managed_fixed_batch_smoke_binding(
     )
 
 
+def test_codex_code_mode_only_context_remains_refused() -> None:
+    """A test-only code-mode attestation cannot admit a required join."""
+    from tests.fakes import make_managed_codex_context
+
+    backend = CodexBackend()
+    skill = DefaultSkillResolver().resolve("audit-bugs")
+    assert skill is not None and skill.semantic_plan is not None
+    managed = make_managed_codex_context("managed-smoke-parent")
+    attestation = managed.managed_join_attestation
+    assert attestation is not None
+    code_mode_only = replace(
+        managed,
+        managed_join_attestation=replace(
+            attestation,
+            launch_context="code_mode_only",
+            direct_tool_mode=False,
+        ),
+    )
+
+    assert backend.adapt_skill_semantics(skill.semantic_plan).unsupported_operation is not None
+    assert (
+        backend.adapt_skill_semantics(skill.semantic_plan, code_mode_only).unsupported_operation
+        is not None
+    )
+
+
 @pytest.mark.timeout(60)
-def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
+def test_codex_managed_fixed_batch_smoke_conformance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_ctx,
+) -> None:
     """Exercise server-owned managed batches without relying on model prompt choices."""
 
     async def exercise() -> None:
-        backend = CodexBackend()
-        authority = DefaultManagedJoinAttestationAuthority()
-        context = authority.issue(
-            backend="codex",
-            launch_context="direct",
-            parent_session_id="managed-smoke-session",
-            direct_tool_mode=True,
-            resolved_model="gpt-5.6-sol",
-            resolved_reasoning_effort="high",
-            codex_catalog_digest="a" * 64,
-            fixed_batch_tool_registry_digest="b" * 64,
-            hook_registry_digest="c" * 64,
-            skill_load_applies=True,
-            guards_apply=True,
+        parent_id = "managed-smoke-parent"
+        request_id = "managed-smoke-transport"
+        source_home = tmp_path / "source-codex-home"
+        generated_home = tmp_path / "interactive-parent-home"
+        source_home.mkdir()
+        generated_home.mkdir()
+        (source_home / "models_cache.json").write_text(
+            json.dumps(installed_catalog()), encoding="utf-8"
         )
-        code_mode_context = authority.issue(
-            backend="codex",
-            launch_context="code_mode_only",
-            parent_session_id="managed-smoke-session",
-            direct_tool_mode=False,
-            resolved_model="gpt-5.6-sol",
-            resolved_reasoning_effort="high",
-            codex_catalog_digest="a" * 64,
-            fixed_batch_tool_registry_digest="b" * 64,
-            hook_registry_digest="c" * 64,
-            skill_load_applies=True,
-            guards_apply=True,
+        (generated_home / "config.toml").write_text(
+            '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+            encoding="utf-8",
+        )
+        backend = CodexBackend(source_codex_home=source_home)
+        context = prepare_managed_join_context(
+            backend=backend,
+            configured_model="haiku",
+            state_root=tool_ctx.project_dir,
+            parent_id=parent_id,
+            launch_context="interactive",
+        )
+        assert isinstance(context, SemanticAdaptationContext)
+        attestation = context.managed_join_attestation
+        assert attestation is not None
+        backend.configure_managed_session_dir(
+            generated_home,
+            attestation=attestation,
+            route="interactive-parent",
+        )
+        monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(generated_home))
+        monkeypatch.setenv(MANAGED_JOIN_PARENT_ID_ENV_VAR, parent_id)
+        tool_ctx.backend = backend
+        tool_ctx.managed_join_attestation_authority = DefaultManagedJoinAttestationAuthority(
+            record_store=ManagedJoinRecordStore(tool_ctx.project_dir),
+            backend=backend,
         )
         static_source, static_document, static_adaptation, static_plan = (
             _load_managed_fixed_batch_smoke_skill("audit-bugs", backend, context)
@@ -1904,21 +1956,6 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
 
         assert backend.capabilities.fixed_set_join_capable is False
         assert backend.adapt_skill_semantics(static_plan).unsupported_operation is not None
-        assert (
-            authority.verify(
-                context,
-                backend="codex",
-                parent_session_id="managed-smoke-session",
-            )
-            == context
-        )
-        assert (
-            backend.adapt_skill_semantics(
-                static_plan,
-                code_mode_context,
-            ).unsupported_operation
-            is not None
-        )
         assert MANAGED_CODEX_PARENT_MCP_TOOLS == (
             "run_fixed_batch",
             "read_fixed_batch_result",
@@ -1935,6 +1972,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
             background=DefaultBackgroundSupervisor(),
             state_root=tmp_path / "state",
         )
+        tool_ctx.managed_fixed_batch_supervisor = service
         assert await service.reconcile_startup()
         observed: list[tuple[str, str]] = []
 
@@ -1959,6 +1997,98 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
                 ledger_attempt_evidence=projection.ledger_attempt_evidence,
                 execute=execute,
             )
+
+        manifest_path = backend.projected_manifest_path(generated_home)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
+                    "artifact_digest": static_source.source_artifact_digest,
+                    "incarnation_id": static_source.source_artifact_incarnation_id,
+                    "skills": {
+                        static_source.skill_name: {
+                            "join_required": static_source.join_required,
+                            "child_spawn_cardinality": static_source.child_spawn_cardinality,
+                            "semantic_digest": static_source.semantic_digest,
+                            "adaptation_digest": static_source.adaptation_digest,
+                            "projected_digest": static_source.projected_digest,
+                            "canonical_digest": static_source.canonical_digest,
+                        }
+                    },
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            _fixed_batch_handlers,
+            "_ManagedLeafLaunchAdapter",
+            lambda **_kwargs: controlled_leaf,
+        )
+        handler_result = await _fixed_batch_handlers._run_fixed_batch_handler(
+            skill_name=static_source.skill_name,
+            assignments=[
+                {
+                    "role": "delegated-worker",
+                    "label": "handler-success",
+                    "task_prompt": "Return handler-owned conformance evidence.",
+                }
+            ],
+            idempotency_key="handler-smoke-key",
+            request_context=SimpleNamespace(session_id=request_id),  # type: ignore[arg-type]
+            tool_ctx=tool_ctx,
+        )
+        assert handler_result["success"] is True
+        assert handler_result["wave_outcome"] == "complete"
+        assert isinstance(handler_result["batch_id"], str)
+        assert isinstance(handler_result["result_reference"], str)
+
+        binding_path = resolve_binding_path(str(tool_ctx.project_dir), parent_id)
+        binding = read_binding(binding_path)
+        assert binding is not None
+        assert binding.session_id == parent_id
+        assert binding.managed_parent_id == parent_id
+        assert binding.managed_route == "interactive-parent"
+
+        handler_batch = active_batch(
+            binding_path.parent,
+            session_id=parent_id,
+            top_level_parent=parent_id,
+        )
+        assert handler_batch is not None
+        assert all(
+            assignment["outcome"] in {OUTCOME_SUCCESS, OUTCOME_FAILURE, OUTCOME_CANCELLED}
+            for assignment in handler_batch["assignments"]
+        )
+        assert [assignment["outcome"] for assignment in handler_batch["assignments"]] == [
+            OUTCOME_SUCCESS
+        ]
+
+        handler_page = _fixed_batch_handlers._read_fixed_batch_result_handler(
+            skill_name=static_source.skill_name,
+            batch_id=handler_result["batch_id"],
+            result_reference=handler_result["result_reference"],
+            assignment_id="",
+            offset=0,
+            page_size=8_192,
+            request_context=SimpleNamespace(session_id=request_id),  # type: ignore[arg-type]
+            tool_ctx=tool_ctx,
+        )
+        assert handler_page["success"] is True
+        assert isinstance(handler_page["content"], str)
+        assert len(json.loads(handler_page["content"])["assignments"]) == 1
+        assert can_release_stop(
+            binding_path.parent,
+            session_id=parent_id,
+            top_level_parent=parent_id,
+            session_binding={
+                "join_required": binding.join_required,
+                "binding_valid": binding.binding_valid,
+                "managed_parent_id": parent_id,
+            },
+        )[0]
 
         static_binding = _managed_fixed_batch_smoke_binding(
             channel=tmp_path / "static-channel",

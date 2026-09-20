@@ -776,3 +776,12 @@ def test_launch_cook_session_required_env_is_required_keyword_only() -> None:
     param = sig.parameters["required_env"]
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
     assert param.default is inspect.Parameter.empty
+
+
+def test_order_launch_env_forwards_managed_join_parent_identity() -> None:
+    from autoskillit.cli.session._session_launch import _order_launch_env
+    from autoskillit.core import MANAGED_JOIN_PARENT_ID_ENV_VAR
+
+    env = _order_launch_env("tracking-id", "managed-join-id")
+
+    assert env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == "managed-join-id"

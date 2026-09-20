@@ -68,7 +68,7 @@ from autoskillit.core.types import (
 
 
 def make_managed_codex_context(parent_session_id: str) -> SemanticAdaptationContext:
-    """Return the canonical direct-mode managed Codex test context."""
+    """Return a synthetic managed Codex context for adapter unit tests only."""
     return SemanticAdaptationContext(
         managed_join_attestation=ManagedJoinAttestation(
             schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,

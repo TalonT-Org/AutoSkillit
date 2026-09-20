@@ -1565,6 +1565,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "between sibling or nested sessions."
         ),
     ),
+    "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID": AmbientEnvDisposition(
+        var="AUTOSKILLIT_MANAGED_JOIN_PARENT_ID",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "AutoSkillit-private managed-join parent identity in the"
+            " AUTOSKILLIT_PRIVATE_ENV_VARS baseline; it must not leak between"
+            " sibling or nested sessions."
+        ),
+    ),
     "AUTOSKILLIT_MANAGED_LAUNCH_ID": AmbientEnvDisposition(
         var="AUTOSKILLIT_MANAGED_LAUNCH_ID",
         disposition="scrub",
@@ -2077,6 +2087,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: the __all__ export name of the CODEX_HOME"
             "env-var-name constant; never set as a real OS environment variable itself."
+        ),
+    ),
+    "MANAGED_JOIN_PARENT_ID_ENV_VAR": AmbientEnvDisposition(
+        var="MANAGED_JOIN_PARENT_ID_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: the __all__ export name of the"
+            " managed-join parent-id env-var-name constant; it is never itself"
+            " set as an OS environment variable."
         ),
     ),
     "CODEX_INTAKE_DISCIPLINE_DIGEST": AmbientEnvDisposition(

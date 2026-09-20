@@ -6,6 +6,7 @@ import json
 import os
 import random
 import sys
+import uuid
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, assert_never
@@ -322,7 +323,33 @@ def order(
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(skill_catalog.exclusions)
-    skill_compilation = compile_session_skill_catalog(skill_catalog, backend)
+    managed_join_context = None
+    managed_join_parent_id: str | None = None
+    if backend.name == "codex":
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
+        managed_join_parent_id = uuid.uuid4().hex[:16]
+        issuance = prepare_managed_join_context(
+            backend=backend,
+            configured_model=config.model.model_override or config.model.default_model,
+            state_root=project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="interactive",
+        )
+        if isinstance(issuance, ManagedJoinIssuanceRefusal):
+            print(f"WARNING: {render_managed_join_refusal(issuance)}")
+            managed_join_parent_id = None
+        else:
+            managed_join_context = issuance
+    skill_compilation = compile_session_skill_catalog(
+        skill_catalog,
+        backend,
+        adaptation_context=managed_join_context,
+    )
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
@@ -435,7 +462,11 @@ def order(
     claimed_launch_id: str | None = None
     match launch:
         case FreshLaunch():
-            launch_id, launch_env = _write_order_entry(project_dir, recipe)
+            launch_id, launch_env = _write_order_entry(
+                project_dir,
+                recipe,
+                managed_join_parent_id,
+            )
             claimed_launch_id = launch_id
         case (
             RestoreSession(session_id=claude_session_id)
@@ -450,7 +481,7 @@ def order(
                 recipe_name=recipe,
             )
             claimed_launch_id = launch_id
-            launch_env = _order_launch_env(launch_id)
+            launch_env = _order_launch_env(launch_id, managed_join_parent_id)
         case _:
             assert_never(launch)
 
@@ -468,6 +499,7 @@ def order(
             workspace_temp_dir=config.workspace.temp_dir,
             force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
             mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
+            adaptation_context=managed_join_context,
         )
     finally:
         if claimed_launch_id is not None:

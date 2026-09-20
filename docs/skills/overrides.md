@@ -25,10 +25,10 @@ to add your team's review guidelines.
 
 ## Semantic Requirements
 
-An override that shadows a bundled skill must preserve the bundled skill's semantic
-requirements. In particular, if the bundled skill declares a semantic schema version,
-the override must declare that version or a later one. If the bundled skill requires a
-fixed-set join, the override must retain:
+Resolution applies a contract floor when a project-local skill shadows a bundled one.
+The local skill may add semantic requirements, but cannot remove the bundled semantic
+plan or lower `join.required`, `concurrency.required`, `evidence.required`, or
+`evidence.independent`. For example, a local copy of a fixed-set skill must retain:
 
 ```yaml
 semantic_version: 1
@@ -37,8 +37,10 @@ semantic_requirements:
     required: true
 ```
 
-This prevents a local customization from making a skill admissible on a backend that
-cannot honestly support the bundled skill's required coordination.
+If the local copy weakens that floor, it receives a `CONTRACT_FLOOR_WEAKENED` exclusion
+and the bundled skill becomes effective. The exclusion details any dropped
+`requires_resources` or `git_metadata_writes`; those fields by themselves do not reject
+an override.
 
 Project-local skills are discovered from all four supported roots, in precedence order:
 
@@ -51,26 +53,9 @@ An interactive Codex Cook generated home has one managed catalog at
 `add-dir/skills`. Its legacy `skills` discovery root is a symlink alias to that
 same catalog, so it does not create a second copy or another precedence tier.
 
-A same-name project-local skill remains the effective override, but precedence does not
-bypass admission. After resolution, the override is checked against the bundled skill's
-semantic contract and the selected backend's capabilities. An override rejected during
-managed-session admission is visible in `ManagedSessionHome.unavailability_payload`, the
-terminal warning from `render_skill_unavailability`, the
-`<autoskillit_skill_unavailability>` prompt block, and the generated add-dir's
-`skill-unavailability.json` artifact.
-
-The current `promote-to-main` and `validate-audit` bundled skills declare
-`semantic_requirements.join.required: true`; their project-local overrides preserve that
-requirement and pass the monotonicity guard unchanged. The bundled `make-arch-diag` skill
-has no `semantic_requirements.join` field, so the join-monotonicity rule does not apply to
-its project-local shadow.
-
-For this repository, the guard repair produces the expected nine-entry reduction in the
-override-influenced Codex catalog: 9 weakened required-join overrides admitted before, 0
-admitted after. `test_required_join_overrides_resolve_and_codex_refuses_them` verifies that
-normal resolver and backend admission now refuse each with operation `required_join`. The
-bundled-only admission ledger remains byte-for-byte unchanged (a zero-entry diff), because
-the bundled skill definitions were not changed.
+Git tracking does not affect this check: every on-disk override root participates in
+resolution. `tests/arch/test_skill_override_contract_guard.py` checks on-disk shadow pairs
+and verifies that local and bundled definitions have the same backend admission result.
 
 ## Name-Matching Behavior
 

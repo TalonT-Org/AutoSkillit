@@ -133,7 +133,7 @@ A skill that declares `semantic_requirements.join.required: true` enters a join-
    * `join_claim_guard` (PreToolUse, matcher `Agent`) atomically claims one declared assignment per top-level direct `Agent` `tool_use_id`.
    * `join_settle_guard` (PostToolUse + PostToolUseFailure) maps the upstream event to one of `success / failure / timeout / cancelled / interruption / missing` and records the outcome on the claimed handle. Empty results are mapped to `missing`, never `success`.
    * `join_followup_guard` (matcherless PreToolUse) denies non-`Agent` side-effecting calls while a wave is unresolved.
-   * `join_stop_guard` (Stop, exit code 2) blocks Claude from completing until the wave is `complete`.
+   * `join_stop_guard` (Stop) blocks completion until the wave is `complete`: Claude uses exit code 2, while Codex consumes a `decision: block` response.
 4. **Backend admission** — `BackendCapabilities.fixed_set_join_capable` is statically `True` only for Claude Code, and only when the full guard set is registered in the same commit. Native Codex remains `fixed_set_join_capable=False`: its wait-any/mailbox behavior cannot satisfy `declare_join_batch`, so native and unattested Codex projections return `unsupported_operation(REQUIRED_JOIN)`.
 5. **Session binding monotonicity** — `skill_load_post_hook.py` writes a JSON envelope with OR-accumulated `join_required`. A later join-false Skill load does not downgrade an established binding. A missing or unreadable projection manifest fails closed by forcing `join_required: true` so dispatch guards refuse all join-bearing work.
 6. **Repository force-inactive option** — `agent_backend.force_inactive_agent_teams` (default False) neutralizes `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and detects conflicting entries in the target repository's `.claude/settings.json` / `.claude/settings.local.json`. Repositories with the option disabled remain byte-for-byte unchanged.
@@ -142,21 +142,24 @@ The session flag carries join policy; the manifest carries projection identity; 
 
 ### Attested managed Codex route
 
-Managed Codex is a separate, server-owned route; it does not change the native
-capability. Before a join-bearing skill is compiled or its generated home is
-issued, the server retrieves one current `SemanticAdaptationContext` from its
-attestation authority. The authority admits only the exact in-process issuance
-for the selected backend and parent session, the active epoch, direct tool mode,
-the configured model and effort, catalog/tool/hook digests, applicable Skill
-load and guards, and a recovery-ready managed batch service. Without that
-evidence the normal unfiltered source catalog is compiled under the native
-refusal rule; a later materialization never attempts to restore a skill that
-was already omitted.
+Managed Codex is a server-owned route; it does not change the native capability.
+Before the first skill catalog compilation, the launch path chooses one managed
+join parent ID and issues a `SemanticAdaptationContext` from the selected model,
+its projected catalog, the managed route definition, and the hook registry.
+The authority persists the attestation under that ID. A fresh MCP server child
+loads it and verifies the generated `CODEX_HOME` model, effort, catalog digest,
+route guards, current route and hook digests, and recovery readiness before
+admitting a batch. An issuance refusal leaves join-required skills unavailable.
 
 With the attestation, catalog compilation, projection binding, and generated
-skill documents carry the same adaptation context. The managed parent may use
-`run_fixed_batch`, which validates the exact loaded source and then records
-fixed membership in the JoinLedger. It cannot use native spawning or
+skill documents carry the same adaptation context. Interactive Codex parents
+use the `interactive-parent` route, with normal kitchen tool visibility and
+join/background guards; headless parents use the restricted `parent` route.
+`AUTOSKILLIT_MANAGED_JOIN_PARENT_ID` carries one parent identity into the MCP
+server and hooks. The server writes a binding for the requested skill from the
+projected manifest under that ID before admission, then records fixed membership
+in the JoinLedger under the same ID. The FastMCP transport session remains the
+result-store request identity. The managed parent cannot use native spawning or
 `declare_join_batch`; the latter remains a native-only capability gate and
 cannot mint managed authority. Each worker is launched as an isolated managed
 leaf with its own binding and a deliberately small direct-tool surface. Leaves
@@ -171,11 +174,9 @@ On restart, unresolved work blocks the route until bounded recovery can prove
 the prior process absent and persist a terminal outcome; uncertain work is not
 silently retried.
 
-The attestation includes the configured hook-registry digest and bindings carry
-that digest as route metadata. Explicit epoch rotation clears issued contexts;
-the digest is not an ambient hook-side authorization check or an automatic
-rotation mechanism. This separation keeps a changed or unavailable trust input
-fail-closed without claiming that an external framework provides the contract.
+The record is launch evidence, not an authorization shortcut: the server checks
+the current generated home before using it, and hooks read the binding keyed by
+the same managed join ID. Explicit epoch rotation clears in-memory contexts.
 
 ## Durable Codex Cook Sessions
 

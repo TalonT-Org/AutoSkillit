@@ -167,6 +167,7 @@ class _RunSkillDispatchState:
     _session_snapshot: dict[str, str] | None = None
     _native_shell_capture_decision: NativeShellCaptureDecision | None = None
     _managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
+    _managed_join_parent_id: str = ""
     _resume_backend_obj: CodingAgentBackend | None = None
     _resume_backend_authority: BackendAuthority | None = None
     _resume_launch_contract: ResolvedLaunchContract | None = None

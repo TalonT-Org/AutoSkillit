@@ -37,6 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    resolve_binding_session_id,
     session_join_required,
     session_managed_codex_route,
     session_managed_scope,
@@ -54,8 +55,7 @@ JOIN_FOLLOWUP_DENY_TRIGGER: str = (
 
 
 def _resolve_session_id(data: dict[str, object]) -> str:
-    sid = data.get("session_id", "")
-    return sid if isinstance(sid, str) else ""
+    return resolve_binding_session_id(data)
 
 
 def _is_unresolved(batch: dict[str, object]) -> bool:

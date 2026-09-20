@@ -108,6 +108,45 @@ def test_fleet_call_sites_build_fresh_launches_without_managed_order_inputs(
     assert managed_order_inputs.isdisjoint(kwargs)
 
 
+def test_fleet_session_launcher_forwards_managed_join_parent_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.fleet._fleet_session import _fleet_session_launcher
+    from autoskillit.core import MANAGED_JOIN_PARENT_ID_ENV_VAR, FreshLaunch
+
+    captured: dict[str, object] = {}
+    backend = MagicMock()
+    backend.capabilities.session_dir_persistent = False
+
+    def capture_session(*_args: object, **kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "_run_interactive_session",
+        capture_session,
+    )
+
+    with _fleet_session_launcher(
+        backend=backend,
+        project_dir=tmp_path,
+        skill_compilation=MagicMock(),
+        default_base_branch="main",
+        workspace_temp_dir=None,
+        force_inactive_agent_teams=False,
+        mcp_tool_timeout_sec=1.0,
+        cook_ceiling_seconds=1.0,
+        systemd_scope_enabled=False,
+        managed_join_parent_id="managed-join-id",
+    ) as launch_session:
+        launch_session(FreshLaunch(), {})
+
+    extra_env = captured["extra_env"]
+    assert isinstance(extra_env, dict)
+    assert extra_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == "managed-join-id"
+
+
 class TestLaunchFleetSessionIngredientsTable:
     def _call(
         self,

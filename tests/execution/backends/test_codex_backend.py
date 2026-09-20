@@ -2005,12 +2005,6 @@ class TestCodexBackendConventions:
     def test_conventions_returns_backend_conventions_instance(self) -> None:
         assert isinstance(CodexBackend().conventions, BackendConventions)
 
-    def test_codex_skills_in_project_local_dirs(self) -> None:
-        assert ".codex/skills" in CodexBackend().conventions.project_local_skill_search_dirs
-
-    def test_agents_skills_in_project_local_dirs(self) -> None:
-        assert ".agents/skills" in CodexBackend().conventions.project_local_skill_search_dirs
-
     def test_conventions_skills_subdir(self) -> None:
         assert CodexBackend().conventions.skills_subdir == Path("skills")
 

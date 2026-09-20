@@ -329,7 +329,6 @@ class _Backend:
     def conventions(self) -> BackendConventions:
         return BackendConventions(
             skills_subdir=Path("test/skills"),
-            project_local_skill_search_dirs=(),
             profile_skills_source=None,
         )
 

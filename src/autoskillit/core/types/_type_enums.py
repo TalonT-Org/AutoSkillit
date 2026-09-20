@@ -200,6 +200,7 @@ class SkillInvalidityKind(StrEnum):
     FIELD_SHAPE = "field_shape"
     EXPLORATION_CONTRACT_INVALID = "exploration_contract_invalid"
     RESOURCE_CONTRACT_INVALID = "resource_contract_invalid"
+    CONTRACT_FLOOR_WEAKENED = "contract_floor_weakened"
     RESERVED_FIELD = "reserved_field"
     UNKNOWN_CAPABILITY = "unknown_capability"
     UNDECLARED_CAPABILITY = "undeclared_capability"

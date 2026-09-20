@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+from tests.execution.backends._codex_fixtures import installed_catalog
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -17,27 +18,7 @@ _READER_REASONING_EFFORT = "xhigh"
 
 
 def _installed_catalog() -> dict[str, object]:
-    return {
-        "models": [
-            {
-                "slug": "gpt-5.6-sol",
-                "tool_mode": "code_mode",
-                "apply_patch_tool_type": "freeform",
-                "sentinel": {"preserved": True},
-            },
-            {
-                "slug": _READER_MODEL,
-                "tool_mode": "code_mode_only",
-                "apply_patch_tool_type": "freeform",
-                "supported_reasoning_levels": [
-                    {"effort": "high", "description": "High"},
-                    {"effort": _READER_REASONING_EFFORT, "description": "Extra high"},
-                ],
-                "reader_metadata": {"preserved": True},
-            },
-        ],
-        "metadata": {"catalog": "installed", "schema_version": 7},
-    }
+    return installed_catalog()
 
 
 def _catalog_bytes(catalog: object) -> bytes:
@@ -138,32 +119,25 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
 
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
     from autoskillit.core import (
-        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
         JoinSpec,
-        ManagedJoinAttestation,
-        SemanticAdaptationContext,
         SkillSemanticPlan,
     )
     from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
     plan = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
-    context = SemanticAdaptationContext(
-        managed_join_attestation=ManagedJoinAttestation(
-            schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
-            backend="codex",
-            launch_context="direct",
-            parent_session_id="parent-1",
-            activation_epoch=0,
-            direct_tool_mode=True,
-            resolved_model="gpt-5.6-sol",
-            resolved_reasoning_effort="high",
-            codex_catalog_digest="c" * 64,
-            fixed_batch_tool_registry_digest="a" * 64,
-            hook_registry_digest="b" * 64,
-            skill_load_applies=True,
-            guards_apply=True,
-            provenance="autoskillit-server",
-        )
+    context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
     )
     backend = CodexBackend()
 
@@ -175,9 +149,10 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
     assert adaptation.instruction_fragments[-1].startswith("Use the server-owned managed")
 
 
-def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path) -> None:
-    from autoskillit.core import MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION, ManagedJoinAttestation
+@pytest.mark.parametrize("route", ["parent", "interactive-parent"])
+def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, route) -> None:
     from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
     source_home = tmp_path / "source"
     session_home = tmp_path / "session"
@@ -194,12 +169,10 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path) -> N
         expected_model=_READER_MODEL,
         expected_reasoning_effort=_READER_REASONING_EFFORT,
     )
-    attestation = ManagedJoinAttestation(
-        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+    context = DefaultManagedJoinAttestationAuthority().issue(
         backend="codex",
-        launch_context="direct",
+        launch_context="interactive" if route == "interactive-parent" else "direct",
         parent_session_id="parent-1",
-        activation_epoch=0,
         direct_tool_mode=True,
         resolved_model=_READER_MODEL,
         resolved_reasoning_effort=_READER_REASONING_EFFORT,
@@ -208,20 +181,26 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path) -> N
         hook_registry_digest="b" * 64,
         skill_load_applies=True,
         guards_apply=True,
-        provenance="autoskillit-server",
     )
+    attestation = context.managed_join_attestation
+    assert attestation is not None
 
     CodexBackend(source_codex_home=source_home).configure_managed_session_dir(
         session_home,
         attestation=attestation,
-        route="parent",
+        route=route,
     )
 
     config = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
-    assert config["mcp_servers"]["autoskillit"]["enabled_tools"] == [
-        "run_fixed_batch",
-        "read_fixed_batch_result",
-    ]
+    tools = config["mcp_servers"]["autoskillit"].get("enabled_tools")
+    if route == "interactive-parent":
+        assert tools is None
+        rendered = json.dumps(config["hooks"])
+        assert "join_stop_guard.py" in rendered
+        assert "join_followup_guard.py" in rendered
+        assert "skill_orchestration_guard.py" not in rendered
+    else:
+        assert tools == ["run_fixed_batch", "read_fixed_batch_result"]
     assert "Stop" in config["hooks"]
     projected_model = json.loads((session_home / "models_cache.json").read_bytes())["models"][1]
     assert projected_model["tool_mode"] == "direct"

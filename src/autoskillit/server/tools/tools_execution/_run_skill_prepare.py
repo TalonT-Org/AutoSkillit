@@ -10,13 +10,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -26,6 +27,7 @@ from autoskillit.core import (
     SkillContractError,
     closure_authority_spec_from_args,
     get_logger,
+    new_managed_launch_id,
     parse_plan_paths,
     render_target_skill_command,
 )
@@ -369,6 +371,46 @@ async def _prepare_dispatch_backend(
         )
         if state._candidate_rejection_reason is not None:
             return None
+
+    backend = state._effective_backend_obj
+    if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
+        if state._managed_join_parent_id:
+            managed_join_parent_id = state._managed_join_parent_id
+        elif state._stored_contract_entry is not None:
+            managed_lineage_ref = state._stored_contract_entry.managed_lineage_ref
+            if managed_lineage_ref is None:
+                raise SkillContractError("Resume dispatch lacks managed lineage identity")
+            managed_join_parent_id = managed_lineage_ref.launch_id
+        else:
+            managed_join_parent_id = new_managed_launch_id()
+        state._managed_join_parent_id = managed_join_parent_id
+        issuance = prepare_managed_join_context(
+            backend=backend,
+            configured_model=state.effective_model,
+            state_root=state.tool_ctx.project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="direct",
+        )
+        if isinstance(issuance, ManagedJoinIssuanceRefusal):
+            print(f"WARNING: {render_managed_join_refusal(issuance)}")
+        else:
+            if state.projection_context is None:
+                raise SkillContractError("Managed execution lacks projection authority")
+            state.projection_context = replace(
+                state.projection_context,
+                adaptation_context=issuance,
+                managed_codex_route="parent",
+            )
+            state.provider_extras = {
+                **(state.provider_extras or {}),
+                MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
+            }
 
     if state._stored_contract is None:
         if state.projection_context is None:

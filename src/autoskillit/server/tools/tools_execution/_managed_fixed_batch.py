@@ -144,7 +144,7 @@ class DefaultManagedFixedBatchSupervisor:
                 try:
                     settle_assignment(
                         Path(recovery_debt.flag_dir),
-                        session_id=recovery_debt.request_session_id,
+                        session_id=recovery_debt.parent_session_id,
                         top_level_parent=recovery_debt.managed_parent_id,
                         tool_use_id=recovery_debt.assignment_id,
                         outcome=OUTCOME_REAPED,
@@ -205,7 +205,7 @@ class DefaultManagedFixedBatchSupervisor:
         batch = open_or_replay(
             binding.flag_dir,
             parent={
-                "request_session_id": binding.launch.request_session_id,
+                "request_session_id": binding.launch.parent_session_id,
                 "managed_parent_id": binding.launch.managed_parent_id,
                 "managed_leaf_id": "",
             },
@@ -401,7 +401,7 @@ class DefaultManagedFixedBatchSupervisor:
                 owner=owner,
                 permit_id=permit.permit_id,
                 flag_dir=str(binding.flag_dir),
-                request_session_id=binding.launch.request_session_id,
+                parent_session_id=binding.launch.parent_session_id,
                 managed_parent_id=binding.launch.managed_parent_id,
                 batch_id=batch_id,
                 assignment_id=ledger_assignment_id,
@@ -586,7 +586,7 @@ class DefaultManagedFixedBatchSupervisor:
             result = replace(result, result_reference=reference, result_digest=digest)
         settle_assignment(
             binding.flag_dir,
-            session_id=binding.launch.request_session_id,
+            session_id=binding.launch.parent_session_id,
             top_level_parent=binding.launch.managed_parent_id,
             tool_use_id=assignment_id,
             outcome=result.outcome,
@@ -616,7 +616,7 @@ class DefaultManagedFixedBatchSupervisor:
     ) -> ManagedFixedBatchResult:
         batch = active_batch(
             binding.flag_dir,
-            session_id=binding.launch.request_session_id,
+            session_id=binding.launch.parent_session_id,
             top_level_parent=binding.launch.managed_parent_id,
         )
         if not isinstance(batch, Mapping) or batch.get("join_batch_id") != batch_id:

@@ -59,6 +59,27 @@ def _seed_skill_lineage(
     )
 
 
+def test_fresh_lineage_uses_supplied_managed_join_identity(tmp_path: Path) -> None:
+    lineage_store = DefaultManagedHeadlessSessionLineageStore()
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
+
+    preparation = prepare_skill_native_shell_lineage(
+        store=lineage_store,
+        backend=backend,
+        lineage_anchor=tmp_path,
+        stored_reference=None,
+        resume_session_id="",
+        requested_mode="",
+        is_resume=False,
+        launch_id="b" * 32,
+    )
+
+    assert preparation.reference is not None
+    assert preparation.reference.launch_id == "b" * 32
+
+
 def _attach_lineage_reference(
     store: DefaultSkillSessionContractStore,
     *,

@@ -28,6 +28,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from autoskillit.hooks._session_binding import JoinAdmission
 
+if __package__:
+    from ._hook_constants import MANAGED_JOIN_PARENT_ID_ENV_VAR
+else:
+    from _hook_constants import (  # type: ignore[import-not-found,no-redef]
+        MANAGED_JOIN_PARENT_ID_ENV_VAR,
+    )
+
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
 HOOK_CONFIG_FILENAME = ".hook_config.json"
@@ -644,7 +651,7 @@ def session_managed_codex_route(
     guards = binding.get("managed_guard_set")
     config_digest = binding.get("managed_config_digest")
     if (
-        route not in ("parent", "leaf")
+        route not in ("parent", "leaf", "interactive-parent")
         or not isinstance(guards, list)
         or any(not isinstance(guard, str) or not guard for guard in guards)
         or len(set(guards)) != len(guards)
@@ -653,6 +660,15 @@ def session_managed_codex_route(
     ):
         return None
     return str(route), frozenset(guards), config_digest
+
+
+def resolve_binding_session_id(payload: dict[str, object]) -> str:
+    """Prefer the managed join identity delivered to a Codex hook process."""
+    managed_parent_id = os.environ.get(MANAGED_JOIN_PARENT_ID_ENV_VAR, "")
+    if managed_parent_id:
+        return managed_parent_id
+    session_id = payload.get("session_id", "")
+    return session_id if isinstance(session_id, str) else ""
 
 
 def payload_managed_codex_route(

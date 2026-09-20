@@ -98,7 +98,10 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultCommittedDispositionResolver,
 )
 from autoskillit.server._exploration_service import DefaultExplorationService
-from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+from autoskillit.server._managed_join_attestation import (
+    DefaultManagedJoinAttestationAuthority,
+    ManagedJoinRecordStore,
+)
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
 from autoskillit.server.recipe._recipe_delivery_helpers import initialize_host_client_attestation
@@ -439,7 +442,10 @@ def make_context(
         review_comment_cap=config.github.review_comment_cap,
     )
     background = DefaultBackgroundSupervisor(audit=audit)
-    managed_join_attestation_authority = DefaultManagedJoinAttestationAuthority()
+    managed_join_attestation_authority = DefaultManagedJoinAttestationAuthority(
+        record_store=ManagedJoinRecordStore(project_dir),
+        backend=backend,
+    )
     ctx = ToolContext(
         config=config,
         audit=audit,

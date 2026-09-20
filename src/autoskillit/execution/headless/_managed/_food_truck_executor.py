@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -62,6 +63,7 @@ from autoskillit.execution.headless._managed._launch_adapter import (
     _food_truck_launch_spec_builder,
 )
 from autoskillit.execution.quota import admit_quota
+from autoskillit.workspace import SkillProjectionContext
 
 
 class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
@@ -368,6 +370,11 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     backend=backend,
                     binding=projection_binding,
                 )
+                if projection_context.adaptation_context is not None:
+                    projection_context = replace(
+                        cast(SkillProjectionContext, projection_context),
+                        managed_codex_route="parent",
+                    )
                 managed_catalog_scope = session_skill_manager.managed_catalog(
                     uuid.uuid4().hex[:16],
                     cast(EffectiveSkillCatalogAuthority, capability_preparation.catalog),

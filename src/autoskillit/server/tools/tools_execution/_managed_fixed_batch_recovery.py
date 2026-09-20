@@ -8,7 +8,7 @@ from pathlib import Path
 
 from autoskillit.core import SkillContractError, read_versioned_json, write_versioned_json
 
-_RECOVERY_SCHEMA_VERSION = 2
+_RECOVERY_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +16,7 @@ class _RecoveryDebt:
     owner: tuple[str, str, str]
     permit_id: str
     flag_dir: str
-    request_session_id: str
+    parent_session_id: str
     managed_parent_id: str
     batch_id: str
     assignment_id: str
@@ -34,7 +34,7 @@ class _RecoveryDebt:
             (
                 "permit_id",
                 "flag_dir",
-                "request_session_id",
+                "parent_session_id",
                 "managed_parent_id",
                 "batch_id",
                 "assignment_id",
@@ -92,7 +92,7 @@ def read_managed_recovery_state(
                 owner=tuple(item["owner"]),
                 permit_id=item["permit_id"],
                 flag_dir=item["flag_dir"],
-                request_session_id=item["request_session_id"],
+                parent_session_id=item["parent_session_id"],
                 managed_parent_id=item["managed_parent_id"],
                 batch_id=item["batch_id"],
                 assignment_id=item["assignment_id"],

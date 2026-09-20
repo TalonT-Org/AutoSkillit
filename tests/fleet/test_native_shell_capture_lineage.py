@@ -36,6 +36,7 @@ async def _execute(
     mode: NativeShellCaptureMode | None = None,
     resume_session_id: str | None = None,
     prior_dispatch_id: str | None = None,
+    managed_join_parent_id: str | None = None,
 ):
     return await execute_dispatch(
         tool_ctx=tool_ctx,
@@ -49,6 +50,7 @@ async def _execute(
         native_shell_capture_mode=mode,
         resume_session_id=resume_session_id,
         prior_dispatch_id=prior_dispatch_id,
+        managed_join_parent_id=managed_join_parent_id,
     )
 
 
@@ -95,6 +97,19 @@ def _seed_resume_lineage(
 
 
 class TestFoodTruckManagedLineage:
+    @pytest.mark.anyio
+    async def test_fresh_dispatch_uses_supplied_managed_join_identity(
+        self, tool_ctx, monkeypatch, tmp_path: Path
+    ) -> None:
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=tmp_path)
+
+        await _execute(tool_ctx, managed_join_parent_id="b" * 32)
+
+        lineage_ref = tool_ctx.executor.dispatch_calls[0].managed_lineage_ref
+        assert lineage_ref is not None
+        assert lineage_ref.launch_id == "b" * 32
+
     @pytest.mark.anyio
     async def test_fresh_direct_dispatch_creates_and_persists_food_truck_lineage(
         self, tool_ctx, monkeypatch, tmp_path: Path

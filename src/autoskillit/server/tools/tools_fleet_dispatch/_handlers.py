@@ -397,6 +397,54 @@ async def dispatch_food_truck(
                 FleetErrorCode.FLEET_INVALID_BACKEND,
                 "Fleet dispatch requires a configured backend.",
             )
+        managed_join_parent_id: str | None = None
+        adaptation_context = None
+        if effective_dispatch_backend.capabilities.managed_fixed_batch_route_capable:
+            if resume_session_id and prior_dispatch_id:
+                from autoskillit.fleet.campaign_state.state import read_state
+
+                prior_state = read_state(
+                    tool_ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json"
+                )
+                prior_record = (
+                    next(
+                        (
+                            record
+                            for record in prior_state.dispatches
+                            if record.name == effective_name
+                        ),
+                        None,
+                    )
+                    if prior_state is not None
+                    else None
+                )
+                if prior_record is not None and prior_record.managed_lineage_ref is not None:
+                    managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
+            if managed_join_parent_id is None and not resume_session_id:
+                from autoskillit.core import new_managed_launch_id
+
+                managed_join_parent_id = new_managed_launch_id()
+            if managed_join_parent_id is not None:
+                from autoskillit.server._managed_join_prelaunch import (
+                    ManagedJoinIssuanceRefusal,
+                    prepare_managed_join_context,
+                    render_managed_join_refusal,
+                )
+
+                issuance = prepare_managed_join_context(
+                    backend=effective_dispatch_backend,
+                    configured_model=(
+                        tool_ctx.config.model.model_override or tool_ctx.config.model.default_model
+                    ),
+                    state_root=tool_ctx.project_dir,
+                    parent_id=managed_join_parent_id,
+                    launch_context="direct",
+                )
+                if isinstance(issuance, ManagedJoinIssuanceRefusal):
+                    print(f"WARNING: {render_managed_join_refusal(issuance)}")
+                    managed_join_parent_id = None
+                else:
+                    adaptation_context = issuance
         cancel_scope: anyio.CancelScope | None = None
         try:
             tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
@@ -428,6 +476,7 @@ async def dispatch_food_truck(
                             projected_sous_chef=_project_food_truck_sous_chef(
                                 tool_ctx,
                                 effective_dispatch_backend,
+                                adaptation_context=adaptation_context,
                             ),
                         ),
                         quota_refresher=_refresh_quota_cache,
@@ -444,6 +493,8 @@ async def dispatch_food_truck(
                         effective_backend_map=_effective_backend_map,
                         provenance=provenance,
                         native_shell_capture_mode=native_shell_capture_mode,
+                        managed_join_parent_id=managed_join_parent_id,
+                        adaptation_context=adaptation_context,
                     )
         except TimeoutError:
             if cancel_scope is None or not cancel_scope.cancel_called:

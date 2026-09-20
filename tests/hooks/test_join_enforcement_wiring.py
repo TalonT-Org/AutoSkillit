@@ -20,6 +20,7 @@ from autoskillit.hooks._join_ledger import (
     resolve_flag_dir,
     settle_assignment,
 )
+from autoskillit.hooks._runtime._hook_constants import MANAGED_JOIN_PARENT_ID_ENV_VAR
 from autoskillit.hooks._session_binding import read_binding, resolve_binding_path, write_binding
 from tests._helpers import _EnvVarReadCollector
 from tests.conftest import production_interpreter_env
@@ -334,6 +335,51 @@ def test_followup_guard_blocks_a_followup_while_a_wave_is_unresolved(tmp_path: P
             "cwd": str(worktree),
         },
         cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert _stdout_json(completed)["decision"] == "block"
+
+
+def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> None:
+    payload_session_id = "codex-thread-id"
+    managed_join_id = "managed-join-id"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=payload_session_id)
+    binding = read_binding(resolve_binding_path(str(worktree), payload_session_id))
+    assert binding is not None
+    write_binding(
+        resolve_binding_path(str(worktree), managed_join_id),
+        binding._replace(
+            session_id=managed_join_id,
+            managed_parent_id=managed_join_id,
+            managed_route="parent",
+            managed_guard_set=("join_followup_guard",),
+            managed_config_digest="managed-config",
+        ),
+    )
+    declare_batch(
+        resolve_flag_dir(worktree),
+        session_id=managed_join_id,
+        top_level_parent=managed_join_id,
+        skill_name="join-bearing",
+        artifact_digest="artdigest-1",
+        assignments=("worker",),
+    )
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_followup_guard.py",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "true"},
+            "session_id": payload_session_id,
+            "cwd": str(worktree),
+        },
+        cwd=worktree,
+        env_overrides={
+            "AUTOSKILLIT_AGENT_BACKEND": "codex",
+            MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_id,
+        },
     )
 
     assert completed.returncode == 2

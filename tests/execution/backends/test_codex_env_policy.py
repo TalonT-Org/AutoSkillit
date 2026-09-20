@@ -9,6 +9,7 @@ from autoskillit.core import (
     AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     MANAGED_ATTEMPT_ID_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     MANAGED_LAUNCH_ID_ENV_VAR,
     MANAGED_LINEAGE_DIGEST_ENV_VAR,
     MANAGED_LINEAGE_REF_ENV_VAR,
@@ -172,3 +173,18 @@ class TestCodexEnvPolicy:
 
     def test_agent_backend_in_private_env_vars(self) -> None:
         assert AGENT_BACKEND_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    def test_managed_join_parent_identity_requires_explicit_injection(self) -> None:
+        policy = CodexEnvPolicy()
+        assert MANAGED_JOIN_PARENT_ID_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+        scrubbed = policy.build_env(
+            {"PATH": "/usr/bin", MANAGED_JOIN_PARENT_ID_ENV_VAR: "ambient-parent"}
+        )
+        injected = policy.build_env(
+            {"PATH": "/usr/bin"},
+            extras={MANAGED_JOIN_PARENT_ID_ENV_VAR: "managed-parent"},
+        )
+
+        assert MANAGED_JOIN_PARENT_ID_ENV_VAR not in scrubbed
+        assert injected[MANAGED_JOIN_PARENT_ID_ENV_VAR] == "managed-parent"

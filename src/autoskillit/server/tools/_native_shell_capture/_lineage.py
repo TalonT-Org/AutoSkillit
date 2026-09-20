@@ -135,6 +135,7 @@ def prepare_skill_native_shell_lineage(
     resume_session_id: str,
     requested_mode: str,
     is_resume: bool,
+    launch_id: str | None = None,
 ) -> SkillNativeShellLineagePreparation:
     """Create fresh lineage or verify that a resume inherits its stored decision."""
     if not is_resume:
@@ -145,7 +146,7 @@ def prepare_skill_native_shell_lineage(
         decision = resolve_native_shell_capture_decision(requested_mode or None)
         lineage = store.create(
             lineage_anchor=lineage_anchor,
-            launch_id=new_managed_launch_id(),
+            launch_id=launch_id or new_managed_launch_id(),
             decision=decision,
             backend=backend.name,
             session_kind=ManagedHeadlessSessionKind.SKILL,

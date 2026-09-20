@@ -20,6 +20,7 @@ import psutil
 
 from autoskillit.core import (
     FLEET_INSPECTOR_MODEL_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -206,6 +207,7 @@ async def run_execution(
     sentinel_contract: Any,
     dispatches_dir: Path,
     resolved_timeout: float,
+    managed_join_parent_id: str | None = None,
 ) -> ExecutionResult:
     """Phase C: lines 905-1207 of the legacy ``_run_dispatch``.
 
@@ -450,6 +452,11 @@ async def run_execution(
                     **(
                         {FLEET_INSPECTOR_MODEL_ENV_VAR: (tool_ctx.config.fleet.inspector_model)}
                         if tool_ctx.config.fleet.inspector_model
+                        else {}
+                    ),
+                    **(
+                        {MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id}
+                        if managed_join_parent_id is not None
                         else {}
                     ),
                 },

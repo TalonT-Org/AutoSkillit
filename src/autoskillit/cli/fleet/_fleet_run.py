@@ -59,7 +59,11 @@ async def _execute_fleet_run(
     import functools
 
     from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
-    from autoskillit.core import SkillExecutionRole, detect_autoskillit_mcp_prefix
+    from autoskillit.core import (
+        SkillExecutionRole,
+        detect_autoskillit_mcp_prefix,
+        new_managed_launch_id,
+    )
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
     from autoskillit.server import make_context
     from autoskillit.workspace import (
@@ -90,6 +94,40 @@ async def _execute_fleet_run(
     if effective_backend is None:
         raise RuntimeError("Fleet dispatch requires a configured backend.")
 
+    managed_join_context = None
+    managed_join_parent_id: str | None = None
+    if effective_backend.name == "codex":
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
+        managed_join_parent_id = new_managed_launch_id()
+        if resume_session_id is not None and prior_dispatch_id is not None:
+            from autoskillit.fleet import read_state
+
+            prior_state = read_state(ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json")
+            if prior_state is not None:
+                prior_record = next(
+                    (record for record in prior_state.dispatches if record.name == recipe),
+                    None,
+                )
+                if prior_record is not None and prior_record.managed_lineage_ref is not None:
+                    managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
+        issuance = prepare_managed_join_context(
+            backend=effective_backend,
+            configured_model=cfg.model.model_override or cfg.model.default_model,
+            state_root=ctx.project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="direct",
+        )
+        if isinstance(issuance, ManagedJoinIssuanceRefusal):
+            print(f"WARNING: {render_managed_join_refusal(issuance)}")
+            managed_join_parent_id = None
+        else:
+            managed_join_context = issuance
+
     from autoskillit.server import _compute_effective_backend_map  # noqa: PLC0415
 
     _recipe_info = ctx.recipes.find(recipe, ctx.project_dir) if ctx.recipes else None
@@ -115,6 +153,7 @@ async def _execute_fleet_run(
         skill_compilation = compile_session_skill_catalog(
             raw_orchestrator_catalog,
             effective_backend,
+            adaptation_context=managed_join_context,
         )
         render_skill_unavailability(skill_compilation.unavailability_payload)
         orchestrator_catalog = skill_compilation.catalog
@@ -131,6 +170,8 @@ async def _execute_fleet_run(
                 backend=effective_backend,
                 conventions=effective_backend.conventions,
                 gating=False,
+                adaptation_context=managed_join_context,
+                managed_codex_route="parent" if managed_join_context is not None else None,
             ),
         ).content
         if sous_chef is not None
@@ -161,6 +202,8 @@ async def _execute_fleet_run(
         dispatch_backend=dispatch_backend,
         effective_backend_map=_effective_backend_map,
         native_shell_capture_mode=native_shell_capture_mode,
+        managed_join_parent_id=managed_join_parent_id,
+        adaptation_context=managed_join_context,
     )
 
 

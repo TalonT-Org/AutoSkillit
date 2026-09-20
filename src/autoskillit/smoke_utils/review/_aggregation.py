@@ -254,7 +254,6 @@ def aggregate_combined_review_candidates(
         "state": "degraded" if validation_errors else "complete",
         "survivors": survivors,
         "unpostable": unpostable,
-        "review_level_findings": [],
         "aggregation_records": aggregation_records,
         "validation_errors": validation_errors,
     }

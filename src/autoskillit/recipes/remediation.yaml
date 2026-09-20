@@ -932,11 +932,11 @@ steps:
     - when: ${{ result.outcome }} == PROGRESSING
       route: reset_test_fix_counter
     - when: ${{ result.outcome }} == STUCK_REPEATING
-      route: release_audit_remediation_stuck
+      route: register_clone_failure
     - when: ${{ result.outcome }} == EXHAUSTED
       route: release_issue_failure
     - when: ${{ result.outcome }} == AWAITING_DECISION
-      route: await_audit_decision
+      route: register_clone_failure
     - when: ${{ result.outcome }} == INTEGRITY_FAULT
       route: check_audit_integrity_retry
     - route: check_audit_integrity_retry

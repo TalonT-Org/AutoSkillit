@@ -55,7 +55,7 @@ from autoskillit.server.tools._serve_helpers import (
     serve_recipe,
 )
 from autoskillit.server.tools._type_coercion import _validate_override_types
-from autoskillit.server.tools._types import _validate_result
+from autoskillit.server.tools._types import _validate_result, dispatch_identity_denial
 
 if TYPE_CHECKING:
     from autoskillit.recipe import RecipeInfo
@@ -341,6 +341,9 @@ async def load_recipe(
             authority_overlap = set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
             if authority_overlap:
                 return json.dumps(build_authority_rejection_envelope(authority_overlap))
+
+        if identity_denial := dispatch_identity_denial():
+            return json.dumps(identity_denial)
 
         with structlog.contextvars.bound_contextvars(tool="load_recipe"):
             tool_ctx = _get_ctx_or_none()

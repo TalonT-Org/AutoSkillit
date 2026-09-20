@@ -17,7 +17,8 @@ from uuid import uuid4
 import pytest
 
 from autoskillit.core import SemanticAdaptationContext, SkillExecutionRole
-from autoskillit.hooks import OUTCOME_PENDING, active_batch
+from autoskillit.hooks._join import OUTCOME_PENDING
+from autoskillit.hooks._join_ledger import active_batch
 from autoskillit.hooks._session_binding import resolve_channel_dir
 from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
 from autoskillit.workspace import (
@@ -27,6 +28,7 @@ from autoskillit.workspace import (
     SkillProjectionContext,
     materialize_agent_skill_tree,
 )
+from tests.conftest import production_interpreter_env
 from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
@@ -129,6 +131,13 @@ def _write_bundled_models_cache(profile_codex_home: Path, env: dict[str, str]) -
     profile_codex_home.joinpath("models_cache.json").write_bytes(completed.stdout)
 
 
+def _stop_guard_env(env: dict[str, str]) -> dict[str, str]:
+    """Combine the live parent environment with production interpreter settings."""
+    isolated = production_interpreter_env()
+    isolated.update(env)
+    return isolated
+
+
 def _stop_guard(
     *, repository: Path, env: dict[str, str], session_id: str
 ) -> subprocess.CompletedProcess[str]:
@@ -138,7 +147,7 @@ def _stop_guard(
             str(Path(__file__).parents[3] / "src/autoskillit/hooks/guards/join_stop_guard.py"),
         ],
         cwd=repository,
-        env=env,
+        env=_stop_guard_env(env),
         input=json.dumps({"session_id": session_id, "cwd": str(repository)}),
         capture_output=True,
         text=True,

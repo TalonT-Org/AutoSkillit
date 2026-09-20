@@ -361,6 +361,7 @@ class TestDispatchFoodTruck:
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from autoskillit.workspace import SkillProjectionContext
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
 
@@ -405,7 +406,11 @@ class TestDispatchFoodTruck:
                 assert backend.name == "claude-code"
                 assert binding.closed is False
                 materialized_bindings.append(binding)
-                return object()
+                return SkillProjectionContext(
+                    cwd=tmp_path,
+                    catalog=self.catalog,
+                    backend=backend,
+                )
 
         minimal_ctx.runner = runner
         # skill_injection_capable + not plugin_install_capable makes this the

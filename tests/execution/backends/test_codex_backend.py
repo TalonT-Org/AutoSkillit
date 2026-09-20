@@ -23,6 +23,7 @@ from autoskillit.core import (
     CODEX_RESERVED_HOME_ENV_VARS,
     DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
@@ -1872,7 +1873,80 @@ class TestCodexStubMethods:
 
 
 class TestCodexForwardVarsInjection:
-    """Codex command builders identify their MCP client backend."""
+    """Always-injected Codex MCP variables appear in generic builder output."""
+
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_binding": None,
+        "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
+    }
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_binding": plugin_binding(Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
+    }
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+
+    @pytest.mark.parametrize(
+        "var",
+        sorted(
+            __import__(
+                "autoskillit.core.types._type_constants_env",
+                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
+            ).CODEX_MCP_ENV_FORWARD_VARS
+            - {MANAGED_JOIN_PARENT_ID_ENV_VAR}
+        ),
+    )
+    def test_skill_session_has_forward_var(self, var: str) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert var in spec.env, f"{var} missing from build_skill_session_cmd env"
+
+    @pytest.mark.parametrize(
+        "var",
+        sorted(
+            __import__(
+                "autoskillit.core.types._type_constants_env",
+                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
+            ).CODEX_MCP_ENV_FORWARD_VARS
+            - {MANAGED_JOIN_PARENT_ID_ENV_VAR}
+        ),
+    )
+    def test_food_truck_has_forward_var(self, var: str) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert var in spec.env, f"{var} missing from build_food_truck_cmd env"
+
+    def test_managed_join_parent_identity_is_forwarded_from_explicit_extras(self) -> None:
+        parent_id = "managed-parent"
+        skill_spec = CodexBackend().build_skill_session_cmd(
+            **self.SKILL_BASE,
+            provider_extras={MANAGED_JOIN_PARENT_ID_ENV_VAR: parent_id},
+        )
+        food_truck_spec = CodexBackend().build_food_truck_cmd(
+            **self.FOOD_TRUCK_BASE,
+            env_extras={MANAGED_JOIN_PARENT_ID_ENV_VAR: parent_id},
+        )
+        assert skill_spec.env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == parent_id
+        assert food_truck_spec.env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == parent_id
 
     def test_headless_has_mcp_client_backend(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")

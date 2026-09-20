@@ -151,6 +151,7 @@ _EXPECTED_ACQUISITIONS = (
         "ArtifactLease.acquire_exclusive",
     ),
     ("server/recipe/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
+    ("server/_managed_join_attestation.py", "_write_lock", "flock"),
     ("server/_misc.py", "_prime_quota_cache", "ArtifactLease.acquire_shared"),
     ("server/_misc.py", "_quota_refresh_loop", "ArtifactLease.acquire_shared"),
     ("server/tools/_overlay_state.py", "locked_overlay", "acquire_flock_with_timeout"),

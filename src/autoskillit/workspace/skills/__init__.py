@@ -64,6 +64,8 @@ _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
 
 
 def _admit_project_local_candidate(candidate: SkillInfo, bundled: SkillInfo | None) -> SkillInfo:
+    if candidate.invalidities:
+        return candidate
     return dataclasses.replace(
         candidate,
         invalidities=(
@@ -160,7 +162,16 @@ class DefaultSkillResolver:
         local candidate is returned so callers can still report why.
         """
         normalized_root = project_root.resolve() if project_root is not None else None
-        bundled = self.resolve(name)
+        bundled: SkillInfo | None = None
+        bundled_loaded = False
+
+        def bundled_twin() -> SkillInfo | None:
+            nonlocal bundled_loaded, bundled
+            if not bundled_loaded:
+                bundled = next((skill for skill in self.list_all() if skill.name == name), None)
+                bundled_loaded = True
+            return bundled
+
         first_invalid: SkillInfo | None = None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -183,7 +194,7 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
-                candidate = _admit_project_local_candidate(candidate, bundled)
+                candidate = _admit_project_local_candidate(candidate, bundled_twin())
                 if not candidate.invalidities:
                     return candidate
                 logger.warning(
@@ -195,7 +206,9 @@ class DefaultSkillResolver:
                 )
                 if first_invalid is None:
                     first_invalid = candidate
-        return bundled if bundled is not None else first_invalid
+        if bundled_loaded:
+            return bundled if bundled is not None else first_invalid
+        return self.resolve(name)
 
     def resolve_local_candidate(self, name: str, project_root: Path | None) -> SkillInfo | None:
         """Return the first-path-match project-local candidate, valid or not.

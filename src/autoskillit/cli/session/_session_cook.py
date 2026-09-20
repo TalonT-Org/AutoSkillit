@@ -31,6 +31,12 @@ from autoskillit.core import (
     resolve_project_dir,
     source_currency,
 )
+from autoskillit.execution.backends import managed_codex_route_for_launch_context
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+    render_managed_join_refusal,
+)
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -91,10 +97,6 @@ def _build_cook_projection_context(
 
     managed_codex_route = None
     if adaptation_context is not None:
-        from autoskillit.execution.backends._codex_hooks import (
-            managed_codex_route_for_launch_context,
-        )
-
         managed_codex_route = managed_codex_route_for_launch_context("interactive")
     base = skills_provider.catalog_projection_context(
         session_catalog,
@@ -331,13 +333,7 @@ def cook(
             claimed_launch_id = launch_id
 
     managed_join_context: SemanticAdaptationContext | None = None
-    if backend.name == "codex":
-        from autoskillit.server._managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
-
+    if backend.capabilities.managed_fixed_batch_route_capable:
         issuance = prepare_managed_join_context(
             backend=backend,
             configured_model=config.model.model_override or config.model.default_model,
@@ -361,9 +357,7 @@ def cook(
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(session_catalog.exclusions)
     skill_compilation = compile_session_skill_catalog(
-        session_catalog,
-        backend,
-        adaptation_context=managed_join_context,
+        session_catalog, backend, adaptation_context=managed_join_context
     )
     session_catalog = skill_compilation.catalog
     requires_resolved_exploration_profile = any(

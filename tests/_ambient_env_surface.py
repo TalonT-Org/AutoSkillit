@@ -524,9 +524,11 @@ def _record_module_collection_reads(
             prefixes.update(members)
             continue
         name_matches = "env" in target.lower()
-        members_upper = bool(members) and all(_UPPER_SNAKE_RE.match(m) for m in members)
-        if name_matches or members_upper:
-            for member in members:
+        upper_members = frozenset(member for member in members if _UPPER_SNAKE_RE.match(member))
+        members_upper = bool(members) and len(upper_members) == len(members)
+        relevant_members = upper_members if target == "__all__" else members
+        if name_matches or members_upper or (target == "__all__" and upper_members):
+            for member in relevant_members:
                 reads.append(EnvRead(var=member, file=rel, line=value.lineno, rule="R4"))
 
 
@@ -978,7 +980,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/tools/tools_execution/_run_skill_prepare.py:110": (
+    "server/tools/tools_execution/_run_skill_prepare.py:112": (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from the persisted launch contract, not a statically resolvable name."
     ),

@@ -217,7 +217,7 @@ def test_skills_facade_exports_are_unchanged() -> None:
 
 def test_skill_helpers_are_discoverable_without_owning_facade_exports() -> None:
     skills = import_module("autoskillit.workspace.skills")
-    for stem in ("_format", "_resources"):
+    for stem in ("_contract_floor", "_format", "_resources"):
         module = import_module(_shard_module_path(_SKILLS_PACKAGE, stem))
         assert module.__all__
         assert set(module.__all__).isdisjoint(skills.__all__)
@@ -227,7 +227,7 @@ def test_every_shard_module_is_in_ownership_table() -> None:
     skills_stems, capability_stems = _workspace_shard_stems()
     table_skills = {stem for stem, _ in _SKILLS_SHARD_OWNERS}
     table_capabilities = {stem for stem, _ in _SKILL_CAPABILITY_SHARD_OWNERS}
-    expected_skills = table_skills | {"_format", "_resources"}
+    expected_skills = table_skills | {"_contract_floor", "_format", "_resources"}
     assert skills_stems == expected_skills, (
         f"skills shard stems out of sync: disk has {sorted(skills_stems - expected_skills)}, "
         f"table has {sorted(expected_skills - skills_stems)}"

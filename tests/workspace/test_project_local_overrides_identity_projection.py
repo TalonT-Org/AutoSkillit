@@ -66,16 +66,15 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
     project_root = tmp_path / "source-project"
     cwd = tmp_path / "generated-home" / "session" / "add-dir"
     cwd.mkdir(parents=True)
-    project_override = _write_effective_skill(
-        project_root / ".claude" / "skills",
-        "process-issues",
-        capabilities=("run_skill",),
-        execution_role="orchestrator",
-        body=(
-            "winning project-root body\n"
-            "merge {{DEFAULT_BASE_BRANCH}} from {{AUTOSKILLIT_TEMP}}\n"
-            'run_skill("/test child")'
-        ),
+    bundled = DefaultSkillResolver().resolve("process-issues")
+    assert bundled is not None
+    project_override = project_root / ".claude" / "skills" / "process-issues" / "SKILL.md"
+    project_override.parent.mkdir(parents=True)
+    project_override.write_text(
+        bundled.canonical_content + "\nwinning project-root body\n"
+        "merge {{DEFAULT_BASE_BRANCH}} from {{AUTOSKILLIT_TEMP}}\n"
+        'run_skill("/test child")\n',
+        encoding="utf-8",
     )
     managed_projection = cwd / ".claude" / "skills" / "process-issues" / "SKILL.md"
     managed_projection.parent.mkdir(parents=True)

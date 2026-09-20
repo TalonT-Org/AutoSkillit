@@ -40,6 +40,11 @@ from autoskillit.core import (
     release_session_claim,
     resume_spec_from_cli,
 )
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+    render_managed_join_refusal,
+)
 from autoskillit.workspace import (
     DefaultSkillResolver,
     compile_session_skill_catalog,
@@ -325,13 +330,7 @@ def order(
     render_skill_catalog_exclusions(skill_catalog.exclusions)
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if backend.name == "codex":
-        from autoskillit.server._managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
-
+    if backend.capabilities.managed_fixed_batch_route_capable:
         managed_join_parent_id = uuid.uuid4().hex[:16]
         issuance = prepare_managed_join_context(
             backend=backend,
@@ -346,9 +345,7 @@ def order(
         else:
             managed_join_context = issuance
     skill_compilation = compile_session_skill_catalog(
-        skill_catalog,
-        backend,
-        adaptation_context=managed_join_context,
+        skill_catalog, backend, adaptation_context=managed_join_context
     )
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)

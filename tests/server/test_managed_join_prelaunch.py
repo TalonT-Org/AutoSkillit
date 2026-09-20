@@ -190,7 +190,7 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     config_path = home / "config.toml"
     original_config = config_path.read_text(encoding="utf-8")
     config_path.write_text(
-        original_config.replace("join_stop_guard.py", "removed_join_stop_guard.py"),
+        original_config.replace("join_stop_guard", "removed_join_stop_guard"),
         encoding="utf-8",
     )
     assert (

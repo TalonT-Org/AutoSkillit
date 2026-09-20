@@ -67,6 +67,7 @@ def _make_codex_backend() -> MagicMock:
     backend.name = "codex"
     backend.capabilities.has_unguarded_filesystem_access = True
     backend.capabilities.anthropic_provider_capable = False
+    backend.capabilities.managed_fixed_batch_route_capable = False
     return backend
 
 
@@ -194,7 +195,13 @@ class TestFleetRunCliAdmission:
             def list_effective(self, *_args: object, **_kwargs: object) -> object:
                 return raw_catalog
 
-        def compile_catalog(catalog: object, selected_backend: object) -> object:
+        def compile_catalog(
+            catalog: object,
+            selected_backend: object,
+            *,
+            adaptation_context: object | None = None,
+        ) -> object:
+            del adaptation_context
             compile_calls.append((catalog, selected_backend))
             return compilation
 

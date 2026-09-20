@@ -22,6 +22,7 @@ from autoskillit.core import (
     fleet_error,
     get_logger,
     is_feature_enabled,
+    new_managed_launch_id,
 )
 from autoskillit.fleet import (
     _INFRASTRUCTURE_FAILURE_REASONS,
@@ -38,10 +39,15 @@ from autoskillit.fleet import (
     prepare_resume,
     read_all_campaign_captures,
     record_gate_outcome,
+    resume_managed_join_parent_id,
     upsert_dispatch_record_by_name,
 )
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+)
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
@@ -401,36 +407,13 @@ async def dispatch_food_truck(
         adaptation_context = None
         if effective_dispatch_backend.capabilities.managed_fixed_batch_route_capable:
             if resume_session_id and prior_dispatch_id:
-                from autoskillit.fleet.campaign_state.state import read_state
-
-                prior_state = read_state(
-                    tool_ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json"
+                managed_join_parent_id = resume_managed_join_parent_id(
+                    tool_ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json",
+                    effective_name,
                 )
-                prior_record = (
-                    next(
-                        (
-                            record
-                            for record in prior_state.dispatches
-                            if record.name == effective_name
-                        ),
-                        None,
-                    )
-                    if prior_state is not None
-                    else None
-                )
-                if prior_record is not None and prior_record.managed_lineage_ref is not None:
-                    managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
             if managed_join_parent_id is None and not resume_session_id:
-                from autoskillit.core import new_managed_launch_id
-
                 managed_join_parent_id = new_managed_launch_id()
             if managed_join_parent_id is not None:
-                from autoskillit.server._managed_join_prelaunch import (
-                    ManagedJoinIssuanceRefusal,
-                    prepare_managed_join_context,
-                    render_managed_join_refusal,
-                )
-
                 issuance = prepare_managed_join_context(
                     backend=effective_dispatch_backend,
                     configured_model=(
@@ -441,7 +424,7 @@ async def dispatch_food_truck(
                     launch_context="direct",
                 )
                 if isinstance(issuance, ManagedJoinIssuanceRefusal):
-                    print(f"WARNING: {render_managed_join_refusal(issuance)}")
+                    logger.warning("managed_join_issuance_refused", reason=issuance.reason)
                     managed_join_parent_id = None
                 else:
                     adaptation_context = issuance

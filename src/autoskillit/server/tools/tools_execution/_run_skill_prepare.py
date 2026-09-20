@@ -35,6 +35,10 @@ from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
 )
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+)
 from autoskillit.server.lifecycle._guards import (
     _check_dry_walkthrough,
     _check_input_contracts,
@@ -374,19 +378,15 @@ async def _prepare_dispatch_backend(
 
     backend = state._effective_backend_obj
     if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
-        from autoskillit.server._managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
-
         if state._managed_join_parent_id:
             managed_join_parent_id = state._managed_join_parent_id
         elif state._stored_contract_entry is not None:
             managed_lineage_ref = state._stored_contract_entry.managed_lineage_ref
-            if managed_lineage_ref is None:
-                raise SkillContractError("Resume dispatch lacks managed lineage identity")
-            managed_join_parent_id = managed_lineage_ref.launch_id
+            managed_join_parent_id = (
+                managed_lineage_ref.launch_id
+                if managed_lineage_ref is not None
+                else new_managed_launch_id()
+            )
         else:
             managed_join_parent_id = new_managed_launch_id()
         state._managed_join_parent_id = managed_join_parent_id
@@ -398,7 +398,7 @@ async def _prepare_dispatch_backend(
             launch_context="direct",
         )
         if isinstance(issuance, ManagedJoinIssuanceRefusal):
-            print(f"WARNING: {render_managed_join_refusal(issuance)}")
+            logger.warning("managed_join_issuance_refused", reason=issuance.reason)
         else:
             if state.projection_context is None:
                 raise SkillContractError("Managed execution lacks projection authority")

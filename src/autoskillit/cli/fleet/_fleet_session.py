@@ -26,6 +26,12 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
 )
+from autoskillit.execution.backends import managed_codex_route_for_launch_context
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+    render_managed_join_refusal,
+)
 
 logger = get_logger(__name__)
 
@@ -144,10 +150,6 @@ def _fleet_session_launcher(
             raise RuntimeError("retained projection mode did not produce a binding")
         managed_codex_route = None
         if adaptation_context is not None:
-            from autoskillit.execution.backends._codex_hooks import (
-                managed_codex_route_for_launch_context,
-            )
-
             managed_codex_route = managed_codex_route_for_launch_context("interactive")
         projection_context = provider.catalog_projection_context(
             skill_compilation.catalog,
@@ -243,13 +245,7 @@ def _launch_fleet_session(
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if _backend.name == "codex":
-        from autoskillit.server._managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
-
+    if _backend.capabilities.managed_fixed_batch_route_capable:
         managed_join_parent_id = uuid.uuid4().hex[:16]
         issuance = prepare_managed_join_context(
             backend=_backend,

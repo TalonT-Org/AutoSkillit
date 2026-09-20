@@ -83,6 +83,9 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # .autoskillit/temp/... themselves; stdlib-only hook module, cannot use
     # resolve_temp_dir().
     "hooks/_runtime/_hook_payload.py": "docstring example",
+    # Justification: trust-boundary documentation identifies the user-writable
+    # record location; it does not construct a filesystem path.
+    "server/_managed_join_attestation.py": "trust-boundary docstring example",
 }
 
 _LITERAL = ".autoskillit/temp"

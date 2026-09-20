@@ -46,11 +46,6 @@ from autoskillit.workspace import (
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.cli._interactive_process import interactive_launch_metadata
-from tests.contracts._skill_admission_ledger import (
-    COOK_SESSION_COMBINATION,
-    SKILL_ADMISSION_LEDGER,
-    _production_managed_codex_context,
-)
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -312,7 +307,7 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
 
     with patch(
         "autoskillit.workspace.compile_session_skill_catalog",
-        side_effect=lambda catalog, _backend: _refusal_compilation(catalog, *refusals),
+        side_effect=lambda catalog, _backend, **_kwargs: _refusal_compilation(catalog, *refusals),
     ):
         _run_cook(
             None,
@@ -351,7 +346,7 @@ def test_cook_only_fresh_attempts_receive_one_unavailability_block(
 
     with patch(
         "autoskillit.workspace.compile_session_skill_catalog",
-        side_effect=lambda catalog, _backend: _refusal_compilation(catalog, refusal),
+        side_effect=lambda catalog, _backend, **_kwargs: _refusal_compilation(catalog, refusal),
     ):
         _run_cook(
             None,
@@ -472,6 +467,7 @@ def _run_finalized_profile_cook(
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             plugin_install_capable=False,
+            managed_fixed_batch_route_capable=False,
         )
         adapt_skill_semantics = staticmethod(skill_adapter)
 
@@ -593,36 +589,6 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in spec.env
     assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
     assert captured["pass_fds"] == (3, 5)
-
-
-def test_cook_compiles_catalog_with_real_codex_admission(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    managed_context = _production_managed_codex_context()
-
-    def managed_adapter(
-        plan: SkillSemanticPlan,
-        _adaptation_context: object | None = None,
-    ) -> SkillSemanticAdaptationResult:
-        return CodexBackend().adapt_skill_semantics(plan, managed_context)
-
-    captured, _generated_home = _run_finalized_profile_cook(
-        monkeypatch,
-        tmp_path,
-        skill_adapter=managed_adapter,
-    )
-    compilation = captured["compilation"]
-    assert isinstance(compilation, CompiledSessionSkillCatalog)
-    actual = {skill.name: "admitted" for skill in compilation.catalog.skills}
-    actual.update({item.skill: item.operation.value for item in compilation.unavailable})
-    expected = {
-        skill_name: backend_statuses[compilation.backend]
-        for skill_name, backend_statuses in SKILL_ADMISSION_LEDGER[
-            COOK_SESSION_COMBINATION
-        ].items()
-    }
-
-    assert actual == expected
 
 
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:

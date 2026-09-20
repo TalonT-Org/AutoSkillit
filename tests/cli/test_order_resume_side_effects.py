@@ -43,7 +43,10 @@ _FEATURE_ENV = {
 class _RoutingBackend:
     def __init__(self, name: str, events: Counter[str]) -> None:
         self.name = name
-        self.capabilities = SimpleNamespace(has_unguarded_filesystem_access=True)
+        self.capabilities = SimpleNamespace(
+            has_unguarded_filesystem_access=True,
+            managed_fixed_batch_route_capable=False,
+        )
         self._events = events
 
     def recover_cook_history(self) -> None:

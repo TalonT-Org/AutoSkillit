@@ -41,6 +41,7 @@ from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
     DispatchStateHandle,
     read_all_campaign_captures,
+    read_state,
 )
 from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
@@ -57,6 +58,17 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
+
+
+def resume_managed_join_parent_id(state_path: Path, dispatch_name: str) -> str | None:
+    """Return the prior launch identity for a named resumable dispatch."""
+    state = read_state(state_path)
+    if state is None:
+        return None
+    for record in state.dispatches:
+        if record.name == dispatch_name and record.managed_lineage_ref is not None:
+            return record.managed_lineage_ref.launch_id
+    return None
 
 
 @dataclass

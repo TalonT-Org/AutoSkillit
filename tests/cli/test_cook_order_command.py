@@ -184,7 +184,10 @@ class TestCLIOrderCommand:
         def compile_with_refusal(
             catalog: EffectiveSkillCatalog,
             _backend: object,
+            *,
+            adaptation_context: object | None = None,
         ) -> CompiledSessionSkillCatalog:
+            del adaptation_context
             return CompiledSessionSkillCatalog(
                 backend=getattr(_backend, "name"),
                 catalog=catalog,
@@ -599,6 +602,8 @@ class TestCLIOrderCommand:
         mock_config.providers.profiles = {}
         mock_config.subsets.disabled = []
         mock_config.packs.enabled = []
+        mock_config.model.model_override = None
+        mock_config.model.default_model = "gpt-5.6-sol"
         mock_config.branching.default_base_branch = "develop"
         mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)

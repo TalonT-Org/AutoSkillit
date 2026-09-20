@@ -196,9 +196,9 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
     if route == "interactive-parent":
         assert tools is None
         rendered = json.dumps(config["hooks"])
-        assert "join_stop_guard.py" in rendered
-        assert "join_followup_guard.py" in rendered
-        assert "skill_orchestration_guard.py" not in rendered
+        assert "join_stop_guard" in rendered
+        assert "join_followup_guard" in rendered
+        assert "skill_orchestration_guard" not in rendered
     else:
         assert tools == ["run_fixed_batch", "read_fixed_batch_result"]
     assert "Stop" in config["hooks"]

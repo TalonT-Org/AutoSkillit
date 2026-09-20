@@ -11,6 +11,11 @@ from cyclopts import Parameter
 
 from autoskillit.cli.session._session_launch import render_skill_unavailability
 from autoskillit.core import get_logger, is_feature_enabled
+from autoskillit.server._managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+    render_managed_join_refusal,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -96,13 +101,7 @@ async def _execute_fleet_run(
 
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if effective_backend.name == "codex":
-        from autoskillit.server._managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
-
+    if effective_backend.capabilities.managed_fixed_batch_route_capable:
         managed_join_parent_id = new_managed_launch_id()
         if resume_session_id is not None and prior_dispatch_id is not None:
             from autoskillit.fleet import read_state

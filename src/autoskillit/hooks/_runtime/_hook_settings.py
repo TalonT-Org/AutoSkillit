@@ -28,13 +28,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from autoskillit.hooks._session_binding import JoinAdmission
 
-if __package__:
-    from ._hook_constants import MANAGED_JOIN_PARENT_ID_ENV_VAR
-else:
-    from _hook_constants import (  # type: ignore[import-not-found,no-redef]
-        MANAGED_JOIN_PARENT_ID_ENV_VAR,
-    )
-
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
 HOOK_CONFIG_FILENAME = ".hook_config.json"
@@ -664,7 +657,7 @@ def session_managed_codex_route(
 
 def resolve_binding_session_id(payload: dict[str, object]) -> str:
     """Prefer the managed join identity delivered to a Codex hook process."""
-    managed_parent_id = os.environ.get(MANAGED_JOIN_PARENT_ID_ENV_VAR, "")
+    managed_parent_id = os.environ.get("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", "")
     if managed_parent_id:
         return managed_parent_id
     session_id = payload.get("session_id", "")

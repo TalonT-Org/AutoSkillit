@@ -113,6 +113,7 @@ class _Backend:
         cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
+        managed_fixed_batch_route_capable=False,
     )
     adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
@@ -978,6 +979,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             supports_tool_list_changed=True,
+            managed_fixed_batch_route_capable=False,
         )
         adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 

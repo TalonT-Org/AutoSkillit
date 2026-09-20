@@ -35,13 +35,17 @@ def prepare_managed_join_context(
     launch_context: str,
 ) -> SemanticAdaptationContext | ManagedJoinIssuanceRefusal:
     """Issue persisted managed-join evidence from trusted launch inputs."""
-    if not backend.capabilities.managed_fixed_batch_route_capable:
+    if not getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
         return ManagedJoinIssuanceRefusal(
             reason=f"backend {backend.name!r} has no managed fixed-batch route"
         )
     try:
-        resolve_identity = getattr(backend, "resolve_managed_parent_identity")
-        project_catalog = getattr(backend, "project_source_catalog")
+        resolve_identity = getattr(backend, "resolve_managed_parent_identity", None)
+        project_catalog = getattr(backend, "project_source_catalog", None)
+        if not callable(resolve_identity) or not callable(project_catalog):
+            return ManagedJoinIssuanceRefusal(
+                reason=f"backend {backend.name!r} cannot issue a managed Codex context"
+            )
         model, effort = resolve_identity(configured_model)
         projection = project_catalog(model, effort)
         return DefaultManagedJoinAttestationAuthority(

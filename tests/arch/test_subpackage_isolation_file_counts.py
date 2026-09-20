@@ -168,10 +168,11 @@ FILE_COUNT_LIMITS: dict[str, int] = {
 }
 
 
-def test_workspace_skills_package_has_only_the_eight_moved_modules() -> None:
+def test_workspace_skills_package_has_the_expected_shards() -> None:
     skills_dir = SRC_ROOT / "workspace" / "skills"
     assert {path.name for path in skills_dir.glob("*.py")} == {
         "__init__.py",
+        "_contract_floor.py",
         "_records.py",
         "_overrides.py",
         "_exploration.py",

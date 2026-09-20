@@ -1171,6 +1171,17 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "autoskillit.hooks._session_binding",
         ),
+        # Managed-join record revalidation uses the same stdlib-only session
+        # channel primitives as the fixed-batch handler. Re-exporting these
+        # through hooks would initialize the hook registry and create a cycle.
+        (
+            "server/_managed_join_attestation.py",
+            "autoskillit.hooks._runtime._hook_settings",
+        ),
+        (
+            "server/_managed_join_attestation.py",
+            "autoskillit.hooks._session_binding",
+        ),
         # REQ-ARCH-001-E2 (issue #4623): execution/child_outcomes.py is the
         # execution-layer reader for the child-terminal-reason snapshot, whose
         # canonical write authority is the stdlib-only
@@ -1704,14 +1715,15 @@ def test_server_docstring_references_registry_constants() -> None:
 
 def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None:
     """REQ-P12-002: Default* classes must be instantiated only in
-    server/_factory.py (the Composition Root). Five allowlisted exception
-    sites are recognized — they must remain in-place; introducing a sixth
-    requires either routing through make_context() or an explicit allowlist
-    update via this test."""
+    server/_factory.py (the Composition Root) or at a narrow allowlisted
+    composition boundary."""
     import ast
 
     allowlist: dict[Path, set[str]] = {
         Path("server/_factory.py"): {"*"},  # Composition Root
+        Path("server/_managed_join_prelaunch.py"): {
+            "DefaultManagedJoinAttestationAuthority"
+        },  # mint persisted launch evidence before catalog admission
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/session/_session_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
         Path("cli/fleet/__init__.py"): {

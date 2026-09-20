@@ -86,7 +86,12 @@ def test_fresh_order_writes_a_new_registry_entry_without_a_resume_claim(
     captured: dict[str, object] = {}
     released: list[tuple[Path, str]] = []
 
-    def write_entry(project_dir: Path, recipe_name: str | None) -> tuple[str, dict[str, str]]:
+    def write_entry(
+        project_dir: Path,
+        recipe_name: str | None,
+        managed_join_parent_id: str | None = None,
+    ) -> tuple[str, dict[str, str]]:
+        del managed_join_parent_id
         captured["write"] = (project_dir, recipe_name)
         return "fresh-launch", {
             SESSION_TYPE_ENV_VAR: SessionType.ORCHESTRATOR.value,

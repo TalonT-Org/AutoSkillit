@@ -3,8 +3,8 @@
 Trust boundary
 --------------
 The attestation record, the binding flags, the projected manifest and the join
-ledger all live under paths a Codex session can write (``.autoskillit/temp``
-and ``CODEX_HOME``). The immunity here covers honest-path erasure and drift:
+ledger all live under the session temp channel and ``CODEX_HOME``. The immunity
+here covers honest-path erasure and drift:
 an override, stale home, refreshed catalog, missing guard, mismatched code
 version, or missing issuer cannot admit a join-required skill without
 evidence. A model deliberately forging files under paths it owns is outside
@@ -29,9 +29,9 @@ from autoskillit.core import (
     ManagedJoinAttestation,
     SemanticAdaptationContext,
     SkillContractError,
-    atomic_write,
+    write_versioned_json,
 )
-from autoskillit.execution.backends._codex_hooks import (
+from autoskillit.execution.backends import (
     managed_codex_guard_set,
     managed_codex_route_digest,
     managed_codex_route_for_launch_context,
@@ -85,14 +85,14 @@ class ManagedJoinRecordStore:
             raise ValueError("managed join record requires an attestation")
         record_path = self.path_for(attestation.parent_session_id)
         document = {
-            "schema_version": MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
             "route": route,
             "attestation": dict(attestation.canonical_payload),
         }
         with self._write_lock(record_path):
-            atomic_write(
+            write_versioned_json(
                 record_path,
-                json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n",
+                document,
+                MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
             )
 
     def load(self, parent_session_id: str) -> tuple[ManagedJoinAttestation, str] | None:

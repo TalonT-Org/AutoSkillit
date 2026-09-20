@@ -38,7 +38,7 @@ from autoskillit.core import (
     render_target_skill_command,
 )
 from autoskillit.execution import MANAGED_CODEX_LEAF_GUARD_SET
-from autoskillit.execution.backends._codex_hooks import (
+from autoskillit.execution.backends import (
     managed_codex_guard_set,
     managed_codex_route_for_launch_context,
 )

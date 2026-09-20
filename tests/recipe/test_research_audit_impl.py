@@ -35,7 +35,7 @@ class TestResearchRecipesAuditImpl:
     def test_audit_impl_on_context_limit_escalates(self, recipe) -> None:
         """audit_impl on_context_limit must route to escalate_stop."""
         step = recipe.steps["audit_impl"]
-        assert step.on_context_limit == "escalate_stop"
+        assert step.on_context_limit == "check_audit_integrity_retry"
 
     def test_audit_impl_on_failure_escalates(self, recipe) -> None:
         """audit_impl on_failure must route to escalate_stop."""
@@ -186,7 +186,7 @@ class TestResearchImplementRemediationLoop:
         conditions = step.on_result.conditions
         error_cond = next((c for c in conditions if c.when and "result.error" in c.when), None)
         assert error_cond is not None
-        assert error_cond.route == "escalate_stop"
+        assert error_cond.route == "check_audit_integrity_retry"
 
     def test_has_remediate_step(self, recipe) -> None:
         assert "remediate" in recipe.steps

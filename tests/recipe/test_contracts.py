@@ -385,40 +385,15 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.workspace import DefaultSkillResolver
 
+    resolver = DefaultSkillResolver()
+    bundled = resolver.resolve("investigate")
+    assert bundled is not None
     skills_dir = tmp_path / ".claude" / "skills"
     skill_md = skills_dir / "investigate" / "SKILL.md"
     skill_md.parent.mkdir(parents=True)
     skill_md.write_text(
-        "---\n"
-        "name: investigate\n"
-        "description: Project override.\n"
-        "execution_role: session\n"
-        "uses_capabilities:\n"
-        "- claude_dir\n"
-        "semantic_version: 1\n"
-        "semantic_requirements:\n"
-        "  logical_roles:\n"
-        "  - name: delegated-worker\n"
-        "    purpose: perform the named independent responsibility and return bounded evidence\n"
-        "  - name: autoskillit:web-evidence-researcher\n"
-        "    purpose: research one selected external evidence topic\n"
-        "  child_spawns:\n"
-        "  - role: delegated-worker\n"
-        "    for_each: selected_reasoning_responsibilities\n"
-        "  - role: autoskillit:web-evidence-researcher\n"
-        "    for_each: selected_web_research_topics\n"
-        "  concurrency:\n"
-        "    required: true\n"
-        "  join:\n"
-        "    required: true\n"
-        "  evidence:\n"
-        "    required: true\n"
-        "    independent: true\n"
-        "  child_model_policies:\n"
-        "  - role: delegated-worker\n"
-        "    model_class: sonnet\n"
-        "---\n"
-        "project override body\n"
+        bundled.canonical_content + "\nproject override body\n",
+        encoding="utf-8",
     )
     contract = {
         "bundled_manifest_version": load_bundled_manifest()["version"],
@@ -427,7 +402,7 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
 
     stale = check_contract_staleness(
         contract,
-        resolver=DefaultSkillResolver(),
+        resolver=resolver,
         project_root=tmp_path,
     )
 

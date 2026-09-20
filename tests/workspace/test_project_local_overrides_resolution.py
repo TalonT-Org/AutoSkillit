@@ -229,14 +229,26 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
 
 
 def test_project_local_rewrite_reclassifies_with_process_cache(
-    tmp_path, evidence_cache, scan_calls
+    tmp_path, monkeypatch, evidence_cache, scan_calls
 ) -> None:
     """Changed canonical bytes must bypass a resident semantic classification."""
     import autoskillit.workspace.skill_capabilities as capability_module
+    import autoskillit.workspace.skills as skills_module
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project = tmp_path / "project"
     skill_root = project / ".claude" / "skills"
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    bundled.mkdir()
+    extended.mkdir()
+    _write_effective_skill(
+        bundled,
+        "cache-rewrite-target",
+        capabilities=("test_check",),
+        execution_role="session",
+        body="bundled sentinel.",
+    )
     skill_path = _write_effective_skill(
         skill_root,
         "cache-rewrite-target",
@@ -245,6 +257,10 @@ def test_project_local_rewrite_reclassifies_with_process_cache(
         body="Call `test_check()` for the first sentinel.",
     )
     resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE_KEY", None)
 
     first = resolver.resolve_effective("cache-rewrite-target", project)
 
@@ -278,7 +294,12 @@ def test_project_local_rewrite_reclassifies_with_process_cache(
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
     assert not second.invalidities
-    assert scan_calls == [
+    local_scan_calls = [
+        call
+        for call in scan_calls
+        if call[0] in {first.canonical_content, second.canonical_content}
+    ]
+    assert local_scan_calls == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),
     ]

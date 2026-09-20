@@ -1182,6 +1182,47 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "server/_managed_join_attestation.py",
             "autoskillit.hooks._session_binding",
         ),
+        # The four CLI launch boundaries defer managed-join issuance until the
+        # selected backend is known. Importing the server prelaunch helper at
+        # module scope breaks CLI import isolation.
+        (
+            "cli/fleet/_fleet_run.py",
+            "autoskillit.server._managed_join_prelaunch",
+        ),
+        (
+            "cli/fleet/_fleet_session.py",
+            "autoskillit.server._managed_join_prelaunch",
+        ),
+        (
+            "cli/session/_session_cook.py",
+            "autoskillit.server._managed_join_prelaunch",
+        ),
+        (
+            "cli/session/_session_order.py",
+            "autoskillit.server._managed_join_prelaunch",
+        ),
+        # Managed join preparation, revalidation, and fixed-batch launch all
+        # consume backend route evidence from the execution package.
+        (
+            "cli/fleet/_fleet_session.py",
+            "autoskillit.execution.backends",
+        ),
+        (
+            "cli/session/_session_cook.py",
+            "autoskillit.execution.backends",
+        ),
+        (
+            "server/_managed_join_attestation.py",
+            "autoskillit.execution.backends",
+        ),
+        (
+            "server/_managed_join_prelaunch.py",
+            "autoskillit.execution.backends",
+        ),
+        (
+            "server/tools/tools_execution/_fixed_batch_handlers.py",
+            "autoskillit.execution.backends",
+        ),
         # REQ-ARCH-001-E2 (issue #4623): execution/child_outcomes.py is the
         # execution-layer reader for the child-terminal-reason snapshot, whose
         # canonical write authority is the stdlib-only
@@ -1894,6 +1935,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),
+    # Dispatch lifetime coverage constructs the real workspace projection
+    # context before handing it to the execution boundary.
+    "tests/execution/test_headless_dispatch.py": frozenset({"autoskillit.workspace"}),
     "tests/execution/test_headless_core.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_headless_result_write_reconciliation.py": frozenset(
         {"autoskillit.pipeline"}
@@ -1947,12 +1991,18 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/workspace/test_project_local_overrides_identity_projection.py": frozenset(
         {"autoskillit.execution"}
     ),
+    # Contract-floor admission verifies the real Codex semantic adapter.
+    "tests/workspace/test_project_local_overrides_resolution.py": frozenset(
+        {"autoskillit.execution"}
+    ),
     # ineligible-context fallback routing test needs a real ClaudeCodeBackend to
     # exercise context.backend.exploration_dispatch_renderer.conventions
     "tests/workspace/test_explorer_eligibility_rendering.py": frozenset({"autoskillit.execution"}),
     # codex session skills split — layout, locking, persistent_root tests import
     # codex backend helpers (CodexBackend, materialize_profile_skills, get_backend)
-    "tests/workspace/test_session_skills_codex_layout.py": frozenset({"autoskillit.execution"}),
+    "tests/workspace/test_session_skills_codex_layout.py": frozenset(
+        {"autoskillit.execution", "autoskillit.server"}
+    ),
     "tests/workspace/test_session_skills_codex_locking.py": frozenset({"autoskillit.execution"}),
     "tests/workspace/test_session_skills_codex_persistent_root.py": frozenset(
         {"autoskillit.execution"}

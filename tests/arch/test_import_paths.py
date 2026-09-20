@@ -404,6 +404,13 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011
         Path("cli/_workspace.py"),  # REQ-IMP-012
+        # Managed Codex launch evidence needs the backend route projection;
+        # these consumers are the narrow server/CLI launch boundaries.
+        Path("server/_managed_join_prelaunch.py"),
+        Path("server/_managed_join_attestation.py"),
+        Path("server/tools/tools_execution/_fixed_batch_handlers.py"),
+        Path("cli/fleet/_fleet_session.py"),
+        Path("cli/session/_session_launch.py"),
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
     violations: list[str] = []

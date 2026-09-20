@@ -40,11 +40,6 @@ from autoskillit.core import (
     release_session_claim,
     resume_spec_from_cli,
 )
-from autoskillit.server._managed_join_prelaunch import (
-    ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
-    render_managed_join_refusal,
-)
 from autoskillit.workspace import (
     DefaultSkillResolver,
     compile_session_skill_catalog,
@@ -330,7 +325,13 @@ def order(
     render_skill_catalog_exclusions(skill_catalog.exclusions)
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if backend.capabilities.managed_fixed_batch_route_capable:
+    if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
         managed_join_parent_id = uuid.uuid4().hex[:16]
         issuance = prepare_managed_join_context(
             backend=backend,

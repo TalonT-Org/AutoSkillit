@@ -167,21 +167,9 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
         SkillSemanticPlan,
         required_join_is_unsupported,
     )
-    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from tests.fakes import make_managed_codex_context
 
-    context = DefaultManagedJoinAttestationAuthority().issue(
-        backend="codex",
-        launch_context="direct",
-        parent_session_id="parent-1",
-        direct_tool_mode=True,
-        resolved_model="gpt-5.6-sol",
-        resolved_reasoning_effort="high",
-        codex_catalog_digest="c" * 64,
-        fixed_batch_tool_registry_digest="a" * 64,
-        hook_registry_digest="b" * 64,
-        skill_load_applies=True,
-        guards_apply=True,
-    )
+    context = make_managed_codex_context("parent-1")
     attestation = context.managed_join_attestation
     assert attestation is not None
 

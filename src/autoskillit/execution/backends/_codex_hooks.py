@@ -330,13 +330,16 @@ def generate_codex_hooks_config(
     )
     hooks_dir = _resolve_codex_hooks_dir(plugin_dir)
     groups: dict[str, dict[tuple[str, str], dict]] = {}
+    session_scope: Literal["interactive", "headless"] = (
+        "interactive" if managed_route == "interactive-parent" else "headless"
+    )
     applicable = [
         hook_def
         for hook_def in registry
         if hook_applies_to_backend(
             hook_def,
             backend="codex",
-            session_scope="headless",
+            session_scope=session_scope,
         )
         and (include_runtime_only or not hook_def.runtime_only)
     ]

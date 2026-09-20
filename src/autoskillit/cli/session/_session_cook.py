@@ -32,11 +32,6 @@ from autoskillit.core import (
     source_currency,
 )
 from autoskillit.execution.backends import managed_codex_route_for_launch_context
-from autoskillit.server._managed_join_prelaunch import (
-    ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
-    render_managed_join_refusal,
-)
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -333,7 +328,13 @@ def cook(
             claimed_launch_id = launch_id
 
     managed_join_context: SemanticAdaptationContext | None = None
-    if backend.capabilities.managed_fixed_batch_route_capable:
+    if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
         issuance = prepare_managed_join_context(
             backend=backend,
             configured_model=config.model.model_override or config.model.default_model,

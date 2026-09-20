@@ -27,11 +27,6 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.backends import managed_codex_route_for_launch_context
-from autoskillit.server._managed_join_prelaunch import (
-    ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
-    render_managed_join_refusal,
-)
 
 logger = get_logger(__name__)
 
@@ -245,7 +240,13 @@ def _launch_fleet_session(
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if _backend.capabilities.managed_fixed_batch_route_capable:
+    if getattr(_backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.server._managed_join_prelaunch import (
+            ManagedJoinIssuanceRefusal,
+            prepare_managed_join_context,
+            render_managed_join_refusal,
+        )
+
         managed_join_parent_id = uuid.uuid4().hex[:16]
         issuance = prepare_managed_join_context(
             backend=_backend,

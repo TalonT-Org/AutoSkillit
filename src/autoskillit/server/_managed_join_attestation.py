@@ -14,7 +14,6 @@ this boundary, as it is for the existing Claude route.
 from __future__ import annotations
 
 import fcntl
-import json
 import os
 import threading
 from collections.abc import Callable, Generator
@@ -29,6 +28,7 @@ from autoskillit.core import (
     ManagedJoinAttestation,
     SemanticAdaptationContext,
     SkillContractError,
+    read_versioned_json,
     write_versioned_json,
 )
 from autoskillit.execution.backends import (
@@ -98,16 +98,18 @@ class ManagedJoinRecordStore:
     def load(self, parent_session_id: str) -> tuple[ManagedJoinAttestation, str] | None:
         record_path = self.path_for(parent_session_id)
         try:
-            document = json.loads(record_path.read_text(encoding="utf-8"))
+            document = read_versioned_json(
+                record_path,
+                MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+            )
             if (
                 not isinstance(document, dict)
-                or document.get("schema_version") != MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION
                 or document.get("route") not in {"parent", "leaf", "interactive-parent"}
                 or not isinstance(document.get("attestation"), dict)
             ):
                 return None
             attestation = ManagedJoinAttestation(**document["attestation"])
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        except (TypeError, ValueError):
             return None
         if attestation.parent_session_id != parent_session_id:
             return None

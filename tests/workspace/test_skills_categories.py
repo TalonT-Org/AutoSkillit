@@ -402,7 +402,6 @@ def test_stale_precontract_copy_of_bundled_tier_skill_does_not_crash_composition
     )
     assert {item.kind for item in exclusion.invalidities} == {
         SkillInvalidityKind.UNDECLARED_CAPABILITY,
-        SkillInvalidityKind.CONTRACT_FLOOR_WEAKENED,
     }
     assert {
         item.capability

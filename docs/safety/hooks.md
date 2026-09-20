@@ -1,6 +1,6 @@
 # Hooks
 
-AutoSkillit registers 57 Claude Code hook scripts: 38 PreToolUse, 11 PostToolUse,
+AutoSkillit registers 58 Claude Code hook scripts: 38 PreToolUse, 12 PostToolUse,
 2 PostToolUseFailure, 2 SessionStart, 1 Stop, 1 SubagentStart, 1 SubagentStop, and
 1 SessionEnd. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
@@ -70,6 +70,14 @@ errors or missing session ID. Session scope: headless only.
 Blocks orchestration tools from skill-tier sessions. Enforces the tier
 invariant: orchestrator and fleet sessions may call orchestration tools;
 skill workers use native Claude Code tools only.
+
+## Session scope
+
+Each `HookDef` declares a session scope. The affected script repeats that literal as
+its first `enforce_session_scope(...)` call, which exits successfully when the current
+shape is outside scope. `hook_session_shape()` preserves unknown tiers for the guard's
+explicit fail-closed policy. `skill_load_post_hook.py` writes the same binding for both
+`PostToolUse`/`Skill` and user-typed `UserPromptExpansion` slash commands.
 
 ### `unsafe_install_guard.py`
 **Guarded tool:** `run_cmd`

@@ -30,6 +30,11 @@ from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
+_NO_BINDING_ERROR = (
+    "declare_join_batch requires a session binding written by Skill/PostToolUse "
+    "or UserPromptExpansion slash-command invocation"
+)
+
 
 def _entry(
     skill_name: str = "rectify",
@@ -144,6 +149,7 @@ def test_end_to_end_real_projection_real_hook_real_handler(
             [sys.executable, str(hook_path)],
             input=json.dumps(
                 {
+                    "hook_event_name": "PostToolUse",
                     "tool_name": "Skill",
                     "tool_input": {"skill": "autoskillit:rectify"},
                     "session_id": "session-e2e",
@@ -336,7 +342,7 @@ def test_binding_candidate_enumeration_oserror_preserves_generic_refusal(
 
         assert result == {
             "success": False,
-            "error": "declare_join_batch requires a valid session binding",
+            "error": _NO_BINDING_ERROR,
         }
         assert diagnostics == []
 
@@ -373,7 +379,6 @@ def test_handler_limits_binding_reads_and_respects_scan_completeness(
         for index in reversed(range(candidate_count))
     ]
     candidate_paths.sort()
-    requested_path = resolve_binding_path(str(state_root), "requested")
     diagnostics: list[dict[str, object]] = []
     read_paths: list[Path] = []
     real_read_binding = declare_module.read_binding
@@ -390,11 +395,11 @@ def test_handler_limits_binding_reads_and_respects_scan_completeness(
     )
 
     assert result["success"] is False
-    assert read_paths == [requested_path, *candidate_paths[:20]]
+    assert read_paths == candidate_paths[:20]
     if expected_status is None:
         assert result == {
             "success": False,
-            "error": "declare_join_batch requires a valid session binding",
+            "error": _NO_BINDING_ERROR,
         }
         assert diagnostics == []
     else:
@@ -476,7 +481,7 @@ def test_malformed_requested_binding_is_not_reported_as_wrong_session(
 
     assert result == {
         "success": False,
-        "error": "declare_join_batch requires a valid session binding",
+        "error": "unsupported session-binding schema_version: None",
     }
 
 

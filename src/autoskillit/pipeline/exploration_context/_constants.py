@@ -2,14 +2,13 @@
 
 These constants are private to the ``exploration_context`` package.  The
 five ``_MAX_*`` caps govern input validation across the store and its
-launch adapter; ``EXPLORER_ROLE_NAMES`` and
-``EXPLORER_INELIGIBLE_SESSION_TYPES`` are public re-aggregations of
-bundled-core definitions.
+launch adapter; ``EXPLORER_ROLE_NAMES`` and ``EXPLORER_SESSION_SCOPE`` are
+public re-aggregations of bundled-core definitions.
 """
 
 from __future__ import annotations
 
-from autoskillit.core import BUNDLED_EXPLORER_ROLES, SessionType
+from autoskillit.core import BUNDLED_EXPLORER_ROLES, SessionScope, SessionType
 
 _MAX_CAPABILITY_LENGTH = 128
 _MAX_TTL_SECONDS = 300.0
@@ -21,4 +20,4 @@ _SHARED_SOURCE_IDENTITY_DOMAIN = b"autoskillit.exploration.shared-source.v1\x00"
 # preserve them while materializing an explorer child, but never mint or alter
 # their authority.
 EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
-EXPLORER_INELIGIBLE_SESSION_TYPES = frozenset({SessionType.ORCHESTRATOR, SessionType.FLEET})
+EXPLORER_SESSION_SCOPE = SessionScope.of(tiers={SessionType.SKILL})

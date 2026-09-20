@@ -249,7 +249,7 @@ def test_hooks_json_matches_hook_registry_after_generate():
         # Per REQ-B39: matcherless events (SessionStart, Stop, matcherless
         # PreToolUse) omit the matcher key entirely; matcher-bearing events
         # carry an explicit matcher string.
-        if hook_def.event_type in {"SessionStart", "Stop"} or (
+        if hook_def.event_type in {"SessionStart", "Stop", "UserPromptExpansion"} or (
             hook_def.event_type == "PreToolUse" and not hook_def.matcher
         ):
             matching = [e for e in event_entries if "matcher" not in e]

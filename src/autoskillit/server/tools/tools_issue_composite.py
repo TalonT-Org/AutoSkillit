@@ -15,6 +15,7 @@ from autoskillit.core import (
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
@@ -34,6 +35,7 @@ def _extract_label_names(raw_labels: list[Any]) -> list[str]:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("claim_and_resolve_issue")
 async def claim_and_resolve_issue(

@@ -16,6 +16,7 @@ import tempfile
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from enum import StrEnum, unique
 from pathlib import Path
 from typing import NamedTuple
 
@@ -221,6 +222,30 @@ class SessionBinding(NamedTuple):
         raise SessionBindingError(
             f"unsupported session-binding schema_version: {schema_version!r}"
         )
+
+
+@unique
+class JoinAdmissionOutcome(StrEnum):
+    ADMITTED = "admitted"
+    NO_BINDING = "no_binding"
+    WRONG_SESSION = "wrong_session"
+    INVALID_BINDING = "invalid_binding"
+    SKILL_NOT_LOADED = "skill_not_loaded"
+    NOT_JOIN_BEARING = "not_join_bearing"
+
+
+class JoinAdmission(NamedTuple):
+    """The single semantic decision derived from a session binding."""
+
+    outcome: JoinAdmissionOutcome
+    enforce: bool
+    binding: SessionBinding | None
+    entry: LoadedSkillEntry | None
+    error: str | None
+
+    @property
+    def binding_dict(self) -> dict[str, object] | None:
+        return None if self.binding is None else json.loads(self.binding.to_json())
 
 
 def resolve_channel_dir(anchor: Path) -> Path:
@@ -431,9 +456,60 @@ def read_binding(path: Path) -> SessionBinding | None:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise SessionBindingError(f"session binding is unreadable: {exc}") from exc
     return SessionBinding.from_json(raw)
+
+
+def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission:
+    """Read a binding once and decide whether this exact skill may declare a join."""
+    try:
+        binding = read_binding(path)
+    except SessionBindingError as exc:
+        return JoinAdmission(
+            JoinAdmissionOutcome.INVALID_BINDING,
+            True,
+            None,
+            None,
+            str(exc),
+        )
+    if binding is None:
+        return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, None)
+    if binding.session_id != session_id:
+        return JoinAdmission(JoinAdmissionOutcome.WRONG_SESSION, False, binding, None, None)
+    if not binding.binding_valid:
+        error = next(
+            (entry.binding_error for entry in binding.loaded_skills if entry.binding_error),
+            None,
+        )
+        return JoinAdmission(
+            JoinAdmissionOutcome.INVALID_BINDING,
+            True,
+            binding,
+            None,
+            error,
+        )
+    entry = next(
+        (entry for entry in reversed(binding.loaded_skills) if entry.skill_name == skill_name),
+        None,
+    )
+    if entry is None:
+        return JoinAdmission(
+            JoinAdmissionOutcome.SKILL_NOT_LOADED,
+            binding.join_required,
+            binding,
+            None,
+            None,
+        )
+    if not entry.join_required or not entry.binding_valid:
+        return JoinAdmission(
+            JoinAdmissionOutcome.NOT_JOIN_BEARING,
+            binding.join_required,
+            binding,
+            entry,
+            None,
+        )
+    return JoinAdmission(JoinAdmissionOutcome.ADMITTED, True, binding, entry, None)
 
 
 def atomic_write(path: Path, content: str) -> None:

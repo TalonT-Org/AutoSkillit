@@ -19,8 +19,9 @@ from ..types import (
     PluginArtifactValidationError,
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
+    managed_home,
 )
-from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR
+from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY, DIRECT_INSTALL_CACHE_SUBDIR
 
 
 def installed_plugin_cache_dir(home: Path, plugin_ref: str) -> Path:
@@ -125,6 +126,13 @@ def resolve_current_generation_for_plugin(home: Path, plugin_ref: str) -> Path |
     if not target.is_dir():
         return None
     return target if target.parent.parent == store_root else None
+
+
+def resolve_installed_generation_root() -> Path | None:
+    """Resolve the deployed Python distribution, not the projected plugin cache."""
+    return resolve_current_generation_for_plugin(
+        managed_home().root, _AUTOSKILLIT_INSTALL_ROOT_KEY
+    )
 
 
 def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:

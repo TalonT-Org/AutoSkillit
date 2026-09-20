@@ -310,9 +310,8 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         monkeypatch.setattr(
-            tools_fleet_dispatch,
-            "_require_fleet",
-            lambda _name: None,
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
             tools_fleet_dispatch,

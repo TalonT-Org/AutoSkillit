@@ -19,7 +19,7 @@ import stat
 import time
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from autoskillit.core import (
     canonical_json_bytes,
@@ -40,6 +40,7 @@ __all__ = [
     "EXPLORATION_PRINCIPAL_ROLE",
     "EXPLORATION_ROLE_ENV",
     "EXPLORATION_SESSION_ENV",
+    "DurableBindFailed",
     "bind_session_scoped_durable",
 ]
 
@@ -58,6 +59,25 @@ EXPLORATION_ROLE_ENV = "AUTOSKILLIT_EXPLORATION_ROLE"
 EXPLORATION_SESSION_ENV = "AUTOSKILLIT_EXPLORATION_SESSION_ID"
 EXPLORATION_AUTHORITY_PATH_ENV = "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"
 EXPLORATION_PRINCIPAL_ROLE = "shared-explorer-session"
+
+
+class DurableBindFailed(RuntimeError):
+    """A durable session-binding stage failed after the in-memory bind began."""
+
+    def __init__(
+        self,
+        stage: Literal["lease_lookup", "authority_home", "authority_write", "authority_chmod"],
+    ) -> None:
+        self.stage = stage
+        super().__init__(f"durable exploration bind failed at {stage}")
+
+
+class _AuthorityWriteFailure(OSError):
+    """Private stage marker preserved until the durable bind boundary."""
+
+    def __init__(self, stage: Literal["authority_write", "authority_chmod"]) -> None:
+        self.stage = stage
+        super().__init__(stage)
 
 
 def _is_capability_shape(value: str) -> bool:
@@ -139,15 +159,21 @@ class _ExplorationLaunchAuthorityStore:
             _AUTHORITY_SIGNATURE_DOMAIN + canonical_json_bytes(principal),
             hashlib.sha256,
         ).hexdigest()
-        write_versioned_json(
-            authority_path,
-            {
-                "principal": principal,
-                "signature": signature,
-            },
-            _AUTHORITY_SCHEMA_VERSION,
-        )
-        os.chmod(authority_path, 0o600)
+        try:
+            write_versioned_json(
+                authority_path,
+                {
+                    "principal": principal,
+                    "signature": signature,
+                },
+                _AUTHORITY_SCHEMA_VERSION,
+            )
+        except OSError as exc:
+            raise _AuthorityWriteFailure("authority_write") from exc
+        try:
+            os.chmod(authority_path, 0o600)
+        except OSError as exc:
+            raise _AuthorityWriteFailure("authority_chmod") from exc
         return authority_path
 
     def load_from_environment(self) -> tuple[str, _ReopenedLaunchAuthority] | None:
@@ -315,21 +341,30 @@ def bind_session_scoped_durable(
         repository_root=repository_root,
         source_identity=source_identity,
     )
-    lease = store.lease_for_capability(capability)
-    if lease is None:
-        raise RuntimeError("bind_session_scoped must mint a lease for its own capability")
     try:
-        _ExplorationLaunchAuthorityStore().write(
-            authority_home=authority_home,
-            session_id=session_id,
-            cwd=cwd,
-            repository_root=repository_root,
-            capability=capability,
-            source_identity=source_identity,
-            snapshot_digest=lease.snapshot_digest,
-            expires_at=int(lease.expires_at * 1_000_000_000),
-        )
-    except Exception:
+        lease = store.lease_for_capability(capability)
+        if lease is None:
+            raise DurableBindFailed("lease_lookup")
+        try:
+            authority_home.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise DurableBindFailed("authority_home") from exc
+        try:
+            _ExplorationLaunchAuthorityStore().write(
+                authority_home=authority_home,
+                session_id=session_id,
+                cwd=cwd,
+                repository_root=repository_root,
+                capability=capability,
+                source_identity=source_identity,
+                snapshot_digest=lease.snapshot_digest,
+                expires_at=int(lease.expires_at * 1_000_000_000),
+            )
+        except _AuthorityWriteFailure as exc:
+            raise DurableBindFailed(exc.stage) from exc
+        except OSError as exc:
+            raise DurableBindFailed("authority_write") from exc
+    except DurableBindFailed:
         # The lease was already minted in-memory by bind_session_scoped above;
         # if the durable write fails, release it immediately rather than
         # leaving it to expire via TTL (mirrors the symmetric grant/revoke

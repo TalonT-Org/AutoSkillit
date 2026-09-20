@@ -253,6 +253,17 @@ def test_skill_load_post_hook_registered_in_hook_registry() -> None:
     )
 
 
+def test_skill_load_post_hook_registered_for_user_prompt_expansion() -> None:
+    scripts = {
+        script
+        for hookdef in HOOK_REGISTRY
+        if hookdef.event_type == "UserPromptExpansion"
+        for script in hookdef.scripts
+    }
+
+    assert "skill_load_post_hook.py" in scripts
+
+
 def test_skill_load_guard_registered_in_hook_registry() -> None:
     """T3-2: guards/skill_load_guard.py must be registered as a PreToolUse hook."""
     pre_scripts = {s for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for s in hd.scripts}

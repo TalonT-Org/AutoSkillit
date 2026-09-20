@@ -26,6 +26,7 @@ from autoskillit.pipeline.exploration_context import (
     EXPLORATION_ROLE_ENV,
     EXPLORATION_SESSION_ENV,
     EXPLORATION_STORE_FAILURE_CODES,
+    EXPLORATION_TYPED_FAILURE_CODES,
     CapabilityResolutionStatus,
     OwnerBoundExplorationContextStore,
     resolve_exploration_store_failure_code,
@@ -33,6 +34,7 @@ from autoskillit.pipeline.exploration_context import (
 from autoskillit.pipeline.exploration_context import (  # noqa: PLC0415
     _launch_adapter as _launch_adapter_module,
 )
+from autoskillit.pipeline.exploration_context_durable import DurableBindFailed
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -672,6 +674,13 @@ def test_every_store_exception_maps_to_a_code() -> None:
         isinstance(code, ExplorationFailureCode)
         for code in EXPLORATION_STORE_FAILURE_CODES.values()
     )
+
+
+def test_typed_failure_codes_extend_store_codes_with_durable_only() -> None:
+    assert set(EXPLORATION_TYPED_FAILURE_CODES) - set(EXPLORATION_STORE_FAILURE_CODES) == {
+        DurableBindFailed
+    }
+    assert EXPLORATION_TYPED_FAILURE_CODES[DurableBindFailed] is ExplorationFailureCode.BIND_FAILED
 
 
 def test_subclass_of_mapped_store_exception_resolves_to_ancestor_code() -> None:

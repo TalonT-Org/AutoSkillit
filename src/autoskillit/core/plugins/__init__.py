@@ -29,6 +29,7 @@ from autoskillit.core.plugins._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity,
     resolve_current_generation,
     resolve_current_generation_for_plugin,
+    resolve_installed_generation_root,
 )
 from autoskillit.core.plugins._plugin_cache import (
     _RETIRING_CACHE_SCHEMA_VERSION,
@@ -193,6 +194,7 @@ __all__ = [
     "repair_corrupt_retiring_cache",
     "resolve_current_generation",
     "resolve_current_generation_for_plugin",
+    "resolve_installed_generation_root",
     "sample_kitchen_process_identity",
     "unregister_active_kitchen",
     "validate_agent_tool_canonical",

@@ -23,6 +23,7 @@ from autoskillit.server._tracker_authority import (
     _release_kitchen_tracker_authority,
     try_retire_tracker,
 )
+from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
 from autoskillit.server.recipe._recipe_delivery import retire_recipe_artifacts
 from autoskillit.server.recipe._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
@@ -158,6 +159,7 @@ def _close_kitchen_handler() -> None:
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@session_scoped(SCOPE_ORCHESTRATOR_EXACT)
 @_cancellation_shield()
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
@@ -166,8 +168,6 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     Never raises.
     """
     try:
-        if (h := _tk_pkg._require_orchestrator_exact("close_kitchen")) is not None:
-            return h
         from autoskillit.server import _get_ctx  # circular-break: server lifecycle owner
 
         service = _get_ctx().managed_fixed_batch_supervisor

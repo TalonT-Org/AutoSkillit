@@ -53,6 +53,7 @@ class TestDispatchFoodTruckGates:
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         tool_ctx.gate = DefaultGateState(enabled=False)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         result = json.loads(await dispatch_food_truck(recipe="r", task="t"))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"

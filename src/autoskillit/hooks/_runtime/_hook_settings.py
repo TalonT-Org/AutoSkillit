@@ -23,6 +23,10 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._session_binding import JoinAdmission
 
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
@@ -541,37 +545,59 @@ def write_dispatch_diagnostic(
         return
 
 
-def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
-    """Read the binding identified by the hook payload.
+def hook_session_shape() -> tuple[bool, str]:
+    """Return the normalized shape without rejecting an unknown hook tier."""
+    headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+    tier = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower() or "skill"
+    return headless, tier
 
-    Missing, unreadable, malformed, or mismatched binding artifacts retain the
-    existing permissive policy and are treated as no binding.
-    """
-    # Some projected hooks consume settings without carrying join artifacts, so
-    # load this dependency only on the join-binding path. ``_session_binding``
-    # is excluded from the hooks/_runtime/ move (dual-import contract) and
-    # stays a sibling of this module's *parent* package, not this package.
+
+def admit_hook_session_scope(
+    session_scope: str,
+    exempt_tiers: frozenset[str],
+    shape: tuple[bool, str],
+) -> bool:
+    """Return whether a HookDef scope admits a raw hook-process shape."""
+    if session_scope not in {"any", "headless_only", "interactive_only"}:
+        msg = f"Unknown hook session scope: {session_scope!r}"
+        raise ValueError(msg)
+    headless, tier = shape
+    if session_scope == "headless_only" and not headless:
+        return False
+    if session_scope == "interactive_only" and headless:
+        return False
+    return tier not in exempt_tiers
+
+
+def enforce_session_scope(
+    session_scope: str,
+    *,
+    exempt_tiers: frozenset[str] = frozenset(),
+) -> None:
+    """Exit successfully when a hook is outside its declared session scope."""
+    shape = hook_session_shape()
+    if shape[1] not in {"skill", "orchestrator", "fleet"}:
+        write_dispatch_diagnostic("invalid_session_shape", "enforce_session_scope", shape[1])
+    if not admit_hook_session_scope(session_scope, exempt_tiers, shape):
+        raise SystemExit(0)
+
+
+def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission":
+    """Return the authoritative join decision for the payload session."""
     module_name = (
         f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
     )
     binding_module = importlib.import_module(module_name)
-    resolve_path = getattr(binding_module, "resolve_binding_path")
-    read_binding = getattr(binding_module, "read_binding")
-    binding_error = getattr(binding_module, "SessionBindingError")
-    try:
-        binding = read_binding(resolve_path(payload_cwd, session_id))
-    except binding_error:
-        return None
-    if binding is None or binding.session_id != session_id:
-        return None
-    parsed = json.loads(binding.to_json())
-    return parsed if isinstance(parsed, dict) else None
+    return getattr(binding_module, "admit_join")(
+        getattr(binding_module, "resolve_binding_path")(payload_cwd, session_id),
+        session_id=session_id,
+        skill_name="",
+    )
 
 
 def session_join_required(payload_cwd: str, session_id: str) -> bool:
     """Return whether the payload-identified binding requires a fixed-set join."""
-    binding = read_session_binding(payload_cwd, session_id)
-    return binding is not None and bool(binding.get("join_required", False))
+    return session_join_admission(payload_cwd, session_id).enforce
 
 
 def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] | None:
@@ -581,8 +607,9 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     from ambient values.  Callers that already established join applicability
     must deny rather than substitute the former ``top_level`` literal.
     """
-    binding = read_session_binding(payload_cwd, session_id)
-    if binding is None or not binding.get("join_required") or not binding.get("binding_valid"):
+    admission = session_join_admission(payload_cwd, session_id)
+    binding = admission.binding_dict
+    if binding is None or not admission.enforce or not binding.get("binding_valid"):
         return None
     parent = binding.get("managed_parent_id")
     leaf = binding.get("managed_leaf_id")
@@ -596,8 +623,9 @@ def session_managed_codex_route(
     session_id: str,
 ) -> tuple[str, frozenset[str], str] | None:
     """Return the explicit managed Codex route carried by a valid binding."""
-    binding = read_session_binding(payload_cwd, session_id)
-    if binding is None or not binding.get("binding_valid"):
+    admission = session_join_admission(payload_cwd, session_id)
+    binding = admission.binding_dict
+    if binding is None or not admission.enforce or not binding.get("binding_valid"):
         return None
     route = binding.get("managed_route")
     guards = binding.get("managed_guard_set")

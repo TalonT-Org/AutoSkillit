@@ -18,15 +18,17 @@ from autoskillit.pipeline.exploration_context_durable import (
     EXPLORATION_PRINCIPAL_ROLE,
     EXPLORATION_ROLE_ENV,
     EXPLORATION_SESSION_ENV,
+    DurableBindFailed,
 )
 
-from ._constants import EXPLORER_INELIGIBLE_SESSION_TYPES, EXPLORER_ROLE_NAMES
+from ._constants import EXPLORER_ROLE_NAMES, EXPLORER_SESSION_SCOPE
 from ._eligibility import (
     exploration_auto_provision_eligible,
     is_explorer_binding_eligible,
 )
 from ._failure_codes import (
     EXPLORATION_STORE_FAILURE_CODES,
+    EXPLORATION_TYPED_FAILURE_CODES,
     resolve_exploration_store_failure_code,
 )
 from ._store import OwnerBoundExplorationContextStore
@@ -40,8 +42,9 @@ __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORATION_STORE_FAILURE_CODES",
+    "EXPLORATION_TYPED_FAILURE_CODES",
     "EXPLORER_ROLE_NAMES",
-    "EXPLORER_INELIGIBLE_SESSION_TYPES",
+    "EXPLORER_SESSION_SCOPE",
     "EXPLORATION_AUTHORITY_PATH_ENV",
     "EXPLORATION_CAPABILITY_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",
@@ -52,6 +55,7 @@ __all__ = [
     "ExplorationContextStoreProtocol",
     "ExplorationServiceProtocol",
     "OwnerBoundExplorationContextStore",
+    "DurableBindFailed",
     "exploration_auto_provision_eligible",
     "is_explorer_binding_eligible",
     "resolve_exploration_store_failure_code",

@@ -56,7 +56,6 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
 )
-from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 from autoskillit.server.recipe._recipe_delivery import finalize_recipe_delivery
 from autoskillit.server.recipe._recipe_execution import clear_recipe_execution
 from autoskillit.server.recipe._recipe_segment_delivery import prepare_recipe_segment_delivery
@@ -188,7 +187,6 @@ __all__ = [
     "_transition_fields",
     "_update_hook_config_with_recipe",
     "_update_hook_config_with_git_ops_policy",
-    "_require_orchestrator_exact",
     "_write_ingredient_locks",
     "_write_reload_sentinel",
     "__version__",

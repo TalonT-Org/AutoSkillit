@@ -185,10 +185,7 @@ def _build_hook_registry() -> list[HookDef]:
     ``__init__.py`` calls this factory at the end of its import sequence,
     after every other module-level binding is in place.
     """
-    from autoskillit.hooks import (
-        EXEMPT_SESSION_TYPES_BY_GUARD,
-        EXEMPT_SKILLS_BY_GUARD,
-    )
+    from autoskillit.hooks import EXEMPT_SKILLS_BY_GUARD
 
     return [
         HookDef(
@@ -260,7 +257,7 @@ def _build_hook_registry() -> list[HookDef]:
             matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
             scripts=["guards/pr_create_guard.py"],
             exempt_skills=EXEMPT_SKILLS_BY_GUARD["pr_create_guard"],
-            exempt_session_types=EXEMPT_SESSION_TYPES_BY_GUARD["pr_create_guard"],
+            exempt_session_types=frozenset({"orchestrator"}),
             mechanism="deny",
             enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
         ),
@@ -447,6 +444,14 @@ def _build_hook_registry() -> list[HookDef]:
             scripts=[
                 "guards/fleet_dispatch_guard.py",
                 "guards/resume_ownership_guard.py",
+            ],
+            session_scope="headless_only",
+            mechanism="deny",
+            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        HookDef(
+            matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
+            scripts=[
                 "guards/ingredient_lock_guard.py",
                 "guards/fleet_claim_guard.py",
             ],
@@ -504,6 +509,13 @@ def _build_hook_registry() -> list[HookDef]:
         HookDef(
             event_type="PostToolUse",
             matcher="Skill",
+            scripts=["skill_load_post_hook.py"],
+            codex_status="not-applicable",
+            mechanism="additionalContext",
+            enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+        ),
+        HookDef(
+            event_type="UserPromptExpansion",
             scripts=["skill_load_post_hook.py"],
             codex_status="not-applicable",
             mechanism="additionalContext",

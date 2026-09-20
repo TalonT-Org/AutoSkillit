@@ -125,7 +125,10 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
     from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch(
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            return_value=None,
+        ),
         patch.object(
             tools_kitchen,
             "_open_kitchen_handler",
@@ -197,7 +200,10 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
     from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch(
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            return_value=None,
+        ),
         patch.object(
             tools_kitchen,
             "_open_kitchen_handler",
@@ -271,7 +277,10 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
     from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch(
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            return_value=None,
+        ),
         patch.object(
             tools_kitchen,
             "_open_kitchen_handler",
@@ -339,10 +348,12 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
     import autoskillit.config as config
     import autoskillit.server as server
     from autoskillit.server import _misc
-    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch(
+            "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+            return_value=None,
+        ),
         patch.object(server, "_get_ctx", return_value=mock_tool_ctx),
         patch.object(config, "resolve_ingredient_defaults", return_value={}),
         patch.object(

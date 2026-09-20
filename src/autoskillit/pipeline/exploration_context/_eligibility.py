@@ -7,9 +7,9 @@ server corridor (``_explorer_projection.py``) and the two boot entry points
 
 from __future__ import annotations
 
-from autoskillit.core import SessionType
+from autoskillit.core import SessionShape, SessionType
 
-from ._constants import EXPLORER_INELIGIBLE_SESSION_TYPES
+from ._constants import EXPLORER_SESSION_SCOPE
 
 
 def is_explorer_binding_eligible(
@@ -29,7 +29,9 @@ def is_explorer_binding_eligible(
     """
     if not has_identity or not has_backend:
         return False
-    if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
+    if session_type is not None and not EXPLORER_SESSION_SCOPE.admits(
+        SessionShape(headless=True, tier=session_type)
+    ):
         return False
     if terminal_explorer_capable or session_scoped_explorer_capable:
         return parent_sandbox_mode == "read-only"
@@ -47,4 +49,6 @@ def exploration_auto_provision_eligible(
     enable_exploration remains the authorization boundary regardless of tag
     visibility.
     """
-    return auto_provision and session_type not in EXPLORER_INELIGIBLE_SESSION_TYPES
+    return auto_provision and EXPLORER_SESSION_SCOPE.admits(
+        SessionShape(headless=True, tier=session_type)
+    )

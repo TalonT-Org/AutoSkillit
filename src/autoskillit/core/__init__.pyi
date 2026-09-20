@@ -127,11 +127,14 @@ from .install.cmd_runner import default_cmd_runner as default_cmd_runner
 from .install.cmd_runner import run_gh as run_gh
 from .install.cmd_runner import run_git as run_git
 from .install.install_detect import DirectUrlInfo as DirectUrlInfo
+from .install.install_detect import SourceCurrency as SourceCurrency
+from .install.install_detect import SourceCurrencyStatus as SourceCurrencyStatus
 from .install.install_detect import _is_release_tag as _is_release_tag
 from .install.install_detect import _is_stable_track as _is_stable_track
 from .install.install_detect import distribution_version_at as distribution_version_at
 from .install.install_detect import is_dev_install as is_dev_install
 from .install.install_detect import parse_direct_url as parse_direct_url
+from .install.install_detect import source_currency as source_currency
 from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
 from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
 from .io import GENERATED_FILES as GENERATED_FILES
@@ -286,6 +289,9 @@ from .plugins._plugin_artifact_identity import (
 )
 from .plugins._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
+)
+from .plugins._plugin_artifact_identity import (
+    resolve_installed_generation_root as resolve_installed_generation_root,
 )
 from .plugins._plugin_artifact_retirement import (
     PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
@@ -464,6 +470,7 @@ from .types import AGENT_BACKEND_DYNACONF_ENV_VAR as AGENT_BACKEND_DYNACONF_ENV_
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+from .types import ALL_SESSION_SHAPES as ALL_SESSION_SHAPES
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import ANNOTATION_HARD_CAP_CHARS as ANNOTATION_HARD_CAP_CHARS
 from .types import ASCII_YAML_POLICY as ASCII_YAML_POLICY
@@ -737,6 +744,7 @@ from .types import RUNTIME_ADMISSION_BY_ROLE as RUNTIME_ADMISSION_BY_ROLE
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
 from .types import SESSION_ADD_DIR_SUBDIR as SESSION_ADD_DIR_SUBDIR
 from .types import SESSION_INDEX_SCHEMA_VERSION as SESSION_INDEX_SCHEMA_VERSION
+from .types import SESSION_SCOPE_ANY as SESSION_SCOPE_ANY
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
@@ -1283,6 +1291,8 @@ from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
 from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome
+from .types import SessionScope as SessionScope
+from .types import SessionShape as SessionShape
 from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionSummary as SessionSummary
 from .types import SessionTelemetry as SessionTelemetry
@@ -1414,6 +1424,7 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import hookdef_session_scope as hookdef_session_scope
 from .types import (
     is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
 )
@@ -1465,6 +1476,7 @@ from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import review_receipt_validation_error as review_receipt_validation_error
 from .types import select_child_session_deadline as select_child_session_deadline
+from .types import session_shape as session_shape
 from .types import session_type as session_type
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix
@@ -1511,3 +1523,6 @@ from .types._type_exploration import RepositoryProfileId as RepositoryProfileId
 from .types._type_exploration import RepositorySnapshot as RepositorySnapshot
 from .types._type_exploration import SnapshotCaptureReason as SnapshotCaptureReason
 from .types._type_exploration import SnapshotCaptureStatus as SnapshotCaptureStatus
+from .types._type_exploration import (
+    render_exploration_failure_guidance as render_exploration_failure_guidance,
+)

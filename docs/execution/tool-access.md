@@ -146,6 +146,10 @@ All three layers must independently agree before any orchestration tool can exec
 A bypassed hook is caught by the code guard; a bypassed code guard is caught by the
 missing kitchen visibility.
 
+Session-scope refusals use the structured `{status, code, response, detail}` envelope.
+`detail` is empty for ordinary refusal and identifies a typed exploration failure when
+one occurs.
+
 ## Complete MCP Tool Access Control Map
 
 All 79 tools with their access level, tags, source file, and functional category.

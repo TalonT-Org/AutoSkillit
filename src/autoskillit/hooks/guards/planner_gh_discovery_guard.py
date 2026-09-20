@@ -31,6 +31,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     interpreter_invokes,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"
 
@@ -110,12 +111,11 @@ def _is_gh_discovery(cmd: str) -> bool:
 
 
 def main() -> None:
+    enforce_session_scope("headless_only")
+
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, AttributeError, OSError):
-        sys.exit(0)
-
-    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         sys.exit(0)
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")

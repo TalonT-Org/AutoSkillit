@@ -145,7 +145,9 @@ async def test_recipe_open_atomically_installs_compiled_execution(
         )
         is None
     )
-    with patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None):
+    with patch(
+        "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope", return_value=None
+    ):
         assert await tools_kitchen.close_kitchen(ctx=request_ctx) == "Kitchen is closed."
     assert get_recipe_execution(tool_ctx) is None
 

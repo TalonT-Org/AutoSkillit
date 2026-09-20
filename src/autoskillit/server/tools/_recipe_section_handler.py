@@ -26,6 +26,7 @@ from autoskillit.pipeline import InitializingRecipe, ReadyRecipe, ToolContext
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.lifecycle._state import _get_ctx_or_none
 from autoskillit.server.recipe._recipe_artifact import (
     RecipeStepExtractionError as _RecipeSectionError,
@@ -239,6 +240,7 @@ def _recipe_section_failure(
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("get_recipe_section"),
 )
+@session_scoped(SCOPE_ANY)
 @track_response_size("get_recipe_section")
 @_cancellation_shield(
     state_factory=_recipe_section_request_state_factory,

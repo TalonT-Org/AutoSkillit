@@ -230,10 +230,8 @@ async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
 
     result = json.loads(await open_kitchen())
     assert result["success"] is False
-    assert result["kitchen"] == "failed"
-    assert "user_visible_message" in result
-    assert len(result["user_visible_message"]) > 0
-    assert result["stage"] == "headless_guard"
+    assert result["subtype"] == "headless_error"
+    assert "open_kitchen cannot be called from headless/skill" in result["result"]
 
 
 @pytest.mark.anyio

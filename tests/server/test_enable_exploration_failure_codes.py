@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from autoskillit.core import SessionType
+from autoskillit.core import SessionShape, SessionType
 from autoskillit.exploration import SnapshotCaptureLimits, SnapshotCaptureReason
 from autoskillit.hooks._runtime._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
@@ -31,9 +31,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _skill_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.SKILL,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.SKILL),
     )
 
 
@@ -64,7 +63,9 @@ async def _bind_raising(
     )
     monkeypatch.setattr(store, "bind_session_scoped", MagicMock(side_effect=exc))
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
-    assert result == {"status": "error", "code": expected_code}
+    assert result["status"] == "error"
+    assert result["code"] == expected_code
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -72,12 +73,13 @@ async def test_session_type_ineligible_returns_own_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        tools_exploration,
-        "_resolve_session_type",
-        lambda: SessionType.ORCHESTRATOR,
+        "autoskillit.server.lifecycle._session_scope.session_shape",
+        lambda: SessionShape(False, SessionType.ORCHESTRATOR),
     )
     result = json.loads(await enable_exploration())
-    assert result == {"status": "error", "code": "session_type_ineligible"}
+    assert result["status"] == "error"
+    assert result["code"] == "session_type_ineligible"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -87,7 +89,9 @@ async def test_store_unavailable_returns_own_code(
     _skill_session(monkeypatch)
     tool_ctx.exploration_context_store = MagicMock(spec=[])
     result = json.loads(await enable_exploration())
-    assert result == {"status": "error", "code": "exploration_store_unavailable"}
+    assert result["status"] == "error"
+    assert result["code"] == "exploration_store_unavailable"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -97,7 +101,9 @@ async def test_no_session_id_returns_own_code(
 ) -> None:
     _skill_session(monkeypatch)
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
-    assert result == {"status": "error", "code": "no_session_id"}
+    assert result["status"] == "error"
+    assert result["code"] == "no_session_id"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -160,7 +166,9 @@ async def test_empty_resolved_session_id_surfaces_session_id_invalid_not_bind_fa
 
     result = json.loads(await enable_exploration())
 
-    assert result == {"status": "error", "code": "session_id_invalid"}
+    assert result["status"] == "error"
+    assert result["code"] == "session_id_invalid"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio
@@ -261,7 +269,7 @@ async def test_bind_failed_returns_own_code(
         tool_ctx,
         exploration_snapshot_service,
         exc=RuntimeError("unclassified bind failure"),
-        expected_code="bind_failed",
+        expected_code="unexpected_internal_error",
     )
 
 
@@ -287,7 +295,9 @@ async def test_enable_components_failed_returns_own_code(
         )
     )
 
-    assert result == {"status": "error", "code": "enable_components_failed"}
+    assert result["status"] == "error"
+    assert result["code"] == "enable_components_failed"
+    assert "response" in result and "detail" in result
     assert store.session_scoped_capability("test-session") is None
     cleanup.assert_called_once_with("test-session")
     request_ctx.disable_components.assert_awaited_once_with(tags={"exploration"})
@@ -306,7 +316,9 @@ async def test_unexpected_internal_error_returns_own_code(
         MagicMock(side_effect=RuntimeError("unclassified")),
     )
     result = json.loads(await enable_exploration())
-    assert result == {"status": "error", "code": "unexpected_internal_error"}
+    assert result["status"] == "error"
+    assert result["code"] == "unexpected_internal_error"
+    assert "response" in result and "detail" in result
 
 
 def _seed_repository(root: Path) -> None:
@@ -367,7 +379,9 @@ async def test_truncating_repository_surfaces_snapshot_truncated_code(
 
     result = json.loads(await enable_exploration(_autoskillit_exploration_request_token=token))
 
-    assert result == {"status": "error", "code": "snapshot_truncated"}
+    assert result["status"] == "error"
+    assert result["code"] == "snapshot_truncated"
+    assert "response" in result and "detail" in result
 
 
 @pytest.mark.asyncio

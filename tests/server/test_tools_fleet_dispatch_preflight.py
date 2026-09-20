@@ -115,10 +115,9 @@ class TestFleetDispatchPreflightBehavioral:
                 "execute_dispatch",
                 mock_execute,
             ),
-            patch.object(
-                tools_fleet_dispatch,
-                "_require_fleet",
-                lambda _name: None,
+            patch(
+                "autoskillit.server.lifecycle._session_scope.admit_tool_session_scope",
+                return_value=None,
             ),
         ):
             from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck

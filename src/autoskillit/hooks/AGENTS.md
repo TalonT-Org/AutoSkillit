@@ -70,3 +70,4 @@ Files with no registration support their folder; files with several registration
 - `_dispatch.py` — Support module: Stable hook dispatcher — NEVER RENAME THIS FILE.
 - `_join_ledger.py` — Support module: Stdlib-only durable authority for declared fixed-set join batches.
 - `_session_binding.py` — Support module: Shared authority for the cross-process session-binding channel.
+- `skill_load_post_hook.py` — Groups 2 registrations: PostToolUse Skill and UserPromptExpansion slash-command binding writer.

@@ -381,12 +381,9 @@ def test_claude_provisioning_preamble_names_pluginless_explorer_and_authorized_c
     assert preamble is not None
     assert PLUGINLESS_EXPLORER_ROLE in preamble
     assert EXPLORATION_FALLBACK_CODES, "expected at least one FALLBACK-classified code"
-    for code in EXPLORATION_FALLBACK_CODES:
-        assert code.value in preamble, f"expected authorized fallback code {code.value!r}"
-    for code in set(ExplorationFailureCode) - set(EXPLORATION_FALLBACK_CODES):
-        assert code.value not in preamble, (
-            f"provisioning preamble names non-FALLBACK code {code.value!r} as a fallback trigger"
-        )
+    for code in ExplorationFailureCode:
+        assert code.value in preamble
+    assert "dispatch" in preamble
 
 
 def test_codex_provisioning_preamble_is_absent() -> None:

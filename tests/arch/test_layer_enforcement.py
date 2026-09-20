@@ -703,41 +703,17 @@ def test_direct_executor_callers_check_backend_compat() -> None:
     )
 
 
-def test_fleet_tools_call_require_fleet() -> None:
-    """Every tool in FLEET_TOOLS (except batch_cleanup_clones) must call
-    _require_fleet() before any non-guard await/return in its function body."""
+def test_fleet_tools_declare_fleet_scope() -> None:
+    """Every fleet-only tool is registered with the shared fleet scope."""
+    # TOOL_SESSION_SCOPES is populated only by the @session_scoped decorator at
+    # tool-module import time. Import the relevant tool modules here so the
+    # registry is populated regardless of xdist test ordering or any future
+    # change to autoskillit/server/__init__.py's eager-import list.
     from autoskillit.core.types._type_constants_registries import FLEET_TOOLS
+    from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, TOOL_SESSION_SCOPES
 
-    FLEET_GUARD_EXEMPT = {"batch_cleanup_clones"}
-    server_dir = SRC_ROOT / "server"
-    violations: list[str] = []
-
-    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
-        src = py_file.read_text()
-        tree = ast.parse(src)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name not in FLEET_TOOLS - FLEET_GUARD_EXEMPT:
-                    continue
-                if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
-                    continue
-                violation = _tool_guard_order_violation(
-                    node,
-                    "_require_fleet",
-                    {
-                        "_require_enabled",
-                        "_require_fleet",
-                        "_require_orchestrator_or_higher",
-                        "_require_orchestrator_exact",
-                    },
-                )
-                if violation is not None:
-                    violations.append(violation)
-
-    assert not violations, (
-        "Fleet tools must call _require_fleet() before any non-guard await/return:\n"
-        + "\n".join(f"  {v}" for v in violations)
-    )
+    expected = FLEET_TOOLS - {"batch_cleanup_clones"}
+    assert {name for name in expected if TOOL_SESSION_SCOPES.get(name) is SCOPE_FLEET} == expected
 
 
 def test_ungated_tools_do_not_call_require_enabled() -> None:

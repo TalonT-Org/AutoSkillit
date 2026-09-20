@@ -26,7 +26,9 @@ from autoskillit.core import (
     executable_binding_matches_current_file,
     is_feature_enabled,
     plugin_launch_binding_scope,
+    resolve_installed_generation_root,
     resolve_project_dir,
+    source_currency,
 )
 
 if TYPE_CHECKING:
@@ -53,6 +55,21 @@ _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
     "or recipe://; those surfaces accept recipe identities only. A name defined as both "
     "a recipe and a skill is rejected until one artifact is renamed."
 )
+
+
+def _print_source_currency_warning(
+    status: str, behind_by: int | None, yellow: str, reset: str
+) -> None:
+    if status == "stale":
+        print(
+            f"{yellow}WARNING: installed AutoSkillit generation is {behind_by} commits "
+            f"behind this checkout. Run `autoskillit install` to refresh it.{reset}"
+        )
+    elif status == "diverged":
+        print(
+            f"{yellow}WARNING: installed AutoSkillit generation diverges from this checkout. "
+            f"Run `autoskillit install` to refresh it.{reset}"
+        )
 
 
 def _build_cook_projection_context(
@@ -177,6 +194,12 @@ def cook(
     _G = "\x1b[32m" if color else ""
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
+
+    currency = source_currency(
+        project_dir,
+        generation_root=resolve_installed_generation_root(),
+    )
+    _print_source_currency_warning(currency.status, currency.behind_by, _Y, _R)
 
     if profile is not None:
         if not is_feature_enabled(

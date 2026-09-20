@@ -54,6 +54,8 @@ def _run_hook(
     cwd: Path,
     env: dict[str, str],
 ) -> subprocess.CompletedProcess[str]:
+    if payload.get("tool_name") == "Skill":
+        payload = {"hook_event_name": "PostToolUse", **payload}
     run_env = production_interpreter_env()
     if "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" not in env:
         run_env.pop("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", None)

@@ -40,7 +40,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    read_session_binding,
+    session_join_admission,
     session_managed_codex_route,
     session_managed_scope,
     write_join_diagnostic,
@@ -88,9 +88,10 @@ def main() -> None:
         )
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    binding = read_session_binding(payload_cwd, sid)
-    if not binding or not binding.get("join_required"):
+    admission = session_join_admission(payload_cwd, sid)
+    if not admission.enforce or admission.binding_dict is None:
         sys.exit(0)
+    binding = admission.binding_dict
 
     managed_route = session_managed_codex_route(payload_cwd, sid)
     if managed_route is not None:

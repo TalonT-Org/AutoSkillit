@@ -23,12 +23,12 @@ from autoskillit.core import (
     render_adjacency_table,
     render_dot,
     render_mermaid,
-)
-from autoskillit.core import (
-    session_type as _resolve_session_type,
+    resolve_installed_generation_root,
+    session_shape,
+    source_currency,
 )
 from autoskillit.pipeline import (
-    EXPLORER_INELIGIBLE_SESSION_TYPES,
+    EXPLORER_SESSION_SCOPE,
     OwnerBoundExplorationContextStore,
     TelemetryFormatter,
 )
@@ -39,7 +39,8 @@ from autoskillit.server._misc import (
     write_telemetry_clear_marker,
 )
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server.lifecycle._guards import _require_enabled, _require_fleet
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, SCOPE_FLEET, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._ordering_telemetry import (
     detect_ordering_violations,
@@ -60,6 +61,7 @@ def _get_log_root() -> Path:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
@@ -109,7 +111,20 @@ async def kitchen_status() -> str:
             # enable_exploration would refuse *before* the downstream zero-tool
             # subagent refusal, instead of only after the fact.
             ctx = _get_ctx()
-            if _resolve_session_type() in EXPLORER_INELIGIBLE_SESSION_TYPES:
+            currency = source_currency(
+                ctx.project_dir,
+                generation_root=resolve_installed_generation_root(),
+            )
+            status["source_currency"] = {
+                "status": currency.status,
+                "installed_commit": currency.installed_commit,
+                "checkout_head": currency.checkout_head,
+                "behind_by": currency.behind_by,
+                "generation_root": (
+                    str(currency.generation_root) if currency.generation_root else None
+                ),
+            }
+            if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
                 status["broker_authority"] = BrokerAuthorityStatus.SESSION_TYPE_INELIGIBLE.value
             elif not isinstance(ctx.exploration_context_store, OwnerBoundExplorationContextStore):
                 status["broker_authority"] = BrokerAuthorityStatus.STORE_UNAVAILABLE.value
@@ -153,6 +168,7 @@ async def kitchen_status() -> str:
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield()
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
@@ -173,8 +189,6 @@ async def get_pipeline_report(clear: bool = False) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("get_pipeline_report")) is not None:
-        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
         try:
@@ -236,6 +250,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield()
 @track_response_size("get_token_summary")
 async def get_token_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
@@ -261,8 +276,6 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("get_token_summary")) is not None:
-        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
         try:
@@ -308,6 +321,7 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield()
 @track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
@@ -328,8 +342,6 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("get_timing_summary")) is not None:
-        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
         try:
@@ -357,6 +369,7 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("analyze_tool_sequences")
 async def analyze_tool_sequences(
@@ -461,6 +474,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_FLEET)
 @_cancellation_shield()
 @track_response_size("get_quota_events")
 async def get_quota_events(n: int = 50) -> str:
@@ -486,8 +500,6 @@ async def get_quota_events(n: int = 50) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    if (fleet_gate := _require_fleet("get_quota_events")) is not None:
-        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
         try:
@@ -508,6 +520,7 @@ async def get_quota_events(n: int = 50) -> str:
     tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
     annotations={"readOnlyHint": True},
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
@@ -598,6 +611,7 @@ async def write_telemetry_files(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("read_db")
 async def read_db(

@@ -19,6 +19,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -35,6 +36,7 @@ def _as_bool(value: str) -> bool:
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"}, annotations={"readOnlyHint": True}
 )
+@session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("bind_plan_set")
 async def bind_plan_set(

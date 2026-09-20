@@ -37,7 +37,7 @@ def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     This is the single authoritative formatter for both hooks.json and
     settings.json generation.
     """
-    if hook_def.event_type in {"SessionStart", "Stop"}:
+    if hook_def.event_type in {"SessionStart", "Stop", "UserPromptExpansion"}:
         return {"hooks": hook_commands}
     if hook_def.event_type == "PreToolUse" and not hook_def.matcher:
         return {"hooks": hook_commands}

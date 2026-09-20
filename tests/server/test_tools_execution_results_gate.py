@@ -71,8 +71,8 @@ class TestTierAwareGateEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         result = json.loads(await open_kitchen())
-        assert result.get("error") == "HeadlessDenied"
-        msg = result.get("user_visible_message", "").lower()
+        assert result["subtype"] == "headless_error"
+        msg = result["result"].lower()
         assert "fleet" in msg
 
     @pytest.mark.anyio

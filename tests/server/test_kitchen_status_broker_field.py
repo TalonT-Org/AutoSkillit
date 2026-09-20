@@ -3,8 +3,8 @@
 Before this field, a caller could not introspect broker eligibility except
 by calling enable_exploration and observing a failure code, or by dispatching
 a downstream broker-only subagent and observing the zero-tool refusal. This
-matrix pins the field for the session types EXPLORER_INELIGIBLE_SESSION_TYPES
-excludes and includes.
+matrix pins the field for the session types EXPLORER_SESSION_SCOPE excludes
+and includes.
 """
 
 from __future__ import annotations

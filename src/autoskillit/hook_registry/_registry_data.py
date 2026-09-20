@@ -342,7 +342,7 @@ def _build_hook_registry() -> list[HookDef]:
             enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
         ),
         HookDef(
-            matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
+            matcher=r"Write|Edit|Bash|apply_patch|mcp__.*autoskillit.*__run_cmd",
             scripts=["guards/write_guard.py"],
             session_scope="any",
             mechanism="deny",

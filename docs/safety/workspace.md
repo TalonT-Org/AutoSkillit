@@ -96,8 +96,8 @@ timestamped worktree and discard the partial progress.
 
 ## Isolation rules in `recipe/rules_isolation.py`
 
-Two semantic rules enforce the isolation invariants at recipe-validation
-time:
+`source-isolation-violation` and `git-mutation-on-source` enforce the isolation
+invariants at recipe-validation time:
 
 - `source-isolation-violation` — fires when a recipe step targets the source
   directory instead of the clone.

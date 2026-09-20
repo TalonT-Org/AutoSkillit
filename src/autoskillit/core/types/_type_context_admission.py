@@ -10,8 +10,8 @@ from __future__ import annotations
 
 # ruff: noqa: I001
 # Inter-block imports are ordered by dependency depth, not alphabetically:
-# the two base-only shards (identities, coverage) bracket the deeper layered
-# shards (records -> events -> effects -> states).
+# base-only shards (identities, coverage) bracket the deeper layered shards
+# (records -> events -> effects -> states).
 
 from ._type_context_admission_base import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,

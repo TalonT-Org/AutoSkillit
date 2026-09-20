@@ -1,7 +1,7 @@
 """Hook command rendering + hooks.json generation.
 
 The single authoritative formatter for ``hooks.json`` / ``settings.json``
-entries. ``_build_hook_entry`` is shared between the two generation paths
+entries. ``_build_hook_entry`` is shared between generation paths
 so path A/B divergence is structurally impossible.
 """
 
@@ -58,7 +58,15 @@ def _build_hook_command(
     else:
         if hooks_dir is None:
             raise ValueError("hooks_dir is required when relocatable=False")
-        command = f"python3 -B {hooks_dir / '_dispatch.py'} {logical_name}"
+        # Backslash-escape literal " and \ characters in the dispatcher
+        # path so the surrounding shell command survives shlex.split round
+        # trips (e.g. when downstream consumers — find_broken_hook_scripts,
+        # _dispatch.py, sync_hooks test fixtures — parse the command).
+        # Plain string concatenation (no surrounding quotes) preserves the
+        # unquoted-path form expected by tests that scan
+        # ``parts[-2].endswith("_dispatch.py")``.
+        escaped_path = str(hooks_dir / "_dispatch.py").replace("\\", "\\\\").replace('"', '\\"')
+        command = f"python3 -B {escaped_path} {logical_name}"
     cmd: dict = {
         "type": "command",
         "command": command,

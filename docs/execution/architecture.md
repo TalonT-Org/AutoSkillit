@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 77 MCP tools and 141 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. Its MCP tools and bundled skills are organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -32,16 +32,16 @@ When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. I
 
 AutoSkillit uses several overlapping tool visibility surfaces:
 
-- **Free-range (8 tools)**: Ordinarily visible — `open_kitchen`, `close_kitchen`,
+- **Free-range**: Ordinarily visible — `open_kitchen`, `close_kitchen`,
   `disable_quota_guard`, `enable_exploration`, `reload_session`, `configure_fleet`,
   `configure_order`, and `lock_ingredients`.
-- **Headless tools (8 tools)**: Revealed in headless sessions via
+- **Headless tools**: Revealed in headless sessions via
   `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`, `commit_files`,
   `write_audit_semantic_result`, `write_standalone_audit_evidence`,
   `write_audit_disposition_bundle`, `post_pr_review`, and `delegate_evidence_reader`.
-- **Kitchen-tagged tools (52 tools total)**: Gated behind `open_kitchen` — `run_skill`,
-  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 46 more.
-  Seven kitchen tools also carry the `headless` tag and are
+- **Kitchen-tagged tools**: Gated behind `open_kitchen` — `run_skill`,
+  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, and `push_to_remote`.
+  Some kitchen tools also carry the `headless` tag and are
   additionally pre-enabled in headless sessions. `post_pr_review` is headless-only and
   deliberately not application-gated.
 
@@ -49,7 +49,7 @@ The two authenticated evidence-reader broker tools are outside the kitchen, free
 and fleet surfaces. A sterile evidence-reader child presents a complete private startup identity
 that reveals exactly those two brokers; partial or malformed identity fails startup closed.
 
-When you call `open_kitchen` (automatically done by `order`), all 53 kitchen-tagged tools become
+When you call `open_kitchen` (automatically done by `order`), the derived kitchen tool set becomes
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
 cluttering the tool list.
 
@@ -101,8 +101,8 @@ Within the clone, implementation happens in git worktrees:
 AutoSkillit supports four session modes with different tool and skill visibility:
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
-  loaded. Sees the 8 Free Range MCP tools and Tier 1 skills only
-  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 52 kitchen-tagged MCP
+  loaded. Sees the free-range MCP tools and Tier 1 skills only
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, kitchen-tagged MCP
   tools become available.
 
 - **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers
@@ -110,13 +110,13 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup.
-  The authenticated evidence-reader brokers remain hidden among the 76 registered MCP tools
+  The authenticated evidence-reader brokers remain hidden from the orchestrator
   because only a separately launched reader child receives their binding. All skill tiers are
   accessible. The orchestrator delegates work through `run_skill` (headless sessions) and
   `run_cmd` (shell commands).
 
-- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 8 always-visible
-  tools plus the 8 headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
+- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees the always-visible
+  and headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
   — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
   Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 

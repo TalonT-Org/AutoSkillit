@@ -122,13 +122,29 @@ class TestSkillsExtendedAgentsMd:
     def test_agents_md_documents_skill_count_correctly(
         self, skills_extended_agents_md: str
     ) -> None:
+        # The PR "remove-incidental-inventory-counts" policy retires pinned
+        # exact totals from AGENTS.md (the canonical count lives in
+        # docs/skills/catalog.md). Check the structural property instead:
+        # AGENTS.md must (a) identify `reload-session` as the only skill that
+        # is NOT slash-command-invocable, and (b) point readers at the
+        # canonical catalog instead of stating a count itself.
         text = skills_extended_agents_md.lower()
-        assert "138" in text
-        assert "bundled" in text or "extended" in text
+        assert "reload-session" in text, (
+            "skills_extended/AGENTS.md must identify reload-session as the "
+            "non-slash-command-invocable skill in this catalog"
+        )
+        assert "disable-model-invocation" in text, (
+            "skills_extended/AGENTS.md must document reload-session's "
+            "disable-model-invocation: true provenance"
+        )
+        assert "docs/skills/catalog.md" in text, (
+            "skills_extended/AGENTS.md must point readers at the canonical "
+            "catalog (docs/skills/catalog.md) for the authoritative count"
+        )
         assert "user-invocable" not in text, (
-            "skills_extended/AGENTS.md must not claim all 138 are "
+            "skills_extended/AGENTS.md must not claim all skills are "
             "user-invocable; reload-session carries "
-            "disable-model-invocation: true (see docs/skills/catalog.md)"
+            "disable-model-invocation: true"
         )
 
     def test_agents_md_mentions_categories_convention(

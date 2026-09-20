@@ -4,7 +4,7 @@ Recipes are YAML pipeline definitions that automate multi-step workflows. Each r
 
 ## Bundled Recipes
 
-AutoSkillit ships with 6 bundled recipes:
+AutoSkillit ships with bundled recipes:
 
 ### implementation
 

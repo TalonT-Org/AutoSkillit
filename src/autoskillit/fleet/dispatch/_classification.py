@@ -1,6 +1,6 @@
 """Phase E: outcome classification + final state write — moved from fleet/_api.py (#4851).
 
-Holds the two final-pass functions:
+Holds the final-pass functions:
 * ``run_outcome_classification`` parses the L3 result block, classifies the
   dispatch outcome, runs the sidecar-synthesis fallback, applies the
   tracker-authority error override, branches on ``SUCCESS`` to fire

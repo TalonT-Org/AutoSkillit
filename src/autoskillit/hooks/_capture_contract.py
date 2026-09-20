@@ -1,7 +1,7 @@
 """Canonical facade for shell-capture transport contracts (stdlib-only).
 
-Owns the V3 failure envelope framing (``CaptureFailureV3``, the four V3
-render/parse functions, the V3 wire-format prefixes) and the cross-cutting
+Owns the V3 failure envelope framing (``CaptureFailureV3``, V3 render/parse
+functions, and V3 wire-format prefixes) and the cross-cutting
 ``CaptureContractError`` exception (sourced from ``_capture._errors``).
 V2 capture protocol primitives live in ``_capture._v2_protocol``;
 request/lineage codecs live in ``_capture._request_lineage``.  This facade

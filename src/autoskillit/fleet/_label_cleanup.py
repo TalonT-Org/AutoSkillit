@@ -1,7 +1,7 @@
 """Infrastructure-level label cleanup for crashed or cancelled dispatches.
 
 Wires the LABEL_LIFECYCLE_REGISTRY state machine to the fleet finally block and
-startup sweep — the two infrastructure paths that run outside the recipe layer.
+startup sweep — infrastructure paths that run outside the recipe layer.
 """
 
 from __future__ import annotations

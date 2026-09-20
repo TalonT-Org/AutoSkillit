@@ -18,12 +18,12 @@ manually reclassifying each of its tools and skills one by one. A project withou
 | `ci` | `wait_for_ci`, `get_ci_status`, `wait_for_merge_queue`, `toggle_auto_merge` | `diagnose-ci` |
 | `clone` | `clone_repo`, `remove_clone`, `register_clone_status`, `batch_cleanup_clones` | — |
 | `telemetry` | `get_token_summary`, `get_timing_summary`, `write_telemetry_files`, `get_quota_events` | — |
-| `arch-lens` | — | All 13 `arch-lens-*` skills, `make-arch-diag`, `verify-diag` |
+| `arch-lens` | — | `arch-lens-*` skills, `make-arch-diag`, `verify-diag` |
 | `audit` | — | `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`, `audit-bugs`, `audit-friction`, `audit-impl` |
-| `exp-lens` | — | All 18 `exp-lens-*` skills |
+| `exp-lens` | — | `exp-lens-*` skills |
 | `kitchen-core` | `run_cmd`, `run_python`, `run_skill`, `test_check`, `reset_test_dir`, `reset_workspace`, `classify_fix`, `list_recipes`, `load_recipe`, `validate_recipe`, `migrate_recipe`, `kitchen_status`, `read_db`, `get_pipeline_report`, `dispatch_food_truck`, `merge_worktree`, `get_token_summary`, `get_timing_summary`, `write_telemetry_files`, `get_quota_events`, `analyze_tool_sequences` | — |
 | `research` | — | `compose-research-pr`, `prepare-research-pr`, `review-research-pr`, `resolve-research-review`, `resolve-claims-review`, `resolve-design-review`, `classify-experiment-type`, `apply-review-dimensions`, `review-design` |
-| `vis-lens` | — | All 12 `vis-lens-*` skills, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan` |
+| `vis-lens` | — | `vis-lens-*` skills, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan` |
 
 ## Disabling a Subset
 
@@ -84,7 +84,7 @@ Custom tags behave like built-in categories for filtering purposes: disabling
 ## FastMCP Mechanics: Why `open_kitchen` Re-Disables Subsets
 
 FastMCP session rules override server rules. When `open_kitchen` calls
-`ctx.enable_components(tags={"kitchen"})` to reveal the 43 kitchen-tagged tools, this
+`ctx.enable_components(tags={"kitchen"})` to reveal kitchen-tagged tools, this
 operation overwrites the server-level `mcp.disable(tags={"github"})` mark applied at
 startup. As a result, `open_kitchen` must immediately re-call
 `ctx.disable_components(tags={subset})` for each configured disabled subset to restore

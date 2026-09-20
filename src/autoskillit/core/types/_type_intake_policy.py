@@ -21,8 +21,8 @@ __all__ = [
 
 CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 
-# Always-on injection: every byte is replicated into 14 bundled agent TOMLs at session
-# setup plus one copy per session prompt across 5 delivery surfaces. Raising either
+# Always-on injection: every byte is replicated into bundled agent TOMLs at session
+# setup and session-prompt delivery surfaces. Raising either
 # ceiling is a decision, not a consequence — record measured before/after in the PR.
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
 # Governs the UNIVERSAL composed suffix only (output-discipline + intake-discipline +

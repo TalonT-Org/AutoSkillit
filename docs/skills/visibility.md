@@ -2,8 +2,8 @@
 
 ## Overview
 
-AutoSkillit has 141 bundled skill sources. Session-role skills are organized into three
-configurable tiers that control when and where they appear as slash commands. Exact-role
+Session-role skills are organized into configurable tiers that control when and where they
+appear as slash commands. Exact-role
 orchestration skills are exposed through role-derived catalogs instead of a user tier. The
 tier system is orthogonal to subset categories — you can disable a subset across all tiers
 simultaneously or reclassify session-role skills between tiers. See
@@ -24,12 +24,11 @@ simultaneously or reclassify session-role skills between tiers. See
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (105 total):
+- **Default members**:
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`, `phoropter-null-synthesis`, `phoropter-priority-synthesis`,
-  all 13 `arch-lens-*` skills, all 18 `exp-lens-*` skills, all 12 `vis-lens-*` skills,
-  all 14 `planner-*` skills,
+  the `arch-lens-*`, `exp-lens-*`, `vis-lens-*`, and `planner-*` families,
   `audit-arch`, `audit-cohesion`, `audit-tests`,
   `audit-defense-standards`, `audit-bugs`, `audit-friction`, `validate-audit`,
   `audit-docs`, `audit-feature-gates`, `audit-review-decisions`,

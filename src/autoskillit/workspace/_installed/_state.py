@@ -1,11 +1,11 @@
 """One authority for whether the on-disk install is internally consistent.
 
-Before this module the same question was asked in nine unrelated ad-hoc repairs
+Before this module the same question was asked in unrelated ad-hoc repairs
 (``upgrade()``, ``_ensure_workspace_ready()``, ``evict_direct_mcp_entry()``,
 ``_evict_stale_autoskillit_hooks()``, cache retirement, …), each with
-its own trigger and idempotency story — and two doctor checks answered ``OK`` on
-a machine that could not start. Nine one-offs is not a pattern; it is the
-absence of one.
+its own trigger and idempotency story — while doctor checks answered ``OK`` on
+a machine that could not start. These one-offs were not a pattern; they were
+the absence of one.
 
 Two public entry points:
 

@@ -816,11 +816,6 @@ tasks:
         echo ""
         autoskillit order smoke-test
 
-  check-docs:
-    desc: Verify documentation counts match source code
-    cmds:
-      - python scripts/check_doc_counts.py
-
   sync-versions:
     desc: Sync all version-bearing files from pyproject.toml
     cmds:

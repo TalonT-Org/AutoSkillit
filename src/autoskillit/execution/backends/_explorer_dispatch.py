@@ -191,7 +191,7 @@ CLAUDE_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
         role_prefix="autoskillit:",
         provisioning_preamble=(
             "Before dispatching explorer subagents, call enable_exploration() to "
-            "establish session-scoped exploration authority. The three broker tools "
+            "establish session-scoped exploration authority. The broker tools "
             "(submit_exploration_query, get_exploration_page, resume_exploration_context) "
             "become visible only after enable_exploration succeeds.\n\n"
             f"{_EXPLORATION_FALLBACK_SENTENCE} Dispatch it as "

@@ -20,8 +20,10 @@ from autoskillit.recipe.api_orchestration._api_orchestration_types import (
 from autoskillit.recipe.io import (
     RecipeInfo,
     find_recipe_by_name,
-    substitute_scripts_placeholder,
-    substitute_temp_placeholder,
+    substitute_scripts_placeholder,  # noqa: F401
+    substitute_scripts_placeholder_yaml_safe,  # noqa: F401
+    substitute_temp_placeholder,  # noqa: F401
+    substitute_temp_placeholder_yaml_safe,  # noqa: F401
 )
 
 __all__ = ["_resolve_recipe_match"]
@@ -41,8 +43,8 @@ def _resolve_recipe_match(
         raise RecipeNotFoundError(f"No recipe named '{name}' found")
 
     raw_declared = match.content if match.content is not None else match.path.read_text()
-    raw = substitute_temp_placeholder(raw_declared, pipeline_inputs.temp_dir_relpath)
-    raw = substitute_scripts_placeholder(raw)
+    raw = substitute_temp_placeholder_yaml_safe(raw_declared, pipeline_inputs.temp_dir_relpath)
+    raw = substitute_scripts_placeholder_yaml_safe(raw)
 
     if match.source == RecipeSource.BUILTIN:
         recipes_dir = _orch.pkg_root() / "recipes"

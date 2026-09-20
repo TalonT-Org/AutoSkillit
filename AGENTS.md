@@ -20,6 +20,7 @@ The assigned issue or ticket is the source of truth; do not work on unassigned f
   * **Address the Root Cause**: Debug to find and fix root causes. No hardcoded workarounds. When a clean fix requires it, do preparatory refactoring — first make the change easy, then make the easy change; the structural work must immediately simplify the change at hand, not generalize for imagined ones.
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
+  * Avoid exact counts of evolving repository inventories in prose and docstrings; name the members or source of truth, and reserve numeric claims for behavior-defining limits or contracts.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
   * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-versions && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry. Configured hooks include ruff format, ruff check, mypy, uv lock validation, and gitleaks.

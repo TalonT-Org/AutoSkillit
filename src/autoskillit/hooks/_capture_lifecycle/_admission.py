@@ -68,11 +68,6 @@ else:
 # module so both admission paths share a single source of truth.
 MAX_ACTIVE_RECORDS = 4096
 
-# Jittered exponential backoff constants. Moved here from
-# ``_capture_lifecycle.py:124-126`` because they are used only by
-# ``_acquire_flock``. The original comment block is reproduced verbatim
-# from the deleted file.
-#
 # Jittered exponential backoff for non-blocking lifecycle-lock retry: base
 # delay uniformly chosen in [5ms, 20ms], doubling each retry, capped.
 # `random` (not `secrets`) is the deliberate choice — its per-process state is

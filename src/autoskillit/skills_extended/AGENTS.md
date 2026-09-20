@@ -1,18 +1,16 @@
 # skills_extended/
 
 Extended catalog of bundled skills covering the arch-lens, exp-lens,
-vis-lens, audit, planner, and diagnostic workflows. Of the 138 bundled
-skills, only `reload-session` carries `disable-model-invocation: true`
-and is NOT slash-command-invocable (it is a recovery action invoked via
-its MCP tool, not a slash command); the remaining 137 are slash-command
-invocable as `/autoskillit:<skill-name>`. The canonical accounting lives
-in `docs/skills/catalog.md`.
+vis-lens, audit, planner, and diagnostic workflows. `reload-session` carries
+`disable-model-invocation: true` and is not slash-command-invocable (it is a
+recovery action invoked via its MCP tool); the other extended skills are
+slash-command-invocable as `/autoskillit:<skill-name>`. The canonical catalog
+lives in `docs/skills/catalog.md`.
 
 This is the bulk skill catalog. The always-loaded kernel skills
 (`open-kitchen`, `sous-chef`, `close-kitchen`) live one directory up in
-`skills/` and are documented in `skills/AGENTS.md`. Authoritative
-counts are pinned by `tests/docs/test_doc_counts.py` and
-`_count_skills_total`.
+`skills/` and are documented in `skills/AGENTS.md`. The catalog test verifies
+that every extended skill directory is represented.
 
 `skills_extended/` is a Markdown-only skill-catalog directory (no
 Python package, so it is not assigned to any import-linter IL layer).

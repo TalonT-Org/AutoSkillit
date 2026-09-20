@@ -113,7 +113,7 @@ def classify_dispatch_outcome(
     """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
 
     Pure function — no filesystem access, no side effects.
-    Rules applied in order:
+    Apply these ordered rules:
       0. controlled context exhaustion → FAILURE
       1. timeout + session_id + lifespan_started + (checkpoint or sidecar)
          + not abandon → RESUMABLE

@@ -1,6 +1,6 @@
 # Phoropter
 
-The phoropter framework organises documentation lenses into a Dial → Apply → Synthesize phase structure across four lens families: arch-lens, exp-lens, vis-lens, and review-design.
+The phoropter framework organises documentation lenses into a Dial → Apply → Synthesize phase structure across the arch-lens, exp-lens, vis-lens, and review-design families.
 
 - [execution-contract.md](execution-contract.md) — execution contract governing lens phase transitions and output guarantees
 - [family-guide.md](family-guide.md) — step-by-step guide for authoring a new lens family

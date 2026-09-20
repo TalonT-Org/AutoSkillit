@@ -13,7 +13,7 @@ changes:
       and 'fixes_applied' as typed outputs. write_expected_when migrated from
       fixes_applied pattern to verdict=real_fix.
     instruction: |
-      In skill_contracts.yaml, for each of the four auto-fix skills, replace:
+      In skill_contracts.yaml, for each auto-fix skill, replace:
         outputs: []
       with:
         outputs:

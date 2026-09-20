@@ -172,7 +172,7 @@ def _predicate_variant(condition_when: str | None, failed_step_value: str) -> st
 
 
 # Exact site pair exemption for the bundled remediation recipe: the
-# pre_remediation_merge and merge steps intentionally diverge for these five
+# pre_remediation_merge and merge steps intentionally diverge for these
 # failed_step values because pre_remediation_merge runs before remediation
 # starts and merge runs after. ref_coherence must still match across sites.
 _CROSS_SITE_SITE_PAIR_EXEMPTIONS: dict[tuple[str, str], frozenset[str]] = {

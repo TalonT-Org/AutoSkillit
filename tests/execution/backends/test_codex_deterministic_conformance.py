@@ -57,8 +57,14 @@ def _sanitize_hooks(hooks: dict[str, list[dict]]) -> dict[str, list[dict]]:
     """Replace machine-specific paths and hashes with deterministic placeholders."""
     raw = json.dumps(hooks, sort_keys=True)
     raw = raw.replace(str(HOOKS_DIR), "SANITIZED_HOOKS_DIR")
+    # shlex.quote wraps the dispatcher path when it contains shell-special
+    # characters (e.g. literal " in a worktree directory name), emitting
+    # ``'/.../"quoted"/_dispatch.py'``. The prior ``[^\"]+`` form could not
+    # span the JSON-escaped ``\"`` inside that wrapped form, so use a
+    # non-greedy match up to ``_dispatch.py`` and consume any trailing quote
+    # the wrapping left behind.
     raw = re.sub(
-        r"python3 -B [^\"]+/_dispatch\.py",
+        r"python3 -B .*?_dispatch\.py['\"]?",
         "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py",
         raw,
     )

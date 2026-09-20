@@ -1436,7 +1436,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_session_type_exemption_enforcement.py",
             "infra/test_skill_exemption_enforcement.py",
             # docs/ file-level entries
-            "docs/test_doc_counts.py",
             "docs/test_shell_capture_snapshot_authority_decision.py",
             "docs/test_guard_fail_mode_docs.py",
         }

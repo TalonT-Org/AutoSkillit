@@ -4,9 +4,9 @@ This document is the authoritative reference for phoropter execution contracts. 
 
 ## §1. The Phoropter Pattern
 
-The phoropter is a recipe-level primitive that organises documentation lenses into a three-phase pipeline: **dial → apply → synthesize**. Each phoropter family groups a set of analytical lenses (e.g., arch-lens, exp-lens, vis-lens) and routes their execution through this pipeline.
+The phoropter is a recipe-level primitive that organises documentation lenses into the **dial → apply → synthesize** pipeline. Each phoropter family groups a set of analytical lenses (e.g., arch-lens, exp-lens, vis-lens) and routes their execution through this pipeline.
 
-Two semantic rules enforce the pattern at recipe validation time (both are `ERROR` severity in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`):
+`phoropter-phase-order` and `phoropter-step-interleaving` enforce the pattern at recipe validation time (both are `ERROR` severity in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`):
 
 - **`phoropter-phase-order`** — steps within a `phoropter_family` must follow the `dial → apply → synthesize` progression. The canonical phase tuple is `_PHOROPTER_PHASES = ("dial", "apply", "synthesize")`. Out-of-order steps produce an `ERROR` finding.
 - **`phoropter-step-interleaving`** — non-phoropter steps must not interrupt an in-progress family sequence. If a step with no `phoropter_family` annotation appears between canonical phase steps of an active family, an `ERROR` finding is emitted.
@@ -15,7 +15,8 @@ Steps with `action: route` are transparent to both rules — routing does not ad
 
 ## §2. Universal Contracts
 
-Every phoropter family must satisfy exactly five contracts. These are enforced by the two semantic rules above plus the step-level configuration knobs in §4.
+Every phoropter family must satisfy the contracts below. The semantic rules above
+and the step-level configuration knobs in §4 enforce them.
 
 | Contract | Description |
 |----------|-------------|
@@ -59,7 +60,10 @@ Reads all per-lens outputs from the capture directory and produces a unified res
 
 ## §4. Configuration Knobs
 
-Single knob controls phoropter family behavior at the registry level. Post-#4894 the registry retains only `step_naming.prefix` per family (the sole field with a live production reader); all other family-level configuration is derived from each lens's `SKILL.md` content (frontmatter + body), the recipe YAML, or step-level fields.
+`step_naming.prefix` controls phoropter family behavior at the registry level.
+Post-#4894 the registry retains that field per family as the only field with a live
+production reader; all other family-level configuration is derived from each lens's
+`SKILL.md` content (frontmatter + body), the recipe YAML, or step-level fields.
 
 | Knob | Values | Description |
 |------|--------|-------------|
@@ -75,7 +79,7 @@ skip_when_false: str | None = None    # Context variable; step skipped when fals
 
 ## §5. Step Naming Conventions
 
-The phoropter framework supports two step-naming cases, driven by the family's `step_naming.prefix` loaded by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`.
+The phoropter framework supports the step-naming cases below, driven by the family's `step_naming.prefix` loaded by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`.
 
 | Aspect | Sole-Family (Case A) | Coexisting Families (Case B) |
 |--------|---------------------|------------------------------|
@@ -107,7 +111,7 @@ Note: The `SynthesisStrategy` enum also includes a `CUSTOM` value for future ext
 
 ## §7. IL-0 Type Cross-Reference
 
-Five phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/_type_phoropter.py` and `_type_enums.py`):
+Phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/_type_phoropter.py` and `_type_enums.py`):
 
 | Type | Module | Status | Fields | Purpose |
 |------|--------|--------|--------|---------|

@@ -1,7 +1,7 @@
 """ToolContext: explicit dependency container for server tool implementations.
 
 pipeline/ module — the only pipeline sub-module that imports from config/.
-Replaces two mutable module-level singletons in server.py:
+Replaces mutable module-level singletons in server.py:
   _config, _tools_enabled
 """
 

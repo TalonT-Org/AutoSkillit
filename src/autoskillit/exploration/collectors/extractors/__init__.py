@@ -1,6 +1,6 @@
 """Stable facade re-exporting collector extractor implementations.
 
-Decomposed from the original 853-line ``collectors/extractors.py`` per #4836.
+Decomposed from the original ``collectors/extractors.py`` per #4836.
 Importing shard symbols directly is fine; importing them through this facade
 guarantees the public surface (``autoskillit.exploration.collectors.extractors.X``)
 survives future shard reorganisation.

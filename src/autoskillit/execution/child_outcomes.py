@@ -72,7 +72,7 @@ def _safe_resolve_snapshot_path(
 ) -> Path | None:
     """Resolve the canonical snapshot path, or None + a ``{caller}_snapshot_path_invalid`` log.
 
-    Absorbs the identical try/except this module's six writer/reader
+    Absorbs the identical try/except shared by this module's writer/reader
     functions each wrapped around ``resolve_snapshot_path`` individually.
     ``caller`` preserves each call site's own distinct log-event name.
     """

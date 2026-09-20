@@ -84,11 +84,8 @@ Run health checks on your setup.
 - `--repair` — Opt into safe repairs. This is the only `doctor` invocation that writes;
   unreadable retirement-cache bytes are preserved in a timestamped sidecar first.
 
-Runs 47 ungated checks (up to 53 with fleet enabled) enumerated by `run_doctor`
-in `cli/doctor/__init__.py`: 38 numbered checks (1–23, excluding 5, and 30–45)
-and 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c`, `17b`,
-`31b`). With fleet enabled the structural total is 44 numbered plus 9 lettered
-checks. The checks cover stale MCP
+`run_doctor` in `cli/doctor/__init__.py` enumerates the baseline checks and
+conditionally adds fleet checks. The checks cover stale MCP
 servers, plugin registration, plugin cache existence and integrity, PATH,
 project config, secrets placement, shared exact-artifact/install-state consistency,
 hook health, hook registration, hook registry drift, recipe version health, gitignore
@@ -100,8 +97,7 @@ codex NDJSON drift, codex model-alias staleness, standing backend pin feasibilit
 local recipe validity, codex limits pin freshness, bundled skill capability
 authenticity, capture-store statistics, project-local skill contracts, and
 retained session-index projection consistency, orphaned codex processes, and
-orphaned registered-stdio AutoSkillit daemons
-(including the 6 fleet checks 24–29). See
+orphaned registered-stdio AutoSkillit daemons. See
 [installation.md](installation.md#post-install-verification) for the full table.
 
 ---

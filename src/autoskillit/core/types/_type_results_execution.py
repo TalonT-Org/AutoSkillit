@@ -2,8 +2,8 @@
 
 Narrow-cascade peer of _type_results.py. These types are consumed primarily by
 execution/, server/, and pipeline/ — not by workspace/, recipe/, migration/, or
-the root-level utility modules. Splitting them here means changes cascade to
-4 test directories instead of 13. ProviderOutcome lives in _type_results.py
+the root-level utility modules. Splitting them here narrows the test cascade.
+ProviderOutcome lives in _type_results.py
 because SkillResult.provider references it (universal consumer surface).
 
 Zero autoskillit imports outside this sub-package (IL-0).

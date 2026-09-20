@@ -244,12 +244,18 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
     """Build a single Codex hook command dict with trusted_hash."""
+    import shlex
+
     logical_name = script.removesuffix(".py")
     dispatch_path = hooks_dir / "_dispatch.py"
     script_hash = hashlib.sha256(dispatch_path.read_bytes()).hexdigest()
     cmd: dict = {
         "type": "command",
-        "command": f"python3 -B {dispatch_path} {logical_name}",
+        # shlex.quote the dispatcher path so paths containing shell-special
+        # characters (e.g. literal " in a worktree directory name) survive
+        # downstream shlex.split consumers — see hook_registry/_rendering.py
+        # for the matching rationale.
+        "command": f"python3 -B {shlex.quote(str(dispatch_path))} {shlex.quote(logical_name)}",
         "trusted_hash": script_hash,
     }
     if timeout_seconds is not None:

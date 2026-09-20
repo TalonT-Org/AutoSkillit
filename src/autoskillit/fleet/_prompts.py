@@ -80,13 +80,13 @@ def _build_food_truck_prompt(
     """Build the system prompt for an L2 food truck headless session.
 
     The prompt is self-contained — the L2 food truck session needs no runtime reference
-    material beyond what is embedded here. It assembles 8 sections:
+    material beyond what is embedded here. It assembles sections for
     filtered sous-chef discipline, headless directives, routing/predicates,
     budget guidance, quota awareness, campaign task, ingredient values,
     and a sentinel-anchored result contract.
 
     ``capture`` is an optional mapping of capture entry keys to their specs,
-    used to inject additional fields into the Section 8 sentinel format block.
+    used to inject additional fields into the sentinel format block.
     """
     dispatch_id_short = dispatch_id[:8]
     ingredients_json = json.dumps(ingredients)

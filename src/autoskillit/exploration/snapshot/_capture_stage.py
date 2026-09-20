@@ -90,8 +90,8 @@ def _capture_stage(
     ``FAILED``, silently defeating the distinction those raise sites exist to
     make.
 
-    ``_capture_once`` is resolved through the facade module so ``test_snapshot.py``
-    monkeypatches ``snapshot_module._capture_once`` (lines 426, 898) propagate.
+    ``_capture_once`` is resolved through the facade module so monkeypatches of
+    ``snapshot_module._capture_once`` in ``test_snapshot.py`` propagate.
     """
     try:
         return _snapshot_facade._capture_once(root, limits, deadline=deadline)

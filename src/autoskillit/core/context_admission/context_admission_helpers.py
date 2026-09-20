@@ -4,7 +4,7 @@ Holds every predicate, effect builder, and state transition that more than
 one dispatch-category shard needs; importing directly from this module keeps
 sibling shards from reaching into each other for cross-category concerns.
 
-Helpers are organised in three internal tiers:
+Helpers are organised into internal categories:
 
 - **Pure predicates** (`_reservation_for`, `_batch_record`,
   `_generation_record`, `_highest_dispatch_sequence`,

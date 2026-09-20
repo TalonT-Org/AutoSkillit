@@ -42,8 +42,7 @@ ALL_DIRS = [
 
 class TestTieredAlwaysRun:
     def test_pure_cli_change_skips_infra_dir_and_docs_dir(self, tmp_path: Path) -> None:
-        """REQ-TIER-001/002/003: cli change → arch+contracts present; infra/docs NOT as dirs;
-        10 infra + 3 hooks unconditional files in result; test_doc_counts.py in result."""
+        """REQ-TIER-001/002/003: cli change selects direct unconditional tests."""
         tests_root = _make_tests_root(tmp_path, ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/cli/app.py"},
@@ -107,6 +106,16 @@ class TestTieredAlwaysRun:
         dir_names = {p.name for p in result2}
         assert "infra" in dir_names
 
+    def test_unconditional_files_constants_have_correct_counts(self) -> None:
+        """_INFRA_UNCONDITIONAL_FILES has 10 entries; hooks has 3 entries.
+
+        Pin the unconditional-files contract: a silent mutation to these
+        frozensets changes the always-run behavior, so any new entry must be
+        reflected here as well.
+        """
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 10
+        assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
+
     def test_empty_changed_files_uses_full_always_run(self, tmp_path: Path) -> None:
         """REQ-TIER-004: empty changed_files → fail-open → full always-run set as dirs."""
         tests_root = _make_tests_root(tmp_path, ALL_DIRS)
@@ -119,11 +128,6 @@ class TestTieredAlwaysRun:
         dir_names = {p.name for p in result}
         for d in ["arch", "contracts", "infra", "docs"]:
             assert d in dir_names, f"fail-open: {d} must be present for empty changeset"
-
-    def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 10 entries; hooks has 3 entries."""
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 10
-        assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
 
     def test_infra_unconditional_files_resolve_under_infra_dir(self, tmp_path: Path) -> None:
         """Infra unconditional files must resolve to tests/infra/."""

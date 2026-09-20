@@ -719,8 +719,8 @@ class CaptureLifecycleStore:
         active-record cap, the ``_append_locked`` call, and the
         ``_sweep_transitions`` budget increment all move with the body to
         ``_admission._admit_new_record`` so the wrapper is a 1-line
-        delegation. ``tests/cli/test_capture_store.py:247`` relies on this
-        exact signature via ``real_admit = CaptureLifecycleStore._admit_new_record``
+        delegation. Capture-lifecycle decomposition tests rely on this exact
+        signature via ``real_admit = CaptureLifecycleStore._admit_new_record``
         and ``monkeypatch.setattr``.
         """
         return _admission._admit_new_record(self, record, records, compaction_epoch, size, now)

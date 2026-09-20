@@ -150,7 +150,7 @@ class LoadRecipeResult(TypedDict, total=False):
 class OpenKitchenResult(TypedDict, total=False):
     """Typed schema for the open_kitchen named-recipe handler → formatter boundary.
 
-    Extends LoadRecipeResult with four post-return keys injected by the handler.
+    Extends LoadRecipeResult with post-return keys injected by the handler.
     """
 
     # Inherited from LoadRecipeResult

@@ -65,6 +65,14 @@ def _check_editable_install_source_exists() -> DoctorResult:
 
     url = direct_url.get("url", "")
     src_path = urllib.parse.urlparse(url).path if url.startswith("file://") else ""
+    if src_path:
+        # pip records the editable-install source URL with percent-encoded
+        # special characters (e.g. literal " becomes %22). urllib's
+        # parsed .path leaves the encoding intact, so unquote before the
+        # filesystem existence check — otherwise a worktree whose directory
+        # name contains shell-special characters is misclassified as
+        # "deleted from a different path".
+        src_path = urllib.parse.unquote(src_path)
     if not src_path or Path(src_path).exists():
         return DoctorResult(Severity.OK, check_name, "Editable install source directory exists")
 

@@ -70,12 +70,12 @@ class PluginArtifactKind(StrEnum):
     routes AutoSkillit's own Python-package install-root generation store — a
     disjoint tree under the same generation-store mechanism, keyed by
     ``_AUTOSKILLIT_INSTALL_ROOT_KEY`` instead of the plugin's ref. All roots
-    are disjoint, so one owner cannot serve two kinds: a record routed to an
+    are disjoint, so an owner cannot serve another kind: a record routed to an
     owner whose ``managed_root`` does not contain it is rejected on every
     sweep forever.
 
     This is a routing key for the retirement queue only. The on-disk manifest's
-    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for all three trees, since
+    own ``artifact_kind`` stays ``INSTALLED_PLUGIN`` for every managed tree, since
     they share one manifest format.
     """
 

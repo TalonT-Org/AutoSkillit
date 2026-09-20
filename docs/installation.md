@@ -72,11 +72,8 @@ invocation that writes; it can rebuild a corrupt retirement cache after preservi
 the original bytes in a timestamped sidecar. It never rewrites a newer unsupported
 cache schema.
 
-Doctor runs 46 ungated checks: 37 numbered checks (1–23, excluding 5,
-and 30–44) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
-`7b`, `7c`, `17b`, `31b`). Enabling the fleet feature adds checks 24–29,
-for 52 total: 43 numbered and 9 lettered checks.
-Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
+`run_doctor` in `src/autoskillit/cli/doctor/__init__.py` enumerates the baseline
+checks and conditionally adds fleet checks:
 
 | # | Check | What it verifies |
 |---|-------|------------------|
@@ -91,7 +88,7 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
 | 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
 | 7 | Hook registration | Hooks are registered in `settings.json` |
-| 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
+| 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `src/autoskillit/hook_registry/` |
 | 7c | Dual hook registration | Plugin-active installs do not also register hooks in `settings.json` |
 | 8 | Script version health | Project recipes carry the current `autoskillit_version` |
 | 9 | gitignore completeness | `.gitignore` covers `.autoskillit/temp/` and other generated paths |

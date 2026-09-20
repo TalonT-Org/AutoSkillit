@@ -68,7 +68,7 @@ class InfrastructureFaultError(Exception):
     ``needs_retry=False`` rather than treating it as a logic crash.
 
     Derives from ``Exception`` only — never ``RuntimeError`` or ``OSError`` —
-    so that joining this marker onto an existing hierarchy (the four
+    so that joining this marker onto an existing hierarchy (the
     ``PluginArtifact*Error`` classes are ``RuntimeError`` subclasses,
     ``ProcessStaleError`` is a ``RecipeLoadError`` subclass) never widens which
     pre-existing ``except RuntimeError``/``except OSError`` handlers catch it.

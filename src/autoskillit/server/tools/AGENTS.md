@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (21 tool modules).
+MCP `@mcp.tool()` handlers registered on import.
 
 The package initializer is docstring-only; importing tool modules performs registration.
 `serve_recipe()` is the only legal caller of `load_and_validate` within `server/tools/`.
@@ -36,19 +36,19 @@ Files with no registration support their folder; files with several registration
 - `_self_revert.py` — Support module: Commit base validation and advisory self-revert scan response handling.
 - `_type_coercion.py` — Support module: Override value coercion and type-validation gate for typed recipe ingredients.
 - `_types.py` — Support module: Server tool response TypedDicts — typed contracts for MCP tool JSON responses.
-- `tools_agents.py` — Groups 3 registrations: Agent listing, exploration, and agent-resource lookup.
-- `tools_audit_artifacts.py` — Groups 3 registrations: Typed, server-owned audit semantic, standalone, and disposition producers.
-- `tools_ci.py` — Groups 2 registrations: MCP tool handlers: set_commit_status (gated), check_repo_merge_state (gated).
-- `tools_ci_merge_queue.py` — Groups 3 registrations: Merge queue MCP tools: toggle_auto_merge, enqueue_pr, wait_for_merge_queue.
-- `tools_ci_watch.py` — Groups 2 registrations: CI watching MCP tools: wait_for_ci and get_ci_status.
-- `tools_clone.py` — Groups 6 registrations: MCP tool handlers: clone_repo, remove_clone, push_to_remote, register_clone_status, batch_cleanup_clones, bootstrap_clone.
-- `tools_config.py` — Groups 2 registrations: Session-scoped configuration MCP tools: configure_fleet, configure_order.
-- `tools_evidence_reader.py` — Groups 3 registrations: Fail-closed tool surface for behavioral evidence readers.
-- `tools_exploration.py` — Groups 4 registrations: Narrow, read-only broker tools for specialized repository explorers.
-- `tools_git.py` — Groups 5 registrations: MCP tool handlers for merge, branch creation, and fix classification.
-- `tools_github.py` — Groups 3 registrations: MCP tool handlers: fetch_github_issue, get_issue_title, report_bug.
-- `tools_issue_labels.py` — Groups 2 registrations: MCP tool handlers: claim_issue, release_issue (GitHub label management).
-- `tools_pr_ops.py` — Groups 4 registrations: MCP tool handlers: PR review reads, receipt verification, authoritative writes, and issue closure.
-- `tools_recipe.py` — Groups 5 registrations: MCP tool handlers: load_recipe, list_recipes, validate_recipe, migrate_recipe.
-- `tools_status.py` — Groups 8 registrations: MCP tool handlers: kitchen_status, get_pipeline_report, get_token_summary, get_timing_summary, read_db.
-- `tools_workspace.py` — Groups 4 registrations: MCP tool handlers for worktree testing, commits, and workspace reset.
+- `tools_agents.py` — Registers agent listing, exploration, and agent-resource lookup.
+- `tools_audit_artifacts.py` — Registers typed, server-owned audit semantic, standalone, and disposition producers.
+- `tools_ci.py` — Registers `set_commit_status` and `check_repo_merge_state`.
+- `tools_ci_merge_queue.py` — Registers `toggle_auto_merge`, `enqueue_pr`, and `wait_for_merge_queue`.
+- `tools_ci_watch.py` — Registers `wait_for_ci` and `get_ci_status`.
+- `tools_clone.py` — Registers clone, removal, push, status, cleanup, and bootstrap operations.
+- `tools_config.py` — Registers session-scoped configuration operations.
+- `tools_evidence_reader.py` — Registers the fail-closed behavioral evidence-reader surface.
+- `tools_exploration.py` — Registers narrow, read-only broker tools for specialized repository explorers.
+- `tools_git.py` — Registers merge, branch-creation, and fix-classification handlers.
+- `tools_github.py` — Registers issue lookup and bug-report handlers.
+- `tools_issue_labels.py` — Registers issue-label management operations.
+- `tools_pr_ops.py` — Registers PR review reads, receipt verification, authoritative writes, and issue closure.
+- `tools_recipe.py` — Registers recipe loading, listing, validation, and migration handlers.
+- `tools_status.py` — Registers kitchen, pipeline, token, timing, and database status handlers.
+- `tools_workspace.py` — Registers worktree testing, commits, and workspace-reset handlers.

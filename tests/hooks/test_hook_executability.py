@@ -73,7 +73,13 @@ def test_hook_command_executable(command: str) -> None:
     version that supplied the file. This test simulates that expansion
     against the source checkout before splitting and executing it.
     """
-    resolved_command = command.replace("${CLAUDE_PLUGIN_ROOT}", str(pkg_root()))
+    # Backslash-escape any literal " characters in the resolved plugin-root
+    # path so shlex.split treats them as part of the path string rather than
+    # as quote delimiters. Necessary for worktrees whose directory names
+    # contain literal " characters (otherwise the parsed path drops them and
+    # subprocess.run reports ENOENT for a path that does exist).
+    plugin_root = str(pkg_root()).replace('"', r"\"")
+    resolved_command = command.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
     parts = shlex.split(resolved_command)
     # Replace python3 with sys.executable for test isolation
     if parts[0] == "python3":

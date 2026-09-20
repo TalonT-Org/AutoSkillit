@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 from autoskillit.core import AnchorAdmission, DiffAnchorAuthority
@@ -13,10 +13,7 @@ from autoskillit.smoke_utils._review_contracts import (
     _is_non_empty_string,
 )
 from autoskillit.smoke_utils.review._constants import _STANDARD_REVIEW_DIMENSIONS
-from autoskillit.smoke_utils.review._validation import (
-    _doc_count_finding_validation_error,
-    _standard_finding_validation_error,
-)
+from autoskillit.smoke_utils.review._validation import _standard_finding_validation_error
 
 
 def _as_int(value: object) -> int:
@@ -26,48 +23,14 @@ def _as_int(value: object) -> int:
 _SEVERITY_RANK: dict[str, int] = {"critical": 0, "warning": 1, "info": 2}
 
 
-def _source_finding_validation_error(
-    *,
-    source: str,
-    finding: object,
-    deletion_only: bool,
-    anchor_authority: DiffAnchorAuthority,
-    allowed_dimensions: Collection[str],
-    review_root: Path,
-) -> str | AnchorAdmission | None:
-    """Select the anchor-aware or review-level validation route for one source."""
-    if source == "doc_count":
-        return _doc_count_finding_validation_error(finding, review_root=review_root)
-    return _standard_finding_validation_error(
-        finding,
-        deletion_only=deletion_only,
-        anchor_authority=anchor_authority,
-        allowed_dimensions=allowed_dimensions,
-        review_root=review_root,
-    )
-
-
 def _has_no_accepted_source_findings(
     *,
     standard: Sequence[Mapping[str, object]],
     deletion: Sequence[Mapping[str, object]],
-    doc_count: Sequence[Mapping[str, object]],
     unpostable: Sequence[Mapping[str, object]],
 ) -> bool:
     """Return whether source validation yielded no usable finding at all."""
-    return not standard and not deletion and not doc_count and not unpostable
-
-
-def _normalize_doc_count_findings(
-    findings: Sequence[Mapping[str, object]],
-    normalize: Callable[..., dict[str, object]],
-) -> tuple[list[dict[str, object]], set[str]]:
-    """Normalize review-level findings without adding a branch to aggregation."""
-    normalized = [
-        normalize(finding, default_source="tests", original_index=index)
-        for index, finding in enumerate(findings)
-    ]
-    return normalized, {str(finding["candidate_id"]) for finding in normalized}
+    return not standard and not deletion and not unpostable
 
 
 def aggregate_combined_review_candidates(
@@ -79,16 +42,14 @@ def aggregate_combined_review_candidates(
     allowed_dimensions: Collection[str] = _STANDARD_REVIEW_DIMENSIONS,
     standard_findings: Sequence[Mapping[str, object]] = (),
     deletion_findings: Sequence[Mapping[str, object]] = (),
-    doc_count_findings: Sequence[Mapping[str, object]] = (),
     snapshot: Mapping[str, str] | None = None,
     review_root: str = "",
 ) -> dict[str, object]:
     """Combine every source, then apply suppression-first deterministic deduplication."""
     dimension_order = tuple(sorted(set(allowed_dimensions)))
-    raw_findings = (*standard_findings, *deletion_findings, *doc_count_findings)
+    raw_findings = (*standard_findings, *deletion_findings)
     validated_standard: list[Mapping[str, object]] = []
     validated_deletion: list[Mapping[str, object]] = []
-    validated_doc_count: list[Mapping[str, object]] = []
     unpostable: list[dict[str, object]] = []
     validation_errors: list[str] = []
     if raw_findings:
@@ -105,11 +66,9 @@ def aggregate_combined_review_candidates(
             for source, findings, deletion_only, destination in (
                 ("standard", standard_findings, False, validated_standard),
                 ("deletion", deletion_findings, True, validated_deletion),
-                ("doc_count", doc_count_findings, False, validated_doc_count),
             ):
                 for index, finding in enumerate(findings):
-                    error = _source_finding_validation_error(
-                        source=source,
+                    error = _standard_finding_validation_error(
                         finding=finding,
                         deletion_only=deletion_only,
                         anchor_authority=anchor_authority,
@@ -133,7 +92,6 @@ def aggregate_combined_review_candidates(
         if _has_no_accepted_source_findings(
             standard=validated_standard,
             deletion=validated_deletion,
-            doc_count=validated_doc_count,
             unpostable=unpostable,
         ):
             return {
@@ -220,11 +178,6 @@ def aggregate_combined_review_candidates(
                 original_index=index,
             )
         )
-    normalized_doc_count, review_level_candidate_ids = _normalize_doc_count_findings(
-        validated_doc_count,
-        normalize,
-    )
-    eligible.extend(normalized_doc_count)
     for index, candidate in enumerate(candidates):
         candidate_id = str(candidate.get("candidate_id", ""))
         if candidate_id not in accepted_dispositions:
@@ -258,14 +211,9 @@ def aggregate_combined_review_candidates(
         else:
             unsuppressed.append(candidate)
 
-    groups: dict[tuple[str, int, str], list[Mapping[str, object]]] = {}
+    groups: dict[tuple[str, int], list[Mapping[str, object]]] = {}
     for unsuppressed_candidate in unsuppressed:
-        candidate_id = str(unsuppressed_candidate["candidate_id"])
-        key = (
-            str(unsuppressed_candidate["file"]),
-            _as_int(unsuppressed_candidate["line"]),
-            ("review_level" if candidate_id in review_level_candidate_ids else "diff_anchored"),
-        )
+        key = (str(unsuppressed_candidate["file"]), _as_int(unsuppressed_candidate["line"]))
         groups.setdefault(key, []).append(unsuppressed_candidate)
 
     survivors: list[Mapping[str, object]] = []
@@ -302,16 +250,10 @@ def aggregate_combined_review_candidates(
                 }
             )
     survivors.sort(key=rank)
-    review_level_findings = [
-        finding
-        for finding in survivors
-        if str(finding["candidate_id"]) in review_level_candidate_ids
-    ]
     return {
         "state": "degraded" if validation_errors else "complete",
         "survivors": survivors,
         "unpostable": unpostable,
-        **({"review_level_findings": review_level_findings} if review_level_findings else {}),
         "aggregation_records": aggregation_records,
         "validation_errors": validation_errors,
     }

@@ -1,6 +1,6 @@
 """execution/runtime/ — launch, headless cmds, clone guard, test runner, DB reader.
 
-Re-exports the full public surface of the five moved modules.
+Re-exports the full public surface of the moved modules.
 """
 
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd

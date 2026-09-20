@@ -201,7 +201,7 @@ def _degraded_obligation() -> PublicationObligation:
 def clear_obligation(home: Path, *, expected: PublicationObligation) -> bool:
     """Compare-and-delete an obligation after verified publication. Never raises.
 
-    Success-only: called from exactly two named sites — the update
+    Success-only: called from the named update
     transaction's ``RESULT_FINALIZATION`` (child reported COMPLETED and
     post-update verification passed) and the shared CLI repair helper
     (``attempt_obligation_repair()``) after a verified repair. No other code

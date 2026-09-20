@@ -1,6 +1,6 @@
 # Explorer Agents
 
-AutoSkillit provides two specialized, terminal Codex exploration roles for an L1 exploration
+AutoSkillit provides specialized, terminal Codex exploration roles for an L1 exploration
 parent:
 
 - `semantic-code-navigator` investigates semantic and structural code relationships.
@@ -53,28 +53,28 @@ post-exploration analysis, diagram construction, output path, and parent-owned s
 Its ordered vector inventory, review rationale, and relationship classes are test-frozen against the
 exploration sidecar.
 
-Architecture orchestration is pinned to Codex only at the three reviewed recipe-step authorities:
+Architecture orchestration is pinned to Codex only at the reviewed recipe-step authorities:
 `implementation.run_arch_lenses`, `implementation-groups.run_arch_lenses`, and
 `remediation.run_arch_lenses`. The pins use the `recipe_step` tier, so unrelated steps and recipes
 continue to inherit their configured backend while existing planner, investigate, and scope pins
 remain intact.
 
-Phase F applies the reviewed contract to the eighteen experiment lenses registered by
-`make-experiment-diag`. Each lens has one shared `missing-context-fields` Step-0 vector and five
+Phase F applies the reviewed contract to the experiment lenses registered by
+`make-experiment-diag`. Each lens has a shared `missing-context-fields` Step-0 vector and
 lens-specific Step-1 vectors. Step 0 may investigate only fields that remain absent after parent
 argument parsing: complete supplied fields are never rediscovered or overwritten, and absent or
 unrelated evidence is reported explicitly without widening scope, inferring scientific meaning,
-or executing the target. Across the family, all 108 vectors use `profile: auto`, while the ninety
-authored Step-1 vectors retain their exact ordered roles and evidence relationships.
+or executing the target. The sidecars retain the ordered roles and evidence relationships for
+the vectors that use `profile: auto`.
 
 Experiment-lens orchestration is pinned to Codex only for
 `research.run_experiment_lenses` and `research-review.run_experiment_lenses`, again at the
 `recipe_step` tier. Lens analysis, scientific judgment, optional visualization, temp directories,
 diagram paths, and final synthesis remain parent-owned.
 
-Phase G reviews all twelve packaged visualization lenses. The shared selector currently reaches
-exactly seven: `always-on`, `temporal`, `multi-compare`, `chart-select`, `uncertainty`,
-`figure-table`, and `methodology-norms`. The other five remain packaged with their reviewed
+Phase G reviews the packaged visualization lenses. The shared selector currently reaches
+`always-on`, `temporal`, `multi-compare`, `chart-select`, `uncertainty`,
+`figure-table`, and `methodology-norms`. The remaining lenses stay packaged with their reviewed
 semantics but are not silently added to either recipe selector. Supplied caller context and
 external or scientific judgments remain parent-owned; only bounded repository evidence vectors
 receive native dispatch. Figure-spec blocks, the always-on `yaml:spec-index`, temp directories,

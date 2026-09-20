@@ -22,6 +22,7 @@ from autoskillit.fleet import (
     reap_stale_dispatches_async,
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
+from tests.conftest import production_interpreter_env
 from tests.fleet._reaper_test_support import make_running_state
 
 pytestmark = [
@@ -74,7 +75,8 @@ def _owned_sleeping_child(
     marker = tmp_path / f"{name}.sigterm"
     ready = tmp_path / f"{name}.ready"
     process = subprocess.Popen(
-        [sys.executable, "-c", _CHILD_CODE, os.fspath(marker), os.fspath(ready)]
+        [sys.executable, "-c", _CHILD_CODE, os.fspath(marker), os.fspath(ready)],
+        env=production_interpreter_env(),
     )
     try:
         _wait_for_file(ready, process)

@@ -337,6 +337,7 @@
         "resolve_queue_merge_conflicts",
         "re_push_queue_fix",
         "classify_push_failure",
+        "check_dequeue_retry_loop",
         "wait_dequeue_retry",
         "ci_watch_post_queue_fix"
       ]
@@ -2828,11 +2829,36 @@
       "on_result": [
         {
           "when": "${{ context.push_error_type }} == queued_branch",
-          "route": "wait_dequeue_retry"
+          "route": "check_dequeue_retry_loop"
         },
         {
           "route": "release_issue_failure"
         }
+      ]
+    },
+    "check_dequeue_retry_loop": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_dequeue_retry_loop",
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.dequeue_retry_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "dequeue_retry_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_unconfirmed"
+        },
+        {
+          "route": "wait_dequeue_retry"
+        }
+      ],
+      "on_failure": "register_clone_unconfirmed",
+      "optional_context_refs": [
+        "dequeue_retry_count"
       ]
     },
     "wait_dequeue_retry": {

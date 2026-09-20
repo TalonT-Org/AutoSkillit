@@ -569,11 +569,36 @@
       "on_result": [
         {
           "when": "${{ context.push_error_type }} == queued_branch",
-          "route": "wait_dequeue_retry"
+          "route": "check_dequeue_retry_loop"
         },
         {
           "route": "register_clone_failure"
         }
+      ]
+    },
+    "check_dequeue_retry_loop": {
+      "tool": "run_python",
+      "with": {
+        "step_name": "check_dequeue_retry_loop",
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.dequeue_retry_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "dequeue_retry_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "wait_dequeue_retry"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "optional_context_refs": [
+        "dequeue_retry_count"
       ]
     },
     "wait_dequeue_retry": {

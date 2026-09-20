@@ -228,12 +228,10 @@ for _p in _ALL_RECIPE_PATHS:
     ids=lambda p: p.stem,
 )
 def test_no_unbounded_cycle_findings_in_bundled_recipes(recipe_yaml: Path) -> None:
-    """Every bundled recipe must have zero unbounded-cycle ERROR findings."""
+    """Every bundled recipe must have zero unbounded-cycle findings."""
     recipe = load_recipe(recipe_yaml)
     findings = run_semantic_rules(recipe)
-    cycle_findings = [
-        f for f in findings if f.rule == "unbounded-cycle" and f.severity == Severity.ERROR
-    ]
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     assert cycle_findings == [], (
         f"{recipe_yaml.stem}: "
         f"{[f'{f.severity.name} {f.step_name}: {f.message[:80]}' for f in cycle_findings]}"

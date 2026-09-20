@@ -225,7 +225,7 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         rule_name="unbounded-cycle",
                         step_name=node,
                         message=message,
-                        severity=Severity.WARNING if has_failure_exit else Severity.ERROR,
+                        severity=Severity.ERROR,
                     )
                 )
         rec_stack.discard(node)

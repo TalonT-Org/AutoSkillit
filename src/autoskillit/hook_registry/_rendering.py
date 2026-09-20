@@ -58,7 +58,14 @@ def _build_hook_command(
     else:
         if hooks_dir is None:
             raise ValueError("hooks_dir is required when relocatable=False")
-        command = f"python3 -B {hooks_dir / '_dispatch.py'} {logical_name}"
+        # Quote the dispatcher path so that paths containing shell-special
+        # characters (e.g. a worktree directory whose name includes literal
+        # " quotes) round-trip cleanly through shlex.split when downstream
+        # consumers — find_broken_hook_scripts, _dispatch.py, etc. — parse
+        # the command. shlex.quote emits single-quoted form, which preserves
+        # the literal " inside.
+        quoted_path = shlex.quote(str(hooks_dir / "_dispatch.py"))
+        command = f"python3 -B {quoted_path} {shlex.quote(logical_name)}"
     cmd: dict = {
         "type": "command",
         "command": command,

@@ -761,16 +761,8 @@ def normalize_dispatch_token_usage(
 
     def measure(*keys: str) -> SerializedTokenMeasure:
         for key in keys:
-            if key not in raw:
-                continue
-            value = raw[key]
-            if isinstance(value, dict):
-                return TokenMeasure.from_dict(value).to_dict()
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                if legacy and value == 0:
-                    return TokenMeasure.unknown().to_dict()
-                return TokenMeasure.observed(value).to_dict()
-            return TokenMeasure.unknown().to_dict()
+            if key in raw:
+                return TokenMeasure.measure_from_raw_to_serialized(raw[key], legacy=legacy)
         return TokenMeasure.unknown().to_dict()
 
     return {

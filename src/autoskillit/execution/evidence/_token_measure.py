@@ -17,27 +17,7 @@ logger = get_logger(__name__)
 
 def serialized_token_measure(raw: object) -> SerializedTokenMeasure:
     """Preserve a structured measure or classify an in-process numeric observation."""
-    if isinstance(raw, dict):
-        try:
-            return TokenMeasure.from_dict(raw).to_dict()
-        except ValueError as exc:
-            logger.debug(
-                "token_measure_downgrade_to_unknown",
-                extra={
-                    "raw_kind": type(raw).__name__,
-                    "raw_keys": sorted(raw.keys()) if isinstance(raw, Mapping) else None,
-                    "error": str(exc),
-                },
-            )
-    if isinstance(raw, int) and not isinstance(raw, bool):
-        if raw < 0:
-            logger.debug(
-                "token_measure_negative_value_downgrade",
-                extra={"raw_value": raw},
-            )
-        else:
-            return TokenMeasure.observed(raw).to_dict()
-    return TokenMeasure.unknown().to_dict()
+    return TokenMeasure.measure_from_raw_to_serialized(raw)
 
 
 def build_token_usage_record(

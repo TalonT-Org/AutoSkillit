@@ -127,6 +127,13 @@ class TokenMeasure:
             return cls.observed(raw)
         return cls.unknown()
 
+    @classmethod
+    def measure_from_raw_to_serialized(
+        cls, raw: object, *, legacy: bool = False
+    ) -> SerializedTokenMeasure:
+        """Decode through the canonical helper and serialize for durable storage."""
+        return cls.measure_from_raw(raw, legacy=legacy).to_dict()
+
     @staticmethod
     def combine_or_unknown(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
         """Combine two measures or downgrade to unknown on incompatible states."""

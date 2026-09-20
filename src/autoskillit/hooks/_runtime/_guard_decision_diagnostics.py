@@ -125,5 +125,5 @@ def record_guard_decision(
         path = _decision_path(data)
         with binding_lock(path):
             atomic_write(path, _retained_records(path, encoded).decode("utf-8"))
-    except Exception:
+    except (OSError, TimeoutError, TypeError, ValueError):
         return

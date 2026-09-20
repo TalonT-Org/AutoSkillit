@@ -32,7 +32,7 @@ def _record_paths_below(root: Path) -> Iterator[tuple[Path, Path]]:
     if not root.is_dir():
         return
     try:
-        records = sorted(root.rglob(f"{_PACKAGE_NAME}-*.dist-info/{_RECORD_NAME}"))
+        records = sorted(root.glob(f"**/{_PACKAGE_NAME}-*.dist-info/{_RECORD_NAME}"))
     except OSError:
         return
     for record_path in records:
@@ -134,7 +134,7 @@ def _record_hash(value: str) -> tuple[str, bytes] | None:
 
 def _regular_files(root: Path) -> Iterator[Path]:
     try:
-        paths = root.rglob("*")
+        paths = root.glob("**/*")
         for path in paths:
             try:
                 if stat.S_ISREG(path.stat(follow_symlinks=False).st_mode):

@@ -423,6 +423,13 @@ def main() -> None:
         sys.exit(0)
 
     if not isinstance(data, dict):
+        if (
+            is_headless_session()
+            and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES")
+            and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX")
+        ):
+            _record(data, activation="headless", scope="none", decision="allow", reason="no_scope")
+            sys.exit(0)
         _deny(
             data,
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input).",

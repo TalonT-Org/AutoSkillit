@@ -177,6 +177,14 @@ def write_generated_hooks_json(plugin_root: Path) -> None:
     runtime_dir = hooks_dir / "_runtime"
     runtime_dir.mkdir(exist_ok=True)
     atomic_write(runtime_dir / "_hook_scope_table.py", render_hook_scope_table())
+    diagnostics_source = (
+        Path(__file__).parents[2] / "hooks" / "_runtime" / "_guard_decision_diagnostics.py"
+    )
+    if diagnostics_source.is_file():
+        atomic_write(
+            runtime_dir / diagnostics_source.name,
+            diagnostics_source.read_text(encoding="utf-8"),
+        )
 
 
 def _manifest_skill_entry(

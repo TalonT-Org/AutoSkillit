@@ -32,6 +32,8 @@ from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
     render_provenance_prefix,
 )
 
+INSTALLATION_INTEGRITY_DENY_TRIGGER = "protected AutoSkillit installation"
+
 
 def _deny(reason_code: str, detail: str) -> None:
     prefix = render_provenance_prefix(
@@ -103,7 +105,15 @@ def _matches_protected_inode(path: str) -> bool:
     for root in _known_roots():
         if not root.exists():
             continue
-        entries = (root,) if root.is_file() else root.rglob("*")
+        entries = (
+            (root,)
+            if root.is_file()
+            else (
+                Path(base) / name
+                for base, directories, files in os.walk(root)
+                for name in (*directories, *files)
+            )
+        )
         for entry in entries:
             try:
                 protected = entry.stat()
@@ -191,7 +201,8 @@ def main() -> None:
         _deny("unresolved-write-target", "Write target could not be resolved safely.")
     if any(_is_protected_target(path) for path in targets):
         _deny(
-            "protected-installation-target", "Writing an AutoSkillit installation is prohibited."
+            "protected-installation-target",
+            f"Writing a {INSTALLATION_INTEGRITY_DENY_TRIGGER} is prohibited.",
         )
 
 

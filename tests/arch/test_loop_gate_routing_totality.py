@@ -21,14 +21,15 @@ _LOOP_SITES = {
         "check_ci_post_queue_loop check_ci_rebase_loop check_ci_timed_out_loop "
         "check_dequeue_retry_loop check_dirty_main_retry check_flake_loop check_merge_fix_loop "
         "check_merge_rebase_loop check_merge_test_fix_loop check_ref_push_loop "
-        "check_stall_loop check_test_fix_loop"
+        "check_replan_iteration check_stall_loop check_test_fix_loop"
     ),
     "implementation-groups": (
         "check_active_trigger_loop check_audit_integrity_retry check_ci_loop "
         "check_ci_post_queue_loop check_ci_rebase_loop check_ci_timed_out_loop "
-        "check_dequeue_retry_loop check_dirty_main_retry check_flake_loop check_merge_fix_loop "
+        "check_dequeue_retry_loop check_dirty_main_retry check_flake_loop check_group_plan_iteration "
+        "check_merge_fix_loop "
         "check_merge_rebase_loop check_merge_test_fix_loop check_next_iteration "
-        "check_ref_push_loop check_stall_loop check_test_fix_loop"
+        "check_ref_push_loop check_replan_iteration check_stall_loop check_test_fix_loop"
     ),
     "merge-prs": (
         "check_audit_integrity_retry check_ci_post_queue_loop check_ci_watch_pr_loop "
@@ -41,7 +42,8 @@ _LOOP_SITES = {
         "check_ci_post_queue_loop check_ci_rebase_loop check_ci_timed_out_loop "
         "check_dequeue_retry_loop check_dirty_main_retry check_flake_loop check_merge_fix_loop "
         "check_merge_rebase_loop check_merge_test_fix_loop check_ref_push_loop "
-        "check_ref_push_loop_pre_remediation check_stall_loop check_test_fix_loop"
+        "check_ref_push_loop_pre_remediation check_replan_iteration check_stall_loop "
+        "check_test_fix_loop"
     ),
     "research": (
         "check_audit_integrity_retry check_design_review_loop "

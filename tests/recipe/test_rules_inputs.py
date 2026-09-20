@@ -490,8 +490,6 @@ def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
         "check_ref_push_loop_pre_remediation",
         "ref_push_pre_remediation",
         "remediate",
-        "make_plan",
-        "salvage_plan",
         "release_audit_remediation_stuck",
         "stop_audit_remediation_stuck",
         "await_audit_decision",

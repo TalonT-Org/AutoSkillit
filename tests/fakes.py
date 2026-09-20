@@ -1196,11 +1196,6 @@ class InMemoryRecipeRepository(RecipeRepository):
         return result
 
 
-# ---------------------------------------------------------------------------
-# GitHubFetcher fake
-# ---------------------------------------------------------------------------
-
-
 class FakeGitHubFetcher(GitHubFetcher):
     """In-memory GitHub issue and label service for tool tests."""
 

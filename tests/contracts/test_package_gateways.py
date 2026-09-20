@@ -623,6 +623,13 @@ def test_gateway_reexports_pre_move_names(
                     "read_boot_id",
                     "read_starttime_ticks",
                     "start_linux_tracing",
+                    "TokenObservation",
+                    "aggregate_token_observations",
+                    "has_attribute",
+                    "project_token_observations",
+                    "record_attributes",
+                    "unique_bool_attribute",
+                    "unique_string_attribute",
                 }
             ),
         ),

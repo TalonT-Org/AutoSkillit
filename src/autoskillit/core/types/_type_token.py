@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
+from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 from ._type_enums import TokenMeasureState
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
@@ -241,7 +242,7 @@ class CanonicalTokenUsage:
     @classmethod
     def from_anthropic_dict(cls, d: dict[str, Any]) -> CanonicalTokenUsage:
         return cls(
-            backend="claude-code",
+            backend=AGENT_BACKEND_CLAUDE_CODE,
             provider_used="anthropic",
             input_tokens=cls._observed_or_unknown(d, "input_tokens"),
             output_tokens=cls._observed_or_unknown(d, "output_tokens"),

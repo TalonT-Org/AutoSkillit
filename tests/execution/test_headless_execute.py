@@ -286,9 +286,9 @@ async def test_otlp_tokens_captured_before_runner_crash_reach_terminal_artifact(
 
     minimal_ctx.runner = crashing_runner  # type: ignore[assignment]
     flushed: list[dict[str, object]] = []
-    import autoskillit.execution.evidence.session_log as _sl_mod
+    import autoskillit.execution as execution
 
-    monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
+    monkeypatch.setattr(execution, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
 
     result = await _execute_claude_headless(
         lambda _binding, extras: ClaudeHeadlessCmd(

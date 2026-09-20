@@ -3636,8 +3636,6 @@ callable_contracts:
     inputs:
     - name: current_pr_number
       type: str
-    - name: error
-      type: str
       required: true
       nullable: false
     - name: pr_order_file
@@ -3645,6 +3643,8 @@ callable_contracts:
       required: true
     outputs:
     - name: current_pr_number
+      type: str
+    - name: error
       type: str
   autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
     inputs:

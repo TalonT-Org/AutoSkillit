@@ -88,10 +88,37 @@ def test_resume_returns_none_when_dispatch_has_no_lineage_ref(tmp_path: Path) ->
 
 
 def test_resume_returns_first_matching_dispatch(tmp_path: Path) -> None:
+    """When multiple dispatches share a name, the first one with a lineage_ref wins."""
+    from autoskillit.core import ManagedHeadlessSessionLineageRef
+    from autoskillit.fleet.campaign_state.state import (
+        DispatchRecord,
+        write_initial_state,
+    )
     from autoskillit.fleet.dispatch._lineage import resume_managed_join_parent_id
 
     state_path = _state_path(tmp_path)
-    _seed_dispatch(state_path, name="phase-one", launch_id="a" * 32)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    write_initial_state(
+        state_path,
+        "cid",
+        "test-campaign",
+        "/m.yaml",
+        [
+            DispatchRecord(name="phase-one", campaign_id="cid", caller_session_id="caller"),
+            DispatchRecord(
+                name="phase-one",
+                campaign_id="cid",
+                caller_session_id="caller",
+                managed_lineage_ref=ManagedHeadlessSessionLineageRef(
+                    launch_id="a" * 32,
+                    lineage_digest="d" * 64,
+                    lineage_anchor=str(state_path.resolve()),
+                    anchor_device=1,
+                    anchor_inode=2,
+                ),
+            ),
+        ],
+    )
 
     assert resume_managed_join_parent_id(state_path, "phase-one") == "a" * 32
 

@@ -77,6 +77,13 @@ def _seed_projection(home: Path, skill_name: str) -> None:
     )
 
 
+def _isolated_state_dir(tmp_path: Path) -> Path:
+    """Return a project root whose ``.autoskillit`` directory is unique to this test."""
+    state_dir = tmp_path / ".autoskillit"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
 def test_write_managed_parent_binding_creates_binding_with_route_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -91,11 +98,12 @@ def test_write_managed_parent_binding_creates_binding_with_route_identity(
         _write_managed_parent_binding,
     )
 
-    home = tmp_path / "home"
+    project_root = _isolated_state_dir(tmp_path)
+    home = project_root / "home"
     _seed_projection(home, skill_name="my-skill")
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
 
-    binding_path = resolve_binding_path(str(tmp_path), "parent-1")
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
     _write_managed_parent_binding(
         binding_path=binding_path,
         binding_session_id="parent-1",
@@ -122,6 +130,7 @@ def test_write_managed_parent_binding_merges_into_existing_binding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import CODEX_HOME_ENV_VAR
+    from autoskillit.execution.backends._codex_hooks import managed_codex_guard_set
     from autoskillit.hooks._session_binding import (
         read_binding,
         resolve_binding_path,
@@ -130,11 +139,12 @@ def test_write_managed_parent_binding_merges_into_existing_binding(
         _write_managed_parent_binding,
     )
 
-    home = tmp_path / "home"
+    project_root = _isolated_state_dir(tmp_path)
+    home = project_root / "home"
     _seed_projection(home, skill_name="my-skill")
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
 
-    binding_path = resolve_binding_path(str(tmp_path), "parent-1")
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
     _write_managed_parent_binding(
         binding_path=binding_path,
         binding_session_id="parent-1",
@@ -154,6 +164,62 @@ def test_write_managed_parent_binding_merges_into_existing_binding(
     assert binding is not None
     assert binding.managed_route == "interactive-parent"
     assert binding.managed_parent_id == "parent-1"
+    assert binding.managed_leaf_id == ""
+    assert binding.managed_guard_set == tuple(
+        sorted(managed_codex_guard_set("interactive-parent"))
+    )
+    assert binding.managed_config_digest == "c" * 64
+
+
+def test_write_managed_parent_binding_rejects_route_mismatch_on_merge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-existing binding with a mismatched managed_route must surface SkillContractError."""
+    from autoskillit.core import CODEX_HOME_ENV_VAR, SkillContractError
+    from autoskillit.execution.backends._codex_hooks import managed_codex_guard_set
+    from autoskillit.hooks._session_binding import (
+        SESSION_BINDING_SCHEMA_VERSION,
+        SessionBinding,
+        resolve_binding_path,
+        write_binding,
+    )
+    from autoskillit.server._managed_join_attestation import (
+        _write_managed_parent_binding,
+    )
+
+    project_root = _isolated_state_dir(tmp_path)
+    home = project_root / "home"
+    _seed_projection(home, skill_name="my-skill")
+    monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
+
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
+    # Seed a binding with a *different* managed_route than the attestation would produce.
+    write_binding(
+        binding_path,
+        SessionBinding(
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
+            session_id="parent-1",
+            join_required=True,
+            binding_valid=True,
+            artifact_digest="d" * 64,
+            loaded_skills=(),
+            managed_parent_id="parent-1",
+            managed_leaf_id="",
+            managed_route="leaf",  # deliberately mismatched
+            managed_guard_set=tuple(sorted(managed_codex_guard_set("leaf"))),
+            managed_config_digest="c" * 64,
+        ),
+    )
+
+    with pytest.raises(SkillContractError, match="does not match the managed parent route"):
+        _write_managed_parent_binding(
+            binding_path=binding_path,
+            binding_session_id="parent-1",
+            normalized_skill_name="my-skill",
+            backend=_StubBackend(),
+            attestation=_sample_attestation("parent-1"),
+        )
 
 
 def test_write_managed_parent_binding_rejects_backend_without_projection(
@@ -166,8 +232,9 @@ def test_write_managed_parent_binding_rejects_backend_without_projection(
         _write_managed_parent_binding,
     )
 
-    monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(tmp_path / "home"))
-    binding_path = resolve_binding_path(str(tmp_path), "parent-1")
+    project_root = _isolated_state_dir(tmp_path)
+    monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(project_root / "home"))
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
 
     with pytest.raises(SkillContractError, match="cannot locate its projection"):
         _write_managed_parent_binding(
@@ -189,8 +256,9 @@ def test_write_managed_parent_binding_requires_codex_home(
         _write_managed_parent_binding,
     )
 
+    project_root = _isolated_state_dir(tmp_path)
     monkeypatch.delenv(CODEX_HOME_ENV_VAR, raising=False)
-    binding_path = resolve_binding_path(str(tmp_path), "parent-1")
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
 
     with pytest.raises(SkillContractError, match="CODEX_HOME"):
         _write_managed_parent_binding(
@@ -212,9 +280,13 @@ def test_write_managed_parent_binding_rejects_skill_not_projected(
         _write_managed_parent_binding,
     )
 
-    home = tmp_path / "home"
+    project_root = _isolated_state_dir(tmp_path)
+    home = project_root / "home"
     home.mkdir()
-    (home / ".autoskillit-projection.json").write_text(
+    catalog_dir = home / "catalog"
+    catalog_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = catalog_dir.parent / f".{catalog_dir.name}.autoskillit-projection.json"
+    manifest_path.write_text(
         json.dumps(
             {
                 "schema_version": 2,
@@ -227,7 +299,7 @@ def test_write_managed_parent_binding_rejects_skill_not_projected(
     )
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
 
-    binding_path = resolve_binding_path(str(tmp_path), "parent-1")
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
 
     with pytest.raises(SkillContractError, match="not projected"):
         _write_managed_parent_binding(

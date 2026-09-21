@@ -44,16 +44,24 @@ def _sample_attestation(parent_session_id: str = "abc123"):
     return SemanticAdaptationContext(managed_join_attestation=attestation)
 
 
+def _isolated_state_root(tmp_path: Path) -> Path:
+    """Return a project root whose ``.autoskillit`` directory is unique per test."""
+    (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
 def test_path_for_normalizes_session_id_and_lives_under_channel_dir(
     tmp_path: Path,
 ) -> None:
     from autoskillit.hooks._session_binding import resolve_channel_dir
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     record_path = store.path_for("abc123")
+    expected_path = resolve_channel_dir(project_root) / "managed_join_attestation_abc123.json"
 
-    assert record_path == resolve_channel_dir(tmp_path) / "managed_join_attestation_abc123.json"
+    assert record_path == expected_path
 
 
 def test_write_then_load_round_trips_attestation(tmp_path: Path) -> None:
@@ -62,7 +70,8 @@ def test_write_then_load_round_trips_attestation(tmp_path: Path) -> None:
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
 
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
@@ -77,7 +86,8 @@ def test_write_then_load_round_trips_attestation(tmp_path: Path) -> None:
 def test_load_returns_none_when_record_is_absent(tmp_path: Path) -> None:
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
 
     assert store.load("missing") is None
 
@@ -88,7 +98,8 @@ def test_load_returns_none_when_parent_id_mismatches(tmp_path: Path) -> None:
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
 
@@ -101,7 +112,8 @@ def test_load_returns_none_when_route_unknown(tmp_path: Path) -> None:
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
 
@@ -119,7 +131,8 @@ def test_load_returns_none_when_record_corrupt(tmp_path: Path) -> None:
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
     record_path = store.path_for("abc123")
@@ -134,7 +147,8 @@ def test_load_returns_none_when_attestation_payload_missing(tmp_path: Path) -> N
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
     record_path = store.path_for("abc123")
@@ -151,7 +165,8 @@ def test_load_returns_none_when_payload_is_not_object(tmp_path: Path) -> None:
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     context = _sample_attestation("abc123")
     store.write(context, route=managed_codex_route_for_launch_context("interactive"))
     record_path = store.path_for("abc123")
@@ -164,41 +179,70 @@ def test_write_raises_when_attestation_is_missing(tmp_path: Path) -> None:
     from autoskillit.core import SemanticAdaptationContext
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
 
     with pytest.raises(ValueError, match="managed join record requires an attestation"):
         store.write(SemanticAdaptationContext(), route="interactive-parent")
 
 
-def test_concurrent_writers_serialize_through_flock(tmp_path: Path) -> None:
-    """Two writers racing for the same record both succeed; the file is consistent."""
+def test_concurrent_writers_for_same_parent_id_one_loses_to_lock_nb(
+    tmp_path: Path,
+) -> None:
+    """Two writers racing for the same record: LOCK_NB ensures one acquires, the other raises."""
     from autoskillit.execution.backends._codex_hooks import (
         managed_codex_route_for_launch_context,
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     barrier = threading.Barrier(2)
-    errors: list[BaseException] = []
+    outcomes: list[BaseException | None] = [None, None]
 
-    def _worker(parent_id: str) -> None:
+    def _worker(slot: int) -> None:
         try:
             barrier.wait(timeout=5)
-            context = _sample_attestation(parent_id)
+            context = _sample_attestation("shared-parent")
             store.write(context, route=managed_codex_route_for_launch_context("interactive"))
-        except BaseException as exc:  # pragma: no cover - propagates to assert
-            errors.append(exc)
+        except BaseException as exc:  # pragma: no cover - propagates via outcomes
+            outcomes[slot] = exc
 
-    t1 = threading.Thread(target=_worker, args=("writer-1",))
-    t2 = threading.Thread(target=_worker, args=("writer-2",))
+    t1 = threading.Thread(target=_worker, args=(0,))
+    t2 = threading.Thread(target=_worker, args=(1,))
     t1.start()
     t2.start()
     t1.join(timeout=10)
     t2.join(timeout=10)
 
-    assert errors == []
-    assert store.load("writer-1") is not None
-    assert store.load("writer-2") is not None
+    errors = [item for item in outcomes if item is not None]
+    successes = [item for item in outcomes if item is None]
+    assert len(successes) >= 1, "at least one writer must acquire the LOCK_EX"
+    assert len(errors) >= 1, "the contended writer must surface LOCK_NB contention"
+    assert all(isinstance(item, BlockingIOError) for item in errors), (
+        f"expected BlockingIOError from LOCK_NB, got {[type(item).__name__ for item in errors]}"
+    )
+    assert store.load("shared-parent") is not None
+
+
+def test_load_returns_none_when_schema_version_mismatches(tmp_path: Path) -> None:
+    """A persisted record with a stale schema_version is rejected at the load boundary."""
+    from autoskillit.execution.backends._codex_hooks import (
+        managed_codex_route_for_launch_context,
+    )
+    from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
+
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
+    context = _sample_attestation("abc123")
+    store.write(context, route=managed_codex_route_for_launch_context("interactive"))
+
+    record_path = store.path_for("abc123")
+    raw = json.loads(record_path.read_text(encoding="utf-8"))
+    raw["schema_version"] = 99
+    record_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert store.load("abc123") is None
 
 
 def test_write_then_overwrite_records_latest_attestation(tmp_path: Path) -> None:
@@ -207,7 +251,8 @@ def test_write_then_overwrite_records_latest_attestation(tmp_path: Path) -> None
     )
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
     store.write(
         _sample_attestation("abc123"),
         route=managed_codex_route_for_launch_context("interactive"),
@@ -227,7 +272,8 @@ def test_write_then_overwrite_records_latest_attestation(tmp_path: Path) -> None
 def test_path_for_rejects_invalid_session_id(tmp_path: Path) -> None:
     from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
 
-    store = ManagedJoinRecordStore(tmp_path)
+    project_root = _isolated_state_root(tmp_path)
+    store = ManagedJoinRecordStore(project_root)
 
     with pytest.raises(ValueError):
         store.path_for("invalid session!")

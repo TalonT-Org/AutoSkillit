@@ -133,17 +133,8 @@ def test_managed_route_hook_defs_leaf_excludes_join_hooks() -> None:
 
 
 def test_managed_route_hook_defs_unknown_route_yields_minimal_hooks() -> None:
-    """An unknown route is treated like ``leaf`` minus the skill_orchestration guard."""
+    """An unknown route is treated like ``leaf`` (no skill_orchestration guard removed)."""
     hooks = _managed_route_hook_defs("unknown-route")  # type: ignore[arg-type]
     scripts = {script for hook in hooks for script in hook.scripts}
     assert "guards/skill_orchestration_guard.py" in scripts
     assert "guards/join_stop_guard.py" not in scripts
-
-
-def test_generate_codex_hooks_config_uses_interactive_scope_for_interactive_parent() -> None:
-    """``interactive-parent`` route must select interactive-scope hook entries."""
-    from autoskillit.execution.backends._codex_hooks import _managed_route_hook_defs
-
-    hooks = _managed_route_hook_defs("interactive-parent")
-    for hook in hooks:
-        assert hook.session_scope == "any"

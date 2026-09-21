@@ -10,59 +10,33 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
 @pytest.fixture
-def settings_module(monkeypatch: pytest.MonkeyPatch):
-    """Reload the stdlib-only settings bridge under controlled env state."""
+def resolve_binding_session_id():
+    """Return the live ``resolve_binding_session_id`` function from the settings bridge."""
     module = importlib.import_module("autoskillit.hooks._runtime._hook_settings")
-    importlib.reload(module)
-    yield module
-    importlib.reload(module)
+    return module.resolve_binding_session_id
 
 
-def test_resolve_binding_session_id_prefers_env_var(settings_module, monkeypatch) -> None:
+def test_prefers_env_var(resolve_binding_session_id, monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", "env-parent-1")
 
-    assert settings_module.resolve_binding_session_id({"session_id": "payload-parent-2"}) == (
-        "env-parent-1"
-    )
+    assert resolve_binding_session_id({"session_id": "payload-parent-2"}) == "env-parent-1"
 
 
-def test_resolve_binding_session_id_falls_back_to_payload_session_id(
-    settings_module,
-) -> None:
-    assert settings_module.resolve_binding_session_id({"session_id": "payload-parent-1"}) == (
-        "payload-parent-1"
-    )
+def test_falls_back_to_payload_session_id(resolve_binding_session_id) -> None:
+    assert resolve_binding_session_id({"session_id": "payload-parent-1"}) == "payload-parent-1"
 
 
-def test_resolve_binding_session_id_returns_empty_when_unset(settings_module) -> None:
-    assert settings_module.resolve_binding_session_id({}) == ""
-    assert settings_module.resolve_binding_session_id({"session_id": None}) == ""
+def test_returns_empty_when_unset(resolve_binding_session_id) -> None:
+    assert resolve_binding_session_id({}) == ""
+    assert resolve_binding_session_id({"session_id": None}) == ""
 
 
-def test_resolve_binding_session_id_ignores_non_string_session_id(settings_module) -> None:
-    assert settings_module.resolve_binding_session_id({"session_id": 123}) == ""
-    assert settings_module.resolve_binding_session_id({"session_id": ["array"]}) == ""
+def test_ignores_non_string_session_id(resolve_binding_session_id) -> None:
+    assert resolve_binding_session_id({"session_id": 123}) == ""
+    assert resolve_binding_session_id({"session_id": ["array"]}) == ""
 
 
-def test_resolve_binding_session_id_treats_empty_env_as_unset(
-    settings_module,
-    monkeypatch,
-) -> None:
+def test_treats_empty_env_as_unset(resolve_binding_session_id, monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", "")
 
-    assert settings_module.resolve_binding_session_id({"session_id": "payload-id"}) == (
-        "payload-id"
-    )
-
-
-def test_resolve_binding_session_id_env_takes_priority_over_payload_session_id(
-    settings_module,
-    monkeypatch,
-) -> None:
-    """Env-managed identity always wins over the payload's session_id field."""
-    monkeypatch.setenv("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", "managed-parent")
-
-    assert (
-        settings_module.resolve_binding_session_id({"session_id": "claude-original-session"})
-        == "managed-parent"
-    )
+    assert resolve_binding_session_id({"session_id": "payload-id"}) == "payload-id"

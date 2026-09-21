@@ -118,6 +118,37 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) 
     assert not (state_root / ".autoskillit").exists()
 
 
+def test_prelaunch_issuance_refuses_malformed_catalog(tmp_path: Path) -> None:
+    """A catalog missing its ``models`` list surfaces a clear ``ManagedJoinIssuanceRefusal``."""
+    import json
+
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server.managed_join_prelaunch import (
+        ManagedJoinIssuanceRefusal,
+        prepare_managed_join_context,
+    )
+
+    source_home = tmp_path / "source"
+    source_home.mkdir(parents=True)
+    (source_home / "models_cache.json").write_text(
+        json.dumps({"version": "missing-models-list"}), encoding="utf-8"
+    )
+
+    # ``gpt-5.6-luna`` is a valid Codex model id but is not in the
+    # CODEX_EFFORT_MAPPING shortcut table, so ``resolve_managed_parent_identity``
+    # falls through to the catalog-parsing branch — which is the site guarded
+    # against a missing ``models`` list.
+    refusal = prepare_managed_join_context(
+        backend=CodexBackend(source_codex_home=source_home),
+        configured_model="gpt-5.6-luna",
+        state_root=tmp_path / "state",
+        parent_id="malformed-catalog",
+        launch_context="interactive",
+    )
+    assert isinstance(refusal, ManagedJoinIssuanceRefusal)
+    assert "models" in refusal.reason
+
+
 def test_server_authority_loads_and_revalidates_prelaunch_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -130,6 +161,7 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     )
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
+    (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
     source_home, _ = _source_home(tmp_path)
     state_root = tmp_path / "state"
     backend = CodexBackend(source_codex_home=source_home)

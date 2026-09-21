@@ -190,6 +190,52 @@ def test_no_guard_reads_session_class_env_directly() -> None:
     assert not violations, f"session-class reads must use _hook_settings: {sorted(violations)}"
 
 
+# Names of the deleted session-class wrappers — issue #5121 collapsed the
+# (headless, tier) tuple reads into the canonical hook_session_shape() accessor,
+# so any re-introduction of these names in a guard's import surface is a
+# regression of the unified-API invariant.
+_DELETED_SESSION_CLASS_WRAPPERS: frozenset[str] = frozenset(
+    {"is_headless_session", "get_session_type"}
+)
+
+
+def _wrapper_import_sites(source: str, filename: str) -> set[str]:
+    """Return ``filename`` if ``source`` imports any deleted session-class wrapper."""
+    try:
+        tree = ast.parse(source, filename=filename)
+    except SyntaxError:
+        return set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        for alias in node.names:
+            # Cover both 'from X import get_session_type' and the rebind
+            # 'from X import get_session_type as g' forms — alias.name is the
+            # original; alias.asname is the bound name in the local namespace.
+            if alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
+                return {filename}
+    return set()
+
+
+def test_no_guard_imports_deleted_session_class_wrappers() -> None:
+    """No guard imports the deleted is_headless_session / get_session_type wrappers.
+
+    Issue #5121: the wrappers were deleted; their only successor is
+    hook_session_shape(), which is the canonical atomic accessor.
+    """
+    violations = {
+        filename
+        for path in HOOKS_DIR.rglob("*.py")
+        for filename in _wrapper_import_sites(
+            path.read_text(encoding="utf-8"), str(path.relative_to(HOOKS_DIR))
+        )
+    }
+    assert not violations, (
+        f"deleted session-class wrappers must not be imported: {sorted(violations)}. "
+        "Use hook_session_shape() instead."
+    )
+
+
 def test_session_class_env_read_inventory_is_complete() -> None:
     helper = HOOKS_DIR / "_runtime" / "_hook_settings.py"
     actual = {
@@ -225,3 +271,167 @@ def test_adr_scope_claims_match_registry() -> None:
     assert set(claims) == set(claim_owners)
     scopes = {script: hook.session_scope for hook in HOOK_REGISTRY for script in hook.scripts}
     assert all(claims[doc] == scopes[script] for doc, script in claim_owners.items())
+
+
+def test_session_scope_values_constant_is_canonical() -> None:
+    """SESSION_SCOPE_VALUES is the canonical value set for the hook runtime layer (T3)."""
+    from autoskillit.hooks._runtime._session_scope_authority import SESSION_SCOPE_VALUES
+
+    assert SESSION_SCOPE_VALUES == frozenset({"any", "headless_only", "interactive_only"})
+
+
+def test_cross_layer_session_scope_values_match() -> None:
+    """The IL-0 inline constant mirrors the canonical hook-runtime constant (T17).
+
+    The IL-0 layer cannot import from autoskillit.hooks._runtime (hard constraint
+    in core/types/AGENTS.md:7). The two layers must agree on the value set;
+    a future addition (e.g. a fourth scope) requires updating both sites
+    AND this test must be updated to reflect the new value.
+    """
+    from autoskillit.hooks._runtime._session_scope_authority import SESSION_SCOPE_VALUES
+
+    core_source = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "autoskillit"
+        / "core"
+        / "types"
+        / "_type_session_shape.py"
+    ).read_text(encoding="utf-8")
+    # The IL-0 site is a frozenset / set / tuple literal at the SessionScope.of
+    # runtime validation. Match the three-string token sequence in any order.
+    expected_tokens = {"any", "headless_only", "interactive_only"}
+    for token in expected_tokens:
+        assert f'"{token}"' in core_source, (
+            f"IL-0 layer is missing session-scope value {token!r} — the inline "
+            "literal must mirror SESSION_SCOPE_VALUES (T17)."
+        )
+    assert SESSION_SCOPE_VALUES == frozenset(expected_tokens)
+
+
+def _enforce_script_session_scope_uses_hook_session_shape_callable(
+    monkeypatch: pytest.MonkeyPatch, headless: bool
+) -> tuple[bool, object]:
+    """Helper for T6 — monkeypatch hook_session_shape and observe the result.
+
+    Returns ``(return_value, deny_payload_or_none)``. When ``headless=True`` the
+    declared scope ``headless_only`` admits; when ``headless=False`` it denies
+    and ``_deny_scope_authority_unavailable`` is invoked.
+    """
+    from autoskillit.hooks._runtime import _session_scope_authority
+
+    captured: dict[str, object] = {}
+
+    def _fake_deny(script_identity: str) -> None:
+        captured["denied"] = script_identity
+
+    monkeypatch.setattr(
+        _session_scope_authority, "hook_session_shape", lambda: (headless, "skill")
+    )
+    monkeypatch.setattr(
+        _session_scope_authority,
+        "_deny_scope_authority_unavailable",
+        _fake_deny,
+    )
+    return (
+        _session_scope_authority.enforce_script_session_scope("guards/fleet_dispatch_guard.py"),
+        captured.get("denied"),
+    )
+
+
+def test_enforce_script_session_scope_uses_hook_session_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """enforce_script_session_scope() consults hook_session_shape() (T6).
+
+    Monkeypatching the canonical accessor changes the result; this proves
+    the call goes through hook_session_shape rather than the deleted
+    is_headless_session / get_session_type wrappers.
+    """
+    monkeypatch.setattr(
+        "autoskillit.hooks._runtime._hook_scope_table.HOOK_SCOPE_BY_SCRIPT",
+        {"guards/fleet_dispatch_guard.py": "headless_only"},
+    )
+    return_value, denied = _enforce_script_session_scope_uses_hook_session_shape_callable(
+        monkeypatch, headless=True
+    )
+    assert return_value is True
+    assert denied is None
+
+    return_value, denied = _enforce_script_session_scope_uses_hook_session_shape_callable(
+        monkeypatch, headless=False
+    )
+    assert return_value is False
+    assert denied == "guards/fleet_dispatch_guard.py"
+
+
+def test_admit_hook_session_scope_uses_session_scope_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Patching the source of SESSION_SCOPE_VALUES changes admit_hook_session_scope (T5).
+
+    Module-reference pattern in _hook_settings.py means admit_hook_session_scope
+    does a fresh attribute lookup on _session_scope_authority at every call, so
+    monkeypatching the source module's attribute (rather than a copy captured at
+    import time) takes effect immediately.
+    """
+    from autoskillit.hooks._runtime import _hook_settings, _session_scope_authority
+
+    monkeypatch.setattr(
+        _session_scope_authority,
+        "SESSION_SCOPE_VALUES",
+        frozenset({"only_one_value"}),
+    )
+    # With the canonical constant narrowed to a single value, the original
+    # 'any' scope is no longer in the admitted set and admit raises ValueError.
+    with pytest.raises(ValueError, match="Unknown hook session scope"):
+        _hook_settings.admit_hook_session_scope("any", frozenset(), (True, "skill"))
+    # The narrowed value itself admits the shape.
+    assert (
+        _hook_settings.admit_hook_session_scope("only_one_value", frozenset(), (True, "skill"))
+        is True
+    )
+
+
+# Caller files that were migrated to hook_session_shape() in Step 4b. Each
+# must import cleanly with the canonical accessor — this is the runtime
+# behavioral gate that pairs with the static AST scan (T2 above).
+_MIGRATED_CALLER_SCRIPTS = (
+    "lint_after_edit_hook.py",
+    "session_start_hook.py",
+    "guards/write_guard.py",
+    "guards/skill_load_guard.py",
+    "guards/background_exec_guard.py",
+    "guards/open_kitchen_guard.py",
+    "guards/pr_create_guard.py",
+    "guards/skill_orchestration_guard.py",
+    "guards/fabricated_completion_guard.py",
+)
+
+
+def test_runtime_import_smoke_for_all_caller_modules() -> None:
+    """Every migrated caller module imports cleanly (T15)."""
+    import importlib.util
+
+    runtime_dir = HOOKS_DIR / "_runtime"
+    if str(runtime_dir) not in sys.path:
+        sys.path.insert(0, str(runtime_dir))
+    if str(HOOKS_DIR) not in sys.path:
+        sys.path.insert(0, str(HOOKS_DIR))
+
+    failures: list[tuple[str, str]] = []
+    for script_rel in _MIGRATED_CALLER_SCRIPTS:
+        script_path = HOOKS_DIR / script_rel
+        spec = importlib.util.spec_from_file_location(
+            f"_migrated_{script_rel.replace('/', '_').replace('.py', '')}",
+            script_path,
+        )
+        if spec is None or spec.loader is None:
+            failures.append((script_rel, "spec_from_file_location returned None"))
+            continue
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+        except Exception as exc:  # noqa: BLE001 — import smoke test
+            failures.append((script_rel, repr(exc)))
+    assert not failures, f"migrated caller modules failed to import: {failures}"

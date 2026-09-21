@@ -250,6 +250,80 @@ class TestProjectionFreshness:
             assert input_text in updated_output, diagnostics
         assert binding.closed
 
+    def test_projected_completion_guard_loads_parent_turn_authority(
+        self, isolated_home: Path
+    ) -> None:
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+
+        source_helper = pkg_root() / "_parent_assistant_turns.py"
+        assert source_helper in set(iter_public_plugin_asset_files(pkg_root()))
+
+        authority = project_default_plugin_authority(
+            cwd=isolated_home,
+            base_branch="main",
+            catalog=session_catalog(),
+        )
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            assert (binding.plugin_dir / source_helper.name).is_file()
+
+            subprocess_cwd = isolated_home / "projected-guard-cwd"
+            subprocess_cwd.mkdir()
+            transcript = subprocess_cwd / "transcript.jsonl"
+            session_id = "parent-session"
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "sessionId": session_id,
+                        "message": {
+                            "role": "assistant",
+                            "content": "<bg_result>Task completed successfully.</bg_result>",
+                        },
+                    }
+                )
+                + "\n"
+            )
+            (subprocess_cwd / f"run-skill-in-progress-{session_id}-token.marker").write_text(
+                json.dumps({"schema_version": 1, "label": "run-skill", "session_id": session_id})
+            )
+            env = production_interpreter_env()
+            env.pop("PYTHONPATH", None)
+            env["AUTOSKILLIT_HEADLESS"] = "1"
+            env["AUTOSKILLIT_SESSION_TYPE"] = "orchestrator"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    "-B",
+                    str(
+                        binding.plugin_dir / "hooks" / "guards" / "fabricated_completion_guard.py"
+                    ),
+                ],
+                input=json.dumps(
+                    {
+                        "session_id": session_id,
+                        "transcript_path": str(transcript),
+                        "tool_name": "mcp__autoskillit__run_python",
+                        "tool_input": {},
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                cwd=subprocess_cwd,
+                env=env,
+                timeout=10,
+            )
+
+            assert result.returncode == 0, result.stderr
+            assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert binding.closed
+
 
 class TestAssetDigestMirrorsTheCopier:
     """The cache-key digest and the copier must agree on what a projection is.

@@ -1015,6 +1015,7 @@ CORE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "is_git_worktree",
         "is_in_git_repo",
         "is_marker_fresh",
+        "is_parent_assistant_record",
         "is_path_like_token",
         "is_pid_alive",
         "is_pid_zombie",

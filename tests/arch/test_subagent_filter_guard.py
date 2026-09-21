@@ -1,4 +1,4 @@
-"""AST guard: all assistant-record processing must use the subagent filter predicate."""
+"""AST guard: parent-assistant filtering has one shared authority."""
 
 from __future__ import annotations
 
@@ -10,51 +10,137 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-
-_GUARDED_FILES = [
+AUTHORITY = SRC / "_parent_assistant_turns.py"
+ANALYZER = SRC / "core" / "pipeline" / "tool_sequence_analysis.py"
+_CONSUMERS = [
     SRC / "execution" / "session" / "_session_model.py",
     SRC / "execution" / "headless" / "_headless_recovery.py",
     SRC / "execution" / "headless" / "_headless_evidence.py",
-    SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
+    SRC / "execution" / "session_log" / "session_log.py",
     SRC / "fleet" / "result_parser.py",
+    SRC / "hooks" / "guards" / "fabricated_completion_guard.py",
 ]
 
-_PREDICATE_NAMES = {"_is_parent_assistant_record", "_is_parent_assistant"}
+_PREDICATE_NAME = "is_parent_assistant_record"
 
 
-@pytest.mark.parametrize("path", _GUARDED_FILES, ids=[p.name for p in _GUARDED_FILES])
-def test_assistant_record_branches_use_subagent_filter(path: Path) -> None:
-    """Every file that parses 'type == assistant' records must use the predicate."""
-    source = path.read_text()
-    tree = ast.parse(source)
-    body_dump = ast.dump(tree)
-    assert any(name in body_dump for name in _PREDICATE_NAMES), (
-        f"{path.name} processes assistant NDJSON records but does not call "
-        f"_is_parent_assistant_record or _is_parent_assistant — "
-        f"subagent records will contaminate results"
+def _imports_predicate(tree: ast.AST) -> bool:
+    return any(
+        isinstance(node, ast.ImportFrom)
+        and any(alias.name == _PREDICATE_NAME for alias in node.names)
+        for node in ast.walk(tree)
     )
 
 
-_REQUIRED_CHECKS = ["subagent_type", "<synthetic>"]
+def _calls_predicate(tree: ast.AST, *, name: str = _PREDICATE_NAME) -> bool:
+    """Return True iff ``tree`` invokes or references ``name``.
+
+    Both a direct call (``is_parent_assistant_record(record)``) and an
+    indirect reference (passing the predicate as a higher-order argument,
+    e.g. ``some_func(text, is_parent_assistant_record)``) count, because
+    both forms require the importing module to hold a usable reference.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == name:
+                return True
+            if isinstance(func, ast.Attribute) and func.attr == name:
+                return True
+        elif isinstance(node, ast.Name) and node.id == name:
+            return True
+        elif isinstance(node, ast.Attribute) and node.attr == name:
+            return True
+    return False
 
 
-def test_predicate_copies_are_structurally_complete() -> None:
-    """Both IL-0 and IL-1 predicate copies must check all exclusion conditions."""
-    for path in [
-        SRC / "execution" / "session" / "_session_model.py",
-        SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
-        SRC / "fleet" / "result_parser.py",
-    ]:
-        source = path.read_text()
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name in _PREDICATE_NAMES:
-                body_dump = ast.dump(node)
-                for check in _REQUIRED_CHECKS:
-                    assert check in body_dump, (
-                        f"{path.name}:{node.name} must check '{check}' — "
-                        f"incomplete predicate allows contamination"
-                    )
-                break
-        else:
-            pytest.fail(f"No predicate function found in {path.name}")
+def _exports_predicate(tree: ast.AST, *, name: str = _PREDICATE_NAME) -> bool:
+    """Return True iff ``tree`` re-exports ``name`` via ``__all__``.
+
+    Re-export via ``__all__`` is the public-API contract for analyzer
+    modules that proxy the predicate downstream without invoking it
+    directly; matching the constant string inside the ``__all__`` list
+    (rather than substring-matching the whole module) keeps the check
+    tight against accidental docstring mentions.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not (isinstance(target, ast.Name) and target.id == "__all__"):
+                continue
+            if not isinstance(node.value, (ast.List, ast.Tuple)):
+                continue
+            for elt in node.value.elts:
+                if isinstance(elt, ast.Constant) and elt.value == name:
+                    return True
+    return False
+
+
+def _predicates(tree: ast.AST, *, name: str) -> list[ast.FunctionDef]:
+    return [
+        node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
+
+
+def _has_string_constant(node: ast.AST, value: str) -> bool:
+    """Return True iff ``node`` (or any descendant) contains an ast.Constant
+    with the given string value.
+
+    String-only matching (rather than ``ast.dump`` substring containment) so a
+    substring present only as a docstring or unrelated literal does not satisfy
+    the assertion.
+    """
+    if isinstance(node, ast.Constant) and node.value == value:
+        return True
+    return any(_has_string_constant(child, value) for child in ast.iter_child_nodes(node))
+
+
+def test_parent_assistant_predicate_has_one_complete_definition() -> None:
+    tree = ast.parse(AUTHORITY.read_text(encoding="utf-8"))
+    definitions = _predicates(tree, name=_PREDICATE_NAME)
+
+    assert len(definitions) == 1, (
+        f"Expected exactly one definition of {_PREDICATE_NAME}, found {len(definitions)}."
+    )
+    definition = definitions[0]
+    assert _has_string_constant(definition, "subagent_type"), (
+        f"{_PREDICATE_NAME} must exclude Task subagent records by checking "
+        "subagent_type as a constant key, not a substring of any docstring."
+    )
+    assert _has_string_constant(definition, "<synthetic>"), (
+        f"{_PREDICATE_NAME} must exclude synthetic assistant messages by "
+        "comparing message.model to the <synthetic> literal."
+    )
+
+
+def test_turn_iterator_calls_the_canonical_predicate() -> None:
+    tree = ast.parse(AUTHORITY.read_text(encoding="utf-8"))
+    iterator = next(
+        iter(_predicates(tree, name="iter_merged_assistant_turns")),
+    )
+    assert _calls_predicate(iterator), (
+        "iter_merged_assistant_turns() must call is_parent_assistant_record() — "
+        "substring containment of the predicate name in the function body is "
+        "insufficient (a docstring would falsely satisfy it)."
+    )
+
+
+def test_analyzer_reexports_the_canonical_predicate() -> None:
+    tree = ast.parse(ANALYZER.read_text(encoding="utf-8"))
+    assert _imports_predicate(tree)
+    assert _exports_predicate(tree) or _calls_predicate(tree), (
+        f"{ANALYZER.name} must re-export {_PREDICATE_NAME} through __all__ "
+        "or invoke it directly. Importing the predicate without surfacing "
+        "it leaves the duplicate-filter risk intact downstream."
+    )
+
+
+@pytest.mark.parametrize("path", _CONSUMERS, ids=[path.name for path in _CONSUMERS])
+def test_consumers_import_the_canonical_predicate(path: Path) -> None:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    assert _imports_predicate(tree), f"{path.name} must import the canonical predicate"
+    assert _calls_predicate(tree), (
+        f"{path.name} must invoke the canonical predicate; importing it without "
+        "calling it leaves the duplicate-filter risk intact."
+    )

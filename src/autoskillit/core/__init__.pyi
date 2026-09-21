@@ -450,6 +450,7 @@ from .tool_sequence_analysis import compute_analysis as compute_analysis
 from .tool_sequence_analysis import compute_gap_stats as compute_gap_stats
 from .tool_sequence_analysis import filter_sessions_by_recipe as filter_sessions_by_recipe
 from .tool_sequence_analysis import format_top_bigrams as format_top_bigrams
+from .tool_sequence_analysis import is_parent_assistant_record as is_parent_assistant_record
 from .tool_sequence_analysis import iter_merged_assistant_turns as iter_merged_assistant_turns
 from .tool_sequence_analysis import parse_raw_cc_jsonl as parse_raw_cc_jsonl
 from .tool_sequence_analysis import (

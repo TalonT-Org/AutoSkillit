@@ -21,6 +21,7 @@ from autoskillit.core import (
     TurnTokenEntry,
     extract_bash_write_targets,
     get_logger,
+    is_parent_assistant_record,
 )
 from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
 from autoskillit.execution.headless._headless_path_tokens import (
@@ -33,7 +34,6 @@ from autoskillit.execution.session import (
     _check_expected_patterns,
 )
 from autoskillit.execution.session._session_content import _normalize_model_output
-from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
     merge_token_usage_measures as _merge_token_usage,
 )
@@ -132,7 +132,7 @@ def _scan_jsonl_write_paths(
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(obj, dict) or not _is_parent_assistant_record(obj):
+        if not isinstance(obj, dict) or not is_parent_assistant_record(obj):
             continue
         msg = obj.get("message")
         if not isinstance(msg, dict):

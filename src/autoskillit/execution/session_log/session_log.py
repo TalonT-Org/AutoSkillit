@@ -34,6 +34,7 @@ from autoskillit.core import (
     default_log_dir,
     fsync_directory,
     get_logger,
+    is_parent_assistant_record,
     iter_merged_assistant_turns,
     write_versioned_json,
 )
@@ -50,7 +51,6 @@ from autoskillit.execution.evidence.anomaly_detection import (
     detect_outcome_anomalies,
     ndjson_drift_anomaly,
 )
-from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
     first_parent_message_timestamps as _message_timestamps,
 )
@@ -352,7 +352,7 @@ def flush_session_log(
     if _channel_b_text is not None:
         try:
             _cb_message_timestamps = _message_timestamps(
-                _channel_b_text, _is_parent_assistant_record
+                _channel_b_text, is_parent_assistant_record
             )
             for _turn in iter_merged_assistant_turns(_channel_b_text):
                 _cb_request_ids.append(_turn.request_id)

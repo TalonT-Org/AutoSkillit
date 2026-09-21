@@ -24,8 +24,12 @@ if _HOOKS_DIR not in sys.path:
 _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
+_PLUGIN_ROOT = str(Path(__file__).resolve().parents[2])
+if _PLUGIN_ROOT not in sys.path:
+    sys.path.insert(0, _PLUGIN_ROOT)
 
 from _hook_settings import hook_session_shape  # noqa: E402
+from _parent_assistant_turns import is_parent_assistant_record  # noqa: E402
 
 FABRICATED_COMPLETION_DENY_TRIGGER: str = "FABRICATED BACKGROUND COMPLETION"
 
@@ -141,6 +145,10 @@ def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | No
                 if record_type == "system" and isinstance(record.get("subtype"), str):
                     continue
                 return None
+            if record_type == "assistant" and not is_parent_assistant_record(record):
+                if candidate_found:
+                    break
+                continue
             role = message.get("role")
             if role not in {"assistant", "user", "system", "tool"}:
                 return None

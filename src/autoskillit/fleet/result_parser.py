@@ -10,7 +10,7 @@ from typing import Literal
 
 import regex as re
 
-from autoskillit.core import ClaudeContentBlockType, get_logger
+from autoskillit.core import ClaudeContentBlockType, get_logger, is_parent_assistant_record
 from autoskillit.execution import _collapse_hr_split_delimiters
 
 logger = get_logger(__name__)
@@ -27,17 +27,6 @@ class L3ParseResult:
     raw_body: str | None
     parse_error: str | None
     source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"]
-
-
-def _is_parent_assistant_record(obj: dict) -> bool:
-    if obj.get("type") != "assistant":
-        return False
-    if obj.get("subagent_type"):
-        return False
-    msg = obj.get("message")
-    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
-        return False
-    return True
 
 
 def _extract_text_from_jsonl(path: Path, skip_lines: int = 0) -> str:
@@ -65,7 +54,7 @@ def _extract_text_from_jsonl(path: Path, skip_lines: int = 0) -> str:
             continue
         if not isinstance(obj, dict):
             continue
-        if not _is_parent_assistant_record(obj):
+        if not is_parent_assistant_record(obj):
             continue
         msg = obj.get("message")
         if not isinstance(msg, dict):

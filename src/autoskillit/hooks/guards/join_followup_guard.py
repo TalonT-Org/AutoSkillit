@@ -54,10 +54,6 @@ JOIN_FOLLOWUP_DENY_TRIGGER: str = (
 )
 
 
-def _resolve_session_id(data: dict[str, object]) -> str:
-    return resolve_binding_session_id(data)
-
-
 def _is_unresolved(batch: dict[str, object]) -> bool:
     """Return True when the wave is active but not yet ``complete``."""
     if batch.get("_corrupted"):
@@ -84,7 +80,7 @@ def main() -> None:
     if not isinstance(data, dict) or data.get("agent_id"):
         sys.exit(0)
 
-    session_id = _resolve_session_id(data)
+    session_id = resolve_binding_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if not session_id or not payload_cwd or not session_join_required(payload_cwd, session_id):
         sys.exit(0)

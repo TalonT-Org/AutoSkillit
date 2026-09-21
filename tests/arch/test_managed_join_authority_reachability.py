@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.contracts._ast_helpers import call_name
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -24,14 +26,6 @@ _EXPECTED_CALLERS = Counter(
         ("verify", "server/_managed_join_attestation.py", "find_verified_context"): 2,
     }
 )
-
-
-def _call_name(node: ast.Call) -> str | None:
-    if isinstance(node.func, ast.Name):
-        return node.func.id
-    if isinstance(node.func, ast.Attribute):
-        return node.func.attr
-    return None
 
 
 def _protocol_methods() -> set[str]:
@@ -61,7 +55,7 @@ def _production_method_callers() -> Counter[tuple[str, str, str]]:
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            method_name = _call_name(node)
+            method_name = call_name(node)
             if method_name not in method_names:
                 continue
             parent = parents.get(node)
@@ -82,12 +76,12 @@ def _factory_wires_default_authority() -> bool:
         for node in ast.walk(tree)
         if isinstance(node, ast.Assign)
         and isinstance(node.value, ast.Call)
-        and _call_name(node.value) == "DefaultManagedJoinAttestationAuthority"
+        and call_name(node.value) == "DefaultManagedJoinAttestationAuthority"
         for target in node.targets
         if isinstance(target, ast.Name)
     }
     return any(
-        _call_name(node) == "ToolContext"
+        call_name(node) == "ToolContext"
         and any(
             keyword.arg == "managed_join_attestation_authority"
             and isinstance(keyword.value, ast.Name)

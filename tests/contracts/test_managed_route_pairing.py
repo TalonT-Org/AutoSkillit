@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import re
 from collections import Counter
 from pathlib import Path
@@ -12,6 +11,7 @@ import pytest
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+from tests.contracts._ast_helpers import callers_by_function
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -31,35 +31,6 @@ _EXPECTED_PREPARE_CALLERS = Counter(
 )
 
 
-def _call_name(node: ast.Call) -> str | None:
-    if isinstance(node.func, ast.Name):
-        return node.func.id
-    if isinstance(node.func, ast.Attribute):
-        return node.func.attr
-    return None
-
-
-def _production_callers(symbol: str) -> Counter[tuple[str, str]]:
-    inventory: Counter[tuple[str, str]] = Counter()
-    for path in _SRC_ROOT.rglob("*.py"):
-        relative_path = str(path.relative_to(_SRC_ROOT))
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
-        parents = {
-            child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)
-        }
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or _call_name(node) != symbol:
-                continue
-            parent = parents.get(node)
-            while parent is not None and not isinstance(
-                parent, (ast.FunctionDef, ast.AsyncFunctionDef)
-            ):
-                parent = parents.get(parent)
-            if parent is not None:
-                inventory[(relative_path, parent.name)] += 1
-    return inventory
-
-
 def test_managed_route_digests_are_sha256_for_every_capable_backend() -> None:
     capable_backends = [
         name
@@ -74,9 +45,9 @@ def test_managed_route_digests_are_sha256_for_every_capable_backend() -> None:
 
 
 def test_managed_route_preparation_covers_every_capable_launch_surface() -> None:
-    assert _production_callers(_PREPARE) == _EXPECTED_PREPARE_CALLERS
+    assert callers_by_function(_SRC_ROOT, symbol=_PREPARE) == _EXPECTED_PREPARE_CALLERS
 
 
 def test_managed_join_authority_issues_production_contexts() -> None:
-    callers = _production_callers("issue")
+    callers = callers_by_function(_SRC_ROOT, symbol="issue")
     assert callers[("server/managed_join_prelaunch.py", _PREPARE)] >= 1

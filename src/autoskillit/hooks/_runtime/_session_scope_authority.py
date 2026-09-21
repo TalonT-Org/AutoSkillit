@@ -24,6 +24,22 @@ import importlib
 import json
 import sys
 from pathlib import Path
+from typing import Final, Literal
+
+# Canonical session-scope value set for the hook runtime + hook_registry layer.
+# T17 (tests/hooks/test_hook_scope_authority.py) pins this value set equal to
+# the IL-0 inline constant in core/types/_type_session_shape.py. Defined here
+# because _session_scope_authority is the canonical authority surface for this
+# layer (per the module docstring at lines 1-19).
+SESSION_SCOPE_VALUES: Final[frozenset[str]] = frozenset(
+    {"any", "headless_only", "interactive_only"}
+)
+
+# Static-only mirror of SESSION_SCOPE_VALUES for use as a typing.Literal[...].
+# Literal cannot reference a runtime constant, so a type alias is the only way
+# to keep the canonical value set in lock-step across annotation sites
+# (_hooks_defs.HookDef.session_scope and LifecycleContractDef.session_scope).
+SessionScopeLiteral = Literal["any", "headless_only", "interactive_only"]
 
 
 def _deny_scope_authority_unavailable(script_identity: str) -> None:
@@ -50,29 +66,6 @@ def _deny_scope_authority_unavailable(script_identity: str) -> None:
     )
     sys.stdout.write(payload + "\n")
     sys.stdout.flush()
-
-
-def is_headless_session() -> bool:
-    """Return the runtime session class used by hook-scope enforcement.
-
-    Delegates to :mod:`_hook_settings` to keep session-class env reads
-    in one module — the AST inventory test
-    (:func:`tests.hooks.test_hook_scope_authority.test_no_guard_reads_session_class_env_directly`)
-    enforces this single-source rule.
-    """
-    from _hook_settings import is_headless_session as _impl
-
-    return _impl()
-
-
-def get_session_type() -> str:
-    """Return the launcher-supplied session tier without interpreting it.
-
-    Delegates to :mod:`_hook_settings` for the same single-source rule.
-    """
-    from _hook_settings import get_session_type as _impl
-
-    return _impl()
 
 
 def enforce_script_session_scope(script_identity: str) -> bool:
@@ -108,7 +101,7 @@ def enforce_script_session_scope(script_identity: str) -> bool:
         )
         table_module = importlib.import_module(table_module_name)
         scope = table_module.HOOK_SCOPE_BY_SCRIPT[key]
-        if scope not in {"any", "headless_only", "interactive_only"}:
+        if scope not in SESSION_SCOPE_VALUES:
             raise ValueError(f"invalid scope {scope!r}")
     except (ImportError, AttributeError, KeyError, ValueError) as exc:
         print(
@@ -118,11 +111,14 @@ def enforce_script_session_scope(script_identity: str) -> bool:
         _deny_scope_authority_unavailable(script_identity)
         return False
 
+    from _hook_settings import hook_session_shape
+
+    headless, _ = hook_session_shape()
     if scope == "any":
         return True
     if scope == "headless_only":
-        return is_headless_session()
-    return not is_headless_session()
+        return headless
+    return not headless
 
 
 def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:

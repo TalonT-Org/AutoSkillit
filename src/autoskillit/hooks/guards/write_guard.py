@@ -8,6 +8,7 @@ workspace sandbox for this boundary; installation writes have a separate guard.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -64,6 +65,24 @@ _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
         "/dev/stdin",
     }
 )
+
+# Module-scoped set tracking prefix values that already produced a realpath-failure
+# warning. Each hook process gets a fresh set (GIL/import boundary guarantees
+# per-process state); pytest-xdist workers likewise receive isolated copies.
+_WARNED_PREFIXES: set[str] = set()
+_LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
+
+# Configuration hint appended to the empty-boundary denial reason, keyed by
+# activation source. Surfaced verbatim so users can grep for the env var or
+# binding field they need to inspect. Stays one sentence so the JSON
+# `permissionDecisionReason` payload doesn't bloat.
+_EMPTY_BOUNDARY_HINT_BY_ACTIVATION: dict[str, str] = {
+    "headless": (
+        "every prefix in AUTOSKILLIT_ALLOWED_WRITE_PREFIX "
+        "or AUTOSKILLIT_ALLOWED_WRITE_PREFIXES failed realpath normalization"
+    ),
+    "skill_binding": ("every write_paths entry in session_binding failed realpath normalization"),
+}
 
 # Every value-taking git global flag, derived at import time from
 # _GIT_GLOBAL_FLAG_SPEC in _command_classification.py. Hook scripts already
@@ -264,12 +283,20 @@ def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> No
     sys.exit(0)
 
 
-def _normalize_prefixes(raw_prefixes: list[str]) -> list[str]:
+def _normalize_prefixes(raw_prefixes: list[str], *, source_label: str) -> list[str]:
     normalized: list[str] = []
     for prefix in raw_prefixes:
         try:
             real = os.path.realpath(prefix)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            if prefix not in _WARNED_PREFIXES:
+                _LOGGER.warning(
+                    "write_guard: dropping prefix %r (realpath failed: %s; source=%s)",
+                    prefix,
+                    type(exc).__name__,
+                    source_label,
+                )
+                _WARNED_PREFIXES.add(prefix)
             continue
         normalized.append(real.rstrip("/") + "/")
     return normalized
@@ -334,7 +361,7 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
             )
             for path in raw_paths
         ]
-        prefixes = _normalize_prefixes(paths)
+        prefixes = _normalize_prefixes(paths, source_label="session_binding")
         effective = (
             prefixes if effective is None else _narrow_compatible_prefixes(effective, prefixes)
         )
@@ -358,7 +385,14 @@ def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
         singular = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
         raw_prefixes = [singular] if singular else []
 
-    norm_prefixes = _normalize_prefixes(raw_prefixes)
+    norm_prefixes = _normalize_prefixes(
+        raw_prefixes,
+        source_label=(
+            "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"
+            if prefixes_str
+            else "AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
+        ),
+    )
     return norm_prefixes, ", ".join(raw_prefixes), ("active" if norm_prefixes else "none")
 
 
@@ -452,12 +486,19 @@ def main() -> None:
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
         sys.exit(0)
     if policy_state in {"empty", "unresolved"}:
-        _deny(
-            data,
-            (
+        if policy_state == "empty":
+            deny_message = (
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(empty boundary: {_EMPTY_BOUNDARY_HINT_BY_ACTIVATION[activation]})"
+            )
+        else:
+            deny_message = (
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
                 f"({policy_state} boundary)."
-            ),
+            )
+        _deny(
+            data,
+            deny_message,
             reason_code=policy_state,
             activation=activation,
         )

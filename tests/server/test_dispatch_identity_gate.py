@@ -24,6 +24,9 @@ def _set_session_shape(
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", headless)
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    # Always clear AUTOSKILLIT_DISPATCH_ID first so xdist workers and dev shells
+    # cannot leak an external truthy value into the empty-dispatch-id cases.
+    monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
     if dispatch_id:
         monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", dispatch_id)
 

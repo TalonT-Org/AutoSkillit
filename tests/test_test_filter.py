@@ -150,10 +150,10 @@ class TestCheckBucketA:
         assert compute_bucket_a_scope({"uv.lock"}) is None
 
     def test_bucket_a_precommit(self) -> None:
-        assert compute_bucket_a_scope({".pre-commit-config.yaml"}) is None
+        assert compute_bucket_a_scope({".pre-commit-config.yaml"}) == set()
 
     def test_bucket_a_factory(self) -> None:
-        assert compute_bucket_a_scope({"src/autoskillit/server/_factory.py"}) is None
+        assert compute_bucket_a_scope({"src/autoskillit/server/_factory.py"}) == set()
 
     @pytest.mark.parametrize(
         ("file", "expected"),
@@ -196,41 +196,23 @@ class TestBuildTestScope:
         )
         assert result is FullRunReason.GIT_UNAVAILABLE
 
-    def test_scope_large_changeset_returns_full_run_reason(self, tmp_path: Path) -> None:
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(31)}
+    def test_large_known_recipe_changeset_uses_normal_scope(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        (tests_root / "cli" / "test_cli_prompts.py").touch()
+        (tests_root / "cli" / "test_preview.py").touch()
+        files = {f"src/autoskillit/recipe/f{i}.py" for i in range(99)}
+        files.add("src/autoskillit/recipe/loader.py")
         result = build_test_scope(
             changed_files=files,
             mode=FilterMode.CONSERVATIVE,
-            tests_root=tmp_path / "tests",
-        )
-        assert result is FullRunReason.LARGE_CHANGESET
-
-    def test_large_changeset_precedes_scoped_support(self, tmp_path: Path) -> None:
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(30)}
-        files.add("tests/execution/conftest.py")
-
-        result = build_test_scope(
-            changed_files=files,
-            mode=FilterMode.CONSERVATIVE,
-            tests_root=tmp_path / "tests",
-        )
-
-        assert result is FullRunReason.LARGE_CHANGESET
-
-    def test_aggressive_mode_ignores_large_changeset_threshold(self, tmp_path: Path) -> None:
-        """Aggressive mode does not trigger LARGE_CHANGESET even with >30 files."""
-        tests_root = tmp_path / "tests"
-        for d in ["core", "arch", "contracts"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(35)}
-        result = build_test_scope(
-            changed_files=files,
-            mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
         )
-        assert isinstance(result, set), (
-            f"Expected set[Path], got {type(result).__name__}: {result}"
-        )
+        assert isinstance(result, set)
+        assert tests_root / "recipe" in result
+        assert tests_root / "cli" / "test_cli_prompts.py" in result
+        assert tests_root / "cli" / "test_preview.py" in result
+        assert tests_root / "arch" in result
+        assert tests_root / "contracts" in result
 
     def test_scope_bucket_a_returns_full_run_reason(self, tmp_path: Path) -> None:
         result = build_test_scope(

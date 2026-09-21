@@ -210,19 +210,33 @@ def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
     assert expected <= result
 
 
-@pytest.mark.parametrize(
-    "changed_file",
-    ["tests/conftest.py", "src/autoskillit/server/_factory.py"],
-)
-def test_global_composition_files_remain_bucket_a(
+def test_root_conftest_remains_bucket_a(
     tmp_path: Path,
-    changed_file: str,
 ) -> None:
     assert (
         build_test_scope(
-            changed_files={changed_file},
+            changed_files={"tests/conftest.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=_tests_root(tmp_path),
         )
         is FullRunReason.BUCKET_A
     )
+
+
+def test_factory_uses_server_cascade_instead_of_bucket_a(tmp_path: Path) -> None:
+    tests_root = _tests_root(tmp_path)
+    result = build_test_scope(
+        changed_files={"src/autoskillit/server/_factory.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=tests_root,
+    )
+
+    assert isinstance(result, set)
+    assert {
+        tests_root / "server",
+        tests_root / "cli",
+        tests_root / "arch",
+        tests_root / "contracts",
+    } <= result
+    assert tests_root / "fleet" not in result
+    assert tests_root / "infra" not in result

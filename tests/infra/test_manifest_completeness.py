@@ -31,7 +31,6 @@ _BUCKET_A_FILES: frozenset[str] = frozenset(
     {
         "pyproject.toml",
         "uv.lock",
-        ".pre-commit-config.yaml",
     }
 )
 

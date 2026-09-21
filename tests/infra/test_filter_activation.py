@@ -86,12 +86,19 @@ def test_ci_filter_codepath_produces_scope():
     assert len(scope) > 0, "Scope must contain at least one test path"
 
 
-def test_build_test_scope_returns_full_run_reason_for_large_changeset():
-    from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+def test_configured_conservative_mode_accepts_large_known_changeset():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope, load_manifest
 
-    changed = {f"src/autoskillit/fake_{i}.py" for i in range(35)}
-    result = build_test_scope(changed_files=changed, mode=FilterMode.CONSERVATIVE)
-    assert result is FullRunReason.LARGE_CHANGESET
+    changed = {f"src/autoskillit/recipe/fake_{index}.py" for index in range(100)}
+    result = build_test_scope(
+        changed_files=changed,
+        mode=FilterMode.CONSERVATIVE,
+        manifest=load_manifest(REPO_ROOT),
+        tests_root=REPO_ROOT / "tests",
+        cwd=REPO_ROOT,
+        base_ref="develop",
+    )
+    assert not isinstance(result, FullRunReason)
 
 
 def test_build_test_scope_returns_full_run_reason_for_git_unavailable():

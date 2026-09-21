@@ -43,7 +43,6 @@ class ChangedFiles:
 class FullRunReason(enum.StrEnum):
     DISABLED = "disabled"
     GIT_UNAVAILABLE = "git_unavailable"
-    LARGE_CHANGESET = "large_changeset"
     BUCKET_A = "bucket_a"
     UNMAPPED_FILE = "unmapped_file"
 
@@ -90,8 +89,6 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
         "tests/_arch_constraint_discovery.py",
         "pyproject.toml",
         "uv.lock",
-        ".pre-commit-config.yaml",
-        "src/autoskillit/server/_factory.py",
     }
 )
 
@@ -181,8 +178,6 @@ _DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md", "AGEN
 # Decoupled from ALWAYS_RUN_AGGRESSIVE so future additions to that constant
 # cannot silently alter conservative behavior.
 _ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL: frozenset[str] = frozenset({"arch", "contracts"})
-
-_LARGE_CHANGESET_THRESHOLD_CONSERVATIVE: int = 30
 
 # ---------------------------------------------------------------------------
 # core/ module-level cascade classification
@@ -2353,12 +2348,6 @@ def _initial_scope(
         return FullRunReason.DISABLED
     if changed_files is None:
         return FullRunReason.GIT_UNAVAILABLE
-    if (
-        mode == FilterMode.CONSERVATIVE
-        and len(changed_files) > _LARGE_CHANGESET_THRESHOLD_CONSERVATIVE
-    ):
-        return FullRunReason.LARGE_CHANGESET
-
     if cwd is not None and base_ref is not None:
         scoped_test_dirs = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
         if scoped_test_dirs is None:

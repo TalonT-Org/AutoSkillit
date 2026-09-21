@@ -286,6 +286,9 @@ tests/arch/release_comparison_ledger.txt:
 .python-version:
   - infra/
 
+.pre-commit-config.yaml:
+  - infra/
+
 install.sh:
   - infra/
   - cli/

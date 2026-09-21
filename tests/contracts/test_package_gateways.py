@@ -462,7 +462,7 @@ def test_parent_assistant_predicate_reexports_share_one_identity() -> None:
         assert importlib.import_module(module_name).is_parent_assistant_record is canonical
 
 
-# ── REQ-GATEWAY-PARITY: gateway re-exports pre-move names ──────────────────────
+# REQ-GATEWAY-PARITY: gateway re-exports pre-move names
 
 # Shared with tests/arch/test_subpackage_isolation_facades.py's sibling-set
 # assertions for the same six decompositions — both checks must agree on

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from tests.fleet._helpers import (
@@ -201,9 +203,17 @@ class TestServerAuthoritativeOverrides:
             captured.update(kwargs)
             return "prompt"
 
+        from autoskillit.fleet import dispatch as _dispatch_mod
         from autoskillit.fleet._api import execute_dispatch
 
-        with structlog.testing.capture_logs() as cap_logs:
+        with (
+            structlog.testing.capture_logs() as cap_logs,
+            patch.object(
+                _dispatch_mod._validation.logger,
+                "warning",
+                wraps=_dispatch_mod._validation.logger.warning,
+            ) as warning_spy,
+        ):
             await execute_dispatch(
                 tool_ctx=tool_ctx,
                 recipe="test-recipe",
@@ -223,6 +233,14 @@ class TestServerAuthoritativeOverrides:
         ]
         assert len(stripped_events) == 1
         assert stripped_events[0]["stripped_ingredient_names"] == ["base_branch"]
+        # Spy on the actual logger.warning call site: a no-op at the call site
+        # would still emit zero structlog events (passing capture_logs) but
+        # would also leave warning_spy uncalled, catching a regression where
+        # the strip code path silently swallows its log emission.
+        assert warning_spy.call_count == 1
+        warning_kwargs = warning_spy.call_args.kwargs
+        assert warning_kwargs["stripped_ingredient_names"] == ["base_branch"]
+        assert warning_kwargs["recipe"] == "test-recipe"
 
     @pytest.mark.anyio
     async def test_config_authoritative_injection_skips_undeclared_ingredients(self, tool_ctx):

@@ -669,12 +669,20 @@ def _parse_step(
         )
     elif isinstance(on_result_data, list):
         conditions = []
-        for item in on_result_data:
+        for index, item in enumerate(on_result_data):
             if isinstance(item, dict):
+                waiver = item.get("recovery_waiver")
+                if "recovery_waiver" in item and (
+                    not isinstance(waiver, str) or not waiver.strip()
+                ):
+                    raise ValueError(
+                        f"on_result[{index}].recovery_waiver must be a non-empty string"
+                    )
                 conditions.append(
                     StepResultCondition(
                         when=item.get("when"),
                         route=item.get("route", ""),
+                        recovery_waiver=waiver,
                     )
                 )
         if conditions:

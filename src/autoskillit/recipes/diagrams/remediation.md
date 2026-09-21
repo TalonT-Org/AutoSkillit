@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:a6a12620438126e3e49eb427a363a814be2b476108433b030552d92fbb16a812 -->
+<!-- autoskillit-recipe-hash: sha256:3410ef27ef7b0df15e95db5fa45379f2e8e849a22c82be44b24fda5df0b4e518 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## remediation
 
@@ -19,7 +19,7 @@ rectify --- bind_plan_set <-> [bounded coverage replan -> make-plan]
 |    +-- [audit] (optional)
 |    |     x fail [-> make-plan]
 |    |
-|    merge
+|    merge <-> [x test gate -> fix -> test]
 |    |
 +----+
      |

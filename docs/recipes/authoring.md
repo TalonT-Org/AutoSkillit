@@ -32,6 +32,13 @@ top-level keys (defined in `recipe/schema.py:Recipe`):
 `RecipeStep` adds: `name`, `tool`, `with_args`, `capture`, `on_result`,
 `skip_when_false`, `skip_when_true`, `on_skip`, `retries`, and `phoropter_family`.
 
+Each `on_result` condition has `route`, optional `when`, and optional
+`recovery_waiver`. A merge failure arm needs a waiver with a reason when its
+nearest recovery class differs from the required class. A waiver is stale when
+the required class is nearest, or when classification is inconclusive but that
+class is reachable before another merge site. Waived arms are excluded from
+cross-site parity checks.
+
 Every step with `skip_when_false` must declare `on_skip` naming the surviving
 step where configuration-time absence continues. `on_skip` is not a runtime
 success, failure, or result edge, and it must be chosen by the recipe author.

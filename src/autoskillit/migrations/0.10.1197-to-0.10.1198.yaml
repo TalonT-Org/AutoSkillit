@@ -1,0 +1,27 @@
+from_version: "0.10.1197"
+to_version: "0.10.1198"
+description: Explain intentional exceptions to merge failure recovery routing.
+changes:
+  - id: recovery-waiver-required
+    description: Declare intentional merge failure recovery exceptions on each route.
+    instruction: |
+      For merge_worktree on_result arms in the code, git_conflict, or ancestry
+      push_recovery domains, route to the required nearest recovery class.
+      When policy intentionally chooses another nearest class or a terminal
+      route, add recovery_waiver with a non-empty reason on that arm.
+
+      A waiver is stale when the required class is nearest, or classification
+      is inconclusive but that class is reachable before another merge site.
+      Remove stale waivers and shorten or disambiguate deep recovery routes.
+      Ref-coherence fallback escalation arms need no waiver.
+    detect:
+      tool: merge_worktree
+    example_before: |
+      on_result:
+        - when: result.failed_step == 'test_gate_contention'
+          route: release_issue_failure
+    example_after: |
+      on_result:
+        - when: result.failed_step == 'test_gate_contention'
+          route: release_issue_failure
+          recovery_waiver: 'Another process holds the test lease; stop with the worktree intact.'

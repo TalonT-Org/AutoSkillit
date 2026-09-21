@@ -9,8 +9,10 @@ import regex as re
 
 from autoskillit.core import MergeFailedStep, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._analysis_bfs import _build_success_step_graph
-from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN
+from autoskillit.recipe._analysis_bfs import (
+    _build_success_step_graph,
+    bfs_reachable_without_barrier_in_graph,
+)
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
@@ -51,15 +53,9 @@ _MERGE_FAILURE_DOMAINS: dict[str, str] = {
     MergeFailedStep.REF_COHERENCE: "push_recovery",
 }
 
-_REQUIRED_SKILL_BY_DOMAIN: dict[str, str] = {
-    "code": "resolve-failures",
-    "git_conflict": "resolve-merge-conflicts",
-}
-
-# Behavioral recovery classes for domains that cannot be validated by exact skill
-# identity. Keys are domain names; values are the recovery class a route must
-# reach via the nearest-depth success-path traversal.
 _REQUIRED_RECOVERY_CLASS: dict[str, str] = {
+    "code": "fix_loop",
+    "git_conflict": "rebase_loop",
     "push_recovery": "push_recovery",
 }
 
@@ -75,6 +71,13 @@ _RECOVERY_SIGNATURES_SKILL: dict[str, str] = {
 }
 _RECOVERY_SIGNATURES_CALLABLE: dict[str, str] = {
     "autoskillit.recipe._cmd_rpc.main_repo_guard": "dirty_retry",
+}
+_RECOVERY_CLASS_REMEDY = {
+    recovery_class: remedy
+    for remedy, recovery_class in (
+        *(_RECOVERY_SIGNATURES_SKILL.items()),
+        *(_RECOVERY_SIGNATURES_TOOL.items()),
+    )
 }
 
 
@@ -171,23 +174,6 @@ def _predicate_variant(condition_when: str | None, failed_step_value: str) -> st
     return _CROSS_SITE_VARIANT_DEFAULT
 
 
-# Exact site pair exemption for the bundled remediation recipe: the
-# pre_remediation_merge and merge steps intentionally diverge for these
-# failed_step values because pre_remediation_merge runs before remediation
-# starts and merge runs after. ref_coherence must still match across sites.
-_CROSS_SITE_SITE_PAIR_EXEMPTIONS: dict[tuple[str, str], frozenset[str]] = {
-    ("pre_remediation_merge", "merge"): frozenset(
-        {
-            MergeFailedStep.DIRTY_TREE,
-            MergeFailedStep.TEST_GATE,
-            MergeFailedStep.TEST_GATE_CONTENTION,
-            MergeFailedStep.POST_REBASE_TEST_GATE,
-            MergeFailedStep.REBASE,
-        }
-    ),
-}
-
-
 def _check_merge_routing_cross_site_consistency(
     ctx: ValidationContext,
 ) -> list[RuleFinding]:
@@ -201,6 +187,8 @@ def _check_merge_routing_cross_site_consistency(
             continue
         per_variant: dict[str, list[tuple[str, str]]] = {}
         for condition in step.on_result.conditions:
+            if condition.recovery_waiver:
+                continue
             if condition.when is None:
                 continue
             m = _FAILED_STEP_PATTERN.search(condition.when)
@@ -229,15 +217,6 @@ def _check_merge_routing_cross_site_consistency(
             continue
 
         failed_step_value = key.split("::", 1)[0]
-        site_set = frozenset(sites_with_key)
-        exemption_match = False
-        for pair, exempt_steps in _CROSS_SITE_SITE_PAIR_EXEMPTIONS.items():
-            if frozenset(pair) == site_set and failed_step_value in exempt_steps:
-                exemption_match = True
-                break
-        if exemption_match:
-            continue
-
         classifications: dict[str, str | None] = {}
         targets: dict[str, str] = {}
         for site in sites_with_key:
@@ -283,7 +262,7 @@ def _check_merge_routing_cross_site_consistency(
         "predicate-qualified failed_step arm to the same recovery class. "
         "Recovery class is determined by the nearest-depth success-path "
         "traversal. Classified-vs-unclassified and different unclassified "
-        "targets are both mismatches."
+        "targets are both mismatches. Arms with recovery_waiver are excluded."
     ),
     severity=Severity.ERROR,
 )
@@ -340,15 +319,33 @@ def _classify_recovery_class(
     return None
 
 
+def _reaches_recovery_class_before_merge(
+    route: str,
+    required: str,
+    ctx: ValidationContext,
+    *,
+    success_graph: dict[str, set[str]],
+) -> bool:
+    """Check a possibly deep recovery without crossing the next merge site."""
+    merge_sites = frozenset(
+        name for name, step in ctx.recipe.steps.items() if step.tool == "merge_worktree"
+    )
+    reachable = bfs_reachable_without_barrier_in_graph(success_graph, route, merge_sites)
+    return any(
+        _recovery_signature(ctx.recipe.steps[name]) == required
+        for name in reachable - merge_sites
+        if name in ctx.recipe.steps
+    )
+
+
 @semantic_rule(
     name="merge-failure-skill-domain-mismatch",
     description=(
-        "A merge_worktree on_result condition routes a recoverable failed_step to "
-        "a route whose behavior does not match the failure domain. Git-conflict "
-        "failures (rebase) must route to resolve-merge-conflicts; code failures "
-        "(dirty_tree, test_gate, post_rebase_test_gate) must route to "
-        "resolve-failures; ref_coherence ancestry arms must classify as "
-        "push_recovery."
+        "Merge failure arms must reach their domain's nearest recovery class or "
+        "declare a recovery_waiver. Ref-coherence fallback arms are exempt; ancestry "
+        "arms are checked. Waivers are stale when required recovery is nearest, or "
+        "classification is inconclusive but required recovery is reachable before "
+        "another merge site."
     ),
     severity=Severity.ERROR,
 )
@@ -374,54 +371,53 @@ def _check_merge_failure_skill_domain_mismatch(
             if domain is None:
                 continue
 
-            # For REF_COHERENCE only the ancestry-aware arm is validated; the
-            # fallback arm is an intentional escalation terminal whose target
-            # differs from the ancestry arm by design.
-            if failed_step_value == MergeFailedStep.REF_COHERENCE:
-                when_lower = condition.when.lower()
-                if "remote_is_ancestor" not in when_lower:
-                    continue
-                required_class = _REQUIRED_RECOVERY_CLASS[domain]
-                actual_class = _classify_recovery_class(
-                    condition.route, ctx, success_graph=success_graph
-                )
-                if actual_class != required_class:
+            if (
+                failed_step_value == MergeFailedStep.REF_COHERENCE
+                and "remote_is_ancestor" not in condition.when.lower()
+            ):
+                continue
+            required = _REQUIRED_RECOVERY_CLASS[domain]
+            actual = _classify_recovery_class(condition.route, ctx, success_graph=success_graph)
+            reaches = _reaches_recovery_class_before_merge(
+                condition.route, required, ctx, success_graph=success_graph
+            )
+            remedy = _RECOVERY_CLASS_REMEDY[required]
+            if condition.recovery_waiver:
+                if reaches and actual in (required, None):
                     findings.append(
                         make_finding(
                             rule_name="merge-failure-skill-domain-mismatch",
                             step_name=step_name,
                             message=(
-                                f"failed_step == '{failed_step_value}' ancestry arm "
-                                f"(domain: {domain}) routes to '{condition.route}' "
-                                f"which classifies as {actual_class!r}, expected "
-                                f"{required_class!r}."
+                                f"failed_step == '{failed_step_value}' (domain: {domain}) "
+                                f"carries a stale recovery_waiver: route '{condition.route}' "
+                                f"reaches {required!r} ({remedy}) before any merge site. "
+                                "Remove the waiver and, if recovery is beyond the "
+                                "classification depth or ambiguous, shorten or "
+                                "disambiguate the route."
                             ),
                         )
                     )
                 continue
-
-            target_step = ctx.recipe.steps.get(condition.route)
-            if target_step is None or target_step.tool != "run_skill":
+            if actual == required:
                 continue
-
-            skill_cmd = target_step.with_args.get("skill_command", "")
-            skill_match = _SKILL_CMD_PATTERN.search(skill_cmd)
-            if not skill_match:
-                continue
-            actual_skill = skill_match.group(1)
-
-            required_skill = _REQUIRED_SKILL_BY_DOMAIN[domain]
-            if actual_skill != required_skill:
-                findings.append(
-                    make_finding(
-                        rule_name="merge-failure-skill-domain-mismatch",
-                        step_name=step_name,
-                        message=(
-                            f"failed_step == '{failed_step_value}' (domain: {domain}) "
-                            f"routes to step '{condition.route}' which invokes "
-                            f"'{actual_skill}', but {domain} failures require "
-                            f"'{required_skill}'."
-                        ),
-                    )
+            inconclusive = (
+                " Required recovery is reachable but classification is inconclusive; "
+                "shorten or disambiguate the route."
+                if actual is None and reaches
+                else ""
+            )
+            findings.append(
+                make_finding(
+                    rule_name="merge-failure-skill-domain-mismatch",
+                    step_name=step_name,
+                    message=(
+                        f"failed_step == '{failed_step_value}' (domain: {domain}) "
+                        f"routes to '{condition.route}' which classifies as {actual!r}; "
+                        f"{domain} failures require {required!r} ({remedy}). Route into "
+                        "that recovery within the classification depth or declare "
+                        f"recovery_waiver: <reason> on this arm.{inconclusive}"
+                    ),
                 )
+            )
     return findings

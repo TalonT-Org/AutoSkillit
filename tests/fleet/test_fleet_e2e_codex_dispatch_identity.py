@@ -55,7 +55,11 @@ import os
 import time
 from pathlib import Path
 
-from autoskillit.config import build_config_authoritative_layer, resolve_ingredient_defaults
+from autoskillit.config import (
+    build_config_authoritative_layer,
+    load_config,
+    resolve_ingredient_defaults,
+)
 from autoskillit.core import session_shape
 from autoskillit.execution.session_log import resolve_log_dir
 from autoskillit.recipe import bind_recipe

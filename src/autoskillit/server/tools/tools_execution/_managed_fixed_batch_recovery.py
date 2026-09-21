@@ -10,7 +10,6 @@ from typing import Any
 from autoskillit.core import SkillContractError, read_versioned_json, write_versioned_json
 
 _RECOVERY_SCHEMA_VERSION = 3
-_LEGACY_RECOVERY_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,36 +81,16 @@ def _coerce_dict_list(value: object) -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)]
 
 
-def _migrate_legacy_recovery_payload(payload: dict[str, object]) -> dict[str, Any]:
-    """Translate a v2 managed-recovery payload into the v3 field layout."""
-    debt_field = _coerce_dict_list(payload.get("debt", ()))
-    unadmitted_field = _coerce_dict_list(payload.get("unadmitted_settlement_debt", ()))
-    migrated_debt: list[dict[str, object]] = [
-        _migrate_legacy_recovery_debt_item(item) for item in debt_field
-    ]
-    migrated_unadmitted: list[dict[str, object]] = [dict(item) for item in unadmitted_field]
-    return {
-        "schema_version": _RECOVERY_SCHEMA_VERSION,
-        "debt": migrated_debt,
-        "unadmitted_settlement_debt": migrated_unadmitted,
-    }
-
-
-def _migrate_legacy_recovery_debt_item(item: dict[str, object]) -> dict[str, object]:
-    """Translate one v2 recovery debt record into the v3 field layout."""
-    parent_session_id = item.get("parent_session_id")
-    if not isinstance(parent_session_id, str) or not parent_session_id:
-        legacy_parent = item.get("request_session_id")
-        parent_session_id = legacy_parent if isinstance(legacy_parent, str) else ""
-    migrated = {key: value for key, value in item.items() if key != "request_session_id"}
-    migrated["parent_session_id"] = parent_session_id
-    return migrated
-
-
 def read_managed_recovery_state(
     state_path: Path,
 ) -> tuple[dict[str, _RecoveryDebt], dict[str, _UnadmittedSettlementDebt]]:
-    """Load and validate both kinds of managed recovery debt."""
+    """Load and validate both kinds of managed recovery debt.
+
+    The recovery schema was bumped from v2 to v3 to rename
+    ``request_session_id`` to ``parent_session_id``. v2 debts are no longer
+    silently readable; the reader must surface an explicit failure so that
+    operators know an in-flight debt was dropped.
+    """
     if not state_path.exists():
         return {}, {}
     try:
@@ -121,14 +100,7 @@ def read_managed_recovery_state(
             raise_io_errors=True,
         )
         if payload is None:
-            legacy = read_versioned_json(
-                state_path,
-                _LEGACY_RECOVERY_SCHEMA_VERSION,
-                raise_io_errors=True,
-            )
-            if legacy is None:
-                raise ValueError("unsupported managed recovery schema")
-            payload = _migrate_legacy_recovery_payload(legacy)
+            raise ValueError("unsupported managed recovery schema")
         recovery_debt = {
             item["permit_id"]: _RecoveryDebt(
                 owner=tuple(item["owner"]),

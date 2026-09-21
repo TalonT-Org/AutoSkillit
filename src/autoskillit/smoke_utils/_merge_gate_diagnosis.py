@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 
 import regex as re
@@ -142,21 +141,3 @@ def diagnose_merge_gate(
     except OSError as exc:
         raise RuntimeError(f"Failed to write diagnosis to {out_path}") from exc
     return {"diagnosis_path": str(out_path), "ci_conclusion": "failure"}
-
-
-# Source-of-truth parameter metadata for diagnose_merge_gate. Derived from the
-# callable's signature so the rule module, the cross-validation test, and the
-# skill_contracts.yaml entry cannot drift out of sync.
-_DIAGNOSE_GATE_PARAMS: tuple[inspect.Parameter, ...] = tuple(
-    inspect.signature(diagnose_merge_gate).parameters.values()
-)
-DIAGNOSE_RESULT_PARAMS: tuple[str, ...] = tuple(
-    param.name
-    for param in _DIAGNOSE_GATE_PARAMS
-    if param.name != "output_dir" and param.kind != inspect.Parameter.VAR_KEYWORD
-)
-DIAGNOSE_OPTIONAL_RESULT_PARAMS: frozenset[str] = frozenset(
-    param.name
-    for param in _DIAGNOSE_GATE_PARAMS
-    if param.default is None and param.kind != inspect.Parameter.VAR_KEYWORD
-)

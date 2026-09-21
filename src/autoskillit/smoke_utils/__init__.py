@@ -26,11 +26,7 @@ from autoskillit.smoke_utils._git import (
 )
 from autoskillit.smoke_utils._helpers import probe_audit_substitutions, try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
-from autoskillit.smoke_utils._merge_gate_diagnosis import (
-    DIAGNOSE_OPTIONAL_RESULT_PARAMS,
-    DIAGNOSE_RESULT_PARAMS,
-    diagnose_merge_gate,
-)
+from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
     RemediationOutcome,
     annotate_pr_diff,
@@ -99,8 +95,6 @@ __all__ = [
     "detect_zero_changes",
     "deletion_regression_is_eligible",
     "determine_experimental_review_verdict",
-    "DIAGNOSE_OPTIONAL_RESULT_PARAMS",
-    "DIAGNOSE_RESULT_PARAMS",
     "diagnose_merge_gate",
     "enrich_diff_context",
     "extract_investigation",

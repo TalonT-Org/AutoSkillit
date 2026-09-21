@@ -10,16 +10,21 @@ from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_arg
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.rules.rules_merge_routing import _FAILED_STEP_PATTERN
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.smoke_utils import (
-    DIAGNOSE_OPTIONAL_RESULT_PARAMS as _DIAGNOSE_OPTIONAL_RESULT_PARAMS,
-)
-from autoskillit.smoke_utils import (
-    DIAGNOSE_RESULT_PARAMS as _DIAGNOSE_RESULT_PARAMS,
-)
 
 logger = get_logger(__name__)
 
 _TEST_GATE_FAILURES = frozenset({"test_gate", "post_rebase_test_gate"})
+_DIAGNOSE_RESULT_PARAMS = (
+    "test_stdout",
+    "test_stderr",
+    "failed_step",
+    "timed_out",
+    "outer_timeout_seconds",
+    "raw_output_artifact_path",
+)
+_DIAGNOSE_OPTIONAL_RESULT_PARAMS = frozenset(
+    {"timed_out", "outer_timeout_seconds", "raw_output_artifact_path"}
+)
 _CONTEXT_REF = re.compile(r"^\$\{\{\s*context\.(\w+)\s*\}\}$")
 
 

@@ -285,7 +285,7 @@ class TestCodexMcpDispatchIdentityE2E:
 
         envelope = await self._dispatch(codex_mcp_runtime)
 
-        assert envelope["success"] is True, envelope
+        assert envelope["success"] is True, envelope.get("stderr") or envelope
         dispatch_id = envelope["dispatch_id"]
         assert dispatch_id
         report = envelope["health_report"]
@@ -303,7 +303,7 @@ class TestCodexMcpDispatchIdentityE2E:
     ) -> None:
         _add_recipe(codex_mcp_runtime["recipes"], "test-codex-mcp-boundary")
         first = await self._dispatch(codex_mcp_runtime)
-        assert first["success"] is True, first
+        assert first["success"] is True, first.get("stderr") or first
 
         second = await self._dispatch(
             codex_mcp_runtime,

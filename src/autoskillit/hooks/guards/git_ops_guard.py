@@ -489,6 +489,12 @@ def main() -> None:
     if skill_name in _EXEMPT_SKILLS:
         sys.exit(0)
 
+    # Orchestrator-typed headless sessions bypass the destructive-op deny
+    # but remain subject to the all-session ref preflight above (which runs
+    # unconditionally before this branch).
+    if session_type in _DESTRUCTIVE_OP_EXEMPT_TIERS:
+        sys.exit(0)
+
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
     if not kitchen_open:

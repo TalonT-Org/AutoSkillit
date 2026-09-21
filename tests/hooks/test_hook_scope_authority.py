@@ -97,7 +97,7 @@ def test_runtime_scope_mapping_matches_registry(
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
 
     hook_def = HookDef(matcher="Bash", session_scope=scope)  # type: ignore[arg-type]
-    assert _hook_settings.enforce_session_scope(script) is hook_applies_to_backend(
+    assert _hook_settings.enforce_script_session_scope(script) is hook_applies_to_backend(
         hook_def,
         backend="claude_code",
         session_scope="headless" if headless else "interactive",

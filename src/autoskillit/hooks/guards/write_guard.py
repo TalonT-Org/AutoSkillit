@@ -306,6 +306,11 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
         manifest = read_manifest(manifest_path)
     except SessionBindingError:
         return [], "", "unresolved"
+    import sys
+    print(f"DEBUG binding={binding}", file=sys.stderr)
+    print(f"DEBUG manifest={manifest}", file=sys.stderr)
+    print(f"DEBUG TEMP_RELATIVE_DIR={TEMP_RELATIVE_DIR}", file=sys.stderr)
+    print(f"DEBUG payload_cwd={payload_cwd}", file=sys.stderr)
     skills = manifest.get("skills")
     if not isinstance(skills, dict):
         return [], "", "unresolved"
@@ -341,6 +346,8 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
 
     if effective is None:
         return [], "", "none"
+    import sys
+    print(f"DEBUG effective={effective}", file=sys.stderr)
     return (
         effective,
         ", ".join(prefix.rstrip("/") for prefix in effective),

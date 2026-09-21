@@ -580,6 +580,62 @@ def admit_hook_session_scope(
     return tier not in exempt_tiers
 
 
+def _deny_scope_authority_unavailable(script_identity: str) -> None:
+    payload = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    f"AutoSkillit hook session-scope authority is unavailable for {script_identity!r}."
+                ),
+            }
+        }
+    )
+    sys.stdout.write(payload + "\n")
+    sys.stdout.flush()
+
+
+def enforce_script_session_scope(script_identity: str) -> bool:
+    """Return whether a registered PreToolUse guard applies to this session.
+
+    A missing, unreadable, malformed, or incomplete generated table denies the
+    tool call before returning ``False``. A normal scope mismatch returns
+    ``False`` so the caller can sys.exit(0). Resolves the script's declared
+    scope from the generated ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` table
+    and compares it against the runtime session class.
+
+    Coexists with develop's canonical :func:`enforce_session_scope` literal
+    overload (a different signature that emits SystemExit on scope mismatch
+    and is the surface declared in ``HookDef.session_scope``). This
+    script-identity form is the runtime surface consulted by the worktree's
+    session-scope authority machinery; PR #5103's literal overload covers
+    the ``HookDef.session_scope == "headless_only"`` path tested by
+    :func:`tests.hooks.test_session_scope_enforcement` and is unchanged here.
+    """
+    try:
+        table_module_name = (
+            f"{__package__}._hook_scope_table" if __package__ else "_hook_scope_table"
+        )
+        table_module = importlib.import_module(table_module_name)
+        scope = table_module.HOOK_SCOPE_BY_SCRIPT[script_identity]
+        if scope not in {"any", "headless_only", "interactive_only"}:
+            raise ValueError(f"invalid scope {scope!r}")
+    except (ImportError, AttributeError, KeyError, ValueError) as exc:
+        print(
+            f"hook_scope_authority_unavailable: script={script_identity!r} error={exc!r}",
+            file=sys.stderr,
+        )
+        _deny_scope_authority_unavailable(script_identity)
+        return False
+
+    if scope == "any":
+        return True
+    if scope == "headless_only":
+        return is_headless_session()
+    return not is_headless_session()
+
+
 def enforce_session_scope(
     session_scope: str,
     *,
@@ -619,7 +675,14 @@ def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object]
     ``tests/hooks/test_write_guard.py`` that predate the JoinAdmission
     refactor.
     """
-    return session_join_admission(payload_cwd, session_id).binding_dict
+    admission = session_join_admission(payload_cwd, session_id)
+    # ``enforce`` is False when no binding exists (NO_BINDING) or the
+    # binding's session_id does not match the request (WRONG_SESSION).
+    # Both cases must return None so legacy callers do not activate the
+    # skill scope against a binding that does not belong to this session.
+    if not admission.enforce:
+        return None
+    return admission.binding_dict
 
 
 def session_join_required(payload_cwd: str, session_id: str) -> bool:

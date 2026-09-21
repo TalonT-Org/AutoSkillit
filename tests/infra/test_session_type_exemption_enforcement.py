@@ -20,6 +20,12 @@ from pathlib import Path
 
 import pytest
 
+# Importing `autoskillit.hooks` populates HOOK_REGISTRY via the package's
+# __init__ (see autoskillit/hooks/__init__.py:_HOOK_REGISTRY_LIST.extend).
+# Without this side-effect import the parametrize decorator below would
+# observe an empty registry and pytest would refuse collection.
+import autoskillit.hooks  # noqa: F401  (side-effect: builds HOOK_REGISTRY)
+
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,

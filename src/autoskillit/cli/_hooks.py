@@ -8,11 +8,14 @@ from pathlib import Path
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 from autoskillit.hook_registry import (
     LIFECYCLE_CONTRACTS,
+    PROTECTION_WAIVERS,
     _build_hook_command,
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
     _load_settings_data,
+    published_hook_defs,
     validate_lifecycle_contracts,
+    validate_protection_coverage,
 )
 from autoskillit.hook_registry import (
     _is_own_hook as _is_autoskillit_hook_command,
@@ -133,6 +136,7 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
         LIFECYCLE_CONTRACTS,
         backend="claude_code",
     )
+    validate_protection_coverage(HOOK_REGISTRY, PROTECTION_WAIVERS, backend="claude_code")
     if not force and _is_plugin_installed():
         _evict_stale_autoskillit_hooks(settings_path)
         return
@@ -142,7 +146,7 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     # Consolidate HookDef entries sharing the same (event_type, matcher) into a
     # single settings.json entry so Claude Code sees no duplicate matchers.
     groups: dict[tuple[str, str], dict] = {}
-    for hook_def in HOOK_REGISTRY:
+    for hook_def in published_hook_defs(HOOK_REGISTRY):
         key = (hook_def.event_type, hook_def.matcher)
         hooks_list = [
             _build_hook_command(hooks_dir, script, hook_def.timeout_seconds)

@@ -1,5 +1,7 @@
 ---
 name: audit-friction
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-friction/'
 categories:
 - audit
 uses_capabilities:

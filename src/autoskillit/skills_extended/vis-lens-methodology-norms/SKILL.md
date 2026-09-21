@@ -1,5 +1,7 @@
 ---
 name: vis-lens-methodology-norms
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/'
 categories:
 - vis-lens
 uses_capabilities: []

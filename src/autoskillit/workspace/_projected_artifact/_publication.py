@@ -31,7 +31,7 @@ from autoskillit.core import (
     validate_agent_tool_canonical,
     write_versioned_json,
 )
-from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.hook_registry import render_hook_scope_table, render_hooks_json_text
 from autoskillit.workspace._installed._projection_cache import is_projected_asset
 from autoskillit.workspace._installed._shared_asset_store import (
     link_or_copy_asset,
@@ -163,17 +163,28 @@ def _copy_non_skill_plugin_assets(
 
 
 def write_generated_hooks_json(plugin_root: Path) -> None:
-    """Write a freshly rendered ``hooks/hooks.json`` into *plugin_root*.
+    """Write freshly rendered hook authorities into *plugin_root*.
 
     Only writes when the hooks directory already exists (meaning hook scripts
     were copied from the source root).  This is the single named operation
-    for "publish current hook manifest into a plugin root" — used by
+    for publishing current hook authorities into a plugin root — used by
     projection staging, marketplace publication, and self-heal republish.
     """
     hooks_dir = plugin_root / "hooks"
     if not hooks_dir.is_dir():
         return
     atomic_write(hooks_dir / "hooks.json", render_hooks_json_text())
+    runtime_dir = hooks_dir / "_runtime"
+    runtime_dir.mkdir(exist_ok=True)
+    atomic_write(runtime_dir / "_hook_scope_table.py", render_hook_scope_table())
+    diagnostics_source = (
+        Path(__file__).parents[2] / "hooks" / "_runtime" / "_guard_decision_diagnostics.py"
+    )
+    if diagnostics_source.is_file():
+        atomic_write(
+            runtime_dir / diagnostics_source.name,
+            diagnostics_source.read_text(encoding="utf-8"),
+        )
 
 
 def _manifest_skill_entry(
@@ -208,6 +219,7 @@ def _manifest_skill_entry(
         "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
         "semantic_digest": document.semantic_digest,
         "adaptation_digest": document.adaptation_digest,
+        "write_paths": list(skill.write_paths) if skill.write_paths is not None else None,
     }
     return entry
 

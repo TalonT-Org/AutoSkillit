@@ -1,5 +1,7 @@
 ---
 name: exp-lens-randomization-blocking
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/'
 categories:
 - exp-lens
 uses_capabilities: []

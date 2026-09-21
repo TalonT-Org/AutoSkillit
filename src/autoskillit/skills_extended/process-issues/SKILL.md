@@ -1,5 +1,7 @@
 ---
 name: process-issues
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/process-issues/'
 uses_capabilities:
 - github_api_write
 - run_skill

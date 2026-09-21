@@ -1,5 +1,7 @@
 ---
 name: exp-lens-exploratory-confirmatory
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/'
 categories:
 - exp-lens
 uses_capabilities: []

@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "76ba7218f636cfd6839b10472551d90c3ef95ad3cb4d25c30f7d3031ebe33eb9",
+  "_registry_hash": "631ca814c2471d1d50287c3d4a8d9324388299562c242438efba70c89dc63f53",
   "hooks": {
     "PostToolUse": [
       {
@@ -259,9 +259,14 @@
             "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/write_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
+          },
+          {
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/installation_integrity_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
           }
         ],
-        "matcher": "Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd"
+        "matcher": "Write|Edit|Bash|apply_patch|mcp__.*autoskillit.*__run_cmd"
       },
       {
         "hooks": [

@@ -267,7 +267,12 @@ def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "hooks" / "_runtime"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
         "hooks_runtime"
-    ] | {"__init__"}
+    ] | {
+        "__init__",
+        "_hook_scope_table",
+        "_guard_decision_diagnostics",
+        "_git_command_classification",
+    }
 
 
 @pytest.mark.parametrize(

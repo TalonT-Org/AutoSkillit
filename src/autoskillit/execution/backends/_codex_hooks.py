@@ -29,11 +29,13 @@ from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
+    PROTECTION_WAIVERS,
     HookDef,
     LifecycleContractDef,
     _build_hook_entry,
     hook_applies_to_backend,
     validate_lifecycle_contracts,
+    validate_protection_coverage,
 )
 from autoskillit.hooks import MANAGED_PARENT_ALLOWED_TOOLS
 
@@ -304,6 +306,7 @@ def generate_codex_hooks_config(
     ]
     if managed_route is not None:
         applicable.extend(_managed_route_hook_defs(managed_route))
+    validate_protection_coverage(applicable, PROTECTION_WAIVERS, backend="codex")
     for hook_def in applicable:
         event = hook_def.event_type
         key = (event, hook_def.matcher)

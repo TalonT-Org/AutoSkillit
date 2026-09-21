@@ -1,18 +1,17 @@
 """Semantic rule: SKILL.md declared write scope must align with recipe output_dir.
 
-When a recipe step narrows an agent's write scope via output_dir (e.g., adding
-iter_N/ subdirectory scoping), but the SKILL.md still instructs the agent to
-write to the broader path, the write guard blocks every write attempt. This rule
-fires when the static NEVER block path in a SKILL.md is broader than the recipe's
-output_dir static base prefix AND the SKILL.md does not use a dynamic write path
-variable (AUTOSKILLIT_ALLOWED_WRITE_PREFIX or REVIEW_OUTPUT_DIR).
+The skill's declared write_paths bound a recipe output_dir. An iteration-scoped
+output_dir also requires the skill's prose write instructions to use the dynamic
+write prefix so the agent can target the narrowed directory.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import regex as re
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity, destination_location, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import (
@@ -21,6 +20,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
 )
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.workspace import parse_frontmatter_content
 
 logger = get_logger(__name__)
 
@@ -69,17 +69,39 @@ def _first_misaligned_write_path(content: str, output_dir: str) -> str | None:
     normalised_base = _normalise_path(static_base)
     for declared in declared_paths:
         normalised_declared = _normalise_path("{{AUTOSKILLIT_TEMP}}/" + declared)
-        if normalised_base.startswith(normalised_declared):
+        if Path(normalised_base).is_relative_to(Path(normalised_declared)):
             return declared
     return None
+
+
+def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -> str | None:
+    parsed = parse_frontmatter_content(content)
+    if not parsed.is_valid or parsed.write_paths is None:
+        return None
+    static_base = _static_base_prefix(output_dir)
+    if not static_base or "${{" in static_base:
+        return None
+    temp_root = project_dir / ".autoskillit" / "temp"
+
+    def location(path: str) -> Path:
+        expanded = path.replace("{{AUTOSKILLIT_TEMP}}", str(temp_root))
+        candidate = Path(expanded)
+        return destination_location(
+            candidate if candidate.is_absolute() else project_dir / candidate
+        )
+
+    output_location = location(static_base)
+    if any(output_location.is_relative_to(location(path)) for path in parsed.write_paths):
+        return None
+    return f"recipe output_dir {output_dir!r} is outside the skill's declared write_paths"
 
 
 @semantic_rule(
     name="skill-write-path-recipe-alignment",
     description=(
         "A SKILL.md's declared write scope does not match the recipe step's output_dir. "
-        "The write guard enforces output_dir, but the SKILL.md instructs the agent to "
-        "write to a different path — causing all writes to be blocked."
+        "The output_dir must remain inside write_paths, and prose write instructions "
+        "must respect an iteration-scoped output_dir."
     ),
     severity=Severity.ERROR,
 )
@@ -97,9 +119,6 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
         # Skip steps where the output_dir is the whole worktree or work_dir only
         if output_dir in (".", "${{ context.work_dir }}") or output_dir.strip("/") == "":
             continue
-        if not _has_iteration_scoping(output_dir):
-            continue
-
         skill_cmd = (step.with_args or {}).get("skill_command", "") or ""
         if not skill_cmd:
             continue
@@ -120,6 +139,21 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
             content = skill_md_path.read_text(encoding="utf-8")
         except OSError:
             logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
+            continue
+
+        boundary_error = _declared_boundary_error(
+            content, output_dir, ctx.project_dir or skill_md_path.parent.parent
+        )
+        if boundary_error is not None:
+            findings.append(
+                make_finding(
+                    rule_name="skill-write-path-recipe-alignment",
+                    step_name=step_name,
+                    message=f"Skill '{skill_name}': {boundary_error}.",
+                )
+            )
+            continue
+        if not _has_iteration_scoping(output_dir):
             continue
 
         declared = _first_misaligned_write_path(content, output_dir)

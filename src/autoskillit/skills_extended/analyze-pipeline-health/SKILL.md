@@ -1,5 +1,7 @@
 ---
 name: analyze-pipeline-health
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/'
 uses_capabilities: []
 categories:
 - diagnostics

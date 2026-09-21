@@ -65,6 +65,8 @@ class HookDef:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
+        if self.session_scope not in ("any", "headless_only", "interactive_only"):
+            raise ValueError("HookDef.session_scope is invalid")
         for field_name in (
             "produces_resources",
             "reclaims_resources",
@@ -110,6 +112,25 @@ class LifecycleContractDef:
             raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")
         if not self.required_owner_roles <= {"same_runner", "session_start"}:
             raise ValueError("LifecycleContractDef.required_owner_roles contains an invalid role")
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionWaiverDef:
+    """Declared coverage for an intentional deny-guard exclusion."""
+
+    guard_script: str
+    excluded_scope: Literal["headless", "interactive", "all"]
+    backend: Literal["claude_code", "codex"]
+    risk: str
+    covering_mechanism: str
+    justification: str
+    covering_guard_script: str | None = None
+
+    def __post_init__(self) -> None:
+        if not all((self.guard_script, self.risk, self.covering_mechanism, self.justification)):
+            raise ValueError("protection waiver fields must be nonempty")
+        if self.covering_mechanism == "hook" and not self.covering_guard_script:
+            raise ValueError("hook protection waiver requires covering_guard_script")
 
 
 class HookDriftResult(NamedTuple):

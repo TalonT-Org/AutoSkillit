@@ -1,5 +1,7 @@
 ---
 name: exp-lens-unit-interference
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-unit-interference/'
 categories:
 - exp-lens
 uses_capabilities: []

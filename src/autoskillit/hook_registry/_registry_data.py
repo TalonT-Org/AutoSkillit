@@ -7,6 +7,7 @@ from pathlib import Path
 from autoskillit.core import pkg_root
 
 from ._hooks_defs import HookDef, LifecycleContractDef
+from ._protection_waivers import PROTECTION_WAIVERS  # noqa: F401  (re-exported)
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
 """Source hooks used by machine-local settings and development checks."""
@@ -88,6 +89,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "resource_exhaustion_guard.py",  # NEW (#4678 rectify)
         "child_outcome_hook.py",  # NEW (#4623)
         "auto_compact_guard.py",  # NEW (#4271)
+        "installation_integrity_guard.py",  # NEW (#5086)
     }
 )
 
@@ -108,6 +110,7 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
         "git_ops_guard.py",
         "pr_create_guard.py",
         "unsafe_install_guard.py",
+        "installation_integrity_guard.py",
     }
 )
 
@@ -339,11 +342,19 @@ def _build_hook_registry() -> list[HookDef]:
             enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
         ),
         HookDef(
-            matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
+            matcher=r"Write|Edit|Bash|apply_patch|mcp__.*autoskillit.*__run_cmd",
             scripts=["guards/write_guard.py"],
-            session_scope="headless_only",
+            session_scope="any",
             mechanism="deny",
             enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        HookDef(
+            matcher=r"Write|Edit|Bash|apply_patch|mcp__.*autoskillit.*__run_cmd",
+            scripts=["guards/installation_integrity_guard.py"],
+            session_scope="any",
+            mechanism="deny",
+            codex_status="works-as-is",
+            enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
         ),
         HookDef(
             matcher=r"Write|Edit",

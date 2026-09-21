@@ -1,5 +1,7 @@
 ---
 name: vis-lens-multi-compare
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-multi-compare/'
 categories:
 - vis-lens
 uses_capabilities: []

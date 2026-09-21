@@ -255,6 +255,8 @@ class TestCLIInit:
             for cmd in [hook.get("command", "")]
         )
         for hdef in HOOK_REGISTRY:
+            if hdef.runtime_only:
+                continue
             for script in hdef.scripts:
                 logical_name = script.removesuffix(".py")
                 assert logical_name in registered, (

@@ -35,8 +35,9 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    hook_session_shape,
+from _hook_settings import (  # noqa: E402
+    get_session_type,
+    is_headless_session,
     payload_managed_codex_route,
     session_join_required,
 )
@@ -65,7 +66,8 @@ def _governed_skill_session() -> bool:
         return False
     if backend not in ("", "claude-code"):
         return False
-    _headless, session_type = hook_session_shape()
+    raw_session_type = get_session_type()
+    session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         return False
     return True
@@ -176,11 +178,14 @@ def main() -> None:
 
     in_subagent_context = bool(data.get("agent_id"))
 
-    headless, session_type = hook_session_shape()
+    raw_session_type = get_session_type()
+    session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers
 
     is_governed = _governed_skill_session()
+    headless = is_headless_session()
+
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
         sys.exit(0)  # fail-open: missing or malformed tool_input

@@ -29,7 +29,9 @@ from tests.execution.backends.conftest import (
     EXPECTED_TOTAL_PROBE_COUNT,
     SESSION_MODES,
     TOOL_CLASSES,
+    normalize_probe_mode,
     record_probe_row,
+    validate_strength_matrix,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -169,6 +171,36 @@ TOOL_CLASS_PAYLOADS: dict[str, dict] = {
 assert set(TOOL_CLASS_PAYLOADS.keys()) == set(TOOL_CLASSES.keys()), (
     "TOOL_CLASS_PAYLOADS keys must match TOOL_CLASSES keys exactly"
 )
+
+
+@pytest.mark.parametrize(
+    ("session_mode", "expected"),
+    [
+        ("interactive", "interactive"),
+        ("headless-p", "headless"),
+        ("subagent", "headless"),
+    ],
+)
+def test_none_strength_scope_normalization(session_mode: str, expected: str) -> None:
+    assert normalize_probe_mode({"session_mode": session_mode, "backend": "claude-code"}) == (
+        expected,
+        "claude_code",
+    )
+
+
+def test_none_strength_scope_exclusion_requires_registered_waiver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tests.execution.backends.conftest as probe_conftest
+
+    row = {
+        "hook": "ask_user_question_guard",
+        "session_mode": "interactive",
+        "backend": "claude-code",
+        "strength": "none",
+    }
+    monkeypatch.setattr(probe_conftest, "PROTECTION_WAIVERS", ())
+    assert any("without a waiver" in failure for failure in validate_strength_matrix([row]))
 
 
 def _clean_env() -> dict[str, str]:

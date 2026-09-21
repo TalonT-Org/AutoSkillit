@@ -56,7 +56,7 @@ ScheduleWakeup tool calls in headless skill sessions. It denies an explicit
 `run_in_background: true` input and every scheduled wakeup because either can leave
 owned work running after the parent reports completion. The denial references this ADR.
 
-Registered in `HOOK_REGISTRY` with `session_scope="headless_only"` and matcher
+Registered in `HOOK_REGISTRY` with `session_scope="any"` and matcher
 `Bash|Agent|ScheduleWakeup`. Test coverage in
 `tests/infra/test_background_exec_guard.py`.
 

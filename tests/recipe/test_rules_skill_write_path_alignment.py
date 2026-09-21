@@ -144,6 +144,33 @@ def test_rule_silent_when_output_dir_missing() -> None:
     assert len(rule_findings) == 0, f"Unexpected findings: {rule_findings}"
 
 
+@pytest.mark.parametrize(
+    ("output_dir", "expected_findings"),
+    [
+        ("{{AUTOSKILLIT_TEMP}}/bounded/iter_1", 0),
+        ("{{AUTOSKILLIT_TEMP}}/bounded-extra/", 1),
+        ("{{AUTOSKILLIT_TEMP}}/other/", 1),
+    ],
+)
+def test_recipe_output_dir_stays_inside_declared_skill_boundary(
+    tmp_path: Path, output_dir: str, expected_findings: int
+) -> None:
+    skill_dir = tmp_path / "bounded"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: bounded\ndescription: Bounded output.\n"
+        "write_paths: ['{{AUTOSKILLIT_TEMP}}/bounded/']\n---\n",
+        encoding="utf-8",
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_yaml("bounded", output_dir), encoding="utf-8")
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(load_recipe(recipe_path))
+    assert (
+        len([finding for finding in findings if finding.rule == _RULE_NAME]) == expected_findings
+    )
+
+
 def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
     """Rule fires for synthetic fixture replicating old divergent review-pr state.
 

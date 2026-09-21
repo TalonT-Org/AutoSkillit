@@ -187,6 +187,10 @@ _FD_DUPLICATION_RE = re.compile(r"^\d*>&\d+$")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
+WRITE_VERBS: frozenset[str] = frozenset(
+    {"sed", "tee", "mv", "cp", "patch", "install", "rm", "unlink"}
+)
+
 
 # _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS, the git add/status/diff content-vs-
 # metadata flag sets, _SHELL_SUBSTITUTION_RE, _SHELL_STATE_VAR_RE, and
@@ -213,6 +217,13 @@ def resolve_write_target(path: str, cwd: str = "") -> str | None:
     if cwd:
         return os.path.join(cwd, path)
     return None
+
+
+def updated_execution_cwd(segment: list[str], cwd: str) -> str:
+    """Apply a literal shell cd segment to later relative target resolution."""
+    if command_verb(segment) != "cd" or len(segment) < 2:
+        return cwd
+    return resolve_write_target(segment[1], cwd) or ""
 
 
 def _consume_output_redirect(
@@ -246,7 +257,7 @@ def _partition_output_redirect_indices(
     *,
     cwd: str,
     redirect_syntax: Sequence[bool] | None = None,
-) -> tuple[list[int], list[str], int]:
+) -> tuple[list[int], list[str], int, bool]:
     """Core of _partition_output_redirects: which *tokens* indices are executable argv.
 
     Shared so a caller threading a second, index-aligned parallel array (e.g.
@@ -257,6 +268,7 @@ def _partition_output_redirect_indices(
     executable_indices: list[int] = []
     targets: list[str] = []
     file_redirect_count = 0
+    unresolved_target = False
     depth = 0
     i = 0
     while i < len(tokens):
@@ -298,7 +310,11 @@ def _partition_output_redirect_indices(
             resolved = resolve_write_target(target, cwd)
             if resolved is not None:
                 targets.append(resolved)
-    return (executable_indices, targets, file_redirect_count)
+            else:
+                unresolved_target = True
+        elif file_redirect_delta:
+            unresolved_target = True
+    return (executable_indices, targets, file_redirect_count, unresolved_target)
 
 
 def _partition_output_redirects(
@@ -308,8 +324,8 @@ def _partition_output_redirects(
     redirect_syntax: Sequence[bool] | None = None,
 ) -> tuple[list[str], list[str], int]:
     """Separate depth-zero output control from executable argv."""
-    executable_indices, targets, file_redirect_count = _partition_output_redirect_indices(
-        tokens, cwd=cwd, redirect_syntax=redirect_syntax
+    executable_indices, targets, file_redirect_count, _unresolved_target = (
+        _partition_output_redirect_indices(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
     )
     return ([tokens[i] for i in executable_indices], targets, file_redirect_count)
 
@@ -327,7 +343,7 @@ def _select_executable_argv_tokens(
     provenance through the same redirect-partitioning decision that
     _partition_output_redirects already makes from *tokens* alone.
     """
-    executable_indices, _targets, _count = _partition_output_redirect_indices(
+    executable_indices, _targets, _count, _unresolved_target = _partition_output_redirect_indices(
         tokens, cwd=cwd, redirect_syntax=redirect_syntax
     )
     return [argv_tokens[i] for i in executable_indices]
@@ -340,6 +356,84 @@ def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
     Relative paths are resolved against cwd when provided.
     """
     return _partition_output_redirects(tokens, cwd=cwd)[1]
+
+
+def extract_redirect_targets_with_status(
+    tokens: list[str], cwd: str = ""
+) -> tuple[list[str], bool]:
+    """Return redirect targets and whether an output target was unresolved."""
+    _indices, targets, _count, unresolved_target = _partition_output_redirect_indices(
+        tokens, cwd=cwd
+    )
+    return targets, unresolved_target
+
+
+def extract_patch_paths(command: str) -> list[str]:
+    """Extract target paths from unified and Codex apply_patch input."""
+    paths: list[str] = []
+    for line in command.splitlines():
+        if line.startswith("+++ b/"):
+            paths.append(line[6:])
+        elif line.startswith(("*** Update File: ", "*** Add File: ", "*** Delete File: ")):
+            paths.append(line.partition(": ")[2].strip())
+    return paths
+
+
+def non_flag_operands(args: list[str]) -> list[str]:
+    operands: list[str] = []
+    skip_next = False
+    for token in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if token.startswith("-") or token.startswith("&") or _FD_REDIRECT_RE.match(token):
+            continue
+        if _REDIRECT_OP_ONLY_RE.match(token):
+            skip_next = True
+            continue
+        if _REDIRECT_TOKEN_RE.match(token):
+            continue
+        operands.append(token)
+    return operands
+
+
+def extract_write_verb_targets(
+    verb: str, segment: list[str], cwd: str = ""
+) -> tuple[list[str], bool]:
+    """Return write-verb targets and whether a write target could not resolve."""
+    operands = non_flag_operands(segment[1:])
+    if verb == "sed":
+        has_inplace = any(token.startswith("-i") or token == "--in-place" for token in segment[1:])
+        if not has_inplace:
+            return [], False
+        operands = operands[-1:]
+    elif verb in {"mv", "cp"}:
+        if len(operands) < 2:
+            return [], False
+        operands = operands[-1:]
+    elif verb == "install":
+        # GNU install: `install -t DIR SRC...` puts the destination in a
+        # `-t` flag (filtered out by non_flag_operands); without `-t` the
+        # last operand is the destination. Pick the target directory in
+        # both shapes.
+        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
+            operands = operands[:1]
+        else:
+            if len(operands) < 2:
+                return [], False
+            operands = operands[-1:]
+    elif verb == "patch":
+        operands = operands[:1]
+
+    targets: list[str] = []
+    unresolved_target = False
+    for operand in operands:
+        resolved = resolve_write_target(operand, cwd)
+        if resolved is None:
+            unresolved_target = True
+        else:
+            targets.append(resolved)
+    return targets, unresolved_target
 
 
 def _is_posix_assignment(token: str) -> bool:

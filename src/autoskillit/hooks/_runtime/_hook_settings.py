@@ -147,6 +147,16 @@ def merge_hook_configs(base: dict, overlay: dict) -> dict:
     return merged
 
 
+def is_headless_session() -> bool:
+    """Return the runtime session class used by hook-scope enforcement."""
+    return os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+
+
+def get_session_type() -> str:
+    """Return the launcher-supplied session tier without interpreting it."""
+    return os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+
+
 def _default_state_root() -> Path:
     """Bare-default state root: ``AUTOSKILLIT_STATE_ROOT`` env var, else process cwd.
 

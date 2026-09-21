@@ -1,5 +1,7 @@
 ---
 name: phoropter-priority-synthesis
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/phoropter-priority-synthesis/'
 categories: [research, vis-lens]
 description: >
   Resolve inter-lens conflicts via a configurable priority hierarchy and

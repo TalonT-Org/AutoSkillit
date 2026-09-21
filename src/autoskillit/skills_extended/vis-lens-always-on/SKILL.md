@@ -1,5 +1,7 @@
 ---
 name: vis-lens-always-on
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-always-on/'
 categories:
 - vis-lens
 uses_capabilities: []

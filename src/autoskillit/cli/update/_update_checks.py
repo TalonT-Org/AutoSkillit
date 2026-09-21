@@ -317,9 +317,16 @@ def run_update_checks(home: Path | None = None) -> None:
     ) and not os.environ.get("AUTOSKILLIT_FORCE_UPDATE_CHECK"):
         return
 
-    import autoskillit as _pkg
+    from autoskillit.cli.install._install_info import normalized_package_version
 
-    current: str = getattr(_pkg, "__version__", "0.0.0")
+    current = normalized_package_version()
+    if current is None:
+        print(
+            "Installation integrity failure: autoskillit has no valid __version__. "
+            "Run `autoskillit install` before checking for updates.",
+            flush=True,
+        )
+        return
     _home = home or Path.home()
     window = dismissal_window(info)
     state = _read_dismiss_state(_home)

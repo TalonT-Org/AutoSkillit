@@ -19,7 +19,11 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _hook_settings import enforce_session_scope, hook_session_shape  # noqa: E402
+
+from _hook_settings import (  # noqa: E402
+    enforce_session_scope,
+    hook_session_shape,
+)
 
 FLEET_DISPATCH_DENY_TRIGGER: str = "dispatch_food_truck cannot be called from headless sessions"
 

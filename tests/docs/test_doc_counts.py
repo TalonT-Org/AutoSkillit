@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -18,6 +19,27 @@ DOCS_DIR = REPO_ROOT / "docs"
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _count_doctor_checks() -> int:
+    """Count isolated check invocations inside ``_collect_doctor_results``."""
+    text = _read(SRC_DIR / "cli" / "doctor" / "__init__.py")
+    tree = ast.parse(text)
+    collector = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_collect_doctor_results"
+        ),
+        None,
+    )
+    assert collector is not None, "_collect_doctor_results not found in cli/doctor/__init__.py"
+    return sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_run_check"
+        for node in ast.walk(collector)
+    )
 
 
 def _quota_thresholds_default() -> tuple[float, float]:
@@ -37,12 +59,12 @@ def test_configuration_states_quota_thresholds() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_tool_access_names_visibility_authority() -> None:
-    text = _read(DOCS_DIR / "execution" / "tool-access.md")
-    assert "GATED_TOOLS" in text
-    assert "core/types/_type_constants_registries.py" in text
-    for surface in ("FREE RANGE", "HEADLESS-TAGGED", "KITCHEN", "EVIDENCE READER"):
-        assert surface in text
+def test_doctor_check_count_is_58() -> None:
+    # Combined-tree canonical count: 48 numbered checks + 10 lettered sub-checks.
+    # Check 47 (S2-5): pytest-generation temp-root capacity and orphaned-generation count.
+    # Update both tests whenever a new doctor check is added.
+    count = _count_doctor_checks()
+    assert count == 58, f"Expected 58 doctor checks; found {count}"
 
 
 def test_hook_docs_name_registry_authority() -> None:

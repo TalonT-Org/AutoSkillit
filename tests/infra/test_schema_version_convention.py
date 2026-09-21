@@ -138,7 +138,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_github.py — bug report dict (non-blocking report-bug status file)
     ("src/autoskillit/server/tools/tools_github.py", 343),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
-    ("src/autoskillit/cli/_hooks.py", 26),
+    ("src/autoskillit/cli/_hooks.py", 29),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/install/_installed_plugins.py", 81),
     # _update_checks.py — dismissal state file

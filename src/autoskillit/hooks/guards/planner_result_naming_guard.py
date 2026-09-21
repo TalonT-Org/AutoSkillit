@@ -28,6 +28,7 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
+
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 PLANNER_NAMING_DENY_TRIGGER: str = "Non-canonical planner result filename"
@@ -111,7 +112,6 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
 
 def main() -> None:
     enforce_session_scope("headless_only")
-
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):

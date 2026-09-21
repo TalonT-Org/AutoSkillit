@@ -498,6 +498,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
             "_github_mutation_analysis",
             "_exploration_request_record",
             "_token_measure",
+            "_session_scope_authority",
         }
     ),
 }

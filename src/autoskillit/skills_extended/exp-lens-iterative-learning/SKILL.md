@@ -1,5 +1,7 @@
 ---
 name: exp-lens-iterative-learning
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/'
 categories:
 - exp-lens
 uses_capabilities: []

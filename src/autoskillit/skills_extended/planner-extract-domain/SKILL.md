@@ -1,5 +1,7 @@
 ---
 name: planner-extract-domain
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Extract domain knowledge and naming conventions for planning context

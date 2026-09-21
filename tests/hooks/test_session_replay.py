@@ -2,13 +2,9 @@
 full PreToolUse hook chain via the real dispatcher, asserting no benign
 command is blocked and no failure-grade message appears without errors.
 
-Each fixture event is dispatched to every PreToolUse
-guard whose HOOK_REGISTRY matcher matches the tool name and whose
-session_scope is compatible with the fixture's simulated session (mirroring
-which guards would actually be wired for that session type, since
-session_scope gating happens at hooks.json generation time, not inside each
-guard) — via the real ``hooks/_dispatch.py`` subprocess, exactly as Claude
-Code would invoke it.
+Each fixture event is dispatched to every matching PreToolUse guard through
+the real ``hooks/_dispatch.py`` subprocess. Each guard applies its registered
+session scope at runtime.
 
 One narrow exception to the PreToolUse-only scope: ``dispatch_capture_lifecycle_hook``
 additionally dispatches the SessionStart ``capture_lifecycle_hook.py`` once
@@ -118,36 +114,28 @@ def apply_state_setup(root: Path, state_setup: list[dict[str, Any]]) -> None:
         target.write_text(entry["content"], encoding="utf-8")
 
 
-def _hook_scope_compatible(hook_def: HookDef, session_env: dict[str, str]) -> bool:
-    """Mirror hook_registry.hook_applies_to_backend's session_scope gate.
-
-    session_scope filtering happens at hooks.json *generation* time (which
-    hooks get wired for a given session type) — a guard scoped headless_only
-    is never dispatched at all for an interactive session, and vice versa.
-    _dispatch.py has no notion of this, so the harness must apply the same
-    filter a real deployed session would have applied before this event ever
-    reached a guard.
-    """
-    if hook_def.session_scope == "any":
-        return True
-    headless = session_env.get("AUTOSKILLIT_HEADLESS") == "1"
-    if hook_def.session_scope == "headless_only":
-        return headless
-    if hook_def.session_scope == "interactive_only":
-        return not headless
-    return True
-
-
-def matched_hook_defs(tool_name: str, session_env: dict[str, str]) -> list[HookDef]:
-    """Return every PreToolUse HookDef whose matcher fullmatches tool_name
-    and whose session_scope is compatible with session_env."""
+def matched_hook_defs(tool_name: str) -> list[HookDef]:
+    """Return every registered PreToolUse matcher for the tool name."""
     return [
         hook_def
         for hook_def in HOOK_REGISTRY
-        if hook_def.event_type == "PreToolUse"
-        and re.fullmatch(hook_def.matcher, tool_name)
-        and _hook_scope_compatible(hook_def, session_env)
+        if hook_def.event_type == "PreToolUse" and re.fullmatch(hook_def.matcher, tool_name)
     ]
+
+
+def test_interactive_replay_dispatches_ask_user_question_guard(tmp_path: Path) -> None:
+    assert any(
+        "guards/ask_user_question_guard.py" in hook.scripts
+        for hook in matched_hook_defs("AskUserQuestion")
+    )
+    event = ReplayEvent(
+        {"tool_name": "AskUserQuestion", "tool_input": {"questions": []}},
+        allowed=True,
+        max_severity="none",
+    )
+    results = run_event_through_matched_guards(event, {"AUTOSKILLIT_HEADLESS": ""}, tmp_path)
+    assert any(result.script == "guards/ask_user_question_guard.py" for result in results)
+    assert not any(result.denied for result in results)
 
 
 class GuardRunResult:
@@ -185,7 +173,7 @@ def run_event_through_matched_guards(
     child_env = {**production_interpreter_env(), **session_env}
     stdin_bytes = json.dumps(event.payload).encode("utf-8")
 
-    for hook_def in matched_hook_defs(tool_name, session_env):
+    for hook_def in matched_hook_defs(tool_name):
         for script in hook_def.scripts:
             logical_name = script.removesuffix(".py")
             proc = subprocess.run(

@@ -1,5 +1,7 @@
 ---
 name: audit-tests
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-tests/'
 categories:
 - audit
 description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization

@@ -1,5 +1,7 @@
 ---
 name: apply-review-dimensions
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/'
 categories:
 - research
 uses_capabilities: []

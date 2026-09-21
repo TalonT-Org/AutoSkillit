@@ -1,5 +1,7 @@
 ---
 name: exp-lens-comparator-construction
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/'
 categories:
 - exp-lens
 uses_capabilities: []

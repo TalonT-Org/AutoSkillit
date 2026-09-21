@@ -1,5 +1,7 @@
 ---
 name: investigate
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/investigate/'
 uses_capabilities:
 - claude_dir
 description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions

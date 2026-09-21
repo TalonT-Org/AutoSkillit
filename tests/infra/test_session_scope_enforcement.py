@@ -7,11 +7,19 @@ parity and prologue contracts live in tests/hooks and tests/arch.
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
+# Importing `autoskillit.hooks` populates HOOK_REGISTRY via the package's
+# __init__ (see autoskillit/hooks/__init__.py:_HOOK_REGISTRY_LIST.extend).
+# Without this the parametrize decorator below would observe an empty
+# registry and pytest would refuse collection.
+import autoskillit.hooks  # noqa: F401  (side-effect: builds HOOK_REGISTRY)
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
+    HOOKS_DIR,
+    PROTECTION_WAIVERS,
     HookDef,
     hook_applies_to_backend,
 )
@@ -46,3 +54,97 @@ def test_git_ops_guard_applies_to_headless_and_interactive_sessions(
         backend=backend,  # type: ignore[arg-type]
         session_scope=session_scope,  # type: ignore[arg-type]
     )
+
+
+def _scoped_hooks() -> list[tuple[HookDef, str]]:
+    """Return (hookdef, script_path) pairs for all non-'any' scoped hooks."""
+    pairs = []
+    for hookdef in HOOK_REGISTRY:
+        scope = getattr(hookdef, "session_scope", "any")
+        if scope != "any":
+            for script in hookdef.scripts:
+                pairs.append((hookdef, script))
+    return pairs
+
+
+@pytest.mark.parametrize("hookdef,script", _scoped_hooks())
+def test_scoped_guard_contains_headless_check(hookdef: HookDef, script: str) -> None:
+    """Every scoped hook must consume the shared session-scope authority."""
+    script_path = HOOKS_DIR / script
+    assert script_path.exists(), f"Hook script not found: {script_path}"
+    source = script_path.read_text(encoding="utf-8")
+    declared_scope = getattr(hookdef, "session_scope", "any")
+    # Accept any of:
+    #  - worktree's script-identity overload: enforce_session_scope("guards/<name>.py")
+    #  - worktree's compatibility overload: enforce_script_session_scope(__file__)
+    #  - develop's literal overload: enforce_session_scope("headless_only") /
+    #    enforce_session_scope("interactive_only") matching the registered scope
+    #  - the legacy helper name "is_headless_session" for non-guard scripts
+    accepted = [
+        f'enforce_session_scope("{script}")',
+        f'enforce_session_scope("{declared_scope}")',
+        "enforce_script_session_scope(__file__)",
+    ]
+    if not script.startswith("guards/"):
+        accepted.append("is_headless_session")
+    assert any(token in source for token in accepted), (
+        f"{script} is declared with session_scope={declared_scope!r} "  # type: ignore[attr-defined]
+        f"but does not consume the shared scope authority "
+        f"(expected one of {accepted!r})."
+    )
+
+
+def _scoped_guard_names() -> list[str]:
+    """Return the base name of each unique guard script declared with non-'any' scope."""
+    seen: set[str] = set()
+    result = []
+    for hookdef in HOOK_REGISTRY:
+        scope = getattr(hookdef, "session_scope", "any")
+        if scope != "any":
+            for script in hookdef.scripts:
+                if script not in seen:
+                    seen.add(script)
+                    result.append(script)
+    return result
+
+
+def _find_test_file(guard_script: str) -> Path | None:
+    """Locate the test file for a guard script in tests/infra/ or tests/hooks/."""
+    stem = Path(guard_script).stem  # e.g. "ask_user_question_guard"
+    tests_infra = Path(__file__).resolve().parent
+    for directory in (tests_infra, tests_infra.parent / "hooks"):
+        candidate = directory / f"test_{stem}.py"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+@pytest.mark.parametrize("guard_script", _scoped_guard_names())
+def test_scoped_guard_has_both_session_type_test_cases(guard_script: str) -> None:
+    """Every scoped guard's test file must exercise both headless and non-headless paths."""
+    test_file = _find_test_file(guard_script)
+    assert test_file is not None, (
+        f"No test file found for scoped guard '{guard_script}'. "
+        f"Expected: tests/infra/test_{Path(guard_script).stem}.py"
+    )
+    source = test_file.read_text(encoding="utf-8")
+    code_lines = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+    has_headless_true = "headless=True" in code_lines or "AUTOSKILLIT_HEADLESS" in code_lines
+    # Accept explicit headless=False OR the env-strip pattern used by subprocess-style hook tests
+    # (k != "AUTOSKILLIT_HEADLESS" strips the var to exercise the non-headless code path)
+    has_headless_false = (
+        "headless=False" in code_lines or '!= "AUTOSKILLIT_HEADLESS"' in code_lines
+    )
+    assert has_headless_true, (
+        f"{test_file.name} must test the headless=True path for scoped guard '{guard_script}'."
+    )
+    assert has_headless_false, (
+        f"{test_file.name} must test the headless=False path for scoped guard '{guard_script}'."
+    )
+    guard = next(hook for hook in HOOK_REGISTRY if guard_script in hook.scripts)
+    if guard.mechanism == "deny":
+        assert any(waiver.guard_script == guard_script for waiver in PROTECTION_WAIVERS), (
+            f"{guard_script} lacks a registered scope-exclusion waiver"
+        )

@@ -1,5 +1,7 @@
 ---
 name: vis-lens-uncertainty
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/'
 categories:
 - vis-lens
 uses_capabilities: []

@@ -1,5 +1,7 @@
 ---
 name: design-guards
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/design-guards/'
 uses_capabilities: []
 description: Investigate a bug pattern audit report and design architectural guards (tests, contracts, structural changes)
   that provide immunity to each identified pattern. Use when user says "design guards", "design defenses", or wants architectural

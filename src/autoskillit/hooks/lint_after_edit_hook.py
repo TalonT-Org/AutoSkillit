@@ -17,7 +17,8 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _hook_settings import enforce_session_scope  # noqa: E402
+
+from _hook_settings import enforce_session_scope, is_headless_session  # noqa: E402
 
 _IMPLEMENT_PREFIXES = ("implement-", "resolve-")
 LINT_AUTOFIX_TRIGGER = "--- RUFF AUTOFIX ---"
@@ -91,6 +92,9 @@ def _run_ruff_pipeline(file_path: str) -> tuple[bool, str]:
 
 def main() -> None:
     enforce_session_scope("headless_only")
+
+    if not is_headless_session():
+        sys.exit(0)
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if not any(skill_name.startswith(p) for p in _IMPLEMENT_PREFIXES):

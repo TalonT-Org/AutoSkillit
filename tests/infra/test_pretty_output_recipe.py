@@ -1350,9 +1350,9 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
         f"ingredients_only=both; actual={measured_modes!r}; limit=all registry modes"
     )
     assert maxima == {
-        "get_recipe_section": (186_174, "remediation", "all_truthy"),
-        "load_recipe": (186_174, "remediation", "all_truthy"),
-        "open_kitchen": (186_228, "remediation", "all_truthy"),
+        "get_recipe_section": (186_203, "remediation", "all_truthy"),
+        "load_recipe": (186_203, "remediation", "all_truthy"),
+        "open_kitchen": (186_257, "remediation", "all_truthy"),
     }, (
         "property=canonical baseline maxima; recipe=all; mode=all; tool=all; "
         f"ingredients_only=both; actual={maxima!r}; limit=measured current baseline"

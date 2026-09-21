@@ -1,8 +1,8 @@
 # Hooks
 
-AutoSkillit registers Claude Code hook scripts for PreToolUse, PostToolUse,
-PostToolUseFailure, SessionStart, Stop, SubagentStart, SubagentStop, and SessionEnd.
-Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 58 Claude Code hook scripts: 39 PreToolUse, 11 PostToolUse,
+2 PostToolUseFailure, 2 SessionStart, 1 Stop, 1 SubagentStart, 1 SubagentStop, and
+1 SessionEnd. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry/` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
@@ -18,7 +18,7 @@ explains the terminal headless result and explicit TUI continuation. A `manual` 
 does not match, so users may compact manually. This hook is excluded from the Claude
 Code registry.
 
-## PreToolUse hooks
+## PreToolUse hooks (39)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -372,6 +372,12 @@ Denies writes to generated files (`hooks.json`, `settings.json`). The hooks
 file must be regenerated through `generate_hooks_json()`, never edited by
 hand.
 
+### `installation_integrity_guard.py`
+**Guarded tools:** `Write`, `Edit`, `Bash`, `apply_patch`, `run_cmd`
+Denies writes into AutoSkillit installation trees, including `site-packages`,
+plugin generations, uv tool installs, and uv cache archives. This protection
+applies in every session class and backend.
+
 ### `recipe_write_advisor.py`
 **Matched tools:** `Write`, `Edit`
 Non-blocking advisory: suggests `/autoskillit:write-recipe` or
@@ -535,7 +541,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Eight guards additionally fail-**closed** for valid input with unrecognized values,
+Ten guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -549,6 +555,7 @@ as a defense-in-depth measure against privilege escalation:
 | `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError); or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. Separately, `_git_command_classification._contains_blocked_git_op` cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, rather than silently falling through to "not blocked" |
 | `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 | `unsafe_install_guard.py` | An unrecognized global pip flag leaves `pip`'s `install` token position unresolved | `_find_pip_install` cannot tell whether the command is a pip install at all; treating that the same as "definitely not an install" would silently skip the editable/system-install checks entirely, so it is threaded through as a distinct `"unresolved-pip-flags"` kind and denied unconditionally, matching the pre-existing `"unresolved-subprocess"` kind's treatment |
+| `installation_integrity_guard.py` | A detected write target cannot be resolved | An unresolved target could be a shell-local indirection into an installation tree and must not bypass the containment floor. |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed. Before adding a fail-closed

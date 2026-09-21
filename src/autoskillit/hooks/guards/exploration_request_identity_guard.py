@@ -22,7 +22,7 @@ from _exploration_request_record import (  # type: ignore[import-not-found]  # n
     write_exploration_request_record,
 )
 from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
-from _hook_settings import enforce_session_scope  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 EXPLORATION_REQUEST_IDENTITY_DENY_TRIGGER = "EXPLORATION REQUEST IDENTITY UNAVAILABLE"
 _TOKEN_PARAM = "_autoskillit_exploration_request_token"
@@ -66,6 +66,7 @@ def main() -> None:
         return
     if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         return
+
     tool_name = _short_tool_name(data.get("tool_name"))
     if tool_name is None:
         return

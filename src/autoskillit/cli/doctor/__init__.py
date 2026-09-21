@@ -52,6 +52,7 @@ from ._doctor_install import (
     _check_source_version_drift,
     _check_stale_entry_points,
     _check_update_dismissal_state,
+    verify_installations,
 )
 from ._doctor_mcp import (
     _check_claude_mcp_timeouts,
@@ -130,6 +131,7 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_plugin_cache_exists)))
     results.extend(_run_check(functools.partial(_check_plugin_cache_integrity)))
     results.extend(_run_check(functools.partial(_check_install_state_consistency)))
+    results.extend(_run_check(functools.partial(verify_installations)))
     results.extend(_run_check(functools.partial(_check_autoskillit_on_path)))
     results.extend(_run_check(functools.partial(_check_project_config)))
     results.extend(_run_check(functools.partial(_check_config_layers_for_secrets)))

@@ -11,7 +11,6 @@ calling run_skill directly. Skill sessions use native Claude Code tools only.
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -27,7 +26,11 @@ from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import normalize_payload_cwd  # noqa: E402
-from _hook_settings import enforce_session_scope, payload_managed_codex_route  # noqa: E402
+from _hook_settings import (  # noqa: E402
+    enforce_session_scope,
+    get_session_type,
+    payload_managed_codex_route,
+)
 
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
@@ -84,7 +87,7 @@ def main() -> None:
         sys.exit(0)
 
     # Headless: resolve session type, fail-closed for orchestration tools.
-    raw_session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    raw_session_type = get_session_type()
     session_type = raw_session_type.lower()
     if session_type == "orchestrator":
         sys.exit(0)

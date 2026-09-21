@@ -1,4 +1,4 @@
-"""Classification primitives for git operations — extracted from git_ops_guard.
+"""Classification primitives for git operations used by git_ops_guard.
 
 Step 9 (#4733) of the decompose-hooks-files plan (#4665). All `_classify_*`
 primitives and the helpers used exclusively by them moved from

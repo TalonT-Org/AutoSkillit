@@ -25,7 +25,7 @@ import pytest
 # _command_classification) is centralized in tests/conftest.py -- it must
 # run before this module's own top-level imports, which a fixture cannot do.
 from autoskillit.hooks._runtime._command_classification import _FlagArity  # noqa: E402
-from autoskillit.hooks.guards._git_command_classification import (  # noqa: E402
+from autoskillit.hooks._runtime._git_command_classification import (  # noqa: E402
     _GIT_FETCH_FLAG_SPEC,
     _classify_fetch,
 )
@@ -1239,11 +1239,11 @@ def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
 
 def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
     """Step 9 (#4733) regression: every classification primitive the orchestrator
-    consumes from autoskillit.hooks.guards._git_command_classification must remain
+    consumes from autoskillit.hooks._runtime._git_command_classification must remain
     reachable from the package import surface. Mirrors the orchestrator's import
     block at src/autoskillit/hooks/guards/git_ops_guard.py:37.
     """
-    from autoskillit.hooks.guards._git_command_classification import (  # noqa: PLC0415, E501
+    from autoskillit.hooks._runtime._git_command_classification import (  # noqa: PLC0415, E501
         _GIT_FETCH_BOOLEAN_FLAGS,
         _GIT_FETCH_FLAG_SPEC,
         _GIT_FETCH_VALUE_FLAGS,

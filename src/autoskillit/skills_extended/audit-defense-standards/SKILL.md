@@ -1,5 +1,7 @@
 ---
 name: audit-defense-standards
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-defense-standards/'
 categories:
 - audit
 uses_capabilities: []

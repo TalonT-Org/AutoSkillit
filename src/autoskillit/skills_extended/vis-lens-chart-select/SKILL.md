@@ -1,5 +1,7 @@
 ---
 name: vis-lens-chart-select
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/'
 categories:
 - vis-lens
 uses_capabilities: []

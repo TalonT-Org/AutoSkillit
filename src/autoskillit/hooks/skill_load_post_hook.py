@@ -24,12 +24,15 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _guard_decision_diagnostics import (  # noqa: E402
+    record_guard_decision,
+)
 from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
     resolve_quota_log_dir,
     write_quota_log_event,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
     SessionBinding,
@@ -148,6 +151,16 @@ def main() -> None:
     new_entry, binding_error, binding_written = _write_skill_binding(
         flag_path, skill_name=skill_name, session_id=session_id, ts=ts
     )
+
+    if not binding_written:
+        record_guard_decision(
+            data,
+            guard="skill_load_post_hook",
+            activation_source="skill_post_hook",
+            scope="session_binding",
+            decision="allow",
+            reason="binding_write_failed",
+        )
 
     if binding_error is not None:
         log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")

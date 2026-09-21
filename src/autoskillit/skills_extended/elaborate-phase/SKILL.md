@@ -1,5 +1,7 @@
 ---
 name: elaborate-phase
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/elaborate-phase/'
 uses_capabilities: []
 activate_deps:
 - dry-walkthrough

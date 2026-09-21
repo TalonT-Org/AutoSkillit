@@ -1,5 +1,7 @@
 ---
 name: exp-lens-variance-stability
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/'
 categories:
 - exp-lens
 uses_capabilities: []

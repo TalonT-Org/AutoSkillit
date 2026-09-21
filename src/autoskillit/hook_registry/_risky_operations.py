@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from ._hooks_defs import HookDef, LifecycleContractDef
+from ._hooks_defs import HookDef, LifecycleContractDef, ProtectionWaiverDef
 
 # The RISKY_* constants are NOT imported here directly. They are resolved
 # lazily through ``autoskillit.hook_registry.__getattr__`` (PEP 562) which
@@ -38,8 +38,15 @@ from ._hooks_defs import HookDef, LifecycleContractDef
 # packages have finished initializing.
 __all__ = [
     "hook_applies_to_backend",
+    "validate_protection_coverage",
     "validate_lifecycle_contracts",
 ]
+
+_PROTECTION_MECHANISM_BACKENDS = {
+    "hook": frozenset({"claude_code", "codex"}),
+    "not-applicable": frozenset({"claude_code", "codex"}),
+    "codex-sandbox": frozenset({"codex"}),
+}
 
 
 def hook_applies_to_backend(
@@ -85,6 +92,59 @@ def _contract_session_scopes(
     if contract.session_scope == "interactive_only":
         return ("interactive",)
     return ("headless", "interactive")
+
+
+def validate_protection_coverage(
+    registry: Sequence[HookDef],
+    waivers: Sequence[ProtectionWaiverDef],
+    *,
+    backend: Literal["claude_code", "codex"],
+) -> None:
+    """Reject undeclared exclusions and unreachable hook delegates."""
+    keys = [(waiver.guard_script, waiver.excluded_scope, waiver.backend) for waiver in waivers]
+    if len(keys) != len(set(keys)):
+        raise ValueError("protection waivers contain duplicate keys")
+    covered = {
+        (waiver.guard_script, waiver.excluded_scope, waiver.backend): waiver for waiver in waivers
+    }
+    registered = {script for hook_def in registry for script in hook_def.scripts}
+    for waiver in waivers:
+        allowed_backends = _PROTECTION_MECHANISM_BACKENDS.get(waiver.covering_mechanism)
+        if allowed_backends is None:
+            raise ValueError(f"unknown protection delegate for {waiver.guard_script!r}")
+        if waiver.backend not in allowed_backends:
+            raise ValueError(f"protection delegate is invalid for {waiver.backend}")
+        if waiver.covering_mechanism != "hook" or waiver.guard_script not in registered:
+            continue
+        if waiver.covering_guard_script is None:
+            raise ValueError(f"hook delegate missing for {waiver.guard_script!r}")
+        if waiver.excluded_scope == "all":
+            raise ValueError("hook delegate requires one excluded session class")
+        if not any(
+            waiver.covering_guard_script in candidate.scripts
+            and candidate.mechanism == "deny"
+            and hook_applies_to_backend(
+                candidate,
+                backend=backend,
+                session_scope=waiver.excluded_scope,
+            )
+            for candidate in registry
+        ):
+            raise ValueError(f"unreachable protection delegate for {waiver.guard_script!r}")
+    for hook_def in registry:
+        if hook_def.mechanism != "deny" or hook_def.session_scope == "any":
+            continue
+        excluded = "interactive" if hook_def.session_scope == "headless_only" else "headless"
+        for script in hook_def.scripts:
+            key = (script, excluded, backend)
+            if key not in covered:
+                raise ValueError(f"deny guard {script!r} has no protection waiver for {backend}")
+    internal_exclusions = [("guards/git_ops_guard.py", "interactive")]
+    if backend in _PROTECTION_MECHANISM_BACKENDS["codex-sandbox"]:
+        internal_exclusions.append(("guards/write_guard.py", "all"))
+    for script, excluded in internal_exclusions:
+        if script in registered and (script, excluded, backend) not in covered:
+            raise ValueError(f"internal policy exclusion {script!r} has no protection waiver")
 
 
 def validate_lifecycle_contracts(

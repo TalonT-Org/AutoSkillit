@@ -28,7 +28,6 @@ _PLUGIN_ROOT = str(Path(__file__).resolve().parents[2])
 if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
-from _hook_settings import hook_session_shape  # noqa: E402
 from _parent_assistant_turns import is_parent_assistant_record  # noqa: E402
 
 FABRICATED_COMPLETION_DENY_TRIGGER: str = "FABRICATED BACKGROUND COMPLETION"
@@ -47,6 +46,16 @@ _TERMINAL_STATUS_RE = re.compile(
     r"<status>\s*(?:completed|failed|cancelled)\s*</status>",
     re.IGNORECASE,
 )
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+
+from _hook_settings import get_session_type  # noqa: E402
 
 
 def _bounded_tail(path: Path) -> str | None:
@@ -296,8 +305,7 @@ def main() -> None:
         return
     if not isinstance(data, dict):
         return
-    _headless, session_type = hook_session_shape()
-    if session_type != "orchestrator" or data.get("agent_id") or data.get("agentId"):
+    if get_session_type() != "orchestrator" or data.get("agent_id") or data.get("agentId"):
         return
 
     session_id = data.get("session_id")

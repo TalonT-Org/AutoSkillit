@@ -1,5 +1,7 @@
 ---
 name: vis-lens-story-arc
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-story-arc/'
 categories:
 - vis-lens
 uses_capabilities: []

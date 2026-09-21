@@ -1,5 +1,7 @@
 ---
 name: planner-refine
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories: [planner]
 description: Targeted fix of validate_plan findings — re-elaboration, duplicate resolution, dependency corrections
 hooks:

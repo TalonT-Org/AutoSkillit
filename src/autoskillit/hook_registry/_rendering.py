@@ -22,6 +22,7 @@ from ._registry_data import (
     HOOK_REGISTRY,
     LIFECYCLE_CONTRACTS,
     PLUGIN_ROOT_TOKEN,
+    PROTECTION_WAIVERS,
     RETIRED_SCRIPT_BASENAMES,
 )
 
@@ -104,6 +105,42 @@ def render_hooks_json_text(
     return json.dumps(generate_hooks_json(registry, lifecycle_contracts), indent=2) + "\n"
 
 
+def render_hook_scope_table(
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+) -> str:
+    """Render the standalone hook-script scope authority from the registry.
+
+    Hook subprocesses cannot import the package registry, so the committed
+    runtime table is their stdlib-only projection of this metadata.
+    """
+    scopes_by_script: dict[str, str] = {}
+    for hook_def in registry:
+        for script in hook_def.scripts:
+            prior_scope = scopes_by_script.setdefault(script, hook_def.session_scope)
+            if prior_scope != hook_def.session_scope:
+                raise ValueError(
+                    f"hook script {script!r} has conflicting session scopes "
+                    f"{prior_scope!r} and {hook_def.session_scope!r}"
+                )
+
+    rows = "\n".join(
+        f"    {json.dumps(script)}: {json.dumps(scope)},"
+        for script, scope in sorted(scopes_by_script.items())
+    )
+    return (
+        '"""Generated hook-session-scope table. Do not edit manually.\n\n'
+        'Run `task sync-hook-scope-table` after changing HOOK_REGISTRY.\n"""\n\n'
+        "HOOK_SCOPE_BY_SCRIPT: dict[str, str] = {\n"
+        f"{rows}\n"
+        "}\n"
+    )
+
+
+def published_hook_defs(registry: Sequence[HookDef]) -> tuple[HookDef, ...]:
+    """Return hooks included in both Claude publication forms."""
+    return tuple(hook_def for hook_def in registry if not hook_def.runtime_only)
+
+
 def generate_hooks_json(
     registry: Sequence[HookDef] = HOOK_REGISTRY,
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
@@ -113,18 +150,17 @@ def generate_hooks_json(
     Multiple HookDef entries with the same (event_type, matcher) are consolidated
     into a single settings.json entry so Claude Code sees no duplicate matchers.
     """
-    from ._risky_operations import validate_lifecycle_contracts
+    from ._risky_operations import validate_lifecycle_contracts, validate_protection_coverage
 
     validate_lifecycle_contracts(
         registry,
         lifecycle_contracts,
         backend="claude_code",
     )
+    validate_protection_coverage(registry, PROTECTION_WAIVERS, backend="claude_code")
     # Preserve insertion order; merge scripts from same (event_type, matcher) key.
     groups: dict[tuple[str, str], dict] = {}
-    for hook_def in registry:
-        if hook_def.runtime_only:
-            continue
+    for hook_def in published_hook_defs(registry):
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
             _build_hook_command(None, script, hook_def.timeout_seconds, relocatable=True)
@@ -142,5 +178,6 @@ def generate_hooks_json(
         registry,
         RETIRED_SCRIPT_BASENAMES,
         lifecycle_contracts,
+        PROTECTION_WAIVERS,
     )
     return {"hooks": by_event, "_autoskillit_registry_hash": registry_hash}

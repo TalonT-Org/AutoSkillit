@@ -189,6 +189,7 @@ def _scoped_source_files() -> list[Path]:
     files += list((HOOKS_ROOT / "guards").glob("*.py"))
     files += [
         HOOKS_ROOT / "_runtime" / "_command_classification.py",
+        HOOKS_ROOT / "_runtime" / "_git_command_classification.py",
         HOOKS_ROOT / "_runtime" / "_github_mutation_analysis.py",
     ]
     return sorted(set(files))
@@ -229,6 +230,13 @@ def _observed_raw_scans() -> tuple[tuple[str, str, str], ...]:
 # must stay scoped to the one payload that defines it.
 _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
     {
+        # Patch file markers are structured tool input, not shell syntax. Both
+        # write guards use this shared extraction of the same target paths.
+        (
+            "hooks/_runtime/_command_classification.py",
+            "extract_patch_paths",
+            "str.splitlines",
+        ),
         # _classification/_interpreters.py -- the authority's own internal
         # tokenizer use (_iter_evaluated_segments / all_evaluated_segments_with_provenance /
         # the grouped shell-payload walk feeding each other and the tokenizer facade).

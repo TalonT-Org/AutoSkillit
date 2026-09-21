@@ -1,5 +1,7 @@
 ---
 name: planner-analyze
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/planner/'
 categories:
 - planner
 description: Analyze project structure for planning decomposition

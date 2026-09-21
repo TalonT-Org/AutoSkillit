@@ -356,8 +356,28 @@ def read_manifest(path: Path) -> dict[str, object]:
         raise SessionBindingError("projection manifest artifact_digest must be a string")
     if not isinstance(parsed.get("incarnation_id"), str):
         raise SessionBindingError("projection manifest incarnation_id must be a string")
-    if not isinstance(parsed.get("skills"), dict):
+    skills = parsed.get("skills")
+    if not isinstance(skills, dict):
         raise SessionBindingError("projection manifest skills must be an object")
+    for name, entry in skills.items():
+        if not isinstance(entry, dict) or "write_paths" not in entry:
+            raise SessionBindingError(f"projection manifest skill {name!r} lacks write_paths")
+        paths = entry["write_paths"]
+        if paths is not None and (
+            not isinstance(paths, list)
+            or any(
+                not isinstance(path, str)
+                or not path
+                or ".." in Path(path).parts
+                or not path.startswith(
+                    ("{{AUTOSKILLIT_TEMP}}/", f"{_hook_payload_module.TEMP_RELATIVE_DIR}/")
+                )
+                for path in paths
+            )
+        ):
+            raise SessionBindingError(
+                f"projection manifest skill {name!r} has invalid write_paths"
+            )
     return parsed
 
 

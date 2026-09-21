@@ -1,5 +1,7 @@
 ---
 name: make-experiment-diag
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-experiment-diag/'
 categories:
 - exp-lens
 uses_capabilities: []

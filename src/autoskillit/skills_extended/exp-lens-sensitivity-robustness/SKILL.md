@@ -1,5 +1,7 @@
 ---
 name: exp-lens-sensitivity-robustness
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/exp-lens-sensitivity-robustness/'
 categories:
 - exp-lens
 uses_capabilities: []

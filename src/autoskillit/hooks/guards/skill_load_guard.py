@@ -45,11 +45,12 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     enforce_session_scope,
-    hook_session_shape,
+    get_session_type,
+    is_headless_session,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     resolve_binding_path,
     resolve_channel_dir,
 )
@@ -142,8 +143,9 @@ def _is_guarded_non_anthropic_skill_session() -> bool:
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if not profile or profile.casefold() == "anthropic":
         return False
-    headless, session_type = hook_session_shape()
-    return headless and session_type == "skill"
+    if not is_headless_session():
+        return False
+    return get_session_type() == "skill"
 
 
 def main() -> None:

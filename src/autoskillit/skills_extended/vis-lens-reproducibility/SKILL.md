@@ -1,5 +1,7 @@
 ---
 name: vis-lens-reproducibility
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/vis-lens-reproducibility/'
 categories:
 - vis-lens
 uses_capabilities: []

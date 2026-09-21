@@ -95,10 +95,13 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     ),
     "write-path-prefix": InvariantDef(
         id="write-path-prefix",
-        prohibition="Writes outside allowed prefix are blocked in write-scoped sessions",
+        prohibition=(
+            "Headless launcher prefixes and interactive skill write_paths bound writes "
+            "in write-scoped sessions"
+        ),
         source_doc="SKILL.md",
         gate_target="guards/write_guard.py",
-        enforcement_layer="server-side",
+        enforcement_layer="hook-deny",
         backends=_CLAUDE_ONLY,
     ),
     "skill-orchestration-from-L1": InvariantDef(

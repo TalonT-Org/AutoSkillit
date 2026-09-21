@@ -1,5 +1,7 @@
 ---
 name: audit-bugs
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-bugs/'
 categories:
 - audit
 uses_capabilities:

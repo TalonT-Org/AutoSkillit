@@ -1,5 +1,7 @@
 ---
 name: validate-review-decisions
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/validate-review-decisions/'
 categories:
 - audit
 uses_capabilities: []

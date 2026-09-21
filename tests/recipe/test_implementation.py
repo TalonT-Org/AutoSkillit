@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = builtin_recipes_dir() / "implementation.yaml"
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:15a2a1869cfd0e65f64a584caf31c35b210c3e9dc63ea1624cfa233c26c5e4d9"
+    "sha256:50b3afcb1c897d1e7d0b592813911f75385edb80b83f96d31d00d81957b2f666"
 )
 
 _CHECKPOINT_HANDLER_TABLE = {

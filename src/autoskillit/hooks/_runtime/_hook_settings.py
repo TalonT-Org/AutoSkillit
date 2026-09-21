@@ -606,6 +606,22 @@ def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission"
     )
 
 
+def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
+    """Dict-shaped wrapper around ``session_join_admission`` for legacy callers.
+
+    Returns the binding's serialized JSON (the same shape that
+    ``_session_binding.SessionBinding.to_json`` produces — a plain ``dict``
+    with a top-level ``loaded_skills`` list, where each entry carries
+    ``skill_name`` and ``binding_valid`` keys) when a valid binding exists
+    for the payload session, or ``None`` for missing / unreadable /
+    mismatched binding artifacts. Preserves the legacy contract used by
+    callers like ``write_guard._interactive_prefix_policy`` and
+    ``tests/hooks/test_write_guard.py`` that predate the JoinAdmission
+    refactor.
+    """
+    return session_join_admission(payload_cwd, session_id).binding_dict
+
+
 def session_join_required(payload_cwd: str, session_id: str) -> bool:
     """Return whether the payload-identified binding requires a fixed-set join."""
     return session_join_admission(payload_cwd, session_id).enforce

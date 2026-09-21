@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "b19937164aae9bc9e8a7fa4ef1c95a2d1735500dcb9c1153d150b48e9bb4383d",
+  "_registry_hash": "631ca814c2471d1d50287c3d4a8d9324388299562c242438efba70c89dc63f53",
   "hooks": {
     "PostToolUse": [
       {

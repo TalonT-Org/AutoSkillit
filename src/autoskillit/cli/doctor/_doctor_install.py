@@ -430,9 +430,14 @@ def _record_hash(value: str) -> tuple[str, bytes] | None:
 
 def _regular_files(root: Path) -> Iterator[Path]:
     try:
-        paths = root.glob("**/*")
-        for path in paths:
+        for path in root.glob("**/*"):
             try:
+                # Reject symlinked directories before descending; the file-stat
+                # follow_symlinks=False branch already rejects symlinked files,
+                # but Path.glob('**/*') still walks into symlinked directories
+                # and enumerates files outside the package root.
+                if path.is_dir() and path.is_symlink():
+                    continue
                 if stat.S_ISREG(path.stat(follow_symlinks=False).st_mode):
                     yield path
             except OSError:

@@ -26,8 +26,6 @@ def _set_session_shape(
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     if dispatch_id:
         monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", dispatch_id)
-    else:
-        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
 
 
 def _make_recipe_ctx() -> MagicMock:

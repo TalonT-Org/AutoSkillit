@@ -69,7 +69,10 @@ def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Itera
         turn_id = _resolve_turn_id(record)
         timestamp = record.get("timestamp", "")
         message = record.get("message")
-        content = message.get("content", []) if isinstance(message, dict) else []
+        # ``message.get("content")`` may be present-but-null in malformed
+        # transcripts; ``or []`` coerces both missing and null to an empty
+        # iterable so a single bad record cannot abort the iterator.
+        content = (message.get("content") or []) if isinstance(message, dict) else []
         tools = [
             str(block["name"])
             for block in content

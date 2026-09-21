@@ -1284,6 +1284,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Fleet file-level entries importing autoskillit.recipe:
             "fleet/test_fleet_e2e.py",
             "fleet/test_fleet_e2e_codex.py",
+            "fleet/test_fleet_e2e_codex_dispatch_identity.py",
             "fleet/test_campaign_capture.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_pack_enforcement_e2e.py",

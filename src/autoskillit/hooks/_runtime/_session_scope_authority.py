@@ -108,8 +108,6 @@ def enforce_script_session_scope(script_identity: str) -> bool:
         )
         table_module = importlib.import_module(table_module_name)
         scope = table_module.HOOK_SCOPE_BY_SCRIPT[key]
-        if scope not in {"any", "headless_only", "interactive_only"}:
-            raise ValueError(f"invalid scope {scope!r}")
     except (ImportError, AttributeError, KeyError, ValueError) as exc:
         print(
             f"hook_scope_authority_unavailable: script={script_identity!r} error={exc!r}",

@@ -37,7 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402,F401
     enforce_session_scope,
     get_session_type,
     read_merged_hook_config,
@@ -48,8 +48,6 @@ PR_CREATE_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["pr_create_guard"]
 _DENY_REASON = DENY_REASON_BY_GUARD["pr_create_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["pr_create_guard"]
-
-_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
 
 
 def _is_gh_pr_create(cmd: str) -> bool:
@@ -76,9 +74,6 @@ def _is_gh_pr_create(cmd: str) -> bool:
 
 def main() -> None:
     enforce_session_scope("any", exempt_tiers=frozenset({"orchestrator"}))
-
-    if get_session_type() in _EXEMPT_SESSION_TYPES:
-        sys.exit(0)
 
     try:
         data = json.loads(sys.stdin.read())

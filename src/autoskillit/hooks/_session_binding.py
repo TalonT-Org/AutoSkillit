@@ -364,21 +364,33 @@ def read_manifest(path: Path) -> dict[str, object]:
             raise SessionBindingError(f"projection manifest skill {name!r} lacks write_paths")
         paths = entry["write_paths"]
         if paths is not None and (
-            not isinstance(paths, list)
-            or any(
-                not isinstance(path, str)
-                or not path
-                or ".." in Path(path).parts
-                or not path.startswith(
-                    ("{{AUTOSKILLIT_TEMP}}/", f"{_hook_payload_module.TEMP_RELATIVE_DIR}/")
-                )
-                for path in paths
-            )
+            not isinstance(paths, list) or any(not _is_valid_write_path(path) for path in paths)
         ):
             raise SessionBindingError(
                 f"projection manifest skill {name!r} has invalid write_paths"
             )
     return parsed
+
+
+def _is_valid_write_path(path: object) -> bool:
+    """Validate one write_paths entry from a projection manifest.
+
+    Returns False when *path* is not a non-empty string rooted at
+    ``{{AUTOSKILLIT_TEMP}}`` or the project-relative temp directory.
+    Catches ``ValueError`` from ``Path(path).parts`` so that paths with
+    embedded null bytes or other invalid characters surface as a
+    ``SessionBindingError`` at the call site instead of leaking a
+    low-level exception.
+    """
+    if not isinstance(path, str) or not path:
+        return False
+    try:
+        parts = Path(path).parts
+    except ValueError:
+        return False
+    return ".." not in parts and path.startswith(
+        ("{{AUTOSKILLIT_TEMP}}/", f"{_hook_payload_module.TEMP_RELATIVE_DIR}/")
+    )
 
 
 def loaded_skill_from_manifest(

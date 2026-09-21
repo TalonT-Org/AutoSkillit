@@ -414,14 +414,14 @@ def extract_write_verb_targets(
     elif verb == "install":
         # GNU install: `install -t DIR SRC...` puts the destination in a
         # `-t` flag (filtered out by non_flag_operands); without `-t` the
-        # last operand is the destination. Pick the target directory in
-        # both shapes.
-        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
-            operands = operands[:1]
-        else:
-            if len(operands) < 2:
-                return [], False
-            operands = operands[-1:]
+        # last operand is the destination. The destination can also be
+        # encoded inline (`-tDIR`, `--target-directory=DIR`); see
+        # `_install_command.select_install_operands` for the full matrix.
+        from _install_command import select_install_operands
+
+        operands = select_install_operands(segment[1:], operands)
+        if operands is None:
+            return [], False
     elif verb == "patch":
         operands = operands[:1]
 

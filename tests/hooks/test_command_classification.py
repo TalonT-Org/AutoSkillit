@@ -1321,6 +1321,59 @@ class TestResolveWriteTarget:
         assert resolve_write_target(path, cwd) == expected
 
 
+class TestExtractWriteVerbTargetsInstall:
+    """GNU install -t / --target-directory supports multiple spellings.
+
+    All forms below carry the destination as the FIRST remaining operand
+    (the target-directory flag is consumed by non_flag_operands). The
+    "no target flag" form takes the LAST operand as the destination.
+    """
+
+    @pytest.mark.parametrize(
+        "tokens,expected",
+        [
+            (["install", "-t", "/dst", "/src"], ["/dst"]),
+            (["install", "--target-directory", "/dst", "/src"], ["/dst"]),
+            (["install", "--target-directory=/dst", "/src"], ["/dst"]),
+            (["install", "-t/dst", "/src"], ["/dst"]),
+            (
+                ["install", "-m", "0644", "--target-directory=/dst", "/src"],
+                ["/dst"],
+            ),
+            # No target flag → last operand is the destination.
+            (["install", "/src", "/dst"], ["/dst"]),
+            (["install", "-m", "0644", "/src", "/dst"], ["/dst"]),
+        ],
+        ids=[
+            "short_separate",
+            "long_separate",
+            "long_equals",
+            "short_combined_no_space",
+            "interleaved_with_mode",
+            "positional_destination",
+            "positional_with_mode",
+        ],
+    )
+    def test_install_target_flag_recognises_every_form(
+        self, tokens: list[str], expected: list[str]
+    ) -> None:
+        targets, unresolved = command_classification.extract_write_verb_targets(
+            "install", tokens, "/workspace"
+        )
+        assert targets == expected
+        assert unresolved is False
+
+    def test_install_without_target_flag_and_one_operand_is_unresolved(self) -> None:
+        # Without `-t`/`--target-directory`, install needs SRC and DEST;
+        # a lone operand cannot be the destination, so the extractor
+        # returns no targets (the write-verb caller treats the missing
+        # target as fail-closed).
+        targets, _unresolved = command_classification.extract_write_verb_targets(
+            "install", ["install", "/src"], "/workspace"
+        )
+        assert targets == []
+
+
 class TestExtractRedirectTargetsCwd:
     @pytest.mark.parametrize(
         "tokens,cwd,expected",

@@ -1966,8 +1966,12 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fleet/test_fleet_e2e_codex.py": frozenset(
         {"autoskillit.execution", "autoskillit.workspace"}
     ),
-    # Codex MCP boundary coverage launches a real headless execution backend.
-    "tests/fleet/test_fleet_e2e_codex_dispatch_identity.py": frozenset({"autoskillit.execution"}),
+    # Codex MCP boundary coverage launches a real headless execution backend
+    # and exercises the dispatch_food_truck tool entry point to verify identity
+    # propagation across the Codex MCP boundary.
+    "tests/fleet/test_fleet_e2e_codex_dispatch_identity.py": frozenset(
+        {"autoskillit.execution", "autoskillit.server"}
+    ),
     # session_log retention tests verify campaign protection in the writer
     # transaction — needs fleet.state
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),

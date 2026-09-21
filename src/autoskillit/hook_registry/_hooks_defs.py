@@ -11,7 +11,6 @@ It is imported as ``regex`` (not stdlib ``re``) per
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import regex as re
@@ -28,6 +27,13 @@ if TYPE_CHECKING:
 _MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset(
     {"SessionStart", "Stop", "PreToolUse", "UserPromptExpansion"}
 )
+
+# Static mirror of canonical ``SESSION_SCOPE_VALUES`` for runtime validation
+# in ``__post_init__``. The import-time cycle through ``autoskillit.hooks``
+# prevents looking up the live constant here; T17
+# (tests/hooks/test_hook_scope_authority.py) pins this set equal to the
+# canonical constant in ``autoskillit.hooks._runtime._session_scope_authority``.
+_SESSION_SCOPE_VALUES: frozenset[str] = frozenset({"any", "headless_only", "interactive_only"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +79,8 @@ class HookDef:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
-        if self.session_scope not in _load_session_scope_values():
-            raise ValueError("HookDef.session_scope is invalid")
+        if self.session_scope not in _SESSION_SCOPE_VALUES:
+            raise ValueError(f"HookDef.session_scope={self.session_scope!r} is invalid")
         for field_name in (
             "produces_resources",
             "reclaims_resources",
@@ -113,9 +119,11 @@ class LifecycleContractDef:
         if not isinstance(self.producer_script, str) or not self.producer_script:
             raise ValueError("LifecycleContractDef.producer_script must be non-empty")
         if self.backend not in ("claude_code", "codex"):
-            raise ValueError("LifecycleContractDef.backend is invalid")
-        if self.session_scope not in _load_session_scope_values():
-            raise ValueError("LifecycleContractDef.session_scope is invalid")
+            raise ValueError(f"LifecycleContractDef.backend={self.backend!r} is invalid")
+        if self.session_scope not in _SESSION_SCOPE_VALUES:
+            raise ValueError(
+                f"LifecycleContractDef.session_scope={self.session_scope!r} is invalid"
+            )
         if not isinstance(self.required_owner_roles, frozenset) or not (self.required_owner_roles):
             raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")
         if not self.required_owner_roles <= {"same_runner", "session_start"}:
@@ -135,8 +143,13 @@ class ProtectionWaiverDef:
     covering_guard_script: str | None = None
 
     def __post_init__(self) -> None:
-        if not all((self.guard_script, self.risk, self.covering_mechanism, self.justification)):
-            raise ValueError("protection waiver fields must be nonempty")
+        empty_fields = [
+            field_name
+            for field_name in ("guard_script", "risk", "covering_mechanism", "justification")
+            if not getattr(self, field_name)
+        ]
+        if empty_fields:
+            raise ValueError(f"protection waiver fields must be nonempty: {empty_fields}")
         if self.covering_mechanism == "hook" and not self.covering_guard_script:
             raise ValueError("hook protection waiver requires covering_guard_script")
 
@@ -150,59 +163,3 @@ class HookDriftResult(NamedTuple):
 
 
 _LOGICAL_HOOK_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
-
-
-def _load_session_scope_values() -> frozenset[str]:
-    """Return the canonical SESSION_SCOPE_VALUES from autoskillit.hooks._runtime.
-
-    Issue #5121 (D7 module-reference pattern): the canonical constant lives in
-    _session_scope_authority.py. Importing it through the normal
-    ``from autoskillit.hooks._runtime import _session_scope_authority`` path
-    triggers ``autoskillit.hooks/__init__.py``, which imports
-    ``autoskillit.hook_registry`` — and that package is mid-load when
-    ``_hooks_defs`` is being imported (it is loaded as part of
-    ``autoskillit.hook_registry.__init__``).
-
-    We avoid the cycle by loading the module via ``importlib.util`` against
-    its on-disk path, which bypasses the package-init machinery. The result
-    is the SAME module object as the package-init path would produce (it
-    ends up cached in ``sys.modules`` under the dotted name on first
-    attribute access), so monkeypatching still works in tests.
-
-    Returns the constant ``frozenset[str]``; the call is cheap — it caches
-    the resolved module on the function attribute after first invocation.
-    """
-    cached = getattr(_load_session_scope_values, "_cached", None)
-    if cached is not None:
-        return cached
-    import importlib.util
-    import sys as _sys
-
-    # Resolve via direct file path to bypass the dotted-name import machinery,
-    # which would otherwise trigger autoskillit.hooks/__init__.py and cycle
-    # back through autoskillit.hook_registry mid-load. After the cycle
-    # resolves, subsequent imports of the canonical dotted name find this
-    # exact module object (registered in sys.modules below), preserving the
-    # module-reference pattern that T5's monkeypatch exercises.
-    module_path = (
-        Path(__file__).resolve().parent.parent
-        / "hooks"
-        / "_runtime"
-        / "_session_scope_authority.py"
-    )
-    direct_spec = importlib.util.spec_from_file_location(
-        "autoskillit.hooks._runtime._session_scope_authority", module_path
-    )
-    if direct_spec is None or direct_spec.loader is None:
-        # Should not happen in a properly-installed environment — the file is
-        # always present. Fall back to the hardcoded value set, which matches
-        # the canonical constant by value (pinned by T17).
-        cached = frozenset({"any", "headless_only", "interactive_only"})
-        _load_session_scope_values._cached = cached  # type: ignore[attr-defined]
-        return cached
-    module = importlib.util.module_from_spec(direct_spec)
-    _sys.modules["autoskillit.hooks._runtime._session_scope_authority"] = module
-    direct_spec.loader.exec_module(module)  # type: ignore[union-attr]
-    cached = module.SESSION_SCOPE_VALUES
-    _load_session_scope_values._cached = cached  # type: ignore[attr-defined]
-    return cached

@@ -516,23 +516,23 @@ class TestIterMergedAssistantTurns:
     def test_message_id_only_records_merge_into_five_turns(self) -> None:
         """Nine MiniMax snapshots for five IDs must remain five logical turns."""
         turns = self._parse(
-            self._make_record(message_id="mid-A", thinking=True),
-            self._make_record(message_id="mid-A", tools=["A"]),
-            self._make_record(message_id="mid-B", tools=["B"]),
-            self._make_record(message_id="mid-C", tools=["C1"]),
-            self._make_record(message_id="mid-C", tools=["C2"]),
-            self._make_record(message_id="mid-D", thinking=True),
-            self._make_record(message_id="mid-D", tools=["D"]),
-            self._make_record(message_id="mid-E", tools=["E1"]),
-            self._make_record(message_id="mid-E", tools=["E2"]),
+            self._make_record(message_id="mid-A", ts="2026-05-30T08:00:00.000Z", thinking=True),
+            self._make_record(message_id="mid-A", ts="2026-05-30T08:00:01.000Z", tools=["A"]),
+            self._make_record(message_id="mid-B", ts="2026-05-30T08:00:02.000Z", tools=["B"]),
+            self._make_record(message_id="mid-C", ts="2026-05-30T08:00:03.000Z", tools=["C1"]),
+            self._make_record(message_id="mid-C", ts="2026-05-30T08:00:04.000Z", tools=["C2"]),
+            self._make_record(message_id="mid-D", ts="2026-05-30T08:00:05.000Z", thinking=True),
+            self._make_record(message_id="mid-D", ts="2026-05-30T08:00:06.000Z", tools=["D"]),
+            self._make_record(message_id="mid-E", ts="2026-05-30T08:00:07.000Z", tools=["E1"]),
+            self._make_record(message_id="mid-E", ts="2026-05-30T08:00:08.000Z", tools=["E2"]),
         )
 
         assert turns == [
-            AssistantTurn("mid-A", "", ("A",)),
-            AssistantTurn("mid-B", "", ("B",)),
-            AssistantTurn("mid-C", "", ("C1", "C2")),
-            AssistantTurn("mid-D", "", ("D",)),
-            AssistantTurn("mid-E", "", ("E1", "E2")),
+            AssistantTurn("mid-A", "2026-05-30T08:00:00.000Z", ("A",)),
+            AssistantTurn("mid-B", "2026-05-30T08:00:02.000Z", ("B",)),
+            AssistantTurn("mid-C", "2026-05-30T08:00:03.000Z", ("C1", "C2")),
+            AssistantTurn("mid-D", "2026-05-30T08:00:05.000Z", ("D",)),
+            AssistantTurn("mid-E", "2026-05-30T08:00:07.000Z", ("E1", "E2")),
         ]
 
     def test_request_id_takes_precedence_over_message_id(self) -> None:

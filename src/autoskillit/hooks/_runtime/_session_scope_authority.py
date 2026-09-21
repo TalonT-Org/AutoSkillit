@@ -1,19 +1,10 @@
-"""Script-identity session-scope authority (worktree compat shim).
+"""Script-identity session-scope authority for hook processes.
 
-The ``HookDef.session_scope`` field declares each hook's runtime scope
-constraint; PR #5103 (post-#5114 branch) routed enforcement through
-``_hook_settings.enforce_session_scope`` (a literal overload that emits
-SystemExit on mismatch). The worktree branch's original
-``enforce_session_scope(script_identity) -> bool`` script-identity form
-was lost during rebase.
-
-This module restores the script-identity form as a thin wrapper around
-the generated ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` map. The literal
-overload continues to live in :mod:`_hook_settings`. Both surfaces are
-required: the literal overload satisfies the ``HookDef.session_scope``
-declaration in the registry, and the script-identity form is what
-``tests/hooks/test_hook_scope_authority.py`` requires for fail-closed
-behavior when the generated table is missing or stale.
+Provides ``enforce_script_session_scope`` as a thin wrapper around the
+generated ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` map. The literal
+overload lives in :mod:`_hook_settings`; the script-identity form here
+is the fail-closed authority used by guard scripts when the generated
+table is missing or stale.
 
 Stdlib-only; runs as a bare sibling module under ``hooks/_runtime/``.
 """
@@ -119,39 +110,3 @@ def enforce_script_session_scope(script_identity: str) -> bool:
     if scope == "headless_only":
         return headless
     return not headless
-
-
-def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
-    """Dict-shaped binding reader for legacy callers that predate JoinAdmission.
-
-    Returns the binding's serialized JSON (the same shape that
-    ``_session_binding.SessionBinding.to_json`` produces — a plain ``dict``
-    with a top-level ``loaded_skills`` list, where each entry carries
-    ``skill_name`` and ``binding_valid`` keys) when a valid binding exists
-    for the payload session, or ``None`` for missing / unreadable /
-    mismatched binding artifacts. Preserves the legacy contract used by
-    callers like ``write_guard._interactive_prefix_policy`` and
-    ``tests/hooks/test_write_guard.py`` that predate the JoinAdmission
-    refactor.
-
-    Goes through ``read_binding`` rather than ``session_join_admission``
-    so a valid binding with any loaded skills returns its dict, regardless
-    of which skill the caller intends to project. ``session_join_admission``
-    is for skill-specific join admission (it asserts the requested skill is
-    loaded) and would always deny here.
-    """
-    binding_module = importlib.import_module(
-        f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
-    )
-    binding_path = binding_module.resolve_binding_path(payload_cwd, session_id)
-    try:
-        binding = binding_module.read_binding(binding_path)
-    except binding_module.SessionBindingError:
-        return None
-    if binding is None:
-        return None
-    if binding.session_id != session_id:
-        return None
-    if not binding.binding_valid:
-        return None
-    return json.loads(binding.to_json())

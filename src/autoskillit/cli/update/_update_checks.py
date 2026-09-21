@@ -24,8 +24,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
 
-from packaging.version import InvalidVersion, Version
-
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli.install._install_info import (
     InstallType,
@@ -319,25 +317,12 @@ def run_update_checks(home: Path | None = None) -> None:
     ) and not os.environ.get("AUTOSKILLIT_FORCE_UPDATE_CHECK"):
         return
 
-    import autoskillit as _pkg
+    from autoskillit.cli.install._install_info import normalized_package_version
 
-    # ``autoskillit.__version__`` is unconditionally set at import time to a
-    # non-empty string from ``importlib.metadata.version()``; the isinstance
-    # and strip guards exist for tests that ``delattr(__version__)`` and to
-    # survive a hypothetical future where the import-time assignment is moved.
-    current = getattr(_pkg, "__version__", None)
-    if not isinstance(current, str) or not current.strip():
+    current = normalized_package_version()
+    if current is None:
         print(
             "Installation integrity failure: autoskillit has no valid __version__. "
-            "Run `autoskillit install` before checking for updates.",
-            flush=True,
-        )
-        return
-    try:
-        Version(current)
-    except InvalidVersion:
-        print(
-            "Installation integrity failure: autoskillit has an invalid __version__. "
             "Run `autoskillit install` before checking for updates.",
             flush=True,
         )

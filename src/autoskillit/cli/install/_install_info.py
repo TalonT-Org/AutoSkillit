@@ -284,3 +284,24 @@ def upgrade_command(
             }
         ),
     )
+
+
+def normalized_package_version() -> str | None:
+    """Return the running package's ``__version__`` string, or ``None`` if invalid.
+
+    Centralizes the missing/invalid-version guard so the doctor and update-check
+    callers share one implementation. The isinstance/strip guards exist for
+    tests that ``delattr(__version__)``.
+    """
+    from packaging.version import InvalidVersion, Version
+
+    import autoskillit as _pkg
+
+    current = getattr(_pkg, "__version__", None)
+    if not isinstance(current, str) or not current.strip():
+        return None
+    try:
+        Version(current)
+    except InvalidVersion:
+        return None
+    return current

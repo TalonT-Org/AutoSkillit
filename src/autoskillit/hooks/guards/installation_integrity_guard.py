@@ -201,7 +201,9 @@ def main() -> None:
         sys.exit(0)
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in {"Write", "Edit", "Bash", "apply_patch"} and "run_cmd" not in tool_name:
+    if not isinstance(tool_name, str) or (
+        tool_name not in {"Write", "Edit", "Bash", "apply_patch"} and "run_cmd" not in tool_name
+    ):
         sys.exit(0)
 
     targets: list[str] = []
@@ -209,7 +211,8 @@ def main() -> None:
     payload_cwd = data.get("cwd", "")
     cwd = payload_cwd if isinstance(payload_cwd, str) and os.path.isabs(payload_cwd) else ""
     if tool_name in {"Write", "Edit"}:
-        path = data.get("tool_input", {}).get("file_path", "")
+        tool_input = data.get("tool_input")
+        path = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
         if isinstance(path, str) and path:
             resolved = resolve_write_target(path, cwd)
             if resolved is None:

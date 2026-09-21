@@ -81,14 +81,18 @@ def test_at_least_one_hookdef_has_exempt_session_types() -> None:
 def test_exempt_session_type_guard_contains_session_type_check(
     hookdef: HookDef, script: str
 ) -> None:
-    """Every exempt guard must consult the shared session-type accessor."""
+    """Route every exempt guard through ``enforce_session_scope(exempt_tiers=...)``."""
     script_path = HOOKS_DIR / script
     assert script_path.exists(), f"Hook script not found: {script_path}"
     source = script_path.read_text(encoding="utf-8")
-    assert "get_session_type" in source, (
+    # The real invariant: a guard declared with exempt_session_types must
+    # delegate exemption to enforce_session_scope(exempt_tiers=...). Callers
+    # must NOT destructure the session shape themselves to re-implement the
+    # same check — admit_hook_session_scope already enforces the exempt tier.
+    assert "enforce_session_scope" in source and "exempt_tiers=" in source, (
         f"{script} is declared with exempt_session_types="
         f"{hookdef.exempt_session_types!r} "  # type: ignore[attr-defined]
-        "but does not consult get_session_type()."
+        "but does not route its exemption through enforce_session_scope(exempt_tiers=...)."
     )
 
 

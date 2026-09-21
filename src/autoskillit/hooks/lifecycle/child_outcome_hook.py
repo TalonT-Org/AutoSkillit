@@ -49,7 +49,7 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-# Resolved dynamically (matching hooks/_runtime/_hook_settings.py:read_session_binding's
+# Resolved dynamically (matching _session_binding.read_session_binding's
 # precedent) rather than a literal ``from _child_outcome_snapshot import (...)``,
 # which static analysis cannot resolve ahead of the sys.path bootstrap above.
 _snapshot_module = importlib.import_module("_child_outcome_snapshot")

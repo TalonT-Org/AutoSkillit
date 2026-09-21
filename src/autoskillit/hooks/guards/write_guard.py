@@ -45,14 +45,14 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
-    is_headless_session,
+    hook_session_shape,
 )
 from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SessionBindingError,
     read_manifest,
+    read_session_binding,
     resolve_projection_manifest_path,
 )
-from _session_scope_authority import read_session_binding  # noqa: E402
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -372,7 +372,8 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
 
 
 def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
-    if not is_headless_session():
+    headless, _ = hook_session_shape()
+    if not headless:
         return _interactive_prefix_policy(data)
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
     if prefixes_str:
@@ -461,8 +462,9 @@ def main() -> None:
         sys.exit(0)
 
     if not isinstance(data, dict):
+        headless, _ = hook_session_shape()
         if (
-            is_headless_session()
+            headless
             and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES")
             and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX")
         ):
@@ -477,7 +479,8 @@ def main() -> None:
         return
 
     norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data)
-    activation = "headless" if is_headless_session() else "skill_binding"
+    headless, _ = hook_session_shape()
+    activation = "headless" if headless else "skill_binding"
     if policy_state == "none":
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
         sys.exit(0)
@@ -508,7 +511,9 @@ def main() -> None:
         else frozenset({"Write", "Edit", "Bash", "apply_patch"})
     )
 
-    if tool_name not in effective_tool_names and "run_cmd" not in tool_name:
+    if not isinstance(tool_name, str) or (
+        tool_name not in effective_tool_names and "run_cmd" not in tool_name
+    ):
         _record(
             data,
             activation=activation,
@@ -518,7 +523,8 @@ def main() -> None:
         )
         sys.exit(0)
 
-    tool_input = data.get("tool_input", {})
+    raw_tool_input = data.get("tool_input")
+    tool_input: dict[str, object] = raw_tool_input if isinstance(raw_tool_input, dict) else {}
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
         parsed = parse_hook_command(data)
@@ -552,7 +558,8 @@ def main() -> None:
         sys.exit(0)
 
     # Write or Edit
-    file_path = tool_input.get("file_path", "")
+    raw_file_path = tool_input.get("file_path", "")
+    file_path = raw_file_path if isinstance(raw_file_path, str) else ""
     reason = _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
     if reason is not None:
         _deny(data, reason, reason_code="scope_violation", activation=activation)

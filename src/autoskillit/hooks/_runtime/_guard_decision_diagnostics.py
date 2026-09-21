@@ -131,13 +131,8 @@ def record_guard_decision(
         with binding_lock(path):
             atomic_write(path, _retained_records(path, encoded).decode("utf-8"))
     except (OSError, TimeoutError, TypeError, ValueError) as exc:
-        # Recording failures must remain invisible to enforcement, but a
-        # persistently silent failure (binding_lock contention, channel-dir
-        # perm denial) should be diagnosable. Surface to stderr so operators
-        # can correlate missing decision records with environmental causes.
-        # This file is listed in tests/arch/_rules._PRINT_EXEMPT (alongside
-        # _hook_settings.py) because the stdlib-only import boundary
-        # precludes autoskillit.core.get_logger.
+        # Stdlib-only boundary precludes autoskillit.core.get_logger;
+        # this file is listed in tests/arch/_rules._PRINT_EXEMPT.
         print(
             f"guard_decision_record_failed: guard={guard!r} error={exc!r}",
             file=sys.stderr,

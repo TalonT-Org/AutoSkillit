@@ -147,16 +147,6 @@ def merge_hook_configs(base: dict, overlay: dict) -> dict:
     return merged
 
 
-def is_headless_session() -> bool:
-    """Return the runtime session class used by hook-scope enforcement."""
-    return os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
-
-
-def get_session_type() -> str:
-    """Return the launcher-supplied session tier without interpreting it."""
-    return os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
-
-
 def _default_state_root() -> Path:
     """Bare-default state root: ``AUTOSKILLIT_STATE_ROOT`` env var, else process cwd.
 
@@ -559,6 +549,9 @@ def write_dispatch_diagnostic(
 def hook_session_shape() -> tuple[bool, str]:
     """Return the normalized shape without rejecting an unknown hook tier."""
     headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+    # Empty-string short-circuit: an explicitly-empty AUTOSKILLIT_SESSION_TYPE
+    # must default to "skill" identically to the unset case. Pinned by
+    # tests/hooks/test_session_shape_parity.py::test_canonical_accessor_is_hook_session_shape.
     tier = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower() or "skill"
     return headless, tier
 
@@ -569,7 +562,11 @@ def admit_hook_session_scope(
     shape: tuple[bool, str],
 ) -> bool:
     """Return whether a HookDef scope admits a raw hook-process shape."""
-    if session_scope not in {"any", "headless_only", "interactive_only"}:
+    # Module-reference import so monkeypatching
+    # _session_scope_authority.SESSION_SCOPE_VALUES takes effect on every call.
+    import _session_scope_authority as _ssa
+
+    if session_scope not in _ssa.SESSION_SCOPE_VALUES:
         msg = f"Unknown hook session scope: {session_scope!r}"
         raise ValueError(msg)
     headless, tier = shape

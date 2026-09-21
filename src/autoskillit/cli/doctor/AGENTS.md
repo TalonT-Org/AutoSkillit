@@ -1,6 +1,6 @@
 # doctor/
 
-Diagnostic health checks for the autoskillit installation (58 checks).
+Diagnostic health checks for the autoskillit installation.
 
 ## Architecture Notes
 

@@ -258,6 +258,31 @@ def resolve_channel_dir(anchor: Path) -> Path:
     return resolved / ".autoskillit" / "temp"
 
 
+def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
+    """Return the binding's serialized dict for ``session_id`` or ``None``.
+
+    Reads through ``read_binding`` (rather than ``admit_join``) so a valid
+    binding with any loaded skills returns its dict regardless of which
+    skill the caller intends to project. ``admit_join`` asserts the
+    requested skill is loaded and would always deny here.
+
+    Returns ``None`` for missing / unreadable / mismatched / invalid
+    bindings so callers can treat absence as a non-decision.
+    """
+    binding_path = resolve_binding_path(payload_cwd, session_id)
+    try:
+        binding = read_binding(binding_path)
+    except SessionBindingError:
+        return None
+    if binding is None:
+        return None
+    if binding.session_id != session_id:
+        return None
+    if not binding.binding_valid:
+        return None
+    return json.loads(binding.to_json())
+
+
 def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
     if not session_id:
         raise SessionBindingError("session_id must be a non-empty string")

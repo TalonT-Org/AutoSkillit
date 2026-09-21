@@ -28,7 +28,7 @@ from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
-    get_session_type,
+    hook_session_shape,
     payload_managed_codex_route,
 )
 
@@ -87,8 +87,7 @@ def main() -> None:
         sys.exit(0)
 
     # Headless: resolve session type, fail-closed for orchestration tools.
-    raw_session_type = get_session_type()
-    session_type = raw_session_type.lower()
+    _headless, session_type = hook_session_shape()
     if session_type == "orchestrator":
         sys.exit(0)
     if session_type == "fleet" and tool in {"run_cmd", "run_python"}:
@@ -111,7 +110,7 @@ def main() -> None:
         )
         if _unrecognized_tier:
             denial_reason += (
-                f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+                f" (AUTOSKILLIT_SESSION_TYPE={session_type!r} is not a recognized tier;"
                 " expected: orchestrator, fleet, or skill)"
             )
     _deny(denial_reason)

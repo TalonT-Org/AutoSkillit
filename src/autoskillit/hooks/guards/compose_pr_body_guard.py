@@ -35,7 +35,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import enforce_session_scope  # noqa: E402
+from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
 COMPOSE_PR_BODY_DENY_TRIGGER: str = "PR body provenance validation failed"
 
@@ -314,7 +314,8 @@ def _body_path_validation_error(
 
 
 def main() -> None:
-    enforce_session_scope("headless_only")
+    if not enforce_script_session_scope(__file__):
+        sys.exit(0)
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name not in {"compose-pr", "open-integration-pr"}:
         sys.exit(0)

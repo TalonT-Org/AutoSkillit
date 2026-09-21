@@ -21,7 +21,12 @@ class AssistantTurn(NamedTuple):
 
 
 def _resolve_turn_id(rec: dict[str, object]) -> str:
-    """Return a nonempty requestId or message.id turn-grouping key, in that order."""
+    """Return a nonempty turn-grouping key for a transcript record.
+
+    Resolution order: a non-empty ``requestId`` wins, then a non-empty
+    ``message.id``. An empty string is returned when neither key resolves,
+    signalling that the record belongs to its own standalone turn.
+    """
     request_id = rec.get("requestId", "")
     if isinstance(request_id, str) and request_id:
         return request_id
@@ -34,7 +39,17 @@ def _resolve_turn_id(rec: dict[str, object]) -> str:
 
 
 def is_parent_assistant_record(rec: dict[str, object]) -> bool:
-    """Whether a transcript record belongs to the parent assistant."""
+    """Return True iff ``rec`` is a transcript record for the parent assistant.
+
+    A record is the parent assistant iff:
+
+    - ``type`` is ``"assistant"`` (excluding ``user``/``system``/tool records),
+    - it is not a Task subagent record (``subagent_type`` is unset), and
+    - its ``message.model`` is not the ``"<synthetic>"`` placeholder that
+      Claude emits for non-conversational assistant messages.
+    """
+    if not isinstance(rec, dict):
+        return False
     if rec.get("type") != "assistant":
         return False
     if rec.get("subagent_type"):

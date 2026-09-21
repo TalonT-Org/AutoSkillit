@@ -347,6 +347,71 @@ def test_successful_popen_records_spawn_without_post_spawn_pgid_lookup() -> None
     assert body.index("on_spawn(pid, pgid)") < body.index("trace.record_spawn()")
 
 
+def test_posix_job_control_foreground_handoff_continues_before_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.session import _session_process
+
+    foreground_changes: list[tuple[int, int]] = []
+    signals: list[tuple[int, signal.Signals]] = []
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+    monkeypatch.setattr(
+        _session_process,
+        "_safe_tcsetpgrp",
+        lambda fd, pgid: foreground_changes.append((fd, pgid)),
+    )
+    monkeypatch.setattr(
+        _session_process.os,
+        "killpg",
+        lambda pgid, signum: signals.append((pgid, signum)),
+    )
+
+    with _session_process._foreground_process_group(200):
+        assert foreground_changes == [(7, 200)]
+        assert signals == [(200, signal.SIGCONT)]
+
+    assert foreground_changes == [(7, 200), (7, 100)]
+
+
+def test_posix_job_control_foreground_handoff_restores_after_continue_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.session import _session_process
+
+    foreground_changes: list[tuple[int, int]] = []
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+    monkeypatch.setattr(
+        _session_process,
+        "_safe_tcsetpgrp",
+        lambda fd, pgid: foreground_changes.append((fd, pgid)),
+    )
+    monkeypatch.setattr(
+        _session_process.os,
+        "killpg",
+        lambda _pgid, _signum: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    with pytest.raises(PermissionError, match="denied"):
+        with _session_process._foreground_process_group(200):
+            pytest.fail("caller body must not run after continuation failure")
+
+    assert foreground_changes == [(7, 200), (7, 100)]
+
+
 def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

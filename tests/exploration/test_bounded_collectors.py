@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import selectors
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import NamedTuple
 
 import pytest
@@ -47,6 +49,30 @@ pytestmark = [
     pytest.mark.feature("exploration"),
     pytest.mark.medium,
 ]
+
+
+def test_posix_job_control_collector_settles_observation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure = RuntimeError("selector construction failed")
+    settled: list[BaseException] = []
+
+    class Owner:
+        process = SimpleNamespace(stdout=None, stderr=None)
+
+        def settle_preserving(self, error: BaseException) -> None:
+            settled.append(error)
+
+    def fail_selector() -> selectors.BaseSelector:
+        raise failure
+
+    monkeypatch.setattr(_bounded.selectors, "DefaultSelector", fail_selector)
+
+    with pytest.raises(RuntimeError) as raised:
+        _bounded._drain_bounded_process(Owner(), CollectorLimits())  # type: ignore[arg-type]
+
+    assert raised.value is failure
+    assert settled == [failure]
 
 
 def test_read_contained_file_rejects_parent_escape_and_symlink(tmp_path: Path) -> None:

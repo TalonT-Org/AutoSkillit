@@ -71,6 +71,18 @@ class OwnedProcessCleanupError(RuntimeError):
         self.cleanup_result = cleanup_result
 
 
+class OwnedProcessStoppedError(RuntimeError):
+    """Raised when a non-reaping observation finds a stopped group leader."""
+
+    def __init__(self, leader_pid: int, pgid: int, stop_signal: int) -> None:
+        super().__init__(
+            f"owned process leader {leader_pid} in group {pgid} stopped by signal {stop_signal}"
+        )
+        self.leader_pid = leader_pid
+        self.pgid = pgid
+        self.stop_signal = stop_signal
+
+
 def _incomplete_observation(
     pid: int, exc: BaseException, event: str
 ) -> ProcessObservationSnapshot:
@@ -168,6 +180,14 @@ class OwnedProcessGroup:
     def supports_nonreaping_observation(self) -> bool:
         return hasattr(os, "waitid") and hasattr(os, "WNOWAIT")
 
+    @property
+    def supports_stopped_observation(self) -> bool:
+        return (
+            self.supports_nonreaping_observation
+            and hasattr(os, "WSTOPPED")
+            and hasattr(os, "CLD_STOPPED")
+        )
+
     def capture_snapshot(self) -> ProcessObservationSnapshot:
         captured = _snapshot_process_tree(self.pid)
         self._snapshot = self._snapshot.merge(captured)
@@ -185,7 +205,7 @@ class OwnedProcessGroup:
             )
         )
 
-    def observe_exit(self) -> int | None:
+    def observe_exit(self, *, include_stopped: bool = True) -> int | None:
         """Observe leader exit without reaping when WNOWAIT is available."""
         if self._observed_returncode is not None:
             return self._observed_returncode
@@ -195,11 +215,15 @@ class OwnedProcessGroup:
             self._observed_returncode = self.process.returncode
             return self._observed_returncode
         if self.supports_nonreaping_observation:
+            wait_flags = os.WEXITED | os.WNOHANG | os.WNOWAIT  # type: ignore[attr-defined]
+            stopped_observation = include_stopped and self.supports_stopped_observation
+            if stopped_observation:
+                wait_flags |= os.WSTOPPED  # type: ignore[attr-defined]
             try:
                 status = os.waitid(  # type: ignore[attr-defined]
                     os.P_PID,
                     self.pid,
-                    os.WEXITED | os.WNOHANG | os.WNOWAIT,  # type: ignore[attr-defined]
+                    wait_flags,
                 )
             except ChildProcessError:
                 self._group_authority = False
@@ -211,6 +235,8 @@ class OwnedProcessGroup:
                 return None
             if status is None:
                 return None
+            if stopped_observation and status.si_code == os.CLD_STOPPED:  # type: ignore[attr-defined]
+                raise OwnedProcessStoppedError(self.pid, self.pgid, int(status.si_status))
             if status.si_code == os.CLD_EXITED:
                 self._observed_returncode = status.si_status
             else:
@@ -325,7 +351,7 @@ class OwnedProcessGroup:
             members = tuple(
                 identity for identity in self._scan_group() if self._identity_is_alive(identity)
             )
-            self.observe_exit()
+            self.observe_exit(include_stopped=False)
             if not members or time.monotonic() >= deadline:
                 return members
             time.sleep(min(_POLL_SECONDS, max(0.0, deadline - time.monotonic())))
@@ -363,12 +389,12 @@ class OwnedProcessGroup:
         self._signal_group(signal.SIGTERM)
         members = self._wait_group_members(timeout)
         escalated = False
-        if members or self.observe_exit() is None:
+        if members or self.observe_exit(include_stopped=False) is None:
             self._signal_group(signal.SIGKILL)
             members = self._wait_group_members(_FINAL_WAIT_SECONDS)
             escalated = True
 
-        returncode = self.observe_exit()
+        returncode = self.observe_exit(include_stopped=False)
         if returncode is None:
             self._signal_direct_leader(signal.SIGTERM)
         returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)

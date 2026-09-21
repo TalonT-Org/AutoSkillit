@@ -19,6 +19,36 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestCheckMcpServerRegisteredCodexBranch:
+    def test_warning_when_registered_env_vars_are_stale(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.execution as _exec_mod
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, DISPATCH_ID_ENV_VAR
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            _exec_mod,
+            "_read_codex_config",
+            lambda path: ReadResult.ok(
+                {
+                    "mcp_servers": {
+                        "autoskillit": {
+                            "command": "autoskillit",
+                            "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {DISPATCH_ID_ENV_VAR}),
+                            "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                            "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                        }
+                    }
+                }
+            ),
+        )
+
+        result = _check_mcp_server_registered(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert DISPATCH_ID_ENV_VAR in result.message
+        assert "autoskillit init" in result.message
+
     def test_ok_when_valid_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import autoskillit.execution as _exec_mod
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR

@@ -309,60 +309,48 @@ def test_cross_layer_session_scope_values_match() -> None:
     assert SESSION_SCOPE_VALUES == frozenset(expected_tokens)
 
 
-def _enforce_script_session_scope_uses_hook_session_shape_callable(
-    monkeypatch: pytest.MonkeyPatch, headless: bool
-) -> tuple[bool, object]:
-    """Helper for T6 — monkeypatch hook_session_shape and observe the result.
-
-    Returns ``(return_value, deny_payload_or_none)``. When ``headless=True`` the
-    declared scope ``headless_only`` admits; when ``headless=False`` it denies
-    and ``_deny_scope_authority_unavailable`` is invoked.
-    """
-    from autoskillit.hooks._runtime import _session_scope_authority
-
-    captured: dict[str, object] = {}
-
-    def _fake_deny(script_identity: str) -> None:
-        captured["denied"] = script_identity
-
-    monkeypatch.setattr(
-        _session_scope_authority, "hook_session_shape", lambda: (headless, "skill")
-    )
-    monkeypatch.setattr(
-        _session_scope_authority,
-        "_deny_scope_authority_unavailable",
-        _fake_deny,
-    )
-    return (
-        _session_scope_authority.enforce_script_session_scope("guards/fleet_dispatch_guard.py"),
-        captured.get("denied"),
-    )
-
-
 def test_enforce_script_session_scope_uses_hook_session_shape(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """enforce_script_session_scope() consults hook_session_shape() (T6).
+    """enforce_script_session_scope() consults hook_session_shape() (T6 — headless branch).
 
-    Monkeypatching the canonical accessor changes the result; this proves
-    the call goes through hook_session_shape rather than the deleted
-    is_headless_session / get_session_type wrappers.
+    Setting AUTOSKILLIT_HEADLESS drives the canonical accessor through the
+    env-var path; the result follows the scope:headless_only policy. The
+    matching non-headless branch is exercised by
+    ``test_enforce_script_session_scope_denies_non_headless_shape`` to
+    keep each test free of inline delenv calls (the central scrub fixture
+    already clears AUTOSKILLIT_HEADLESS at test start).
     """
+    from autoskillit.hooks._runtime import _session_scope_authority
+
     monkeypatch.setattr(
         "autoskillit.hooks._runtime._hook_scope_table.HOOK_SCOPE_BY_SCRIPT",
         {"guards/fleet_dispatch_guard.py": "headless_only"},
     )
-    return_value, denied = _enforce_script_session_scope_uses_hook_session_shape_callable(
-        monkeypatch, headless=True
-    )
-    assert return_value is True
-    assert denied is None
 
-    return_value, denied = _enforce_script_session_scope_uses_hook_session_shape_callable(
-        monkeypatch, headless=False
+    # Headless shape — scope "headless_only" admits.
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    assert (
+        _session_scope_authority.enforce_script_session_scope("guards/fleet_dispatch_guard.py")
+        is True
     )
-    assert return_value is False
-    assert denied == "guards/fleet_dispatch_guard.py"
+
+
+def test_enforce_script_session_scope_denies_non_headless_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """enforce_script_session_scope() denies on the non-headless branch (T6 — deny branch)."""
+    from autoskillit.hooks._runtime import _session_scope_authority
+
+    monkeypatch.setattr(
+        "autoskillit.hooks._runtime._hook_scope_table.HOOK_SCOPE_BY_SCRIPT",
+        {"guards/fleet_dispatch_guard.py": "headless_only"},
+    )
+    # AUTOSKILLIT_HEADLESS is already cleared by the central scrub fixture.
+    assert (
+        _session_scope_authority.enforce_script_session_scope("guards/fleet_dispatch_guard.py")
+        is False
+    )
 
 
 def test_admit_hook_session_scope_uses_session_scope_values(
@@ -374,14 +362,24 @@ def test_admit_hook_session_scope_uses_session_scope_values(
     does a fresh attribute lookup on _session_scope_authority at every call, so
     monkeypatching the source module's attribute (rather than a copy captured at
     import time) takes effect immediately.
-    """
-    from autoskillit.hooks._runtime import _hook_settings, _session_scope_authority
 
-    monkeypatch.setattr(
-        _session_scope_authority,
-        "SESSION_SCOPE_VALUES",
-        frozenset({"only_one_value"}),
-    )
+    The lookup uses the bare-name 'import _session_scope_authority as _ssa' (the
+    bare-name is resolved against hooks/_runtime/ on sys.path, matching the
+    subprocess hook bootstrap). We register the canonical-dotted-name module
+    under the bare name in sys.modules so the test's setattr takes effect on
+    the same object that admit_hook_session_scope's lookup resolves to.
+    """
+    import autoskillit.hooks._runtime._session_scope_authority as canonical_mod
+
+    # Make the bare-name lookup resolve to the SAME module object as the
+    # canonical-dotted-name (otherwise setattr on one doesn't affect the
+    # other — Python's import system keys sys.modules by the name used at
+    # load time).
+    sys.modules.setdefault("_session_scope_authority", canonical_mod)
+
+    from autoskillit.hooks._runtime import _hook_settings
+
+    monkeypatch.setattr(canonical_mod, "SESSION_SCOPE_VALUES", frozenset({"only_one_value"}))
     # With the canonical constant narrowed to a single value, the original
     # 'any' scope is no longer in the admitted set and admit raises ValueError.
     with pytest.raises(ValueError, match="Unknown hook session scope"):

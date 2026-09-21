@@ -45,7 +45,18 @@ def test_hookdef_has_session_scope() -> None:
     # that would otherwise silently bypass the type-alias contract.
     from autoskillit.hooks._runtime._session_scope_authority import SessionScopeLiteral
 
-    annotation_args = typing.get_args(typing.get_type_hints(HookDef)["session_scope"])
+    # SessionScopeLiteral is referenced inside _hooks_defs.py under TYPE_CHECKING
+    # only (to break an import cycle through autoskillit.hooks.__init__). The
+    # annotation on HookDef.session_scope is therefore a forward reference at
+    # runtime — typing.get_type_hints evaluates it against the module's
+    # namespace. Pass the imported SessionScopeLiteral via localns so the
+    # forward reference resolves to the same object the file TYPE_CHECKING-
+    # imports for static analysis.
+    annotation_args = typing.get_args(
+        typing.get_type_hints(HookDef, localns={"SessionScopeLiteral": SessionScopeLiteral})[
+            "session_scope"
+        ]
+    )
     alias_args = typing.get_args(SessionScopeLiteral)
     assert annotation_args == alias_args, (
         f"HookDef.session_scope annotation references a different Literal "

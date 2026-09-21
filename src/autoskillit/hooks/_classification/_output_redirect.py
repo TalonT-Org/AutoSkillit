@@ -78,12 +78,6 @@ class OutputRedirectPartition:
     unresolved: bool
     """True when at least one redirect target could not be resolved to a concrete path."""
 
-    def __post_init__(self) -> None:
-        if self.file_redirect_count < 0:
-            raise ValueError(
-                f"file_redirect_count must be non-negative, got {self.file_redirect_count}"
-            )
-
 
 def _partition_output_redirect_indices(
     tokens: Sequence[str],

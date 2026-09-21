@@ -184,19 +184,9 @@ WRITE_VERBS: frozenset[str] = frozenset(
 )
 
 
-# _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS, the git add/status/diff content-vs-
-# metadata flag sets, _SHELL_SUBSTITUTION_RE, _SHELL_STATE_VAR_RE, and
-# _WC_FLAG_RE moved to _flags.py (their sole consumer) to keep this facade
-# under REQ-CNST-010's line cap; re-exported below through the existing
-# block B bootstrap.
-#
-# Issue #5120's redirect-partition machinery (_REDIRECT_* regexes,
-# _consume_output_redirect, _partition_output_redirect_indices,
-# _partition_output_redirects, _select_executable_argv_tokens,
-# extract_redirect_targets, extract_redirect_targets_with_status,
-# OutputRedirectPartition dataclass) moved to _output_redirect.py
-# alongside its sole producer to keep this facade under REQ-CNST-010's
-# line cap; re-exported below through the same block B bootstrap.
+# Flag constants and shell-substitution regexes moved to _flags.py; output-redirect
+# partition machinery moved to _output_redirect.py. All re-exported below through
+# the existing block B bootstrap.
 
 
 class SearchPattern(Protocol):
@@ -607,9 +597,11 @@ if TYPE_CHECKING:
         _partition_output_redirect_indices,
         _partition_output_redirects,
         _select_executable_argv_tokens,
-        extract_redirect_targets,
         extract_redirect_targets_with_status,
         resolve_write_target,
+    )
+    from autoskillit.hooks._classification._output_redirect import (
+        extract_redirect_targets as _extract_redirect_targets_impl,
     )
 else:
     if __package__:
@@ -666,7 +658,7 @@ else:
     _partition_output_redirect_indices = _output_redirect._partition_output_redirect_indices
     _partition_output_redirects = _output_redirect._partition_output_redirects
     _select_executable_argv_tokens = _output_redirect._select_executable_argv_tokens
-    extract_redirect_targets = _output_redirect.extract_redirect_targets
+    _extract_redirect_targets_impl = _output_redirect.extract_redirect_targets
     extract_redirect_targets_with_status = _output_redirect.extract_redirect_targets_with_status
     resolve_write_target = _output_redirect.resolve_write_target
 
@@ -688,3 +680,8 @@ def live_command_text(command: str) -> str:
 def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
     """Return True when a PYTHON-consumer payload resolves to invoking *target*."""
     return _interpreter_invokes_impl(command, target=target)
+
+
+def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
+    """Extract resolved redirect target paths from already-tokenized input."""
+    return _extract_redirect_targets_impl(tokens, cwd=cwd)

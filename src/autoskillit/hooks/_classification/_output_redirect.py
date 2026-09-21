@@ -1,16 +1,4 @@
-"""Output-redirect partitioning for hook command classification.
-
-Split out of `_runtime/_command_classification.py` (issue #5120) to keep that
-facade under REQ-CNST-010's line cap while making room for the
-``OutputRedirectPartition`` dataclass consolidation. Self-contained: the
-partition machinery depends only on stdlib (``re``, ``os``) and the
-``ArgvToken`` token-type imported from `_tokenizer.py` for the
-``_select_executable_argv_tokens`` projection. Re-exported through the
-facade's existing block B bootstrap so consumers importing via
-``autoskillit.hooks._runtime._command_classification`` (or via the
-``autoskillit.hooks._runtime`` facade) continue to work without source
-edits.
-"""
+"""Output-redirect partitioning for hook command classification."""
 
 from __future__ import annotations
 
@@ -22,13 +10,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import ArgvToken
-else:
-    if __package__:
-        from . import _tokenizer
-    else:
-        import _tokenizer
-
-    ArgvToken = _tokenizer.ArgvToken
 
 
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
@@ -83,14 +64,7 @@ def _consume_output_redirect(
 
 @dataclass(frozen=True, slots=True)
 class OutputRedirectPartition:
-    """Result of partitioning a token stream by output-redirect syntax.
-
-    Consolidates the prior 4-tuple return shape of
-    ``_partition_output_redirect_indices`` so future fields (e.g. an
-    ``_unresolved_target`` count for shell-state expansion, a
-    ``pseudo_device_count``) land here rather than as further positional
-    returns that every caller must unpack.
-    """
+    """Result of partitioning a token stream by output-redirect syntax."""
 
     segments: list[int]
     """Indices into the original ``tokens`` list that survive as executable argv."""
@@ -103,6 +77,12 @@ class OutputRedirectPartition:
 
     unresolved: bool
     """True when at least one redirect target could not be resolved to a concrete path."""
+
+    def __post_init__(self) -> None:
+        if self.file_redirect_count < 0:
+            raise ValueError(
+                f"file_redirect_count must be non-negative, got {self.file_redirect_count}"
+            )
 
 
 def _partition_output_redirect_indices(
@@ -118,10 +98,10 @@ def _partition_output_redirect_indices(
     decision without re-deriving the redirect-syntax logic independently.
     """
     syntax = redirect_syntax if redirect_syntax is not None else [True] * len(tokens)
-    executable_indices: list[int] = []
+    segments: list[int] = []
     targets: list[str] = []
     file_redirect_count = 0
-    unresolved_target = False
+    unresolved = False
     depth = 0
     i = 0
     while i < len(tokens):
@@ -130,28 +110,28 @@ def _partition_output_redirect_indices(
             depth += 1
             if token.endswith(")") and len(token) > 1:
                 depth -= 1
-            executable_indices.append(i)
+            segments.append(i)
             i += 1
             continue
         if token == ")":
             if depth > 0:
                 depth -= 1
-            executable_indices.append(i)
+            segments.append(i)
             i += 1
             continue
         if token.endswith(")") and len(token) > 1:
             if depth > 0:
                 depth -= 1
-            executable_indices.append(i)
+            segments.append(i)
             i += 1
             continue
         if depth > 0:
-            executable_indices.append(i)
+            segments.append(i)
             i += 1
             continue
         redirect = _consume_output_redirect(tokens, syntax, i)
         if redirect is None:
-            executable_indices.append(i)
+            segments.append(i)
             i += 1
             continue
         i, target, file_redirect_delta = redirect
@@ -164,14 +144,14 @@ def _partition_output_redirect_indices(
             if resolved is not None:
                 targets.append(resolved)
             else:
-                unresolved_target = True
+                unresolved = True
         elif file_redirect_delta:
-            unresolved_target = True
+            unresolved = True
     return OutputRedirectPartition(
-        segments=executable_indices,
+        segments=segments,
         targets=targets,
         file_redirect_count=file_redirect_count,
-        unresolved=unresolved_target,
+        unresolved=unresolved,
     )
 
 

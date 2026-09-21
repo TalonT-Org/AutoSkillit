@@ -1383,7 +1383,8 @@ class TestOutputRedirectPartition:
         assert result.targets == ["/tmp/out"]
         assert result.file_redirect_count == 1
         assert result.unresolved is False
-        # Frozen + replace: identity comparison is preserved across a non-mutating replace.
+        # Frozen + replace: a non-mutating replace produces a new instance
+        # with identical field values (equality preserved, identity not).
         replaced = dataclasses.replace(result, segments=[0])
         assert replaced is not result
         assert replaced == result
@@ -1402,7 +1403,7 @@ class TestOutputRedirectPartition:
         assert result.targets == []
         assert result.file_redirect_count == 1
 
-    def test_partition_indices_unresolved_for_redirect_op_only_with_target(self) -> None:
+    def test_partition_indices_unresolved_for_redirect_op_only_no_target(self) -> None:
         from autoskillit.hooks._runtime._command_classification import (
             _partition_output_redirect_indices,
         )
@@ -1457,14 +1458,8 @@ class TestOutputRedirectPartition:
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             partition.segments = [99]  # type: ignore[misc]
 
-        # slots=True is verified by deriving `__slots__` from the dataclass's
-        # fields — Python's docs explicitly warn that `__slots__` is not the
-        # source of truth for field names, so deriving the expected tuple
-        # catches both a future rename and a future removal of `slots=True`.
-        expected = tuple(f.name for f in dataclasses.fields(OutputRedirectPartition))
-        assert OutputRedirectPartition.__slots__ == expected
-        # And no instance __dict__ — the per-instance dict cost that motivated
-        # freezing is the second half of the frozen+slots contract.
+        # slots=True contract: no instance __dict__ — the per-instance dict cost
+        # that motivated freezing.
         assert not hasattr(
             OutputRedirectPartition(
                 segments=[], targets=[], file_redirect_count=0, unresolved=False

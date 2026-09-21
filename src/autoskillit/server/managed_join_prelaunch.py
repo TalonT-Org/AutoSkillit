@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,9 +22,58 @@ class ManagedJoinIssuanceRefusal:
     reason: str
 
 
+ManagedJoinRefusalHandler = Callable[[ManagedJoinIssuanceRefusal], object]
+
+
 def render_managed_join_refusal(refusal: ManagedJoinIssuanceRefusal) -> str:
     """Render one operator-visible managed-join issuance refusal."""
     return f"managed join issuance refused: {refusal.reason}"
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedJoinEvidence:
+    """Resolved managed-join evidence paired with its parent identity."""
+
+    context: SemanticAdaptationContext
+    parent_id: str
+
+
+def acquire_managed_join_evidence(
+    *,
+    backend: CodingAgentBackend,
+    configured_model: str,
+    state_root: Path,
+    parent_id: str,
+    launch_context: str,
+    on_refusal: ManagedJoinRefusalHandler | None = None,
+) -> ManagedJoinEvidence | None:
+    """Issue managed-join evidence, returning ``None`` when the backend refuses.
+
+    The shared helper consolidates the launch-boundary boilerplate
+    (``getattr`` capability check + ``prepare_managed_join_context`` call +
+    refusal handling) that previously appeared verbatim across every CLI and
+    server launch path. ``on_refusal`` defaults to the operator-visible
+    WARNING-print used by CLI launch paths; pass an alternative callable
+    (e.g. a structlog adapter) for non-CLI callers.
+    """
+    if not getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        return None
+    issuance = prepare_managed_join_context(
+        backend=backend,
+        configured_model=configured_model,
+        state_root=state_root,
+        parent_id=parent_id,
+        launch_context=launch_context,
+    )
+    if isinstance(issuance, ManagedJoinIssuanceRefusal):
+        (on_refusal or _default_managed_join_refusal_handler)(issuance)
+        return None
+    return ManagedJoinEvidence(context=issuance, parent_id=parent_id)
+
+
+def _default_managed_join_refusal_handler(refusal: ManagedJoinIssuanceRefusal) -> None:
+    """Print a one-line operator-visible warning for a managed-join refusal."""
+    print(f"WARNING: {render_managed_join_refusal(refusal)}")
 
 
 def prepare_managed_join_context(

@@ -326,25 +326,20 @@ def order(
     managed_join_parent_id: str | None = None
     if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
         from autoskillit.core import new_managed_launch_id
-        from autoskillit.server.managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
+        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
 
         managed_join_parent_id = new_managed_launch_id()
-        issuance = prepare_managed_join_context(
+        evidence = acquire_managed_join_evidence(
             backend=backend,
             configured_model=config.model.model_override or config.model.default_model,
             state_root=project_dir,
             parent_id=managed_join_parent_id,
             launch_context="interactive",
         )
-        if isinstance(issuance, ManagedJoinIssuanceRefusal):
-            print(f"WARNING: {render_managed_join_refusal(issuance)}")
-            managed_join_parent_id = None
+        if evidence is not None:
+            managed_join_context = evidence.context
         else:
-            managed_join_context = issuance
+            managed_join_parent_id = None
     skill_compilation = compile_session_skill_catalog(
         skill_catalog, backend, adaptation_context=managed_join_context
     )

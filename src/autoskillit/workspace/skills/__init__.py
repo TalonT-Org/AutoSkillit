@@ -64,14 +64,12 @@ _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
 
 
 def _admit_project_local_candidate(candidate: SkillInfo, bundled: SkillInfo | None) -> SkillInfo:
-    if candidate.invalidities:
+    floor = contract_floor_invalidities(candidate, bundled)
+    if not floor:
         return candidate
     return dataclasses.replace(
         candidate,
-        invalidities=(
-            *candidate.invalidities,
-            *contract_floor_invalidities(candidate, bundled),
-        ),
+        invalidities=(*candidate.invalidities, *floor),
     )
 
 

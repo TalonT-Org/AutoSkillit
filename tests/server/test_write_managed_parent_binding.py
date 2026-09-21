@@ -7,31 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.server._managed_join_fixtures import isolated_state_dir, sample_attestation_only
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _sample_attestation(parent_session_id: str = "parent-1"):
-    from autoskillit.core import (
-        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
-        ManagedJoinAttestation,
-    )
-
-    return ManagedJoinAttestation(
-        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
-        backend="codex",
-        launch_context="interactive",
-        parent_session_id=parent_session_id,
-        activation_epoch=0,
-        direct_tool_mode=True,
-        resolved_model="gpt-5.6-luna",
-        resolved_reasoning_effort="high",
-        codex_catalog_digest="a" * 64,
-        fixed_batch_tool_registry_digest="b" * 64,
-        hook_registry_digest="c" * 64,
-        skill_load_applies=True,
-        guards_apply=True,
-        provenance="autoskillit-server",
-    )
 
 
 class _StubBackend:
@@ -77,13 +55,6 @@ def _seed_projection(home: Path, skill_name: str) -> None:
     )
 
 
-def _isolated_state_dir(tmp_path: Path) -> Path:
-    """Return a project root whose ``.autoskillit`` directory is unique to this test."""
-    state_dir = tmp_path / ".autoskillit"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    return tmp_path
-
-
 def test_write_managed_parent_binding_creates_binding_with_route_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -98,7 +69,7 @@ def test_write_managed_parent_binding_creates_binding_with_route_identity(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     home = project_root / "home"
     _seed_projection(home, skill_name="my-skill")
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
@@ -109,7 +80,7 @@ def test_write_managed_parent_binding_creates_binding_with_route_identity(
         binding_session_id="parent-1",
         normalized_skill_name="my-skill",
         backend=_StubBackend(),
-        attestation=_sample_attestation("parent-1"),
+        attestation=sample_attestation_only("parent-1"),
     )
 
     binding = read_binding(binding_path)
@@ -139,7 +110,7 @@ def test_write_managed_parent_binding_merges_into_existing_binding(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     home = project_root / "home"
     _seed_projection(home, skill_name="my-skill")
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
@@ -150,14 +121,14 @@ def test_write_managed_parent_binding_merges_into_existing_binding(
         binding_session_id="parent-1",
         normalized_skill_name="my-skill",
         backend=_StubBackend(),
-        attestation=_sample_attestation("parent-1"),
+        attestation=sample_attestation_only("parent-1"),
     )
     _write_managed_parent_binding(
         binding_path=binding_path,
         binding_session_id="parent-1",
         normalized_skill_name="my-skill",
         backend=_StubBackend(),
-        attestation=_sample_attestation("parent-1"),
+        attestation=sample_attestation_only("parent-1"),
     )
 
     binding = read_binding(binding_path)
@@ -188,7 +159,7 @@ def test_write_managed_parent_binding_rejects_route_mismatch_on_merge(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     home = project_root / "home"
     _seed_projection(home, skill_name="my-skill")
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
@@ -218,7 +189,7 @@ def test_write_managed_parent_binding_rejects_route_mismatch_on_merge(
             binding_session_id="parent-1",
             normalized_skill_name="my-skill",
             backend=_StubBackend(),
-            attestation=_sample_attestation("parent-1"),
+            attestation=sample_attestation_only("parent-1"),
         )
 
 
@@ -232,7 +203,7 @@ def test_write_managed_parent_binding_rejects_backend_without_projection(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(project_root / "home"))
     binding_path = resolve_binding_path(str(project_root), "parent-1")
 
@@ -242,7 +213,7 @@ def test_write_managed_parent_binding_rejects_backend_without_projection(
             binding_session_id="parent-1",
             normalized_skill_name="my-skill",
             backend=_NoProjectionBackend(),
-            attestation=_sample_attestation("parent-1"),
+            attestation=sample_attestation_only("parent-1"),
         )
 
 
@@ -256,7 +227,7 @@ def test_write_managed_parent_binding_requires_codex_home(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     monkeypatch.delenv(CODEX_HOME_ENV_VAR, raising=False)
     binding_path = resolve_binding_path(str(project_root), "parent-1")
 
@@ -266,7 +237,7 @@ def test_write_managed_parent_binding_requires_codex_home(
             binding_session_id="parent-1",
             normalized_skill_name="my-skill",
             backend=_StubBackend(),
-            attestation=_sample_attestation("parent-1"),
+            attestation=sample_attestation_only("parent-1"),
         )
 
 
@@ -280,7 +251,7 @@ def test_write_managed_parent_binding_rejects_skill_not_projected(
         _write_managed_parent_binding,
     )
 
-    project_root = _isolated_state_dir(tmp_path)
+    project_root = isolated_state_dir(tmp_path)
     home = project_root / "home"
     home.mkdir()
     catalog_dir = home / "catalog"
@@ -307,5 +278,5 @@ def test_write_managed_parent_binding_rejects_skill_not_projected(
             binding_session_id="parent-1",
             normalized_skill_name="missing-skill",
             backend=_StubBackend(),
-            attestation=_sample_attestation("parent-1"),
+            attestation=sample_attestation_only("parent-1"),
         )

@@ -97,11 +97,7 @@ async def _execute_fleet_run(
     managed_join_context = None
     managed_join_parent_id: str | None = None
     if getattr(effective_backend.capabilities, "managed_fixed_batch_route_capable", False):
-        from autoskillit.server.managed_join_prelaunch import (
-            ManagedJoinIssuanceRefusal,
-            prepare_managed_join_context,
-            render_managed_join_refusal,
-        )
+        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
 
         managed_join_parent_id = new_managed_launch_id()
         if resume_session_id is not None and prior_dispatch_id is not None:
@@ -115,18 +111,17 @@ async def _execute_fleet_run(
                 )
                 if prior_record is not None and prior_record.managed_lineage_ref is not None:
                     managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
-        issuance = prepare_managed_join_context(
+        evidence = acquire_managed_join_evidence(
             backend=effective_backend,
             configured_model=cfg.model.model_override or cfg.model.default_model,
             state_root=ctx.project_dir,
             parent_id=managed_join_parent_id,
             launch_context="direct",
         )
-        if isinstance(issuance, ManagedJoinIssuanceRefusal):
-            print(f"WARNING: {render_managed_join_refusal(issuance)}")
-            managed_join_parent_id = None
+        if evidence is not None:
+            managed_join_context = evidence.context
         else:
-            managed_join_context = issuance
+            managed_join_parent_id = None
 
     from autoskillit.server import _compute_effective_backend_map  # noqa: PLC0415
 

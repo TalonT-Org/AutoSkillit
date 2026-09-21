@@ -16,7 +16,11 @@ from uuid import uuid4
 
 import pytest
 
-from autoskillit.core import SemanticAdaptationContext, SkillExecutionRole
+from autoskillit.core import (
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
+    SemanticAdaptationContext,
+    SkillExecutionRole,
+)
 from autoskillit.hooks._join import OUTCOME_PENDING
 from autoskillit.hooks._join_ledger import active_batch
 from autoskillit.hooks._session_binding import resolve_channel_dir
@@ -234,7 +238,7 @@ def test_live_codex_interactive_managed_route_gate(
         {
             "AUTOSKILLIT_AGENT_BACKEND": "codex",
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
-            "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID": parent_id,
+            MANAGED_JOIN_PARENT_ID_ENV_VAR: parent_id,
             "AUTOSKILLIT_PROJECT_DIR": str(repository),
             "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
         }

@@ -50,7 +50,7 @@ from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, session_scoped
 from autoskillit.server.managed_join_prelaunch import (
     ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
+    acquire_managed_join_evidence,
 )
 from autoskillit.server.tools import (
     tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
@@ -414,7 +414,11 @@ async def dispatch_food_truck(
             if managed_join_parent_id is None and not resume_session_id:
                 managed_join_parent_id = new_managed_launch_id()
             if managed_join_parent_id is not None:
-                issuance = prepare_managed_join_context(
+
+                def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+                    logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+                evidence = acquire_managed_join_evidence(
                     backend=effective_dispatch_backend,
                     configured_model=(
                         tool_ctx.config.model.model_override or tool_ctx.config.model.default_model
@@ -422,12 +426,12 @@ async def dispatch_food_truck(
                     state_root=tool_ctx.project_dir,
                     parent_id=managed_join_parent_id,
                     launch_context="direct",
+                    on_refusal=_log_refusal,
                 )
-                if isinstance(issuance, ManagedJoinIssuanceRefusal):
-                    logger.warning("managed_join_issuance_refused", reason=issuance.reason)
-                    managed_join_parent_id = None
+                if evidence is not None:
+                    adaptation_context = evidence.context
                 else:
-                    adaptation_context = issuance
+                    managed_join_parent_id = None
         cancel_scope: anyio.CancelScope | None = None
         try:
             tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec

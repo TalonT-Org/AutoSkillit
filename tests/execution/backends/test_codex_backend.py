@@ -68,6 +68,7 @@ from autoskillit.execution.backends.codex import (
     CodexBackend as _CodexBackend,
 )
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests._env_forward_helpers import codex_mcp_env_forward_vars_minus_parent_id
 from tests.execution.backends._generated_home_backend import (
     GeneratedHomeCodexBackend,
     bind_generated_home_backend,
@@ -1909,13 +1910,7 @@ class TestCodexForwardVarsInjection:
 
     @pytest.mark.parametrize(
         "var",
-        sorted(
-            __import__(
-                "autoskillit.core.types._type_constants_env",
-                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
-            ).CODEX_MCP_ENV_FORWARD_VARS
-            - {MANAGED_JOIN_PARENT_ID_ENV_VAR}
-        ),
+        sorted(codex_mcp_env_forward_vars_minus_parent_id()),
     )
     def test_skill_session_has_forward_var(self, var: str) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
@@ -1923,13 +1918,7 @@ class TestCodexForwardVarsInjection:
 
     @pytest.mark.parametrize(
         "var",
-        sorted(
-            __import__(
-                "autoskillit.core.types._type_constants_env",
-                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
-            ).CODEX_MCP_ENV_FORWARD_VARS
-            - {MANAGED_JOIN_PARENT_ID_ENV_VAR}
-        ),
+        sorted(codex_mcp_env_forward_vars_minus_parent_id()),
     )
     def test_food_truck_has_forward_var(self, var: str) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)

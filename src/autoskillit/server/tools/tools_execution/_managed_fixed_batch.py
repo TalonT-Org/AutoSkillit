@@ -205,6 +205,8 @@ class DefaultManagedFixedBatchSupervisor:
         batch = open_or_replay(
             binding.flag_dir,
             parent={
+                # Key pinned to the legacy JSON schema for record compatibility;
+                # value comes from the renamed binding dataclass field.
                 "request_session_id": binding.launch.parent_session_id,
                 "managed_parent_id": binding.launch.managed_parent_id,
                 "managed_leaf_id": "",

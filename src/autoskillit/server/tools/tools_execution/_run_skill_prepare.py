@@ -42,7 +42,7 @@ from autoskillit.server.lifecycle._guards import (
 )
 from autoskillit.server.managed_join_prelaunch import (
     ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
+    acquire_managed_join_evidence,
 )
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._backend_compat import _candidate_backend_rejection_reason
@@ -378,33 +378,34 @@ async def _prepare_dispatch_backend(
 
     backend = state._effective_backend_obj
     if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
-        if state._managed_join_parent_id:
-            managed_join_parent_id = state._managed_join_parent_id
-        elif state._stored_contract_entry is not None:
-            managed_lineage_ref = state._stored_contract_entry.managed_lineage_ref
+        managed_join_parent_id = state._managed_join_parent_id
+        if not managed_join_parent_id:
+            stored_entry = state._stored_contract_entry
+            stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
             managed_join_parent_id = (
-                managed_lineage_ref.launch_id
-                if managed_lineage_ref is not None
-                else new_managed_launch_id()
+                stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
             )
-        else:
-            managed_join_parent_id = new_managed_launch_id()
         state._managed_join_parent_id = managed_join_parent_id
-        issuance = prepare_managed_join_context(
+
+        def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+            logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+        evidence = acquire_managed_join_evidence(
             backend=backend,
             configured_model=state.effective_model,
             state_root=state.tool_ctx.project_dir,
             parent_id=managed_join_parent_id,
             launch_context="direct",
+            on_refusal=_log_refusal,
         )
-        if isinstance(issuance, ManagedJoinIssuanceRefusal):
-            logger.warning("managed_join_issuance_refused", reason=issuance.reason)
+        if evidence is None:
+            state._managed_join_parent_id = ""
         else:
             if state.projection_context is None:
                 raise SkillContractError("Managed execution lacks projection authority")
             state.projection_context = replace(
                 state.projection_context,
-                adaptation_context=issuance,
+                adaptation_context=evidence.context,
                 managed_codex_route="parent",
             )
             state.provider_extras = {

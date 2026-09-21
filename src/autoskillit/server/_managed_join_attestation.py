@@ -1,14 +1,9 @@
 """Server-owned issuance and revalidation for managed-join evidence.
 
-Trust boundary
---------------
-The attestation record, the binding flags, the projected manifest and the join
-ledger all live under the session temp channel and ``CODEX_HOME``. The immunity
-here covers honest-path erasure and drift:
-an override, stale home, refreshed catalog, missing guard, mismatched code
-version, or missing issuer cannot admit a join-required skill without
-evidence. A model deliberately forging files under paths it owns is outside
-this boundary, as it is for the existing Claude route.
+Trust boundary covers honest-path erasure and drift — overrides, stale homes,
+refreshed catalogs, missing guards, mismatched code versions, or missing
+issuers cannot admit a join-required skill without evidence. Deliberate forgery
+under paths a model owns is out of scope, as it is for the Claude route.
 """
 
 from __future__ import annotations

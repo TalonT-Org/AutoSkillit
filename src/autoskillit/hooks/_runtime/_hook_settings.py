@@ -380,6 +380,10 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
 
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+# Mirror of _hook_constants.MANAGED_JOIN_PARENT_ID_ENV_VAR. The hook-settings
+# bridge is loaded as a bare script by hook subprocesses (no parent package),
+# so relative imports fail; tests/hooks/test_hook_constants_authority.py
+# enforces parity with the canonical constant.
 _AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 

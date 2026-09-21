@@ -64,9 +64,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # noqa: E402
-    get_session_type,
-    is_headless_session,
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    hook_session_shape,
     read_merged_hook_config,
 )
 
@@ -478,7 +477,8 @@ def main() -> None:
             sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
             sys.exit(2)
 
-    if not is_headless_session():
+    headless, session_type = hook_session_shape()
+    if not headless:
         sys.exit(0)
 
     blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
@@ -487,10 +487,6 @@ def main() -> None:
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
-        sys.exit(0)
-
-    current_session_type = get_session_type()
-    if current_session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     # Hook config file is written by open_kitchen and removed by close_kitchen.

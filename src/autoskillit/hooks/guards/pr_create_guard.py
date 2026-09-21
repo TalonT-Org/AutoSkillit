@@ -37,8 +37,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # noqa: E402
-    get_session_type,
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    enforce_session_scope,
     read_merged_hook_config,
 )
 
@@ -87,10 +87,6 @@ def main() -> None:
 
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
-        sys.exit(0)
-
-    current_session_type = get_session_type()
-    if current_session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     project_root = resolve_state_root(parsed.payload_cwd)

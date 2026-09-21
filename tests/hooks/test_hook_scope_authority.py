@@ -371,11 +371,14 @@ def test_admit_hook_session_scope_uses_session_scope_values(
     """
     import autoskillit.hooks._runtime._session_scope_authority as canonical_mod
 
-    # Make the bare-name lookup resolve to the SAME module object as the
-    # canonical-dotted-name (otherwise setattr on one doesn't affect the
-    # other — Python's import system keys sys.modules by the name used at
-    # load time).
-    sys.modules.setdefault("_session_scope_authority", canonical_mod)
+    # Force the bare-name entry in sys.modules to point at the canonical module
+    # object. Earlier tests in the suite may have already populated
+    # sys.modules['_session_scope_authority'] with a SEPARATE module object
+    # loaded from the same source file; setdefault would be a no-op in that
+    # case and the monkeypatch would land on the wrong object. The function
+    # 'admit_hook_session_scope' consults the bare-name entry, so we must
+    # ensure both keys resolve to the same module.
+    sys.modules["_session_scope_authority"] = canonical_mod
 
     from autoskillit.hooks._runtime import _hook_settings
 

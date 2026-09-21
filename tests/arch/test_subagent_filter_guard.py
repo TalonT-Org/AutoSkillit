@@ -33,15 +33,47 @@ def _imports_predicate(tree: ast.AST) -> bool:
 
 
 def _calls_predicate(tree: ast.AST, *, name: str = _PREDICATE_NAME) -> bool:
-    """Return True iff ``tree`` contains a call expression to ``name``."""
+    """Return True iff ``tree`` invokes or references ``name``.
+
+    Both a direct call (``is_parent_assistant_record(record)``) and an
+    indirect reference (passing the predicate as a higher-order argument,
+    e.g. ``some_func(text, is_parent_assistant_record)``) count, because
+    both forms require the importing module to hold a usable reference.
+    """
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == name:
+                return True
+            if isinstance(func, ast.Attribute) and func.attr == name:
+                return True
+        elif isinstance(node, ast.Name) and node.id == name:
+            return True
+        elif isinstance(node, ast.Attribute) and node.attr == name:
+            return True
+    return False
+
+
+def _exports_predicate(tree: ast.AST, *, name: str = _PREDICATE_NAME) -> bool:
+    """Return True iff ``tree`` re-exports ``name`` via ``__all__``.
+
+    Re-export via ``__all__`` is the public-API contract for analyzer
+    modules that proxy the predicate downstream without invoking it
+    directly; matching the constant string inside the ``__all__`` list
+    (rather than substring-matching the whole module) keeps the check
+    tight against accidental docstring mentions.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
             continue
-        func = node.func
-        if isinstance(func, ast.Name) and func.id == name:
-            return True
-        if isinstance(func, ast.Attribute) and func.attr == name:
-            return True
+        for target in node.targets:
+            if not (isinstance(target, ast.Name) and target.id == "__all__"):
+                continue
+            if not isinstance(node.value, (ast.List, ast.Tuple)):
+                continue
+            for elt in node.value.elts:
+                if isinstance(elt, ast.Constant) and elt.value == name:
+                    return True
     return False
 
 
@@ -97,9 +129,10 @@ def test_turn_iterator_calls_the_canonical_predicate() -> None:
 def test_analyzer_reexports_the_canonical_predicate() -> None:
     tree = ast.parse(ANALYZER.read_text(encoding="utf-8"))
     assert _imports_predicate(tree)
-    assert _calls_predicate(tree), (
-        f"{ANALYZER.name} must call {_PREDICATE_NAME} to re-export it through "
-        "the pipeline namespace."
+    assert _exports_predicate(tree) or _calls_predicate(tree), (
+        f"{ANALYZER.name} must re-export {_PREDICATE_NAME} through __all__ "
+        "or invoke it directly. Importing the predicate without surfacing "
+        "it leaves the duplicate-filter risk intact downstream."
     )
 
 

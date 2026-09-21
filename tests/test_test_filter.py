@@ -20,6 +20,7 @@ from tests._test_filter import (
     LAYER_CASCADE_AGGRESSIVE,
     LAYER_CASCADE_CONSERVATIVE,
     ASTImportWalker,
+    ChangedFiles,
     FilterMode,
     FullRunReason,
     ImportContext,
@@ -811,7 +812,10 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py", "tests/core/test_io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py", "tests/core/test_io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
 
     def test_git_changed_files_failure_returns_none(
@@ -910,7 +914,10 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
 
     def test_git_changed_files_includes_untracked_files(
@@ -925,7 +932,7 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"new_script.py"}
+        assert result == ChangedFiles(tracked=frozenset(), untracked=frozenset({"new_script.py"}))
         assert mock_run.call_count == 3
 
     def test_git_changed_files_ls_files_failure_is_nonfatal(
@@ -942,8 +949,84 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
+
+
+class TestUntrackedPathNormalization:
+    def test_tracked_external_manifest_miss_still_fails_open(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=_make_tests_tree(tmp_path),
+        )
+        assert result is FullRunReason.UNMAPPED_FILE
+
+    def test_untracked_external_manifest_miss_is_ignored_after_manifest_load(
+        self, tmp_path: Path
+    ) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=tests_root,
+            untracked_files=frozenset({"scratch.txt"}),
+        )
+        assert isinstance(result, set)
+        assert tests_root / "arch" in result
+
+    def test_untracked_manifest_match_remains_classified(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={"scratch.txt": ["infra"]},
+            tests_root=tests_root,
+            untracked_files=frozenset({"scratch.txt"}),
+        )
+        assert isinstance(result, set)
+        assert tests_root / "infra" in result
+
+    def test_untracked_source_path_remains_a_normal_input(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            {"src/autoskillit/recipe/loader.py"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=_make_tests_tree(tmp_path),
+            untracked_files=frozenset({"src/autoskillit/recipe/loader.py"}),
+        )
+        assert result is not FullRunReason.UNMAPPED_FILE
+
+    def test_untracked_bucket_a_and_workflow_misses_do_not_reach_policy(
+        self, tmp_path: Path
+    ) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        for path in ("pyproject.toml", "uv.lock", ".github/scratch.yml"):
+            result = build_test_scope(
+                {path},
+                FilterMode.CONSERVATIVE,
+                manifest={},
+                tests_root=tests_root,
+                untracked_files=frozenset({path}),
+            )
+            assert isinstance(result, set)
+
+    def test_manifest_matched_untracked_workflow_triggers_infra(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {".github/workflows/scratch.yml"},
+            FilterMode.CONSERVATIVE,
+            manifest={".github/**/*.yml": ["docs"]},
+            tests_root=tests_root,
+            untracked_files=frozenset({".github/workflows/scratch.yml"}),
+        )
+        assert isinstance(result, set)
+        assert tests_root / "infra" in result
 
 
 # ---------------------------------------------------------------------------

@@ -1131,13 +1131,14 @@ def pytest_configure(config: pytest.Config) -> None:
         coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
 
         scope = build_test_scope(
-            changed_files=changed,
+            changed_files=None if changed is None else set(changed.all_paths),
             mode=mode,
             manifest=manifest,
             tests_root=config.rootpath / "tests",
             coverage_map_path=coverage_map_path,
             cwd=config.rootpath,
             base_ref=resolved_base_ref,
+            untracked_files=frozenset() if changed is None else changed.untracked,
         )
 
         if isinstance(scope, FullRunReason):

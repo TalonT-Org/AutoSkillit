@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,18 @@ class FilterMode(enum.StrEnum):
     NONE = "none"
     CONSERVATIVE = "conservative"
     AGGRESSIVE = "aggressive"
+
+
+@dataclass(frozen=True, slots=True)
+class ChangedFiles:
+    """Tracked and untracked Git paths collected for test-scope construction."""
+
+    tracked: frozenset[str]
+    untracked: frozenset[str]
+
+    @property
+    def all_paths(self) -> frozenset[str]:
+        return self.tracked | self.untracked
 
 
 class FullRunReason(enum.StrEnum):
@@ -1737,8 +1750,8 @@ def _paths_from_git_output(output: str) -> set[str]:
 def git_changed_files(
     cwd: str | Path,
     base_ref: str | None = None,
-) -> set[str] | None:
-    """Return set of changed files relative to base_ref, or None on failure."""
+) -> ChangedFiles | None:
+    """Return tracked and untracked files relative to base_ref, or None on failure."""
     if base_ref is None:
         base_ref = resolve_test_base_ref_from_env()
     if base_ref is None:
@@ -1776,7 +1789,7 @@ def git_changed_files(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
-    files = _paths_from_git_output(diff_result.stdout)
+    tracked = frozenset(_paths_from_git_output(diff_result.stdout))
 
     untracked = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -1786,16 +1799,18 @@ def git_changed_files(
         timeout=10,
         check=False,
     )
-    if untracked.returncode == 0:
-        files.update(_paths_from_git_output(untracked.stdout))
-
-    return files
+    untracked_paths = (
+        frozenset(_paths_from_git_output(untracked.stdout))
+        if untracked.returncode == 0
+        else frozenset()
+    )
+    return ChangedFiles(tracked=tracked, untracked=untracked_paths)
 
 
 def git_changed_files_local(
     cwd: str | Path,
-) -> set[str] | None:
-    """Return files changed in working tree vs HEAD, or None on failure.
+) -> ChangedFiles | None:
+    """Return tracked and untracked working-tree files vs HEAD, or None on failure.
 
     Uses ``git diff HEAD --name-only`` (staged + unstaged vs last commit)
     plus ``git ls-files --others --exclude-standard`` (untracked).
@@ -1821,7 +1836,7 @@ def git_changed_files_local(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
-    files = _paths_from_git_output(diff_result.stdout)
+    tracked = frozenset(_paths_from_git_output(diff_result.stdout))
 
     try:
         untracked = subprocess.run(
@@ -1834,14 +1849,16 @@ def git_changed_files_local(
         )
     except subprocess.TimeoutExpired:
         warnings.warn("git ls-files timed out after 10s", stacklevel=2)
-        return files
+        return ChangedFiles(tracked=tracked, untracked=frozenset())
     except FileNotFoundError:
         warnings.warn("git binary not found on PATH", stacklevel=2)
-        return files
-    if untracked.returncode == 0:
-        files.update(_paths_from_git_output(untracked.stdout))
-
-    return files
+        return ChangedFiles(tracked=tracked, untracked=frozenset())
+    untracked_paths = (
+        frozenset(_paths_from_git_output(untracked.stdout))
+        if untracked.returncode == 0
+        else frozenset()
+    )
+    return ChangedFiles(tracked=tracked, untracked=untracked_paths)
 
 
 def _scoped_test_dirs_for_file(path: str) -> set[str]:
@@ -2650,6 +2667,32 @@ def _augment_with_coverage(
     return additions
 
 
+def _effective_changed_files(
+    changed_files: set[str],
+    untracked_files: frozenset[str],
+    manifest: dict[str, Any] | None,
+) -> set[str]:
+    """Drop only external untracked paths that a loaded manifest does not handle."""
+    if manifest is None:
+        return changed_files
+
+    external_untracked = {
+        filepath
+        for filepath in changed_files & untracked_files
+        if not filepath.startswith(("src/", "tests/"))
+    }
+    if not external_untracked:
+        return changed_files
+
+    compiled_matchers = _compile_manifest_matchers(manifest)
+    matched = {
+        filepath
+        for filepath in external_untracked
+        if apply_manifest({filepath}, manifest, compiled_matchers=compiled_matchers) is not None
+    }
+    return changed_files - external_untracked | matched
+
+
 def build_test_scope(
     changed_files: set[str] | None,
     mode: FilterMode,
@@ -2658,20 +2701,22 @@ def build_test_scope(
     coverage_map_path: str | Path | None = None,
     cwd: str | Path | None = None,
     base_ref: str | None = None,
+    *,
+    untracked_files: frozenset[str] = frozenset(),
 ) -> set[Path] | FullRunReason:
     """Compute the set of test paths to run, or a FullRunReason for a full run.
 
     Algorithm:
-    1. None changed_files -> FullRunReason.GIT_UNAVAILABLE (fail-open)
-    2. Conservative + >30 files -> FullRunReason.LARGE_CHANGESET (aggressive mode: no threshold)
-    3. Global Bucket A -> full run; scoped support files -> required test directories
-    4. Classify: src Python -> cascade, ordinary test Python -> direct, others -> manifest
-    5. Compute always-run set for mode (includes arch/contracts for both modes)
-    6. Union all sets into an append-only scope
-    7. Coverage-oracle augmentation (additive only)
-    8. Resolve to concrete paths
+    Unmatched untracked paths outside ``src/`` and ``tests/`` are removed only
+    when a manifest loaded successfully. All tracked paths and source/test paths
+    remain fail-open inputs to the ordinary scope policy.
     """
-    initial_scope = _initial_scope(changed_files, mode, cwd, base_ref)
+    effective_changed_files = (
+        None
+        if changed_files is None
+        else _effective_changed_files(changed_files, untracked_files, manifest)
+    )
+    initial_scope = _initial_scope(effective_changed_files, mode, cwd, base_ref)
     if isinstance(initial_scope, FullRunReason):
         return initial_scope
     changed_files, scoped_test_dirs = initial_scope

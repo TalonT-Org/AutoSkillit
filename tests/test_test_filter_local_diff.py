@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from tests._test_filter import git_changed_files_local
+from tests._test_filter import ChangedFiles, git_changed_files_local
 
 pytestmark = [pytest.mark.medium]
 
@@ -25,7 +25,10 @@ class TestGitChangedFilesLocal:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files_local("/fake")
-        assert result == {"src/autoskillit/core/io.py", "new_file.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py"}),
+            untracked=frozenset({"new_file.py"}),
+        )
         assert mock_run.call_count == 2
         first_call = mock_run.call_args_list[0][0][0]
         assert first_call == ["git", "diff", "HEAD", "--name-only"]
@@ -41,7 +44,7 @@ class TestGitChangedFilesLocal:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files_local("/fake")
-        assert result == set()
+        assert result == ChangedFiles(tracked=frozenset(), untracked=frozenset())
 
     def test_local_diff_failure_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Git failure returns None (fail-open)."""
@@ -73,4 +76,4 @@ class TestGitChangedFilesLocal:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files_local("/fake")
-        assert result == {"changed.py"}
+        assert result == ChangedFiles(tracked=frozenset({"changed.py"}), untracked=frozenset())

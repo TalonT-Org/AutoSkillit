@@ -36,7 +36,7 @@ def _changed_files_or_skip(ctx: BaseRefContext) -> set[str]:
     base_ref = require_base_ref_or_skip(ctx)
     changed = git_changed_files(REPO_ROOT, base_ref=base_ref)
     assert changed is not None, f"could not compute changed files against base ref {base_ref!r}"
-    return changed
+    return set(changed.all_paths)
 
 
 def test_no_diff_exceeds_line_limit(resolved_test_base: BaseRefContext) -> None:

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests._test_filter import ChangedFiles
 from tests.arch._deselection import deselect_arch_items
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -107,7 +108,11 @@ class TestPytestCollectionModifyItemsHook:
         unchanged_item = _make_arch_item(unchanged)
         items = [changed_item, unchanged_item]
         mock_config = MagicMock()
-        with patch.object(arch_conftest, "git_changed_files", return_value={changed_rel}):
+        with patch.object(
+            arch_conftest,
+            "git_changed_files",
+            return_value=ChangedFiles(frozenset({changed_rel}), frozenset()),
+        ):
             arch_conftest.pytest_collection_modifyitems(mock_config, items)
         mock_config.hook.pytest_deselected.assert_called_once_with(items=[unchanged_item])
         assert len(items) == 1

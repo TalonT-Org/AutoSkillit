@@ -12,8 +12,12 @@ Two distinct root-level patterns exist; placement is governed by
   `_recipe_delivery_framing.py`, and `quota_constraints.py` are safe for hook subprocesses running outside the
   package venv. They have zero internal autoskillit imports and are loaded via
   bare-name sys.path bootstrap (`hooks/guards/quota_guard.py:42`,
-  `hooks/quota_post_hook.py:39`). Add a new module here only when both
-  properties hold.
+  `hooks/quota_post_hook.py:39`). Because the same property — no
+  autoskillit imports — makes them safe for hook subprocesses, the same
+  modules also act as the canonical internal authority for the same
+  logic (the ``is_parent_assistant_record`` predicate is consumed by both
+  the hook guard and the in-process pipeline). Add a new module here only
+  when both properties hold.
 - **Headless run_python utilities** — `_llm_triage.py`, `_probe_canary.py`, and
   `_test_filter.py` import autoskillit modules and run inside the package venv
   via the headless `run_python` tool. They are NOT safe for hook subprocesses.

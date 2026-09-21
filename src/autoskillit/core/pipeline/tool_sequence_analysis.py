@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from itertools import islice
 
 from autoskillit._parent_assistant_turns import (
-    _TOOL_USE_CAP,
+    TOOL_USE_CAP,
     AssistantTurn,
     is_parent_assistant_record,
     iter_merged_assistant_turns,
@@ -75,7 +75,7 @@ class AnalysisResult:
 
 
 def parse_raw_cc_jsonl(
-    jsonl_path: pathlib.Path, *, cap: int = _TOOL_USE_CAP
+    jsonl_path: pathlib.Path, *, cap: int = TOOL_USE_CAP
 ) -> list[tuple[str, ...]]:
     """Parse a Claude Code session JSONL into per-turn tool call lists."""
     try:

@@ -11,7 +11,7 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import NamedTuple
 
-_TOOL_USE_CAP = 8
+TOOL_USE_CAP = 8
 
 
 class AssistantTurn(NamedTuple):
@@ -38,15 +38,19 @@ def _resolve_turn_id(rec: dict[str, object]) -> str:
     return ""
 
 
-def is_parent_assistant_record(rec: dict[str, object]) -> bool:
+def is_parent_assistant_record(rec: object) -> bool:
     """Return True iff ``rec`` is a transcript record for the parent assistant.
 
     A record is the parent assistant iff:
 
+    - it is a mapping,
     - ``type`` is ``"assistant"`` (excluding ``user``/``system``/tool records),
     - it is not a Task subagent record (``subagent_type`` is unset), and
     - its ``message.model`` is not the ``"<synthetic>"`` placeholder that
       Claude emits for non-conversational assistant messages.
+
+    Non-mapping inputs (including raw JSON scalars) return False rather than
+    raising, so callers can pass the output of ``json.loads()`` directly.
     """
     if not isinstance(rec, dict):
         return False
@@ -58,7 +62,7 @@ def is_parent_assistant_record(rec: dict[str, object]) -> bool:
     return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
 
 
-def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Iterator[AssistantTurn]:
+def iter_merged_assistant_turns(text: str, *, cap: int = TOOL_USE_CAP) -> Iterator[AssistantTurn]:
     """Yield merged parent-assistant turns in their first-seen transcript order.
 
     A nonempty ``requestId`` is the preferred turn-grouping key, with

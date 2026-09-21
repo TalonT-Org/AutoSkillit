@@ -30,6 +30,7 @@ from autoskillit.core import (
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
     FreshLaunch,
+    InteractiveInvocationValidation,
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
@@ -137,9 +138,9 @@ class _RecordingBackend:
             inherited_fds=getattr(binding, "inherited_fds", ()),
         )
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+    def validate_interactive_invocation(self, spec: CmdSpec) -> InteractiveInvocationValidation:
         del spec
-        return []
+        return InteractiveInvocationValidation(errors=())
 
     def session_attempt_context(
         self,

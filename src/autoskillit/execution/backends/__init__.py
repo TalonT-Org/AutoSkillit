@@ -19,6 +19,7 @@ from ._codex_config import (
     codex_recipe_delivery_calling_contract,
     ensure_codex_mcp_registered,
 )
+from ._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 from ._codex_execution_identity import extract_codex_execution_identity
 from ._codex_hooks import (
     MANAGED_CODEX_LEAF_GUARD_SET,
@@ -97,6 +98,7 @@ __all__ = [
     "BACKEND_REGISTRY",
     "all_backends",
     "CODEX_SKILL_DISCOVERY_CONTRACT",
+    "CODEX_MANAGED_HOME_ROUTE",
     "MANAGED_CODEX_LEAF_GUARD_SET",
     "MANAGED_CODEX_PARENT_GUARD_SET",
     "CompositeSessionLocator",

@@ -42,6 +42,7 @@ from autoskillit.core import (
     ExecutableLaunchBinding,
     ExplorationDispatchRenderer,
     FreshLaunch,
+    InteractiveInvocationValidation,
     InteractiveLaunch,
     LineDriver,
     ManagedHeadlessSessionLineageRef,
@@ -706,7 +707,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             log.warning("list_plugins() failed", exc_info=True)
             return []
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+    def validate_interactive_invocation(self, spec: CmdSpec) -> InteractiveInvocationValidation:
         """Verify the interactive launch spec's effective environment policy.
 
         When the spec carries a request to keep Claude agent teams inactive,
@@ -718,10 +719,12 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         launch defect.
         """
         if not spec.force_inactive_agent_teams:
-            return []
+            return InteractiveInvocationValidation(errors=())
         env = dict(spec.env)
         project_root: Path | str | None = spec.cwd if spec.cwd else None
-        return _interactive_invocation_environment_policy(env, project_root)
+        return InteractiveInvocationValidation(
+            errors=tuple(_interactive_invocation_environment_policy(env, project_root))
+        )
 
     def ensure_pre_launch(
         self,

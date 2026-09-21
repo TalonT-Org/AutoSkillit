@@ -33,7 +33,7 @@ def test_default_intent_ignores_teams_enabled_project(tmp_path: Path) -> None:
         origin=spec.origin,
     )
 
-    assert backend.validate_interactive_invocation(spec) == []
+    assert backend.validate_interactive_invocation(spec).errors == ()
 
 
 def test_declared_intent_reports_policy_violations(tmp_path: Path) -> None:
@@ -48,7 +48,7 @@ def test_declared_intent_reports_policy_violations(tmp_path: Path) -> None:
         force_inactive_agent_teams=True,
     )
 
-    errors = backend.validate_interactive_invocation(spec)
+    errors = backend.validate_interactive_invocation(spec).errors
 
     assert errors
     assert any(AGENT_TEAMS_ENV_VAR in error for error in errors)
@@ -72,7 +72,7 @@ def test_declared_intent_passes_on_a_clean_project(tmp_path: Path) -> None:
     )
 
     assert spec.force_inactive_agent_teams is True
-    assert backend.validate_interactive_invocation(spec) == []
+    assert backend.validate_interactive_invocation(spec).errors == ()
 
 
 def test_declared_intent_neutralizes_teams_enabled_settings(tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_malformed_settings_are_scoped_to_declared_intent(tmp_path: Path) -> Non
     backend = ClaudeCodeBackend()
 
     default_spec = CmdSpec(cmd=("claude",), env={}, cwd=str(project))
-    assert backend.validate_interactive_invocation(default_spec) == []
+    assert backend.validate_interactive_invocation(default_spec).errors == ()
 
     forced_spec = CmdSpec(
         cmd=("claude",),
@@ -115,7 +115,7 @@ def test_malformed_settings_are_scoped_to_declared_intent(tmp_path: Path) -> Non
         cwd=str(project),
         force_inactive_agent_teams=True,
     )
-    errors = backend.validate_interactive_invocation(forced_spec)
+    errors = backend.validate_interactive_invocation(forced_spec).errors
     assert any("could not be parsed" in error for error in errors)
 
 

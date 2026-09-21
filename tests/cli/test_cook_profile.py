@@ -22,6 +22,7 @@ from autoskillit.core import (
     CompiledSessionSkillCatalogAuthority,
     FreshLaunch,
     HookTrustPolicy,
+    InteractiveInvocationValidation,
     ManagedSessionHome,
     RepositoryProfileId,
     RestoreSession,
@@ -98,8 +99,10 @@ def _make_mock_backend_class(
                 **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
             )
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-            return []
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            return InteractiveInvocationValidation(errors=())
 
         @contextmanager
         def session_attempt_context(self, **kwargs: object):
@@ -501,9 +504,11 @@ def _run_finalized_profile_cook(
                 **interactive_launch_metadata(binary="codex", launch=kwargs["launch"]),
             )
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
             captured["validated"] = spec
-            return []
+            return InteractiveInvocationValidation(errors=())
 
         @contextmanager
         def session_attempt_context(self, **kwargs: object):

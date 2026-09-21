@@ -22,6 +22,7 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+from autoskillit.core import InteractiveInvocationValidation
 from tests.cli._cook_launch_helpers import RecordingLifecycle
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
@@ -169,9 +170,11 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
             return ClaudeCodeBackend().interactive_ordering_flags()
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
             events.append(("validate", spec))
-            return []
+            return InteractiveInvocationValidation(errors=())
 
         def session_attempt_context(self, **kwargs):  # type: ignore[no-untyped-def]
             return lifecycle.session_attempt_context(**kwargs)
@@ -367,8 +370,10 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
 
             return ClaudeCodeBackend().interactive_ordering_flags()
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-            return []
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            return InteractiveInvocationValidation(errors=())
 
         @contextmanager
         def session_attempt_context(self, *, attempt: int, **kwargs: object):

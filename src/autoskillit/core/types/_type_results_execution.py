@@ -11,7 +11,7 @@ Zero autoskillit imports outside this sub-package (IL-0).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, TypedDict, cast
 
@@ -27,6 +27,7 @@ __all__ = [
     "ExecutionCandidateAttempt",
     "ExecutionSelection",
     "SessionTelemetry",
+    "SessionAttemptHandle",
     "RecipeIdentity",
     "CIRunScope",
 ]
@@ -37,6 +38,22 @@ class SubagentModelOutcomeDict(TypedDict):
     final_model: str
     model_swapped: bool
     agent_type: NotRequired[str]
+
+
+@dataclass(frozen=True, slots=True)
+class SessionAttemptHandle:
+    """Ownership handle for one durable session attempt."""
+
+    view_id: str
+    pass_fds: tuple[int, ...]
+    _record_spawn: Callable[[int, int], None] = field(repr=False, compare=False)
+    _record_reaped: Callable[[int, int], None] = field(repr=False, compare=False)
+
+    def record_spawn(self, pid: int, pgid: int) -> None:
+        self._record_spawn(pid, pgid)
+
+    def record_reaped(self, pid: int, pgid: int) -> None:
+        self._record_reaped(pid, pgid)
 
 
 @dataclass(frozen=True, slots=True)

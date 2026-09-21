@@ -17,7 +17,7 @@ import autoskillit.cli.session._session_backend as _patch_session__session_backe
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
-from autoskillit.core import ClaudeFlags, PreLaunchReadiness
+from autoskillit.core import ClaudeFlags, InteractiveInvocationValidation, PreLaunchReadiness
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
@@ -618,7 +618,11 @@ class TestCLIOrderCommand:
             return PreLaunchReadiness((), {})
 
         monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
-        monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])
+        monkeypatch.setattr(
+            CodexBackend,
+            "validate_interactive_invocation",
+            lambda *_: InteractiveInvocationValidation(errors=()),
+        )
         monkeypatch.setattr(
             CodexBackend,
             "session_attempt_context",

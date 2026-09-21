@@ -345,3 +345,69 @@ def test_successful_popen_records_spawn_without_post_spawn_pgid_lookup() -> None
     ]
     assert "os.getpgid" not in body
     assert body.index("on_spawn(pid, pgid)") < body.index("trace.record_spawn()")
+
+
+def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_process
+    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    spawn = Mock()
+    monkeypatch.setattr(_session_process, "spawn_owned_process", spawn)
+    callbacks = Mock()
+
+    with pytest.raises(RuntimeError, match="catalog changed"):
+        run_cook_attempt(
+            CmdSpec(
+                cmd=(sys.executable, "-c", "pass"),
+                env=dict(os.environ),
+                cwd=str(tmp_path.resolve()),
+                skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+            ),
+            pass_fds=(),
+            on_spawn=callbacks.spawn,
+            on_reaped=callbacks.reaped,
+            trace=Mock(),
+            observer=None,
+            not_after=time.time() + 60,
+            pre_spawn_check=lambda: (_ for _ in ()).throw(RuntimeError("catalog changed")),
+        )
+
+    spawn.assert_not_called()
+    callbacks.spawn.assert_not_called()
+    callbacks.reaped.assert_not_called()
+
+
+def test_managed_launch_requires_a_retained_pre_spawn_check(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_process
+    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    spawn = Mock()
+    monkeypatch.setattr(_session_process, "spawn_owned_process", spawn)
+
+    with pytest.raises(RuntimeError, match="requires a pre-spawn check"):
+        run_cook_attempt(
+            CmdSpec(
+                cmd=(sys.executable, "-c", "pass"),
+                env=dict(os.environ),
+                cwd=str(tmp_path.resolve()),
+                skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+            ),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=None,
+            not_after=time.time() + 60,
+        )
+
+    spawn.assert_not_called()

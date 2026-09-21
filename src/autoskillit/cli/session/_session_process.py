@@ -17,6 +17,7 @@ from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import CmdSpec, get_logger
 from autoskillit.execution import (
+    CODEX_MANAGED_HOME_ROUTE,
     INTERACTIVE_TETHER_CEILING_SECONDS,
     OwnedProcessGroup,
     TetherSpec,
@@ -37,6 +38,13 @@ class CookAttemptResult:
     returncode: int
 
 
+def _run_pre_spawn_check(spec: CmdSpec, check: Callable[[], None] | None) -> None:
+    if spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE and check is None:
+        raise RuntimeError("Codex managed interactive launch requires a pre-spawn check")
+    if check is not None:
+        check()
+
+
 def run_cook_attempt(
     spec: CmdSpec,
     *,
@@ -47,6 +55,7 @@ def run_cook_attempt(
     observer: PtyObserver | None,
     not_after: float,
     systemd_scope_enabled: bool = False,
+    pre_spawn_check: Callable[[], None] | None = None,
 ) -> CookAttemptResult:
     """Run one finalized cook command and prove complete child cleanup.
 
@@ -83,6 +92,7 @@ def run_cook_attempt(
                 spawn_fds = _merge_launcher_fds(inherited_fds, slave_fd)
                 process_group = None
                 start_new_session = True
+            _run_pre_spawn_check(spec, pre_spawn_check)
             # PTY mode places the launcher and its replacement workload in the same scope.
             owner = spawn_owned_process(
                 wrap_systemd_scope(

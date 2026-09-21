@@ -464,10 +464,10 @@ def cook(
                     value_bearing_flags=value_bearing_flags,
                 )
                 assert_resume_purity(spec=spec, launch=current_launch)
-                validation_errors = backend.validate_interactive_invocation(spec)
-                if validation_errors:
+                validation = backend.validate_interactive_invocation(spec)
+                if validation.errors:
                     raise RuntimeError(
-                        "Interactive invocation validation failed: " + "; ".join(validation_errors)
+                        "Interactive invocation validation failed: " + "; ".join(validation.errors)
                     )
 
                 with backend.session_attempt_context(
@@ -522,6 +522,7 @@ def cook(
                         observer=observer,
                         not_after=time.time() + config.process_tether.cook_ceiling_seconds,
                         systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
+                        pre_spawn_check=validation.pre_spawn_check,
                     )
                     reload_session_id = consume_reload_sentinel(project_dir)
                     _require_observer_ready(observer)

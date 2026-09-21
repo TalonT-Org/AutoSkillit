@@ -18,6 +18,7 @@ from autoskillit.core import (
     ExecutionIdentity,
     ExplorationDispatchRenderer,
     FreshLaunch,
+    InteractiveInvocationValidation,
     InteractiveLaunch,
     LineDriver,
     OutputFormat,
@@ -143,6 +144,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         CodingAgentBackend,
         ExecutableLaunchBinding,
         ExecutionIdentity,
+        InteractiveInvocationValidation,
         PreLaunchReadiness,
         ResumeSpec,
         SessionAttemptHandle,
@@ -162,7 +164,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     assert tuple(native.parameters) == ("self", "spec")
     assert typing.get_type_hints(CodingAgentBackend.validate_interactive_invocation) == {
         "spec": CmdSpec,
-        "return": list[str],
+        "return": InteractiveInvocationValidation,
     }
 
     pre_launch = inspect.signature(CodingAgentBackend.ensure_pre_launch)
@@ -407,8 +409,8 @@ class _Backend:
         project_dir: Path | None = None,
     ) -> list[str]: ...
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-        return []
+    def validate_interactive_invocation(self, spec: CmdSpec) -> InteractiveInvocationValidation:
+        return InteractiveInvocationValidation(errors=())
 
     def validate_skill_content(self, content: str) -> list[str]: ...
 

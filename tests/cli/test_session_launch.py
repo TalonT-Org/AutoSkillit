@@ -32,6 +32,7 @@ from autoskillit.core import (
     ClaudeFlags,
     FreshLaunch,
     HookTrustPolicy,
+    InteractiveInvocationValidation,
     PluginLoadMode,
     PreLaunchReadiness,
 )
@@ -117,7 +118,7 @@ class _BackendLifecycleStub:
         return backend.interactive_ordering_flags()
 
     def validate_interactive_invocation(self, spec):
-        return []
+        return InteractiveInvocationValidation(errors=())
 
     def ensure_pre_launch(
         self, *, session_dir: Path | None = None, executable=None
@@ -210,7 +211,11 @@ def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
         "ensure_pre_launch",
         lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
-    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda _self, _spec: [])
+    monkeypatch.setattr(
+        CodexBackend,
+        "validate_interactive_invocation",
+        lambda _self, _spec: InteractiveInvocationValidation(errors=()),
+    )
 
 
 # Module-level flags map — shared by Tests B, C, and the registry guard.
@@ -1672,7 +1677,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         def validate_interactive_invocation(self, spec):
             events.append("validated")
             assert spec.cwd == str(tmp_path.resolve())
-            return []
+            return InteractiveInvocationValidation(errors=())
 
     def run_attempt(spec, **kwargs):
         events.append("spawned")
@@ -2113,9 +2118,9 @@ def _prepare_codex_order_composition(
         cast(list[str], captured["events"]).append("validated")
         captured["spec"] = spec
         _capture_optional_codex_config(captured, spec)
-        errors = original_validate(self, spec)
-        cast(list[list[str]], captured["validation_errors"]).append(errors)
-        return errors
+        validation = original_validate(self, spec)
+        cast(list[object], captured["validation_errors"]).append(validation)
+        return validation
 
     monkeypatch.setattr(
         CodexBackend,
@@ -2192,7 +2197,9 @@ def test_codex_order_composition_produces_canonical_generated_home(
     launch()  # type: ignore[operator]
 
     assert captured["events"] == ["validated", "spawned"]
-    assert captured["validation_errors"] == [[]]
+    validations = cast(list[InteractiveInvocationValidation], captured["validation_errors"])
+    assert len(validations) == 1
+    assert validations[0].errors == ()
     assert len(cast(list[object], captured["process_calls"])) == 1
     spec = cast(CmdSpec, captured["spec"])
     generated_home = Path(spec.env["CODEX_HOME"])
@@ -2286,7 +2293,7 @@ def test_raw_codex_launch_attests_finalized_projected_home_while_lease_is_live(
     monkeypatch.setattr("autoskillit.execution.assert_interactive_ordering", check_ordering)
     original_validate = CodexBackend.validate_interactive_invocation
 
-    def validate(self, spec: CmdSpec) -> list[str]:
+    def validate(self, spec: CmdSpec) -> InteractiveInvocationValidation:
         binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
         assert not binding.closed
         captured["validated_spec"] = spec
@@ -2347,8 +2354,8 @@ def test_raw_codex_launch_renders_validation_errors_without_spawning(
     original_validate = CodexBackend.validate_interactive_invocation
 
     def reject(self, spec):  # type: ignore[no-untyped-def]
-        assert original_validate(self, spec) == []
-        return ["projected catalog discovery rejected"]
+        assert original_validate(self, spec).errors == ()
+        return InteractiveInvocationValidation(errors=("projected catalog discovery rejected",))
 
     monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", reject)
 
@@ -2442,9 +2449,11 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                 managed_skill_catalog=managed_skill_catalog,
             )
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
             events.append(("validated", spec.env["RESUME"]))
-            return []
+            return InteractiveInvocationValidation(errors=())
 
         def session_attempt_context(self, **kwargs):  # type: ignore[no-untyped-def]
             return lifecycle.session_attempt_context(**kwargs)

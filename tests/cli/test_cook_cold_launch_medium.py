@@ -13,6 +13,7 @@ from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
+    InteractiveInvocationValidation,
     PreLaunchReadiness,
     SessionAttemptHandle,
     atomic_write,
@@ -150,7 +151,7 @@ def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
     monkeypatch.setattr(
         CodexBackend,
         "validate_interactive_invocation",
-        lambda _self, _spec: [],
+        lambda _self, _spec: InteractiveInvocationValidation(errors=()),
     )
     monkeypatch.setattr(
         _patch_session__session_reload,

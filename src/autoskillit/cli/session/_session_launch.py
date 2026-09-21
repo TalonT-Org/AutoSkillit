@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, assert_never, overload
@@ -133,6 +133,7 @@ class PreparedInteractiveLaunch:
 
     spec: CmdSpec
     executable: ExecutableLaunchBinding
+    pre_spawn_check: Callable[[], None] | None = None
 
 
 def prepare_interactive_launch(
@@ -296,11 +297,15 @@ def _finalize_interactive_launch(
         value_bearing_flags=value_bearing_flags,
     )
     assert_resume_purity(spec=spec, launch=launch)
-    validation_errors = backend.validate_interactive_invocation(spec)
-    if validation_errors:
-        _exit_launch_validation_errors(validation_errors)
+    validation = backend.validate_interactive_invocation(spec)
+    if validation.errors:
+        _exit_launch_validation_errors(validation.errors)
 
-    return PreparedInteractiveLaunch(spec=spec, executable=executable)
+    return PreparedInteractiveLaunch(
+        spec=spec,
+        executable=executable,
+        pre_spawn_check=validation.pre_spawn_check,
+    )
 
 
 def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
@@ -475,6 +480,7 @@ def _run_interactive_session(
                 observer=None,
                 not_after=time.time() + cook_ceiling_seconds,
                 systemd_scope_enabled=systemd_scope_enabled,
+                pre_spawn_check=prepared.pre_spawn_check,
             )
         returncode = managed_result.returncode
     else:

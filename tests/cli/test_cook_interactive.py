@@ -30,6 +30,7 @@ from autoskillit.core import (
     CompiledSessionSkillCatalogAuthority,
     FreshLaunch,
     HookTrustPolicy,
+    InteractiveInvocationValidation,
     ManagedSessionHome,
     NamedResume,
     PreLaunchReadiness,
@@ -156,9 +157,9 @@ class _Backend:
             ),
         )
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+    def validate_interactive_invocation(self, spec: CmdSpec) -> InteractiveInvocationValidation:
         self.validated.append(spec)
-        return []
+        return InteractiveInvocationValidation(errors=())
 
     @contextmanager
     def session_attempt_context(self, **kwargs: object):
@@ -387,8 +388,10 @@ def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     class _DiscoveryFailureBackend(_Backend):
         name = "codex"
 
-        def validate_interactive_invocation(self, _spec: CmdSpec) -> list[str]:
-            return [diagnostic]
+        def validate_interactive_invocation(
+            self, _spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            return InteractiveInvocationValidation(errors=(diagnostic,))
 
     backend = _DiscoveryFailureBackend()
     captured = _install_harness(monkeypatch, tmp_path)
@@ -511,7 +514,7 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
     monkeypatch.setattr(
         CodexBackend,
         "validate_interactive_invocation",
-        lambda _self, _spec: [],
+        lambda _self, _spec: InteractiveInvocationValidation(errors=()),
     )
 
     cli.cook(backend=backend)
@@ -991,9 +994,11 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
 
             return ClaudeCodeBackend().interactive_ordering_flags()
 
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
             events.append(("validate", spec))
-            return []
+            return InteractiveInvocationValidation(errors=())
 
         @contextmanager
         def session_attempt_context(self, **kwargs: object):

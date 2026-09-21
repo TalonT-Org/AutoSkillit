@@ -38,7 +38,7 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH
     from autoskillit.hooks._session_binding import resolve_channel_dir
-    from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
+    from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
     source_home, raw_catalog = _source_home(tmp_path)
     state_root = tmp_path / "state"
@@ -77,7 +77,7 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
 
 def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) -> None:
     from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
-    from autoskillit.server._managed_join_prelaunch import (
+    from autoskillit.server.managed_join_prelaunch import (
         ManagedJoinIssuanceRefusal,
         prepare_managed_join_context,
     )
@@ -128,7 +128,7 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         DefaultManagedJoinAttestationAuthority,
         ManagedJoinRecordStore,
     )
-    from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
+    from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
     source_home, _ = _source_home(tmp_path)
     state_root = tmp_path / "state"

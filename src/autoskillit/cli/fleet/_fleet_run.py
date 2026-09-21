@@ -97,7 +97,7 @@ async def _execute_fleet_run(
     managed_join_context = None
     managed_join_parent_id: str | None = None
     if getattr(effective_backend.capabilities, "managed_fixed_batch_route_capable", False):
-        from autoskillit.server._managed_join_prelaunch import (
+        from autoskillit.server.managed_join_prelaunch import (
             ManagedJoinIssuanceRefusal,
             prepare_managed_join_context,
             render_managed_join_refusal,

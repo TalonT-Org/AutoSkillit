@@ -20,7 +20,7 @@ from autoskillit.core import SemanticAdaptationContext, SkillExecutionRole
 from autoskillit.hooks._join import OUTCOME_PENDING
 from autoskillit.hooks._join_ledger import active_batch
 from autoskillit.hooks._session_binding import resolve_channel_dir
-from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
+from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 from autoskillit.workspace import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,

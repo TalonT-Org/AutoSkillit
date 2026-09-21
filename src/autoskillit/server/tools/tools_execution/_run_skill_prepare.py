@@ -35,14 +35,14 @@ from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
 )
-from autoskillit.server._managed_join_prelaunch import (
-    ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
-)
 from autoskillit.server.lifecycle._guards import (
     _check_dry_walkthrough,
     _check_input_contracts,
     _profile_to_env,
+)
+from autoskillit.server.managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
 )
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._backend_compat import _candidate_backend_rejection_reason

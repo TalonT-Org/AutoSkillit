@@ -15,7 +15,7 @@ _SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
 _PROTOCOL_PATH = _SRC_ROOT / "core" / "types" / "_type_protocols_infra.py"
 _EXPECTED_CALLERS = Counter(
     {
-        ("issue", "server/_managed_join_prelaunch.py", "prepare_managed_join_context"): 1,
+        ("issue", "server/managed_join_prelaunch.py", "prepare_managed_join_context"): 1,
         (
             "find_verified_context",
             "server/tools/tools_execution/_fixed_batch_handlers.py",

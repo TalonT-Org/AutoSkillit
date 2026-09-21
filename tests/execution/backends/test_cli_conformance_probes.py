@@ -138,7 +138,7 @@ from autoskillit.server._managed_join_attestation import (
     DefaultManagedJoinAttestationAuthority,
     ManagedJoinRecordStore,
 )
-from autoskillit.server._managed_join_prelaunch import prepare_managed_join_context
+from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 from autoskillit.server.tools.tools_execution import _fixed_batch_handlers
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     DefaultManagedFixedBatchSupervisor,

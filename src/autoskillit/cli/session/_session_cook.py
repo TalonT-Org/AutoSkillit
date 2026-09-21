@@ -329,7 +329,7 @@ def cook(
 
     managed_join_context: SemanticAdaptationContext | None = None
     if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
-        from autoskillit.server._managed_join_prelaunch import (
+        from autoskillit.server.managed_join_prelaunch import (
             ManagedJoinIssuanceRefusal,
             prepare_managed_join_context,
             render_managed_join_refusal,
@@ -429,6 +429,11 @@ def cook(
             LAUNCH_ID_ENV_VAR: launch_id,
         }
         if managed_join_context is not None:
+            # cook() IS the parent Codex process that issues managed leaves, so
+            # the managed-join parent identity is the cook's own launch_id.
+            # This contrasts with the cli-managed-cook and order paths, which
+            # mint a distinct managed_join_parent_id via new_managed_launch_id()
+            # because they spawn a child session that becomes the parent.
             cook_env_extras[MANAGED_JOIN_PARENT_ID_ENV_VAR] = launch_id
         if profile is not None:
             cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile

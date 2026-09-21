@@ -1184,22 +1184,24 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         ),
         # The four CLI launch boundaries defer managed-join issuance until the
         # selected backend is known. Importing the server prelaunch helper at
-        # module scope breaks CLI import isolation.
+        # module scope breaks CLI import isolation. The prelaunch module is now
+        # public (``managed_join_prelaunch``); these exemptions stay because the
+        # cross-package CLI -> server boundary still exists.
         (
             "cli/fleet/_fleet_run.py",
-            "autoskillit.server._managed_join_prelaunch",
+            "autoskillit.server.managed_join_prelaunch",
         ),
         (
             "cli/fleet/_fleet_session.py",
-            "autoskillit.server._managed_join_prelaunch",
+            "autoskillit.server.managed_join_prelaunch",
         ),
         (
             "cli/session/_session_cook.py",
-            "autoskillit.server._managed_join_prelaunch",
+            "autoskillit.server.managed_join_prelaunch",
         ),
         (
             "cli/session/_session_order.py",
-            "autoskillit.server._managed_join_prelaunch",
+            "autoskillit.server.managed_join_prelaunch",
         ),
         # Managed join preparation, revalidation, and fixed-batch launch all
         # consume backend route evidence from the execution package.
@@ -1216,7 +1218,7 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "autoskillit.execution.backends",
         ),
         (
-            "server/_managed_join_prelaunch.py",
+            "server/managed_join_prelaunch.py",
             "autoskillit.execution.backends",
         ),
         (
@@ -1762,7 +1764,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
 
     allowlist: dict[Path, set[str]] = {
         Path("server/_factory.py"): {"*"},  # Composition Root
-        Path("server/_managed_join_prelaunch.py"): {
+        Path("server/managed_join_prelaunch.py"): {
             "DefaultManagedJoinAttestationAuthority"
         },  # mint persisted launch evidence before catalog admission
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing

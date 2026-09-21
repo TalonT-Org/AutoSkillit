@@ -326,7 +326,7 @@ def order(
     managed_join_parent_id: str | None = None
     if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
         from autoskillit.core import new_managed_launch_id
-        from autoskillit.server._managed_join_prelaunch import (
+        from autoskillit.server.managed_join_prelaunch import (
             ManagedJoinIssuanceRefusal,
             prepare_managed_join_context,
             render_managed_join_refusal,

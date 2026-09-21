@@ -79,4 +79,4 @@ def test_managed_route_preparation_covers_every_capable_launch_surface() -> None
 
 def test_managed_join_authority_issues_production_contexts() -> None:
     callers = _production_callers("issue")
-    assert callers[("server/_managed_join_prelaunch.py", _PREPARE)] >= 1
+    assert callers[("server/managed_join_prelaunch.py", _PREPARE)] >= 1

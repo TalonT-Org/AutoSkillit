@@ -44,14 +44,14 @@ from autoskillit.fleet import (
 )
 from autoskillit.pipeline import ToolContext
 from autoskillit.server import mcp
-from autoskillit.server._managed_join_prelaunch import (
-    ManagedJoinIssuanceRefusal,
-    prepare_managed_join_context,
-)
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, session_scoped
+from autoskillit.server.managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    prepare_managed_join_context,
+)
 from autoskillit.server.tools import (
     tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
 )

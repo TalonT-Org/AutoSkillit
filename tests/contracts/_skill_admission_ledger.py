@@ -204,7 +204,16 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
 
 
 def _production_managed_codex_context() -> SemanticAdaptationContext:
-    """Issue the managed Codex admission context from production evidence producers."""
+    """Issue the managed Codex admission context from production digests.
+
+    Uses the production ``CodexBackend.project_source_catalog`` path to mint a
+    realistic ``codex_catalog_digest`` and the production
+    ``managed_codex_route_digest`` for the fixed-batch tool registry digest.
+    The authority itself is constructed in-process only — ``record_store=None``
+    and ``backend=None`` — because this helper exists to seed the admission
+    ledger with verifiable digests, not to exercise the persistence/recovery
+    surfaces that those arguments enable.
+    """
     with TemporaryDirectory() as temp_dir:
         source_home = Path(temp_dir)
         (source_home / "models_cache.json").write_text(

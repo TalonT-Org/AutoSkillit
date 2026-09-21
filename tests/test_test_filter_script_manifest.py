@@ -6,9 +6,39 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit._test_filter import apply_manifest as apply_production_manifest
+from autoskillit._test_filter import load_manifest as load_production_manifest
+from tests._git_inventory import git_ls_files
 from tests._test_filter import FilterMode, FullRunReason, build_test_scope
 
 pytestmark = [pytest.mark.medium]
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_PRODUCTION_MANIFEST = _REPO_ROOT / ".autoskillit" / "test-filter-manifest.yaml"
+
+
+def test_every_tracked_python_script_has_the_infra_manifest_route() -> None:
+    manifest = load_production_manifest(_PRODUCTION_MANIFEST)
+
+    for script in git_ls_files(_REPO_ROOT):
+        if script.startswith("scripts/") and script.endswith(".py"):
+            result = apply_production_manifest([script], manifest)
+            assert result is not None, f"{script} has no production manifest route"
+            assert "infra/" in result, f"{script} is missing the scripts/*.py infrastructure route"
+
+
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        ("scripts/check_file_lengths.py", {"arch/", "infra/"}),
+        ("scripts/check_single_enforcement_point.py", {"contracts/", "infra/"}),
+        ("scripts/pytest_tmp_lifecycle.py", {"arch/", "infra/"}),
+        ("scripts/sync_hook_scope_table.py", {"hooks/", "infra/"}),
+    ],
+)
+def test_new_script_routes_are_exact_additive_unions(script: str, expected: set[str]) -> None:
+    manifest = load_production_manifest(_PRODUCTION_MANIFEST)
+    assert apply_production_manifest([script], manifest) == expected
 
 
 def test_scope_script_py_manifest_match(tmp_path: Path) -> None:

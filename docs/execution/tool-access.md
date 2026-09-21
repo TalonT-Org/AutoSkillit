@@ -1,10 +1,6 @@
 # MCP Tool Access Control
 
-<<<<<<< HEAD
 AutoSkillit provides MCP tools across overlapping visibility surfaces that control which
-=======
-AutoSkillit provides MCP tools across overlapping visibility surfaces that control which
->>>>>>> 2df98db29 (docs: remove mutable catalog totals)
 session types can see each tool. Visibility determines addressability; each tool still enforces
 its own authority contract.
 
@@ -156,11 +152,7 @@ one occurs.
 
 ## Complete MCP Tool Access Control Map
 
-<<<<<<< HEAD
 Registered tools with their access level, tags, source file, and functional category.
-=======
-Registered tools with their access level, tags, source file, and functional category.
->>>>>>> 2df98db29 (docs: remove mutable catalog totals)
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,

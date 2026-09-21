@@ -186,14 +186,16 @@ async def run_pre_launch_gating(
         effective_ingredients = {"task": task, **effective_ingredients}
 
     from autoskillit.config import (  # noqa: PLC0415
-        apply_config_authoritative_overrides,
+        strip_server_authoritative_overrides,
     )
 
-    effective_ingredients = apply_config_authoritative_overrides(
-        effective_ingredients,
-        full_recipe.ingredients,
-        tool_ctx.project_dir,
-    )
+    effective_ingredients, stripped = strip_server_authoritative_overrides(effective_ingredients)
+    if stripped:
+        logger.warning(
+            "fleet_dispatch_server_authoritative_overrides_stripped",
+            stripped_ingredient_names=sorted(stripped),
+            recipe=recipe,
+        )
 
     effective_name = dispatch_name or recipe
 

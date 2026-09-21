@@ -59,6 +59,7 @@ __all__ = [
     "CODEX_INTERACTIVE_REQUIRED_ENV",
     "CODEX_STARTUP_TRACE_ENV_VAR",
     "CODEX_MCP_ENV_FORWARD_VARS",
+    "CODEX_MCP_ENV_SERVER_EXCLUDED_VARS",
     "EVIDENCE_READER_AUTHORITY_ENV_VAR",
     "EVIDENCE_READER_CAPABILITY_ENV_VAR",
     "EVIDENCE_READER_AUTHORITY_PATH_ENV_VAR",
@@ -141,6 +142,9 @@ EVIDENCE_READER_ENV_FORWARD_VARS: frozenset[str] = frozenset(
     }
 )
 
+# Before adding a private name, identify its producer, consuming process or
+# transport, and lifetime. Names for another transport or host authority belong
+# in CODEX_MCP_ENV_SERVER_EXCLUDED_VARS rather than the ordinary MCP server.
 # Both AGENT_BACKEND_ENV_VAR (flat) and AGENT_BACKEND_DYNACONF_ENV_VAR
 # (nested Dynaconf form) are scrubbed from ambient env by build_env(),
 # then re-injected via extras in all cmd builders.  The nested form is
@@ -250,20 +254,21 @@ ORDER_INTERACTIVE_REQUIRED_ENV: frozenset[str] = frozenset(
     }
 )
 
-CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
+CODEX_MCP_ENV_SERVER_EXCLUDED_VARS: frozenset[str] = frozenset(
     {
-        HEADLESS_ENV_VAR,
-        HEADLESS_AUTO_GATE_ENV_VAR,
-        MCP_CLIENT_BACKEND_ENV_VAR,
-        SESSION_TYPE_ENV_VAR,
-        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
-        FLEET_INSPECTOR_MODEL_ENV_VAR,
-        LAUNCH_ID_ENV_VAR,
-        AUTOSKILLIT_STATE_ROOT_ENV_VAR,
-        AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
-        "AUTOSKILLIT_SKILL_NAME",
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+        *EVIDENCE_READER_ENV_FORWARD_VARS,
+        AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
+        AUTOSKILLIT_ATTESTED_META_SUPPORT,
+        *CODEX_RESERVED_HOME_ENV_VARS,
     }
+)
+CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = (
+    AUTOSKILLIT_PRIVATE_ENV_VARS - CODEX_MCP_ENV_SERVER_EXCLUDED_VARS
 )
 
 CODEX_INTERACTIVE_REQUIRED_ENV: frozenset[str] = frozenset(

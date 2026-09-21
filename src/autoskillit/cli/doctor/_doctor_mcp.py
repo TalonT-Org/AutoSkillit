@@ -9,7 +9,15 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_agent_env, get_logger
+from autoskillit.core import (
+    CODEX_MCP_ENV_FORWARD_VARS,
+    DIRECT_INSTALL_CACHE_SUBDIR,
+    DISPATCH_ID_ENV_VAR,
+    HEADLESS_AUTO_GATE_ENV_VAR,
+    Severity,
+    build_agent_env,
+    get_logger,
+)
 from autoskillit.workspace import verify_install_state
 
 from ._doctor_types import DoctorResult
@@ -98,6 +106,42 @@ def _check_codex_mcp_server_registered() -> DoctorResult:
             ),
         )
     else:
+        entry = read_result.data.get("mcp_servers", {}).get("autoskillit")
+        if isinstance(entry, dict) and entry.get("command") == "autoskillit":
+            env_vars = entry.get("env_vars")
+            if isinstance(env_vars, list):
+                required = CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}
+                missing = required - {name for name in env_vars if isinstance(name, str)}
+                if missing:
+                    return DoctorResult(
+                        severity=Severity.WARNING,
+                        check="mcp_server_registered",
+                        message=(
+                            "autoskillit Codex MCP env_vars is missing forwarded variables: "
+                            f"{', '.join(sorted(missing))}. "
+                            "Run 'autoskillit init' to regenerate ~/.codex/config.toml."
+                        ),
+                    )
+            else:
+                # The entry is registered (command == "autoskillit") but the
+                # env_vars field is missing or malformed — without it, no
+                # private variables (including AUTOSKILLIT_DISPATCH_ID) are
+                # forwarded across the Codex MCP boundary. The runtime
+                # dispatch_identity gate only fires for headless orchestrators,
+                # so interactive Codex MCP sessions get silent degradation if
+                # we don't surface this here. Surface a precise warning so the
+                # operator can re-run `autoskillit init` rather than guessing
+                # from a misleading "not registered" message.
+                return DoctorResult(
+                    severity=Severity.WARNING,
+                    check="mcp_server_registered",
+                    message=(
+                        "autoskillit Codex MCP entry is missing the env_vars field; "
+                        "no private variables will be forwarded across the Codex MCP "
+                        f"boundary (including {DISPATCH_ID_ENV_VAR}). "
+                        "Re-run 'autoskillit init' to regenerate ~/.codex/config.toml."
+                    ),
+                )
         if _is_autoskillit_registered(read_result.data, headless_auto_gate=False):
             return DoctorResult(
                 severity=Severity.OK,

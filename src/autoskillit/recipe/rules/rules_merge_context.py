@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import regex as re
+
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
@@ -12,6 +14,18 @@ from autoskillit.recipe.schema import RecipeStep
 logger = get_logger(__name__)
 
 _TEST_GATE_FAILURES = frozenset({"test_gate", "post_rebase_test_gate"})
+_DIAGNOSE_RESULT_PARAMS = (
+    "test_stdout",
+    "test_stderr",
+    "failed_step",
+    "timed_out",
+    "outer_timeout_seconds",
+    "raw_output_artifact_path",
+)
+_DIAGNOSE_OPTIONAL_RESULT_PARAMS = frozenset(
+    {"timed_out", "outer_timeout_seconds", "raw_output_artifact_path"}
+)
+_CONTEXT_REF = re.compile(r"^\$\{\{\s*context\.(\w+)\s*\}\}$")
 
 
 def _failed_step_routes(step: RecipeStep) -> dict[str, set[str]]:
@@ -173,19 +187,17 @@ def _check_merge_test_gate_context_not_forwarded(
 
 
 @semantic_rule(
-    name="merge-failed-step-not-captured",
+    name="merge-diagnosis-context-not-captured",
     description=(
-        "A merge_worktree step routes on result.failed_step to a step chain that "
-        "reaches a run_python step calling autoskillit.smoke_utils.diagnose_merge_gate, "
-        "but the merge_worktree capture block does not include a field capturing "
-        "result.failed_step. Without this capture, diagnose_merge_gate receives no "
-        "failed_step argument and falls through to failure_type=test, misclassifying "
-        "pre-test failures (dirty_tree, rebase, etc.) as test failures and creating an "
-        "unwinnable retry loop."
+        "Every diagnose_merge_gate result parameter must bind a context key captured "
+        "from the same merge_worktree result; conditional result fields must use "
+        "optional_string captures."
     ),
     severity=Severity.ERROR,
 )
-def _check_merge_failed_step_not_captured(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_merge_diagnosis_context_not_captured(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
@@ -196,32 +208,60 @@ def _check_merge_failed_step_not_captured(ctx: ValidationContext) -> list[RuleFi
         if not failed_step_routes:
             continue
 
-        has_failed_step_capture = any(
-            "failed_step" in v.from_ for v in (step.capture or {}).values()
-        )
-        if has_failed_step_capture:
-            continue
-
         for route_target in failed_step_routes:
-            result = _find_diagnose_merge_gate_step(route_target, ctx)
+            target = ctx.recipe.steps.get(route_target)
+            result = (
+                (route_target, target)
+                if target is not None
+                and target.tool == "run_python"
+                and target.with_args.get("callable")
+                == "autoskillit.smoke_utils.diagnose_merge_gate"
+                else _find_diagnose_merge_gate_step(route_target, ctx)
+            )
             if result is None:
                 continue
-            dg_step_name, _ = result
-            findings.append(
-                make_finding(
-                    rule_name="merge-failed-step-not-captured",
-                    step_name=step_name,
-                    message=(
-                        f"merge_worktree step '{step_name}' routes on result.failed_step "
-                        f"to a chain that reaches diagnose_merge_gate step "
-                        f"'{dg_step_name}', but its capture block is missing "
-                        f"result.failed_step. Add "
-                        f"'merge_failed_step: ${{{{ result.failed_step }}}}' to capture "
-                        f"and pass 'failed_step: ${{{{ context.merge_failed_step }}}}' "
-                        f"to diagnose_merge_gate so pre-test failures (dirty_tree, rebase, "
-                        f"etc.) are classified as failure_type=pre_test."
-                    ),
-                )
-            )
+            dg_step_name, dg_step = result
+            for param in _DIAGNOSE_RESULT_PARAMS:
+                binding = dg_step.with_args.get(param, "")
+                match = _CONTEXT_REF.fullmatch(str(binding))
+                if match is None:
+                    findings.append(
+                        make_finding(
+                            rule_name="merge-diagnosis-context-not-captured",
+                            step_name=dg_step_name,
+                            message=(
+                                f"diagnose_merge_gate step '{dg_step_name}' does not bind "
+                                f"{param} from context."
+                            ),
+                        )
+                    )
+                    continue
+                key = match.group(1)
+                capture = (step.capture or {}).get(key)
+                if capture is None or capture.from_ != f"${{{{ result.{param} }}}}":
+                    findings.append(
+                        make_finding(
+                            rule_name="merge-diagnosis-context-not-captured",
+                            step_name=step_name,
+                            message=(
+                                f"merge_worktree step '{step_name}' does not capture "
+                                f"context.{key} from result.{param} for '{dg_step_name}'."
+                            ),
+                        )
+                    )
+                elif (
+                    param in _DIAGNOSE_OPTIONAL_RESULT_PARAMS
+                    and capture.value_type != "optional_string"
+                ):
+                    findings.append(
+                        make_finding(
+                            rule_name="merge-diagnosis-context-not-captured",
+                            step_name=step_name,
+                            message=(
+                                f"merge_worktree step '{step_name}' must capture "
+                                f"context.{key} from result.{param} as optional_string."
+                            ),
+                        )
+                    )
 
     return findings

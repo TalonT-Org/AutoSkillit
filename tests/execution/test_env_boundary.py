@@ -111,37 +111,6 @@ def test_managed_native_shell_controls_are_scrubbed_and_never_mcp_forwarded() ->
     assert protected.isdisjoint(CODEX_MCP_ENV_FORWARD_VARS)
 
 
-def test_codex_forward_vars_cover_server_consumed() -> None:
-    """CODEX_MCP_ENV_FORWARD_VARS must cover every server-consumed env var."""
-    from autoskillit.core import (
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
-        CODEX_MCP_ENV_FORWARD_VARS,
-        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-        HEADLESS_AUTO_GATE_ENV_VAR,
-        HEADLESS_ENV_VAR,
-        MCP_CLIENT_BACKEND_ENV_VAR,
-        SESSION_TYPE_ENV_VAR,
-    )
-
-    server_consumed_forward_vars: frozenset[str] = frozenset(
-        {
-            HEADLESS_ENV_VAR,
-            HEADLESS_AUTO_GATE_ENV_VAR,
-            MCP_CLIENT_BACKEND_ENV_VAR,
-            SESSION_TYPE_ENV_VAR,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-            AGENT_BACKEND_DYNACONF_ENV_VAR,
-            "AUTOSKILLIT_SKILL_NAME",
-        }
-    )
-    missing = server_consumed_forward_vars - CODEX_MCP_ENV_FORWARD_VARS
-    assert not missing, (
-        f"Server-consumed vars missing from CODEX_MCP_ENV_FORWARD_VARS: {missing}. "
-        f"The MCP server reads these via os.environ.get() but Codex config.toml "
-        f"won't forward them without an entry in CODEX_MCP_ENV_FORWARD_VARS."
-    )
-
-
 def test_ensure_codex_mcp_registered_env_vars_match_canonical_set(tmp_path) -> None:
     """ensure_codex_mcp_registered() must write exactly CODEX_MCP_ENV_FORWARD_VARS."""
     import tomllib

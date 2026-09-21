@@ -5,9 +5,10 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import Severity
-from autoskillit.recipe._analysis import _build_step_graph, bfs_reachable
+from autoskillit.recipe._analysis import _build_step_graph, bfs_reachable, make_validation_context
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.rules import rules_merge_routing
 from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS, _TERMINAL_FAILED_STEPS
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
@@ -73,7 +74,7 @@ def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_bundled_recipes_route_test_gate_contention(recipe_name: str) -> None:
-    """Every merge site must route contention through its existing test-failure path."""
+    """Contention follows the test-failure path unless an arm explicitly waives recovery."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     merge_steps = {
         name: step for name, step in recipe.steps.items() if step.tool == "merge_worktree"
@@ -96,7 +97,11 @@ def test_bundled_recipes_route_test_gate_contention(recipe_name: str) -> None:
             for condition in step.on_result.conditions
             if condition.when and "result.failed_step == 'test_gate'" in condition.when
         )
-        assert matches[0].route == test_gate_route
+        if recipe_name == "remediation" and step_name == "pre_remediation_merge":
+            assert matches[0].route == "release_issue_failure"
+            assert matches[0].recovery_waiver
+        else:
+            assert matches[0].route == test_gate_route
 
 
 def test_every_merge_failed_step_is_classified() -> None:
@@ -1290,6 +1295,84 @@ def test_cross_site_consistency_matching_arms_is_clean() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
     assert flagged == [], f"Expected no finding, got: {flagged}"
+
+
+def test_remediation_sites_share_test_gate_recovery_class() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    ctx = make_validation_context(recipe)
+    for site_name in ("pre_remediation_merge", "merge"):
+        site = recipe.steps[site_name]
+        assert site.on_result is not None
+        routes = {condition.when: condition.route for condition in site.on_result.conditions}
+        for failure in ("test_gate", "post_rebase_test_gate"):
+            route = routes[f"result.failed_step == '{failure}'"]
+            assert rules_merge_routing._classify_recovery_class(route, ctx) == "fix_loop"
+
+
+def test_cross_site_waived_arm_is_excluded_from_parity() -> None:
+    def recipe_with_waiver(waiver: str | None) -> Recipe:
+        second_arm = StepResultCondition(
+            when="result.failed_step == 'rebase'",
+            route="stop",
+            recovery_waiver=waiver,
+        )
+        return _make_recipe(
+            {
+                "merge_a": RecipeStep(
+                    tool="merge_worktree",
+                    on_result=StepResultRoute(
+                        conditions=[
+                            StepResultCondition(
+                                when="result.failed_step == 'rebase'", route="rebase_fix"
+                            ),
+                            StepResultCondition(when=None, route="stop"),
+                        ]
+                    ),
+                ),
+                "rebase_fix": RecipeStep(
+                    tool="run_skill",
+                    with_args={"skill_command": "/autoskillit:resolve-merge-conflicts /tmp/wt"},
+                    on_success="stop",
+                ),
+                "merge_b": RecipeStep(
+                    tool="merge_worktree",
+                    on_result=StepResultRoute(
+                        conditions=[second_arm, StepResultCondition(when=None, route="stop")]
+                    ),
+                ),
+                "stop": RecipeStep(action="stop", message="Stop."),
+            }
+        )
+
+    def parity_findings(recipe: Recipe) -> list:
+        return [
+            finding
+            for finding in run_semantic_rules(recipe)
+            if finding.rule == "merge-routing-cross-site-consistency"
+        ]
+
+    assert parity_findings(recipe_with_waiver("manual review")) == []
+    assert parity_findings(recipe_with_waiver(None)) != []
+
+
+def test_bundled_remediation_recipe_has_no_cross_site_parity_findings() -> None:
+    """Bundled remediation recipe must have zero cross-site parity findings.
+
+    The former _CROSS_SITE_SITE_PAIR_EXEMPTIONS exception table allowed the
+    (pre_remediation_merge, merge) site pair to diverge on dirty_tree,
+    test_gate, test_gate_contention, post_rebase_test_gate, and rebase. After
+    retirement, the rule must classify those arms consistently on its own.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    flagged = [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "merge-routing-cross-site-consistency"
+    ]
+    assert flagged == [], (
+        "removal of _CROSS_SITE_SITE_PAIR_EXEMPTIONS must leave no parity "
+        f"findings on bundled remediation.yaml; got: {flagged}"
+    )
 
 
 def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None:

@@ -8,9 +8,17 @@ and server internals — not cross-layer protocols.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Literal, Required, TypedDict
 
-from autoskillit.core import ExecutionIdentityDict, ModelTotalEntry, RetryReason
+from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
+    ExecutionIdentityDict,
+    ModelTotalEntry,
+    RetryReason,
+    SessionType,
+    session_shape,
+)
 
 __all__ = [
     "RunSkillResult",
@@ -27,6 +35,7 @@ __all__ = [
     "server_failure_envelope",
     "input_failure_envelope",
     "deny_envelope",
+    "dispatch_identity_denial",
     "_validate_result",
 ]
 
@@ -360,6 +369,23 @@ def deny_envelope(
         "stage": stage,
         "retriable": retriable,
     }
+
+
+def dispatch_identity_denial() -> dict[str, object] | None:
+    """Refuse recipe serving when a headless food truck lost its dispatch ID."""
+    shape = session_shape()
+    if not (shape.headless and shape.tier is SessionType.ORCHESTRATOR):
+        return None
+    if os.environ.get(DISPATCH_ID_ENV_VAR):
+        return None
+    return deny_envelope(
+        "AUTOSKILLIT_DISPATCH_ID is missing in the MCP server process after the "
+        "agent to MCP-server boundary; dispatch identity cannot be bound.",
+        stage="preflight:dispatch_identity",
+        retriable=False,
+        recovery="Check the generated Codex home [mcp_servers.autoskillit].env_vars "
+        "and CODEX_MCP_ENV_FORWARD_VARS for AUTOSKILLIT_DISPATCH_ID.",
+    )
 
 
 def _validate_result(

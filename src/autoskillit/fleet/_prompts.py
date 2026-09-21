@@ -13,6 +13,7 @@ import regex as re
 from autoskillit.core import (
     ADMIRAL_DISPATCH_SECTIONS,
     ROUTING_AUTHORITY_CLAUSE,
+    SERVER_AUTHORITATIVE_INGREDIENTS,
     STEP_SKIP_SEMANTICS_CLAUSE,
     STOP_STEP_EVIDENCE_DOCTRINE_INDENTED,
     CaptureEntrySpec,
@@ -88,6 +89,13 @@ def _build_food_truck_prompt(
     ``capture`` is an optional mapping of capture entry keys to their specs,
     used to inject additional fields into the sentinel format block.
     """
+    if forbidden := set(ingredients) & SERVER_AUTHORITATIVE_INGREDIENTS:
+        raise ValueError(
+            "food-truck prompt cannot carry server-authoritative ingredient overrides "
+            f"{sorted(forbidden)}; the child's open_kitchen rejects them and resolves "
+            "them from its own config and AUTOSKILLIT_DISPATCH_ID"
+        )
+
     dispatch_id_short = dispatch_id[:8]
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)

@@ -6,13 +6,11 @@ import os
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol
 
 from autoskillit.core import (
-    CALLER_SOVEREIGN_INGREDIENTS,
-    CONFIG_AUTHORITY_KEYS,
     DISPATCH_ID_ENV_VAR,
     FLEET_MENU_TOOLS,
+    SERVER_AUTHORITATIVE_INGREDIENTS,
     get_logger,
     is_feature_enabled,
 )
@@ -164,12 +162,6 @@ def iter_display_categories(
 
 _REMOTE_PRECEDENCE = ("upstream", "origin")
 
-# Keys from resolve_ingredient_defaults() that the server must inject as authoritative
-# overrides, preventing LLM-supplied values from winning.
-SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = (
-    CONFIG_AUTHORITY_KEYS - CALLER_SOVEREIGN_INGREDIENTS
-)
-
 SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
     "base_branch": "branching.default_base_branch",
     "local_review_rounds": "review.local_review_rounds",
@@ -233,38 +225,17 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     return resolved
 
 
-class _HasAuthority(Protocol):
-    authority: str | None
-
-
-def apply_config_authoritative_overrides(
-    effective_ingredients: dict[str, str],
-    recipe_ingredients: Mapping[str, _HasAuthority],
-    project_dir: Path,
-) -> dict[str, str]:
-    """Prevent LLM-supplied values from winning for config-authoritative keys at fleet dispatch."""
-    config_keys = [
-        key
-        for key, ing in recipe_ingredients.items()
-        if getattr(ing, "authority", None) == "config"
-    ]
-    if not config_keys:
-        return dict(effective_ingredients)
-
-    resolved = resolve_ingredient_defaults(project_dir)
-    result = dict(effective_ingredients)
-    for key in config_keys:
-        if key in SERVER_AUTHORITATIVE_INGREDIENTS:
-            if key in resolved:
-                result[key] = resolved[key]
-            else:
-                logger.warning(
-                    "config-authority key %r not found in resolved defaults — "
-                    "caller-supplied value retained (config-authoritative contract not enforced)",
-                    key,
-                )
-        # else: key is caller-sovereign (e.g., source_dir) — leave result unchanged
-    return result
+def strip_server_authoritative_overrides(
+    effective_ingredients: Mapping[str, str],
+) -> tuple[dict[str, str], frozenset[str]]:
+    """Remove overrides for names resolved by the serving server."""
+    stripped = frozenset(
+        key for key in effective_ingredients if key in SERVER_AUTHORITATIVE_INGREDIENTS
+    )
+    return (
+        {key: value for key, value in effective_ingredients.items() if key not in stripped},
+        stripped,
+    )
 
 
 def build_config_authoritative_layer(defaults: dict[str, str]) -> dict[str, str]:

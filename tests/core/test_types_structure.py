@@ -450,7 +450,10 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         "_type_enums.__all__ unexpectedly contains every pre-split name: "
         f"{sorted(legacy_enum_exports)}"
     )
-    assert set(constants_mod.__all__) < _PRE_SPLIT_CONSTANT_NAMES, (
+    assert (
+        set(constants_mod.__all__) - {"SERVER_AUTHORITATIVE_INGREDIENTS"}
+        < _PRE_SPLIT_CONSTANT_NAMES
+    ), (
         f"Names unexpectedly re-added to _type_constants.__all__: "
         f"{sorted(set(constants_mod.__all__) - _PRE_SPLIT_CONSTANT_NAMES)}"
     )

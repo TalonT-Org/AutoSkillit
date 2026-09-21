@@ -19,6 +19,106 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestCheckMcpServerRegisteredCodexBranch:
+    def test_warning_when_registered_env_vars_are_stale(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.execution as _exec_mod
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, DISPATCH_ID_ENV_VAR
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            _exec_mod,
+            "_read_codex_config",
+            lambda path: ReadResult.ok(
+                {
+                    "mcp_servers": {
+                        "autoskillit": {
+                            "command": "autoskillit",
+                            "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {DISPATCH_ID_ENV_VAR}),
+                            "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                            "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                        }
+                    }
+                }
+            ),
+        )
+
+        result = _check_mcp_server_registered(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert DISPATCH_ID_ENV_VAR in result.message
+        assert "autoskillit init" in result.message
+
+    def test_warning_when_env_vars_field_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Entry is registered but env_vars key is absent — surface a precise warning.
+
+        Without this branch, the doctor falls through to the generic
+        "not registered" warning, which is misleading because the entry IS
+        present (command == "autoskillit") — only env_vars is missing. The
+        runtime dispatch_identity gate only fires for headless orchestrators,
+        so interactive Codex MCP sessions would otherwise get silent
+        degradation.
+        """
+        import autoskillit.execution as _exec_mod
+        from autoskillit.core import DISPATCH_ID_ENV_VAR
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            _exec_mod,
+            "_read_codex_config",
+            lambda path: ReadResult.ok(
+                {
+                    "mcp_servers": {
+                        "autoskillit": {
+                            "command": "autoskillit",
+                            "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                            "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                        }
+                    }
+                }
+            ),
+        )
+
+        result = _check_mcp_server_registered(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert "env_vars" in result.message
+        assert DISPATCH_ID_ENV_VAR in result.message
+        assert "autoskillit init" in result.message
+        # Must NOT collapse to the misleading "not registered" wording.
+        assert "not registered" not in result.message
+
+    def test_warning_when_env_vars_is_wrong_type(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """env_vars is present but not a list (e.g., a single string). Same surface as missing."""
+        import autoskillit.execution as _exec_mod
+        from autoskillit.core import DISPATCH_ID_ENV_VAR
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            _exec_mod,
+            "_read_codex_config",
+            lambda path: ReadResult.ok(
+                {
+                    "mcp_servers": {
+                        "autoskillit": {
+                            "command": "autoskillit",
+                            "env_vars": DISPATCH_ID_ENV_VAR,
+                            "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                            "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                        }
+                    }
+                }
+            ),
+        )
+
+        result = _check_mcp_server_registered(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert result.check == "mcp_server_registered"
+        assert "env_vars" in result.message
+        assert DISPATCH_ID_ENV_VAR in result.message
+        assert "autoskillit init" in result.message
+        assert "not registered" not in result.message
+
     def test_ok_when_valid_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import autoskillit.execution as _exec_mod
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR

@@ -2106,6 +2106,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "CODEX_MCP_ENV_SERVER_EXCLUDED_VARS": AmbientEnvDisposition(
+        var="CODEX_MCP_ENV_SERVER_EXCLUDED_VARS",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT": AmbientEnvDisposition(
         var="CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
         disposition="scrub",

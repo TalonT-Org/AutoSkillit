@@ -138,7 +138,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         for recipe, step, skill, input_name in occurrences
         if (recipe, step, skill, input_name) != standalone_optional
     }
-    assert len(occurrences) == 109
+    assert len(occurrences) == 111
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:

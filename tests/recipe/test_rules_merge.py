@@ -1352,11 +1352,27 @@ def test_cross_site_waived_arm_is_excluded_from_parity() -> None:
         ]
 
     assert parity_findings(recipe_with_waiver("manual review")) == []
-    assert parity_findings(recipe_with_waiver(None))
+    assert parity_findings(recipe_with_waiver(None)) != []
 
 
 def test_cross_site_exemption_dict_is_gone() -> None:
-    assert not hasattr(rules_merge_routing, "_CROSS_SITE_SITE_PAIR_EXEMPTIONS")
+    """Bundled remediation recipe must have zero cross-site parity findings.
+
+    The former _CROSS_SITE_SITE_PAIR_EXEMPTIONS exception table allowed the
+    (pre_remediation_merge, merge) site pair to diverge on dirty_tree,
+    test_gate, test_gate_contention, post_rebase_test_gate, and rebase. After
+    retirement, the rule must classify those arms consistently on its own.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    flagged = [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "merge-routing-cross-site-consistency"
+    ]
+    assert flagged == [], (
+        "removal of _CROSS_SITE_SITE_PAIR_EXEMPTIONS must leave no parity "
+        f"findings on bundled remediation.yaml; got: {flagged}"
+    )
 
 
 def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None:

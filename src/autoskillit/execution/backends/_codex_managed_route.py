@@ -46,7 +46,12 @@ def resolve_managed_parent_identity(
         if source_home is None:
             raise ValueError("managed Codex route has no source Codex home")
         catalog = json.loads((source_home / "models_cache.json").read_text(encoding="utf-8"))
-        matches = [entry for entry in catalog["models"] if entry.get("slug") == model]
+        models = catalog.get("models") if isinstance(catalog, dict) else None
+        if not isinstance(models, list):
+            raise ValueError("managed Codex catalog is missing the 'models' list")
+        matches = [
+            entry for entry in models if isinstance(entry, dict) and entry.get("slug") == model
+        ]
         if len(matches) != 1:
             raise ValueError(f"managed Codex catalog does not contain {model}")
         effort = matches[0].get("default_reasoning_level")

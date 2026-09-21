@@ -429,11 +429,9 @@ def cook(
             LAUNCH_ID_ENV_VAR: launch_id,
         }
         if managed_join_context is not None:
-            # cook() IS the parent Codex process that issues managed leaves, so
-            # the managed-join parent identity is the cook's own launch_id.
-            # This contrasts with the cli-managed-cook and order paths, which
-            # mint a distinct managed_join_parent_id via new_managed_launch_id()
-            # because they spawn a child session that becomes the parent.
+            # cook() runs in-process as the parent, so reuse its launch_id as
+            # the managed-join parent identity (cli/order paths mint a distinct
+            # child parent_id via new_managed_launch_id()).
             cook_env_extras[MANAGED_JOIN_PARENT_ID_ENV_VAR] = launch_id
         if profile is not None:
             cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile

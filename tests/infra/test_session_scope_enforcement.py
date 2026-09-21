@@ -7,6 +7,7 @@ parity and prologue contracts live in tests/hooks and tests/arch.
 from __future__ import annotations
 
 import dataclasses
+import typing
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,23 @@ def test_hookdef_has_session_scope() -> None:
     assert "session_scope" in fields, (
         "HookDef is missing the 'session_scope' field. "
         "Add: session_scope: Literal['any', 'headless_only', 'interactive_only'] = 'any'"
+    )
+
+    # Portable structural pin (T8): SessionScopeLiteral's get_args() must match
+    # the annotation's get_args() tuple. Per the Python typing spec, Literal
+    # documents only equality semantics (order-independent, redundant-arg
+    # skipping, nested flattening); the _LiteralGenericAlias interning is
+    # implementation-defined and not portable. Comparing via get_args() works
+    # across CPython versions and detects inline Literal re-introductions
+    # that would otherwise silently bypass the type-alias contract.
+    from autoskillit.hooks._runtime._session_scope_authority import SessionScopeLiteral
+
+    annotation_args = typing.get_args(typing.get_type_hints(HookDef)["session_scope"])
+    alias_args = typing.get_args(SessionScopeLiteral)
+    assert annotation_args == alias_args, (
+        f"HookDef.session_scope annotation references a different Literal "
+        f"than SessionScopeLiteral: {annotation_args!r} != {alias_args!r}. "
+        "Both sites must reference the canonical alias."
     )
 
 
@@ -79,14 +97,11 @@ def test_scoped_guard_contains_headless_check(hookdef: HookDef, script: str) -> 
     #  - worktree's compatibility overload: enforce_script_session_scope(__file__)
     #  - develop's literal overload: enforce_session_scope("headless_only") /
     #    enforce_session_scope("interactive_only") matching the registered scope
-    #  - the legacy helper name "is_headless_session" for non-guard scripts
     accepted = [
         f'enforce_session_scope("{script}")',
         f'enforce_session_scope("{declared_scope}")',
         "enforce_script_session_scope(__file__)",
     ]
-    if not script.startswith("guards/"):
-        accepted.append("is_headless_session")
     assert any(token in source for token in accepted), (
         f"{script} is declared with session_scope={declared_scope!r} "  # type: ignore[attr-defined]
         f"but does not consume the shared scope authority "

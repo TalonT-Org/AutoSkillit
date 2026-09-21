@@ -85,10 +85,13 @@ def test_exempt_session_type_guard_contains_session_type_check(
     script_path = HOOKS_DIR / script
     assert script_path.exists(), f"Hook script not found: {script_path}"
     source = script_path.read_text(encoding="utf-8")
-    assert "get_session_type" in source, (
+    # After issue #5121, guards consume the canonical hook_session_shape() and
+    # destructure 'tier' from the tuple. Both names must appear in source so
+    # the migration reached the exempt-session-types codepath.
+    assert "hook_session_shape" in source and "tier" in source, (
         f"{script} is declared with exempt_session_types="
         f"{hookdef.exempt_session_types!r} "  # type: ignore[attr-defined]
-        "but does not consult get_session_type()."
+        "but does not consult hook_session_shape() (and destructure 'tier')."
     )
 
 

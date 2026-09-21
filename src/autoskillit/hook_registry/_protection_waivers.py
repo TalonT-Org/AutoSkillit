@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from ._hooks_defs import ProtectionWaiverDef
 
@@ -160,5 +160,30 @@ PROTECTION_WAIVERS: tuple[ProtectionWaiverDef, ...] = (
             ),
         )
         for backend in _PROTECTION_BACKENDS
+    )
+    + tuple(
+        cast(
+            tuple[ProtectionWaiverDef, ...],
+            (
+                ProtectionWaiverDef(
+                    guard_script=script,
+                    excluded_scope="interactive",
+                    backend=cast(Literal["claude_code", "codex"], backend),
+                    risk="headless-only session scope",
+                    covering_mechanism="not-applicable",
+                    justification=(
+                        f"{script} denies session-bound operations when invoked "
+                        "from a headless worker; interactive users own the "
+                        "operation and may resume ownership / dispatch directly."
+                    ),
+                )
+                for script, backend in (
+                    ("guards/fleet_dispatch_guard.py", "claude_code"),
+                    ("guards/fleet_dispatch_guard.py", "codex"),
+                    ("guards/resume_ownership_guard.py", "claude_code"),
+                    ("guards/resume_ownership_guard.py", "codex"),
+                )
+            ),
+        )
     )
 )

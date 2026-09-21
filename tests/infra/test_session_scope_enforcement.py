@@ -7,9 +7,15 @@ parity and prologue contracts live in tests/hooks and tests/arch.
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
+# Importing `autoskillit.hooks` populates HOOK_REGISTRY via the package's
+# __init__ (see autoskillit/hooks/__init__.py:_HOOK_REGISTRY_LIST.extend).
+# Without this the parametrize decorator below would observe an empty
+# registry and pytest would refuse collection.
+import autoskillit.hooks  # noqa: F401  (side-effect: builds HOOK_REGISTRY)
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,
@@ -67,14 +73,22 @@ def test_scoped_guard_contains_headless_check(hookdef: HookDef, script: str) -> 
     script_path = HOOKS_DIR / script
     assert script_path.exists(), f"Hook script not found: {script_path}"
     source = script_path.read_text(encoding="utf-8")
-    expected = (
-        f'enforce_session_scope("{script}")'
-        if script.startswith("guards/")
-        else "is_headless_session"
-    )
-    assert expected in source, (
-        f"{script} is declared with session_scope={hookdef.session_scope!r} "  # type: ignore[attr-defined]
-        f"but does not consume the shared scope authority ({expected!r})."
+    declared_scope = getattr(hookdef, "session_scope", "any")
+    # Accept any of:
+    #  - worktree's script-identity API: enforce_session_scope("guards/<name>.py")
+    #  - develop's literal-scope API: enforce_session_scope("headless_only") /
+    #    enforce_session_scope("interactive_only") matching the registered scope
+    #  - the legacy helper name "is_headless_session" for non-guard scripts
+    accepted = [
+        f'enforce_session_scope("{script}")',
+        f'enforce_session_scope("{declared_scope}")',
+    ]
+    if not script.startswith("guards/"):
+        accepted.append("is_headless_session")
+    assert any(token in source for token in accepted), (
+        f"{script} is declared with session_scope={declared_scope!r} "  # type: ignore[attr-defined]
+        f"but does not consume the shared scope authority "
+        f"(expected one of {accepted!r})."
     )
 
 

@@ -232,8 +232,8 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 def test_diagnosis_result_params_match_callable_signature() -> None:
     from autoskillit.core import load_yaml, pkg_root
-    from autoskillit.recipe.rules.rules_merge_context import _DIAGNOSE_RESULT_PARAMS
     from autoskillit.smoke_utils import diagnose_merge_gate
+    from autoskillit.smoke_utils._merge_gate_diagnosis import DIAGNOSE_RESULT_PARAMS
 
     signature = inspect.signature(diagnose_merge_gate)
     callable_fields = tuple(
@@ -249,4 +249,4 @@ def test_diagnosis_result_params_match_callable_signature() -> None:
         ]
         if item["name"] != "output_dir"
     )
-    assert _DIAGNOSE_RESULT_PARAMS == callable_fields == contract_fields
+    assert DIAGNOSE_RESULT_PARAMS == callable_fields == contract_fields

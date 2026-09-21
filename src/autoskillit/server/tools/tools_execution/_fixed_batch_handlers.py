@@ -20,6 +20,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -213,6 +214,15 @@ class _ManagedLeafLaunchAdapter:
             caller_session_id=self.launch.parent_session_id,
             child_role=leaf_projection.binding.assignment.role,
             child_attribution_skill=self.source_name,
+            provider_extras=(
+                {
+                    MANAGED_JOIN_PARENT_ID_ENV_VAR: (
+                        leaf_projection.binding.assignment.generated_home_id
+                    )
+                }
+                if backend.capabilities.managed_fixed_batch_route_capable
+                else None
+            ),
         )
         if isinstance(result, CandidatePreSpawnRejection):
             raise SkillContractError("Managed fixed-batch leaf rejected before its runner started")

@@ -27,7 +27,7 @@ from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_kitchen_state_dir,
 )
-from _hook_settings import enforce_session_scope, hook_session_shape  # noqa: E402
+from _hook_settings import enforce_session_scope  # noqa: E402
 
 
 def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
@@ -65,10 +65,6 @@ def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
 
 def main() -> None:
     enforce_session_scope("interactive_only")
-
-    headless, _ = hook_session_shape()
-    if headless:
-        sys.exit(0)
 
     try:
         data = json.loads(sys.stdin.read())

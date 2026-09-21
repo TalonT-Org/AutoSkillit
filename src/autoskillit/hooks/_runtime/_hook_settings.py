@@ -551,7 +551,7 @@ def hook_session_shape() -> tuple[bool, str]:
     headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
     # Empty-string short-circuit: an explicitly-empty AUTOSKILLIT_SESSION_TYPE
     # must default to "skill" identically to the unset case. Pinned by
-    # tests/hooks/test_session_shape_parity.py::test_hook_session_shape_returns_default_tier.
+    # tests/hooks/test_session_shape_parity.py::test_canonical_accessor_is_hook_session_shape.
     tier = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower() or "skill"
     return headless, tier
 
@@ -562,9 +562,8 @@ def admit_hook_session_scope(
     shape: tuple[bool, str],
 ) -> bool:
     """Return whether a HookDef scope admits a raw hook-process shape."""
-    # Module-reference import so callers' monkeypatch.setattr on
-    # _session_scope_authority.SESSION_SCOPE_VALUES takes effect on every
-    # call (T5 in tests/hooks/test_hook_scope_authority.py exercises this).
+    # Module-reference import so monkeypatching
+    # _session_scope_authority.SESSION_SCOPE_VALUES takes effect on every call.
     import _session_scope_authority as _ssa
 
     if session_scope not in _ssa.SESSION_SCOPE_VALUES:

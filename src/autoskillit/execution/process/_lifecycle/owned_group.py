@@ -215,10 +215,10 @@ class OwnedProcessGroup:
             self._observed_returncode = self.process.returncode
             return self._observed_returncode
         if self.supports_nonreaping_observation:
-            wait_flags = os.WEXITED | os.WNOHANG | os.WNOWAIT  # type: ignore[attr-defined]
             stopped_observation = include_stopped and self.supports_stopped_observation
-            if stopped_observation:
-                wait_flags |= os.WSTOPPED  # type: ignore[attr-defined]
+            wait_flags = (  # type: ignore[attr-defined]
+                os.WEXITED | os.WNOHANG | os.WNOWAIT | (os.WSTOPPED if stopped_observation else 0)
+            )
             try:
                 status = os.waitid(  # type: ignore[attr-defined]
                     os.P_PID,

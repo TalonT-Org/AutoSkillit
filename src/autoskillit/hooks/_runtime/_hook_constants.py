@@ -11,9 +11,12 @@ single source of truth.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Final
 
 CODEX_AUTO_COMPACTION_DENIED_REASON: Final[str] = "autoskillit_auto_compaction_denied"
+
+TEMP_RELATIVE_DIR: Final[Path] = Path(".autoskillit") / "temp"
 
 # ── Risky operations requiring PreToolUse guard coverage ──────────────────────
 

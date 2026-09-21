@@ -38,8 +38,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     TEMP_RELATIVE_DIR,
+)
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
     parse_hook_command,
 )

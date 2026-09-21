@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 _RUN_CMD_SUFFIX = "__run_cmd"
-TEMP_RELATIVE_DIR = Path(".autoskillit") / "temp"
 
 
 class PayloadAnomaly(StrEnum):

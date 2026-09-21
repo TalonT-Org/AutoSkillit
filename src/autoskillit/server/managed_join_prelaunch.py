@@ -22,7 +22,7 @@ class ManagedJoinIssuanceRefusal:
     reason: str
 
 
-ManagedJoinRefusalHandler = Callable[[ManagedJoinIssuanceRefusal], object]
+ManagedJoinRefusalHandler = Callable[[ManagedJoinIssuanceRefusal], None]
 
 
 def render_managed_join_refusal(refusal: ManagedJoinIssuanceRefusal) -> str:
@@ -50,14 +50,12 @@ def acquire_managed_join_evidence(
     """Issue managed-join evidence, returning ``None`` when the backend refuses.
 
     The shared helper consolidates the launch-boundary boilerplate
-    (``getattr`` capability check + ``prepare_managed_join_context`` call +
-    refusal handling) that previously appeared verbatim across every CLI and
-    server launch path. ``on_refusal`` defaults to the operator-visible
-    WARNING-print used by CLI launch paths; pass an alternative callable
-    (e.g. a structlog adapter) for non-CLI callers.
+    (``prepare_managed_join_context`` call + refusal handling) that
+    previously appeared verbatim across every CLI and server launch path.
+    ``on_refusal`` defaults to the operator-visible WARNING-print used by CLI
+    launch paths; pass an alternative callable (e.g. a structlog adapter) for
+    non-CLI callers.
     """
-    if not getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
-        return None
     issuance = prepare_managed_join_context(
         backend=backend,
         configured_model=configured_model,

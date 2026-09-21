@@ -1,8 +1,6 @@
-"""Tests for rules_merge_context.py: merge-test-gate-context-not-forwarded rule."""
+"""Tests for merge gate context forwarding and diagnosis provenance rules."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
@@ -355,200 +353,122 @@ def test_rule_does_not_fire_for_fixed_recipes(recipe_name: str) -> None:
     assert len(flagged) == 0
 
 
-def _diagnose_on_result_conditions() -> list[StepResultCondition]:
+_DIAGNOSE_FIELDS = (
+    "test_stdout",
+    "test_stderr",
+    "failed_step",
+    "timed_out",
+    "outer_timeout_seconds",
+    "raw_output_artifact_path",
+)
+_OPTIONAL_FIELDS = {"timed_out", "outer_timeout_seconds", "raw_output_artifact_path"}
+
+
+def _diagnosis_recipe(
+    *,
+    omit_capture: str | None = None,
+    omit_binding: str | None = None,
+    plain_capture: str | None = None,
+    direct: bool = False,
+) -> Recipe:
+    captures = {
+        f"merge_{field}": CaptureEntrySpec(
+            from_=f"${{{{ result.{field} }}}}",
+            value_type=(
+                "string"
+                if field == plain_capture or field not in _OPTIONAL_FIELDS
+                else "optional_string"
+            ),
+        )
+        for field in _DIAGNOSE_FIELDS
+        if field != omit_capture
+    }
+    bindings = {
+        field: f"${{{{ context.merge_{field} }}}}"
+        for field in _DIAGNOSE_FIELDS
+        if field != omit_binding
+    }
+    steps = {
+        "merge": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+            capture=captures,
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        when="result.failed_step == 'test_gate'",
+                        route="diagnose" if direct else "guard",
+                    ),
+                    StepResultCondition(when=None, route="done"),
+                ]
+            ),
+        ),
+        "diagnose": RecipeStep(
+            tool="run_python",
+            with_args={
+                "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
+                "output_dir": "/tmp/diagnose-merge-gate",
+                **bindings,
+            },
+            on_success="done",
+        ),
+        "done": RecipeStep(action="stop", message="Done."),
+    }
+    if not direct:
+        steps["guard"] = RecipeStep(tool="run_python", on_success="diagnose")
+    return _make_recipe(steps)
+
+
+def _diagnosis_findings(recipe: Recipe) -> list:
     return [
-        StepResultCondition(when="result.failed_step == 'dirty_tree'", route="check_loop"),
-        StepResultCondition(when="result.failed_step == 'test_gate'", route="check_loop"),
-        StepResultCondition(when=None, route="done"),
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "merge-diagnosis-context-not-captured"
     ]
 
 
-def test_merge_step_missing_failed_step_capture_fires_error() -> None:
-    """merge routes on result.failed_step to a chain reaching diagnose_merge_gate, but
-    capture is missing result.failed_step → ERROR.
-    """
-    recipe = _make_recipe(
-        {
-            "merge": RecipeStep(
-                tool="merge_worktree",
-                with_args={"worktree_path": "${{ context.worktree_path }}", "base_branch": "main"},
-                capture={
-                    "cleanup_succeeded": "${{ result.cleanup_succeeded }}",
-                    "worktree_path": "${{ result.worktree_path }}",
-                    "merge_test_stdout": "${{ result.test_stdout }}",
-                    "merge_test_stderr": "${{ result.test_stderr }}",
-                    # merge_failed_step is absent — should trigger the rule
-                },
-                on_result=StepResultRoute(conditions=_diagnose_on_result_conditions()),
-                on_failure="escalate",
-            ),
-            "check_loop": RecipeStep(
-                tool="run_python",
-                with_args={
-                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
-                    "current_iteration": "${{ context.merge_fix_count }}",
-                    "max_iterations": "3",
-                },
-                capture={"merge_fix_count": "${{ result.next_iteration }}"},
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(
-                            when="${{ result.max_exceeded }} == true", route="escalate"
-                        ),
-                        StepResultCondition(when=None, route="diagnose_merge_gate"),
-                    ]
-                ),
-                on_failure="escalate",
-            ),
-            "diagnose_merge_gate": RecipeStep(
-                tool="run_python",
-                with_args={
-                    "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
-                    "test_stdout": "${{ context.merge_test_stdout }}",
-                    "test_stderr": "${{ context.merge_test_stderr }}",
-                    "output_dir": "/tmp/diagnose-merge-gate",
-                    "failed_step": "${{ context.merge_failed_step }}",
-                },
-                capture={
-                    "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
-                },
-                on_success="done",
-                on_failure="escalate",
-            ),
-            "done": RecipeStep(action="stop", with_args={}, message="done"),
-            "escalate": RecipeStep(action="stop", with_args={}, message="escalate"),
-        }
-    )
-    findings = run_semantic_rules(recipe)
-    flagged = [f for f in findings if f.rule == "merge-failed-step-not-captured"]
-    assert len(flagged) >= 1
-    assert all(f.severity == Severity.ERROR for f in flagged)
-    assert any("merge_failed_step" in f.message for f in flagged)
+@pytest.mark.parametrize("field", _DIAGNOSE_FIELDS)
+def test_diagnosis_context_rule_fires_for_each_missing_result_field(field: str) -> None:
+    findings = _diagnosis_findings(_diagnosis_recipe(omit_capture=field))
+    assert len(findings) == 1
+    assert f"merge_{field}" in findings[0].message
+    assert f"result.{field}" in findings[0].message
+    assert findings[0].step_name == "merge"
 
 
-def test_merge_step_with_failed_step_capture_is_clean() -> None:
-    """merge captures result.failed_step → rule does not fire."""
-    recipe = _make_recipe(
-        {
-            "merge": RecipeStep(
-                tool="merge_worktree",
-                with_args={"worktree_path": "${{ context.worktree_path }}", "base_branch": "main"},
-                capture={
-                    "cleanup_succeeded": "${{ result.cleanup_succeeded }}",
-                    "worktree_path": "${{ result.worktree_path }}",
-                    "merge_test_stdout": "${{ result.test_stdout }}",
-                    "merge_test_stderr": "${{ result.test_stderr }}",
-                    "merge_failed_step": "${{ result.failed_step }}",
-                },
-                on_result=StepResultRoute(conditions=_diagnose_on_result_conditions()),
-                on_failure="escalate",
-            ),
-            "check_loop": RecipeStep(
-                tool="run_python",
-                with_args={
-                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
-                    "current_iteration": "${{ context.merge_fix_count }}",
-                    "max_iterations": "3",
-                },
-                capture={"merge_fix_count": "${{ result.next_iteration }}"},
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(
-                            when="${{ result.max_exceeded }} == true", route="escalate"
-                        ),
-                        StepResultCondition(when=None, route="diagnose_merge_gate"),
-                    ]
-                ),
-                on_failure="escalate",
-            ),
-            "diagnose_merge_gate": RecipeStep(
-                tool="run_python",
-                with_args={
-                    "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
-                    "test_stdout": "${{ context.merge_test_stdout }}",
-                    "test_stderr": "${{ context.merge_test_stderr }}",
-                    "output_dir": "/tmp/diagnose-merge-gate",
-                    "failed_step": "${{ context.merge_failed_step }}",
-                },
-                capture={
-                    "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
-                },
-                on_success="done",
-                on_failure="escalate",
-            ),
-            "done": RecipeStep(action="stop", with_args={}, message="done"),
-            "escalate": RecipeStep(action="stop", with_args={}, message="escalate"),
-        }
-    )
-    findings = run_semantic_rules(recipe)
-    flagged = [f for f in findings if f.rule == "merge-failed-step-not-captured"]
-    assert not flagged
+def test_diagnosis_context_rule_fires_when_diagnose_step_does_not_bind_field() -> None:
+    findings = _diagnosis_findings(_diagnosis_recipe(omit_binding="timed_out"))
+    assert len(findings) == 1
+    assert findings[0].step_name == "diagnose"
+    assert "timed_out" in findings[0].message
+
+
+@pytest.mark.parametrize("field", sorted(_OPTIONAL_FIELDS))
+def test_diagnosis_context_rule_requires_optional_string_for_conditional_fields(
+    field: str,
+) -> None:
+    findings = _diagnosis_findings(_diagnosis_recipe(plain_capture=field))
+    assert len(findings) == 1
+    assert "optional_string" in findings[0].message
+    assert f"result.{field}" in findings[0].message
+    assert _diagnosis_findings(_diagnosis_recipe()) == []
 
 
 @pytest.mark.parametrize(
-    "recipe_name",
-    ["remediation.yaml", "implementation.yaml", "implementation-groups.yaml"],
+    "recipe_name", ["implementation.yaml", "implementation-groups.yaml", "remediation.yaml"]
 )
-def test_merge_failed_step_rule_does_not_fire_for_fixed_recipes(recipe_name: str) -> None:
-    """Post recipe fix: merge-failed-step-not-captured rule does not fire on the three
-    pipeline recipes (they all capture merge_failed_step and pass it through).
-    """
-    recipe_path = pkg_root() / "recipes" / recipe_name
-    recipe = load_recipe(recipe_path)
-    findings = run_semantic_rules(recipe)
-    flagged = [f for f in findings if f.rule == "merge-failed-step-not-captured"]
-    assert len(flagged) == 0
+def test_diagnosis_context_rule_clean_on_bundled_recipes(recipe_name: str) -> None:
+    recipe = load_recipe(pkg_root() / "recipes" / recipe_name)
+    assert _diagnosis_findings(recipe) == []
 
 
-_TIMEOUT_CONTEXT_CAPTURES = {
-    "merge_timed_out": "${{ result.timed_out }}",
-    "merge_outer_timeout_seconds": "${{ result.outer_timeout_seconds }}",
-    "merge_raw_output_artifact_path": "${{ result.raw_output_artifact_path }}",
-}
-
-
-def _assert_final_merge_forwards_timeout_context(recipe: Recipe) -> None:
-    """Assert the final merge's timeout facts reach diagnose_merge_gate losslessly."""
-    merge = recipe.steps["merge"]
-    for context_key, result_ref in _TIMEOUT_CONTEXT_CAPTURES.items():
-        capture = merge.capture[context_key]
-        assert isinstance(capture, CaptureEntrySpec)
-        assert capture.from_ == result_ref
-        assert capture.value_type == "optional_string"
-
-    assert merge.on_result is not None
-    merge_routes = {condition.when: condition.route for condition in merge.on_result.conditions}
-    assert merge_routes["result.failed_step == 'test_gate'"] == "check_merge_fix_loop"
-    assert merge_routes["result.failed_step == 'post_rebase_test_gate'"] == "check_merge_fix_loop"
-
-    loop = recipe.steps["check_merge_fix_loop"]
-    assert loop.on_result is not None
-    assert any(
-        condition.when is None and condition.route == "diagnose_merge_gate"
-        for condition in loop.on_result.conditions
+@pytest.mark.parametrize("omitted", ["capture", "binding"])
+def test_diagnosis_context_rule_checks_direct_diagnose_route(omitted: str) -> None:
+    recipe = _diagnosis_recipe(
+        omit_capture="failed_step" if omitted == "capture" else None,
+        omit_binding="failed_step" if omitted == "binding" else None,
+        direct=True,
     )
-
-    diagnosis = recipe.steps["diagnose_merge_gate"]
-    assert diagnosis.with_args["callable"] == "autoskillit.smoke_utils.diagnose_merge_gate"
-    for context_key in _TIMEOUT_CONTEXT_CAPTURES:
-        argument_name = context_key.removeprefix("merge_")
-        assert diagnosis.with_args[argument_name] == f"${{{{ context.{context_key} }}}}"
-        assert context_key in (diagnosis.optional_context_refs or [])
-
-
-@pytest.mark.parametrize(
-    "recipe_name",
-    ["implementation.yaml", "remediation.yaml", "implementation-groups.yaml"],
-)
-def test_final_merge_forwards_outer_timeout_context_to_diagnosis(recipe_name: str) -> None:
-    """Bundled recipes preserve merge-gate outer-timeout provenance for remediation."""
-    _assert_final_merge_forwards_timeout_context(load_recipe(pkg_root() / "recipes" / recipe_name))
-
-
-def test_project_remediation_fable_forwards_outer_timeout_context_to_diagnosis() -> None:
-    """The project-local remediation fable keeps the same merge-gate handoff shape."""
-    recipe_path = Path.cwd() / ".autoskillit" / "recipes" / "remediation-fable.yaml"
-    if not recipe_path.is_file():
-        pytest.skip("project-local remediation fable is not installed in this worktree")
-
-    _assert_final_merge_forwards_timeout_context(load_recipe(recipe_path))
+    findings = _diagnosis_findings(recipe)
+    assert len(findings) == 1
+    assert "failed_step" in findings[0].message

@@ -162,6 +162,24 @@ class TestBundledRecipesPassFailureDomainCheck:
         assert errors == [], f"{recipe_name}: {[e.message for e in errors]}"
 
     @pytest.mark.parametrize(
+        "recipe_name", ["implementation", "implementation-groups", "remediation"]
+    )
+    def test_bundled_recipes_have_no_domain_or_waiver_findings(self, recipe_name):
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        findings = run_semantic_rules(recipe)
+        assert [
+            finding
+            for finding in findings
+            if finding.rule
+            in {
+                "merge-failure-skill-domain-mismatch",
+                "merge-routing-cross-site-consistency",
+            }
+        ] == []
+
+    @pytest.mark.parametrize(
         "recipe_name,merge_step_name",
         [
             ("implementation", "merge"),
@@ -431,3 +449,138 @@ class TestRefCoherenceDomainValidation:
             f"Fallback escalation arm must not be flagged when ancestry arm is correct, "
             f"got: {[e.message for e in errors]}"
         )
+
+
+def _domain_findings(
+    failed_step: str,
+    route: str,
+    extra_steps: dict[str, dict],
+    *,
+    waiver: str | None = None,
+    ancestry: bool = False,
+) -> list:
+    when = f"result.failed_step == '{failed_step}'"
+    if ancestry:
+        when += " and result.remote_is_ancestor == true"
+    arm = {"when": when, "route": route}
+    if waiver is not None:
+        arm["recovery_waiver"] = waiver
+    recipe = _make_workflow(
+        {
+            "merge": {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [arm, {"route": "done"}],
+            },
+            **extra_steps,
+            "done": {"action": "stop", "message": "Done."},
+            "escalate": {"action": "stop", "message": "Escalate."},
+        }
+    )
+    return [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "merge-failure-skill-domain-mismatch"
+    ]
+
+
+def _skill_step(command: str, next_step: str = "done") -> dict:
+    return {
+        "tool": "run_skill",
+        "with": {"skill_command": f"/autoskillit:{command} /tmp/wt /tmp/plan main"},
+        "on_success": next_step,
+    }
+
+
+def test_code_failure_routed_to_terminal_without_waiver_fires() -> None:
+    findings = _domain_findings("test_gate", "escalate", {})
+    assert len(findings) == 1
+    assert all(
+        term in findings[0].message for term in ("fix_loop", "resolve-failures", "recovery_waiver")
+    )
+
+
+def test_code_failure_routed_to_terminal_with_waiver_is_clean() -> None:
+    assert _domain_findings("test_gate", "escalate", {}, waiver="manual review") == []
+
+
+def test_waiver_on_arm_that_reaches_required_recovery_is_stale() -> None:
+    steps = {
+        "guard": {
+            "tool": "run_python",
+            "with": {"callable": "autoskillit.smoke_utils.check_loop_iteration"},
+            "on_success": "fix",
+        },
+        "fix": _skill_step("resolve-failures"),
+    }
+    findings = _domain_findings("test_gate", "guard", steps, waiver="manual review")
+    assert len(findings) == 1
+    assert "stale" in findings[0].message
+
+
+def test_waiver_on_arm_reaching_required_recovery_beyond_classification_depth_is_stale() -> None:
+    steps = {
+        f"p{n}": {
+            "tool": "run_python",
+            "with": {"callable": "autoskillit.smoke_utils.check_loop_iteration"},
+            "on_success": f"p{n + 1}" if n < 5 else "fix",
+        }
+        for n in range(1, 6)
+    }
+    steps["fix"] = _skill_step("resolve-failures")
+    findings = _domain_findings("test_gate", "p1", steps, waiver="manual review")
+    assert len(findings) == 1
+    assert "stale" in findings[0].message
+    findings = _domain_findings("test_gate", "p1", steps)
+    assert len(findings) == 1
+    assert "None" in findings[0].message
+    steps["p1"]["on_success"] = "fix"
+    assert _domain_findings("test_gate", "p1", steps) == []
+
+
+def test_waiver_on_arm_whose_recovery_lies_past_a_merge_site_is_not_stale() -> None:
+    steps = {
+        "commit_guard": {"tool": "run_python", "on_success": "next_merge"},
+        "next_merge": {
+            "tool": "merge_worktree",
+            "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+            "on_success": "fix",
+        },
+        "fix": _skill_step("resolve-failures"),
+    }
+    assert _domain_findings("dirty_tree", "commit_guard", steps, waiver="manual review") == []
+
+
+def test_waived_ref_coherence_ancestry_arm_uses_the_same_contract() -> None:
+    assert (
+        _domain_findings("ref_coherence", "escalate", {}, waiver="manual review", ancestry=True)
+        == []
+    )
+    findings = _domain_findings("ref_coherence", "escalate", {}, ancestry=True)
+    assert len(findings) == 1
+    assert "push_recovery" in findings[0].message
+    steps = {"push": {"tool": "push_to_remote", "on_success": "done"}}
+    findings = _domain_findings(
+        "ref_coherence", "push", steps, waiver="manual review", ancestry=True
+    )
+    assert len(findings) == 1
+    assert "stale" in findings[0].message
+    assert _domain_findings("ref_coherence", "escalate", {}) == []
+
+
+def test_code_failure_reaching_resolve_failures_through_guard_is_clean() -> None:
+    guard = {"tool": "run_python", "on_success": "fix"}
+    steps = {"guard": guard, "fix": _skill_step("resolve-failures")}
+    assert _domain_findings("test_gate", "guard", steps) == []
+    steps["fix"] = _skill_step("resolve-merge-conflicts")
+    findings = _domain_findings("test_gate", "guard", steps)
+    assert len(findings) == 1
+    assert "rebase_loop" in findings[0].message
+
+
+def test_waiver_for_wrong_nearest_recovery_is_not_stale() -> None:
+    steps = {
+        "wrong": _skill_step("resolve-merge-conflicts", "fix"),
+        "fix": _skill_step("resolve-failures"),
+    }
+    assert _domain_findings("test_gate", "wrong", steps, waiver="manual review") == []

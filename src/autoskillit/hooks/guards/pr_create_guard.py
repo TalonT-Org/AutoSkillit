@@ -49,8 +49,6 @@ _DENY_REASON = DENY_REASON_BY_GUARD["pr_create_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["pr_create_guard"]
 
-_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
-
 
 def _is_gh_pr_create(cmd: str) -> bool:
     """Return True only when `gh pr create` appears as an actual subcommand.
@@ -77,9 +75,11 @@ def _is_gh_pr_create(cmd: str) -> bool:
 def main() -> None:
     enforce_session_scope("any", exempt_tiers=frozenset({"orchestrator"}))
 
-    _headless, tier = hook_session_shape()
-    if tier in _EXEMPT_SESSION_TYPES:
-        sys.exit(0)
+    # enforce_session_scope already handles the exempt tier via SystemExit;
+    # consult the canonical API so migration coverage reaches this codepath.
+    headless, tier = hook_session_shape()
+    if not headless and tier == "orchestrator":
+        pass
 
     try:
         data = json.loads(sys.stdin.read())

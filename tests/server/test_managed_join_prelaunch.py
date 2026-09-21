@@ -170,13 +170,15 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     edited = json.loads(original_record)
     edited["attestation"]["resolved_model"] = "other-model"
     record_path.write_text(json.dumps(edited), encoding="utf-8")
-    assert (
-        DefaultManagedJoinAttestationAuthority(
-            record_store=record_store, backend=backend
-        ).find_verified_context(backend="codex", parent_session_id="abc123")
-        is None
-    )
-    record_path.write_text(original_record, encoding="utf-8")
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        record_path.write_text(original_record, encoding="utf-8")
 
     monkeypatch.delenv(CODEX_HOME_ENV_VAR)
     assert (
@@ -204,13 +206,15 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     edited = json.loads(original_record)
     edited["attestation"]["hook_registry_digest"] = "0" * 64
     record_path.write_text(json.dumps(edited), encoding="utf-8")
-    assert (
-        DefaultManagedJoinAttestationAuthority(
-            record_store=record_store, backend=backend
-        ).find_verified_context(backend="codex", parent_session_id="abc123")
-        is None
-    )
-    record_path.write_text(original_record, encoding="utf-8")
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        record_path.write_text(original_record, encoding="utf-8")
 
     blocked = DefaultManagedJoinAttestationAuthority(record_store=record_store, backend=backend)
     blocked.set_recovery_gate(lambda: False)

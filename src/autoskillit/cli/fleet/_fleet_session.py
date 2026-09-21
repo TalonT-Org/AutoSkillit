@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -135,7 +134,9 @@ def _fleet_session_launcher(
     projection_load_mode = (
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
-    launch_id = uuid.uuid4().hex[:16]
+    from autoskillit.core import new_managed_launch_id
+
+    launch_id = new_managed_launch_id()
     with plugin_launch_binding_scope(
         authority=authority,
         backend=backend,
@@ -241,13 +242,14 @@ def _launch_fleet_session(
     managed_join_context = None
     managed_join_parent_id: str | None = None
     if getattr(_backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.core import new_managed_launch_id
         from autoskillit.server._managed_join_prelaunch import (
             ManagedJoinIssuanceRefusal,
             prepare_managed_join_context,
             render_managed_join_refusal,
         )
 
-        managed_join_parent_id = uuid.uuid4().hex[:16]
+        managed_join_parent_id = new_managed_launch_id()
         issuance = prepare_managed_join_context(
             backend=_backend,
             configured_model=cfg.model.model_override or cfg.model.default_model,

@@ -44,6 +44,9 @@ logger = get_logger(__name__)
 
 ManagedCodexRoute = Literal["parent", "leaf", "interactive-parent"]
 
+MANAGED_CODEX_ROUTE_NAMES: tuple[ManagedCodexRoute, ...] = ("parent", "leaf", "interactive-parent")
+"""Canonical ordered tuple of all valid managed Codex routes."""
+
 MANAGED_CODEX_PARENT_MCP_TOOLS: tuple[str, ...] = MANAGED_PARENT_ALLOWED_TOOLS
 """The complete AutoSkillit MCP surface for a managed parent."""
 
@@ -97,13 +100,12 @@ def managed_codex_route_for_launch_context(launch_context: str) -> ManagedCodexR
 
 
 def managed_codex_route_digest() -> str:
-    route_names: tuple[ManagedCodexRoute, ...] = ("parent", "leaf", "interactive-parent")
     routes = {
         route: {
             "mcp_tools": managed_codex_mcp_tools(route),
             "guards": sorted(managed_codex_guard_set(route)),
         }
-        for route in route_names
+        for route in MANAGED_CODEX_ROUTE_NAMES
     }
     payload = json.dumps({"routes": routes}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

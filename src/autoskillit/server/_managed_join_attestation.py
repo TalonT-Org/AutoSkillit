@@ -32,6 +32,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.execution.backends import (
+    MANAGED_CODEX_ROUTE_NAMES,
     managed_codex_guard_set,
     managed_codex_route_digest,
     managed_codex_route_for_launch_context,
@@ -104,12 +105,12 @@ class ManagedJoinRecordStore:
             )
             if (
                 not isinstance(document, dict)
-                or document.get("route") not in {"parent", "leaf", "interactive-parent"}
+                or document.get("route") not in MANAGED_CODEX_ROUTE_NAMES
                 or not isinstance(document.get("attestation"), dict)
             ):
                 return None
             attestation = ManagedJoinAttestation(**document["attestation"])
-        except (TypeError, ValueError):
+        except (OSError, TypeError, ValueError):
             return None
         if attestation.parent_session_id != parent_session_id:
             return None
@@ -128,8 +129,11 @@ def _write_managed_parent_binding(
     projected_manifest_path = getattr(backend, "projected_manifest_path", None)
     if not callable(projected_manifest_path):
         raise SkillContractError("run_fixed_batch managed backend cannot locate its projection")
+    home_text = os.environ.get(CODEX_HOME_ENV_VAR)
+    if not home_text:
+        raise SkillContractError("run_fixed_batch managed binding requires CODEX_HOME to be set")
     try:
-        manifest = read_manifest(projected_manifest_path(Path(os.environ[CODEX_HOME_ENV_VAR])))
+        manifest = read_manifest(projected_manifest_path(Path(home_text)))
         entry = loaded_skill_from_manifest(
             manifest,
             normalized_skill_name,

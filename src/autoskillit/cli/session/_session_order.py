@@ -6,7 +6,6 @@ import json
 import os
 import random
 import sys
-import uuid
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, assert_never
@@ -326,13 +325,14 @@ def order(
     managed_join_context = None
     managed_join_parent_id: str | None = None
     if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.core import new_managed_launch_id
         from autoskillit.server._managed_join_prelaunch import (
             ManagedJoinIssuanceRefusal,
             prepare_managed_join_context,
             render_managed_join_refusal,
         )
 
-        managed_join_parent_id = uuid.uuid4().hex[:16]
+        managed_join_parent_id = new_managed_launch_id()
         issuance = prepare_managed_join_context(
             backend=backend,
             configured_model=config.model.model_override or config.model.default_model,

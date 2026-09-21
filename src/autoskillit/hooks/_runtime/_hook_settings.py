@@ -380,6 +380,7 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
 
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 
 def read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -657,7 +658,7 @@ def session_managed_codex_route(
 
 def resolve_binding_session_id(payload: dict[str, object]) -> str:
     """Prefer the managed join identity delivered to a Codex hook process."""
-    managed_parent_id = os.environ.get("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", "")
+    managed_parent_id = os.environ.get(_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV, "")
     if managed_parent_id:
         return managed_parent_id
     session_id = payload.get("session_id", "")

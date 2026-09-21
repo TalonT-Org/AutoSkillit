@@ -272,6 +272,7 @@ def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
         "_hook_scope_table",
         "_guard_decision_diagnostics",
         "_git_command_classification",
+        "_install_command",
     }
 
 

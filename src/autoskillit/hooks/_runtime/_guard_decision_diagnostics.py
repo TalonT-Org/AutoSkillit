@@ -41,6 +41,8 @@ _ALLOWED_REASONS = frozenset(
         "scope_violation",
         "in_scope",
         "binding_write_failed",
+        "empty",
+        "unresolved",
     }
 )
 

@@ -44,7 +44,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
-    is_headless_session,
+    hook_session_shape,
 )
 from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SessionBindingError,
@@ -349,7 +349,8 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
 
 
 def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
-    if not is_headless_session():
+    headless, _ = hook_session_shape()
+    if not headless:
         return _interactive_prefix_policy(data)
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
     if prefixes_str:
@@ -431,8 +432,9 @@ def main() -> None:
         sys.exit(0)
 
     if not isinstance(data, dict):
+        headless, _ = hook_session_shape()
         if (
-            is_headless_session()
+            headless
             and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES")
             and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX")
         ):
@@ -447,7 +449,8 @@ def main() -> None:
         return
 
     norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data)
-    activation = "headless" if is_headless_session() else "skill_binding"
+    headless, _ = hook_session_shape()
+    activation = "headless" if headless else "skill_binding"
     if policy_state == "none":
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
         sys.exit(0)

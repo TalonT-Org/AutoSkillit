@@ -36,8 +36,7 @@ if _RUNTIME_DIR not in sys.path:
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
-    get_session_type,
-    is_headless_session,
+    hook_session_shape,
     payload_managed_codex_route,
     session_join_required,
 )
@@ -53,7 +52,7 @@ MANAGED_CODEX_CHILD_DENY_TRIGGER: str = (
 )
 
 
-def _governed_skill_session() -> bool:
+def _governed_skill_session(session_type: str) -> bool:
     """Whether this hook is acting in a governed Claude skill session tier.
 
     Active for Claude-code sessions on the skill tier, so orchestrator, fleet,
@@ -66,8 +65,6 @@ def _governed_skill_session() -> bool:
         return False
     if backend not in ("", "claude-code"):
         return False
-    raw_session_type = get_session_type()
-    session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         return False
     return True
@@ -178,13 +175,11 @@ def main() -> None:
 
     in_subagent_context = bool(data.get("agent_id"))
 
-    raw_session_type = get_session_type()
-    session_type = raw_session_type.lower()
+    headless, session_type = hook_session_shape()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers
 
-    is_governed = _governed_skill_session()
-    headless = is_headless_session()
+    is_governed = _governed_skill_session(session_type)
 
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):

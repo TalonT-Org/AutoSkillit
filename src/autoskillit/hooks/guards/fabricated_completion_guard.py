@@ -55,7 +55,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_settings import get_session_type  # noqa: E402
+from _hook_settings import hook_session_shape  # noqa: E402
 
 
 def _bounded_tail(path: Path) -> str | None:
@@ -305,7 +305,8 @@ def main() -> None:
         return
     if not isinstance(data, dict):
         return
-    if get_session_type() != "orchestrator" or data.get("agent_id") or data.get("agentId"):
+    _headless, tier = hook_session_shape()
+    if tier != "orchestrator" or data.get("agent_id") or data.get("agentId"):
         return
 
     session_id = data.get("session_id")

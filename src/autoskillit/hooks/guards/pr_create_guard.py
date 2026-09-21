@@ -39,7 +39,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     enforce_session_scope,
-    get_session_type,
+    hook_session_shape,
     read_merged_hook_config,
 )
 
@@ -77,7 +77,8 @@ def _is_gh_pr_create(cmd: str) -> bool:
 def main() -> None:
     enforce_session_scope("any", exempt_tiers=frozenset({"orchestrator"}))
 
-    if get_session_type() in _EXEMPT_SESSION_TYPES:
+    _headless, tier = hook_session_shape()
+    if tier in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
     try:

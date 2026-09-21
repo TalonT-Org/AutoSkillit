@@ -10,10 +10,10 @@ from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_arg
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.rules.rules_merge_routing import _FAILED_STEP_PATTERN
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.smoke_utils._merge_gate_diagnosis import (
+from autoskillit.smoke_utils import (
     DIAGNOSE_OPTIONAL_RESULT_PARAMS as _DIAGNOSE_OPTIONAL_RESULT_PARAMS,
 )
-from autoskillit.smoke_utils._merge_gate_diagnosis import (
+from autoskillit.smoke_utils import (
     DIAGNOSE_RESULT_PARAMS as _DIAGNOSE_RESULT_PARAMS,
 )
 

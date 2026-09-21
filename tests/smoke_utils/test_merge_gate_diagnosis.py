@@ -232,8 +232,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 def test_diagnosis_result_params_match_callable_signature() -> None:
     from autoskillit.core import load_yaml, pkg_root
-    from autoskillit.smoke_utils import diagnose_merge_gate
-    from autoskillit.smoke_utils._merge_gate_diagnosis import DIAGNOSE_RESULT_PARAMS
+    from autoskillit.smoke_utils import DIAGNOSE_RESULT_PARAMS, diagnose_merge_gate
 
     signature = inspect.signature(diagnose_merge_gate)
     callable_fields = tuple(

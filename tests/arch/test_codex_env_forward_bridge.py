@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.execution.backends._plugin_binding import plugin_binding
-
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
@@ -35,55 +33,6 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_MCP_CLIENT_BACKEND", raising=False)
-
-
-def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
-    """Every non-launch-scoped forward var is injected by Codex command builders."""
-    from autoskillit.core import (
-        CODEX_MCP_ENV_FORWARD_VARS,
-        LAUNCH_ID_ENV_VAR,
-        OutputFormat,
-        ValidatedAddDir,
-    )
-    from autoskillit.execution.backends.codex import CodexBackend
-
-    backend = CodexBackend()
-    launch_id = "0123456789abcdef"
-    add_dirs = (
-        ValidatedAddDir(
-            path="/work/add-dir",
-            session_home="/work",
-            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
-        ),
-    )
-    skill_spec = backend.build_skill_session_cmd(
-        skill_command="/test-skill",
-        cwd="/work",
-        completion_marker="%%DONE%%",
-        model=None,
-        plugin_binding=None,
-        output_format=OutputFormat.JSON,
-        provider_extras={LAUNCH_ID_ENV_VAR: launch_id},
-        add_dirs=add_dirs,
-    )
-    with plugin_binding(Path("/projected-plugin")) as binding:
-        food_truck_spec = backend.build_food_truck_cmd(
-            orchestrator_prompt="dispatch",
-            plugin_binding=binding,
-            cwd="/work",
-            completion_marker="%%DONE%%",
-            env_extras={LAUNCH_ID_ENV_VAR: launch_id},
-            managed_skill_catalog=add_dirs[0],
-        )
-    assert skill_spec.env[LAUNCH_ID_ENV_VAR] == launch_id
-    assert food_truck_spec.env[LAUNCH_ID_ENV_VAR] == launch_id
-    for var in sorted(CODEX_MCP_ENV_FORWARD_VARS - {LAUNCH_ID_ENV_VAR}):
-        assert var in skill_spec.env, (
-            f"{var} in CODEX_MCP_ENV_FORWARD_VARS but missing from build_skill_session_cmd env"
-        )
-        assert var in food_truck_spec.env, (
-            f"{var} in CODEX_MCP_ENV_FORWARD_VARS but missing from build_food_truck_cmd env"
-        )
 
 
 def test_always_injected_mcp_server_vars_forwarded_by_codex() -> None:

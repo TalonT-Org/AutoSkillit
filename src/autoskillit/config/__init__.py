@@ -13,11 +13,11 @@ from autoskillit.config.ingredient_defaults import (
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
     SERVER_AUTHORITATIVE_KEY_HINTS,
-    apply_config_authoritative_overrides,
     build_config_authoritative_layer,
     build_config_default_layer,
     iter_display_categories,
     resolve_ingredient_defaults,
+    strip_server_authoritative_overrides,
 )
 from autoskillit.config.settings import (
     _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
@@ -122,9 +122,9 @@ __all__ = [
     "SERVER_AUTHORITATIVE_CONFIG_PATHS",
     "SERVER_AUTHORITATIVE_INGREDIENTS",
     "SERVER_AUTHORITATIVE_KEY_HINTS",
-    "apply_config_authoritative_overrides",
     "build_config_authoritative_layer",
     "build_config_default_layer",
+    "strip_server_authoritative_overrides",
     "validate_layer_keys",
     "write_config_layer",
 ]

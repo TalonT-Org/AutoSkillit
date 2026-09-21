@@ -49,6 +49,7 @@ from autoskillit.server.tools._serve_helpers import (
     render_served_response,
     response_backstop_tool_meta,
 )
+from autoskillit.server.tools._types import dispatch_identity_denial
 from autoskillit.server.tools.tools_kitchen._get_recipe import _build_tool_category_listing
 from autoskillit.server.tools.tools_kitchen._open_kitchen._recipe_serve import _serve_named_recipe
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import _kitchen_failure_envelope
@@ -201,6 +202,9 @@ async def open_kitchen(
         if overrides:
             if authority_overlap := set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS:
                 return json.dumps(build_authority_rejection_envelope(authority_overlap))
+
+        if identity_denial := dispatch_identity_denial():
+            return json.dumps(identity_denial)
 
         from autoskillit.server import _get_ctx  # circular-break
 

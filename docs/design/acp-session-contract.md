@@ -58,7 +58,7 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `validate_skill_content` | ACP skill-content validation | YAML frontmatter validation (`required_skill_fields={"name", "description"}`) | Returns `[]` unconditionally (no frontmatter requirement) | Codex: structural discard — entire validation is a no-op. |
 | `stream_parser` | ACP event stream consumption | Returns a `StreamParser` for stdout/JSONL events | Returns a `StreamParser` for NDJSON events (`thread.started`, `turn.completed`, `turn.failed`) | Codex events are NDJSON with `thread_id` resolution for `CodexSessionLocator`. |
 | `result_parser` | ACP event aggregation | Returns a `ResultParser` aggregating events into `AgentSessionResult` | Returns a `ResultParser` aggregating Codex events; populated `jsonl_context_exhausted` when `error_code == CODEX_CONTEXT_EXHAUSTION_MARKER` (lines 105–108 of `_headless_evidence.py`) | Codex surfaces context-exhaustion via `error_code` rather than API `needs_retry`. |
-| `env_policy` | ACP environment contract | Returns `EnvPolicy` for subprocess env (injects MCP env-forward vars per Env Forwarding Contract) | Returns `EnvPolicy`; env-denylist prefixes via `CODEX_ENV_PREFIX_DENYLIST` | Codex applies a denylist; Claude Code does not. |
+| `env_policy` | ACP environment contract | Returns `EnvPolicy` for subprocess env | Returns `EnvPolicy`; env-denylist prefixes via `CODEX_ENV_PREFIX_DENYLIST` | Codex applies a denylist; Claude Code does not. |
 | `session_locator` | ACP session discovery / `session/load` | Returns a `SessionLocator` resolving session log dirs from Channel B JSONL | Returns `CodexSessionLocator`; `list_sessions` reads the derived typed index while `locate_session` searches canonical active/archive stores and validated active views by real `thread_id` | Listing is read-only; explicit recovery, not listing, rebuilds the derived index. |
 | `write_tool_names` | (write-detection contract) | `frozenset({"Write", "Edit", "Bash", "apply_patch"})` | `frozenset({"apply_patch", "Bash", "run_cmd"})` | Different write-tool vocabularies; Codex uses `apply_patch` + `run_cmd`. |
 | `binary_name` | (process identity) | `"claude"` | `"codex"` | — |
@@ -360,7 +360,7 @@ future use and have no current production consumer outside the exemption set.
 | `session_dir_symlinks` | Session directory layout (Codex: `frozenset({"sessions", "archived_sessions"})`; Claude: `frozenset()`) |
 | `patch_format` | Write-guard path extraction (Claude: `"unified_diff"`; Codex: `"codex_star_update"`) |
 | `min_version` | Version validation in doctor (Codex: `"0.136.0"`; Claude: `""`) |
-| `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS`; Claude: `frozenset()`) |
+| `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS = AUTOSKILLIT_PRIVATE_ENV_VARS - CODEX_MCP_ENV_SERVER_EXCLUDED_VARS`; Claude Code inherits the full environment and declares `frozenset()`). MCP registration forwards each listed variable present in the agent process; the Codex MCP server env and builder coverage architecture tests enforce the contract. |
 | `github_api_callable` | Future network-capability gate for outbound GitHub API writes |
 
 

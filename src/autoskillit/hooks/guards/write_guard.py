@@ -243,10 +243,10 @@ def _record(data: object, *, activation: str, scope: str, decision: str, reason:
     )
 
 
-def _deny(data: object, reason: str, *, reason_code: str) -> None:
+def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> None:
     _record(
         data,
-        activation="headless",
+        activation=activation,
         scope="write_prefix",
         decision="deny",
         reason=reason_code,
@@ -444,6 +444,7 @@ def main() -> None:
             data,
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (malformed hook input).",
             reason_code="malformed_input",
+            activation="headless",
         )
         return
 
@@ -460,6 +461,7 @@ def main() -> None:
                 f"({policy_state} boundary)."
             ),
             reason_code=policy_state,
+            activation=activation,
         )
         return
 
@@ -494,13 +496,13 @@ def main() -> None:
             command, parsed.execution_cwd, norm_prefixes, display_prefix
         )
         if reason is not None:
-            _deny(data, reason, reason_code="scope_violation")
+            _deny(data, reason, reason_code="scope_violation", activation=activation)
             return
         reason = _bash_validation_error(
             command, parsed.execution_cwd, norm_prefixes, display_prefix
         )
         if reason is not None:
-            _deny(data, reason, reason_code="scope_violation")
+            _deny(data, reason, reason_code="scope_violation", activation=activation)
             return
         _record(
             data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
@@ -511,7 +513,7 @@ def main() -> None:
         command = extract_apply_patch_text(data) or ""
         reason = _patch_validation_error(command, norm_prefixes, display_prefix)
         if reason is not None:
-            _deny(data, reason, reason_code="scope_violation")
+            _deny(data, reason, reason_code="scope_violation", activation=activation)
             return
         _record(
             data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
@@ -522,7 +524,7 @@ def main() -> None:
     file_path = tool_input.get("file_path", "")
     reason = _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
     if reason is not None:
-        _deny(data, reason, reason_code="scope_violation")
+        _deny(data, reason, reason_code="scope_violation", activation=activation)
         return
     _record(data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope")
     sys.exit(0)

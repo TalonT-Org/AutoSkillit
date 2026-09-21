@@ -68,6 +68,44 @@ def test_hook_session_shape_keeps_unknown_tiers_for_hook_policy(
     assert hook_session_shape() == (True, "leaf")
 
 
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        (
+            {"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "orchestrator"},
+            (True, "orchestrator"),
+        ),
+        ({"AUTOSKILLIT_SESSION_TYPE": "skill"}, (False, "skill")),
+        ({}, (False, "skill")),
+        ({"AUTOSKILLIT_SESSION_TYPE": "LEAF"}, (False, "leaf")),
+        # Empty-string short-circuit (issue #5121 / D14): an explicitly-empty
+        # AUTOSKILLIT_SESSION_TYPE must default to "skill" identically to the
+        # unset case. Pinned by the inline comment at _hook_settings.py around
+        # the 'or "skill"' trailing expression.
+        ({"AUTOSKILLIT_SESSION_TYPE": ""}, (False, "skill")),
+    ],
+)
+def test_canonical_accessor_is_hook_session_shape(
+    env: dict[str, str],
+    expected: tuple[bool, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T4 — hook_session_shape() returns the canonical (headless, tier) tuple.
+
+    Pins the empty-string short-circuit documented at _hook_settings.py
+    alongside the trailing 'or "skill"' expression. Future regressions of
+    that short-circuit (e.g. someone "simplifying" it away) would surface
+    as a tier of "" leaking through to admit_hook_session_scope and
+    downstream policy code.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    assert hook_session_shape() == expected
+
+
 def test_hook_scope_admission_matches_core_scope() -> None:
     """Each HookDef has one admission result across core and hook runtimes."""
     for hookdef in HOOK_REGISTRY:

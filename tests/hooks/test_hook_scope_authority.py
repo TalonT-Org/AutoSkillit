@@ -199,41 +199,93 @@ _DELETED_SESSION_CLASS_WRAPPERS: frozenset[str] = frozenset(
 )
 
 
-def _wrapper_import_sites(source: str, filename: str) -> set[str]:
-    """Return ``filename`` if ``source`` imports any deleted session-class wrapper."""
+def _wrapper_introduction_sites(source: str, filename: str) -> set[tuple[str, int]]:
+    """Return ``(filename, lineno)`` for every deleted session-class wrapper re-introduction.
+
+    Catches two bypass vectors that re-introduce the canonical surface
+    through a different code path:
+
+    1. ``from X import get_session_type`` (T2 ImportFrom vector) — also
+       catches the rebind ``from X import get_session_type as g`` form
+       (alias.asname is the bound name; the rebind case is checked via
+       alias.name, which is always the source identifier).
+    2. ``is_headless_session = ...`` / ``get_session_type = ...`` (T2
+       PARTIAL Assign vector) — a top-level assignment that re-binds the
+       deleted name to any expression. Without this scan, a future
+       refactor could ``from _hook_settings import hook_session_shape as
+       get_session_type`` and silently re-introduce the wrapper surface
+       as a guard-local alias — defeating the unified-API invariant.
+    """
     try:
         tree = ast.parse(source, filename=filename)
     except SyntaxError:
         return set()
+    sites: set[tuple[str, int]] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        for alias in node.names:
-            # Cover both 'from X import get_session_type' and the rebind
-            # 'from X import get_session_type as g' forms — alias.name is the
-            # original; alias.asname is the bound name in the local namespace.
-            if alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
-                return {filename}
-    return set()
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
+                    sites.add((filename, node.lineno))
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in _DELETED_SESSION_CLASS_WRAPPERS:
+                    sites.add((filename, node.lineno))
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id in _DELETED_SESSION_CLASS_WRAPPERS:
+                sites.add((filename, node.lineno))
+    return sites
 
 
 def test_no_guard_imports_deleted_session_class_wrappers() -> None:
-    """No guard imports the deleted is_headless_session / get_session_type wrappers.
+    """No guard imports or re-binds the deleted is_headless_session / get_session_type wrappers.
 
     Issue #5121: the wrappers were deleted; their only successor is
-    hook_session_shape(), which is the canonical atomic accessor.
+    hook_session_shape(), which is the canonical atomic accessor. The scan
+    blocks both the ImportFrom vector (T2) AND the Assign / AnnAssign
+    rebind vector (T2 PARTIAL).
     """
     violations = {
-        filename
+        site
         for path in HOOKS_DIR.rglob("*.py")
-        for filename in _wrapper_import_sites(
+        for site in _wrapper_introduction_sites(
             path.read_text(encoding="utf-8"), str(path.relative_to(HOOKS_DIR))
         )
     }
     assert not violations, (
-        f"deleted session-class wrappers must not be imported: {sorted(violations)}. "
+        f"deleted session-class wrappers must not be imported or rebound: {sorted(violations)}. "
         "Use hook_session_shape() instead."
     )
+
+
+# Runtime modules that historically defined the session-class wrappers
+# (issue #5121 / T1). After the refactor, neither module should re-introduce
+# top-level `def is_headless_session` / `def get_session_type` — the canonical
+# accessor hook_session_shape() is the single source.
+_RUNTIME_MODULE_PATHS = (
+    HOOKS_DIR / "_runtime" / "_hook_settings.py",
+    HOOKS_DIR / "_runtime" / "_session_scope_authority.py",
+)
+
+
+@pytest.mark.parametrize("module_path", _RUNTIME_MODULE_PATHS)
+def test_no_wrapper_definitions_in_runtime_module(module_path: Path) -> None:
+    """T1 — runtime modules must not define the deleted wrappers at module scope.
+
+    Walks the module's top-level ``ast.FunctionDef`` nodes (not the full AST
+    body, which would match nested functions defined for testing) and asserts
+    none of them carries a deleted wrapper name. Catches any future
+    re-introduction of the wrappers in the runtime layer.
+    """
+    source = module_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(module_path))
+    top_level_funcs = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for wrapper_name in _DELETED_SESSION_CLASS_WRAPPERS:
+        assert wrapper_name not in top_level_funcs, (
+            f"{module_path.relative_to(HOOKS_DIR)} defines a top-level "
+            f"`def {wrapper_name}` — issue #5121 removed the wrapper; the "
+            "canonical session-class accessor is hook_session_shape()."
+        )
 
 
 def test_session_class_env_read_inventory_is_complete() -> None:

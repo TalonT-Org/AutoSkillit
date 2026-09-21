@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -1684,3 +1685,221 @@ class TestWriteGuardRunCmdExecutionCwd:
         )
         result = _run_hook(event)
         assert result == ""
+
+
+class TestNormalizePrefixesSurface:
+    """A realpath OSError during prefix normalization must surface a single
+    rate-limited warning naming the prefix value, exception type, and source
+    configuration. Fail-closed semantics (skip the bad prefix) are preserved."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_warned_prefixes(self) -> None:
+        from autoskillit.hooks.guards import write_guard
+
+        write_guard._WARNED_PREFIXES.clear()
+
+    def _fail_realpath(self, *bad: str) -> Callable[..., str]:
+        """Return a realpath stub that raises OSError for `bad` paths and
+        passes through every other value unchanged (good paths need a return
+        value for `rstrip("/") + "/"` to do its work). Accepts and ignores
+        trailing keyword args so callers like `Path(...).resolve(strict=...)`
+        — which internally delegate to `os.path.realpath(..., strict=...)` —
+        succeed without raising."""
+        bad_set = set(bad)
+
+        def _realpath(p: str, **_kwargs: object) -> str:
+            if p in bad_set:
+                raise OSError("permission denied")
+            return p
+
+        return _realpath
+
+    def test_realpath_failure_logs_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A realpath OSError emits one WARNING naming prefix, type, source."""
+        import logging
+
+        from autoskillit.hooks.guards import write_guard
+
+        monkeypatch.setattr(write_guard.os.path, "realpath", self._fail_realpath("/bad"))
+        with caplog.at_level(logging.WARNING, logger="autoskillit.hooks.guards.write_guard"):
+            result = write_guard._normalize_prefixes(
+                ["/bad"], source_label="AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
+            )
+        assert result == []
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        msg = warnings[0].getMessage()
+        assert "/bad" in msg
+        assert "OSError" in msg
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in msg
+
+    def test_realpath_failure_is_rate_limited_per_prefix(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Repeated identical prefixes warn once; distinct bad prefixes each warn."""
+        import logging
+
+        from autoskillit.hooks.guards import write_guard
+
+        monkeypatch.setattr(
+            write_guard.os.path,
+            "realpath",
+            self._fail_realpath("/bad", "/also-bad"),
+        )
+        with caplog.at_level(logging.WARNING, logger="autoskillit.hooks.guards.write_guard"):
+            write_guard._normalize_prefixes(["/bad", "/bad", "/also-bad"], source_label="env")
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 2
+        # Follow-up call with the same prefixes must produce no further warnings.
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="autoskillit.hooks.guards.write_guard"):
+            write_guard._normalize_prefixes(["/bad", "/also-bad"], source_label="env")
+        second = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert second == []
+
+    def test_realpath_failure_includes_source_label(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        from autoskillit.hooks.guards import write_guard
+
+        monkeypatch.setattr(write_guard.os.path, "realpath", self._fail_realpath("/bad"))
+        with caplog.at_level(logging.WARNING, logger="autoskillit.hooks.guards.write_guard"):
+            write_guard._normalize_prefixes(
+                ["/bad"], source_label="AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
+            )
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        msg = warnings[0].getMessage()
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in msg
+
+    def test_realpath_failure_skipped_prefix_does_not_block_siblings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fail-closed: a bad prefix is dropped, a sibling good prefix survives."""
+        from autoskillit.hooks.guards import write_guard
+
+        monkeypatch.setattr(write_guard.os.path, "realpath", self._fail_realpath("/bad"))
+        result = write_guard._normalize_prefixes(["/bad", "/good"], source_label="env")
+        assert result == ["/good/"]
+
+    @pytest.mark.parametrize(
+        "exc_factory,expected_type_name",
+        [
+            (
+                lambda: FileNotFoundError(2, "No such file"),
+                "FileNotFoundError",
+            ),
+            (
+                lambda: PermissionError(13, "Permission denied"),
+                "PermissionError",
+            ),
+        ],
+        ids=["file_not_found", "permission_error"],
+    )
+    def test_realpath_failure_distinguishes_exception_subclasses(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        exc_factory: Callable[[], BaseException],
+        expected_type_name: str,
+    ) -> None:
+        """Operators reading the JSONL must distinguish config typos from perm fixes."""
+        import logging
+
+        from autoskillit.hooks.guards import write_guard
+
+        def _raise(p: str, **_kwargs: object) -> str:
+            return (_ for _ in ()).throw(exc_factory())
+
+        monkeypatch.setattr(write_guard.os.path, "realpath", _raise)
+        with caplog.at_level(logging.WARNING, logger="autoskillit.hooks.guards.write_guard"):
+            write_guard._normalize_prefixes(["/typo"], source_label="env")
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        msg = warnings[0].getMessage()
+        assert expected_type_name in msg
+
+
+class TestEmptyPolicyDenialHint:
+    """Empty-boundary denials should name the configuration source that produced
+    the empty set so operators can self-diagnose without reading log files."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_warned_prefixes(self) -> None:
+        from autoskillit.hooks.guards import write_guard
+
+        write_guard._WARNED_PREFIXES.clear()
+
+    def test_interactive_empty_policy_reason_includes_configuration_hint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """Interactive skill_binding empty policy names session_binding/write_paths."""
+        from autoskillit.hooks.guards import write_guard
+
+        _set_headless(monkeypatch, headless=False)
+        monkeypatch.setattr(
+            write_guard,
+            "read_session_binding",
+            lambda _cwd, _session_id: {
+                "loaded_skills": [{"skill_name": "review-pr", "binding_valid": True}]
+            },
+        )
+        monkeypatch.setattr(
+            write_guard, "resolve_projection_manifest_path", lambda _path: tmp_path
+        )
+        monkeypatch.setattr(
+            write_guard,
+            "read_manifest",
+            lambda _path: {"skills": {"review-pr": {"write_paths": ["/this/does/not/exist"]}}},
+        )
+        monkeypatch.setattr(
+            write_guard.os.path,
+            "realpath",
+            lambda _p, **_kw: (_ for _ in ()).throw(OSError("permission denied")),
+        )
+
+        event = {
+            "tool_name": "Write",
+            "cwd": str(tmp_path),
+            "session_id": "interactive-test",
+            "tool_input": {"file_path": str(tmp_path / "outside.py")},
+        }
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "session_binding" in reason
+        assert "write_path" in reason
+
+    def test_headless_empty_policy_reason_includes_env_var_hint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Headless empty policy names AUTOSKILLIT_ALLOWED_WRITE_PREFIX.
+
+        In headless mode, ``policy_state`` reaches ``"empty"`` only when the
+        upstream source returns an empty list after realpath filtering; the
+        path that triggers this directly via env-var parsing produces
+        ``"none"`` and bypasses the guard. We therefore mock
+        ``_write_prefix_policy`` to surface the empty-boundary branch with
+        ``activation == "headless"`` so the env-var hint can be asserted.
+        """
+        from autoskillit.hooks.guards import write_guard
+
+        _set_headless(monkeypatch, headless=True)
+        monkeypatch.setattr(write_guard, "_write_prefix_policy", lambda _data: ([], "", "empty"))
+
+        event = {
+            "tool_name": "Write",
+            "cwd": "/some/cwd",
+            "session_id": "headless-test",
+            "tool_input": {"file_path": "/some/file.py"},
+        }
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in reason

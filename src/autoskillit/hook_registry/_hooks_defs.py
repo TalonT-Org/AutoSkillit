@@ -15,6 +15,9 @@ from typing import Literal, NamedTuple
 
 import regex as re
 
+from autoskillit.hooks._runtime import _session_scope_authority as _ssa
+from autoskillit.hooks._runtime._session_scope_authority import SessionScopeLiteral
+
 # Events that do not require a tool-name matcher pattern (Stop fires once
 # per turn; SessionStart fires before any tool call).
 _MATCHERLESS_EVENT_TYPES: frozenset[str] = frozenset(
@@ -41,7 +44,7 @@ class HookDef:
     ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
-    session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
+    session_scope: SessionScopeLiteral = "any"
     exempt_skills: frozenset[str] = field(default_factory=frozenset)
     exempt_session_types: frozenset[str] = field(default_factory=frozenset)
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"] = (
@@ -65,7 +68,7 @@ class HookDef:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
-        if self.session_scope not in ("any", "headless_only", "interactive_only"):
+        if self.session_scope not in _ssa.SESSION_SCOPE_VALUES:
             raise ValueError("HookDef.session_scope is invalid")
         for field_name in (
             "produces_resources",
@@ -96,7 +99,7 @@ class LifecycleContractDef:
     resource: str
     producer_script: str
     backend: Literal["claude_code", "codex"]
-    session_scope: Literal["any", "headless_only", "interactive_only"]
+    session_scope: SessionScopeLiteral
     required_owner_roles: frozenset[Literal["same_runner", "session_start"]]
 
     def __post_init__(self) -> None:
@@ -106,7 +109,7 @@ class LifecycleContractDef:
             raise ValueError("LifecycleContractDef.producer_script must be non-empty")
         if self.backend not in ("claude_code", "codex"):
             raise ValueError("LifecycleContractDef.backend is invalid")
-        if self.session_scope not in ("any", "headless_only", "interactive_only"):
+        if self.session_scope not in _ssa.SESSION_SCOPE_VALUES:
             raise ValueError("LifecycleContractDef.session_scope is invalid")
         if not isinstance(self.required_owner_roles, frozenset) or not (self.required_owner_roles):
             raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")

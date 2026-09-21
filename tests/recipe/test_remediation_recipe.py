@@ -1,11 +1,12 @@
 """Structural tests for remediation.yaml recipe."""
 
+import re
 from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe.analysis._analysis import make_validation_context
-from autoskillit.recipe.analysis._analysis_bfs import (
+from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._analysis_bfs import (
     _build_success_step_graph,
     all_paths_cross,
     bfs_reachable,
@@ -117,6 +118,16 @@ def test_pre_remediation_merge_routes_path_validation_to_remediate(recipe) -> No
 def _routes(step):
     assert step.on_result is not None
     return {condition.when: condition for condition in step.on_result.conditions}
+
+
+_FAILED_STEP_NAME_RE = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
+
+
+def _failed_step_name(when: str) -> str:
+    """Extract the failed_step identifier from a `result.failed_step == '<name>'` clause."""
+    match = _FAILED_STEP_NAME_RE.search(when)
+    assert match is not None, f"when clause missing failed_step: {when!r}"
+    return match.group(1)
 
 
 def _early_recovery_steps(recipe):
@@ -260,7 +271,7 @@ def test_pre_remediation_merge_exhaustion_preserves_worktree(recipe) -> None:
 def test_remediation_pre_remediation_waivers_are_exactly_declared(recipe) -> None:
     early = _routes(recipe.steps["pre_remediation_merge"])
     waived = {
-        when.split("'")[1]
+        _failed_step_name(when)
         for when, condition in early.items()
         if when and condition.recovery_waiver
     }

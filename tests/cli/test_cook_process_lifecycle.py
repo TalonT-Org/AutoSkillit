@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -15,6 +17,7 @@ import pytest
 from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.core import CmdSpec, ValidatedAddDir
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -567,3 +570,134 @@ def test_managed_launch_requires_a_retained_pre_spawn_check(
         )
 
     spawn.assert_not_called()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="requires Linux /proc process states")
+def test_posix_job_control_direct_cook_resumes_stopped_group(tmp_path: Path) -> None:
+    from tests.cli._blackbox_launch import _acquire_controlling_terminal
+
+    control_read, control_write = os.pipe()
+    master_fd, slave_fd = os.openpty()
+    helper: subprocess.Popen[bytes] | None = None
+    frames: list[dict[str, object]] = []
+    buffer = bytearray()
+    child_pgid: int | None = None
+    slave_open = True
+    helper_code = r"""
+import json
+import os
+import sys
+import time
+from types import SimpleNamespace
+
+from autoskillit.cli.session._session_process import run_cook_attempt
+from autoskillit.core import CmdSpec
+
+control_fd = int(os.environ["CONTROL_FD"])
+
+def report(payload):
+    os.write(control_fd, (json.dumps(payload) + "\n").encode())
+
+def process_state(pid):
+    tail = open(f"/proc/{pid}/stat", encoding="utf-8").read().rsplit(")", 1)[1]
+    return tail.split()[0]
+
+stop_observed = False
+reaped = False
+
+def on_spawn(pid, pgid):
+    global stop_observed
+    report({"kind": "identity", "pid": pid, "pgid": pgid})
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if process_state(pid) == "T":
+            stop_observed = True
+            return
+        time.sleep(0.01)
+    raise RuntimeError("child never reached stopped terminal state")
+
+def on_reaped(_pid, _pgid):
+    global reaped
+    reaped = True
+
+try:
+    result = run_cook_attempt(
+        CmdSpec(
+            cmd=(sys.executable, "-c", "import tty; tty.setraw(0)"),
+            env=dict(os.environ),
+            cwd=os.getcwd(),
+        ),
+        pass_fds=(control_fd,),
+        on_spawn=on_spawn,
+        on_reaped=on_reaped,
+        trace=SimpleNamespace(record_spawn=lambda: None),
+        observer=None,
+        not_after=time.time() + 3,
+    )
+    report(
+        {
+            "kind": "result",
+            "returncode": result.returncode,
+            "stop_observed": stop_observed,
+            "reaped": reaped,
+            "foreground_pgid": os.tcgetpgrp(0),
+        }
+    )
+except BaseException as exc:
+    report({"kind": "error", "error": repr(exc), "stop_observed": stop_observed})
+    raise
+"""
+    try:
+        helper = subprocess.Popen(
+            [sys.executable, "-c", helper_code],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            pass_fds=(control_write,),
+            close_fds=True,
+            preexec_fn=_acquire_controlling_terminal,
+            cwd=tmp_path,
+            env={**production_interpreter_env(), "CONTROL_FD": str(control_write)},
+        )
+        os.close(slave_fd)
+        slave_open = False
+        deadline = time.monotonic() + 5
+        while len(frames) < 2 and time.monotonic() < deadline:
+            readable, _, _ = select.select([control_read], [], [], deadline - time.monotonic())
+            if not readable:
+                break
+            chunk = os.read(control_read, 4096)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+            while b"\n" in buffer:
+                line, _, remainder = buffer.partition(b"\n")
+                buffer = bytearray(remainder)
+                frames.append(json.loads(line))
+        identity = next((frame for frame in frames if frame["kind"] == "identity"), None)
+        assert identity is not None, frames
+        child_pgid = int(identity["pgid"])
+        result = next((frame for frame in frames if frame["kind"] == "result"), None)
+        assert result is not None, frames
+        assert result["stop_observed"] is True
+        assert result["returncode"] == 0
+        assert result["reaped"] is True
+        assert result["foreground_pgid"] == helper.pid
+        assert helper.wait(timeout=2) == 0
+    finally:
+        if child_pgid is not None:
+            try:
+                os.killpg(child_pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if helper is not None and helper.poll() is None:
+            try:
+                os.killpg(helper.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            helper.wait(timeout=2)
+        if slave_open:
+            os.close(slave_fd)
+        os.close(master_fd)
+        os.close(control_read)
+        os.close(control_write)

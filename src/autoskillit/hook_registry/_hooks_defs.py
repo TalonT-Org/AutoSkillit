@@ -11,12 +11,16 @@ It is imported as ``regex`` (not stdlib ``re``) per
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import regex as re
 
-from autoskillit.hooks._runtime import _session_scope_authority as _ssa
-from autoskillit.hooks._runtime._session_scope_authority import SessionScopeLiteral
+if TYPE_CHECKING:
+    # Issue #5121: route SessionScopeLiteral through the canonical authority
+    # module's type alias. TYPE_CHECKING-guarded so the import does NOT trigger
+    # the autoskillit.hooks package init at runtime (which would cycle back
+    # through autoskillit.hook_registry and partially-load _hooks_defs).
+    from autoskillit.hooks._runtime._session_scope_authority import SessionScopeLiteral
 
 # Events that do not require a tool-name matcher pattern (Stop fires once
 # per turn; SessionStart fires before any tool call).
@@ -64,6 +68,14 @@ class HookDef:
     runtime_only: bool = False
 
     def __post_init__(self) -> None:
+        # Issue #5121 (D7 module-reference pattern, D5 lazy-import discipline):
+        # the canonical constant lives in autoskillit.hooks._runtime, which
+        # would cycle through autoskillit.hooks.__init__ if imported at module
+        # top here (autoskillit.hook_registry is loaded by that init). Use a
+        # lazy import inside the validator so the module can finish loading
+        # before the cycle resolves.
+        from autoskillit.hooks._runtime import _session_scope_authority as _ssa
+
         if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
@@ -103,6 +115,9 @@ class LifecycleContractDef:
     required_owner_roles: frozenset[Literal["same_runner", "session_start"]]
 
     def __post_init__(self) -> None:
+        # See HookDef.__post_init__ for the rationale on the lazy import.
+        from autoskillit.hooks._runtime import _session_scope_authority as _ssa
+
         if not isinstance(self.resource, str) or not self.resource:
             raise ValueError("LifecycleContractDef.resource must be non-empty")
         if not isinstance(self.producer_script, str) or not self.producer_script:

@@ -1,4 +1,10 @@
-"""Durable recovery-state codec for managed fixed-batch execution."""
+"""Durable recovery-state codec for managed fixed-batch execution.
+
+The recovery schema was bumped from v2 to v3 to rename ``request_session_id``
+to ``parent_session_id``. v2 debts are no longer silently readable; the
+reader must surface an explicit failure so that operators know an in-flight
+debt was dropped.
+"""
 
 from __future__ import annotations
 

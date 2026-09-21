@@ -7,7 +7,6 @@ _INTERPRETER_LINE_RE.
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -180,13 +179,6 @@ _WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
     }
 )
 
-_REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
-_REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
-_FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
-_FD_DUPLICATION_RE = re.compile(r"^\d*>&\d+$")
-_TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
-_SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
-
 WRITE_VERBS: frozenset[str] = frozenset(
     {"sed", "tee", "mv", "cp", "patch", "install", "rm", "unlink"}
 )
@@ -197,26 +189,18 @@ WRITE_VERBS: frozenset[str] = frozenset(
 # _WC_FLAG_RE moved to _flags.py (their sole consumer) to keep this facade
 # under REQ-CNST-010's line cap; re-exported below through the existing
 # block B bootstrap.
+#
+# Issue #5120's redirect-partition machinery (_REDIRECT_* regexes,
+# _consume_output_redirect, _partition_output_redirect_indices,
+# _partition_output_redirects, _select_executable_argv_tokens,
+# extract_redirect_targets, extract_redirect_targets_with_status,
+# OutputRedirectPartition dataclass) moved to _output_redirect.py
+# alongside its sole producer to keep this facade under REQ-CNST-010's
+# line cap; re-exported below through the same block B bootstrap.
 
 
 class SearchPattern(Protocol):
     def search(self, string: str, /): ...
-
-
-def resolve_write_target(path: str, cwd: str = "") -> str | None:
-    if not path:
-        return None
-    if path.startswith("&") or _FD_REDIRECT_RE.match(path):
-        return None
-    if _SHELL_VAR_RE.search(path):
-        path = os.path.expandvars(path)
-        if _SHELL_VAR_RE.search(path):
-            return None
-    if os.path.isabs(path):
-        return path
-    if cwd:
-        return os.path.join(cwd, path)
-    return None
 
 
 def updated_execution_cwd(segment: list[str], cwd: str) -> str:
@@ -224,148 +208,6 @@ def updated_execution_cwd(segment: list[str], cwd: str) -> str:
     if command_verb(segment) != "cd" or len(segment) < 2:
         return cwd
     return resolve_write_target(segment[1], cwd) or ""
-
-
-def _consume_output_redirect(
-    tokens: Sequence[str], syntax: Sequence[bool], index: int
-) -> tuple[int, str | None, int] | None:
-    """Consume one active output redirect, returning its next index, target, and count."""
-    token = tokens[index]
-    if not syntax[index]:
-        return None
-    if _FD_DUPLICATION_RE.fullmatch(token):
-        return (index + 1, None, 0)
-    if _REDIRECT_OP_ONLY_RE.fullmatch(token):
-        next_index = index + 1
-        if next_index < len(tokens) and not (
-            syntax[next_index]
-            and (
-                _REDIRECT_OP_ONLY_RE.fullmatch(tokens[next_index])
-                or _FD_DUPLICATION_RE.fullmatch(tokens[next_index])
-            )
-        ):
-            return (next_index + 1, tokens[next_index], 1)
-        return (next_index, None, 1)
-    match = _REDIRECT_TOKEN_RE.fullmatch(token)
-    if match is None:
-        return None
-    return (index + 1, match.group(2), 1)
-
-
-def _partition_output_redirect_indices(
-    tokens: Sequence[str],
-    *,
-    cwd: str,
-    redirect_syntax: Sequence[bool] | None = None,
-) -> tuple[list[int], list[str], int, bool]:
-    """Core of _partition_output_redirects: which *tokens* indices are executable argv.
-
-    Shared so a caller threading a second, index-aligned parallel array (e.g.
-    ArgvToken quote provenance) can project it onto the same partitioning
-    decision without re-deriving the redirect-syntax logic independently.
-    """
-    syntax = redirect_syntax if redirect_syntax is not None else [True] * len(tokens)
-    executable_indices: list[int] = []
-    targets: list[str] = []
-    file_redirect_count = 0
-    unresolved_target = False
-    depth = 0
-    i = 0
-    while i < len(tokens):
-        token = tokens[i]
-        if token == "(" or (token.startswith("(") and len(token) > 1):
-            depth += 1
-            if token.endswith(")") and len(token) > 1:
-                depth -= 1
-            executable_indices.append(i)
-            i += 1
-            continue
-        if token == ")":
-            if depth > 0:
-                depth -= 1
-            executable_indices.append(i)
-            i += 1
-            continue
-        if token.endswith(")") and len(token) > 1:
-            if depth > 0:
-                depth -= 1
-            executable_indices.append(i)
-            i += 1
-            continue
-        if depth > 0:
-            executable_indices.append(i)
-            i += 1
-            continue
-        redirect = _consume_output_redirect(tokens, syntax, i)
-        if redirect is None:
-            executable_indices.append(i)
-            i += 1
-            continue
-        i, target, file_redirect_delta = redirect
-        file_redirect_count += file_redirect_delta
-
-        if target is not None:
-            while target and target[-1] in _TRAILING_SHELL_CLOSERS:
-                target = target[:-1]
-            resolved = resolve_write_target(target, cwd)
-            if resolved is not None:
-                targets.append(resolved)
-            else:
-                unresolved_target = True
-        elif file_redirect_delta:
-            unresolved_target = True
-    return (executable_indices, targets, file_redirect_count, unresolved_target)
-
-
-def _partition_output_redirects(
-    tokens: Sequence[str],
-    *,
-    cwd: str,
-    redirect_syntax: Sequence[bool] | None = None,
-) -> tuple[list[str], list[str], int]:
-    """Separate depth-zero output control from executable argv."""
-    executable_indices, targets, file_redirect_count, _unresolved_target = (
-        _partition_output_redirect_indices(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
-    )
-    return ([tokens[i] for i in executable_indices], targets, file_redirect_count)
-
-
-def _select_executable_argv_tokens(
-    tokens: Sequence[str],
-    argv_tokens: Sequence[ArgvToken],
-    *,
-    cwd: str,
-    redirect_syntax: Sequence[bool] | None = None,
-) -> list[ArgvToken]:
-    """Project *argv_tokens* onto the same indices _partition_output_redirects
-
-    keeps as executable argv -- for callers threading ArgvToken quote
-    provenance through the same redirect-partitioning decision that
-    _partition_output_redirects already makes from *tokens* alone.
-    """
-    executable_indices, _targets, _count, _unresolved_target = _partition_output_redirect_indices(
-        tokens, cwd=cwd, redirect_syntax=redirect_syntax
-    )
-    return [argv_tokens[i] for i in executable_indices]
-
-
-def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
-    """Extract resolved redirect target paths from already-tokenized input.
-
-    Returns resolved paths including pseudo-devices — caller filters.
-    Relative paths are resolved against cwd when provided.
-    """
-    return _partition_output_redirects(tokens, cwd=cwd)[1]
-
-
-def extract_redirect_targets_with_status(
-    tokens: list[str], cwd: str = ""
-) -> tuple[list[str], bool]:
-    """Return redirect targets and whether an output target was unresolved."""
-    _indices, targets, _count, unresolved_target = _partition_output_redirect_indices(
-        tokens, cwd=cwd
-    )
-    return targets, unresolved_target
 
 
 def extract_patch_paths(command: str) -> list[str]:
@@ -754,11 +596,26 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._interpreters import (
         live_command_text as _live_command_text_impl,
     )
+    from autoskillit.hooks._classification._output_redirect import (  # noqa: F401
+        _FD_DUPLICATION_RE,
+        _FD_REDIRECT_RE,
+        _REDIRECT_OP_ONLY_RE,
+        _REDIRECT_TOKEN_RE,
+        _SHELL_VAR_RE,
+        _TRAILING_SHELL_CLOSERS,
+        OutputRedirectPartition,
+        _partition_output_redirect_indices,
+        _partition_output_redirects,
+        _select_executable_argv_tokens,
+        extract_redirect_targets,
+        extract_redirect_targets_with_status,
+        resolve_write_target,
+    )
 else:
     if __package__:
-        from .._classification import _flags, _interpreters
+        from .._classification import _flags, _interpreters, _output_redirect
     else:
-        from _classification import _flags, _interpreters
+        from _classification import _flags, _interpreters, _output_redirect
 
     _GIT_ADD_CONTENT_FLAGS = _flags._GIT_ADD_CONTENT_FLAGS
     _GIT_DIFF_CONTENT_FLAGS = _flags._GIT_DIFF_CONTENT_FLAGS
@@ -799,6 +656,19 @@ else:
     _live_command_text_impl = _interpreters.live_command_text
     _SHELL_INVOCATION_FLAG_SPEC = _interpreters._SHELL_INVOCATION_FLAG_SPEC
     _PYTHON_INVOCATION_FLAG_SPEC = _interpreters._PYTHON_INVOCATION_FLAG_SPEC
+    OutputRedirectPartition = _output_redirect.OutputRedirectPartition
+    _FD_DUPLICATION_RE = _output_redirect._FD_DUPLICATION_RE
+    _FD_REDIRECT_RE = _output_redirect._FD_REDIRECT_RE
+    _REDIRECT_OP_ONLY_RE = _output_redirect._REDIRECT_OP_ONLY_RE
+    _REDIRECT_TOKEN_RE = _output_redirect._REDIRECT_TOKEN_RE
+    _SHELL_VAR_RE = _output_redirect._SHELL_VAR_RE
+    _TRAILING_SHELL_CLOSERS = _output_redirect._TRAILING_SHELL_CLOSERS
+    _partition_output_redirect_indices = _output_redirect._partition_output_redirect_indices
+    _partition_output_redirects = _output_redirect._partition_output_redirects
+    _select_executable_argv_tokens = _output_redirect._select_executable_argv_tokens
+    extract_redirect_targets = _output_redirect.extract_redirect_targets
+    extract_redirect_targets_with_status = _output_redirect.extract_redirect_targets_with_status
+    resolve_write_target = _output_redirect.resolve_write_target
 
 
 def all_evaluated_segments(

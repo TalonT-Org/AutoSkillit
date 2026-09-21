@@ -75,9 +75,6 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
 
-    if not enforce_session_scope("guards/skill_orchestration_guard.py"):
-        sys.exit(0)
-
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>
     # Check only the last __ segment — avoids false positives where a server

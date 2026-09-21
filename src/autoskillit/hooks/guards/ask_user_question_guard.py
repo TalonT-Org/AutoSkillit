@@ -71,9 +71,6 @@ def main() -> None:
     if tool_name != "AskUserQuestion":
         sys.exit(0)  # defensive; matcher should pre-filter
 
-    if not enforce_session_scope("guards/ask_user_question_guard.py"):
-        sys.exit(0)
-
     session_id = payload.get("session_id", "")
     if not session_id:
         sys.exit(0)  # fail-open when session_id unavailable

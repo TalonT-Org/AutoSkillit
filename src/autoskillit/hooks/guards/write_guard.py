@@ -420,13 +420,11 @@ def _interpreter_validation_error(
 
 
 def main() -> None:
+    enforce_session_scope("any")
     try:
         data: object = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         data = None
-
-    if not enforce_session_scope("guards/write_guard.py"):
-        sys.exit(0)
 
     if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         _record(data, activation="backend", scope="workspace", decision="allow", reason="codex")

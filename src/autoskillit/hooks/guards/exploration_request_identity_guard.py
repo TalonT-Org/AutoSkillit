@@ -66,8 +66,6 @@ def main() -> None:
         return
     if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         return
-    if not enforce_session_scope("guards/exploration_request_identity_guard.py"):
-        return
 
     tool_name = _short_tool_name(data.get("tool_name"))
     if tool_name is None:

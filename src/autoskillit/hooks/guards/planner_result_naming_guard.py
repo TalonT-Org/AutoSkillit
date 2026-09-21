@@ -111,9 +111,7 @@ def _invalid_planner_result_reason(file_path: str) -> str | None:
 
 
 def main() -> None:
-    if not enforce_session_scope("guards/planner_result_naming_guard.py"):
-        sys.exit(0)
-
+    enforce_session_scope("headless_only")
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):

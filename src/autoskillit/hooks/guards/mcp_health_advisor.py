@@ -94,9 +94,6 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
-    if not enforce_session_scope("guards/mcp_health_advisor.py"):
-        sys.exit(0)
-
     cwd = os.getcwd()
     entries = _read_kitchens()
 

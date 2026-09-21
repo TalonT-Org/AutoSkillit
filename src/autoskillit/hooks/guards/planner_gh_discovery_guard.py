@@ -118,9 +118,6 @@ def main() -> None:
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
 
-    if not enforce_session_scope("guards/planner_gh_discovery_guard.py"):
-        sys.exit(0)
-
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if not skill_name.startswith("planner-"):
         sys.exit(0)

@@ -42,9 +42,6 @@ def main() -> None:
         sys.stderr.write("recipe_read_guard: malformed stdin — failing open\n")
         sys.exit(0)
 
-    if not enforce_session_scope("guards/recipe_read_guard.py"):
-        sys.exit(0)
-
     tool_name: str = data.get("tool_name", "")
     tool_input: dict = data.get("tool_input", {})
 

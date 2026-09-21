@@ -52,9 +52,6 @@ def main() -> None:
     if tool_name not in ("Write", "Edit"):
         sys.exit(0)
 
-    if not enforce_session_scope("guards/recipe_write_advisor.py"):
-        sys.exit(0)
-
     file_path = data.get("tool_input", {}).get("file_path", "")
     if not isinstance(file_path, str) or not file_path:
         sys.exit(0)

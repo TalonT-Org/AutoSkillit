@@ -156,9 +156,6 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    if not enforce_session_scope("guards/skill_load_guard.py"):
-        sys.exit(0)
-
     if _is_bypassed(data):
         sys.exit(0)
 

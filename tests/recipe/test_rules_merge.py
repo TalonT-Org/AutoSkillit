@@ -1355,7 +1355,7 @@ def test_cross_site_waived_arm_is_excluded_from_parity() -> None:
     assert parity_findings(recipe_with_waiver(None)) != []
 
 
-def test_cross_site_exemption_dict_is_gone() -> None:
+def test_bundled_remediation_recipe_has_no_cross_site_parity_findings() -> None:
     """Bundled remediation recipe must have zero cross-site parity findings.
 
     The former _CROSS_SITE_SITE_PAIR_EXEMPTIONS exception table allowed the

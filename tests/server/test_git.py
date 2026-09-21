@@ -490,9 +490,23 @@ async def test_perform_merge_returns_success_on_green_tests(
 
 
 def test_merge_success_result_omits_all_diagnosis_provenance_keys() -> None:
-    from autoskillit.recipe.rules.rules_merge_context import _DIAGNOSE_OPTIONAL_RESULT_PARAMS
+    """perform_merge's success result must omit optional provenance keys.
 
-    assert _DIAGNOSE_OPTIONAL_RESULT_PARAMS == {
+    Derives the optional-key set from the smoke_utils.diagnose_merge_gate
+    callable signature (parameters whose default is None) rather than from the
+    private rule constant, so this server test stays decoupled from internal
+    recipe-rule renaming.
+    """
+    import inspect
+
+    from autoskillit.smoke_utils import diagnose_merge_gate
+
+    optional_keys = frozenset(
+        name
+        for name, param in inspect.signature(diagnose_merge_gate).parameters.items()
+        if param.default is None and param.kind != inspect.Parameter.VAR_KEYWORD
+    )
+    assert optional_keys == {
         "timed_out",
         "outer_timeout_seconds",
         "raw_output_artifact_path",

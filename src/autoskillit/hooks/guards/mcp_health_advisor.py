@@ -28,7 +28,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_settings import enforce_session_scope  # noqa: E402
+from _hook_settings import enforce_script_session_scope  # noqa: E402
 
 
 def _active_kitchens_path() -> Path:
@@ -84,7 +84,8 @@ def _pid_alive(pid: int) -> bool:
 
 
 def main() -> None:
-    enforce_session_scope("interactive_only")
+    if not enforce_script_session_scope(__file__):
+        sys.exit(0)
 
     # Validate stdin is well-formed JSON; result intentionally discarded — this
     # hook fires on every tool regardless of tool_name, so the payload content

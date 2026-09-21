@@ -75,13 +75,15 @@ def test_scoped_guard_contains_headless_check(hookdef: HookDef, script: str) -> 
     source = script_path.read_text(encoding="utf-8")
     declared_scope = getattr(hookdef, "session_scope", "any")
     # Accept any of:
-    #  - worktree's script-identity API: enforce_session_scope("guards/<name>.py")
-    #  - develop's literal-scope API: enforce_session_scope("headless_only") /
+    #  - worktree's script-identity overload: enforce_session_scope("guards/<name>.py")
+    #  - worktree's compatibility overload: enforce_script_session_scope(__file__)
+    #  - develop's literal overload: enforce_session_scope("headless_only") /
     #    enforce_session_scope("interactive_only") matching the registered scope
     #  - the legacy helper name "is_headless_session" for non-guard scripts
     accepted = [
         f'enforce_session_scope("{script}")',
         f'enforce_session_scope("{declared_scope}")',
+        "enforce_script_session_scope(__file__)",
     ]
     if not script.startswith("guards/"):
         accepted.append("is_headless_session")

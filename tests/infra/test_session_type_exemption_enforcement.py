@@ -25,7 +25,6 @@ import pytest
 # Without this side-effect import the parametrize decorator below would
 # observe an empty registry and pytest would refuse collection.
 import autoskillit.hooks  # noqa: F401  (side-effect: builds HOOK_REGISTRY)
-
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 if __package__:
-    from .._session_binding import atomic_write, binding_lock, resolve_channel_dir
+    from .._session_binding import atomic_write, binding_lock
     from ._hook_payload import normalize_payload_cwd, resolve_state_root
 else:
     from _hook_payload import (  # type: ignore[import-not-found,no-redef]
@@ -19,7 +19,6 @@ else:
     from _session_binding import (  # type: ignore[import-not-found,no-redef]
         atomic_write,
         binding_lock,
-        resolve_channel_dir,
     )
 
 _DECISION_FILE = "guard_decisions.jsonl"
@@ -49,7 +48,8 @@ _ALLOWED_REASONS = frozenset(
 def _decision_path(data: object) -> Path:
     payload = data if isinstance(data, dict) else {}
     cwd = normalize_payload_cwd(payload.get("cwd"))
-    return resolve_channel_dir(resolve_state_root(cwd)) / _DECISION_FILE
+    state_root = resolve_state_root(cwd)
+    return state_root / ".autoskillit" / "temp" / _DECISION_FILE
 
 
 def _session_id(data: object) -> str:

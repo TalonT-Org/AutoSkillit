@@ -13,7 +13,6 @@ import pytest
 # and the test collection itself fails — not any individual assertion.
 # Mirrors the established pattern in tests/execution/backends/conftest.py.
 import autoskillit.hooks  # noqa: F401  (side effect: populates HOOK_REGISTRY)
-
 from tests._test_filter import git_changed_files
 from tests.arch._deselection import deselect_arch_items
 from tests.arch._policy_gate_plumbing import TEST_BASE_KEY

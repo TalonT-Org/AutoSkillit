@@ -111,6 +111,7 @@ def test_skill_load_post_hook_records_binding_write_failure(
     )
     event = {
         "session_id": "session-2",
+        "hook_event_name": "PostToolUse",
         "tool_name": "Skill",
         "tool_input": {"skill": "autoskillit:test"},
         "cwd": str(tmp_path),

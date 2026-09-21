@@ -78,10 +78,10 @@ def test_missing_scope_table_fails_closed(
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert (
-        "scope authority is unavailable"
-        in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    )
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    # Denial reason uses render_provenance_prefix + PolicyEvent; the
+    # canonical reason_code surfaces as ``code=scope_authority_unavailable``.
+    assert "code=scope_authority_unavailable" in reason
 
 
 @pytest.mark.parametrize("scope", ["any", "headless_only", "interactive_only"])

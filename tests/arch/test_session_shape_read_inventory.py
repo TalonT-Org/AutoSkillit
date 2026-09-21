@@ -63,22 +63,53 @@ def _scope_prologue(path: Path) -> tuple[str, frozenset[str]] | None:
     main = mains[0]
     if not main.body:
         return None
+    # The hook script may consume the scope via either API shape:
+    #  - ``enforce_session_scope("headless_only")`` (develop's literal overload)
+    #  - ``enforce_script_session_scope(__file__)`` (worktree's script-identity
+    #    overload that resolves script -> scope via the generated table)
+    # The call may also be wrapped in ``if not <call>(): sys.exit(0)`` —
+    # descend into the If's test expression to find it. Recognize either by
+    # parsing the first statement; if it's a Call whose function name matches
+    # either helper, unwrap the relevant literal args.
     first_statement = main.body[0]
-    if not isinstance(first_statement, ast.Expr) or not isinstance(
-        first_statement.value, ast.Call
-    ):
+    if isinstance(first_statement, ast.If) and first_statement.test:
+        unwrapped = first_statement.test
+    elif isinstance(first_statement, ast.Expr):
+        unwrapped = first_statement.value
+    else:
         return None
-    call = first_statement.value
-    if not isinstance(call.func, ast.Name) or call.func.id != "enforce_session_scope":
+    # Guard may also wrap the call in ``not <call>()`` — descend through Not.
+    if isinstance(unwrapped, ast.UnaryOp) and isinstance(unwrapped.op, ast.Not):
+        unwrapped = unwrapped.operand
+    if not isinstance(unwrapped, ast.Call) or not isinstance(unwrapped.func, ast.Name):
         return None
-    assert len(call.args) == 1 and not any(
-        keyword.arg not in {"exempt_tiers"} for keyword in call.keywords
-    ), f"{path}: enforce_session_scope arguments must be literal scope declarations"
-    scope = call.args[0]
+    call = unwrapped
+    if call.func.id not in {
+        "enforce_session_scope",
+        "enforce_script_session_scope",
+    }:
+        return None
+    if call.func.id == "enforce_session_scope":
+        assert len(call.args) == 1 and not any(
+            keyword.arg not in {"exempt_tiers"} for keyword in call.keywords
+        ), f"{path}: enforce_session_scope arguments must be literal scope declarations"
+        scope = call.args[0]
+        exempt_keywords = [
+            keyword for keyword in call.keywords if keyword.arg == "exempt_tiers"
+        ]
+    else:
+        # enforce_script_session_scope(__file__) — no literal scope string;
+        # the caller asserts the call exists, scope is implied by __file__ +
+        # the registry mapping.
+        assert (
+            len(call.args) == 1
+            and not call.keywords
+        ), f"{path}: enforce_script_session_scope needs a single __file__ arg"
+        scope = ast.Constant(value="<identity>")
+        exempt_keywords = []
     assert isinstance(scope, ast.Constant) and isinstance(scope.value, str), (
         f"{path}: session scope must be a string literal"
     )
-    exempt_keywords = [keyword for keyword in call.keywords if keyword.arg == "exempt_tiers"]
     assert len(exempt_keywords) <= 1, f"{path}: duplicate exempt_tiers declaration"
     exempt_tiers = (
         frozenset() if not exempt_keywords else _literal_exempt_tiers(exempt_keywords[0].value)
@@ -106,15 +137,19 @@ def test_script_scope_prologue_matches_registry() -> None:
             )
             assert not requires_prologue or prologue is not None, (
                 f"{script} has a non-default HookDef scope but main() does not begin with "
-                "enforce_session_scope(...)"
+                "enforce_session_scope(...) or enforce_script_session_scope(__file__)"
             )
             assert len(declarations) == 1, (
                 f"{script} is listed by HookDefs with incompatible scope declarations: "
                 f"{sorted(map(repr, declarations))}"
             )
-            assert prologue is None or prologue == next(iter(declarations)), (
-                f"{script} registry declaration {next(iter(declarations))!r} does not match "
-                f"its main() scope prologue {prologue!r}"
+            acceptable = (
+                prologue is None
+                or prologue == next(iter(declarations))
+                or prologue[0] == "<identity>"
+            )
+            assert acceptable, (
+                f"{script} decl {next(iter(declarations))!r} != prologue {prologue!r}"
             )
 
     known_scripts = {script for script, _path in _hook_scripts()}

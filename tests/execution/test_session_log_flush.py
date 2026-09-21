@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -680,6 +681,17 @@ def test_resolve_log_dir_explicit_override():
     """Explicit log_dir is used as-is."""
     result = resolve_log_dir("/custom/path")
     assert result == Path("/custom/path")
+
+
+@pytest.mark.parametrize("log_dir", [None, 0, b"", object(), MagicMock()])
+def test_resolve_log_dir_rejects_invalid_roots_before_coercion(log_dir: object):
+    with pytest.raises(TypeError, match="log_dir must be a str or Path"):
+        resolve_log_dir(log_dir)  # type: ignore[arg-type]
+
+
+def test_resolve_log_dir_accepts_path_and_tilde_string():
+    assert resolve_log_dir(Path("/custom/path")) == Path("/custom/path")
+    assert resolve_log_dir("~/logs") == Path("~/logs").expanduser()
 
 
 def test_proc_trace_timestamps_are_per_snapshot_not_session_start(tmp_path):

@@ -195,13 +195,15 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         original_config.replace("join_stop_guard", "removed_join_stop_guard"),
         encoding="utf-8",
     )
-    assert (
-        DefaultManagedJoinAttestationAuthority(
-            record_store=record_store, backend=backend
-        ).find_verified_context(backend="codex", parent_session_id="abc123")
-        is None
-    )
-    config_path.write_text(original_config, encoding="utf-8")
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        config_path.write_text(original_config, encoding="utf-8")
 
     edited = json.loads(original_record)
     edited["attestation"]["hook_registry_digest"] = "0" * 64

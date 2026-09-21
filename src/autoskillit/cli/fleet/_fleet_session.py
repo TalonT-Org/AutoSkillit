@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -134,9 +135,7 @@ def _fleet_session_launcher(
     projection_load_mode = (
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
-    from autoskillit.core import new_managed_launch_id
-
-    launch_id = new_managed_launch_id()
+    launch_id = uuid.uuid4().hex[:16]
     with plugin_launch_binding_scope(
         authority=authority,
         backend=backend,

@@ -528,7 +528,7 @@ def _record_module_collection_reads(
         members_upper = bool(members) and len(upper_members) == len(members)
         constants_export = target == "__all__" and rel == "core/types/_type_constants_env.py"
         relevant_members = upper_members if constants_export else members
-        if name_matches or members_upper or (constants_export and upper_members):
+        if name_matches or (constants_export and upper_members) or members_upper:
             for member in relevant_members:
                 reads.append(EnvRead(var=member, file=rel, line=value.lineno, rule="R4"))
 

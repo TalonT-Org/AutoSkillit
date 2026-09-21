@@ -56,6 +56,7 @@ class TestBackendRegistry:
             "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
             "MANAGED_CODEX_LEAF_GUARD_SET",
             "MANAGED_CODEX_PARENT_GUARD_SET",
+            "MANAGED_CODEX_ROUTE_NAMES",
             "managed_codex_guard_set",
             "managed_codex_route_digest",
             "managed_codex_route_for_launch_context",

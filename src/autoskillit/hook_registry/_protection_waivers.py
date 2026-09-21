@@ -96,74 +96,69 @@ _PROTECTION_BACKENDS: tuple[Literal["claude_code", "codex"], ...] = (
     "codex",
 )
 
-PROTECTION_WAIVERS: tuple[ProtectionWaiverDef, ...] = tuple(
-    ProtectionWaiverDef(
-        guard_script=script,
-        excluded_scope=scope,
-        backend=backend,
-        risk=risk,
-        covering_mechanism=mechanism,
-        justification=reason,
-        covering_guard_script=delegate,
+PROTECTION_WAIVERS: tuple[ProtectionWaiverDef, ...] = (
+    tuple(
+        ProtectionWaiverDef(
+            guard_script=script,
+            excluded_scope=scope,
+            backend=backend,
+            risk=risk,
+            covering_mechanism=mechanism,
+            justification=reason,
+            covering_guard_script=delegate,
+        )
+        for script, scope, risk, reason, mechanism, delegate in _SCOPED_POLICY_EXCLUSIONS
+        for backend in _PROTECTION_BACKENDS
     )
-    for script, scope, risk, reason, mechanism, delegate in _SCOPED_POLICY_EXCLUSIONS
-    for backend in _PROTECTION_BACKENDS
-) + (
-    ProtectionWaiverDef(
-        guard_script="guards/background_exec_guard.py",
-        excluded_scope="interactive",
-        backend="codex",
-        risk="managed-route scope exclusion",
-        covering_mechanism="not-applicable",
-        justification="Managed Codex parent and leaf routes are headless sessions only.",
-    ),
-    ProtectionWaiverDef(
-        guard_script="guards/join_followup_guard.py",
-        excluded_scope="interactive",
-        backend="codex",
-        risk="managed-route scope exclusion",
-        covering_mechanism="not-applicable",
-        justification="Join follow-up applies only to managed headless parents.",
-    ),
-    ProtectionWaiverDef(
-        guard_script="guards/join_stop_guard.py",
-        excluded_scope="interactive",
-        backend="codex",
-        risk="managed-route scope exclusion",
-        covering_mechanism="not-applicable",
-        justification="Join stop applies only to managed headless parents.",
-    ),
-    ProtectionWaiverDef(
-        guard_script="guards/write_guard.py",
-        excluded_scope="all",
-        backend="codex",
-        risk="write-prefix guard bypasses Codex",
-        covering_mechanism="codex-sandbox",
-        justification=(
-            "Codex workspace-write and file_changes enforce session writes; "
-            "the installation guard still runs."
+    + (
+        ProtectionWaiverDef(
+            guard_script="guards/background_exec_guard.py",
+            excluded_scope="interactive",
+            backend="codex",
+            risk="managed-route scope exclusion",
+            covering_mechanism="not-applicable",
+            justification="Managed Codex parent and leaf routes are headless sessions only.",
         ),
-    ),
-    ProtectionWaiverDef(
-        guard_script="guards/git_ops_guard.py",
-        excluded_scope="interactive",
-        backend="claude_code",
-        risk="headless destructive-git policy branch is inactive",
-        covering_mechanism="not-applicable",
-        justification=(
-            "Interactive users may choose these Git operations; "
-            "the all-session ref preflight remains active."
+        ProtectionWaiverDef(
+            guard_script="guards/join_followup_guard.py",
+            excluded_scope="interactive",
+            backend="codex",
+            risk="managed-route scope exclusion",
+            covering_mechanism="not-applicable",
+            justification="Join follow-up applies only to managed headless parents.",
         ),
-    ),
-    ProtectionWaiverDef(
-        guard_script="guards/git_ops_guard.py",
-        excluded_scope="interactive",
-        backend="codex",
-        risk="headless destructive-git policy branch is inactive",
-        covering_mechanism="not-applicable",
-        justification=(
-            "Interactive users may choose these Git operations; "
-            "the all-session ref preflight remains active."
+        ProtectionWaiverDef(
+            guard_script="guards/join_stop_guard.py",
+            excluded_scope="interactive",
+            backend="codex",
+            risk="managed-route scope exclusion",
+            covering_mechanism="not-applicable",
+            justification="Join stop applies only to managed headless parents.",
         ),
-    ),
+        ProtectionWaiverDef(
+            guard_script="guards/write_guard.py",
+            excluded_scope="all",
+            backend="codex",
+            risk="write-prefix guard bypasses Codex",
+            covering_mechanism="codex-sandbox",
+            justification=(
+                "Codex workspace-write and file_changes enforce session writes; "
+                "the installation guard still runs."
+            ),
+        ),
+    )
+    + tuple(
+        ProtectionWaiverDef(
+            guard_script="guards/git_ops_guard.py",
+            excluded_scope="interactive",
+            backend=backend,
+            risk="headless destructive-git policy branch is inactive",
+            covering_mechanism="not-applicable",
+            justification=(
+                "Interactive users may choose these Git operations; "
+                "the all-session ref preflight remains active."
+            ),
+        )
+        for backend in _PROTECTION_BACKENDS
+    )
 )

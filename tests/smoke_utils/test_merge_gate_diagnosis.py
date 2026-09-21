@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,26 @@ def test_diagnose_merge_gate_structured_outer_timeout_wins_over_pytest_output(
     assert "failure_subtype = outer_timeout" in content
     assert "outer_timeout_seconds = 900.0" in content
     assert f"raw_output_artifact_path = {artifact_path}" in content
+
+
+def test_diagnose_merge_gate_ignores_timeout_provenance_when_not_timed_out(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    result = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_example.py::test_gate - AssertionError",
+        test_stderr="",
+        output_dir=str(tmp_path),
+        failed_step="test_gate",
+        timed_out=False,
+        outer_timeout_seconds=300.0,
+        raw_output_artifact_path="/stale/raw.json",
+    )
+    content = Path(result["diagnosis_path"]).read_text()
+    assert "failure_subtype = outer_timeout" not in content
+    assert "outer_timeout_seconds" not in content
+    assert "raw_output_artifact_path" not in content
 
 
 @pytest.mark.parametrize(
@@ -207,3 +228,25 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
     with pytest.raises(ValueError, match="output_dir must be absolute"):
         diagnose_merge_gate(test_stdout="FAILED test_foo", test_stderr="")
+
+
+def test_diagnosis_result_params_match_callable_signature() -> None:
+    from autoskillit.core import load_yaml, pkg_root
+    from autoskillit.recipe.rules.rules_merge_context import _DIAGNOSE_RESULT_PARAMS
+    from autoskillit.smoke_utils import diagnose_merge_gate
+
+    signature = inspect.signature(diagnose_merge_gate)
+    callable_fields = tuple(
+        name
+        for name, param in signature.parameters.items()
+        if name != "output_dir" and param.kind != inspect.Parameter.VAR_KEYWORD
+    )
+    contracts = load_yaml((pkg_root() / "recipe" / "skill_contracts.yaml").read_text())
+    contract_fields = tuple(
+        item["name"]
+        for item in contracts["callable_contracts"]["autoskillit.smoke_utils.diagnose_merge_gate"][
+            "inputs"
+        ]
+        if item["name"] != "output_dir"
+    )
+    assert _DIAGNOSE_RESULT_PARAMS == callable_fields == contract_fields

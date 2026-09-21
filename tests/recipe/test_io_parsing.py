@@ -376,6 +376,52 @@ class TestRecipeParser:
         assert step.on_result.conditions[2].when is None
         assert step.on_result.conditions[2].route == "push"
 
+    def test_on_result_condition_parses_recovery_waiver(self, tmp_path: Path) -> None:
+        data = {
+            "name": "waiver-recipe",
+            "description": "Conditional recovery waiver",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "on_result": [
+                        {
+                            "when": "result.failed_step == 'rebase'",
+                            "route": "done",
+                            "recovery_waiver": "worktree retained for review",
+                        },
+                        {"route": "done"},
+                    ],
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        recipe = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+        on_result = recipe.steps["merge"].on_result
+        assert on_result is not None
+        conditions = on_result.conditions
+        assert conditions[0].recovery_waiver == "worktree retained for review"
+        assert conditions[1].recovery_waiver is None
+
+    @pytest.mark.parametrize("invalid_waiver", ["", True])
+    def test_on_result_condition_rejects_blank_or_non_string_recovery_waiver(
+        self, tmp_path: Path, invalid_waiver: object
+    ) -> None:
+        data = {
+            "name": "bad-waiver",
+            "description": "Invalid recovery waiver",
+            "kitchen_rules": ["test"],
+            "steps": {
+                "merge": {
+                    "tool": "merge_worktree",
+                    "on_result": [{"route": "done", "recovery_waiver": invalid_waiver}],
+                },
+                "done": {"action": "stop", "message": "Done."},
+            },
+        }
+        with pytest.raises(ValueError, match=r"on_result\[0\]\.recovery_waiver"):
+            load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
+
     def test_on_result_list_without_when_is_default_condition(self, tmp_path: Path) -> None:
         """A list entry with only route (no when key) parses as when=None (default)."""
         data = {

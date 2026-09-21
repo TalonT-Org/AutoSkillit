@@ -1,9 +1,17 @@
 """Structural tests for remediation.yaml recipe."""
 
+import re
 from pathlib import Path
 
 import pytest
 
+from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._analysis_bfs import (
+    _build_success_step_graph,
+    all_paths_cross,
+    bfs_reachable,
+    bfs_reachable_without_barrier,
+)
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.validator import validate_recipe_structure
 from tests.recipe.test_implementation import _assert_delivery_projection_contract
@@ -14,7 +22,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:61943fade3eda0457c3cf7cd84fedfa43dc917f4565f5c8a1a92e56ba1e07e04"
+    "sha256:2c1ed9c73e0508a78416c1138ca97ef5c3ff6e2ff3077deb5c38a005d04d5df7"
 )
 
 
@@ -105,6 +113,172 @@ def test_pre_remediation_merge_routes_path_validation_to_remediate(recipe) -> No
         "release_issue_failure"
     )
     assert pv_routes[0] == "remediate"
+
+
+def _routes(step):
+    assert step.on_result is not None
+    return {condition.when: condition for condition in step.on_result.conditions}
+
+
+_FAILED_STEP_NAME_RE = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
+
+
+def _failed_step_name(when: str) -> str:
+    """Extract the failed_step identifier from a `result.failed_step == '<name>'` clause."""
+    match = _FAILED_STEP_NAME_RE.search(when)
+    assert match is not None, f"when clause missing failed_step: {when!r}"
+    return match.group(1)
+
+
+def _early_recovery_steps(recipe):
+    return bfs_reachable_without_barrier(
+        recipe,
+        "check_merge_fix_loop_pre_remediation",
+        frozenset({"pre_remediation_merge", "release_issue_failure"}),
+    )
+
+
+def test_pre_remediation_merge_routes_both_test_gates_to_bounded_recovery(recipe) -> None:
+    routes = _routes(recipe.steps["pre_remediation_merge"])
+    for failed_step in ("test_gate", "post_rebase_test_gate"):
+        assert routes[f"result.failed_step == '{failed_step}'"].route == (
+            "check_merge_fix_loop_pre_remediation"
+        )
+
+    guard = recipe.steps["check_merge_fix_loop_pre_remediation"]
+    assert guard.tool == "run_python"
+    assert guard.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+    guard_routes = _routes(guard)
+    assert next(c.route for c in guard_routes.values() if c.when and "max_exceeded" in c.when) == (
+        "release_issue_failure"
+    )
+    assert guard_routes[None].route == "diagnose_merge_gate_pre_remediation"
+
+    reached = _early_recovery_steps(recipe)
+    assert any(
+        recipe.steps[name].tool == "run_skill"
+        and "resolve-failures" in recipe.steps[name].with_args.get("skill_command", "")
+        for name in reached
+    )
+    assert any(recipe.steps[name].tool == "test_check" for name in reached)
+    assert not reached.intersection(
+        {
+            "implement",
+            "retry_worktree",
+            "remediate",
+            "merge",
+            "check_merge_fix_loop",
+            "diagnose_merge_gate",
+            "merge_gate_assess",
+            "merge_gate_test",
+            "check_test_fix_loop",
+            "assess",
+            "test",
+            "audit_impl",
+        }
+    )
+
+
+def test_pre_remediation_recovery_returns_to_same_merge_site_with_same_refs(recipe) -> None:
+    assert recipe.steps["merge_gate_test_pre_remediation"].on_success == (
+        "commit_guard_pre_remediation"
+    )
+    assert _routes(recipe.steps["commit_guard_pre_remediation"])[None].route == (
+        "pre_remediation_merge"
+    )
+    merge = recipe.steps["pre_remediation_merge"]
+    assert merge.with_args["worktree_path"] == "${{ context.implementation_ref }}"
+    assert merge.with_args["base_branch"] == "${{ context.merge_target }}"
+    assert merge.capture["implementation_ref"].from_ == "${{ result.worktree_path }}"
+    for name in (_early_recovery_steps(recipe) - {"pre_remediation_merge"}) | {
+        "commit_guard_pre_remediation"
+    }:
+        assert not set(recipe.steps[name].capture).intersection(
+            {"implementation_ref", "merge_target", "worktree_path"}
+        )
+    assess = recipe.steps["merge_gate_assess_pre_remediation"]
+    assert assess.with_args["skill_inputs"]["worktree_path"] == (
+        "${{ context.implementation_ref }}"
+    )
+    assert assess.with_args["cwd"] == "${{ context.implementation_ref }}"
+    assert recipe.steps["merge_gate_test_pre_remediation"].with_args["worktree_path"] == (
+        "${{ context.implementation_ref }}"
+    )
+    assert {name for name, step in recipe.steps.items() if "merge_target" in step.capture} == {
+        "clone",
+        "create_and_publish",
+    }
+
+
+def test_early_and_late_merge_gate_continuations_are_independent(recipe) -> None:
+    late = recipe.steps["merge_gate_test"]
+    assert late.on_success == "audit_impl"
+    assert late.on_failure == "check_merge_test_fix_loop"
+    assert recipe.steps["merge_gate_test_pre_remediation"].on_failure == (
+        "check_merge_fix_loop_pre_remediation"
+    )
+    assert "merge_gate_test" not in _early_recovery_steps(recipe)
+
+
+def test_pre_remediation_test_gate_contention_stays_terminal(recipe) -> None:
+    assert (
+        _routes(recipe.steps["pre_remediation_merge"])[
+            "result.failed_step == 'test_gate_contention'"
+        ].route
+        == "release_issue_failure"
+    )
+    assert "check_merge_fix_loop_pre_remediation" not in bfs_reachable(
+        make_validation_context(recipe).step_graph, "release_issue_failure"
+    )
+
+
+def test_pre_remediation_merge_fix_budget_is_reset_per_audit_cycle_only(recipe) -> None:
+    guard = recipe.steps["check_merge_fix_loop_pre_remediation"]
+    assert guard.with_args["current_iteration"] == (
+        "${{ context.pre_remediation_merge_fix_count }}"
+    )
+    assert guard.with_args["max_iterations"] == "${{ inputs.merge_fix_max_retries }}"
+    assert "pre_remediation_merge_fix_count" in guard.capture
+    reset = recipe.steps["reset_pre_remediation_merge_fix_counter"]
+    assert reset.tool == "run_python"
+    assert reset.with_args["callable"] == "autoskillit.smoke_utils.init_counter"
+    assert "pre_remediation_merge_fix_count" in reset.capture
+    assert all_paths_cross(
+        _build_success_step_graph(recipe),
+        "merge_audit_cycle_path",
+        "reset_pre_remediation_merge_fix_counter",
+        "check_merge_fix_loop_pre_remediation",
+    )
+    assert {
+        name
+        for name in _early_recovery_steps(recipe)
+        if "pre_remediation_merge_fix_count" in recipe.steps[name].capture
+    } == {"check_merge_fix_loop_pre_remediation"}
+
+
+def test_pre_remediation_merge_exhaustion_preserves_worktree(recipe) -> None:
+    guard = recipe.steps["check_merge_fix_loop_pre_remediation"]
+    assert next(
+        c.route for c in _routes(guard).values() if c.when and "max_exceeded" in c.when
+    ) == ("release_issue_failure")
+    reached = bfs_reachable(make_validation_context(recipe).step_graph, "release_issue_failure")
+    assert all(
+        recipe.steps[name].tool not in {"merge_worktree", "remove_clone", "reset_workspace"}
+        for name in reached
+    )
+
+
+def test_remediation_pre_remediation_waivers_are_exactly_declared(recipe) -> None:
+    early = _routes(recipe.steps["pre_remediation_merge"])
+    waived = {
+        _failed_step_name(when)
+        for when, condition in early.items()
+        if when and condition.recovery_waiver
+    }
+    assert waived == {"test_gate_contention", "rebase", "dirty_tree"}
+    assert all(c.recovery_waiver is None for c in _routes(recipe.steps["merge"]).values())
+    for failed_step in ("test_gate", "post_rebase_test_gate"):
+        assert early[f"result.failed_step == '{failed_step}'"].recovery_waiver is None
 
 
 # T_REM_LOOP3

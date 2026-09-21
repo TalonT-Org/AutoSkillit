@@ -12,10 +12,37 @@ import pytest
 
 import autoskillit.recipe.api._api as recipe_api
 import autoskillit.recipe.api_orchestration._api_orchestration as orch
-from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step, _merge_sub_recipe
-from autoskillit.recipe.schema import Recipe, RecipeStep
+from autoskillit.recipe._recipe_composition import (
+    _drop_sub_recipe_step,
+    _merge_sub_recipe,
+    _rewrite_step_routes,
+)
+from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+def test_route_rewrite_preserves_recovery_waiver() -> None:
+    step = RecipeStep(
+        tool="merge_worktree",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(
+                    when="result.failed_step == 'rebase'",
+                    route="old",
+                    recovery_waiver="operator review",
+                ),
+                StepResultCondition(when=None, route="old"),
+            ]
+        ),
+    )
+    rewritten = _rewrite_step_routes(step, {"old": "new"})
+    assert rewritten.on_result is not None
+    assert [condition.route for condition in rewritten.on_result.conditions] == ["new", "new"]
+    assert [condition.recovery_waiver for condition in rewritten.on_result.conditions] == [
+        "operator review",
+        None,
+    ]
 
 
 def _write_project_recipe(project_dir: Path, name: str, content: str) -> None:

@@ -354,7 +354,11 @@ def _rewrite_step_routes(step: RecipeStep, redirects: dict[str, str]) -> RecipeS
         if result_route.conditions:
             result_route = StepResultRoute(
                 conditions=[
-                    StepResultCondition(when=condition.when, route=rewrite(condition.route) or "")
+                    StepResultCondition(
+                        when=condition.when,
+                        route=rewrite(condition.route) or "",
+                        recovery_waiver=condition.recovery_waiver,
+                    )
                     for condition in result_route.conditions
                 ]
             )

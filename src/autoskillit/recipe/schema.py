@@ -82,10 +82,14 @@ class StepResultCondition:
 
     when=None means the default/else condition (no guard — always matches).
     Conditions are evaluated in declaration order; first match wins.
+    recovery_waiver explains an intentional exception to the merge failure's
+    required recovery class; a waiver is rejected when that recovery is reached
+    before the next merge site and excludes the arm from cross-site comparison.
     """
 
     route: str
     when: str | None = None
+    recovery_waiver: str | None = None
 
 
 @dataclass

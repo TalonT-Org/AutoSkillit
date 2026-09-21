@@ -23,6 +23,7 @@ from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+from tests.conftest import production_interpreter_env
 from tests.fakes import InMemoryRecipeRepository
 from tests.fleet.test_fleet_e2e import FleetTestRunner
 
@@ -194,11 +195,12 @@ def _add_recipe(recipes: InMemoryRecipeRepository, name: str) -> None:
 
 
 def _server_env_from_generated_home(generated_home: Path) -> dict[str, str]:
+    agent_env = production_interpreter_env()
     with (generated_home / "config.toml").open("rb") as config_file:
         config = tomllib.load(config_file)
     env_vars = config["mcp_servers"]["autoskillit"]["env_vars"]
-    return {key: os.environ[key] for key in _MCP_SERVER_BASE_ENV_VARS if key in os.environ} | {
-        key: os.environ[key] for key in env_vars if key in os.environ
+    return {key: agent_env[key] for key in _MCP_SERVER_BASE_ENV_VARS if key in agent_env} | {
+        key: agent_env[key] for key in env_vars if key in agent_env
     }
 
 
@@ -210,6 +212,7 @@ class TestCodexMcpDispatchIdentityE2E:
         _write_project_config(tmp_path)
         tool_ctx = make_tool_ctx(config=load_config(tmp_path))
         tool_ctx.gate = DefaultGateState(enabled=True)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
         shim_dir = tmp_path / "bin"
         _write_codex_mcp_boundary_shim(shim_dir)

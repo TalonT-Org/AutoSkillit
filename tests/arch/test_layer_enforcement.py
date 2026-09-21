@@ -1946,6 +1946,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     # recipe tests — recipe layer is IL-2 and may use workspace (IL-1 sibling) or config (IL-1)
     "tests/recipe/test_rules_inputs.py": frozenset({"autoskillit.config"}),
+    # Binding an implementation recipe crosses the config-authority layer.
+    "tests/recipe/test_dispatch_identity_binding.py": frozenset({"autoskillit.config"}),
     "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_skill_capability_cache_integration.py": frozenset(
         {"autoskillit.workspace"}
@@ -1964,6 +1966,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fleet/test_fleet_e2e_codex.py": frozenset(
         {"autoskillit.execution", "autoskillit.workspace"}
     ),
+    # Codex MCP boundary coverage launches a real headless execution backend.
+    "tests/fleet/test_fleet_e2e_codex_dispatch_identity.py": frozenset({"autoskillit.execution"}),
     # session_log retention tests verify campaign protection in the writer
     # transaction — needs fleet.state
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),

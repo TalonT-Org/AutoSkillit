@@ -135,7 +135,8 @@ def test_missing_version_is_integrity_failure_before_update_resolution(
     _update_checks.run_update_checks(home=tmp_path)
 
     rendered = capsys.readouterr().out
-    assert "integrity failure" in rendered.lower()
+    assert "Installation integrity failure" in rendered
+    assert "Run `autoskillit install`" in rendered
     assert not calls
 
 
@@ -164,5 +165,7 @@ def test_doctor_missing_version_is_integrity_failure_before_network_resolution(
     result = _check_source_version_drift(home=tmp_path)
 
     assert result.severity is Severity.ERROR
-    assert "integrity failure" in result.message.lower()
+    assert result.check == "source_version_drift"
+    assert "Installation integrity failure" in result.message
+    assert "Run `autoskillit install`" in result.message
     assert not calls

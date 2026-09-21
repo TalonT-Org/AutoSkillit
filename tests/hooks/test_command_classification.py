@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import shlex
@@ -19,6 +20,7 @@ from autoskillit.hooks._runtime._command_classification import (
     _PYTHON_INVOCATION_FLAG_SPEC,
     _SHELL_INVOCATION_FLAG_SPEC,
     PROTECTED_SOURCE_PATH_PATTERNS,
+    OutputRedirectPartition,
     StdinConsumer,
     _FlagArity,
     all_evaluated_segments,
@@ -1365,6 +1367,138 @@ class TestExtractRedirectTargetsCwd:
         from autoskillit.hooks._runtime._command_classification import extract_redirect_targets
 
         assert extract_redirect_targets(tokens, cwd) == expected
+
+
+class TestOutputRedirectPartition:
+    def test_partition_indices_returns_dataclass_with_expected_fields(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            _partition_output_redirect_indices,
+        )
+
+        result = _partition_output_redirect_indices(["cmd", ">/tmp/out"], cwd="/work")
+
+        assert isinstance(result, OutputRedirectPartition)
+        # Attribute access by field name (the dataclass's contract).
+        assert result.segments == [0]
+        assert result.targets == ["/tmp/out"]
+        assert result.file_redirect_count == 1
+        assert result.unresolved is False
+        # Frozen + replace: identity comparison is preserved across a non-mutating replace.
+        replaced = dataclasses.replace(result, segments=[0])
+        assert replaced is not result
+        assert replaced == result
+
+    def test_partition_indices_unresolved_for_dynamic_shell_var_target(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            _partition_output_redirect_indices,
+        )
+
+        # `>$OUT` cannot be resolved: `resolve_write_target("$OUT", "/work")` returns
+        # None after `os.path.expandvars` finds the env var unset, so the partition
+        # exposes this as `unresolved=True` and `targets=[]`.
+        result = _partition_output_redirect_indices(["cmd", ">$OUT"], cwd="/work")
+
+        assert result.unresolved is True
+        assert result.targets == []
+        assert result.file_redirect_count == 1
+
+    def test_partition_indices_unresolved_for_redirect_op_only_with_target(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            _partition_output_redirect_indices,
+        )
+
+        # Bare op-only redirect with no following token: `_REDIRECT_OP_ONLY_RE`
+        # matches `>`, the inner guard finds no next token, so `_consume_output_redirect`
+        # returns `(next_index, None, 1)` — the caller flips `unresolved_target = True`
+        # via the `elif file_redirect_delta:` branch.
+        result = _partition_output_redirect_indices(["cmd", ">"], cwd="/work")
+
+        assert result.unresolved is True
+        assert result.targets == []
+        assert result.file_redirect_count == 1
+
+    def test_partition_redirects_external_signature_unchanged(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            _partition_output_redirects,
+        )
+
+        # The public return shape is still a 3-tuple
+        # `(executable_tokens, targets, file_redirect_count)` — the dataclass
+        # migration is invisible to existing callers.
+        result = _partition_output_redirects(["cmd", ">/tmp/out"], cwd="/work")
+
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        executable_tokens, targets, file_redirect_count = result
+        assert executable_tokens == ["cmd"]
+        assert targets == ["/tmp/out"]
+        assert file_redirect_count == 1
+
+    def test_select_executable_argv_tokens_uses_dataclass(self) -> None:
+        from autoskillit.hooks._classification._tokenizer import ArgvToken
+        from autoskillit.hooks._runtime._command_classification import (
+            _select_executable_argv_tokens,
+        )
+
+        tokens = ["cmd", ">/tmp/out"]
+        argv_tokens = [ArgvToken(text=t, fully_single_quoted=False, raw_span=t) for t in tokens]
+        result = _select_executable_argv_tokens(tokens, argv_tokens, cwd="/work")
+
+        # The redirect target is dropped from the projected argv even though
+        # `_select_executable_argv_tokens` only consumes `partition.segments`.
+        assert [t.text for t in result] == ["cmd"]
+
+    def test_output_redirect_partition_is_frozen(self) -> None:
+        partition = OutputRedirectPartition(
+            segments=[0], targets=["/tmp/out"], file_redirect_count=1, unresolved=False
+        )
+
+        # Frozen: any field assignment raises.
+        with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
+            partition.segments = [99]  # type: ignore[misc]
+
+        # slots=True is verified by deriving `__slots__` from the dataclass's
+        # fields — Python's docs explicitly warn that `__slots__` is not the
+        # source of truth for field names, so deriving the expected tuple
+        # catches both a future rename and a future removal of `slots=True`.
+        expected = tuple(f.name for f in dataclasses.fields(OutputRedirectPartition))
+        assert OutputRedirectPartition.__slots__ == expected
+        # And no instance __dict__ — the per-instance dict cost that motivated
+        # freezing is the second half of the frozen+slots contract.
+        assert not hasattr(
+            OutputRedirectPartition(
+                segments=[], targets=[], file_redirect_count=0, unresolved=False
+            ),
+            "__dict__",
+        )
+
+    def test_extract_redirect_targets_with_status_uses_dataclass(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_redirect_targets_with_status,
+        )
+
+        # Resolved-target branch: `>/tmp/out` resolves cleanly.
+        assert extract_redirect_targets_with_status(["cmd", ">/tmp/out"], cwd="/work") == (
+            ["/tmp/out"],
+            False,
+        )
+        # Unresolved-target branch: `>$OUT` cannot resolve; empty targets,
+        # `unresolved=True` propagates through the shim.
+        assert extract_redirect_targets_with_status(["cmd", ">$OUT"], cwd="/work") == (
+            [],
+            True,
+        )
+
+    def test_partition_indices_empty_input(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            _partition_output_redirect_indices,
+        )
+
+        result = _partition_output_redirect_indices([], cwd="/work")
+
+        assert result == OutputRedirectPartition(
+            segments=[], targets=[], file_redirect_count=0, unresolved=False
+        )
 
 
 @pytest.mark.parametrize(

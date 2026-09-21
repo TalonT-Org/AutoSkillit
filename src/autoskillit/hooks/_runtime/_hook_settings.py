@@ -580,88 +580,6 @@ def admit_hook_session_scope(
     return tier not in exempt_tiers
 
 
-def _deny_scope_authority_unavailable(script_identity: str) -> None:
-    from _policy_event import PolicyEvent, render_provenance_prefix
-
-    reason = render_provenance_prefix(
-        PolicyEvent(
-            hook_id="session-scope-authority",
-            hook_version=1,
-            event="PreToolUse",
-            decision="deny",
-            reason_code="scope_authority_unavailable",
-            source=script_identity,
-        )
-    )
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.stdout.flush()
-
-
-def enforce_script_session_scope(script_identity: str) -> bool:
-    """Return whether a registered PreToolUse guard applies to this session.
-
-    A missing, unreadable, malformed, or incomplete generated table denies the
-    tool call before returning ``False``. A normal scope mismatch returns
-    ``False`` so the caller can sys.exit(0). Resolves the script's declared
-    scope from the generated ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` table
-    and compares it against the runtime session class.
-
-    Accepts either a relative path (``guards/ask_user_question_guard.py`` —
-    the canonical key in ``HOOK_SCOPE_BY_SCRIPT``) or an absolute path
-    (``__file__`` when the guard subprocess calls us directly). Absolute
-    paths are translated to the hooks-relative key before lookup so the
-    same call site works in both in-process and subprocess contexts.
-
-    Coexists with develop's canonical :func:`enforce_session_scope` literal
-    overload (a different signature that emits SystemExit on scope mismatch
-    and is the surface declared in ``HookDef.session_scope``). This
-    script-identity form is the runtime surface consulted by the worktree's
-    session-scope authority machinery; PR #5103's literal overload covers
-    the ``HookDef.session_scope == "headless_only"`` path tested by
-    :func:`tests.hooks.test_session_scope_enforcement` and is unchanged here.
-    """
-    key = script_identity
-    try:
-        script_path = Path(script_identity)
-        if script_path.is_absolute():
-            try:
-                hooks_dir = Path(__file__).resolve().parent.parent  # .../hooks/
-                key = script_path.relative_to(hooks_dir).as_posix()
-            except ValueError:
-                # Script lives outside the hooks tree — preserve identity
-                # so the KeyError surfaces in the diagnostic.
-                key = script_identity
-        table_module_name = (
-            f"{__package__}._hook_scope_table" if __package__ else "_hook_scope_table"
-        )
-        table_module = importlib.import_module(table_module_name)
-        scope = table_module.HOOK_SCOPE_BY_SCRIPT[key]
-        if scope not in {"any", "headless_only", "interactive_only"}:
-            raise ValueError(f"invalid scope {scope!r}")
-    except (ImportError, AttributeError, KeyError, ValueError) as exc:
-        print(
-            f"hook_scope_authority_unavailable: script={script_identity!r} error={exc!r}",
-            file=sys.stderr,
-        )
-        _deny_scope_authority_unavailable(script_identity)
-        return False
-
-    if scope == "any":
-        return True
-    if scope == "headless_only":
-        return is_headless_session()
-    return not is_headless_session()
-
-
 def enforce_session_scope(
     session_scope: str,
     *,
@@ -686,42 +604,6 @@ def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission"
         session_id=session_id,
         skill_name="",
     )
-
-
-def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
-    """Dict-shaped binding reader for legacy callers that predate JoinAdmission.
-
-    Returns the binding's serialized JSON (the same shape that
-    ``_session_binding.SessionBinding.to_json`` produces — a plain ``dict``
-    with a top-level ``loaded_skills`` list, where each entry carries
-    ``skill_name`` and ``binding_valid`` keys) when a valid binding exists
-    for the payload session, or ``None`` for missing / unreadable /
-    mismatched binding artifacts. Preserves the legacy contract used by
-    callers like ``write_guard._interactive_prefix_policy`` and
-    ``tests/hooks/test_write_guard.py`` that predate the JoinAdmission
-    refactor.
-
-    Goes through ``read_binding`` rather than ``session_join_admission``
-    so a valid binding with any loaded skills returns its dict, regardless
-    of which skill the caller intends to project. ``session_join_admission``
-    is for skill-specific join admission (it asserts the requested skill is
-    loaded) and would always deny here.
-    """
-    binding_module = importlib.import_module(
-        f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
-    )
-    binding_path = binding_module.resolve_binding_path(payload_cwd, session_id)
-    try:
-        binding = binding_module.read_binding(binding_path)
-    except binding_module.SessionBindingError:
-        return None
-    if binding is None:
-        return None
-    if binding.session_id != session_id:
-        return None
-    if not binding.binding_valid:
-        return None
-    return json.loads(binding.to_json())
 
 
 def session_join_required(payload_cwd: str, session_id: str) -> bool:

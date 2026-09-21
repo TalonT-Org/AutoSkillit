@@ -63,27 +63,4 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
     ),
-    "hooks/_runtime/_hook_settings.py": LineLimitExemption(
-        900,
-        "REQ-CNST-010-E30: PR #5114's session-scope rebase landed the worktree's "
-        "table-driven enforce_script_session_scope wrapper, fail-closed "
-        "_deny_scope_authority_unavailable helper, and read_session_binding "
-        "compat shim in this module alongside develop's existing literal-scope "
-        "enforce_session_scope and session_join_admission. Splitting them "
-        "would separate two halves of the same API surface (literal-scope "
-        "and script-identity overloads) that share private helpers like "
-        "admit_hook_session_scope and hook_session_shape.",
-        predicate=lambda: (
-            __import__(
-                "autoskillit.hooks._runtime._hook_settings",
-                fromlist=["enforce_session_scope", "enforce_script_session_scope"],
-            ).enforce_session_scope.__name__
-            == "enforce_session_scope"
-            and __import__(
-                "autoskillit.hooks._runtime._hook_settings",
-                fromlist=["enforce_session_scope", "enforce_script_session_scope"],
-            ).enforce_script_session_scope.__name__
-            == "enforce_script_session_scope"
-        ),
-    ),
 }

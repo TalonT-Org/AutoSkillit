@@ -94,17 +94,14 @@ def _scope_prologue(path: Path) -> tuple[str, frozenset[str]] | None:
             keyword.arg not in {"exempt_tiers"} for keyword in call.keywords
         ), f"{path}: enforce_session_scope arguments must be literal scope declarations"
         scope = call.args[0]
-        exempt_keywords = [
-            keyword for keyword in call.keywords if keyword.arg == "exempt_tiers"
-        ]
+        exempt_keywords = [keyword for keyword in call.keywords if keyword.arg == "exempt_tiers"]
     else:
         # enforce_script_session_scope(__file__) — no literal scope string;
         # the caller asserts the call exists, scope is implied by __file__ +
         # the registry mapping.
-        assert (
-            len(call.args) == 1
-            and not call.keywords
-        ), f"{path}: enforce_script_session_scope needs a single __file__ arg"
+        assert len(call.args) == 1 and not call.keywords, (
+            f"{path}: enforce_script_session_scope needs a single __file__ arg"
+        )
         scope = ast.Constant(value="<identity>")
         exempt_keywords = []
     assert isinstance(scope, ast.Constant) and isinstance(scope.value, str), (

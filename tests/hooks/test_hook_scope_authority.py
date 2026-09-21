@@ -20,7 +20,7 @@ from autoskillit.hook_registry import (
     hook_applies_to_backend,
     render_hook_scope_table,
 )
-from autoskillit.hooks._runtime import _hook_scope_table, _hook_settings
+from autoskillit.hooks._runtime import _hook_scope_table, _session_scope_authority
 from autoskillit.workspace._projected_artifact._publication import write_generated_hooks_json
 from tests.conftest import production_interpreter_env
 
@@ -97,7 +97,9 @@ def test_runtime_scope_mapping_matches_registry(
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
 
     hook_def = HookDef(matcher="Bash", session_scope=scope)  # type: ignore[arg-type]
-    assert _hook_settings.enforce_script_session_scope(script) is hook_applies_to_backend(
+    assert _session_scope_authority.enforce_script_session_scope(
+        script
+    ) is hook_applies_to_backend(
         hook_def,
         backend="claude_code",
         session_scope="headless" if headless else "interactive",

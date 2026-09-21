@@ -45,13 +45,13 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     is_headless_session,
-    read_session_binding,
 )
-from _session_binding import (  # noqa: E402
+from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SessionBindingError,
     read_manifest,
     resolve_projection_manifest_path,
 )
+from _session_scope_authority import read_session_binding  # noqa: E402
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 

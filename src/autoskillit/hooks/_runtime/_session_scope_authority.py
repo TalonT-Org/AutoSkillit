@@ -44,29 +44,6 @@ def _deny_scope_authority_unavailable(script_identity: str) -> None:
     sys.stdout.flush()
 
 
-def is_headless_session() -> bool:
-    """Return the runtime session class used by hook-scope enforcement.
-
-    Delegates to :mod:`_hook_settings` to keep session-class env reads
-    in one module — the AST inventory test
-    (:func:`tests.hooks.test_hook_scope_authority.test_no_guard_reads_session_class_env_directly`)
-    enforces this single-source rule.
-    """
-    from _hook_settings import is_headless_session as _impl
-
-    return _impl()
-
-
-def get_session_type() -> str:
-    """Return the launcher-supplied session tier without interpreting it.
-
-    Delegates to :mod:`_hook_settings` for the same single-source rule.
-    """
-    from _hook_settings import get_session_type as _impl
-
-    return _impl()
-
-
 def enforce_script_session_scope(script_identity: str) -> bool:
     """Return whether a registered PreToolUse guard applies to this session.
 
@@ -110,6 +87,8 @@ def enforce_script_session_scope(script_identity: str) -> bool:
 
     if scope == "any":
         return True
+    from _hook_settings import is_headless_session
+
     if scope == "headless_only":
         return is_headless_session()
     return not is_headless_session()

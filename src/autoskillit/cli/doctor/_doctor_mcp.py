@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     DIRECT_INSTALL_CACHE_SUBDIR,
+    DISPATCH_ID_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     Severity,
     build_agent_env,
@@ -121,6 +122,26 @@ def _check_codex_mcp_server_registered() -> DoctorResult:
                             "Run 'autoskillit init' to regenerate ~/.codex/config.toml."
                         ),
                     )
+            else:
+                # The entry is registered (command == "autoskillit") but the
+                # env_vars field is missing or malformed — without it, no
+                # private variables (including AUTOSKILLIT_DISPATCH_ID) are
+                # forwarded across the Codex MCP boundary. The runtime
+                # dispatch_identity gate only fires for headless orchestrators,
+                # so interactive Codex MCP sessions get silent degradation if
+                # we don't surface this here. Surface a precise warning so the
+                # operator can re-run `autoskillit init` rather than guessing
+                # from a misleading "not registered" message.
+                return DoctorResult(
+                    severity=Severity.WARNING,
+                    check="mcp_server_registered",
+                    message=(
+                        "autoskillit Codex MCP entry is missing the env_vars field; "
+                        "no private variables will be forwarded across the Codex MCP "
+                        f"boundary (including {DISPATCH_ID_ENV_VAR}). "
+                        "Re-run 'autoskillit init' to regenerate ~/.codex/config.toml."
+                    ),
+                )
         if _is_autoskillit_registered(read_result.data, headless_auto_gate=False):
             return DoctorResult(
                 severity=Severity.OK,

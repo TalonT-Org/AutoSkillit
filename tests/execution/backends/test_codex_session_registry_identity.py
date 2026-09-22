@@ -66,7 +66,11 @@ def test_resumed_codex_identity_stays_aligned_across_hook_storage_and_index(
     write_registry_entry(project_dir, _LAUNCH_ID, "cook", None)
 
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", _LAUNCH_ID)
-    bridge_session_registry(_SANITIZED_THREAD_ID, str(project_dir))
+    bridge_session_registry(
+        _SANITIZED_THREAD_ID,
+        str(project_dir),
+        launch_id=_LAUNCH_ID,
+    )
     launch_id = claim_launch_for_session(
         project_dir,
         claude_session_id=_SANITIZED_THREAD_ID,

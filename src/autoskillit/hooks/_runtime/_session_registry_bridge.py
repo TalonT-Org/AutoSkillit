@@ -74,11 +74,12 @@ def _claim_session_id(registry: dict[str, object], launch_id: str, session_id: s
 
 
 def _write_registry(registry_file: Path, registry: dict[str, object]) -> None:
+    target = registry_file.parent / "session_registry.json"
     fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             stream.write(json.dumps(registry))
-        os.replace(tmp, registry_file)
+        os.replace(tmp, target)
     except (OSError, TypeError, ValueError):
         try:
             os.unlink(tmp)

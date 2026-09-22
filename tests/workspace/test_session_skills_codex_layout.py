@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,10 @@ def test_codex_materializes_exact_guarded_investigate_document(
 
     manager = make_session_skill_manager()
     backend = _make_codex_backend()
+    backend.capabilities = replace(
+        backend.capabilities,
+        managed_fixed_batch_route_capable=True,
+    )
     invocation = DefaultSkillResolver().resolve_invocation(
         "investigate",
         manager._root,

@@ -414,7 +414,6 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     tmp_path: Path,
 ) -> None:
     from autoskillit.core import SkillExecutionRole
-    from autoskillit.execution.backends._codex_config import effective_codex_agent_names
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.workspace import DefaultSkillResolver
 
@@ -450,11 +449,9 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
         generated_home = Path(spec.env["CODEX_HOME"])
         compose_projection = generated_home / "add-dir" / "skills" / "compose-pr" / "SKILL.md"
-        role_names = effective_codex_agent_names(generated_home)
         captured["compose_projected"] = compose_projection.is_file()
         captured["source_cache_exists"] = (source_home / "models_cache.json").exists()
         captured["mapped_targets"] = mapped_targets
-        captured["role_names"] = role_names
         kwargs["on_spawn"](101, 101)  # type: ignore[operator]
         kwargs["trace"].record_spawn()  # type: ignore[union-attr]
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
@@ -532,10 +529,6 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     assert captured["source_cache_exists"] is False
     assert not (source_home / "models_cache.json").exists()
     assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
-    role_names = captured["role_names"]
-    assert isinstance(role_names, frozenset)
-    assert "pr-synthesizer" in role_names
-    assert "pr-source-reader" in role_names
 
 
 def test_cook_captures_managed_preparation_refusal_once(

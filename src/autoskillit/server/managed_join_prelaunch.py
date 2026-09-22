@@ -7,14 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext, get_logger
-
-logger = get_logger(__name__)
 from autoskillit.execution.backends import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 from autoskillit.server._managed_join_attestation import (
     DefaultManagedJoinAttestationAuthority,
     ManagedJoinRecordStore,
 )
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)

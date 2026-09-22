@@ -102,7 +102,7 @@ _TASKFILE_NON_PARITY_VARS: frozenset[str] = frozenset(
         # the pytest-hypothesis entry-point plugin (which loads BEFORE
         # conftest.py) cannot create `.hypothesis/constants/` at the repo
         # root — that path is monitored by the root-debris detector.
-        "HYPOTHESIS_STORAGE_DIR",
+        "HYPOTHESIS_STORAGE_DIRECTORY",
     }
 )
 

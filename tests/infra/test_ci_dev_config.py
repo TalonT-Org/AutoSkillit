@@ -145,10 +145,7 @@ class TestPreCommitConfig:
             "check-complexity must select the cached-index paths itself so "
             "pre-commit run --all-files does not turn it into a full-tree scan"
         )
-        assert hook.get("verbose") is True, (
-            "check-complexity must set verbose: true so the warn-mode report is "
-            "visible on a passing (exit-0) hook run"
-        )
+        assert "verbose" not in hook
         assert hook.get("always_run") is True, (
             "check-complexity must set always_run: true so deletion-only commits "
             "still reach stale-exemption validation"

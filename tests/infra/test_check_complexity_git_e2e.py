@@ -63,19 +63,20 @@ def _seed_repo(tmp_path: Path) -> Path:
     return repo
 
 
-# --- case 1: growth past the base-revision ceiling warns, then fails once promoted --------
+# --- case 1: staged growth past the inherited ceiling fails -------------------------------
 
 
-def test_staged_growth_past_ceiling_warns_then_fails(tmp_path, monkeypatch, capsys):
+def test_staged_growth_past_inherited_ceiling_fails(tmp_path, capsys):
     repo = _seed_repo(tmp_path)
     _write_a_py(repo, 13, 4)
     _git(repo, "add", "-A")
 
-    assert check.main(["--staged", "--repo-root", str(repo)]) == 0
-    assert "complexity 13 > allowed 12" in capsys.readouterr().out
-
-    monkeypatch.setattr(check, "ENFORCEMENT", "fail")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "src/a.py" in out
+    assert "f" in out
+    assert "complexity 13 > allowed 12" in out
+    assert "was 12 at the base revision" in out
 
 
 # --- case 2: growth that stays under MAX_COMPLEXITY never violates, no false positive -----
@@ -122,25 +123,40 @@ def test_staged_delete_and_add_inherits_vanished_ceiling(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-# --- case 5: an untracked file is enumerated and checked against --base -------------------
+# --- case 5: base-mode growth past the inherited ceiling fails ----------------------------
+
+
+def test_base_growth_past_inherited_ceiling_fails(tmp_path, capsys):
+    repo = _seed_repo(tmp_path)
+    _write_a_py(repo, 13, 4)
+
+    assert check.main(["--base", "base", "--repo-root", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "src/a.py" in out
+    assert "f" in out
+    assert "complexity 13 > allowed 12" in out
+    assert "was 12 at the base revision" in out
+
+
+# --- case 6: an untracked file is enumerated and checked against --base -------------------
 
 
 def test_untracked_file_against_base_reports_violation(tmp_path, capsys):
     repo = _seed_repo(tmp_path)
     (repo / "src" / "new.py").write_text(_source_with_function("f", 11), encoding="utf-8")
 
-    assert check.main(["--base", "base", "--repo-root", str(repo)]) == 0
+    assert check.main(["--base", "base", "--repo-root", str(repo)]) == 1
     out = capsys.readouterr().out
     assert "src/new.py" in out
+    assert "f" in out
     assert "new function" in out
 
 
 # --- a merged reduction becomes the next ceiling (Design Decision 2) ----------------------
 
 
-def test_merged_reduction_lowers_next_ceiling(tmp_path, monkeypatch, capsys):
+def test_merged_reduction_lowers_next_ceiling(tmp_path, capsys):
     repo = _seed_repo(tmp_path)
-    monkeypatch.setattr(check, "ENFORCEMENT", "fail")
 
     _write_a_py(repo, 11, 4)
     _git(repo, "add", "-A")
@@ -164,7 +180,7 @@ _VALID_RATIONALE = (
 )
 
 
-def test_refactor_and_exemption_removal_in_one_change(tmp_path, monkeypatch, capsys):
+def test_refactor_and_exemption_removal_in_one_change(tmp_path, capsys):
     repo = _seed_repo(tmp_path)
     exempt_limits = (
         "MAX_COMPLEXITY = 10\nMIN_RATIONALE_CHARS = 60\n"
@@ -184,6 +200,5 @@ def test_refactor_and_exemption_removal_in_one_change(tmp_path, monkeypatch, cap
     )
     _git(repo, "add", "-A")
 
-    monkeypatch.setattr(check, "ENFORCEMENT", "fail")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 0
     assert capsys.readouterr().out == ""

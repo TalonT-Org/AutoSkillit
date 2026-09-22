@@ -378,7 +378,7 @@ def test_evaluate_missing_required_base_source_raises_git_failure():
 # --- rendering ----------------------------------------------------------------------------
 
 
-def test_report_is_self_instructing_in_warn_mode():
+def test_report_is_self_instructing_failure():
     violation = check.Violation(
         key="src/x.py::Foo.bar",
         path="src/x.py",
@@ -391,16 +391,17 @@ def test_report_is_self_instructing_in_warn_mode():
         base_path=None,
         exemption=None,
     )
-    report = check.render_report([violation], "warn", _policy())
+    report = check.render_report([violation], _policy())
     normalized = _normalize(report)
     ordered_fragments = [
-        "WARNING ONLY",
-        "will be promoted to a hard failure",
+        "Cyclomatic complexity check FAILED.",
         "src/x.py:12-40  Foo.bar",
         "complexity 14 > allowed 10",
         "1. Refactor first",
         "Do not split a function into trivially named fragments",
-        "2. Exemption -- last resort",
+        "reduced as far as reasonably possible through a genuine refactor attempt",
+        "human-approved last resort",
+        "COMPLEXITY_EXEMPTIONS",
         "tests/arch/_complexity_limits.py",
         '"src/x.py::Foo.bar": ComplexityExemption(',
         "limit=14",
@@ -410,11 +411,6 @@ def test_report_is_self_instructing_in_warn_mode():
     ]
     positions = [normalized.index(_normalize(fragment)) for fragment in ordered_fragments]
     assert positions == sorted(positions)
-
-
-def test_report_fail_mode_banner():
-    report = check.render_report([], "fail", _policy())
-    assert report.startswith("Cyclomatic complexity check FAILED.")
 
 
 def test_annotations_emitted_only_under_github_actions(monkeypatch):
@@ -430,20 +426,17 @@ def test_annotations_emitted_only_under_github_actions(monkeypatch):
         base_path=None,
         exemption=None,
     )
+    policy = _policy()
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    warn_lines = check.render_annotations([violation], "warn", 10)
-    assert len(warn_lines) == 1
-    assert warn_lines[0].startswith(
-        "::warning file=src/x.py,line=12,endLine=40,title=Cyclomatic complexity::"
-    )
-    fail_lines = check.render_annotations([violation], "fail", 10)
-    assert fail_lines[0].startswith(
+    lines = check.render_annotations([violation], policy)
+    assert len(lines) == 1
+    assert lines[0].startswith(
         "::error file=src/x.py,line=12,endLine=40,title=Cyclomatic complexity::"
     )
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    assert check.render_annotations([violation], "warn", 10) == []
+    assert check.render_annotations([violation], policy) == []
     monkeypatch.setenv("GITHUB_ACTIONS", "false")
-    assert check.render_annotations([violation], "warn", 10) == []
+    assert check.render_annotations([violation], policy) == []
 
 
 @pytest.mark.parametrize(
@@ -479,16 +472,14 @@ def test_main_exit_codes_no_violations(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_main_exit_codes_warn_and_fail(tmp_path, monkeypatch, capsys):
+def test_main_exit_code_violation(tmp_path, capsys):
     repo = _seed_repo(tmp_path, _source_with_function("f", 10))
     (repo / "src" / "a.py").write_text(_source_with_function("f", 11), encoding="utf-8")
     _git(repo, "add", "-A")
-    assert check.main(["--staged", "--repo-root", str(repo)]) == 0
-    warn_out = capsys.readouterr().out
-    assert "complexity 11 > allowed 10" in warn_out
-    assert "was 10 at the base revision" in warn_out
-    monkeypatch.setattr(check, "ENFORCEMENT", "fail")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "complexity 11 > allowed 10" in out
+    assert "was 10 at the base revision" in out
 
 
 def test_main_missing_mode_exits_2():
@@ -497,6 +488,12 @@ def test_main_missing_mode_exits_2():
 
 def test_main_conflicting_modes_exits_2():
     assert check.main(["--staged", "--base", "HEAD"]) == 2
+
+
+def test_main_unknown_argument_raises_usage_exit_2():
+    with pytest.raises(SystemExit) as exc_info:
+        check.main(["--unknown"])
+    assert exc_info.value.code == 2
 
 
 def test_main_unavailable_limits_exits_2(tmp_path):
@@ -776,7 +773,7 @@ def test_staged_policy_uses_index_not_working_tree(tmp_path):
     assert check.main(["--staged", "--repo-root", str(repo)]) == 0
 
 
-def test_staged_policy_unstaged_exemption_does_not_authorize(tmp_path, monkeypatch, capsys):
+def test_staged_policy_unstaged_exemption_does_not_authorize(tmp_path, capsys):
     repo = _seed_repo(tmp_path, _source_with_function("f", 10))
     (repo / "src" / "a.py").write_text(_source_with_function("f", 15), encoding="utf-8")
     _git(repo, "add", "src/a.py")
@@ -787,7 +784,6 @@ def test_staged_policy_unstaged_exemption_does_not_authorize(tmp_path, monkeypat
         ")}\n"
     )
     (repo / "tests" / "arch" / "_complexity_limits.py").write_text(exempt_limits, encoding="utf-8")
-    monkeypatch.setattr(check, "ENFORCEMENT", "fail")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 1
     assert "src/a.py::f" in capsys.readouterr().out
 
@@ -858,18 +854,27 @@ def test_validate_exemptions_valid_entry_is_clean():
     assert check.validate_exemptions(policy, source_for) == []
 
 
-def test_invalid_registry_blocks_run_in_both_modes(tmp_path, monkeypatch, capsys):
-    repo = _seed_repo(tmp_path, "def f():\n    pass\n")
-    stale_limits = (
+@pytest.mark.parametrize(
+    "function_source,key,limit,expected",
+    [
+        ("def f():\n    pass\n", "src/a.py.f", 14, "malformed key"),
+        ("def f():\n    pass\n", "src/a.py::missing", 14, "stale"),
+        ("def f():\n    pass\n", "src/a.py::f", 14, "no longer exceeds"),
+        (_source_with_function("f", 15), "src/a.py::f", 14, "below the current complexity"),
+    ],
+    ids=["malformed", "stale", "unnecessary", "exceeded"],
+)
+def test_invalid_registry_returns_2(tmp_path, capsys, function_source, key, limit, expected):
+    repo = _seed_repo(tmp_path, function_source)
+    invalid_limits = (
         "MAX_COMPLEXITY = 10\nMIN_RATIONALE_CHARS = 60\n"
-        'COMPLEXITY_EXEMPTIONS = {"src/a.py::missing": ComplexityExemption(\n'
-        f"    limit=14, rationale={_RATIONALE_60!r},\n"
+        f"COMPLEXITY_EXEMPTIONS = {{{key!r}: ComplexityExemption(\n"
+        f"    limit={limit}, rationale={_RATIONALE_60!r},\n"
         ")}\n"
     )
-    (repo / "tests" / "arch" / "_complexity_limits.py").write_text(stale_limits, encoding="utf-8")
+    (repo / "tests" / "arch" / "_complexity_limits.py").write_text(
+        invalid_limits, encoding="utf-8"
+    )
     _git(repo, "add", "-A")
-    for enforcement in ("warn", "fail"):
-        monkeypatch.setattr(check, "ENFORCEMENT", enforcement)
-        exit_code = check.main(["--staged", "--repo-root", str(repo)])
-        assert exit_code == 2
-        assert "stale" in capsys.readouterr().err
+    assert check.main(["--staged", "--repo-root", str(repo)]) == 2
+    assert expected in capsys.readouterr().err

@@ -84,7 +84,7 @@ def _build_cook_projection_context(
     resolved_exploration_profile: RepositoryProfileId | None,
     *,
     adaptation_context: SemanticAdaptationContext | None = None,
-    explorer_provisioning_eligible: bool | None = None,
+    provisioning_disposition: bool | None = None,
 ) -> SkillProjectionContext:
     """Bind scripts to the exact artifact selected for this cook session."""
     if binding is None:
@@ -102,13 +102,13 @@ def _build_cook_projection_context(
         adaptation_context=adaptation_context,
         managed_codex_route=managed_codex_route,
     )
-    if explorer_provisioning_eligible is not None:
+    if provisioning_disposition is not None:
         return replace(
             base,
-            explorer_provisioning_eligible=explorer_provisioning_eligible,
+            provisioning_disposition=provisioning_disposition,
             parent_sandbox_mode=(
                 "read-only"
-                if explorer_provisioning_eligible
+                if provisioning_disposition is True
                 and backend.capabilities.terminal_explorer_capable
                 else base.parent_sandbox_mode
             ),
@@ -595,7 +595,7 @@ def cook(
                     projection_binding,
                     resolved_exploration_profile,
                     adaptation_context=managed_join_context,
-                    explorer_provisioning_eligible=(
+                    provisioning_disposition=(
                         True if backend.capabilities.session_scoped_explorer_capable else None
                     ),
                 ),

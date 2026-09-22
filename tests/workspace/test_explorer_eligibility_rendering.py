@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 def _exploration_projection_context(
     tmp_path: Path,
     *,
-    explorer_provisioning_eligible: bool | None,
+    provisioning_disposition: bool | None,
 ):
     """Build a real catalog + projection context spanning every exploration-bearing skill.
 
@@ -64,17 +64,17 @@ def _exploration_projection_context(
         catalog=catalog,
         backend=ClaudeCodeBackend(),
         resolved_exploration_profile=RepositoryProfileId.LANGUAGE_NEUTRAL,
-        explorer_provisioning_eligible=explorer_provisioning_eligible,
+        provisioning_disposition=provisioning_disposition,
     )
     return catalog, context, exploration_skill_names
 
 
 def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
-    """When explorer_provisioning_eligible is False, projected text routes to the fallback."""
+    """When provisioning_disposition is False, projected text routes to the fallback."""
     from autoskillit.workspace import materialize_agent_skill_tree
 
     catalog, context, exploration_skill_names = _exploration_projection_context(
-        tmp_path, explorer_provisioning_eligible=False
+        tmp_path, provisioning_disposition=False
     )
 
     destination = tmp_path / "skills"
@@ -84,11 +84,11 @@ def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
         content = documents[name].content
         assert "autoskillit:pluginless-explorer" in content, (
             f"Expected exploration skill {name!r} to route to the pluginless-explorer "
-            "fallback when eligible=False"
+            "fallback when disposition=False"
         )
         assert "do not dispatch this exploration vector" not in content, (
             f"Expected exploration skill {name!r} to no longer render the bare "
-            "'do not dispatch' suppression text when eligible=False"
+            "'do not dispatch' suppression text when disposition=False"
         )
         assert "local checkout" in content
         assert "remote or public copy" in content
@@ -102,7 +102,7 @@ def test_ineligible_context_projects_pluginless_explorer_dispatch(tmp_path: Path
     )
 
     _catalog, context, exploration_skill_names = _exploration_projection_context(
-        tmp_path, explorer_provisioning_eligible=False
+        tmp_path, provisioning_disposition=False
     )
     skill_info = next(entry for entry in context.skills if entry.name in exploration_skill_names)
 
@@ -120,12 +120,12 @@ def test_ineligible_context_projects_pluginless_explorer_dispatch(tmp_path: Path
         assert code in document.content, f"Expected authorized fallback code {code!r} in content"
 
 
-def test_eligible_none_preserves_dispatch(tmp_path: Path) -> None:
-    """When explorer_provisioning_eligible is None (default), dispatch is preserved."""
+def test_disposition_none_preserves_dispatch(tmp_path: Path) -> None:
+    """When provisioning_disposition is None (default), dispatch is preserved."""
     from autoskillit.workspace import materialize_agent_skill_tree
 
     catalog, context, exploration_skill_names = _exploration_projection_context(
-        tmp_path, explorer_provisioning_eligible=None
+        tmp_path, provisioning_disposition=None
     )
 
     destination = tmp_path / "skills"
@@ -134,5 +134,5 @@ def test_eligible_none_preserves_dispatch(tmp_path: Path) -> None:
     for name in sorted(exploration_skill_names):
         content = documents[name].content
         assert "Explorer provisioning is unavailable" not in content, (
-            f"Skill {name!r} should NOT contain unavailability text when eligible=None"
+            f"Skill {name!r} should NOT contain unavailability text when disposition=None"
         )

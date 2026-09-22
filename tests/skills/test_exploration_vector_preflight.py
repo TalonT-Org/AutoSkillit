@@ -106,7 +106,7 @@ def test_projected_exploration_preflight_matches_session_authority(
         cwd=tmp_path,
         catalog=catalog,
         backend=backend,
-        explorer_provisioning_eligible=session_scoped_provisioning,
+        provisioning_disposition=session_scoped_provisioning,
         resolved_exploration_profile=RepositoryProfileId.LANGUAGE_NEUTRAL,
     )
 

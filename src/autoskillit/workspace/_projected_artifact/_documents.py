@@ -167,11 +167,22 @@ class _SemanticAdaptationOutcome:
 class SkillProjectionContext:
     """Execution-local inputs that may affect an agent-visible projection.
 
-    ``explorer_provisioning_eligible`` is tri-state: ``False`` selects the
-    unavailable fallback, ``None`` preserves native dispatch without projecting
-    session-scoped provisioning instructions, and ``True`` authorizes those
-    instructions when the bound backend supports them. The later provisioning
-    call still validates request identity, session scope, and store state.
+    ``provisioning_disposition`` is tri-state. The state table is the
+    authoritative contract; downstream code MUST branch on these values:
+
+    =============  ===================================================
+    Value          Meaning
+    =============  ===================================================
+    ``True``       Authorize the session-scoped provisioning preamble
+                   when the bound backend's capability also permits it.
+    ``False``      Render the unavailable-fallback text and route the
+                   vector to the pluginless explorer role.
+    ``None``       Preserve native dispatch without projecting any
+                   provisioning instructions.
+    =============  ===================================================
+
+    The later provisioning call still validates request identity, session
+    scope, and store state, regardless of the disposition chosen here.
     """
 
     cwd: Path
@@ -191,7 +202,7 @@ class SkillProjectionContext:
     parent_sandbox_mode: str = "workspace-write"
     adaptation_context: SemanticAdaptationContext | None = None
     managed_codex_route: str | None = None
-    explorer_provisioning_eligible: bool | None = None
+    provisioning_disposition: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
@@ -521,8 +532,8 @@ def _prepare_exploration_replacements(
         for vector in migrated
         if vector.applicability not in context.active_exploration_applicabilities
     }
-    if not active_vectors or context.explorer_provisioning_eligible is False:
-        if context.explorer_provisioning_eligible is False and active_vectors:
+    if not active_vectors or context.provisioning_disposition is False:
+        if context.provisioning_disposition is False and active_vectors:
             assert context.backend is not None
             conventions = context.backend.exploration_dispatch_renderer.conventions
             dispatch_role = f"{conventions.role_prefix}{PLUGINLESS_EXPLORER_ROLE}"
@@ -549,7 +560,7 @@ def _prepare_exploration_replacements(
         plan,
         active_vectors,
         include_provisioning_preamble=(
-            context.explorer_provisioning_eligible is True
+            context.provisioning_disposition is True
             and context.backend.capabilities.session_scoped_explorer_capable
         ),
         launch_context_ref=context.exploration_launch_context_ref or f"skill:{skill_name}",

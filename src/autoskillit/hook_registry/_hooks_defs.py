@@ -77,7 +77,8 @@ class HookDef:
     def __post_init__(self) -> None:
         if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:
             raise ValueError(
-                f"HookDef.matcher must be non-empty for event_type={self.event_type!r}"
+                f"HookDef.matcher={self.matcher!r} must be non-empty "
+                f"(event_type={self.event_type!r} requires a matcher)"
             )
         if self.session_scope not in _SESSION_SCOPE_VALUES:
             raise ValueError(f"HookDef.session_scope={self.session_scope!r} is invalid")
@@ -160,9 +161,15 @@ class ProtectionWaiverDef:
             if not getattr(self, field_name)
         ]
         if empty_fields:
-            raise ValueError(f"protection waiver fields must be nonempty: {empty_fields}")
+            rendered = ", ".join(
+                f"{field_name}={getattr(self, field_name)!r}" for field_name in empty_fields
+            )
+            raise ValueError(f"ProtectionWaiverDef.{rendered} must be non-empty")
         if self.covering_mechanism == "hook" and not self.covering_guard_script:
-            raise ValueError("hook protection waiver requires covering_guard_script")
+            raise ValueError(
+                f"ProtectionWaiverDef.covering_guard_script={self.covering_guard_script!r} "
+                "must be non-empty when covering_mechanism='hook'"
+            )
 
 
 class HookDriftResult(NamedTuple):

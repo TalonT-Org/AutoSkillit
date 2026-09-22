@@ -83,9 +83,10 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
     had three call-site shapes that would otherwise silently bypass the unified
     hook_session_shape() API:
 
-    1. Direct call: ``get_session_type()`` — caught by the literal name match
-       in ``_is_session_type_env_read`` (the predecessor to the bare-name
-       ``hook_session_shape`` recognition that replaced it).
+    1. Direct call: ``get_session_type()`` — caught at the import site by
+       ``test_no_guard_imports_deleted_session_class_wrappers`` (any direct
+       call would ImportError at runtime since the wrapper is deleted, so
+       no AST-level detection is needed here).
     2. ``as`` rebind: ``from _hook_settings import get_session_type as g``
        followed by ``g()`` — caught by walking ImportFrom nodes up front and
        populating ``_forbidden_aliases`` with the bound ``asname`` (or the

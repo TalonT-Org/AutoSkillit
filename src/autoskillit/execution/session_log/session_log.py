@@ -39,6 +39,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
+from autoskillit.core.io.paths import _coerce_str_or_path
 from autoskillit.execution.evidence._token_measure import (
     build_token_usage_record,
     serialized_token_measure,
@@ -183,8 +184,7 @@ def _analyze_proc_snapshots(
 
 def resolve_log_dir(log_dir: str | Path) -> Path:
     """Resolve session log directory. Empty string = platform default."""
-    if not isinstance(log_dir, (str, Path)):
-        raise TypeError("log_dir must be a str or Path")
+    _coerce_str_or_path("log_dir", log_dir)
     if log_dir:
         return Path(log_dir).expanduser()
     return default_log_dir()

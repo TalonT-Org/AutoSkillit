@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -28,6 +29,11 @@ _RUN_SKILL_WINDOW = 400
 _PROSE_TRIGGER_WINDOW = 60
 _PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
 T = TypeVar("T")
+
+# Inputs that must be rejected by helpers enforcing a ``str | Path`` contract.
+# ``MagicMock`` is included because ``Path(...)`` accepts it via ``__fspath__``;
+# the explicit ``isinstance`` guard is what keeps the rejection test honest.
+INVALID_PATH_INPUTS: tuple[object, ...] = (None, 0, b"", object(), MagicMock())
 
 
 def delete_once_then_delegate(

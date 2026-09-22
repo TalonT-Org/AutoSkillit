@@ -288,3 +288,16 @@ def is_generated_path(file_path: str) -> bool:
         elif file_path == entry:
             return True
     return False
+
+
+def _coerce_str_or_path(name: str, value: object) -> str | Path:
+    """Reject non-str/Path inputs with a uniform error message.
+
+    ``Path(value)`` already raises a clear ``TypeError`` for most non-PathLike
+    inputs, but accepts ``MagicMock`` (which exposes ``__fspath__``). Public
+    helpers that document a ``str | Path`` contract use this guard so their
+    rejection message stays consistent across modules.
+    """
+    if not isinstance(value, (str, Path)):
+        raise TypeError(f"{name} must be a str or Path")
+    return value

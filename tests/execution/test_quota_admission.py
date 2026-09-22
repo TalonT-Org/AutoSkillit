@@ -9,12 +9,12 @@ from unittest.mock import MagicMock
 import pytest
 import structlog.testing
 
-from tests._helpers import make_quota_guard_config
+from tests._helpers import INVALID_PATH_INPUTS, make_quota_guard_config
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
-@pytest.mark.parametrize("diagnostic_log_root", [None, 0, b"", object(), MagicMock()])
+@pytest.mark.parametrize("diagnostic_log_root", INVALID_PATH_INPUTS)
 def test_oauth_admission_lock_path_rejects_invalid_roots(diagnostic_log_root: object):
     from autoskillit.execution.quota._admission import oauth_admission_lock_path
 
@@ -31,7 +31,14 @@ def test_oauth_admission_lock_path_accepts_strings_and_paths():
 
 
 @pytest.mark.anyio
-async def test_invalid_oauth_admission_root_fails_closed(monkeypatch, tmp_path):
+async def test_invalid_diagnostic_log_root_fails_closed(monkeypatch, tmp_path):
+    """A non-Path ``diagnostic_log_root`` fails the admission gate closed.
+
+    The OAuth admission path requires a writable diagnostic log root; passing
+    a ``MagicMock`` (which is path-like enough to fool ``Path(...)`` but not
+    the explicit guard) must produce ``quota_authority_unavailable`` rather
+    than silently admitting or crashing.
+    """
     import autoskillit.execution.quota._admission as admission
 
     monkeypatch.setattr(

@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,6 +25,7 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log.session_log import resolve_log_dir
+from tests._helpers import INVALID_PATH_INPUTS
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
@@ -683,7 +683,7 @@ def test_resolve_log_dir_explicit_override():
     assert result == Path("/custom/path")
 
 
-@pytest.mark.parametrize("log_dir", [None, 0, b"", object(), MagicMock()])
+@pytest.mark.parametrize("log_dir", INVALID_PATH_INPUTS)
 def test_resolve_log_dir_rejects_invalid_roots_before_coercion(log_dir: object):
     with pytest.raises(TypeError, match="log_dir must be a str or Path"):
         resolve_log_dir(log_dir)  # type: ignore[arg-type]

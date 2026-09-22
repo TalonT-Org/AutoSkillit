@@ -427,6 +427,61 @@ def test_observe_exit_uses_waitid_without_reaping(
     assert owner._group_authority is True
 
 
+@pytest.mark.skipif(
+    not all(hasattr(_owned_group.os, name) for name in ("WNOWAIT", "WSTOPPED", "CLD_STOPPED")),
+    reason="stopped non-reaping observation is required",
+)
+def test_posix_job_control_observe_exit_reports_stopped_leader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    owner = _spawn_owner(monkeypatch, tmp_path)
+    observed_flags: list[int] = []
+
+    class StoppedStatus:
+        si_code = _owned_group.os.CLD_STOPPED
+        si_status = signal.SIGTTIN
+
+    def waitid(_idtype: int, _pid: int, flags: int) -> StoppedStatus | None:
+        observed_flags.append(flags)
+        return StoppedStatus() if flags & _owned_group.os.WSTOPPED else None
+
+    monkeypatch.setattr(_owned_group.os, "waitid", waitid)
+    monkeypatch.setattr(owner.process, "poll", lambda: pytest.fail("poll reaped leader"))
+
+    with pytest.raises(_owned_group.OwnedProcessStoppedError) as raised:
+        owner.observe_exit()
+
+    assert raised.value.leader_pid == owner.pid
+    assert raised.value.pgid == owner.pgid
+    assert raised.value.stop_signal == signal.SIGTTIN
+    assert observed_flags[0] & _owned_group.os.WSTOPPED
+    assert owner.process.returncode is None
+    assert owner._reaped is False
+    assert owner._group_authority is True
+    assert owner.observe_exit(include_stopped=False) is None
+    assert not observed_flags[1] & _owned_group.os.WSTOPPED
+
+
+def test_observe_exit_keeps_base_waitid_path_without_stopped_symbols(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    owner = _spawn_owner(monkeypatch, tmp_path)
+    observed_flags: list[int] = []
+    monkeypatch.delattr(_owned_group.os, "WSTOPPED", raising=False)
+    monkeypatch.delattr(_owned_group.os, "CLD_STOPPED", raising=False)
+    monkeypatch.setattr(
+        _owned_group.os,
+        "waitid",
+        lambda _idtype, _pid, flags: observed_flags.append(flags) or None,
+    )
+    monkeypatch.setattr(owner.process, "poll", lambda: pytest.fail("poll reaped leader"))
+
+    assert owner.observe_exit() is None
+    assert observed_flags == [
+        _owned_group.os.WEXITED | _owned_group.os.WNOHANG | _owned_group.os.WNOWAIT
+    ]
+
+
 def test_spawn_provenance_and_unreaped_leader_authorize_group_signal(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -563,7 +618,7 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
     monkeypatch.setattr(owner, "_scan_group", lambda: ())
     monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
     monkeypatch.setattr(owner, "_wait_group_members", lambda _timeout: ())
-    monkeypatch.setattr(owner, "observe_exit", lambda: None)
+    monkeypatch.setattr(owner, "observe_exit", lambda **_kwargs: None)
 
     owner.cleanup(timeout=7.0)
 

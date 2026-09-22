@@ -607,8 +607,9 @@ def _drain_bounded_process(
     process = owner.process
     output = {"stdout": bytearray(), "stderr": bytearray()}
     selector_factory = selectors.DefaultSelector
-    selector = selector_factory()
+    selector: selectors.BaseSelector | None = None
     try:
+        selector = selector_factory()
         assert process.stdout is not None
         assert process.stderr is not None
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
@@ -642,8 +643,12 @@ def _drain_bounded_process(
                 output[key.data].extend(chunk)
         returncode, _cleanup_result = owner.settle_evidence()
         return BoundedCommandResult(returncode, bytes(output["stdout"]), bytes(output["stderr"]))
+    except BaseException as primary_error:
+        owner.settle_preserving(primary_error)
+        raise
     finally:
-        selector.close()
+        if selector is not None:
+            selector.close()
         for stream in (process.stdout, process.stderr):
             if stream is not None:
                 stream.close()

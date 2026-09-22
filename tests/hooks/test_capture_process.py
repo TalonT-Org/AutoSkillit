@@ -327,6 +327,7 @@ def test_wait_cancellation_still_settles_and_reaps(
 
     def cancel_wait(
         _process: subprocess.Popen[bytes],
+        _pgid: int,
         *,
         timeout_seconds: float | None,
     ) -> bool:
@@ -445,6 +446,7 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
     previous_pgid = 2468
     foreground_changes: list[tuple[int, int]] = []
+    signals: list[tuple[int, signal.Signals]] = []
     previous_handlers = {signum: object() for signum in capture_process._FORWARDED_SIGNALS}
     restored_handlers: list[tuple[signal.Signals, object]] = []
 
@@ -462,6 +464,11 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
         capture_process,
         "_safe_tcsetpgrp",
         lambda descriptor, pgid: foreground_changes.append((descriptor, pgid)),
+    )
+    monkeypatch.setattr(
+        capture_process.os,
+        "killpg",
+        lambda pgid, signum: signals.append((pgid, signum)),
     )
     monkeypatch.setattr(
         capture_process,
@@ -494,7 +501,195 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
         (terminal_fd, process.pid),
         (terminal_fd, previous_pgid),
     ]
+    assert signals == [(process.pid, signal.SIGCONT)]
     assert restored_handlers == list(previous_handlers.items())
+
+
+def test_posix_job_control_hook_handoff_restores_after_continue_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    master_fd, terminal_fd = os.openpty()
+    foreground_changes: list[tuple[int, int]] = []
+    previous_pgid = 2468
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return terminal_fd
+
+    monkeypatch.setattr(capture_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(capture_process.os, "tcgetpgrp", lambda _fd: previous_pgid)
+    monkeypatch.setattr(
+        capture_process,
+        "_safe_tcsetpgrp",
+        lambda fd, pgid: foreground_changes.append((fd, pgid)),
+    )
+    monkeypatch.setattr(
+        capture_process.os,
+        "killpg",
+        lambda _pgid, _signum: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    try:
+        with pytest.raises(PermissionError, match="denied"):
+            capture_process._take_foreground_process_group(1234)
+    finally:
+        os.close(master_fd)
+        os.close(terminal_fd)
+
+    assert foreground_changes == [(terminal_fd, 1234), (terminal_fd, previous_pgid)]
+
+
+def test_posix_job_control_hook_handoff_annotates_primary_on_restore_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    master_fd, terminal_fd = os.openpty()
+    foreground_changes: list[tuple[int, int]] = []
+    previous_pgid = 2468
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return terminal_fd
+
+    monkeypatch.setattr(capture_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(capture_process.os, "tcgetpgrp", lambda _fd: previous_pgid)
+
+    def fake_tcsetpgrp(fd: int, pgid: int) -> None:
+        foreground_changes.append((fd, pgid))
+        if foreground_changes[-1] == (terminal_fd, previous_pgid):
+            raise OSError("restore failed")
+
+    monkeypatch.setattr(capture_process, "_safe_tcsetpgrp", fake_tcsetpgrp)
+    monkeypatch.setattr(
+        capture_process.os,
+        "killpg",
+        lambda _pgid, _signum: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    try:
+        with pytest.raises(PermissionError) as raised:
+            capture_process._take_foreground_process_group(1234)
+    finally:
+        os.close(master_fd)
+        os.close(terminal_fd)
+
+    assert raised.value is not None
+    assert any("foreground process-group restoration" in note for note in raised.value.__notes__)
+    assert foreground_changes == [
+        (terminal_fd, 1234),
+        (terminal_fd, previous_pgid),
+    ]
+
+
+@pytest.mark.skipif(
+    not all(hasattr(capture_process.os, name) for name in ("WSTOPPED", "CLD_STOPPED")),
+    reason="stopped non-reaping observation is required",
+)
+def test_posix_job_control_hook_poll_reports_stopped_leader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        env=production_interpreter_env(),
+    )
+    pgid = process.pid + 9999
+
+    class StoppedStatus:
+        si_code = capture_process.os.CLD_STOPPED
+        si_status = signal.SIGTTIN
+
+    captured: list[tuple[object, int, int]] = []
+
+    def fake_waitid(idtype: object, pid: int, flags: int) -> StoppedStatus:
+        captured.append((idtype, pid, flags))
+        return StoppedStatus()
+
+    monkeypatch.setattr(capture_process.os, "waitid", fake_waitid)
+    try:
+        with pytest.raises(OwnedProcessError) as raised:
+            capture_process._poll_leader_without_reaping(process, pgid)
+    finally:
+        process.kill()
+        process.wait()
+
+    assert raised.value.leader_pid == process.pid
+    assert raised.value.pgid == pgid
+    assert raised.value.stop_signal == signal.SIGTTIN
+    assert captured, "waitid must be invoked"
+    _, observed_pid, observed_flags = captured[0]
+    assert observed_pid == process.pid
+    assert observed_flags & capture_process.os.WSTOPPED, "waitid must request stopped observation"
+
+
+@pytest.mark.skipif(
+    not all(hasattr(capture_process.os, name) for name in ("WSTOPPED", "CLD_STOPPED")),
+    reason="stopped non-reaping observation is required",
+)
+def test_posix_job_control_hook_poll_skips_stopped_when_include_stopped_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        env=production_interpreter_env(),
+    )
+    pgid = process.pid
+
+    class StoppedStatus:
+        si_code = capture_process.os.CLD_STOPPED
+        si_status = signal.SIGTTIN
+
+    captured: list[int] = []
+
+    def fake_waitid(idtype: object, pid: int, flags: int) -> None:
+        del idtype, pid
+        captured.append(flags)
+        return None
+
+    monkeypatch.setattr(capture_process.os, "waitid", fake_waitid)
+    try:
+        assert (
+            capture_process._poll_leader_without_reaping(process, pgid, include_stopped=False)
+            is None
+        )
+    finally:
+        process.kill()
+        process.wait()
+
+    assert captured, "waitid must be invoked"
+    observed_flags = captured[0]
+    assert not (observed_flags & capture_process.os.WSTOPPED), (
+        "waitid must not request stopped observation when include_stopped is False"
+    )
+
+
+@pytest.mark.parametrize("capture_output", (False, True), ids=("direct", "capture"))
+@pytest.mark.parametrize("use_bash", (False, True), ids=("argv", "bash"))
+def test_spawn_owned_process_stdin_matches_capture_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capture_output: bool,
+    use_bash: bool,
+) -> None:
+    popen_kwargs: list[dict[str, object]] = []
+    process = cast("subprocess.Popen[bytes]", object())
+    monkeypatch.setattr(
+        capture_spawn.subprocess,
+        "Popen",
+        lambda *_args, **kwargs: popen_kwargs.append(kwargs) or process,
+    )
+    monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", lambda *_args, **_kwargs: object())
+
+    if use_bash:
+        capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=capture_output)
+    else:
+        cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            capture_spawn.spawn_owned_process(
+                ["command"], cwd_fd=cwd_fd, env={}, capture_output=capture_output
+            )
+        finally:
+            os.close(cwd_fd)
+
+    assert popen_kwargs[0]["stdin"] is (subprocess.DEVNULL if capture_output else None)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")

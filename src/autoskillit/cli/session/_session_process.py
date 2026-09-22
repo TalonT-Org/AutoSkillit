@@ -243,12 +243,27 @@ def _foreground_process_group(pgid: int) -> Iterator[None]:
         return
 
     previous_pgid = os.tcgetpgrp(terminal_fd)
-    _safe_tcsetpgrp(terminal_fd, pgid)
-
+    primary_error: BaseException | None = None
     try:
+        _safe_tcsetpgrp(terminal_fd, pgid)
+        try:
+            os.killpg(pgid, signal.SIGCONT)
+        except ProcessLookupError:
+            logger.debug("owned_process_foreground_cont_lookup_raced", extra={"pgid": pgid})
         yield
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
-        _safe_tcsetpgrp(terminal_fd, previous_pgid)
+        try:
+            _safe_tcsetpgrp(terminal_fd, previous_pgid)
+        except BaseException as restore_error:
+            if primary_error is None:
+                raise
+            primary_error.add_note(
+                "foreground process-group restoration also failed: "
+                f"{type(restore_error).__name__}: {restore_error}"
+            )
 
 
 def _safe_tcsetpgrp(terminal_fd: int, pgid: int) -> None:

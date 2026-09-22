@@ -69,7 +69,29 @@ _OWNED_PROCESS_SPAWN_TOKEN = object()
 
 
 class OwnedProcessError(RuntimeError):
-    """The runner could not prove complete process-group settlement."""
+    """The runner could not prove complete process-group settlement.
+
+    NOTE: ``autoskillit.execution.process._lifecycle.owned_group.OwnedProcessStoppedError``
+    is the dedicated subclass for the stopped-leader condition in the
+    lifecycle layer. The hooks instance shares the same ``leader_pid``,
+    ``pgid``, and ``stop_signal`` payload (populated at the stopped-leader
+    raise site) so downstream ``except`` clauses that read these fields work
+    identically across both hierarchies. Unification is intentionally
+    avoided: hooks is contractually stdlib-only.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        leader_pid: int | None = None,
+        pgid: int | None = None,
+        stop_signal: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.leader_pid = leader_pid
+        self.pgid = pgid
+        self.stop_signal = stop_signal
 
 
 def _add_cleanup_failure_note(
@@ -119,7 +141,7 @@ class OwnedProcessGroup:
         return self.process.returncode
 
     def poll(self) -> int | None:
-        return _poll_leader_without_reaping(self.process)
+        return _poll_leader_without_reaping(self.process, self.pgid)
 
     def terminate(self) -> None:
         self.signal_group(signal.SIGTERM)
@@ -143,7 +165,7 @@ class OwnedProcessGroup:
 
         failures: list[BaseException] = []
         try:
-            _wait_for_leader_exit_without_reaping(self.process, timeout_seconds=None)
+            _wait_for_leader_exit_without_reaping(self.process, self.pgid, timeout_seconds=None)
         except BaseException as exc:
             logger.error("owned_process_wait_failed", exc_info=True)
             failures.append(exc)
@@ -170,16 +192,23 @@ class OwnedProcessGroup:
 
         failures: list[BaseException] = []
         try:
-            if _poll_leader_without_reaping(self.process) is None:
+            if (
+                _poll_leader_without_reaping(self.process, self.pgid, include_stopped=False)
+                is None
+            ):
                 self.signal_group(signal.SIGTERM)
                 if not _wait_for_leader_exit_without_reaping(
                     self.process,
+                    self.pgid,
                     timeout_seconds=_TERM_TIMEOUT_SECONDS,
+                    include_stopped=False,
                 ):
                     self.signal_group(signal.SIGKILL)
                     if not _wait_for_leader_exit_without_reaping(
                         self.process,
+                        self.pgid,
                         timeout_seconds=_KILL_TIMEOUT_SECONDS,
+                        include_stopped=False,
                     ):
                         failures.append(
                             OwnedProcessError(
@@ -521,7 +550,23 @@ def _take_foreground_process_group(pgid: int) -> tuple[int, int] | None:
     if not os.isatty(terminal_fd):
         return None
     previous_pgid = os.tcgetpgrp(terminal_fd)
-    _safe_tcsetpgrp(terminal_fd, pgid)
+    try:
+        _safe_tcsetpgrp(terminal_fd, pgid)
+        try:
+            os.killpg(pgid, signal.SIGCONT)
+        except ProcessLookupError:
+            logger.debug("owned_process_foreground_cont_lookup_raced", extra={"pgid": pgid})
+    except BaseException as primary_error:
+        try:
+            _safe_tcsetpgrp(terminal_fd, previous_pgid)
+        except BaseException as restore_error:
+            logger.error("owned_process_foreground_restore_failed", exc_info=True)
+            _add_cleanup_failure_note(
+                primary_error,
+                "foreground process-group restoration also failed",
+                restore_error,
+            )
+        raise
     return terminal_fd, previous_pgid
 
 
@@ -540,8 +585,18 @@ def _require_posix_process_ownership() -> None:
 
 def _poll_leader_without_reaping(
     process: subprocess.Popen[bytes],
+    pgid: int,
+    *,
+    include_stopped: bool = True,
 ) -> int | None:
-    """Observe a real child leader without releasing its PGID anchor."""
+    """Observe a real child leader without releasing its PGID anchor.
+
+    ``pgid`` is the leader's process-group id captured at spawn time. It is
+    reported verbatim when a stopped observation surfaces so downstream
+    handlers can reconcile the leader against its PGID anchor; it is not
+    recovered from ``process.pid`` because the leader's pid alone may not
+    match a fresh ``os.getpgid`` lookup if the group has been reaped.
+    """
 
     if process.returncode is not None:
         return process.returncode
@@ -550,16 +605,30 @@ def _poll_leader_without_reaping(
     required = ("P_PID", "WEXITED", "WNOHANG", "WNOWAIT", "waitid")
     if any(not hasattr(os, name) for name in required):
         raise OwnedProcessError("non-reaping process observation is unavailable")
+    wait_flags = os.WEXITED | os.WNOHANG | os.WNOWAIT
+    stopped_observation = include_stopped and all(
+        hasattr(os, name) for name in ("WSTOPPED", "CLD_STOPPED")
+    )
+    if stopped_observation:
+        wait_flags |= os.WSTOPPED
     try:
         result = os.waitid(
             os.P_PID,
             process.pid,
-            os.WEXITED | os.WNOHANG | os.WNOWAIT,
+            wait_flags,
         )
     except ChildProcessError as exc:
         raise OwnedProcessError(f"owned process leader {process.pid} is not waitable") from exc
     if result is None:
         return None
+    if stopped_observation and result.si_code == os.CLD_STOPPED:
+        raise OwnedProcessError(
+            f"owned process leader {process.pid} in group {pgid} "
+            f"stopped by signal {result.si_status}",
+            leader_pid=process.pid,
+            pgid=pgid,
+            stop_signal=int(result.si_status),
+        )
     if result.si_code == os.CLD_EXITED:
         return int(result.si_status)
     return -int(result.si_status)
@@ -567,11 +636,13 @@ def _poll_leader_without_reaping(
 
 def _wait_for_leader_exit_without_reaping(
     process: subprocess.Popen[bytes],
+    pgid: int,
     *,
     timeout_seconds: float | None,
+    include_stopped: bool = True,
 ) -> bool:
     deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
-    while _poll_leader_without_reaping(process) is None:
+    while _poll_leader_without_reaping(process, pgid, include_stopped=include_stopped) is None:
         if deadline is not None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:

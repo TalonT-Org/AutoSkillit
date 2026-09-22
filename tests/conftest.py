@@ -14,6 +14,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Pin Hypothesis storage to the pytest tmp dir BEFORE any test collection or
+# plugin import runs. pytest_configure runs too late: hypothesis is imported
+# transitively during pytest plugin discovery (e.g. via xdist worker setup,
+# auto-fixture analysis, or test module collection), so by the time
+# pytest_configure fires the storage root has already been resolved against
+# the working directory. Setting the env var at module load guarantees every
+# pytest process — controller and every xdist worker — picks it up before
+# hypothesis is loaded. TMPDIR is set by the _tmpdir-setup task to a per-run
+# pytest tmp dir under /dev/shm/pytest-tmp-* which is git-ignored and exempt
+# from the root-debris detector. Falls back to /tmp if TMPDIR is unset.
+_hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
+os.makedirs(_hypothesis_storage_dir, exist_ok=True)
+os.environ["HYPOTHESIS_STORAGE_DIR"] = _hypothesis_storage_dir
+
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
 
@@ -1081,17 +1095,6 @@ def pytest_configure(config: pytest.Config) -> None:
     Fail-open: any error sets scope to None (full test run).
     """
     import warnings
-
-    # Pin Hypothesis storage to the pytest tmp dir so it cannot create
-    # `.hypothesis/` at the repo root — that path is monitored by the
-    # root-debris detector and any hypothesis test would mark the next
-    # pytest_runtest_teardown as "non-ignored repository-root debris
-    # observed". TMPDIR is set to a per-run pytest tmp dir by the
-    # _tmpdir-setup task (see Taskfile.yml), which the .gitignore and the
-    # root-debris detector both exempt.
-    hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
-    os.makedirs(hypothesis_storage_dir, exist_ok=True)
-    os.environ["HYPOTHESIS_STORAGE_DIR"] = hypothesis_storage_dir
 
     # Reset xdist IPC accumulator so in-process pytester reruns don't leak counts.
     _worker_filter_counts.clear()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -96,6 +97,7 @@ def select_interactive_discovery_route(
 class DiscoveredSkills:
     names: frozenset[str]
     roots: tuple[Path, ...]
+    root_tokens: tuple[str, ...]
     paths: Mapping[str, Path]
 
 
@@ -146,9 +148,12 @@ def _expand_skill_path(token: str, aliases: Mapping[str, Path]) -> Path:
     return path
 
 
-def _parse_skill_roots(lines: Sequence[str]) -> tuple[tuple[Path, ...], dict[str, Path]]:
+def _parse_skill_roots(
+    lines: Sequence[str],
+) -> tuple[tuple[Path, ...], tuple[str, ...], dict[str, Path]]:
     aliases: dict[str, Path] = {}
     roots: list[Path] = []
+    root_tokens: list[str] = []
     for raw_line in lines:
         line = raw_line.strip()
         if not line:
@@ -159,12 +164,14 @@ def _parse_skill_roots(lines: Sequence[str]) -> tuple[tuple[Path, ...], dict[str
         alias = match.group("alias")
         if alias in aliases:
             raise ValueError(f"duplicate skill-root alias: {alias}")
-        root = Path(match.group("path"))
+        root_token = match.group("path")
+        root = Path(root_token)
         if not root.is_absolute():
             raise ValueError(f"skill root is not absolute: {root}")
         aliases[alias] = root
         roots.append(root)
-    return tuple(roots), aliases
+        root_tokens.append(root_token)
+    return tuple(roots), tuple(root_tokens), aliases
 
 
 def _new_skill_name(raw_name: str, paths: Mapping[str, Path]) -> str:
@@ -236,11 +243,12 @@ def parse_skills_instructions(prompt_input_json: str) -> DiscoveredSkills:
     if any("(file:" in line for line in lines[: skills_index + 1]):
         raise ValueError("skill path line appears outside Available skills")
 
-    roots, aliases = _parse_skill_roots(lines[roots_index + 1 : skills_index])
+    roots, root_tokens, aliases = _parse_skill_roots(lines[roots_index + 1 : skills_index])
     paths = _parse_available_skills(lines[skills_index + 1 : -1], aliases)
     return DiscoveredSkills(
         names=frozenset(paths),
         roots=roots,
+        root_tokens=root_tokens,
         paths=MappingProxyType(paths),
     )
 
@@ -301,7 +309,121 @@ def _fingerprint_managed_files(
     return tuple(fingerprint)
 
 
+def _capture_managed_alias_state(
+    alias_root: Path,
+    *,
+    catalog_dir: Path,
+    route: SkillDiscoveryRouteDef,
+) -> tuple[int, int, int, int, int, int, str, Path]:
+    before = alias_root.lstat()
+    if not stat.S_ISLNK(before.st_mode):
+        raise ValueError(f"managed discovery alias must be a symlink: {alias_root}")
+    token = os.readlink(alias_root)
+    if token != route.alias_target:
+        raise ValueError(f"managed discovery root has an unexpected alias target: {alias_root}")
+    resolved_target = alias_root.resolve(strict=True)
+    after = alias_root.lstat()
+    before_identity = (
+        before.st_dev,
+        before.st_ino,
+        before.st_mode,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    )
+    after_identity = (
+        after.st_dev,
+        after.st_ino,
+        after.st_mode,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    )
+    if before_identity != after_identity:
+        raise ValueError(f"managed discovery root changed while validating: {alias_root}")
+    if resolved_target != catalog_dir:
+        raise ValueError(f"managed discovery root does not resolve to catalog: {alias_root}")
+    return (*after_identity, token, resolved_target)
+
+
 def _validate_expected_discovery_root(
+    discovered: DiscoveredSkills,
+    *,
+    expected_discovery_root: Path,
+    catalog_dir: Path,
+    route: SkillDiscoveryRouteDef,
+    context: str,
+    managed_root_scope: Path | None,
+) -> list[str]:
+    if route is CODEX_MANAGED_HOME_ROUTE:
+        return _managed_root_policy_errors(
+            discovered,
+            expected_discovery_root=expected_discovery_root,
+            catalog_dir=catalog_dir,
+            context=context,
+            managed_root_scope=managed_root_scope,
+        )
+    return _direct_root_errors(
+        discovered,
+        expected_discovery_root=expected_discovery_root,
+        catalog_dir=catalog_dir,
+        context=context,
+        managed_root_scope=managed_root_scope,
+    )
+
+
+def _managed_root_policy_errors(
+    discovered: DiscoveredSkills,
+    *,
+    expected_discovery_root: Path,
+    catalog_dir: Path,
+    context: str,
+    managed_root_scope: Path | None,
+) -> list[str]:
+    roots = [str(root) for root in discovered.roots]
+    primary_tokens = {str(expected_discovery_root), str(catalog_dir)}
+    primary_indexes = [
+        index for index, token in enumerate(discovered.root_tokens) if token in primary_tokens
+    ]
+    if len(primary_indexes) != 1:
+        return [
+            "Codex skill discovery root-policy requires exactly one exact managed "
+            f"primary root; roots={list(discovered.root_tokens)}; {context}"
+        ]
+    try:
+        primary_target = discovered.roots[primary_indexes[0]].resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        return [f"Codex skill discovery managed primary root is unreadable: {exc}; {context}"]
+    if primary_target != catalog_dir:
+        return [
+            "Codex skill discovery managed primary root does not resolve to the "
+            f"catalog; roots={roots}; {context}"
+        ]
+    scope = managed_root_scope.resolve(strict=False) if managed_root_scope else None
+    allowed_system = str(catalog_dir / ".system")
+    for index, (token, root) in enumerate(zip(discovered.root_tokens, discovered.roots)):
+        if index == primary_indexes[0] or token == allowed_system:
+            continue
+        try:
+            resolved = root.resolve(strict=False)
+        except RuntimeError as exc:
+            return [
+                f"Codex skill discovery root-policy could not resolve {root}: {exc}; {context}"
+            ]
+        in_managed_scope = (
+            (scope is not None and (resolved == scope or scope in resolved.parents))
+            or resolved == catalog_dir
+            or catalog_dir in resolved.parents
+        )
+        if in_managed_scope:
+            return [
+                "Codex skill discovery root-policy rejects additional managed root "
+                f"{token!r}; roots={list(discovered.root_tokens)}; {context}"
+            ]
+    return []
+
+
+def _direct_root_errors(
     discovered: DiscoveredSkills,
     *,
     expected_discovery_root: Path,
@@ -353,6 +475,7 @@ def _catalog_discovery_errors(
     *,
     expected_discovery_root: Path,
     catalog_dir: Path,
+    route: SkillDiscoveryRouteDef,
     managed_root_scope: Path | None,
     context: str,
 ) -> list[str]:
@@ -386,6 +509,7 @@ def _catalog_discovery_errors(
             discovered,
             expected_discovery_root=expected_discovery_root,
             catalog_dir=catalog_dir,
+            route=route,
             managed_root_scope=managed_root_scope,
             context=context,
         )
@@ -436,85 +560,6 @@ def probe_codex_version(
     return raw, normalized, []
 
 
-def attest_catalog_discovery(
-    *,
-    probe_command: tuple[str, ...],
-    env: Mapping[str, str],
-    cwd: str,
-    catalog_dir: Path,
-    expected_discovery_root: Path,
-    expected_entries: Sequence[tuple[str, str]],
-    route: SkillDiscoveryRouteDef,
-    version: str,
-    managed_root_scope: Path | None = None,
-    timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-) -> list[str]:
-    """Require Codex's real prompt loader to expose the frozen managed catalog."""
-    executable = probe_command[0] if probe_command else "<missing>"
-    context = _contract_context(
-        executable=executable,
-        catalog_dir=catalog_dir,
-        version=version,
-        timeout_seconds=timeout_seconds,
-        route=route,
-    )
-    if not expected_discovery_root.is_absolute():
-        return [f"Codex skill discovery expected root must be absolute; {context}"]
-    try:
-        expected_paths = _validated_expected_paths(catalog_dir, expected_entries)
-        before_fingerprint = _fingerprint_managed_files(expected_paths)
-    except (OSError, ValueError) as exc:
-        return [f"Codex skill discovery catalog validation failed: {exc}; {context}"]
-
-    result = _run_bounded_codex_probe(
-        probe_command,
-        env=env,
-        cwd=cwd,
-        timeout_seconds=timeout_seconds,
-        stream_limit_bytes=_CODEX_DISCOVERY_STREAM_LIMIT,
-    )
-    errors: list[str] = []
-    if result.failure is not None:
-        errors.append(
-            f"Codex skill discovery probe {result.failure}; {_probe_diagnostic(result)}; {context}"
-        )
-    elif result.returncode != 0:
-        errors.append(
-            f"Codex skill discovery probe exited with status {result.returncode}; "
-            f"{_probe_diagnostic(result)}; {context}"
-        )
-    else:
-        try:
-            prompt_json = result.stdout.decode("utf-8")
-            discovered = parse_skills_instructions(prompt_json)
-        except (UnicodeDecodeError, ValueError) as exc:
-            errors.append(f"Codex skill discovery parse failed: {exc}; {context}")
-        else:
-            errors.extend(
-                _catalog_discovery_errors(
-                    discovered,
-                    expected_paths,
-                    expected_discovery_root=expected_discovery_root,
-                    catalog_dir=catalog_dir,
-                    context=context,
-                    managed_root_scope=managed_root_scope,
-                )
-            )
-    try:
-        after_fingerprint = _fingerprint_managed_files(expected_paths)
-    except OSError as exc:
-        errors.append(
-            "Codex skill discovery could not revalidate the managed catalog: "
-            f"{type(exc).__name__}: {exc}; {context}"
-        )
-    except ValueError as exc:
-        errors.append(f"Codex skill discovery mutated the managed catalog: {exc}; {context}")
-    else:
-        if after_fingerprint != before_fingerprint:
-            errors.append(f"Codex skill discovery mutated the managed catalog; {context}")
-    return errors
-
-
 __all__ = [
     "CODEX_APP_SERVER_ROUTE",
     "CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS",
@@ -523,7 +568,6 @@ __all__ = [
     "CODEX_SKILL_DISCOVERY_CONTRACT",
     "CodexSkillDiscoveryContractDef",
     "DiscoveredSkills",
-    "attest_catalog_discovery",
     "parse_skills_instructions",
     "probe_codex_version",
     "select_interactive_discovery_route",

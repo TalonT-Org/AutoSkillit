@@ -51,10 +51,10 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "InteractiveInvocationValidation",
     "PositionalRole",
     "CodexRuntimeSpec",
     "CodexAppServerPlan",
-    "SessionAttemptHandle",
     "ExecutableLaunchBinding",
     "ModelTranslation",
     "SessionSummary",
@@ -74,6 +74,18 @@ CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
     "Automatic Codex context compaction was blocked. Start an explicit new session, "
     "or compact manually and deliberately resume."
 )
+
+
+@dataclass(frozen=True, slots=True)
+class InteractiveInvocationValidation:
+    """Validated interactive invocation evidence retained until process spawn."""
+
+    errors: tuple[str, ...]
+    pre_spawn_check: Callable[[], None] | None = None
+
+    def __post_init__(self) -> None:
+        if self.errors and self.pre_spawn_check is not None:
+            raise ValueError("pre_spawn_check is only valid when errors is empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,22 +533,6 @@ class SessionSummary:
     modified: str | None
     is_sidechain: bool
     session_type_hint: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class SessionAttemptHandle:
-    """Ownership handle for one durable session attempt."""
-
-    view_id: str
-    pass_fds: tuple[int, ...]
-    _record_spawn: Callable[[int, int], None] = field(repr=False, compare=False)
-    _record_reaped: Callable[[int, int], None] = field(repr=False, compare=False)
-
-    def record_spawn(self, pid: int, pgid: int) -> None:
-        self._record_spawn(pid, pgid)
-
-    def record_reaped(self, pid: int, pgid: int) -> None:
-        self._record_reaped(pid, pgid)
 
 
 class PositionalRole(StrEnum):

@@ -304,9 +304,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         result = self.backend.validate_session_layout(tmp_path, project_dir=tmp_path)
         assert isinstance(result, list)
 
-    def test_validate_interactive_invocation_returns_list(self) -> None:
+    def test_validate_interactive_invocation_returns_validation(self) -> None:
+        from autoskillit.core import InteractiveInvocationValidation
+
         spec = self.backend.build_interactive_cmd(**self._builder_home_kwargs("generated_home"))
-        assert isinstance(self.backend.validate_interactive_invocation(spec), list)
+        assert isinstance(
+            self.backend.validate_interactive_invocation(spec), InteractiveInvocationValidation
+        )
 
     def test_cook_lifecycle_boundaries_are_implemented(self) -> None:
         assert callable(self.backend.recover_cook_history)

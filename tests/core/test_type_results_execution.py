@@ -81,6 +81,7 @@ class TestExecutionTypesNotInResults:
 
         expected = {
             "SessionTelemetry",
+            "SessionAttemptHandle",
             "RecipeIdentity",
             "CIRunScope",
             "SubagentModelOutcomeDict",

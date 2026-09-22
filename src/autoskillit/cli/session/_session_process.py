@@ -37,6 +37,13 @@ class CookAttemptResult:
     returncode: int
 
 
+def _run_pre_spawn_check(spec: CmdSpec, check: Callable[[], None] | None) -> None:
+    if spec.managed_skill_catalog is not None and check is None:
+        raise RuntimeError("managed interactive launch requires a pre-spawn check")
+    if check is not None:
+        check()
+
+
 def run_cook_attempt(
     spec: CmdSpec,
     *,
@@ -47,6 +54,7 @@ def run_cook_attempt(
     observer: PtyObserver | None,
     not_after: float,
     systemd_scope_enabled: bool = False,
+    pre_spawn_check: Callable[[], None] | None = None,
 ) -> CookAttemptResult:
     """Run one finalized cook command and prove complete child cleanup.
 
@@ -83,6 +91,7 @@ def run_cook_attempt(
                 spawn_fds = _merge_launcher_fds(inherited_fds, slave_fd)
                 process_group = None
                 start_new_session = True
+            _run_pre_spawn_check(spec, pre_spawn_check)
             # PTY mode places the launcher and its replacement workload in the same scope.
             owner = spawn_owned_process(
                 wrap_systemd_scope(

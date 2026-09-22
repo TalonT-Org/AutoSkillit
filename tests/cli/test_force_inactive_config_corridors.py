@@ -26,6 +26,7 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     FreshLaunch,
+    InteractiveInvocationValidation,
     ManagedSessionHome,
     PreLaunchReadiness,
     SessionAttemptHandle,
@@ -68,9 +69,9 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             del executable
             return PreLaunchReadiness((), {})
 
-        def validate_interactive_invocation(self, spec: object) -> list[str]:
+        def validate_interactive_invocation(self, spec: object) -> InteractiveInvocationValidation:
             del spec
-            return []
+            return InteractiveInvocationValidation(errors=())
 
         def interactive_ordering_flags(self) -> tuple[frozenset[str], frozenset[str]]:
             from autoskillit.execution.backends import CodexBackend

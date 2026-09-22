@@ -15,7 +15,9 @@ from typing import Any
 import pytest
 
 import autoskillit.hooks  # noqa: F401 — forces HOOK_REGISTRY population before sync_hooks_to_codex_config validates lifecycle contracts
+from autoskillit.core import InteractiveInvocationValidation
 from autoskillit.execution.backends import _codex_probes as probes
+from autoskillit.execution.backends._codex import interactive_validation
 from autoskillit.execution.process._lifecycle import owned_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -536,9 +538,9 @@ def test_real_interactive_validator_reaches_successful_native_probe(
     monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    assert backend.validate_interactive_invocation(spec) == []
+    assert backend.validate_interactive_invocation(spec).errors == ()
 
-    probe_prefix = codex._interactive_probe_prefix(spec.origin)
+    probe_prefix = interactive_validation._interactive_probe_prefix(spec.origin)
     assert calls == [
         {
             "command": (*probe_prefix, "mcp", "list", codex.CodexFlags.JSON),
@@ -582,31 +584,34 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     discovery_errors = ["exact discovery diagnostic"]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(codex, "_validate_mcp_probe", lambda _command, **_kwargs: [])
     monkeypatch.setattr(
-        codex,
+        interactive_validation,
+        "_validate_mcp_probe",
+        lambda _command, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        interactive_validation,
         "probe_codex_version",
         lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
     )
 
-    def attest(**kwargs: object) -> list[str]:
+    def attest(**kwargs: object) -> InteractiveInvocationValidation:
         captured.update(kwargs)
-        return discovery_errors
+        return InteractiveInvocationValidation(errors=tuple(discovery_errors))
 
-    monkeypatch.setattr(codex, "attest_catalog_discovery", attest)
+    monkeypatch.setattr(interactive_validation, "attest", attest)
 
-    assert backend.validate_interactive_invocation(spec) == discovery_errors
+    assert backend.validate_interactive_invocation(spec).errors == tuple(discovery_errors)
+    managed_route = interactive_validation.CODEX_MANAGED_HOME_ROUTE
     assert captured["probe_command"] == (
-        *codex._interactive_probe_prefix(spec.origin),
+        *interactive_validation._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
     )
     assert captured["env"] == spec.env
     assert captured["cwd"] == spec.cwd
-    assert captured["route"] is codex.CODEX_MANAGED_HOME_ROUTE
-    assert captured["catalog_dir"] == codex.CODEX_MANAGED_HOME_ROUTE.catalog_dir(generated_home)
-    assert captured["expected_discovery_root"] == codex.CODEX_MANAGED_HOME_ROUTE.discovery_root(
-        generated_home
-    )
+    assert captured["route"] is managed_route
+    assert captured["catalog_dir"] == managed_route.catalog_dir(generated_home)
+    assert captured["expected_discovery_root"] == managed_route.discovery_root(generated_home)
     assert captured["managed_root_scope"] == generated_home.parent
     assert captured["expected_entries"] == spec.managed_skill_catalog.skill_entries
     assert captured["timeout_seconds"] == 30
@@ -635,15 +640,15 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
         version_call.update(kwargs)
         return "codex-cli 0.153.4", "0.153.4", []
 
-    def attest(**kwargs: object) -> list[str]:
+    def attest(**kwargs: object) -> InteractiveInvocationValidation:
         events.append("prompt-input")
         discovery_call.update(kwargs)
-        return []
+        return InteractiveInvocationValidation(errors=())
 
-    monkeypatch.setattr(codex, "probe_codex_version", probe_version)
-    monkeypatch.setattr(codex, "attest_catalog_discovery", attest)
+    monkeypatch.setattr(interactive_validation, "probe_codex_version", probe_version)
+    monkeypatch.setattr(interactive_validation, "attest", attest)
 
-    assert backend.validate_interactive_invocation(spec) == []
+    assert backend.validate_interactive_invocation(spec).errors == ()
     assert events == ["version", "prompt-input"]
     assert version_call == {
         "executable": str(executable),
@@ -652,16 +657,15 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
         "timeout_seconds": 30.0,
     }
     assert discovery_call["probe_command"] == (
-        *codex._interactive_probe_prefix(spec.origin),
+        *interactive_validation._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
     )
-    assert discovery_call["route"] is codex.CODEX_PROJECTED_HOME_ROUTE
-    assert discovery_call["catalog_dir"] == codex.CODEX_PROJECTED_HOME_ROUTE.catalog_dir(
+    projected_route = interactive_validation.CODEX_PROJECTED_HOME_ROUTE
+    assert discovery_call["route"] is projected_route
+    assert discovery_call["catalog_dir"] == projected_route.catalog_dir(projected_home)
+    assert discovery_call["expected_discovery_root"] == projected_route.discovery_root(
         projected_home
     )
-    assert discovery_call[
-        "expected_discovery_root"
-    ] == codex.CODEX_PROJECTED_HOME_ROUTE.discovery_root(projected_home)
     assert discovery_call["managed_root_scope"] == projected_home.parent
     assert discovery_call["expected_entries"] == spec.projected_skill_entries
     assert discovery_call["version"] == "codex-cli 0.153.4"
@@ -671,17 +675,17 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
 def test_interactive_validator_rejects_spec_without_declared_route(tmp_path: Path) -> None:
     backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
 
-    assert backend.validate_interactive_invocation(replace(spec, skill_discovery_route=None)) == [
-        "Codex interactive validation requires a declared skill discovery route"
-    ]
+    assert backend.validate_interactive_invocation(
+        replace(spec, skill_discovery_route=None)
+    ).errors == ("Codex interactive validation requires a declared skill discovery route",)
 
 
 def test_interactive_validator_rejects_missing_managed_catalog_evidence(tmp_path: Path) -> None:
     backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
 
-    assert backend.validate_interactive_invocation(replace(spec, managed_skill_catalog=None)) == [
-        "Codex managed discovery route requires managed catalog evidence"
-    ]
+    assert backend.validate_interactive_invocation(
+        replace(spec, managed_skill_catalog=None)
+    ).errors == ("Codex managed discovery route requires managed catalog evidence",)
 
 
 @pytest.mark.parametrize(
@@ -707,9 +711,9 @@ def test_projected_interactive_validator_rejects_invalid_home_environment(
     environment = dict(spec.env)
     environment.update(environment_update)
 
-    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
-        expected_error
-    ]
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)).errors == (
+        expected_error,
+    )
 
 
 def test_projected_interactive_validator_rejects_noncanonical_home(tmp_path: Path) -> None:
@@ -718,9 +722,9 @@ def test_projected_interactive_validator_rejects_noncanonical_home(tmp_path: Pat
     environment = dict(spec.env)
     environment["CODEX_HOME"] = str(noncanonical_home)
 
-    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
-        "Codex projected interactive CODEX_HOME must be a canonical real directory"
-    ]
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)).errors == (
+        "Codex projected interactive CODEX_HOME must be a canonical real directory",
+    )
 
 
 def test_projected_interactive_validator_rejects_unreadable_home(tmp_path: Path) -> None:
@@ -728,7 +732,7 @@ def test_projected_interactive_validator_rejects_unreadable_home(tmp_path: Path)
     environment = dict(spec.env)
     environment["CODEX_HOME"] = str(tmp_path / "missing-home")
 
-    errors = backend.validate_interactive_invocation(replace(spec, env=environment))
+    errors = backend.validate_interactive_invocation(replace(spec, env=environment)).errors
 
     assert len(errors) == 1
     assert errors[0].startswith("Codex projected interactive CODEX_HOME is unreadable:")
@@ -741,9 +745,9 @@ def test_projected_interactive_validator_rejects_home_file(tmp_path: Path) -> No
     environment = dict(spec.env)
     environment["CODEX_HOME"] = str(home_file)
 
-    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
-        "Codex projected interactive CODEX_HOME must be a canonical real directory"
-    ]
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)).errors == (
+        "Codex projected interactive CODEX_HOME must be a canonical real directory",
+    )
 
 
 def test_managed_interactive_validator_rejects_mismatched_reserved_homes(tmp_path: Path) -> None:
@@ -751,16 +755,15 @@ def test_managed_interactive_validator_rejects_mismatched_reserved_homes(tmp_pat
     environment = dict(spec.env)
     environment["CODEX_SQLITE_HOME"] = str(tmp_path / "different-home")
 
-    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
-        "Codex interactive reserved home and SQLite environment must name the same generated home"
-    ]
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)).errors == (
+        "Codex interactive reserved home and SQLite environment must name the same generated home",
+    )
 
 
 def test_projected_interactive_validator_rejects_missing_catalog_before_prompt_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.execution.backends import codex
     from autoskillit.execution.backends._codex_discovery import CODEX_PROJECTED_HOME_ROUTE
 
     backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
@@ -768,12 +771,12 @@ def test_projected_interactive_validator_rejects_missing_catalog_before_prompt_p
         CODEX_PROJECTED_HOME_ROUTE.catalog_dir(projected_home) / "projected-skill" / "SKILL.md"
     ).unlink()
     monkeypatch.setattr(
-        codex,
+        interactive_validation,
         "probe_codex_version",
         lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
     )
 
-    errors = backend.validate_interactive_invocation(spec)
+    errors = backend.validate_interactive_invocation(spec).errors
 
     assert any("catalog validation failed" in error for error in errors)
     assert any("projected-skill/SKILL.md" in error for error in errors)
@@ -793,12 +796,11 @@ def test_projected_interactive_validator_rejects_attestation_catalog_changes(
     expected_fragment: str,
 ) -> None:
     from autoskillit.execution.backends import _codex_discovery as discovery
-    from autoskillit.execution.backends import codex
 
     backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
     catalog_dir = discovery.CODEX_PROJECTED_HOME_ROUTE.catalog_dir(projected_home)
     monkeypatch.setattr(
-        codex,
+        interactive_validation,
         "probe_codex_version",
         lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
     )
@@ -820,7 +822,7 @@ def test_projected_interactive_validator_rejects_attestation_catalog_changes(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    errors = backend.validate_interactive_invocation(spec)
+    errors = backend.validate_interactive_invocation(spec).errors
 
     assert any(expected_fragment in error for error in errors)
 
@@ -831,12 +833,12 @@ def test_projected_interactive_validator_rejects_empty_or_mixed_catalog_evidence
     backend, spec, _projected_home, _executable = _projected_interactive_spec(tmp_path)
     _, managed_spec, _generated_home, _managed_executable = _interactive_discovery_spec(tmp_path)
 
-    assert backend.validate_interactive_invocation(replace(spec, projected_skill_entries=())) == [
-        "Codex projected discovery route requires projected catalog evidence"
-    ]
+    assert backend.validate_interactive_invocation(
+        replace(spec, projected_skill_entries=())
+    ).errors == ("Codex projected discovery route requires projected catalog evidence",)
     assert backend.validate_interactive_invocation(
         replace(spec, managed_skill_catalog=managed_spec.managed_skill_catalog)
-    ) == ["Codex interactive validation received mixed managed and projected catalogs"]
+    ).errors == ("Codex interactive validation received mixed managed and projected catalogs",)
 
 
 def test_projected_interactive_cmd_rejects_empty_frozen_catalog(tmp_path: Path) -> None:
@@ -878,7 +880,7 @@ def test_interactive_validator_skips_version_and_discovery_when_mcp_fails(
     monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    errors = backend.validate_interactive_invocation(spec)
+    errors = backend.validate_interactive_invocation(spec).errors
 
     assert len(errors) == 1
     assert "Codex MCP validation exited with status 7" in errors[0]
@@ -929,7 +931,7 @@ def test_interactive_validator_stops_before_discovery_when_exact_version_probe_f
     monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    errors = backend.validate_interactive_invocation(spec)
+    errors = backend.validate_interactive_invocation(spec).errors
 
     assert len(errors) == 1
     assert expected_diagnostic in errors[0]

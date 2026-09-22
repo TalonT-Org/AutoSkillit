@@ -1070,6 +1070,7 @@ from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import InstallMode as InstallMode
 from .types import InstructionExtractionMode as InstructionExtractionMode
 from .types import IntakeRuleDef as IntakeRuleDef
+from .types import InteractiveInvocationValidation as InteractiveInvocationValidation
 from .types import InteractiveLaunch as InteractiveLaunch
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision

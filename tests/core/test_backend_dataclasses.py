@@ -618,10 +618,10 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
+        "InteractiveInvocationValidation",
         "PositionalRole",
         "CodexAppServerPlan",
         "CodexRuntimeSpec",
-        "SessionAttemptHandle",
         "ExecutableLaunchBinding",
         "ModelTranslation",
         "SessionSummary",
@@ -802,3 +802,15 @@ def test_skill_session_config_field_types():
     assert hints["resume_checkpoint"] == SessionCheckpoint | None
     assert hints["resume_message"] == str | None
     assert hints["sandbox_mode"] is str
+
+
+def test_interactive_invocation_validation_is_frozen_and_rejects_error_check_mix() -> None:
+    from autoskillit.core import InteractiveInvocationValidation
+
+    result = InteractiveInvocationValidation(errors=())
+    assert result.pre_spawn_check is None
+    assert not hasattr(result, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        result.errors = ("changed",)  # type: ignore[misc]
+    with pytest.raises(ValueError, match="pre_spawn_check"):
+        InteractiveInvocationValidation(errors=("failure",), pre_spawn_check=lambda: None)

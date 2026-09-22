@@ -33,8 +33,10 @@ from autoskillit.execution.backends._codex_discovery import (
     CODEX_MANAGED_HOME_ROUTE,
     CODEX_PROJECTED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
-    attest_catalog_discovery,
     parse_skills_instructions,
+)
+from autoskillit.execution.backends._codex_discovery_attestation import (
+    attest as attest_catalog_discovery,
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import run_managed_async
@@ -559,13 +561,17 @@ def test_installed_codex_discovers_the_session_catalog_through_the_declared_inte
         )
         assert discovery_root.is_symlink()
         assert discovery_root.resolve() == catalog.resolve()
-        assert discovery_root in discovered.roots
-        for root in discovered.roots:
-            if tmp_path in root.parents:
-                assert (
-                    root == discovery_root
-                    or catalog.resolve() in root.resolve(strict=False).parents
-                )
+        primary_indexes = [
+            index
+            for index, token in enumerate(discovered.root_tokens)
+            if token in {str(discovery_root), str(catalog)}
+        ]
+        assert len(primary_indexes) == 1
+        assert discovered.roots[primary_indexes[0]].resolve(strict=True) == catalog
+        assert all(
+            index == primary_indexes[0] or token == str(catalog / ".system")
+            for index, token in enumerate(discovered.root_tokens)
+        )
         assert "join-required" not in discovered.names
         for name, _ in expected_entries:
             assert name in discovered.names
@@ -650,8 +656,8 @@ def test_two_concurrent_session_homes_do_not_share_catalogs(
                     version=selected_codex.normalized_version,
                     timeout_seconds=_PROBE_TIMEOUT_SECONDS,
                     managed_root_scope=tmp_path,
-                )
-                == []
+                ).errors
+                == ()
             )
         _write_diagnostics(
             alpha_project,
@@ -692,8 +698,8 @@ def test_prelaunch_attestation_matches_the_real_loader(
                 route=CODEX_MANAGED_HOME_ROUTE,
                 version=selected_codex.normalized_version,
                 timeout_seconds=_PROBE_TIMEOUT_SECONDS,
-            )
-            == []
+            ).errors
+            == ()
         )
 
         removed_name, _ = expected_entries[0]
@@ -708,7 +714,7 @@ def test_prelaunch_attestation_matches_the_real_loader(
             route=CODEX_MANAGED_HOME_ROUTE,
             version=selected_codex.normalized_version,
             timeout_seconds=_PROBE_TIMEOUT_SECONDS,
-        )
+        ).errors
         assert errors
         assert removed_name in "\n".join(errors)
         _write_diagnostics(
@@ -868,12 +874,12 @@ def test_projected_home_prelaunch_attestation_uses_the_direct_skill_root(
             assert discovered.paths[name] == expected_path
             assert discovered.paths[name].resolve(strict=True) == expected_path.resolve()
 
-        assert backend.validate_interactive_invocation(spec) == []
+        assert backend.validate_interactive_invocation(spec).errors == ()
 
         removed_name, relative_path = expected_entries[0]
         skill_path = projected_catalog / relative_path
         skill_path.rename(skill_path.with_name("SKILL.md.removed"))
-        errors = backend.validate_interactive_invocation(spec)
+        errors = backend.validate_interactive_invocation(spec).errors
         assert errors
         assert "Codex skill discovery catalog validation failed" in "\n".join(errors)
         assert removed_name in "\n".join(errors)

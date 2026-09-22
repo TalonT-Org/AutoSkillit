@@ -18,7 +18,7 @@ from ._type_backend import (
     BackendConventions,
     CmdSpec,
     ExecutableLaunchBinding,
-    SessionAttemptHandle,
+    InteractiveInvocationValidation,
     SessionEvent,
     SessionSummary,
     SkillSessionConfig,
@@ -34,6 +34,7 @@ from ._type_native_shell_capture import (
 )
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import PreLaunchReadiness, ValidatedAddDir
+from ._type_results_execution import SessionAttemptHandle
 from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import (
     SemanticAdaptationContext,
@@ -328,7 +329,9 @@ class CodingAgentBackend(Protocol):
         project_dir: Path | None = None,
     ) -> list[str]: ...
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]: ...
+    def validate_interactive_invocation(
+        self, spec: CmdSpec
+    ) -> InteractiveInvocationValidation: ...
 
     def validate_skill_content(self, content: str) -> list[str]: ...
 

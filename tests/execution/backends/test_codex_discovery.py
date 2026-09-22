@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
 from autoskillit.execution.backends import _codex_discovery as discovery
+from autoskillit.execution.backends import _codex_discovery_attestation as attestation
 from autoskillit.execution.backends import _codex_probes as probes
 from tests.fixtures.codex import fixture_path
 
@@ -71,7 +73,11 @@ def _catalog(
 
 
 def _loader_output(name: str, catalog_dir: Path) -> str:
-    return _loader_output_at_root(name, catalog_dir, _discovery_root(catalog_dir))
+    discovery_root = _discovery_root(catalog_dir)
+    return _loader_output_at_root(name, catalog_dir, discovery_root).replace(
+        str(discovery_root / ".system"),
+        str(catalog_dir / ".system"),
+    )
 
 
 def _discovery_root(catalog_dir: Path) -> Path:
@@ -287,16 +293,21 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
         if use_managed_alias
         else discovery.CODEX_PROJECTED_HOME_ROUTE
     )
+    output = _loader_output_at_root(
+        "discovery_prompt_input_v0153.json",
+        catalog_dir,
+        expected_discovery_root,
+    )
+    if use_managed_alias:
+        output = output.replace(
+            str(expected_discovery_root / ".system"), str(catalog_dir / ".system")
+        )
     command, env = _install_prompt_stub(
         tmp_path,
-        _loader_output_at_root(
-            "discovery_prompt_input_v0153.json",
-            catalog_dir,
-            expected_discovery_root,
-        ),
+        output,
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -305,9 +316,9 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
         route=route,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
-    assert errors == []
+    assert errors == ()
     assert (catalog_dir / ".system" / "native" / "SKILL.md").is_file()
 
 
@@ -328,7 +339,7 @@ def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -338,10 +349,10 @@ def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -
         expected_entries=expected_entries,
         version="0.153.4",
         managed_root_scope=scope,
-    )
+    ).errors
 
     assert len(errors) == 1
-    assert "foreign managed root" in errors[0]
+    assert "root-policy rejects additional managed root" in errors[0]
 
 
 def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> None:
@@ -352,7 +363,7 @@ def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> N
         _loader_output_with_extra_root("discovery_prompt_input_v0153.json", catalog_dir, scope),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -362,10 +373,10 @@ def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> N
         expected_entries=expected_entries,
         version="0.153.4",
         managed_root_scope=scope,
-    )
+    ).errors
 
     assert len(errors) == 1
-    assert "foreign managed root" in errors[0]
+    assert "root-policy rejects additional managed root" in errors[0]
 
 
 def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_path: Path) -> None:
@@ -375,7 +386,7 @@ def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_p
         _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -385,9 +396,9 @@ def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_p
         expected_entries=expected_entries,
         version="0.153.4",
         managed_root_scope=catalog_dir.parents[2],
-    )
+    ).errors
 
-    assert errors == []
+    assert errors == ()
 
 
 def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) -> None:
@@ -402,7 +413,7 @@ def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) ->
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -412,9 +423,9 @@ def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) ->
         expected_entries=expected_entries,
         version="0.153.4",
         managed_root_scope=catalog_dir.parents[2],
-    )
+    ).errors
 
-    assert errors == []
+    assert errors == ()
 
 
 def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
@@ -437,7 +448,7 @@ def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -446,7 +457,7 @@ def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     diagnostic = "\n".join(errors)
     assert "missing expected names ['beta']" in diagnostic
@@ -463,7 +474,7 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
     )
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -472,7 +483,7 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     diagnostic = "\n".join(errors)
     assert "unreadable: FileNotFoundError:" in diagnostic
@@ -521,16 +532,16 @@ def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
         expected_fragment = "roots contain duplicate expected discovery root"
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=expected_discovery_root,
-        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        route=discovery.CODEX_PROJECTED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     diagnostic = "\n".join(errors)
     assert expected_fragment in diagnostic
@@ -552,7 +563,7 @@ def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -561,7 +572,7 @@ def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     assert len(errors) == 1
     assert "expected root must be absolute" in errors[0]
@@ -580,7 +591,7 @@ def test_attest_catalog_discovery_rejects_symlinked_catalog_before_probe(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -589,7 +600,7 @@ def test_attest_catalog_discovery_rejects_symlinked_catalog_before_probe(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     assert len(errors) == 1
     assert "managed catalog must be a canonical real directory" in errors[0]
@@ -608,7 +619,7 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
     )
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -617,7 +628,7 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     assert any("misplaced expected paths" in error and "alpha=" in error for error in errors)
 
@@ -651,7 +662,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
     catalog_dir, expected_entries = _catalog(tmp_path)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", lambda *_args, **_kwargs: result)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -660,7 +671,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     diagnostic = "\n".join(errors)
     assert expected_fragment in diagnostic
@@ -675,7 +686,7 @@ def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
     catalog_dir, expected_entries = _catalog(tmp_path)
     (catalog_dir / "beta" / "SKILL.md").unlink()
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("missing-codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -684,7 +695,7 @@ def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     assert any("catalog validation failed" in error for error in errors)
     assert any("beta/SKILL.md" in error for error in errors)
@@ -698,7 +709,7 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
         mutate_path=catalog_dir / "alpha" / "SKILL.md",
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -707,7 +718,7 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     assert any("mutated the managed catalog" in error for error in errors)
 
@@ -733,7 +744,7 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
 
     monkeypatch.setattr(discovery, "_fingerprint_managed_files", fingerprint)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -742,7 +753,7 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
         route=discovery.CODEX_MANAGED_HOME_ROUTE,
         expected_entries=expected_entries,
         version="0.153.4",
-    )
+    ).errors
 
     diagnostic = "\n".join(errors)
     assert "could not revalidate the managed catalog: OSError: catalog read failed" in diagnostic
@@ -824,7 +835,7 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
     )
     assert (raw, normalized, errors) == ("codex-cli 0.153.4", "0.153.4", [])
 
-    discovery.attest_catalog_discovery(
+    attestation.attest(
         probe_command=("bound-codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -841,3 +852,194 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
         probes._CODEX_PROBE_STREAM_LIMIT,
         discovery._CODEX_DISCOVERY_STREAM_LIMIT,
     ]
+
+
+@pytest.mark.parametrize("reported_primary", ("alias", "canonical"))
+def test_managed_attestation_accepts_one_exact_alias_or_canonical_primary(
+    tmp_path: Path,
+    reported_primary: str,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    alias_root = _discovery_root(catalog_dir)
+    primary = alias_root if reported_primary == "alias" else catalog_dir
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir)
+    output = output.replace(str(alias_root / ".system"), str(catalog_dir / ".system"))
+    output = output.replace(str(alias_root), str(primary))
+    command, env = _install_prompt_stub(tmp_path, output)
+
+    result = attestation.attest(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=alias_root,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=tmp_path,
+    )
+
+    assert result.errors == ()
+    assert result.pre_spawn_check is not None
+    result.pre_spawn_check()
+
+
+@pytest.mark.parametrize(
+    "alias_state",
+    (
+        "missing",
+        "dangling",
+        "directory",
+        "wrong-target",
+        "absolute-token",
+        "wrong-relative-token",
+    ),
+)
+def test_managed_attestation_rejects_invalid_alias_before_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    alias_state: str,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    alias_root = _discovery_root(catalog_dir)
+    alias_root.unlink()
+    if alias_state == "missing":
+        pass
+    elif alias_state == "dangling":
+        alias_root.symlink_to("missing-catalog", target_is_directory=True)
+    elif alias_state == "directory":
+        alias_root.mkdir()
+    elif alias_state == "wrong-target":
+        wrong_target = tmp_path / "wrong-target"
+        wrong_target.mkdir()
+        alias_root.symlink_to(wrong_target, target_is_directory=True)
+    elif alias_state == "absolute-token":
+        alias_root.symlink_to(catalog_dir, target_is_directory=True)
+    else:
+        alias_root.symlink_to("./add-dir/skills", target_is_directory=True)
+
+    def probe_must_not_run(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("invalid managed alias must fail before prompt-input")
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
+
+    result = attestation.attest(
+        probe_command=("codex", "debug", "prompt-input"),
+        env={},
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=alias_root,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    assert result.errors
+    assert result.pre_spawn_check is None
+    assert any(str(alias_root) in message for message in result.errors)
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "missing-primary",
+        "both-primary-spellings",
+        "duplicate-alias-primary",
+        "duplicate-canonical-primary",
+        "non-exact-alias",
+        "non-exact-alias-dot",
+        "system-descendant",
+        "additional-alias-to-catalog",
+    ),
+)
+def test_managed_attestation_rejects_root_policy_variants(
+    tmp_path: Path,
+    case: str,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    alias_root = _discovery_root(catalog_dir)
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir)
+    if case == "missing-primary":
+        output = output.replace(str(alias_root), str(tmp_path / "other-root"), 1)
+    elif case == "both-primary-spellings":
+        output = _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json", catalog_dir, catalog_dir
+        )
+    elif case == "duplicate-alias-primary":
+        output = _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json", catalog_dir, alias_root
+        )
+    elif case == "duplicate-canonical-primary":
+        document = json.loads(output)
+        assert isinstance(document, list)
+        text = _skills_text(document).replace(str(alias_root), str(catalog_dir), 1)
+        output = _with_skills_text(
+            document,
+            text.replace(
+                "### Available skills",
+                f"- `r9` = `{catalog_dir}`\n### Available skills",
+            ),
+        )
+    elif case == "non-exact-alias":
+        output = output.replace(str(alias_root), f"{alias_root}/", 1)
+    elif case == "non-exact-alias-dot":
+        output = output.replace(str(alias_root), f"{alias_root}/.", 1)
+    elif case == "system-descendant":
+        output = output.replace(str(catalog_dir / ".system"), str(catalog_dir / ".system/child"))
+    else:
+        extra_alias = tmp_path / "additional-alias"
+        extra_alias.symlink_to(catalog_dir, target_is_directory=True)
+        output = _loader_output_with_extra_root(
+            "discovery_prompt_input_v0153.json", catalog_dir, extra_alias
+        )
+    command, env = _install_prompt_stub(tmp_path, output)
+
+    errors = attestation.attest(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=alias_root,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+        managed_root_scope=tmp_path,
+    ).errors
+
+    assert any("root-policy" in error for error in errors)
+
+
+@pytest.mark.parametrize("probe_result", ("success", "nonzero"))
+def test_managed_attestation_rejects_same_token_alias_replacement_after_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    probe_result: str,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    alias_root = _discovery_root(catalog_dir)
+    original_inode = alias_root.lstat().st_ino
+    replacement = tmp_path / "replacement-alias"
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir)
+
+    def replace_alias(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
+        replacement.symlink_to("add-dir/skills", target_is_directory=True)
+        os.replace(replacement, alias_root)
+        if probe_result == "nonzero":
+            return probes._BoundedProbeResult(23, b"", b"expected failure")
+        return probes._BoundedProbeResult(0, output.encode(), b"")
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", replace_alias)
+    result = attestation.attest(
+        probe_command=("codex", "debug", "prompt-input"),
+        env={},
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=alias_root,
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+    assert alias_root.lstat().st_ino != original_inode
+    assert any("mutated the managed alias" in error for error in result.errors)
+    if probe_result == "nonzero":
+        assert any("exited with status 23" in error for error in result.errors)

@@ -18,29 +18,25 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
     CODEX_VALID_MODEL_IDS,
-    PROVIDER_PROFILE_ENV_VAR,
-    SESSION_ADD_DIR_SUBDIR,
     BackendCapabilities,
     BackendConventions,
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
-    CmdOrigin,
     CmdSpec,
     CodexRuntimeSpec,
     ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
     HookTrustPolicy,
+    InteractiveInvocationValidation,
     LineDriver,
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
     SessionAttemptHandle,
-    SkillDiscoveryRouteDef,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
-    ValidatedAddDir,
     default_log_dir,
     get_logger,
     required_join_is_unsupported,
@@ -49,6 +45,9 @@ from autoskillit.execution.backends._backend_cmd_builder_base import FlagVocabul
 from autoskillit.execution.backends._codex.app_server import CodexAppServerDriver
 from autoskillit.execution.backends._codex.headless_commands import (
     CodexOrdinaryHeadlessCommandMixin,
+)
+from autoskillit.execution.backends._codex.interactive_validation import (
+    validate_codex_interactive_invocation,
 )
 from autoskillit.execution.backends._codex_cmd_builders import (
     CODEX_ENV_PREFIX_DENYLIST,
@@ -62,16 +61,11 @@ from autoskillit.execution.backends._codex_cmd_builders import (
 from autoskillit.execution.backends._codex_config import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES,
-    _format_toml_value,
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_discovery import (
-    CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     CODEX_MANAGED_HOME_ROUTE,
-    CODEX_PROJECTED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
-    attest_catalog_discovery,
-    probe_codex_version,
 )
 from autoskillit.execution.backends._codex_execution_identity import (
     extract_codex_execution_identity,
@@ -90,7 +84,6 @@ from autoskillit.execution.backends._codex_prelaunch import (
 from autoskillit.execution.backends._codex_probes import (
     _validate_generated_codex_home,
     _validate_inert_rollout_paths,
-    _validate_mcp_probe,
 )
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.backends._explorer_dispatch import (
@@ -99,17 +92,6 @@ from autoskillit.execution.backends._explorer_dispatch import (
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
-
-
-def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
-    command: list[str] = [origin.binary]
-    for flag, value in origin.kv_flags:
-        if flag == CodexFlags.PROFILE:
-            command.extend((flag, value))
-    for flag, value in origin.variadic_pairs:
-        if flag == CodexFlags.CONFIG_OVERRIDE:
-            command.extend((flag, value))
-    return tuple(command)
 
 
 def _validate_managed_skill_catalog(skills_dir: Path) -> list[str]:
@@ -129,65 +111,6 @@ def _validate_managed_skill_catalog(skills_dir: Path) -> list[str]:
 def _append_symlink_shape_error(errors: list[str], path: Path, diagnostic: str) -> None:
     if path.exists() and not path.is_symlink():
         errors.append(diagnostic)
-
-
-def _run_interactive_native_probes(
-    spec: CmdSpec,
-    *,
-    origin: CmdOrigin,
-    generated_home: Path,
-    catalog_dir: Path,
-    managed_catalog: ValidatedAddDir,
-    expected_discovery_root: Path,
-    managed_root_scope: Path,
-    route: SkillDiscoveryRouteDef,
-    config_bytes: bytes,
-    before_fingerprint: tuple[tuple[str, str, int, int], ...],
-) -> list[str]:
-    probe_command = (*_interactive_probe_prefix(origin), "mcp", "list", CodexFlags.JSON)
-    errors = _validate_mcp_probe(
-        probe_command,
-        env=spec.env,
-        cwd=spec.cwd,
-        config_bytes=config_bytes,
-    )
-    after_errors, after_fingerprint = _validate_inert_rollout_paths(generated_home)
-    errors.extend(after_errors)
-    if not after_errors and after_fingerprint != before_fingerprint:
-        errors.append("Codex MCP validation mutated the inert rollout path topology")
-    if errors:
-        return errors
-
-    raw_version, _, version_errors = probe_codex_version(
-        executable=origin.binary,
-        env=spec.env,
-        cwd=spec.cwd,
-        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-    )
-    if version_errors:
-        return version_errors
-
-    discovery_command = (
-        *_interactive_probe_prefix(origin),
-        *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
-    )
-    errors = attest_catalog_discovery(
-        probe_command=discovery_command,
-        env=spec.env,
-        cwd=spec.cwd,
-        catalog_dir=catalog_dir,
-        expected_discovery_root=expected_discovery_root,
-        expected_entries=managed_catalog.skill_entries,
-        managed_root_scope=managed_root_scope,
-        route=route,
-        version=raw_version,
-        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-    )
-    final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
-    errors.extend(final_errors)
-    if not final_errors and final_fingerprint != before_fingerprint:
-        errors.append("Codex skill discovery mutated the inert rollout path topology")
-    return errors
 
 
 __all__ = [
@@ -217,76 +140,6 @@ _CODEX_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
         CodexFlags.PROFILE,
     }
 )
-
-
-def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list[str]]:
-    origin = spec.origin
-    if origin is None:
-        return None, ["Codex interactive validation requires unambiguous CmdOrigin metadata"]
-    reconstructed: list[str] = [origin.binary, *origin.mode_flags]
-    for flag, value in origin.kv_flags:
-        reconstructed.extend((flag, value))
-    reconstructed.extend(value for _role, value in origin.positional)
-    for flag, value in origin.variadic_pairs:
-        reconstructed.extend((flag, value))
-    if tuple(reconstructed) != spec.cmd:
-        return None, ["Codex interactive CmdOrigin does not describe the finalized command"]
-    if not spec.cwd or not Path(spec.cwd).is_absolute():
-        return None, ["Codex interactive validation requires an absolute finalized cwd"]
-    return origin, []
-
-
-def _validate_projected_interactive_invocation(
-    spec: CmdSpec,
-    origin: CmdOrigin,
-    route: SkillDiscoveryRouteDef,
-) -> list[str]:
-    home_value = spec.env.get(CODEX_HOME_ENV_VAR)
-    if not home_value:
-        return ["Codex projected interactive validation requires CODEX_HOME"]
-    if spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR):
-        return ["Codex projected interactive environment must not contain CODEX_SQLITE_HOME"]
-    projected_home = Path(home_value)
-    if not projected_home.is_absolute():
-        return ["Codex projected interactive CODEX_HOME must be absolute"]
-    try:
-        canonical_home = projected_home.resolve(strict=True)
-    except OSError as exc:
-        return [f"Codex projected interactive CODEX_HOME is unreadable: {exc}"]
-    if (
-        projected_home != canonical_home
-        or projected_home.is_symlink()
-        or not projected_home.is_dir()
-    ):
-        return ["Codex projected interactive CODEX_HOME must be a canonical real directory"]
-
-    catalog_dir = route.catalog_dir(projected_home)
-    expected_discovery_root = route.discovery_root(projected_home)
-    if expected_discovery_root is None:
-        return ["Codex projected interactive discovery route has no loader entry point"]
-    raw_version, _, version_errors = probe_codex_version(
-        executable=origin.binary,
-        env=spec.env,
-        cwd=spec.cwd,
-        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-    )
-    if version_errors:
-        return version_errors
-    return attest_catalog_discovery(
-        probe_command=(
-            *_interactive_probe_prefix(origin),
-            *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
-        ),
-        env=spec.env,
-        cwd=spec.cwd,
-        catalog_dir=catalog_dir,
-        expected_discovery_root=expected_discovery_root,
-        expected_entries=spec.projected_skill_entries,
-        route=route,
-        version=raw_version,
-        managed_root_scope=projected_home.parent,
-        timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-    )
 
 
 def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
@@ -554,96 +407,8 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         errors.extend(rollout_errors)
         return errors
 
-    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-        origin, origin_errors = _validated_interactive_origin(spec)
-        if origin_errors:
-            return origin_errors
-        assert origin is not None
-
-        route = spec.skill_discovery_route
-        if route is None:
-            return ["Codex interactive validation requires a declared skill discovery route"]
-        managed_catalog = spec.managed_skill_catalog
-        if managed_catalog is not None and spec.projected_skill_entries:
-            return ["Codex interactive validation received mixed managed and projected catalogs"]
-        if route is CODEX_PROJECTED_HOME_ROUTE:
-            if managed_catalog is not None:
-                return ["Codex projected discovery route cannot use a managed catalog"]
-            if not spec.projected_skill_entries:
-                return ["Codex projected discovery route requires projected catalog evidence"]
-            return _validate_projected_interactive_invocation(spec, origin, route)
-        if route is not CODEX_MANAGED_HOME_ROUTE:
-            return [f"unsupported Codex interactive discovery route: {route.name}"]
-        if managed_catalog is None:
-            return ["Codex managed discovery route requires managed catalog evidence"]
-        if spec.projected_skill_entries:
-            return ["Codex managed discovery route cannot use projected catalog evidence"]
-
-        home_value = spec.env.get(CODEX_HOME_ENV_VAR)
-        sqlite_value = spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR)
-        if not home_value or home_value != sqlite_value:
-            return [
-                "Codex interactive reserved home and SQLite environment must name "
-                "the same generated home"
-            ]
-        generated_home = Path(home_value)
-        if not generated_home.is_absolute():
-            return ["Codex interactive generated home must be absolute"]
-        generated_home = generated_home.resolve(strict=False)
-        if str(generated_home) != home_value:
-            return ["Codex interactive generated home environment is not canonical"]
-
-        expected_add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
-        if managed_catalog.session_home != str(generated_home):
-            return ["Codex interactive managed skill catalog is bound to another home"]
-        if Path(managed_catalog.path) != expected_add_dir:
-            return ["Codex interactive managed skill catalog is bound to another add-dir"]
-        if not managed_catalog.skill_entries:
-            return ["Codex interactive managed skill catalog has no frozen entries"]
-        catalog_dir = route.catalog_dir(generated_home)
-        expected_discovery_root = route.discovery_root(generated_home)
-        if expected_discovery_root is None:
-            return ["Codex managed discovery route has no loader entry point"]
-
-        sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
-        config_overrides = [
-            value for flag, value in origin.variadic_pairs if flag == CodexFlags.CONFIG_OVERRIDE
-        ]
-        if not config_overrides or config_overrides[-1] != sqlite_override:
-            return [
-                "Codex interactive command is missing the highest-precedence "
-                "generated-home sqlite_home override"
-            ]
-        profiles = [value for flag, value in origin.kv_flags if flag == CodexFlags.PROFILE]
-        if len(profiles) > 1:
-            return ["Codex interactive command has an ambiguous selected profile"]
-        selected_profile = spec.env.get(PROVIDER_PROFILE_ENV_VAR)
-        if profiles != ([selected_profile] if selected_profile else []):
-            return ["Codex interactive profile metadata does not match the child environment"]
-
-        config_path = generated_home / "config.toml"
-        try:
-            config_bytes = config_path.read_bytes()
-        except OSError as exc:
-            return [
-                f"Failed to read finalized generated Codex config: {type(exc).__name__}: {exc}"
-            ]
-        layout_errors, before_fingerprint = _validate_inert_rollout_paths(generated_home)
-        if layout_errors:
-            return layout_errors
-
-        return _run_interactive_native_probes(
-            spec,
-            origin=origin,
-            generated_home=generated_home,
-            catalog_dir=catalog_dir,
-            managed_catalog=managed_catalog,
-            expected_discovery_root=expected_discovery_root,
-            managed_root_scope=generated_home.parent,
-            route=route,
-            config_bytes=config_bytes,
-            before_fingerprint=before_fingerprint,
-        )
+    def validate_interactive_invocation(self, spec: CmdSpec) -> InteractiveInvocationValidation:
+        return validate_codex_interactive_invocation(spec)
 
     configure_managed_session_dir = project_managed_route
 

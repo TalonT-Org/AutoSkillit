@@ -335,6 +335,10 @@ below the map's default — needs a `PolicyRelaxationApproval` entry naming a tr
 the human who recorded it, plus code-owner review. Tightening is free, and so is removing an
 obsolete exemption.
 
+Automated sessions respond to a line-limit violation by decomposing the file first. If
+decomposition is genuinely infeasible, they stop and give a human the path, measured count, and
+justification; only a human may use the existing exemption-plus-approval path.
+
 `scripts/check_policy_relaxation.py` enforces this as a pre-commit hook (staged vs `HEAD`), as
 `test_no_registered_surface_relaxed_against_base`, and in CI from the base revision's own copy
 of the script. Here "base" means the merge-base revision's policy values that the candidate is

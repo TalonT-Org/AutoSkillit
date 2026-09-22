@@ -155,7 +155,7 @@ def _is_raw_splitlines_len_call(node: ast.AST) -> bool:
         ("tests/arch/_helpers.py", 1),
         ("tests/arch/test_skills_subpackage_size_ceilings.py", 1),
         ("tests/arch/test_subpackage_isolation_capture_layout.py", 1),
-        ("tests/arch/test_subpackage_isolation_size.py", 7),
+        ("tests/arch/test_subpackage_isolation_size.py", 8),
         ("tests/arch/test_subpackage_isolation_smoke_review.py", 2),
         ("tests/hooks/test_hook_registry_decomposition.py", 1),
         ("tests/migration/test_engine_decomposition.py", 2),

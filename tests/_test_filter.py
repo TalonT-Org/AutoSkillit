@@ -1742,6 +1742,26 @@ def _paths_from_git_output(output: str) -> set[str]:
     return {line.strip() for line in output.strip().splitlines() if line.strip()}
 
 
+def _list_untracked_paths(cwd: str | Path) -> frozenset[str]:
+    """Return untracked paths under *cwd*, or an empty set on git failure.
+
+    Used by both ``git_changed_files`` and ``git_changed_files_local``; the
+    only thing that differs between callers is which diff is used to collect
+    *tracked* paths, so the untracked enumeration is centralised here.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        return frozenset()
+    return frozenset(_paths_from_git_output(result.stdout))
+
+
 def git_changed_files(
     cwd: str | Path,
     base_ref: str | None = None,
@@ -1786,20 +1806,7 @@ def git_changed_files(
 
     tracked = frozenset(_paths_from_git_output(diff_result.stdout))
 
-    untracked = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    untracked_paths = (
-        frozenset(_paths_from_git_output(untracked.stdout))
-        if untracked.returncode == 0
-        else frozenset()
-    )
-    return ChangedFiles(tracked=tracked, untracked=untracked_paths)
+    return ChangedFiles(tracked=tracked, untracked=_list_untracked_paths(cwd))
 
 
 def git_changed_files_local(
@@ -1833,27 +1840,7 @@ def git_changed_files_local(
 
     tracked = frozenset(_paths_from_git_output(diff_result.stdout))
 
-    try:
-        untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        warnings.warn("git ls-files timed out after 10s", stacklevel=2)
-        return ChangedFiles(tracked=tracked, untracked=frozenset())
-    except FileNotFoundError:
-        warnings.warn("git binary not found on PATH", stacklevel=2)
-        return ChangedFiles(tracked=tracked, untracked=frozenset())
-    untracked_paths = (
-        frozenset(_paths_from_git_output(untracked.stdout))
-        if untracked.returncode == 0
-        else frozenset()
-    )
-    return ChangedFiles(tracked=tracked, untracked=untracked_paths)
+    return ChangedFiles(tracked=tracked, untracked=_list_untracked_paths(cwd))
 
 
 def _scoped_test_dirs_for_file(path: str) -> set[str]:
@@ -2665,10 +2652,12 @@ def _effective_changed_files(
     if manifest is None:
         return changed_files
 
+    # Callers pass ``untracked_files`` as a subset of ``changed_files`` (see
+    # ``conftest.py``: ``changed_files = set(changed.all_paths)`` and
+    # ``untracked_files = changed.untracked``), so iterating untracked_files
+    # directly is equivalent to the intersection.
     external_untracked = {
-        filepath
-        for filepath in changed_files & untracked_files
-        if not filepath.startswith(("src/", "tests/"))
+        filepath for filepath in untracked_files if not filepath.startswith(("src/", "tests/"))
     }
     if not external_untracked:
         return changed_files

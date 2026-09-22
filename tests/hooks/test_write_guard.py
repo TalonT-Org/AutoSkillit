@@ -1699,12 +1699,10 @@ class TestNormalizePrefixesSurface:
 
     @staticmethod
     def _fail_realpath(*bad: str) -> Callable[..., str]:
-        # Bad paths raise OSError; good paths return unchanged so rstrip("/") + "/"
-        # still works. **_kwargs lets callers using `Path(...).resolve(strict=...)`
-        # — which delegates to `os.path.realpath(..., strict=...)` — pass cleanly.
+        # Stub for os.path.realpath: bad paths raise OSError, good paths pass through.
         bad_set = set(bad)
 
-        def _realpath(p: str, **_kwargs: object) -> str:
+        def _realpath(p: str) -> str:
             if p in bad_set:
                 raise OSError("permission denied")
             return p
@@ -1779,7 +1777,7 @@ class TestNormalizePrefixesSurface:
     ) -> None:
         """Operators reading the JSONL must distinguish config typos from perm fixes."""
 
-        def _raise(p: str, **_kwargs: object) -> str:
+        def _raise(p: str) -> str:
             raise exc_factory()
 
         monkeypatch.setattr(write_guard.os.path, "realpath", _raise)
@@ -1820,7 +1818,7 @@ class TestEmptyPolicyDenialHint:
             lambda _path: {"skills": {"review-pr": {"write_paths": ["/this/does/not/exist"]}}},
         )
 
-        def _raise_realpath(_p: str, **_kw: object) -> str:
+        def _raise_realpath(_p: str) -> str:
             raise OSError("permission denied")
 
         monkeypatch.setattr(write_guard.os.path, "realpath", _raise_realpath)

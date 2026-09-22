@@ -273,7 +273,11 @@ def _validate_managed_interactive_invocation(
     generated_home, home_error = _managed_home(spec)
     if home_error is not None:
         return InteractiveInvocationValidation(errors=(home_error,))
-    assert generated_home is not None
+    if generated_home is None:
+        raise RuntimeError(
+            "Codex interactive validation invariant violated: "
+            "_managed_home returned no error and no generated home"
+        )
     catalog_dir, expected_discovery_root, catalog_error = _managed_catalog_error(
         managed_catalog,
         generated_home,
@@ -281,7 +285,11 @@ def _validate_managed_interactive_invocation(
     )
     if catalog_error is not None:
         return InteractiveInvocationValidation(errors=(catalog_error,))
-    assert catalog_dir is not None and expected_discovery_root is not None
+    if catalog_dir is None or expected_discovery_root is None:
+        raise RuntimeError(
+            "Codex interactive validation invariant violated: "
+            "_managed_catalog_error returned no error and missing catalog metadata"
+        )
     command_error = _managed_command_error(spec, origin, generated_home)
     if command_error is not None:
         return InteractiveInvocationValidation(errors=(command_error,))
@@ -314,7 +322,11 @@ def validate_codex_interactive_invocation(spec: CmdSpec) -> InteractiveInvocatio
     origin, origin_errors = _validated_interactive_origin(spec)
     if origin_errors:
         return InteractiveInvocationValidation(errors=tuple(origin_errors))
-    assert origin is not None
+    if origin is None:
+        raise RuntimeError(
+            "Codex interactive validation invariant violated: "
+            "_validated_interactive_origin returned no errors and no origin"
+        )
     route = spec.skill_discovery_route
     if route is None:
         return InteractiveInvocationValidation(

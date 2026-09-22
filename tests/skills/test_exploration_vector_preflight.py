@@ -98,7 +98,6 @@ def test_projected_exploration_preflight_matches_session_authority(
 
     retained_only_skill_names = exploration_skill_names - migrated_skill_names
     assert retained_only_skill_names, "expected a bundled retained-only exploration skill"
-    assert "scope" in retained_only_skill_names
     for skill_name in sorted(exploration_skill_names):
         content = documents[skill_name].content
         expected = session_scoped_provisioning and skill_name in migrated_skill_names

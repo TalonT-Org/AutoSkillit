@@ -25,8 +25,18 @@ from autoskillit.workspace.skills import (
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.small]
 
 
-def _exploration_catalog() -> tuple[EffectiveSkillCatalog, frozenset[str], frozenset[str]]:
-    """Load the bundled session skills that projection delivers to an agent."""
+def _exploration_catalog(
+    *, isolate_rendering: bool = False
+) -> tuple[EffectiveSkillCatalog, frozenset[str], frozenset[str]]:
+    """Load the bundled session skills that projection delivers to an agent.
+
+    When ``isolate_rendering`` is true, every entry's ``semantic_plan`` is
+    replaced with ``None``. This strips the canonical join-required contract so
+    Codex can be projected without re-running the production profile-admission
+    pipeline that would otherwise reject join-required skills. The substitution
+    is intentionally limited to this isolation use case — production callers
+    must bind real admission results.
+    """
     source_infos = tuple(
         skill
         for skill in DefaultSkillResolver().list_all()
@@ -44,9 +54,12 @@ def _exploration_catalog() -> tuple[EffectiveSkillCatalog, frozenset[str], froze
         )
     )
     assert exploration_skill_names, "expected bundled session skills with exploration vectors"
+    entries = tuple(SkillCatalogEntry.from_skill_info(skill) for skill in source_infos)
+    if isolate_rendering:
+        entries = tuple(replace(entry, semantic_plan=None) for entry in entries)
     return (
         EffectiveSkillCatalog(
-            skills=tuple(SkillCatalogEntry.from_skill_info(skill) for skill in source_infos),
+            skills=entries,
             execution_role=SkillExecutionRole.SESSION,
         ),
         exploration_skill_names,
@@ -74,18 +87,21 @@ def test_projected_exploration_preflight_matches_session_authority(
     their projected bytes must never direct an agent to call
     ``enable_exploration``. Retained-only skills stay in the contract because
     their vector bodies do not reach the migrated-vector renderer.
+
+    Codex parametrizations exercise projection rendering in isolation: their
+    production catalog rejects join-required skills through profile admission,
+    so the catalog is rebuilt with ``isolate_rendering=True`` to drop
+    ``semantic_plan`` and keep only the rendering contract. The cross-backend
+    asymmetry is bounded to this isolation helper and documented on
+    ``_exploration_catalog``.
     """
-    catalog, exploration_skill_names, migrated_skill_names = _exploration_catalog()
+    isolate_rendering = isinstance(backend, CodexBackend)
+    catalog, exploration_skill_names, migrated_skill_names = _exploration_catalog(
+        isolate_rendering=isolate_rendering,
+    )
     session_scoped_provisioning = (
         backend.capabilities.session_scoped_explorer_capable and not headless
     )
-    if isinstance(backend, CodexBackend):
-        # Canonical join-required skills remain rejected on Codex; this
-        # substitution isolates rendering without claiming production admission.
-        catalog = EffectiveSkillCatalog(
-            skills=tuple(replace(entry, semantic_plan=None) for entry in catalog.skills),
-            execution_role=catalog.execution_role,
-        )
     context = SkillProjectionContext(
         cwd=tmp_path,
         catalog=catalog,

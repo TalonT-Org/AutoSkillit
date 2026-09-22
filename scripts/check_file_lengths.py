@@ -39,6 +39,30 @@ from tests.arch._subpackage_isolation_line_limits import (
 HARD_CAP = 750
 ABSOLUTE_CAP = 1000
 
+# Human-agent handoff wording for line-limit violations. Single source of
+# truth so copy edits do not require touching every violation branch. The
+# wording mirrors the policy recorded in `.claude/skills/audit-arch/SKILL.md`
+# and `src/autoskillit/skills_extended/audit-arch/SKILL.md`.
+_HANDOFF_GUIDANCE_TEMPLATE = (
+    " Decompose the file first. An exemption is a human-approved last resort. "
+    "An automated session must not add or relax _LINE_LIMIT_EXEMPTIONS or add its "
+    "PolicyRelaxationApproval. If decomposition is genuinely infeasible, stop and "
+    "give a human the path {path}, measured count {measured_count} non-import lines, "
+    "and the justification."
+)
+
+
+def _human_handoff(rel: str, line_count: int) -> str:
+    """Render the human-agent handoff wording for a line-limit violation.
+
+    Used only by branches that detect a violation against an exempt or
+    non-exempt file. Configuration errors (e.g. an exemption ceiling above
+    the absolute cap) take a different branch and do NOT carry this wording,
+    because the human remediation there is "fix the registry entry", not
+    "decompose the file".
+    """
+    return _HANDOFF_GUIDANCE_TEMPLATE.format(path=rel, measured_count=line_count)
+
 
 def check_file(path: Path) -> str | None:
     """Return a violation message for `path`, or None when it complies."""
@@ -56,36 +80,32 @@ def check_file(path: Path) -> str | None:
         return format_unmeasurable(rel, detail)
     if line_count <= HARD_CAP:
         return None
-    handoff_guidance = (
-        " Decompose the file first. An exemption is a human-approved last resort. "
-        "An automated session must not add or relax _LINE_LIMIT_EXEMPTIONS or add its "
-        "PolicyRelaxationApproval. If decomposition is genuinely infeasible, stop and "
-        f"give a human the path {rel}, measured count {line_count} non-import lines, "
-        "and the justification."
-    )
     exemption: LineLimitExemption | None = _LINE_LIMIT_EXEMPTIONS.get(rel)
     if exemption is None:
         return (
             f"{rel}: {line_count} non-import lines exceeds the {HARD_CAP}-line hard cap "
             "(REQ-CNST-010)"
-        ) + handoff_guidance
+        ) + _human_handoff(rel, line_count)
     if exemption.predicate is None:
         rule_id = exemption.rationale.split(":", 1)[0]
         return (
             f"{rel}: {line_count} non-import lines -- exemption {rule_id} has no "
             f"machine-checkable predicate and is voided under REQ-CNST-010's "
             "diff-scoped gate"
-        ) + handoff_guidance
+        ) + _human_handoff(rel, line_count)
     if exemption.limit > ABSOLUTE_CAP:
+        rule_id = exemption.rationale.split(":", 1)[0]
         return (
-            f"{rel}: exemption ceiling {exemption.limit} exceeds the "
-            f"{ABSOLUTE_CAP}-line absolute maximum permitted by REQ-CNST-010"
-        ) + handoff_guidance
+            f"{rel}: exemption {rule_id} ceiling {exemption.limit} exceeds the "
+            f"{ABSOLUTE_CAP}-line absolute maximum permitted by REQ-CNST-010 -- "
+            "fix the registered limit (do NOT decompose the file, do NOT add a "
+            "new exemption; the registry entry is misconfigured)"
+        )
     if line_count > exemption.limit:
         return (
             f"{rel}: {line_count} non-import lines exceeds its exemption ceiling "
             f"of {exemption.limit}"
-        ) + handoff_guidance
+        ) + _human_handoff(rel, line_count)
     rule_id = exemption.rationale.split(":", 1)[0]
     try:
         predicate_holds = exemption.predicate()
@@ -93,12 +113,12 @@ def check_file(path: Path) -> str | None:
         return (
             f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
             f"raised {exc.__class__.__name__}: {exc}; the justification cannot be verified"
-        ) + handoff_guidance
+        ) + _human_handoff(rel, line_count)
     if not predicate_holds:
         return (
             f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
             f"returned False; the justification no longer holds"
-        ) + handoff_guidance
+        ) + _human_handoff(rel, line_count)
     return None
 
 

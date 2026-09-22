@@ -936,7 +936,7 @@ def test_managed_attestation_rejects_invalid_alias_before_probe(
 
     assert result.errors
     assert result.pre_spawn_check is None
-    assert any("managed alias" in message for message in result.errors)
+    assert any(str(alias_root) in message for message in result.errors)
 
 
 @pytest.mark.parametrize(

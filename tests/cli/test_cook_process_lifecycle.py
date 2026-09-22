@@ -415,6 +415,71 @@ def test_posix_job_control_foreground_handoff_restores_after_continue_failure(
     assert foreground_changes == [(7, 200), (7, 100)]
 
 
+def test_posix_job_control_foreground_handoff_annotates_primary_on_restore_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.session import _session_process
+
+    foreground_changes: list[tuple[int, int]] = []
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+
+    def fake_tcsetpgrp(fd: int, pgid: int) -> None:
+        foreground_changes.append((fd, pgid))
+        if foreground_changes[-1] == (7, 100):
+            raise OSError("restore failed")
+
+    monkeypatch.setattr(_session_process, "_safe_tcsetpgrp", fake_tcsetpgrp)
+    monkeypatch.setattr(
+        _session_process.os,
+        "killpg",
+        lambda _pgid, _signum: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    with pytest.raises(PermissionError) as raised:
+        with _session_process._foreground_process_group(200):
+            pytest.fail("caller body must not run after continuation failure")
+
+    assert raised.value is not None
+    assert any("foreground process-group restoration" in note for note in raised.value.__notes__)
+    assert foreground_changes == [(7, 200), (7, 100)]
+
+
+def test_posix_job_control_foreground_handoff_propagates_restore_failure_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.session import _session_process
+
+    foreground_changes: list[tuple[int, int]] = []
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+
+    def fake_tcsetpgrp(fd: int, pgid: int) -> None:
+        foreground_changes.append((fd, pgid))
+        if foreground_changes[-1] == (7, 100):
+            raise OSError("restore failed")
+
+    monkeypatch.setattr(_session_process, "_safe_tcsetpgrp", fake_tcsetpgrp)
+
+    with pytest.raises(OSError, match="restore failed"):
+        with _session_process._foreground_process_group(200):
+            assert foreground_changes == [(7, 200)]
+
+    assert foreground_changes == [(7, 200), (7, 100)]
+
+
 def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

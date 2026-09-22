@@ -51,7 +51,7 @@ pytestmark = [
 ]
 
 
-def test_posix_job_control_collector_settles_observation_failure(
+def test_drain_bounded_process_settles_observation_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     failure = RuntimeError("selector construction failed")

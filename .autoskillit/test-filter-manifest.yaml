@@ -286,6 +286,9 @@ tests/arch/release_comparison_ledger.txt:
 .python-version:
   - infra/
 
+.pre-commit-config.yaml:
+  - infra/
+
 install.sh:
   - infra/
   - cli/
@@ -315,6 +318,14 @@ scripts/check_policy_relaxation.py:
 scripts/check_complexity.py:
   - infra/
   - arch/
+scripts/check_file_lengths.py:
+  - arch/
+scripts/check_single_enforcement_point.py:
+  - contracts/
+scripts/pytest_tmp_lifecycle.py:
+  - arch/
+scripts/sync_hook_scope_table.py:
+  - hooks/
 scripts/_git_plumbing.py:
   - infra/
   - arch/
@@ -345,6 +356,8 @@ scripts/ci_target_policy.py:
 scripts/measure_codex_read_repetition.py:
   - infra/
 scripts/sync_versions.py:
+  - infra/
+scripts/*.py:
   - infra/
 
 # Source non-Python files

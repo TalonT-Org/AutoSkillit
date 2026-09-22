@@ -25,6 +25,7 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log.session_log import resolve_log_dir
+from tests._helpers import INVALID_PATH_INPUTS
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
@@ -680,6 +681,17 @@ def test_resolve_log_dir_explicit_override():
     """Explicit log_dir is used as-is."""
     result = resolve_log_dir("/custom/path")
     assert result == Path("/custom/path")
+
+
+@pytest.mark.parametrize("log_dir", INVALID_PATH_INPUTS)
+def test_resolve_log_dir_rejects_invalid_roots_before_coercion(log_dir: object):
+    with pytest.raises(TypeError, match="log_dir must be a str or Path"):
+        resolve_log_dir(log_dir)  # type: ignore[arg-type]
+
+
+def test_resolve_log_dir_accepts_path_and_tilde_string():
+    assert resolve_log_dir(Path("/custom/path")) == Path("/custom/path")
+    assert resolve_log_dir("~/logs") == Path("~/logs").expanduser()
 
 
 def test_proc_trace_timestamps_are_per_snapshot_not_session_start(tmp_path):

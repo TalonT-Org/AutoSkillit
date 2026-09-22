@@ -210,19 +210,40 @@ def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
     assert expected <= result
 
 
-@pytest.mark.parametrize(
-    "changed_file",
-    ["tests/conftest.py", "src/autoskillit/server/_factory.py"],
-)
-def test_global_composition_files_remain_bucket_a(
+def test_root_conftest_remains_bucket_a(
     tmp_path: Path,
-    changed_file: str,
 ) -> None:
     assert (
         build_test_scope(
-            changed_files={changed_file},
+            changed_files={"tests/conftest.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=_tests_root(tmp_path),
         )
         is FullRunReason.BUCKET_A
     )
+
+
+def test_factory_uses_server_cascade_instead_of_bucket_a(tmp_path: Path) -> None:
+    tests_root = _tests_root(tmp_path)
+    result = build_test_scope(
+        changed_files={"src/autoskillit/server/_factory.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=tests_root,
+    )
+
+    assert isinstance(result, set)
+    assert {
+        tests_root / "server",
+        tests_root / "cli",
+        tests_root / "arch",
+        tests_root / "contracts",
+    } <= result
+    # fleet/ only enters the result via the server cascade's file-level entries
+    # (e.g. fleet/test_api.py) — never as a directory target — so the directory
+    # itself must stay out of the scope.
+    assert tests_root / "fleet" not in result
+    # infra/ as a directory target is only added by the always-run prefix
+    # matchers (.github/, src/autoskillit/hooks/, or the named trigger files).
+    # A src/ path with no .github/ prefix does not trigger infra — assert that
+    # the server cascade stays narrow and does NOT bleed into infra/.
+    assert tests_root / "infra" not in result

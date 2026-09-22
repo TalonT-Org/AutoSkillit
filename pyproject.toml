@@ -131,6 +131,7 @@ select = ["E", "F", "I", "UP", "TID251", "W"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/check_file_lengths.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
 "tests/execution/test_session_classification_e2e.py" = ["E402"]
 "tests/execution/test_process_channel_b.py" = ["E501"]
 "tests/test_test_filter_cascade.py" = ["E501"]

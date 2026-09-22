@@ -20,6 +20,7 @@ from tests._test_filter import (
     LAYER_CASCADE_AGGRESSIVE,
     LAYER_CASCADE_CONSERVATIVE,
     ASTImportWalker,
+    ChangedFiles,
     FilterMode,
     FullRunReason,
     ImportContext,
@@ -149,10 +150,10 @@ class TestCheckBucketA:
         assert compute_bucket_a_scope({"uv.lock"}) is None
 
     def test_bucket_a_precommit(self) -> None:
-        assert compute_bucket_a_scope({".pre-commit-config.yaml"}) is None
+        assert compute_bucket_a_scope({".pre-commit-config.yaml"}) == set()
 
     def test_bucket_a_factory(self) -> None:
-        assert compute_bucket_a_scope({"src/autoskillit/server/_factory.py"}) is None
+        assert compute_bucket_a_scope({"src/autoskillit/server/_factory.py"}) == set()
 
     @pytest.mark.parametrize(
         ("file", "expected"),
@@ -195,41 +196,23 @@ class TestBuildTestScope:
         )
         assert result is FullRunReason.GIT_UNAVAILABLE
 
-    def test_scope_large_changeset_returns_full_run_reason(self, tmp_path: Path) -> None:
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(31)}
+    def test_large_known_recipe_changeset_uses_normal_scope(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        (tests_root / "cli" / "test_cli_prompts.py").touch()
+        (tests_root / "cli" / "test_preview.py").touch()
+        files = {f"src/autoskillit/recipe/f{i}.py" for i in range(99)}
+        files.add("src/autoskillit/recipe/loader.py")
         result = build_test_scope(
             changed_files=files,
             mode=FilterMode.CONSERVATIVE,
-            tests_root=tmp_path / "tests",
-        )
-        assert result is FullRunReason.LARGE_CHANGESET
-
-    def test_large_changeset_precedes_scoped_support(self, tmp_path: Path) -> None:
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(30)}
-        files.add("tests/execution/conftest.py")
-
-        result = build_test_scope(
-            changed_files=files,
-            mode=FilterMode.CONSERVATIVE,
-            tests_root=tmp_path / "tests",
-        )
-
-        assert result is FullRunReason.LARGE_CHANGESET
-
-    def test_aggressive_mode_ignores_large_changeset_threshold(self, tmp_path: Path) -> None:
-        """Aggressive mode does not trigger LARGE_CHANGESET even with >30 files."""
-        tests_root = tmp_path / "tests"
-        for d in ["core", "arch", "contracts"]:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
-        files = {f"src/autoskillit/core/f{i}.py" for i in range(35)}
-        result = build_test_scope(
-            changed_files=files,
-            mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
         )
-        assert isinstance(result, set), (
-            f"Expected set[Path], got {type(result).__name__}: {result}"
-        )
+        assert isinstance(result, set)
+        assert tests_root / "recipe" in result
+        assert tests_root / "cli" / "test_cli_prompts.py" in result
+        assert tests_root / "cli" / "test_preview.py" in result
+        assert tests_root / "arch" in result
+        assert tests_root / "contracts" in result
 
     def test_scope_bucket_a_returns_full_run_reason(self, tmp_path: Path) -> None:
         result = build_test_scope(
@@ -811,7 +794,10 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py", "tests/core/test_io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py", "tests/core/test_io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
 
     def test_git_changed_files_failure_returns_none(
@@ -910,7 +896,10 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
 
     def test_git_changed_files_includes_untracked_files(
@@ -925,7 +914,7 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"new_script.py"}
+        assert result == ChangedFiles(tracked=frozenset(), untracked=frozenset({"new_script.py"}))
         assert mock_run.call_count == 3
 
     def test_git_changed_files_ls_files_failure_is_nonfatal(
@@ -942,8 +931,108 @@ class TestGitChangedFiles:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
-        assert result == {"src/autoskillit/core/io.py"}
+        assert result == ChangedFiles(
+            tracked=frozenset({"src/autoskillit/core/io.py"}),
+            untracked=frozenset(),
+        )
         assert mock_run.call_count == 3
+
+
+class TestUntrackedPathNormalization:
+    def test_tracked_external_manifest_miss_still_fails_open(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=_make_tests_tree(tmp_path),
+        )
+        assert result is FullRunReason.UNMAPPED_FILE
+
+    def test_untracked_external_manifest_miss_is_ignored_after_manifest_load(
+        self, tmp_path: Path
+    ) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=tests_root,
+            untracked_files=frozenset({"scratch.txt"}),
+        )
+        # The external untracked path misses the empty manifest, so it is
+        # dropped from classification and changed_files becomes empty. With
+        # no changed files left, the always-run else branch fires and the
+        # scope is exactly the conservative always-run directories —
+        # nothing keyed to scratch.txt, no BUCKET_A escalation.
+        assert isinstance(result, set)
+        assert result == {tests_root / d for d in ALWAYS_RUN_CONSERVATIVE}
+
+    def test_untracked_manifest_match_remains_classified(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {"scratch.txt"},
+            FilterMode.CONSERVATIVE,
+            manifest={"scratch.txt": ["infra"]},
+            tests_root=tests_root,
+            untracked_files=frozenset({"scratch.txt"}),
+        )
+        assert isinstance(result, set)
+        assert tests_root / "infra" in result
+
+    def test_untracked_source_path_remains_a_normal_input(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {"src/autoskillit/recipe/loader.py"},
+            FilterMode.CONSERVATIVE,
+            manifest={},
+            tests_root=tests_root,
+            untracked_files=frozenset({"src/autoskillit/recipe/loader.py"}),
+        )
+        # Source paths under src/ are never classified as external unknowns,
+        # even when untracked, so the recipe cascade must drive the scope
+        # rather than the fail-open UNMAPPED_FILE gate.
+        assert isinstance(result, set)
+        assert result is not FullRunReason.UNMAPPED_FILE
+        assert tests_root / "recipe" in result
+
+    def test_untracked_bucket_a_and_workflow_misses_do_not_reach_policy(
+        self, tmp_path: Path
+    ) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        # Each input drops its only changed path through _effective_changed_files
+        # (no manifest match), leaving just the always-run baseline. Bucket-A
+        # triggers are absent, so the scope is a strict subset of always-run.
+        for path in ("pyproject.toml", "uv.lock", ".github/scratch.yml"):
+            result = build_test_scope(
+                {path},
+                FilterMode.CONSERVATIVE,
+                manifest={},
+                tests_root=tests_root,
+                untracked_files=frozenset({path}),
+            )
+            assert isinstance(result, set)
+            assert result is not FullRunReason.BUCKET_A
+            assert result is not FullRunReason.UNMAPPED_FILE
+            # The dropped path is never classified; the scope is bounded by
+            # the conservative always-run directories only.
+            assert result <= {tests_root / d for d in ALWAYS_RUN_CONSERVATIVE}
+
+    def test_manifest_matched_untracked_workflow_triggers_infra(self, tmp_path: Path) -> None:
+        tests_root = _make_tests_tree(tmp_path)
+        result = build_test_scope(
+            {".github/workflows/scratch.yml"},
+            FilterMode.CONSERVATIVE,
+            manifest={".github/**/*.yml": ["docs"]},
+            tests_root=tests_root,
+            untracked_files=frozenset({".github/workflows/scratch.yml"}),
+        )
+        # The manifest maps the workflow to "docs", so docs must land in the
+        # scope; the .github/ prefix also triggers infra via the always-run
+        # path. Together they confirm both the manifest routing AND the
+        # always-run trigger fire on the same untracked workflow path.
+        assert isinstance(result, set)
+        assert tests_root / "docs" in result
+        assert tests_root / "infra" in result
 
 
 # ---------------------------------------------------------------------------

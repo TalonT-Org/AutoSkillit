@@ -39,7 +39,7 @@ def pytest_collection_modifyitems(
         )
         if changed is None:
             return
-        changed_abs = {(_PROJECT_ROOT / f).resolve() for f in changed}
+        changed_abs = {(_PROJECT_ROOT / f).resolve() for f in changed.all_paths}
         selected, deselected = deselect_arch_items(items, changed_abs, _ARCH_DIR)
         if deselected:
             config.hook.pytest_deselected(items=deselected)

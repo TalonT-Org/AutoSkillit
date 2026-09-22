@@ -3,13 +3,59 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import structlog.testing
 
-from tests._helpers import make_quota_guard_config
+from tests._helpers import INVALID_PATH_INPUTS, make_quota_guard_config
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+@pytest.mark.parametrize("diagnostic_log_root", INVALID_PATH_INPUTS)
+def test_oauth_admission_lock_path_rejects_invalid_roots(diagnostic_log_root: object):
+    from autoskillit.execution.quota._admission import oauth_admission_lock_path
+
+    with pytest.raises(TypeError, match="diagnostic_log_root must be a str or Path"):
+        oauth_admission_lock_path(diagnostic_log_root)  # type: ignore[arg-type]
+
+
+def test_oauth_admission_lock_path_accepts_strings_and_paths():
+    from autoskillit.execution.quota._admission import oauth_admission_lock_path
+
+    expected = Path("/diagnostics/quota-admission/anthropic-oauth.lock")
+    assert oauth_admission_lock_path("/diagnostics") == expected
+    assert oauth_admission_lock_path(Path("/diagnostics")) == expected
+
+
+@pytest.mark.anyio
+async def test_invalid_diagnostic_log_root_fails_closed(monkeypatch, tmp_path):
+    """A non-Path ``diagnostic_log_root`` fails the admission gate closed.
+
+    The OAuth admission path requires a writable diagnostic log root; passing
+    a ``MagicMock`` (which is path-like enough to fool ``Path(...)`` but not
+    the explicit guard) must produce ``quota_authority_unavailable`` rather
+    than silently admitting or crashing.
+    """
+    import autoskillit.execution.quota._admission as admission
+
+    monkeypatch.setattr(
+        admission,
+        "quota_scope",
+        lambda *_args, **_kwargs: "anthropic-oauth:token-digest",
+    )
+
+    decision = await admission.admit_quota(
+        config=make_quota_guard_config(credentials_path=str(tmp_path / "credentials.json")),
+        credential_scope="anthropic-oauth:token-digest",
+        diagnostic_log_root=MagicMock(),
+        deadline_monotonic=time.monotonic() + 5,
+    )
+
+    assert decision.admitted is False
+    assert decision.reason == "quota_authority_unavailable"
 
 
 @pytest.mark.anyio

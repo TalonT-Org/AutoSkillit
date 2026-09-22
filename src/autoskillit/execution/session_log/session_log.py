@@ -181,8 +181,10 @@ def _analyze_proc_snapshots(
     )
 
 
-def resolve_log_dir(log_dir: str) -> Path:
+def resolve_log_dir(log_dir: str | Path) -> Path:
     """Resolve session log directory. Empty string = platform default."""
+    if not isinstance(log_dir, (str, Path)):
+        raise TypeError("log_dir must be a str or Path")
     if log_dir:
         return Path(log_dir).expanduser()
     return default_log_dir()

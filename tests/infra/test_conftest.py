@@ -1,5 +1,7 @@
 """Tests for conftest fixture infrastructure: tool_ctx and MockSubprocessRunner."""
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,167 @@ import pytest
 from autoskillit.core.types import SubprocessResult, TerminationReason
 
 pytestmark = [pytest.mark.medium]
+pytest_plugins = ["pytester"]
+
+
+def _init_git_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "tests@example.invalid"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tests"], cwd=path, check=True)
+
+
+def test_root_debris_detector_excludes_baseline_reported_and_ignored_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.conftest import _new_nonignored_root_entries
+
+    _init_git_repo(tmp_path)
+    (tmp_path / ".gitignore").write_text("ignored/\n")
+    (tmp_path / "baseline").mkdir()
+    (tmp_path / "reported").mkdir()
+    (tmp_path / "ignored").mkdir()
+    (tmp_path / "new-entry").mkdir()
+
+    # The chdir here is a regression sentinel: _new_nonignored_root_entries
+    # passes ``cwd=repository_root`` to ``git check-ignore`` explicitly, so
+    # the test process's cwd should not affect the result. If a future
+    # refactor drops the explicit ``cwd=``, this chdir makes the test fail
+    # rather than silently inheriting the wrong working tree.
+    monkeypatch.chdir(tmp_path / "baseline")
+
+    observed = _new_nonignored_root_entries(
+        repository_root=tmp_path,
+        baseline_entries=frozenset({".git", ".gitignore", "baseline"}),
+        reported_entries=frozenset({"reported"}),
+    )
+
+    assert observed == {"new-entry"}
+
+
+def test_root_debris_detector_handles_newline_names_and_status_one(tmp_path: Path) -> None:
+    from tests.conftest import _new_nonignored_root_entries
+
+    _init_git_repo(tmp_path)
+    newline_name = "new\nentry"
+    (tmp_path / newline_name).mkdir()
+
+    observed = _new_nonignored_root_entries(
+        repository_root=tmp_path,
+        baseline_entries=frozenset({".git"}),
+        reported_entries=frozenset(),
+    )
+
+    assert observed == {newline_name}
+
+
+_ROOT_DEBRIS_PLUGIN = """
+from pathlib import Path
+
+import tests.conftest as production
+
+production._ROOT_DEBRIS_REPOSITORY_ROOT = Path(__file__).parent
+pytest_sessionstart = production.pytest_sessionstart
+pytest_runtest_teardown = production.pytest_runtest_teardown
+"""
+
+
+def test_root_debris_detector_runs_after_finalizers_and_reports_once(
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # pytester.runpytest_subprocess spawns a fresh pytest in pytester.path with
+    # cwd isolated from the parent — the spawned interpreter does NOT inherit
+    # the parent's sys.path, so the injected conftest's
+    # `import tests.conftest as production` raises ModuleNotFoundError unless
+    # the project root is on PYTHONPATH for the child. See
+    # tests/cli/test_install_root_upgrade_immunity.py:486-492 for the
+    # parallel `subprocess.run(env={...})` pattern.
+    project_root = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [project_root, existing_pythonpath]))
+    )
+
+    _init_git_repo(pytester.path)
+    pytester.makeconftest(_ROOT_DEBRIS_PLUGIN)
+    pytester.makepyfile(
+        test_debris="""
+        from pathlib import Path
+        import pytest
+
+        @pytest.fixture
+        def artifact(request):
+            def finalize():
+                Path('created-by-finalizer').mkdir(exist_ok=True)
+                Path('events').write_text('finalized')
+            request.addfinalizer(finalize)
+
+        def test_first(artifact):
+            assert True
+
+        def test_second(artifact):
+            assert True
+        """
+    )
+
+    result = pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
+
+    # pytest.fail() called from inside a pytest_runtest_teardown hookwrapper is
+    # reported by modern pytest as an "error" rather than a "failed" outcome
+    # (the body of test_first passed, the failure is in the teardown hook). The
+    # second test passes because the reported set was already updated by the
+    # first test's debris observation, so no further debris is reported for it.
+    # The extra "passed" count comes from pytester's own collection step.
+    result.assert_outcomes(passed=2, errors=1)
+    assert (pytester.path / "events").read_text() == "finalized"
+    result.stdout.fnmatch_lines(
+        [
+            "*root debris observed after this test: test_debris.py::test_first*",
+            "*xdist attribution is adjacent and may cross worker boundaries*",
+        ]
+    )
+
+
+def test_root_debris_detector_preserves_existing_teardown_failure(
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # See test_root_debris_detector_runs_after_finalizers_and_reports_once
+    # for why PYTHONPATH must be set before runpytest_subprocess — the
+    # spawned pytest inherits the parent's os.environ but not sys.path.
+    project_root = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [project_root, existing_pythonpath]))
+    )
+
+    _init_git_repo(pytester.path)
+    pytester.makeconftest(_ROOT_DEBRIS_PLUGIN)
+    pytester.makepyfile(
+        test_failure="""
+        from pathlib import Path
+        import pytest
+
+        @pytest.fixture
+        def artifact(request):
+            def finalize():
+                Path('created-by-finalizer').mkdir()
+                raise RuntimeError('original finalizer failure')
+            request.addfinalizer(finalize)
+
+        def test_failure(artifact):
+            assert True
+        """
+    )
+
+    result = pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
+
+    # The fixture finalizer raises RuntimeError which surfaces as a test error
+    # (not a failure) because the exception originates outside the test body.
+    # The extra "passed" entry is pytester's collection step.
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*RuntimeError: original finalizer failure*"])
+    assert "root debris observed" not in result.stdout.str()
 
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):
@@ -156,7 +319,6 @@ def test_pytest_timeout_is_configured(pytestconfig):
 
 def test_tool_ctx_log_dir_is_isolated_from_production(tool_ctx):
     """tool_ctx must override log_dir to a tmp path, never the production XDG dir."""
-    import os
 
     log_dir = tool_ctx.config.linux_tracing.log_dir
     assert log_dir != ""

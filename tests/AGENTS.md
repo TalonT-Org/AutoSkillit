@@ -159,14 +159,13 @@ changed files. Controlled by env var + CLI flags:
 **Filter algorithm** (`tests/_test_filter.py`):
 
 1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
-2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Union of all three — a strict superset of the old three-dot form. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
+2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Preserve tracked and untracked provenance through scope construction. With a loaded manifest, unmatched untracked paths outside `src/` and `tests/` are discarded; tracked paths, manifest-matched untracked paths, and all untracked source/test paths continue through normal classification. A missing manifest preserves every path and external unknowns fail open. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
    - **Aggressive mode override**: Uses `git diff HEAD --name-only` (working-tree-only) instead of merge-base diff. This prevents committed-but-old files from inflating the changed set.
-3. **Large changeset**: >30 files -> full run (conservative only; disabled in aggressive mode)
-4. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
-5. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
-6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
-7. **Coverage augmentation**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
-8. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
+3. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
+4. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
+5. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
+6. **Coverage augmentation**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
+7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
 
 Directory-scoped conftests do not follow cross-package Python imports. The arch helper
 mapping does not follow imports through arbitrary intermediate test modules.

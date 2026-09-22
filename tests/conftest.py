@@ -1,18 +1,37 @@
 """Shared test fixtures for autoskillit."""
 
-import functools
-import os
-import shutil
-import subprocess
-import sys
-import warnings
-from collections.abc import Mapping
-from pathlib import Path as _Path
-from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
-from unittest.mock import MagicMock
+# Pin Hypothesis storage to a fresh per-process tmp dir BEFORE any other
+# imports run. pytest_configure runs too late: hypothesis is imported
+# transitively during pytest plugin discovery (e.g. via xdist worker setup,
+# auto-fixture analysis, or test module collection), so by the time
+# pytest_configure fires the storage root has already been resolved against
+# the working directory. Setting the env var at module load guarantees
+# every pytest process — controller and every xdist worker — picks it up
+# before hypothesis is loaded.
+#
+# Use mkdtemp (not os.path.join) so each pytest process gets a UNIQUE
+# subdirectory; multiple pytest workers racing on the same env var would
+# otherwise step on each other's hypothesis files.
+import os as _os
+import tempfile as _tempfile
 
-import pytest
+_hypothesis_storage_dir = _tempfile.mkdtemp(prefix="autoskillit-hypothesis-")
+_os.environ["HYPOTHESIS_STORAGE_DIRECTORY"] = _hypothesis_storage_dir
+
+# noqa: E402 — see comment block above; intentional pre-import bootstrap
+import functools  # noqa: E402
+import os  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import warnings  # noqa: E402
+from collections.abc import Mapping  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+from types import MappingProxyType  # noqa: E402
+from typing import TYPE_CHECKING, cast  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+import pytest  # noqa: E402
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
@@ -50,6 +69,7 @@ _HOOKS_RUNTIME_SRC = str(_Path(_HOOKS_SRC) / "_runtime")
 if _HOOKS_RUNTIME_SRC not in sys.path:
     sys.path.insert(0, _HOOKS_RUNTIME_SRC)
 
+_ROOT_DEBRIS_REPOSITORY_ROOT = _Path(__file__).resolve().parent.parent
 _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 
 #: Captured at collection time, before any test can monkeypatch shutil.rmtree
@@ -153,12 +173,85 @@ _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 _full_run_reason_key = pytest.StashKey[str | None]()
 _feature_scope_key = pytest.StashKey[dict[str, bool] | None]()
+_root_debris_baseline_key = pytest.StashKey[frozenset[str]]()
+_root_debris_reported_key = pytest.StashKey[set[str]]()
 
 # Module-level accumulator for xdist worker-to-controller IPC.
 # Populated by pytest_testnodedown (controller); cleared by pytest_configure
 # at session start so in-process pytester reruns don't leak stale data.
 _worker_filter_counts: dict[str, int | None] = {}
 _worker_feature_scope: dict[str, bool] = {}
+
+
+def _new_nonignored_root_entries(
+    repository_root: _Path,
+    baseline_entries: frozenset[str],
+    reported_entries: frozenset[str],
+) -> set[str]:
+    """Return new root entries that Git does not ignore."""
+    candidates = {
+        entry.name
+        for entry in repository_root.iterdir()
+        if entry.name not in baseline_entries and entry.name not in reported_entries
+    }
+    if not candidates:
+        return set()
+
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--stdin", "-z"],
+        cwd=repository_root,
+        input=("\0".join(sorted(candidates)) + "\0").encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    if result.returncode not in (0, 1):
+        stderr = result.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"git check-ignore failed ({result.returncode}): {stderr}")
+
+    ignored = {os.fsdecode(entry) for entry in result.stdout.split(b"\0") if entry}
+    return candidates - ignored
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Record repository-root state before test teardown can create artifacts."""
+    session.config.stash[_root_debris_baseline_key] = frozenset(
+        entry.name for entry in _ROOT_DEBRIS_REPOSITORY_ROOT.iterdir()
+    )
+    session.config.stash[_root_debris_reported_key] = set()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None):
+    """Fail once for root debris observed after fixture finalizers complete."""
+    outcome = yield
+    if outcome.excinfo is not None:
+        return
+
+    config = item.config
+    baseline = config.stash[_root_debris_baseline_key]
+    reported = config.stash[_root_debris_reported_key]
+    try:
+        observed = _new_nonignored_root_entries(
+            _ROOT_DEBRIS_REPOSITORY_ROOT,
+            baseline,
+            frozenset(reported),
+        )
+    except Exception as exc:
+        pytest.fail(f"root debris detector failed after {item.nodeid}: {exc}")
+
+    if not observed:
+        return
+
+    reported.update(observed)
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "controller")
+    observed_names = ", ".join(repr(name) for name in sorted(observed))
+    pytest.fail(
+        "non-ignored repository-root debris observed after this test: "
+        f"{item.nodeid} ({worker_id}): {observed_names}. "
+        "This identifies the observing test, not definitive causation; under xdist "
+        "attribution is adjacent and may cross worker boundaries."
+    )
 
 
 class TimeoutTier:
@@ -1058,13 +1151,14 @@ def pytest_configure(config: pytest.Config) -> None:
         coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
 
         scope = build_test_scope(
-            changed_files=changed,
+            changed_files=None if changed is None else set(changed.all_paths),
             mode=mode,
             manifest=manifest,
             tests_root=config.rootpath / "tests",
             coverage_map_path=coverage_map_path,
             cwd=config.rootpath,
             base_ref=resolved_base_ref,
+            untracked_files=frozenset() if changed is None else changed.untracked,
         )
 
         if isinstance(scope, FullRunReason):

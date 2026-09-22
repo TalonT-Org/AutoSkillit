@@ -65,8 +65,10 @@ class QuotaAdmission:
     rate_limit: RateLimitWindow = field(default_factory=RateLimitWindow)
 
 
-def oauth_admission_lock_path(diagnostic_log_root: Path) -> Path:
+def oauth_admission_lock_path(diagnostic_log_root: str | Path) -> Path:
     """Return the shared OAuth credential-read lock beneath the diagnostics root."""
+    if not isinstance(diagnostic_log_root, (str, Path)):
+        raise TypeError("diagnostic_log_root must be a str or Path")
     return Path(diagnostic_log_root) / "quota-admission" / "anthropic-oauth.lock"
 
 
@@ -162,7 +164,7 @@ async def admit_quota(
     *,
     config: QuotaAdmissionConfigLike,
     credential_scope: str | None,
-    diagnostic_log_root: Path,
+    diagnostic_log_root: str | Path,
     deadline_monotonic: float | None,
     provider: str = "anthropic",
     binding_scope: str | None = None,

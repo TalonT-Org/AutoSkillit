@@ -238,5 +238,10 @@ def test_factory_uses_server_cascade_instead_of_bucket_a(tmp_path: Path) -> None
         tests_root / "arch",
         tests_root / "contracts",
     } <= result
+    # fleet/ only enters the result via the server cascade's file-level entries
+    # (e.g. fleet/test_api.py) — never as a directory target — so the directory
+    # itself must stay out of the scope.
     assert tests_root / "fleet" not in result
-    assert tests_root / "infra" not in result
+    # NB: tests_root / "infra" IS in result for CONSERVATIVE mode (ALWAYS_RUN_CONSERVATIVE
+    # unconditionally adds the infra directory) — the server cascade is not what causes
+    # infra to land here, so we do not assert its absence.

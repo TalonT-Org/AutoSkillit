@@ -159,6 +159,7 @@ def test_concurrent_writers_for_same_parent_id_one_loses_to_lock_nb(
     tmp_path: Path,
 ) -> None:
     """Two writers racing for the same record: LOCK_NB ensures one acquires, the other raises."""
+    from contextlib import contextmanager
     from autoskillit.execution.backends._codex_hooks import (
         managed_codex_route_for_launch_context,
     )
@@ -166,19 +167,49 @@ def test_concurrent_writers_for_same_parent_id_one_loses_to_lock_nb(
 
     project_root = isolated_state_dir(tmp_path)
     store = ManagedJoinRecordStore(project_root)
-    barrier = threading.Barrier(2)
+
+    # The production write is microseconds-fast, so a back-to-back barrier
+    # release can let both workers sequentially acquire/release with no
+    # contention. Inject a deterministic hold window into the first worker's
+    # _write_lock so the second worker's LOCK_NB attempt is guaranteed to land
+    # inside the held-lock window.
+    lock_held = threading.Event()
+    release_lock = threading.Event()
+    original_write_lock = store._write_lock
+
+    @contextmanager
+    def _slow_write_lock(record_path):  # type: ignore[no-untyped-def]
+        with original_write_lock(record_path):
+            lock_held.set()
+            release_lock.wait(timeout=5)
+            yield
+
+    store._write_lock = _slow_write_lock  # type: ignore[method-assign]
     outcomes: list[BaseException | None] = [None, None]
 
-    def _worker(slot: int) -> None:
+    def _first_worker() -> None:
         try:
-            barrier.wait(timeout=5)
-            context = sample_attestation("shared-parent")
-            store.write(context, route=managed_codex_route_for_launch_context("interactive"))
+            store.write(
+                sample_attestation("shared-parent"),
+                route=managed_codex_route_for_launch_context("interactive"),
+            )
         except BaseException as exc:  # pragma: no cover - propagates via outcomes
-            outcomes[slot] = exc
+            outcomes[0] = exc
 
-    t1 = threading.Thread(target=_worker, args=(0,))
-    t2 = threading.Thread(target=_worker, args=(1,))
+    def _second_worker() -> None:
+        try:
+            lock_held.wait(timeout=5)
+            store.write(
+                sample_attestation("shared-parent"),
+                route=managed_codex_route_for_launch_context("interactive"),
+            )
+        except BaseException as exc:  # pragma: no cover - propagates via outcomes
+            outcomes[1] = exc
+        finally:
+            release_lock.set()
+
+    t1 = threading.Thread(target=_first_worker)
+    t2 = threading.Thread(target=_second_worker)
     t1.start()
     t2.start()
     t1.join(timeout=10)

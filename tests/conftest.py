@@ -1082,6 +1082,17 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     import warnings
 
+    # Pin Hypothesis storage to the pytest tmp dir so it cannot create
+    # `.hypothesis/` at the repo root — that path is monitored by the
+    # root-debris detector and any hypothesis test would mark the next
+    # pytest_runtest_teardown as "non-ignored repository-root debris
+    # observed". TMPDIR is set to a per-run pytest tmp dir by the
+    # _tmpdir-setup task (see Taskfile.yml), which the .gitignore and the
+    # root-debris detector both exempt.
+    hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
+    os.makedirs(hypothesis_storage_dir, exist_ok=True)
+    os.environ["HYPOTHESIS_STORAGE_DIR"] = hypothesis_storage_dir
+
     # Reset xdist IPC accumulator so in-process pytester reruns don't leak counts.
     _worker_filter_counts.clear()
     _worker_feature_scope.clear()

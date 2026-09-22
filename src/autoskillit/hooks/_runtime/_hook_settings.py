@@ -564,6 +564,11 @@ def admit_hook_session_scope(
     """Return whether a HookDef scope admits a raw hook-process shape."""
     # Module-reference import so monkeypatching
     # _session_scope_authority.SESSION_SCOPE_VALUES takes effect on every call.
+    # The bare-name form (rather than `from autoskillit.hooks._runtime...`) is
+    # intentional — it matches the subprocess sys.path bootstrap that resolves
+    # this module against hooks/_runtime/ before the package import graph is
+    # fully built. A function-local import (rather than module top) keeps the
+    # cycle contained to admit_hook_session_scope's lookup site.
     import _session_scope_authority as _ssa
 
     if session_scope not in _ssa.SESSION_SCOPE_VALUES:

@@ -224,7 +224,12 @@ def _wrapper_introduction_sites(source: str, filename: str) -> set[tuple[str, in
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                if alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
+                # Wildcard imports `from X import *` would silently re-introduce
+                # the deleted wrapper surface; flag the ImportFrom site so
+                # authors resolve explicit names instead of star-importing.
+                if alias.name == "*":
+                    sites.add((filename, node.lineno))
+                elif alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
                     sites.add((filename, node.lineno))
         elif isinstance(node, ast.Assign):
             for target in node.targets:
@@ -325,40 +330,43 @@ def test_adr_scope_claims_match_registry() -> None:
     assert all(claims[doc] == scopes[script] for doc, script in claim_owners.items())
 
 
-def test_session_scope_values_constant_is_canonical() -> None:
-    """SESSION_SCOPE_VALUES is the canonical value set for the hook runtime layer (T3)."""
-    from autoskillit.hooks._runtime._session_scope_authority import SESSION_SCOPE_VALUES
-
-    assert SESSION_SCOPE_VALUES == frozenset({"any", "headless_only", "interactive_only"})
-
-
 def test_cross_layer_session_scope_values_match() -> None:
     """The IL-0 inline constant mirrors the canonical hook-runtime constant (T17).
 
     The IL-0 layer cannot import from autoskillit.hooks._runtime (hard constraint
     in core/types/AGENTS.md:7). The two layers must agree on the value set;
     a future addition (e.g. a fourth scope) requires updating both sites
-    AND this test must be updated to reflect the new value.
+    AND this test must be updated to reflect the new value. AST-based scan
+    avoids the false-positive surface of substring matching (comments,
+    docstrings, unrelated Literal usages).
     """
     from autoskillit.hooks._runtime._session_scope_authority import SESSION_SCOPE_VALUES
 
-    core_source = (
+    core_path = (
         Path(__file__).resolve().parents[2]
         / "src"
         / "autoskillit"
         / "core"
         / "types"
         / "_type_session_shape.py"
-    ).read_text(encoding="utf-8")
-    # The IL-0 site is a frozenset / set / tuple literal at the SessionScope.of
-    # runtime validation. Match the three-string token sequence in any order.
-    expected_tokens = {"any", "headless_only", "interactive_only"}
-    for token in expected_tokens:
-        assert f'"{token}"' in core_source, (
-            f"IL-0 layer is missing session-scope value {token!r} — the inline "
-            "literal must mirror SESSION_SCOPE_VALUES (T17)."
-        )
-    assert SESSION_SCOPE_VALUES == frozenset(expected_tokens)
+    )
+    core_tree = ast.parse(core_path.read_text(encoding="utf-8"), filename=str(core_path))
+
+    expected_tokens = frozenset({"any", "headless_only", "interactive_only"})
+    found_tokens: set[str] = set()
+    for node in ast.walk(core_tree):
+        if not isinstance(node, ast.Set):
+            continue
+        for elt in node.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                if elt.value in expected_tokens:
+                    found_tokens.add(elt.value)
+    assert found_tokens == expected_tokens, (
+        f"IL-0 layer is missing session-scope values "
+        f"{sorted(expected_tokens - found_tokens)} — the inline literal "
+        "must mirror SESSION_SCOPE_VALUES (T17)."
+    )
+    assert SESSION_SCOPE_VALUES == expected_tokens
 
 
 def test_enforce_script_session_scope_uses_hook_session_shape(
@@ -419,7 +427,9 @@ def test_admit_hook_session_scope_uses_session_scope_values(
     bare-name is resolved against hooks/_runtime/ on sys.path, matching the
     subprocess hook bootstrap). We register the canonical-dotted-name module
     under the bare name in sys.modules so the test's setattr takes effect on
-    the same object that admit_hook_session_scope's lookup resolves to.
+    the same object that admit_hook_session_scope's lookup resolves to. The
+    monkeypatch.setitem teardown restores the prior sys.modules entry so the
+    mutation does not leak to later tests in the same xdist worker.
     """
     import autoskillit.hooks._runtime._session_scope_authority as canonical_mod
 
@@ -429,8 +439,9 @@ def test_admit_hook_session_scope_uses_session_scope_values(
     # loaded from the same source file; setdefault would be a no-op in that
     # case and the monkeypatch would land on the wrong object. The function
     # 'admit_hook_session_scope' consults the bare-name entry, so we must
-    # ensure both keys resolve to the same module.
-    sys.modules["_session_scope_authority"] = canonical_mod
+    # ensure both keys resolve to the same module. monkeypatch.setitem
+    # restores the prior value (or deletes the key) at test teardown.
+    monkeypatch.setitem(sys.modules, "_session_scope_authority", canonical_mod)
 
     from autoskillit.hooks._runtime import _hook_settings
 
@@ -462,15 +473,22 @@ _MIGRATED_CALLER_SCRIPTS = (
 )
 
 
-def test_runtime_import_smoke_for_all_caller_modules() -> None:
-    """Every migrated caller module imports cleanly (T15)."""
+def test_runtime_import_smoke_for_all_caller_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every migrated caller module imports cleanly (T15).
+
+    sys.path entries are scoped via monkeypatch.syspath_prepend so the bare-name
+    module lookups in the imported scripts do not leak across xdist workers —
+    each worker restores sys.path to its prior state on teardown.
+    """
     import importlib.util
 
     runtime_dir = HOOKS_DIR / "_runtime"
     if str(runtime_dir) not in sys.path:
-        sys.path.insert(0, str(runtime_dir))
+        monkeypatch.syspath_prepend(str(runtime_dir))
     if str(HOOKS_DIR) not in sys.path:
-        sys.path.insert(0, str(HOOKS_DIR))
+        monkeypatch.syspath_prepend(str(HOOKS_DIR))
 
     failures: list[tuple[str, str]] = []
     for script_rel in _MIGRATED_CALLER_SCRIPTS:

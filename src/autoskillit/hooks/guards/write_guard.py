@@ -371,8 +371,7 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
     )
 
 
-def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
-    headless, _ = hook_session_shape()
+def _write_prefix_policy(data: dict[str, object], headless: bool) -> tuple[list[str], str, str]:
     if not headless:
         return _interactive_prefix_policy(data)
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
@@ -461,8 +460,11 @@ def main() -> None:
         _record(data, activation="backend", scope="workspace", decision="allow", reason="codex")
         sys.exit(0)
 
+    # Resolve the runtime shape once and pass it to helper paths so each guard
+    # invocation makes a single hook_session_shape() call instead of three.
+    headless, _ = hook_session_shape()
+
     if not isinstance(data, dict):
-        headless, _ = hook_session_shape()
         if (
             headless
             and not os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES")
@@ -478,8 +480,7 @@ def main() -> None:
         )
         return
 
-    norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data)
-    headless, _ = hook_session_shape()
+    norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data, headless)
     activation = "headless" if headless else "skill_binding"
     if policy_state == "none":
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")

@@ -78,6 +78,12 @@ def test_hook_session_shape_keeps_unknown_tiers_for_hook_policy(
         ({"AUTOSKILLIT_SESSION_TYPE": "skill"}, (False, "skill")),
         ({}, (False, "skill")),
         ({"AUTOSKILLIT_SESSION_TYPE": "LEAF"}, (False, "leaf")),
+        # Mixed- and upper-case AUTOSKILLIT_SESSION_TYPE must normalize to
+        # the canonical lowercase tier (skill_load_guard.py:149 used to
+        # compare the raw env var case-sensitively and now lowercases first,
+        # so pins here defend the unification).
+        ({"AUTOSKILLIT_SESSION_TYPE": "SKILL"}, (False, "skill")),
+        ({"AUTOSKILLIT_SESSION_TYPE": "Skill"}, (False, "skill")),
         # Empty-string short-circuit (issue #5121 / D14): an explicitly-empty
         # AUTOSKILLIT_SESSION_TYPE must default to "skill" identically to the
         # unset case. Pinned by the inline comment at _hook_settings.py around

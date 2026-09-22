@@ -78,16 +78,29 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
     values (from os.environ.get reads), then propagates through derived assignments
     until convergence, then collects strings from Compare nodes and SESSION_TYPE
     frozenset constants involving those variables.
+
+    Issue #5121 (T19) hardening rationale: the deleted get_session_type wrapper
+    had three call-site shapes that would otherwise silently bypass the unified
+    hook_session_shape() API:
+
+    1. Direct call: ``get_session_type()`` — caught by the literal name match
+       in ``_is_session_type_env_read`` (the predecessor to the bare-name
+       ``hook_session_shape`` recognition that replaced it).
+    2. ``as`` rebind: ``from _hook_settings import get_session_type as g``
+       followed by ``g()`` — caught by walking ImportFrom nodes up front and
+       populating ``_forbidden_aliases`` with the bound ``asname`` (or the
+       original name when no ``asname`` is supplied).
+    3. Tuple destructure: ``headless, tier = hook_session_shape()`` — caught
+       by accepting Assign targets shaped as Tuple or List of two Name nodes
+       and registering the second element as the session-type variable
+       (because the deleted wrapper returned exactly the tier).
     """
 
     def __init__(self) -> None:
         self.found: set[str] = set()
         self._session_type_vars: set[str] = set()
-        # Issue #5121 (T19 asname-aliasing hardening): track all local
-        # bindings whose source name is the deleted get_session_type wrapper
-        # so that a call site rebinding via 'as' (e.g.
-        # 'from _hook_settings import get_session_type as g' followed by
-        # 'g()') is still flagged by _is_session_type_env_read.
+        # Populated from ImportFrom rebinds so a `get_session_type as g`
+        # call site still resolves to the deleted wrapper name.
         self._forbidden_aliases: set[str] = set()
 
     def visit_Module(self, node: ast.Module) -> None:
@@ -95,11 +108,9 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _discover_session_type_vars(self, module: ast.Module) -> None:
-        # Issue #5121 (T19 asname-aliasing hardening): record every local
-        # binding whose source name is the deleted get_session_type wrapper.
-        # Walk ImportFrom nodes pre-emptively so that the rest of the visitor
-        # can detect rebinds via 'from _hook_settings import get_session_type
-        # as g' without re-walking the import graph at every call site.
+        # Walk ImportFrom nodes pre-emptively so the rest of the visitor
+        # can detect rebinds via 'as' without re-walking the import graph
+        # at every call site.
         for node in ast.walk(module):
             if not isinstance(node, ast.ImportFrom):
                 continue
@@ -110,11 +121,12 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
                     self._forbidden_aliases.add(alias.asname or alias.name)
 
         assigns: list[tuple[str, ast.expr]] = []
-        # Issue #5121 (T19 destructure-pattern hardening): accept Assign
-        # targets shaped as a Tuple or List of two Name nodes, so that
-        # 'headless, tier = hook_session_shape()' registers 'tier' as a
-        # session-type variable — the second element of the canonical tuple
-        # is exactly what the deleted get_session_type() returned.
+        # Destructure pattern accepts Assign targets shaped as Tuple or List
+        # of two Name nodes so 'headless, tier = hook_session_shape()'
+        # registers both names — the second is the session-type variable
+        # and the first is bound unconditionally so the downstream fixed-
+        # point propagation can still match direct headless comparisons if
+        # any caller ever branches on headless directly.
         for node in ast.walk(module):
             if not isinstance(node, ast.Assign) or len(node.targets) != 1:
                 continue
@@ -123,16 +135,9 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
             if isinstance(target, ast.Name):
                 assigns.append((target.id, value))
             elif isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
-                # Destructure target — bind the SECOND Name as the
-                # session-type variable (the first is the headless bool).
                 second = target.elts[1]
                 if isinstance(second, ast.Name):
                     assigns.append((second.id, value))
-                # Bind the FIRST name as a headless var too, so the
-                # downstream _derives_from_known_var can still match
-                # comparisons against it if any caller ever branches on
-                # headless directly. Both are added unconditionally so the
-                # fixed-point propagates consistently.
                 first = target.elts[0]
                 if isinstance(first, ast.Name):
                     assigns.append((first.id, value))
@@ -152,29 +157,20 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
     def _is_session_type_env_read(
         node: ast.expr, forbidden_aliases: frozenset[str] = frozenset()
     ) -> bool:
-        # Issue #5121 (T19): recognize the canonical hook_session_shape()
-        # call as a session-type source. The function returns (headless, tier);
-        # the destructure pattern in _discover_session_type_vars extracts
-        # the tier name into _session_type_vars.
+        # Canonical hook_session_shape() call is the session-type source.
+        # The function returns (headless, tier); the destructure pattern
+        # in _discover_session_type_vars extracts the tier name into
+        # _session_type_vars.
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "hook_session_shape"
         ):
             return True
-        # Backwards-compat: keep the literal name match so any straggler
-        # direct call to the deleted wrapper is still flagged.
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "get_session_type"
-        ):
-            return True
-        # Issue #5121 (T19 asname-aliasing hardening): if a hook rebinds
-        # 'from _hook_settings import get_session_type as g', the call site
-        # reads as 'g()' which is identical to a direct wrapper call.
-        # forbidden_aliases is the precomputed set of every local name that
-        # resolves to the deleted wrapper via an 'as' rebind.
+        # ``as``-rebinding the deleted wrapper surfaces at the call site as
+        # ``g()`` which is identical to a direct wrapper call. The
+        # forbidden_aliases set is the precomputed set of every local name
+        # that resolves to the deleted wrapper via an 'as' rebind.
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
@@ -190,9 +186,9 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
             and node.args[0].value == "AUTOSKILLIT_SESSION_TYPE"
         ):
             return True
-        # Issue #5121 (T19): also match os.environ["AUTOSKILLIT_SESSION_TYPE"]
-        # subscript access — pre-existing detector only matched the
-        # os.environ.get(...) call form.
+        # Match ``os.environ["AUTOSKILLIT_SESSION_TYPE"]`` subscript access —
+        # the pre-existing detector only matched the os.environ.get(...) call
+        # form, which would miss direct subscript lookups.
         if (
             isinstance(node, ast.Subscript)
             and isinstance(node.value, ast.Attribute)

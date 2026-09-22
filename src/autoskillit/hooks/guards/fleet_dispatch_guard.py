@@ -41,15 +41,15 @@ def main() -> None:
         sys.stderr.write("fleet_dispatch_guard: unexpected JSON root type — failing open\n")
         sys.exit(0)
 
-    _headless, session_type = hook_session_shape()
-    if session_type and session_type != "fleet":
+    _headless, tier = hook_session_shape()
+    if tier and tier != "fleet":
         payload = json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"dispatch_food_truck requires fleet session (current: {session_type})"
+                        f"dispatch_food_truck requires fleet session (current: {tier})"
                     ),
                 }
             }

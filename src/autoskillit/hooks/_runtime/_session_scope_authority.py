@@ -104,6 +104,11 @@ def enforce_script_session_scope(script_identity: str) -> bool:
 
     from _hook_settings import hook_session_shape
 
+    # Deferred bare-name import: doing this inside the function body breaks
+    # the cycle that would otherwise arise if _hook_settings imported from
+    # this module at module scope (which it cannot, since _hook_settings is
+    # the canonical accessor). The bare-name form matches the subprocess
+    # sys.path bootstrap that resolves _hook_settings against hooks/_runtime/.
     headless, _ = hook_session_shape()
     if scope == "any":
         return True

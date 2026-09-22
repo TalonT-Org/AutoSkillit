@@ -216,12 +216,12 @@ def _deny(reason: str) -> None:
 
 
 def _enforce_session_authorization() -> None:
-    headless, current_session_type = hook_session_shape()
+    headless, tier = hook_session_shape()
     if headless:
-        if current_session_type in ("fleet",):
-            _deny(f"open_kitchen cannot be called from {current_session_type!r} sessions.")
+        if tier in ("fleet",):
+            _deny(f"open_kitchen cannot be called from {tier!r} sessions.")
 
-        if current_session_type not in ("orchestrator",):
+        if tier not in ("orchestrator",):
             # skill session, unset, or invalid — deny (fail-closed)
             _deny(
                 "open_kitchen cannot be called from skill sessions. "

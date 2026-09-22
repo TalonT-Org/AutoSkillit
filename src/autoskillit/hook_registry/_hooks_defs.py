@@ -77,7 +77,7 @@ class HookDef:
     def __post_init__(self) -> None:
         if self.event_type not in _MATCHERLESS_EVENT_TYPES and not self.matcher:
             raise ValueError(
-                f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
+                f"HookDef.matcher must be non-empty for event_type={self.event_type!r}"
             )
         if self.session_scope not in _SESSION_SCOPE_VALUES:
             raise ValueError(f"HookDef.session_scope={self.session_scope!r} is invalid")
@@ -90,7 +90,10 @@ class HookDef:
             if not isinstance(resources, frozenset) or any(
                 not isinstance(resource, str) or not resource for resource in resources
             ):
-                raise ValueError(f"HookDef.{field_name} must be a frozenset of non-empty strings")
+                raise ValueError(
+                    f"HookDef.{field_name}={resources!r} is invalid "
+                    "(must be a frozenset of non-empty strings)"
+                )
 
 
 class HookEnvVarDef(NamedTuple):
@@ -115,9 +118,11 @@ class LifecycleContractDef:
 
     def __post_init__(self) -> None:
         if not isinstance(self.resource, str) or not self.resource:
-            raise ValueError("LifecycleContractDef.resource must be non-empty")
+            raise ValueError(f"LifecycleContractDef.resource={self.resource!r} must be non-empty")
         if not isinstance(self.producer_script, str) or not self.producer_script:
-            raise ValueError("LifecycleContractDef.producer_script must be non-empty")
+            raise ValueError(
+                f"LifecycleContractDef.producer_script={self.producer_script!r} must be non-empty"
+            )
         if self.backend not in ("claude_code", "codex"):
             raise ValueError(f"LifecycleContractDef.backend={self.backend!r} is invalid")
         if self.session_scope not in _SESSION_SCOPE_VALUES:
@@ -125,9 +130,15 @@ class LifecycleContractDef:
                 f"LifecycleContractDef.session_scope={self.session_scope!r} is invalid"
             )
         if not isinstance(self.required_owner_roles, frozenset) or not (self.required_owner_roles):
-            raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")
+            raise ValueError(
+                f"LifecycleContractDef.required_owner_roles={self.required_owner_roles!r} "
+                "must be non-empty"
+            )
         if not self.required_owner_roles <= {"same_runner", "session_start"}:
-            raise ValueError("LifecycleContractDef.required_owner_roles contains an invalid role")
+            raise ValueError(
+                f"LifecycleContractDef.required_owner_roles={self.required_owner_roles!r} "
+                "contains an invalid role"
+            )
 
 
 @dataclass(frozen=True, slots=True)

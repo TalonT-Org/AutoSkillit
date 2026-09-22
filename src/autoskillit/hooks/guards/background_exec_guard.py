@@ -175,11 +175,11 @@ def main() -> None:
 
     in_subagent_context = bool(data.get("agent_id"))
 
-    headless, session_type = hook_session_shape()
-    if session_type in ("orchestrator", "fleet"):
+    headless, tier = hook_session_shape()
+    if tier in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers
 
-    is_governed = _governed_skill_session(session_type)
+    is_governed = _governed_skill_session(tier)
 
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
@@ -213,7 +213,7 @@ def main() -> None:
         sys.exit(0)
 
     # --- ADR-0001 background/SessionWakeup gate (headless only) ---
-    denial_reason = _headless_background_denial(session_type, tool_name, tool_input)
+    denial_reason = _headless_background_denial(tier, tool_name, tool_input)
     if denial_reason is not None:
         _emit_deny(denial_reason)
 

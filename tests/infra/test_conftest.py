@@ -30,6 +30,11 @@ def test_root_debris_detector_excludes_baseline_reported_and_ignored_entries(
     (tmp_path / "ignored").mkdir()
     (tmp_path / "new-entry").mkdir()
 
+    # The chdir here is a regression sentinel: _new_nonignored_root_entries
+    # passes ``cwd=repository_root`` to ``git check-ignore`` explicitly, so
+    # the test process's cwd should not affect the result. If a future
+    # refactor drops the explicit ``cwd=``, this chdir makes the test fail
+    # rather than silently inheriting the wrong working tree.
     monkeypatch.chdir(tmp_path / "baseline")
 
     observed = _new_nonignored_root_entries(

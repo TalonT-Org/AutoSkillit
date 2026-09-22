@@ -43,7 +43,8 @@ from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
 # hypothesis is loaded. TMPDIR is set by the _tmpdir-setup task to a per-run
 # pytest tmp dir under /dev/shm/pytest-tmp-* which is git-ignored and exempt
 # from the root-debris detector. Falls back to /tmp if TMPDIR is unset.
-_hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
+import tempfile as _tempfile
+_hypothesis_storage_dir = _tempfile.gettempdir() + "/autoskillit-hypothesis"
 os.makedirs(_hypothesis_storage_dir, exist_ok=True)
 os.environ["HYPOTHESIS_STORAGE_DIR"] = _hypothesis_storage_dir
 

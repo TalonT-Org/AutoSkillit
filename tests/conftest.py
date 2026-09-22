@@ -184,6 +184,7 @@ def _new_nonignored_root_entries(
         input=("\0".join(sorted(candidates)) + "\0").encode(),
         capture_output=True,
         check=False,
+        timeout=10,
     )
     if result.returncode not in (0, 1):
         stderr = result.stderr.decode(errors="replace").strip()

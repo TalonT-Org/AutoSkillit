@@ -14,7 +14,7 @@ import pytest
 
 from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.cli.session.pty._observer import PtyObserver
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, ValidatedAddDir
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -352,13 +352,13 @@ def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
     tmp_path: Path,
 ) -> None:
     from autoskillit.cli.session import _session_process
-    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
     if _assert_unsupported_platform(tmp_path):
         return
     spawn = Mock()
     monkeypatch.setattr(_session_process, "spawn_owned_process", spawn)
     callbacks = Mock()
+    managed_catalog = ValidatedAddDir(path=str(tmp_path / "add-dir"), session_home=str(tmp_path))
 
     with pytest.raises(RuntimeError, match="catalog changed"):
         run_cook_attempt(
@@ -366,7 +366,7 @@ def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
                 cmd=(sys.executable, "-c", "pass"),
                 env=dict(os.environ),
                 cwd=str(tmp_path.resolve()),
-                skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+                managed_skill_catalog=managed_catalog,
             ),
             pass_fds=(),
             on_spawn=callbacks.spawn,
@@ -387,7 +387,6 @@ def test_pty_pre_spawn_check_closes_descriptors_without_spawning(
     tmp_path: Path,
 ) -> None:
     from autoskillit.cli.session import _session_process
-    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
     if _assert_unsupported_platform(tmp_path):
         return
@@ -412,6 +411,7 @@ def test_pty_pre_spawn_check_closes_descriptors_without_spawning(
 
     monkeypatch.setattr(PtyObserver, "close_master", record_close_master)
     callbacks = Mock()
+    managed_catalog = ValidatedAddDir(path=str(tmp_path / "add-dir"), session_home=str(tmp_path))
     try:
         with pytest.raises(RuntimeError, match="catalog changed"):
             run_cook_attempt(
@@ -419,7 +419,7 @@ def test_pty_pre_spawn_check_closes_descriptors_without_spawning(
                     cmd=(sys.executable, "-c", "pass"),
                     env=dict(os.environ),
                     cwd=str(tmp_path.resolve()),
-                    skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+                    managed_skill_catalog=managed_catalog,
                 ),
                 pass_fds=(),
                 on_spawn=callbacks.spawn,
@@ -478,12 +478,12 @@ def test_managed_launch_requires_a_retained_pre_spawn_check(
     tmp_path: Path,
 ) -> None:
     from autoskillit.cli.session import _session_process
-    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 
     if _assert_unsupported_platform(tmp_path):
         return
     spawn = Mock()
     monkeypatch.setattr(_session_process, "spawn_owned_process", spawn)
+    managed_catalog = ValidatedAddDir(path=str(tmp_path / "add-dir"), session_home=str(tmp_path))
 
     with pytest.raises(RuntimeError, match="requires a pre-spawn check"):
         run_cook_attempt(
@@ -491,7 +491,7 @@ def test_managed_launch_requires_a_retained_pre_spawn_check(
                 cmd=(sys.executable, "-c", "pass"),
                 env=dict(os.environ),
                 cwd=str(tmp_path.resolve()),
-                skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+                managed_skill_catalog=managed_catalog,
             ),
             pass_fds=(),
             on_spawn=lambda _pid, _pgid: None,

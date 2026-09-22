@@ -17,7 +17,6 @@ from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import CmdSpec, get_logger
 from autoskillit.execution import (
-    CODEX_MANAGED_HOME_ROUTE,
     INTERACTIVE_TETHER_CEILING_SECONDS,
     OwnedProcessGroup,
     TetherSpec,
@@ -39,8 +38,8 @@ class CookAttemptResult:
 
 
 def _run_pre_spawn_check(spec: CmdSpec, check: Callable[[], None] | None) -> None:
-    if spec.skill_discovery_route is CODEX_MANAGED_HOME_ROUTE and check is None:
-        raise RuntimeError("Codex managed interactive launch requires a pre-spawn check")
+    if spec.managed_skill_catalog is not None and check is None:
+        raise RuntimeError("managed interactive launch requires a pre-spawn check")
     if check is not None:
         check()
 

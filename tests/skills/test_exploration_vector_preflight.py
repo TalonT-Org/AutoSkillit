@@ -1,74 +1,108 @@
-"""Skill contract: exploration-vector markers require preflight documentation
-(#4684 Fix F / 2.8).
-
-Before this contract, no SKILL.md or agent definition mentioned
-``enable_exploration`` at all —
-``rg -rln "enable_exploration" src/autoskillit/skills/ src/autoskillit/skills_extended/
-src/autoskillit/agents/`` returned zero files. A skill author who adds an
-``exploration-vector`` marker shipped with no instruction that a preflight call
-is required. This test enumerates every SKILL.md containing the marker (mirrors
-the enumeration shape of tests/contracts/test_explorer_conformance_preamble.py)
-and asserts each carries a structured preflight block: a Markdown blockquote of
-the form ``> **Preflight:** ...`` with ``enable_exploration`` appearing within
-200 characters of the anchor. A loose, unrelated mention of
-``enable_exploration`` elsewhere in the file does not satisfy the contract.
-"""
+"""Projected exploration-preflight contracts for every session corridor (#4755)."""
 
 from __future__ import annotations
 
-import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import pkg_root
+from autoskillit.core import (
+    ExplorationVectorDisposition,
+    SkillExecutionRole,
+    SkillSource,
+)
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.workspace import SkillProjectionContext, materialize_agent_skill_tree
+from autoskillit.workspace.skills import (
+    DefaultSkillResolver,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.small]
 
-_MARKER_RE = re.compile(r'<!--\s*autoskillit:exploration-vector\s+id="')
-_PREFLIGHT_ANCHOR_RE = re.compile(r">\s*\*\*Preflight:\*\*", re.IGNORECASE)
-_PREFLIGHT_WINDOW = 200
 
-
-def _skill_md_files_with_exploration_vector_marker() -> list[Path]:
-    roots = [pkg_root() / "skills", pkg_root() / "skills_extended"]
-    found: list[Path] = []
-    for root in roots:
-        if not root.exists():
-            continue
-        for path in sorted(root.rglob("SKILL.md")):
-            if _MARKER_RE.search(path.read_text(encoding="utf-8")):
-                found.append(path)
-    return found
-
-
-_MARKED_SKILLS = _skill_md_files_with_exploration_vector_marker()
-
-
-def _skill_id(path: Path) -> str:
-    return str(path.relative_to(pkg_root()))
-
-
-@pytest.mark.parametrize("skill_path", _MARKED_SKILLS, ids=[_skill_id(p) for p in _MARKED_SKILLS])
-def test_exploration_vector_skill_has_preflight_block(skill_path: Path) -> None:
-    text = skill_path.read_text(encoding="utf-8")
-    anchor = _PREFLIGHT_ANCHOR_RE.search(text)
-    assert anchor is not None, (
-        f"{_skill_id(skill_path)} has an exploration-vector marker but no "
-        "'> **Preflight:**' block. Add one instructing the session to call "
-        "enable_exploration before acting on the exploration-vector directives."
+def _exploration_catalog() -> tuple[EffectiveSkillCatalog, frozenset[str], frozenset[str]]:
+    """Load the bundled session skills that projection delivers to an agent."""
+    source_infos = tuple(
+        skill
+        for skill in DefaultSkillResolver().list_all()
+        if skill.source in {SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED}
+        and skill.execution_role is SkillExecutionRole.SESSION
+        and skill.exploration_vectors
     )
-    window = text[anchor.end() : anchor.end() + _PREFLIGHT_WINDOW]
-    assert "enable_exploration" in window, (
-        f"{_skill_id(skill_path)}'s preflight block must mention enable_exploration "
-        f"within {_PREFLIGHT_WINDOW} characters of the '> **Preflight:**' anchor — a "
-        "loose mention elsewhere in the file does not satisfy the contract."
+    exploration_skill_names = frozenset(
+        skill.name for skill in source_infos if skill.exploration_vectors
+    )
+    migrated_skill_names = frozenset(
+        skill.name
+        for skill in source_infos
+        if any(
+            vector.disposition is ExplorationVectorDisposition.MIGRATED
+            for vector in skill.exploration_vectors
+        )
+    )
+    assert exploration_skill_names, "expected bundled session skills with exploration vectors"
+    return (
+        EffectiveSkillCatalog(
+            skills=tuple(SkillCatalogEntry.from_skill_info(skill) for skill in source_infos),
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+        exploration_skill_names,
+        migrated_skill_names,
     )
 
 
-def test_discovery_walk_finds_the_known_marked_skills() -> None:
-    """Sanity: the enumeration walk itself must not silently find nothing."""
-    assert len(_MARKED_SKILLS) >= 1, (
-        "No SKILL.md with an exploration-vector marker discovered — "
-        "the enumeration walk may be broken."
+@pytest.mark.parametrize(
+    ("backend", "headless"),
+    (
+        pytest.param(ClaudeCodeBackend(), False, id="claude-interactive"),
+        pytest.param(ClaudeCodeBackend(), True, id="claude-headless"),
+        pytest.param(CodexBackend(), False, id="codex-interactive"),
+        pytest.param(CodexBackend(), True, id="codex-headless"),
+    ),
+)
+def test_projected_exploration_preflight_matches_session_authority(
+    tmp_path: Path,
+    backend: ClaudeCodeBackend | CodexBackend,
+    headless: bool,
+) -> None:
+    """Only interactive Claude projections instruct session-scoped provisioning.
+
+    The identity-guard bridge is exempted for Codex and headless corridors, so
+    their projected bytes must never direct an agent to call
+    ``enable_exploration``. Retained-only skills stay in the contract because
+    their vector bodies do not reach the migrated-vector renderer.
+    """
+    catalog, exploration_skill_names, migrated_skill_names = _exploration_catalog()
+    session_scoped_provisioning = (
+        backend.capabilities.session_scoped_explorer_capable and not headless
     )
+    if isinstance(backend, CodexBackend):
+        # Canonical join-required skills remain rejected on Codex; this
+        # substitution isolates rendering without claiming production admission.
+        catalog = EffectiveSkillCatalog(
+            skills=tuple(replace(entry, semantic_plan=None) for entry in catalog.skills),
+            execution_role=catalog.execution_role,
+        )
+    context = SkillProjectionContext(
+        cwd=tmp_path,
+        catalog=catalog,
+        backend=backend,
+        explorer_provisioning_eligible=session_scoped_provisioning,
+    )
+
+    documents = materialize_agent_skill_tree(tmp_path / "skills", catalog, context)
+
+    retained_only_skill_names = exploration_skill_names - migrated_skill_names
+    assert retained_only_skill_names, "expected a bundled retained-only exploration skill"
+    assert "scope" in retained_only_skill_names
+    for skill_name in sorted(exploration_skill_names):
+        content = documents[skill_name].content
+        expected = session_scoped_provisioning and skill_name in migrated_skill_names
+        assert ("enable_exploration" in content) is expected, (
+            f"{backend.name} headless={headless}: projected {skill_name!r} "
+            f"session-scoped preflight expected={expected}"
+        )

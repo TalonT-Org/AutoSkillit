@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
-    assert SKILL_PROJECTION_VERSION == 8
+    assert SKILL_PROJECTION_VERSION == 9
     assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
 
 
@@ -472,6 +472,33 @@ def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Pa
         match=f"unsupported projection_version 5; expected {SKILL_PROJECTION_VERSION}",
     ):
         store.finalize(correlation_key, "stale-projection")
+
+
+def test_store_load_rejects_an_otherwise_valid_finalized_v8_contract(tmp_path: Path) -> None:
+    """A finalized pre-v9 snapshot cannot resume through the real load path."""
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_codec import _digest_json
+
+    text = "projected\n"
+    session_id = "finalized-v8"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    store.finalize(correlation_key, session_id)
+    entry = store._session_path(session_id)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data["projection_version"] = 8
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    with pytest.raises(
+        ValueError,
+        match=f"unsupported projection_version 8; expected {SKILL_PROJECTION_VERSION}",
+    ):
+        store.load(session_id)
 
 
 @pytest.mark.parametrize(

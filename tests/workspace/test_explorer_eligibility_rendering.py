@@ -41,12 +41,9 @@ def _exploration_projection_context(
         if s.source in {SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED}
         and s.execution_role is SkillExecutionRole.SESSION
     )
-    # Filtered to MIGRATED-disposition vectors only: a skill whose exploration.yaml
-    # declares vectors that are all RETAINED (e.g. "scope", which has 12 retained:
-    # and no vectors: at all) never enters the `if migrated:` branch in
-    # materialization.py, so it renders neither the fallback text nor the
-    # eligible-path dispatch text — its preflight text is the untouched static
-    # blockquote (out of scope; see the rectify plan's Step 1 placement decision).
+    # Unavailability dispatch applies only to migrated vectors. Retained-only
+    # skills, including ``scope``, are covered by the projected-preflight
+    # contract in tests/skills/test_exploration_vector_preflight.py.
     exploration_skill_names = {
         skill.name
         for skill in source_infos
@@ -93,6 +90,9 @@ def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
             f"Expected exploration skill {name!r} to no longer render the bare "
             "'do not dispatch' suppression text when eligible=False"
         )
+        assert "local checkout" in content
+        assert "remote or public copy" in content
+        assert "local access" in content
 
 
 def test_ineligible_context_projects_pluginless_explorer_dispatch(tmp_path: Path) -> None:

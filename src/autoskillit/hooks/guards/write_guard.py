@@ -8,6 +8,7 @@ workspace sandbox for this boundary; installation writes have a separate guard.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -64,6 +65,19 @@ _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
         "/dev/stdin",
     }
 )
+
+# Per-process set of prefix values that already produced a realpath-failure warning;
+# pytest-xdist workers get isolated copies via the import boundary.
+_WARNED_PREFIXES: set[str] = set()
+_LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
+# Empty-boundary denial hint, keyed by activation. Kept terse to bound JSON payload size.
+_EMPTY_BOUNDARY_HINT_BY_ACTIVATION: dict[str, str] = {
+    "headless": (
+        "every prefix in AUTOSKILLIT_ALLOWED_WRITE_PREFIX "
+        "or AUTOSKILLIT_ALLOWED_WRITE_PREFIXES failed realpath normalization"
+    ),
+    "skill_binding": ("every write_paths entry in session_binding failed realpath normalization"),
+}
 
 # Every value-taking git global flag, derived at import time from
 # _GIT_GLOBAL_FLAG_SPEC in _command_classification.py. Hook scripts already
@@ -264,12 +278,21 @@ def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> No
     sys.exit(0)
 
 
-def _normalize_prefixes(raw_prefixes: list[str]) -> list[str]:
+def _normalize_prefixes(raw_prefixes: list[str], *, source_label: str) -> list[str]:
     normalized: list[str] = []
     for prefix in raw_prefixes:
         try:
             real = os.path.realpath(prefix)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            if prefix not in _WARNED_PREFIXES:
+                _LOGGER.warning(
+                    "write_guard: dropping prefix %r (realpath failed: %s: %s; source=%s)",
+                    prefix,
+                    type(exc).__name__,
+                    exc,
+                    source_label,
+                )
+                _WARNED_PREFIXES.add(prefix)
             continue
         normalized.append(real.rstrip("/") + "/")
     return normalized
@@ -334,7 +357,7 @@ def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str,
             )
             for path in raw_paths
         ]
-        prefixes = _normalize_prefixes(paths)
+        prefixes = _normalize_prefixes(paths, source_label="session_binding")
         effective = (
             prefixes if effective is None else _narrow_compatible_prefixes(effective, prefixes)
         )
@@ -358,7 +381,14 @@ def _write_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
         singular = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
         raw_prefixes = [singular] if singular else []
 
-    norm_prefixes = _normalize_prefixes(raw_prefixes)
+    norm_prefixes = _normalize_prefixes(
+        raw_prefixes,
+        source_label=(
+            "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"
+            if prefixes_str
+            else "AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
+        ),
+    )
     return norm_prefixes, ", ".join(raw_prefixes), ("active" if norm_prefixes else "none")
 
 
@@ -452,12 +482,15 @@ def main() -> None:
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
         sys.exit(0)
     if policy_state in {"empty", "unresolved"}:
+        hint = _EMPTY_BOUNDARY_HINT_BY_ACTIVATION.get(activation)
+        suffix = (
+            f"empty boundary: {hint}"
+            if hint is not None
+            else f"{policy_state} boundary (activation={activation})"
+        )
         _deny(
             data,
-            (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-                f"({policy_state} boundary)."
-            ),
+            (f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} ({suffix})."),
             reason_code=policy_state,
             activation=activation,
         )

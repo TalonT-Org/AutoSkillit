@@ -1748,15 +1748,28 @@ def _list_untracked_paths(cwd: str | Path) -> frozenset[str]:
     Used by both ``git_changed_files`` and ``git_changed_files_local``; the
     only thing that differs between callers is which diff is used to collect
     *tracked* paths, so the untracked enumeration is centralised here.
+
+    ``TimeoutExpired`` and ``FileNotFoundError`` are caught and converted to
+    an empty result with a warning so callers do not need to wrap this call
+    individually. The diff subprocesses in each caller already wrap their own
+    git invocations the same way, so this keeps error handling consistent
+    across both subprocess types.
     """
-    result = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        warnings.warn("git ls-files timed out after 10s", stacklevel=2)
+        return frozenset()
+    except FileNotFoundError:
+        warnings.warn("git binary not found on PATH", stacklevel=2)
+        return frozenset()
     if result.returncode != 0:
         return frozenset()
     return frozenset(_paths_from_git_output(result.stdout))

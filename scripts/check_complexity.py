@@ -593,9 +593,11 @@ _REFACTOR_INSTRUCTIONS = """\
      complexity instead of removing it, and review will send it back."""
 
 _EXEMPTION_INTRO = """\
-  2. Exemption -- last resort, human-approved. Only when a genuine refactor attempt shows
-     the complexity is essential (a parser, state machine, or exhaustive validator whose
-     branches mirror the domain) and removing it would make the code harder to follow:
+  2. Exemption. Only after complexity has been reduced as far as reasonably possible
+     through a genuine refactor attempt may a narrowly scoped exemption be considered as a
+     human-approved last resort. The remaining complexity must be essential (a parser,
+     state machine, or exhaustive validator whose branches mirror the domain), and further
+     reduction would make the code harder to follow:
        a. add the entry to COMPLEXITY_EXEMPTIONS in tests/arch/_complexity_limits.py:"""
 
 _EXEMPTION_APPROVAL = """\

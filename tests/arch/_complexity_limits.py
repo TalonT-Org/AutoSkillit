@@ -13,7 +13,7 @@ approved it -- an automated session must not add that approval itself.
 Every exemption's rationale must describe the attempted refactor and why it was not viable,
 in at least MIN_RATIONALE_CHARS characters.
 
-An exemption self-invalidates -- and fails the check in both warn and fail mode -- when its
+An exemption self-invalidates as a policy error rejected with exit status 2 when its
 function: (1) no longer exists at the key's path::qualname, (2) has dropped to
 MAX_COMPLEXITY or below (the exemption is no longer needed), or (3) exceeds its own
 `limit` (the exemption no longer covers the actual complexity).

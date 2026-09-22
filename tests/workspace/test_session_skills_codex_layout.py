@@ -10,6 +10,7 @@ import pytest
 import autoskillit.workspace.session_skills._materialization as session_skill_materialization
 from autoskillit.core import (
     ClaudeDirectoryConventions,
+    ExplorationVectorApplicabilityId,
     ManagedSessionHome,
     PreLaunchReadiness,
     RepositoryProfileId,
@@ -194,6 +195,9 @@ def test_managed_materialization_forwards_complete_catalog_context(
             cwd=tmp_path,
             invocation=invocation,
             backend=backend,
+            resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
+            active_exploration_applicabilities=frozenset(ExplorationVectorApplicabilityId),
+            parent_sandbox_mode="read-only",
             adaptation_context=adaptation_context,
             managed_codex_route=route,
         ),

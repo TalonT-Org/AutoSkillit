@@ -182,9 +182,14 @@ class TestTaskfile:
             "task test-all",
             "LOCAL_GATE_EXIT=$?",
             "set -e",
-            'if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then',
+            "MANAGED_ROUTE_LIVE_EXIT=0",
+            'if [[ "${AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE:-0}" == "1" ]]; then',
+            "task test-smoke-codex",
+            "MANAGED_ROUTE_LIVE_EXIT=$?",
+            'if [ "$LOCAL_GATE_EXIT" -ne 0 ] || [ "$MANAGED_ROUTE_LIVE_EXIT" -ne 0 ]; then',
             'echo "TEST_RESULT=FAIL"',
             'echo "LOCAL_GATE_EXIT_CODE=$LOCAL_GATE_EXIT"',
+            'echo "MANAGED_ROUTE_LIVE_EXIT_CODE=$MANAGED_ROUTE_LIVE_EXIT"',
             "exit 1",
             "else",
             'echo "TEST_RESULT=PASS"',
@@ -201,7 +206,9 @@ class TestTaskfile:
             last_idx = idx
 
         set_e_idx = commands.find("set -e", commands.find("LOCAL_GATE_EXIT=$?"))
-        if_branch_idx = commands.index('if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then')
+        if_branch_idx = commands.index(
+            'if [ "$LOCAL_GATE_EXIT" -ne 0 ] || [ "$MANAGED_ROUTE_LIVE_EXIT" -ne 0 ]; then'
+        )
         assert "exit" not in commands[set_e_idx:if_branch_idx], (
             "no `exit` should appear between errexit restore and the result branch"
         )

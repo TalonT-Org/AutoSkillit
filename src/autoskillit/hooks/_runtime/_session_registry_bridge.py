@@ -20,8 +20,6 @@ else:
 
 _REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
 _LOCK_RETRY_INTERVAL_SECONDS = 0.01
-_LAUNCH_ID_ENV = "AUTOSKILLIT_LAUNCH_ID"
-_MANAGED_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 
 def _registry_path(payload_cwd: str) -> Path:
@@ -96,9 +94,13 @@ def _bridge_locked_registry(registry_file: Path, launch_id: str, session_id: str
     _write_registry(registry_file, registry)
 
 
-def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
+def bridge_session_registry(
+    session_id: str,
+    payload_cwd: str = "",
+    *,
+    launch_id: str,
+) -> None:
     """Bind the selected launch row to one unique native session identity."""
-    launch_id = os.environ.get(_LAUNCH_ID_ENV, "")
     if not launch_id or not session_id:
         return
 
@@ -161,42 +163,38 @@ def is_authenticated_top_level_cook(
     payload: dict[str, object],
     payload_cwd: str,
     binding_session_id: str,
+    *,
+    headless: bool = False,
+    backend: str = "",
+    launch_id: str = "",
+    managed_parent_id: str = "",
 ) -> bool:
     """Return whether durable state proves this is the top-level interactive cook."""
-    if (
-        os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
-        or payload.get("agent_id")
-        or not payload_cwd
-        or not binding_session_id
-    ):
+    if headless or payload.get("agent_id") or not payload_cwd or not binding_session_id:
         return False
 
     registry = _read_registry(payload_cwd)
     if registry is None:
         return False
 
-    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":
-        launch_id = os.environ.get(_MANAGED_PARENT_ID_ENV, "")
-        ambient_launch_id = os.environ.get(_LAUNCH_ID_ENV, "")
         if (
-            not launch_id
-            or binding_session_id != launch_id
-            or (ambient_launch_id and ambient_launch_id != launch_id)
+            not managed_parent_id
+            or binding_session_id != managed_parent_id
+            or (launch_id and launch_id != managed_parent_id)
         ):
             return False
-        row = registry.get(launch_id)
+        row = registry.get(managed_parent_id)
         if not isinstance(row, dict) or row.get("session_type") != "cook":
             return False
         binding = read_session_binding(payload_cwd, binding_session_id)
         return bool(
             binding is not None
-            and binding.get("managed_parent_id") == launch_id
+            and binding.get("managed_parent_id") == managed_parent_id
             and binding.get("managed_route") in {"parent", "interactive-parent"}
             and binding.get("managed_leaf_id") == ""
         )
 
-    launch_id = os.environ.get(_LAUNCH_ID_ENV, "")
     payload_session_id = payload.get("session_id")
     if (
         not launch_id

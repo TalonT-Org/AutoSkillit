@@ -77,10 +77,8 @@ def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> N
 
 def render_skill_unavailability(
     unavailability_payload: SkillUnavailabilityPayload,
-    *,
-    managed_join_refusal: str | None = None,
 ) -> None:
-    """Print backend exclusions and an optional managed-preparation refusal once."""
+    """Print backend exclusions grouped by operation and diagnostic."""
     grouped: dict[tuple[str, str], list[str]] = {}
     for item in unavailability_payload["unavailable"]:
         grouped.setdefault((item["operation"], item["diagnostic"]), []).append(item["skill"])
@@ -90,8 +88,6 @@ def render_skill_unavailability(
             f"{len(skill_names)} skills unavailable on this backend "
             f"({operation}: {diagnostic}): {names}"
         )
-    if managed_join_refusal is not None:
-        print(f"WARNING: {managed_join_refusal}")
 
 
 @overload

@@ -27,8 +27,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_kitchen_state_dir,
 )
-from _hook_settings import hook_session_shape  # noqa: E402
-from _session_registry_bridge import bridge_session_registry  # noqa: E402
+from _hook_settings import bridge_session_registry, hook_session_shape  # noqa: E402
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
 

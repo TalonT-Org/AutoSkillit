@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         RepositoryProfileId,
         ResumeSpec,
         SemanticAdaptationContext,
+        SkillUnavailabilityPayload,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
@@ -170,6 +171,15 @@ def _acquire_cook_managed_join(
         on_refusal=capture_refusal,
     )
     return (evidence.context if evidence is not None else None), rendered_refusal
+
+
+def _render_cook_skill_unavailability(
+    unavailability_payload: SkillUnavailabilityPayload,
+    managed_join_refusal: str | None,
+) -> None:
+    render_skill_unavailability(unavailability_payload)
+    if managed_join_refusal is not None:
+        print(f"WARNING: {managed_join_refusal}")
 
 
 def cook(
@@ -410,9 +420,9 @@ def cook(
 
     def _run_managed() -> None:
         nonlocal claimed_launch_id, cook_system_prompt, launch
-        render_skill_unavailability(
+        _render_cook_skill_unavailability(
             managed_home.unavailability_payload,
-            managed_join_refusal=managed_join_refusal,
+            managed_join_refusal,
         )
         cook_system_prompt = append_skill_unavailability(
             cook_system_prompt,

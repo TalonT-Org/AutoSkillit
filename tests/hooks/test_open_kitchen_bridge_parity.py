@@ -38,7 +38,7 @@ def _bridge(
     launch_id: str,
     session_id: str,
 ) -> None:
-    from autoskillit.hooks._runtime._session_registry_bridge import bridge_session_registry
+    from autoskillit.hooks._runtime._hook_settings import bridge_session_registry
 
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
     bridge_session_registry(session_id, str(project_dir))
@@ -56,12 +56,11 @@ def _race_bridge(
 
     project = Path(project_dir)
     if implementation == "hook":
-        os.environ["AUTOSKILLIT_LAUNCH_ID"] = launch_id
         os.environ["AUTOSKILLIT_STATE_ROOT"] = project_dir
     barrier.wait(timeout=5)
     try:
         if implementation == "hook":
-            bridge_session_registry(session_id, project_dir)
+            bridge_session_registry(session_id, project_dir, launch_id=launch_id)
         else:
             bridge_claude_session_id(project, launch_id, session_id)
     except ValueError:
@@ -74,7 +73,7 @@ def test_authenticated_cook_requires_one_persisted_native_identity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.hooks._runtime._session_registry_bridge import (
+    from autoskillit.hooks._runtime._hook_settings import (
         is_authenticated_top_level_cook,
     )
 
@@ -87,7 +86,6 @@ def test_authenticated_cook_requires_one_persisted_native_identity(
             }
         },
     )
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", "cook-launch")
     payload = {"session_id": "native-session", "cwd": str(tmp_path)}
@@ -129,7 +127,7 @@ def test_authenticated_managed_codex_cook_requires_parent_binding(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.hooks._runtime._session_registry_bridge import (
+    from autoskillit.hooks._runtime._hook_settings import (
         is_authenticated_top_level_cook,
     )
     from autoskillit.hooks._session_binding import (
@@ -157,7 +155,6 @@ def test_authenticated_managed_codex_cook_requires_parent_binding(
         managed_config_digest="config",
     )
     write_binding(binding_path, binding)
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
     monkeypatch.setenv("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", launch_id)

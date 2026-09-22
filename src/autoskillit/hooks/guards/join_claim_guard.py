@@ -41,6 +41,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    is_authenticated_top_level_cook,
     resolve_binding_session_id,
     session_join_required,
     session_managed_scope,
@@ -50,9 +51,6 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     JoinLedgerError,
     claim_assignment,
     resolve_flag_dir,
-)
-from _session_registry_bridge import (  # type: ignore[import-not-found]  # noqa: E402
-    is_authenticated_top_level_cook,
 )
 
 JOIN_CLAIM_DENY_TRIGGER: str = (

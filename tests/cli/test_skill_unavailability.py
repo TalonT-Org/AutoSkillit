@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.cli.session._session_cook import _render_cook_skill_unavailability
 from autoskillit.cli.session._session_launch import (
     append_skill_unavailability,
     render_skill_unavailability,
@@ -65,9 +66,9 @@ def test_render_skill_unavailability_reports_managed_preparation_refusal_once(
         )
     )
 
-    render_skill_unavailability(
+    _render_cook_skill_unavailability(
         payload,
-        managed_join_refusal="managed join issuance refused: catalog_probe_failed",
+        "managed join issuance refused: catalog_probe_failed",
     )
 
     lines = capsys.readouterr().out.splitlines()

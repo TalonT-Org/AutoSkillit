@@ -10,8 +10,8 @@ from autoskillit.core import Severity, get_logger, is_feature_enabled
 from autoskillit.execution import get_backend
 
 from ._doctor_capture_store import _check_capture_store_stats
-from ._doctor_codex_preparation import _check_codex_managed_preparation
 from ._doctor_config import (
+    _check_codex_managed_preparation,
     _check_config_layers_for_secrets,
     _check_gitignore_completeness,
     _check_local_recipe_validity,

@@ -136,6 +136,8 @@ def _required_native_child_roles(
     plan: SkillSemanticPlan,
     adaptation: SkillSemanticAdaptationResult,
 ) -> tuple[str, ...]:
+    if adaptation.adaptation_context_digest:
+        return ()
     return tuple(
         sorted({adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns})
     )

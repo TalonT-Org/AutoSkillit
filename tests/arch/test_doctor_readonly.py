@@ -68,7 +68,7 @@ def test_doctor_performs_no_writes() -> None:
 
 def test_managed_preparation_probe_scratch_is_project_temp_scoped() -> None:
     """The diagnostic write exception is limited to disposable project-temp scratch."""
-    source = (SRC / "cli" / "doctor" / "_doctor_codex_preparation.py").read_text()
+    source = (SRC / "cli" / "doctor" / "_doctor_config.py").read_text()
     tree = ast.parse(source)
     func = _find_function(tree, "_check_codex_managed_preparation")
     assert func is not None

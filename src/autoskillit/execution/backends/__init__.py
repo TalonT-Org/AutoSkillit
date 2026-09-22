@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from autoskillit.core import CodexRuntimeSpec, CodingAgentBackend
 
+from ._codex_catalog import CodexCatalogAcquisitionError
 from ._codex_config import (
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
@@ -120,6 +121,7 @@ __all__ = [
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
     "CodexBackend",
+    "CodexCatalogAcquisitionError",
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexResultParser",

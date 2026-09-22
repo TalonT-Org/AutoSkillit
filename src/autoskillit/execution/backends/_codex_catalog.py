@@ -134,8 +134,8 @@ def run_owned_bounded(
             stdout_limit,
             remaining=remaining,
         )
-        returncode, cleanup = owner.settle(timeout=min(2.0, remaining(deadline)))
-        if not cleanup.complete:
+        returncode, cleanup = owner.settle_evidence(timeout=min(2.0, remaining(deadline)))
+        if returncode is None or not cleanup.complete:
             raise CodexCatalogAcquisitionError("process_cleanup_incomplete")
         return CodexProcessOutput(
             returncode,
@@ -239,7 +239,7 @@ def _parse_catalog(raw: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         )
         models = parsed["models"]
     except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError, ValueError) as exc:
-        raise ValueError("Codex bundled model catalog is malformed") from exc
+        raise ValueError("Codex bundled models catalog is malformed") from exc
     if not isinstance(parsed, dict) or not isinstance(models, list):
         raise ValueError("Codex bundled model catalog has no model list")
     if any(

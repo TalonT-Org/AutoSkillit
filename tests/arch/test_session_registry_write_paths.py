@@ -78,7 +78,7 @@ _EXPECTED_REGISTRY_WRITES = (
     ),
     (
         "hooks/_runtime/_session_registry_bridge.py",
-        "bridge_session_registry",
+        "_write_registry",
         "os.replace",
     ),
 )

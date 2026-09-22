@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -228,7 +229,7 @@ def test_conformance_probe_attests_help_auth_and_output_schema(
         cwd=tmp_path,
         environment={"OPENAI_API_KEY": "key"},
         probe_schema_path=tmp_path / "probe.schema.json",
-        deadline=launcher.time.monotonic() + 30,
+        deadline=time.monotonic() + 30,
     )
     assert result is None
     assert len(seen) == 3

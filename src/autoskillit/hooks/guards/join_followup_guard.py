@@ -37,6 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    is_authenticated_top_level_cook,
     resolve_binding_session_id,
     session_join_required,
     session_managed_codex_route,
@@ -48,18 +49,15 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     is_terminal_non_success_batch,
     resolve_flag_dir,
 )
-from _session_registry_bridge import (  # type: ignore[import-not-found]  # noqa: E402
-    is_authenticated_top_level_cook,
-)
 
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
 )
-_RECOVERY_DECLARE_TOOL_NAMES = frozenset(
+_RECOVERY_DECLARE_TOOL_PARTS = frozenset(
     {
-        "mcp__autoskillit__declare_join_batch",
-        "mcp__plugin_autoskillit_autoskillit__declare_join_batch",
+        ("mcp", "autoskillit", "declare_join_batch"),
+        ("mcp", "plugin_autoskillit_autoskillit", "declare_join_batch"),
     }
 )
 
@@ -165,7 +163,9 @@ def main() -> None:
 
     if batch is None or not _is_unresolved(batch):
         sys.exit(0)
-    if tool_name in _RECOVERY_DECLARE_TOOL_NAMES and is_terminal_non_success_batch(batch):
+    if tuple(
+        tool_name.split("__")
+    ) in _RECOVERY_DECLARE_TOOL_PARTS and is_terminal_non_success_batch(batch):
         sys.exit(0)
 
     write_join_diagnostic(

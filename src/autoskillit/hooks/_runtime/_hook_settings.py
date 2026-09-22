@@ -385,6 +385,8 @@ _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 # so relative imports fail; tests/hooks/test_hook_constants_authority.py
 # enforces parity with the canonical constant.
 _AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
+_AUTOSKILLIT_LAUNCH_ID_ENV = "AUTOSKILLIT_LAUNCH_ID"
+_AUTOSKILLIT_AGENT_BACKEND_ENV = "AUTOSKILLIT_AGENT_BACKEND"
 
 
 def read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -610,6 +612,40 @@ def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission"
         getattr(binding_module, "resolve_binding_path")(payload_cwd, session_id),
         session_id=session_id,
         skill_name="",
+    )
+
+
+def is_authenticated_top_level_cook(
+    payload: dict[str, object],
+    payload_cwd: str,
+    binding_session_id: str,
+) -> bool:
+    """Apply canonical session shape before consulting durable cook identity."""
+    module_name = (
+        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
+    )
+    return bool(
+        getattr(importlib.import_module(module_name), "is_authenticated_top_level_cook")(
+            payload,
+            payload_cwd,
+            binding_session_id,
+            headless=hook_session_shape()[0],
+            backend=os.environ.get(_AUTOSKILLIT_AGENT_BACKEND_ENV, "").strip(),
+            launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
+            managed_parent_id=os.environ.get(_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV, ""),
+        )
+    )
+
+
+def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
+    """Bind the hook session through the canonical launch-id accessor."""
+    module_name = (
+        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
+    )
+    getattr(importlib.import_module(module_name), "bridge_session_registry")(
+        session_id,
+        payload_cwd,
+        launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
     )
 
 

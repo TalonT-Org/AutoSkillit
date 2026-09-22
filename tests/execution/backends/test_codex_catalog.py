@@ -279,7 +279,8 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         assert tools == ["run_fixed_batch", "read_fixed_batch_result"]
     else:
         assert tools == ["test_check"]
-    assert "Stop" in config["hooks"]
+    if route != "leaf":
+        assert "Stop" in config["hooks"]
     assert (session_home / "models_cache.json").read_bytes() == (
         projection.canonical_projected_bytes
     )

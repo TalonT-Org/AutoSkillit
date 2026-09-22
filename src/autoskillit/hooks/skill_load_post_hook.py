@@ -29,6 +29,7 @@ from _guard_decision_diagnostics import (  # noqa: E402
 )
 from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
+    bridge_session_registry,
     resolve_quota_log_dir,
     write_quota_log_event,
 )
@@ -48,7 +49,6 @@ from _session_binding import (  # noqa: E402
     unresolved_loaded_skill,
     write_binding,
 )
-from _session_registry_bridge import bridge_session_registry  # noqa: E402
 
 
 def _write_skill_binding(

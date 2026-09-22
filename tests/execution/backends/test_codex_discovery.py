@@ -880,6 +880,7 @@ def test_managed_attestation_accepts_one_exact_alias_or_canonical_primary(
 
     assert result.errors == ()
     assert result.pre_spawn_check is not None
+    result.pre_spawn_check()
 
 
 @pytest.mark.parametrize(
@@ -933,6 +934,8 @@ def test_managed_attestation_rejects_invalid_alias_before_probe(
     )
 
     assert result.errors
+    assert result.pre_spawn_check is None
+    assert any("managed alias" in message for message in result.errors)
 
 
 @pytest.mark.parametrize(

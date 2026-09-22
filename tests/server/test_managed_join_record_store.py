@@ -160,6 +160,7 @@ def test_concurrent_writers_for_same_parent_id_one_loses_to_lock_nb(
 ) -> None:
     """Two writers racing for the same record: LOCK_NB ensures one acquires, the other raises."""
     from contextlib import contextmanager
+
     from autoskillit.execution.backends._codex_hooks import (
         managed_codex_route_for_launch_context,
     )

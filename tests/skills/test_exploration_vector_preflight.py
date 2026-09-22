@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core import (
     ExplorationVectorDisposition,
+    RepositoryProfileId,
     SkillExecutionRole,
     SkillSource,
 )
@@ -92,6 +93,7 @@ def test_projected_exploration_preflight_matches_session_authority(
         catalog=catalog,
         backend=backend,
         explorer_provisioning_eligible=session_scoped_provisioning,
+        resolved_exploration_profile=RepositoryProfileId.LANGUAGE_NEUTRAL,
     )
 
     documents = materialize_agent_skill_tree(tmp_path / "skills", catalog, context)

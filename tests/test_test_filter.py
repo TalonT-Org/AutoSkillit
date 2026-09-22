@@ -960,13 +960,12 @@ class TestUntrackedPathNormalization:
             untracked_files=frozenset({"scratch.txt"}),
         )
         # The external untracked path misses the empty manifest, so it is
-        # dropped from classification. The only test directories in the
-        # resulting scope are the always-run baseline (arch, contracts);
-        # nothing keyed to the dropped path should appear.
+        # dropped from classification and changed_files becomes empty. With
+        # no changed files left, the always-run else branch fires and the
+        # scope is exactly the conservative always-run directories —
+        # nothing keyed to scratch.txt, no BUCKET_A escalation.
         assert isinstance(result, set)
-        assert {tests_root / "arch", tests_root / "contracts"} <= result
-        assert tests_root / "infra" not in result
-        assert tests_root / "execution" not in result
+        assert result == {tests_root / d for d in ALWAYS_RUN_CONSERVATIVE}
 
     def test_untracked_manifest_match_remains_classified(self, tmp_path: Path) -> None:
         tests_root = _make_tests_tree(tmp_path)

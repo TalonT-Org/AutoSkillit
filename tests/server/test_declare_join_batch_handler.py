@@ -81,6 +81,13 @@ def _write_session_binding(
     filename_session_id: str,
     binding: SessionBinding,
 ) -> Path:
+    # resolve_channel_dir walks up from state_root looking for the nearest
+    # `.autoskillit/` ancestor — without creating it inside state_root, the
+    # walk-up lands on a shared `.autoskillit/` at /tmp and the join ledger
+    # accumulates stale batches across runs (causing "another wave is already
+    # open" failures). Pre-create the directory inside state_root so the
+    # walk-up matches there.
+    (state_root / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
     path = resolve_binding_path(str(state_root), filename_session_id)
     write_binding(path, binding)
     return path
@@ -324,7 +331,7 @@ def test_binding_candidate_enumeration_oserror_preserves_generic_refusal(
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
     requested_path = resolve_binding_path(str(state_root), "requested")
     channel_dir = requested_path.parent
-    channel_dir.mkdir(parents=True)
+    channel_dir.mkdir(parents=True, exist_ok=True)
     _write_session_binding(state_root, "recorded", _binding("recorded"))
     diagnostics: list[dict[str, object]] = []
     monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
@@ -470,8 +477,13 @@ def test_malformed_requested_binding_is_not_reported_as_wrong_session(
     state_root = tmp_path / "state-root"
     state_root.mkdir()
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    # resolve_channel_dir walks up from state_root looking for the nearest
+    # `.autoskillit/` — without pre-creating it inside state_root, the
+    # walk-up lands on the shared `.autoskillit/` at /tmp and the test's
+    # malformed-binding file ends up there instead of in the per-test dir.
+    (state_root / ".autoskillit" / "temp").mkdir(parents=True, exist_ok=True)
     requested_path = resolve_binding_path(str(state_root), "requested")
-    requested_path.parent.mkdir(parents=True)
+    requested_path.parent.mkdir(parents=True, exist_ok=True)
     requested_path.write_text("{}", encoding="utf-8")
     _write_session_binding(state_root, "recorded", _binding("recorded"))
 

@@ -62,6 +62,11 @@ _ROOT = Path(__file__).resolve().parents[2]
 _SKILLS_ROOT = _ROOT / "src" / "autoskillit" / "skills_extended"
 
 
+def _has_write_restriction_prose(content: str) -> bool:
+    never = extract_never_block(content).lower()
+    return any(re.search(pattern, never) for pattern in _WRITE_RESTRICTION_PATTERNS)
+
+
 def _collect_write_paths_violations(
     parsed: SkillFrontmatterParseResult,
     skill_name: str,
@@ -74,13 +79,6 @@ def _collect_write_paths_violations(
     production accepts (which silently permits absent/null/empty write_paths);
     the per-entry shape and prefix checks delegate to validate_skill_frontmatter
     to keep this helper's surface aligned with the runtime contract.
-
-    Note: the parser distinguishes four parse-failure codes
-    (missing_opening_delimiter, missing_closing_delimiter, malformed_yaml,
-    non_mapping). The first guard deliberately collapses all four into a
-    single violation count; this helper asserts *that* a parse failure
-    occurred, not which mode produced it. Real on-disk failure mode is
-    preserved on `parsed.error` for diagnostic consumers.
     """
     if not parsed.is_valid or parsed.data is None:
         return [f"{skill_name}: frontmatter is not parseable or missing mapping"]
@@ -95,11 +93,6 @@ def _collect_write_paths_violations(
         return [f"{skill_name}: 'write_paths' must be a non-empty list"]
     full_errors = validate_skill_frontmatter(parsed.data, skill_name)
     return [f"{skill_name}: {err}" for err in full_errors if "write_paths" in err]
-
-
-def _has_write_restriction_prose(content: str) -> bool:
-    never = extract_never_block(content).lower()
-    return any(re.search(pattern, never) for pattern in _WRITE_RESTRICTION_PATTERNS)
 
 
 def test_never_modify_source_skills_have_write_prefix() -> None:
@@ -153,78 +146,106 @@ def test_skill_md_guard_claims_are_true() -> None:
     assert not violations, f"unreachable guard claims: {violations}"
 
 
-class TestWritePathsCoverage:
-    """Parametrized regression coverage for the write_paths content invariant."""
-
-    @pytest.mark.parametrize(
-        ("frontmatter_text", "expected_violation_count"),
-        [
-            pytest.param(
-                "---\nname: foo\ndescription: bar\n---\nbody\n",
-                1,
-                id="no_write_paths_key",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths: null\n---\nbody\n",
-                1,
-                id="write_paths_null",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths: 123\n---\nbody\n",
-                1,
-                id="write_paths_not_list",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths: []\n---\nbody\n",
-                1,
-                id="write_paths_empty_list",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths:\n- 123\n---\nbody\n",
-                1,
-                id="write_paths_non_string_entry",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths:\n- ''\n---\nbody\n",
-                1,
-                id="write_paths_empty_string_entry",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths:\n- /tmp/foo\n---\nbody\n",
-                1,
-                id="write_paths_wrong_prefix",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths:\n"
-                "- '{{AUTOSKILLIT_TEMP}}/foo/'\n---\nbody\n",
-                0,
-                id="write_paths_valid_placeholder",
-            ),
-            pytest.param(
-                "---\nname: foo\ndescription: bar\nwrite_paths:\n"
-                "- .autoskillit/temp/foo/\n---\nbody\n",
-                0,
-                id="write_paths_valid_resolved",
-            ),
-            pytest.param(
-                "no frontmatter at all\n",
-                1,
-                id="write_paths_missing_opening_delimiter",
-            ),
-            pytest.param(
-                "---\nname: [bad yaml\n---\n",
-                1,
-                id="write_paths_malformed_yaml_within_delimiters",
-            ),
-        ],
+@pytest.mark.parametrize(
+    ("frontmatter_text", "expected_violation_count", "expected_substring"),
+    [
+        pytest.param(
+            "---\nname: foo\ndescription: bar\n---\nbody\n",
+            1,
+            "missing",
+            id="no_write_paths_key",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: null\n---\nbody\n",
+            1,
+            "must be declared",
+            id="write_paths_null",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: 123\n---\nbody\n",
+            1,
+            "must be a list",
+            id="write_paths_not_list",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: []\n---\nbody\n",
+            1,
+            "non-empty",
+            id="write_paths_empty_list",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- 123\n---\nbody\n",
+            1,
+            "must be a non-empty string",
+            id="write_paths_non_string_entry",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- ''\n---\nbody\n",
+            1,
+            "must be a non-empty string",
+            id="write_paths_empty_string_entry",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- /tmp/foo\n---\nbody\n",
+            1,
+            "must start with",
+            id="write_paths_wrong_prefix",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n"
+            "- '{{AUTOSKILLIT_TEMP}}/foo/'\n---\nbody\n",
+            0,
+            "",
+            id="write_paths_valid_placeholder",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n"
+            "- .autoskillit/temp/foo/\n---\nbody\n",
+            0,
+            "",
+            id="write_paths_valid_resolved",
+        ),
+        pytest.param(
+            "no frontmatter at all\n",
+            1,
+            "not parseable",
+            id="write_paths_missing_opening_delimiter",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\n",
+            1,
+            "not parseable",
+            id="write_paths_missing_closing_delimiter",
+        ),
+        pytest.param(
+            "---\n- a\n- b\n---\n",
+            1,
+            "not parseable",
+            id="write_paths_non_mapping_root",
+        ),
+        pytest.param(
+            "---\nname: [bad yaml\n---\n",
+            1,
+            "not parseable",
+            id="write_paths_malformed_yaml_within_delimiters",
+        ),
+    ],
+)
+def test_collect_write_paths_violations(
+    frontmatter_text: str,
+    expected_violation_count: int,
+    expected_substring: str,
+) -> None:
+    parsed = parse_frontmatter_content(frontmatter_text)
+    result = _collect_write_paths_violations(parsed, "foo")
+    assert len(result) == expected_violation_count, (
+        f"frontmatter={frontmatter_text!r}\n"
+        f"expected {expected_violation_count} violations, "
+        f"got {len(result)}: {result}"
     )
-    def test_collect_write_paths_violations(
-        self, frontmatter_text: str, expected_violation_count: int
-    ) -> None:
-        parsed = parse_frontmatter_content(frontmatter_text)
-        result = _collect_write_paths_violations(parsed, "foo")
-        assert len(result) == expected_violation_count, (
+    if expected_substring:
+        assert all(expected_substring in violation for violation in result), (
             f"frontmatter={frontmatter_text!r}\n"
-            f"expected {expected_violation_count} violations, "
-            f"got {len(result)}: {result}"
+            f"expected substring {expected_substring!r} in every violation, "
+            f"got: {result}"
         )

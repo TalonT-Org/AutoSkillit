@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: hook drift warnings and diagnostic warnings."""
+"""Tests for the tools_kitchen package: hook drift and diagnostic warnings."""
 
 from __future__ import annotations
 

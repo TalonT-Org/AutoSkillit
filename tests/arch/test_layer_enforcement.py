@@ -1579,7 +1579,7 @@ def test_native_tool_guard_absent_from_hook_registry():
 def test_hook_config_filename_and_dir_match_quota_check():
     """Hook config path constants must agree across all readers and the server writer.
 
-    The server (tools_kitchen.py) writes the config; all hooks read it.
+    The server (`tools_kitchen/_hook_config.py`) writes the config; all hooks read it.
     Two reader contracts must hold:
     - _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS == server._misc._hook_config_path
     - _hook_settings.py constants == server._misc constants

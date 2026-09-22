@@ -55,7 +55,8 @@ QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
 
 # The exact keys the descriptor-anchored shell capture runner reads from
 # hook_config["output_budget_policy"]. Keep this stdlib-only declaration in
-# sync with _output_budget_policy_hook_payload() in server/tools/tools_kitchen.py.
+# sync with _output_budget_policy_hook_payload() in
+# server/tools/tools_kitchen/_hook_config.py.
 OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {"disabled", "shell_max_inline_bytes", "capture_capacity"}
 )

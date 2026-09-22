@@ -42,7 +42,6 @@ semantic_requirements:
 
 # Always-On Visualization Triage Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Composite
 **Primary Question:** "What are the blocking visualization issues?"

@@ -114,6 +114,7 @@ class ExplorationDispatchRenderer(Protocol):
         plan: ExplorationRouterPlan,
         vectors: tuple[ExplorationVectorDef, ...],
         *,
+        include_provisioning_preamble: bool = False,
         launch_context_ref: str | None = None,
     ) -> ExplorationDispatchMaterialization: ...
 

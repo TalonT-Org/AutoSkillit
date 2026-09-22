@@ -26,6 +26,9 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 def test_guidance_renderer_names_each_response_tier() -> None:
     guidance = render_exploration_failure_guidance(fallback_dispatch="pluginless explorer")
 
+    assert "local checkout" in guidance
+    assert "remote or public copy" in guidance
+    assert "local access" in guidance
     for code, response in EXPLORATION_FAILURE_CODE_RESPONSES.items():
         assert code.value in guidance
         if response is ExplorationFailureResponse.FALLBACK:

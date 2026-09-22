@@ -40,7 +40,6 @@ semantic_requirements:
 
 # Exploratory-Confirmatory Experimental Design Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Boundary
 **Primary Question:** "Is this discovery or test, and are norms aligned?"

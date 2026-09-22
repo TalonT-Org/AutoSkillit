@@ -97,7 +97,7 @@ def _materialize_profile_skill_infos(
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
         adaptation_context=projection_context.adaptation_context,
         managed_codex_route=projection_context.managed_codex_route,
-        explorer_provisioning_eligible=projection_context.explorer_provisioning_eligible,
+        provisioning_disposition=projection_context.provisioning_disposition,
         projection_version=projection_context.projection_version,
     )
     staging = catalog_dir.parent / f".profile-projection-{uuid4().hex}"
@@ -374,8 +374,8 @@ def _publish_session_skill_tree(
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
         adaptation_context=projection_context.adaptation_context,
         managed_codex_route=projection_context.managed_codex_route,
-        explorer_provisioning_eligible=(
-            explorer_binding_env is not None or projection_context.explorer_provisioning_eligible
+        provisioning_disposition=(
+            explorer_binding_env is not None or projection_context.provisioning_disposition
         ),
         projection_version=projection_context.projection_version,
     )

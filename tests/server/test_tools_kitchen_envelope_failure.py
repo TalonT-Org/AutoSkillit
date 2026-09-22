@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: failure and success envelope behavior."""
+"""Tests for tools_kitchen package failure and success envelope behavior."""
 
 from __future__ import annotations
 

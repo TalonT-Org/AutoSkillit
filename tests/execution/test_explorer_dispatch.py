@@ -377,8 +377,25 @@ def test_claude_provisioning_preamble_names_pluginless_explorer_and_authorized_c
         ExplorationFailureCode,
     )
 
-    preamble = ClaudeCodeBackend().exploration_dispatch_renderer.conventions.provisioning_preamble
+    renderer = ClaudeCodeBackend().exploration_dispatch_renderer
+    preamble = renderer.conventions.provisioning_preamble
     assert preamble is not None
+    plan = _plan((_STANDARD_NAVIGATOR,))
+    default = renderer.render(plan, (_STANDARD_NAVIGATOR,))
+    explicitly_disabled = renderer.render(
+        plan,
+        (_STANDARD_NAVIGATOR,),
+        include_provisioning_preamble=False,
+    )
+    explicitly_enabled = renderer.render(
+        plan,
+        (_STANDARD_NAVIGATOR,),
+        include_provisioning_preamble=True,
+    )
+
+    assert preamble not in default.preamble
+    assert preamble not in explicitly_disabled.preamble
+    assert preamble in explicitly_enabled.preamble
     assert PLUGINLESS_EXPLORER_ROLE in preamble
     assert EXPLORATION_FALLBACK_CODES, "expected at least one FALLBACK-classified code"
     for code in ExplorationFailureCode:

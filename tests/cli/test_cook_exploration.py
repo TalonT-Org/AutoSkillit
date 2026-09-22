@@ -1,4 +1,4 @@
-"""T8: cook exploration mode sets explorer_provisioning_eligible correctly."""
+"""T8: cook exploration mode sets provisioning_disposition correctly."""
 
 from __future__ import annotations
 
@@ -49,10 +49,10 @@ class TestCookExplorationEligibility:
             _mock_backend(session_scoped=True),
             _mock_binding(),
             None,
-            explorer_provisioning_eligible=True,
+            provisioning_disposition=True,
         )
 
-        assert result.explorer_provisioning_eligible is True
+        assert result.provisioning_disposition is True
 
     def test_codex_backend_leaves_eligible_none(self) -> None:
         from autoskillit.cli.session._session_cook import _build_cook_projection_context
@@ -105,7 +105,7 @@ class TestCookExplorationEligibility:
             _mock_backend(terminal=True),
             _mock_binding(),
             None,
-            explorer_provisioning_eligible=True,
+            provisioning_disposition=True,
         )
 
         assert result.parent_sandbox_mode == "read-only"
@@ -125,7 +125,7 @@ class TestCookExplorationEligibility:
             _mock_backend(session_scoped=True),
             _mock_binding(),
             None,
-            explorer_provisioning_eligible=True,
+            provisioning_disposition=True,
         )
 
         assert result.parent_sandbox_mode == "workspace-write"

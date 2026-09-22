@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py helper functions — error response envelope generation."""
+"""Tests for tools_kitchen package helpers that generate error response envelopes."""
 
 from __future__ import annotations
 

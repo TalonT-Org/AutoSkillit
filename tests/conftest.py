@@ -14,20 +14,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Pin Hypothesis storage to the pytest tmp dir BEFORE any test collection or
-# plugin import runs. pytest_configure runs too late: hypothesis is imported
-# transitively during pytest plugin discovery (e.g. via xdist worker setup,
-# auto-fixture analysis, or test module collection), so by the time
-# pytest_configure fires the storage root has already been resolved against
-# the working directory. Setting the env var at module load guarantees every
-# pytest process — controller and every xdist worker — picks it up before
-# hypothesis is loaded. TMPDIR is set by the _tmpdir-setup task to a per-run
-# pytest tmp dir under /dev/shm/pytest-tmp-* which is git-ignored and exempt
-# from the root-debris detector. Falls back to /tmp if TMPDIR is unset.
-_hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
-os.makedirs(_hypothesis_storage_dir, exist_ok=True)
-os.environ["HYPOTHESIS_STORAGE_DIR"] = _hypothesis_storage_dir
-
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
 
@@ -46,6 +32,20 @@ from autoskillit.core.types import (
 )
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
 from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
+
+# Pin Hypothesis storage to the pytest tmp dir BEFORE any test collection or
+# plugin import runs. pytest_configure runs too late: hypothesis is imported
+# transitively during pytest plugin discovery (e.g. via xdist worker setup,
+# auto-fixture analysis, or test module collection), so by the time
+# pytest_configure fires the storage root has already been resolved against
+# the working directory. Setting the env var at module load guarantees every
+# pytest process — controller and every xdist worker — picks it up before
+# hypothesis is loaded. TMPDIR is set by the _tmpdir-setup task to a per-run
+# pytest tmp dir under /dev/shm/pytest-tmp-* which is git-ignored and exempt
+# from the root-debris detector. Falls back to /tmp if TMPDIR is unset.
+_hypothesis_storage_dir = os.environ.get("TMPDIR", "/tmp") + "/hypothesis"
+os.makedirs(_hypothesis_storage_dir, exist_ok=True)
+os.environ["HYPOTHESIS_STORAGE_DIR"] = _hypothesis_storage_dir
 
 # Mirror the standalone hook process import mode: runtime sibling modules
 # (e.g. _git_command_classification.py) use bare-name imports that resolve

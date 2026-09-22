@@ -34,9 +34,7 @@ def _exploration_catalog() -> tuple[EffectiveSkillCatalog, frozenset[str], froze
         and skill.execution_role is SkillExecutionRole.SESSION
         and skill.exploration_vectors
     )
-    exploration_skill_names = frozenset(
-        skill.name for skill in source_infos if skill.exploration_vectors
-    )
+    exploration_skill_names = frozenset(skill.name for skill in source_infos)
     migrated_skill_names = frozenset(
         skill.name
         for skill in source_infos

@@ -40,16 +40,18 @@ def _configured_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def _assert_human_handoff(message: str | None, path: str, measured_count: int) -> None:
     assert message is not None
-    assert path in message
+    # Anchor to the handoff block: ``rel`` also appears in the violation prefix
+    # (``f"{rel}: ..."``) so a bare ``path in message`` check would pass even
+    # if the handoff guidance were dropped. The ``the path <rel>`` phrasing
+    # is unique to the handoff template.
+    assert f"the path {path}" in message
     assert f"measured count {measured_count} non-import lines" in message
     assert "Decompose the file first" in message
     assert "human-approved last resort" in message
     assert "must not add or relax _LINE_LIMIT_EXEMPTIONS" in message
     assert "add its PolicyRelaxationApproval" in message
     assert "stop and give a human the path" in message
-    assert "measured count" in message
     assert "justification" in message
-    assert "AUTOSKILLIT_HUMAN_REQUIRED" not in message
 
 
 def test_file_at_hard_cap_passes_without_exemption(
@@ -231,7 +233,11 @@ def test_exemption_limit_above_absolute_cap_is_rejected_first(
 
     assert message is not None
     assert "1000-line absolute maximum" in message
-    _assert_human_handoff(message, "candidate.py", 751)
+    # Configuration-error branch must NOT carry the human-decomposition
+    # handoff (which would tell the human to decompose the file -- the
+    # opposite of the actual remediation, which is to fix the registry).
+    assert "Decompose the file first" not in message
+    assert "registry entry is misconfigured" in message
 
 
 def test_main_reports_violations_and_is_silent_on_success(

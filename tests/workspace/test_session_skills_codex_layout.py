@@ -83,10 +83,6 @@ def test_codex_materializes_exact_guarded_investigate_document(
 
     manager = make_session_skill_manager()
     backend = _make_codex_backend()
-    backend.capabilities = replace(
-        backend.capabilities,
-        managed_fixed_batch_route_capable=True,
-    )
     invocation = DefaultSkillResolver().resolve_invocation(
         "investigate",
         manager._root,
@@ -168,6 +164,10 @@ def test_managed_materialization_forwards_complete_catalog_context(
 
     manager = make_session_skill_manager()
     backend = _make_codex_backend()
+    backend.capabilities = replace(
+        backend.capabilities,
+        managed_fixed_batch_route_capable=True,
+    )
     invocation = DefaultSkillResolver().resolve_invocation(
         "make-arch-diag",
         tmp_path,

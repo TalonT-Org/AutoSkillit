@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
-from tests.execution.backends._codex_fixtures import installed_catalog
+from tests.execution.backends._codex_fixtures import (
+    installed_catalog,
+    managed_selection_catalog,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -55,6 +58,84 @@ def test_reader_projection_preserves_the_complete_installed_catalog() -> None:
     assert projection.bundled_sha256.startswith("sha256:")
     assert projection.projected_sha256.startswith("sha256:")
     assert projection.bundled_sha256 != projection.projected_sha256
+
+
+def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.execution.backends import _codex_managed_route as managed_route
+
+    raw = _catalog_bytes(managed_selection_catalog())
+    seen: dict[str, object] = {}
+
+    def acquire(codex, *, scratch_root, environment, deadline):
+        seen.update(
+            codex=codex,
+            scratch_root=scratch_root,
+            environment=environment,
+            deadline=deadline,
+        )
+        return raw
+
+    monkeypatch.setattr(managed_route, "acquire_bundled_codex_catalog", acquire)
+    monkeypatch.setattr(managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+
+    model, effort, projection = CodexBackend().prepare_managed_codex_catalog(
+        "gpt-5.6-sol",
+        scratch_root=tmp_path,
+        deadline=123.0,
+    )
+
+    assert (model, effort) == ("gpt-5.6-sol", "ultra")
+    assert json.loads(projection.canonical_projected_bytes)["models"][0]["tool_mode"] == "direct"
+    assert seen["scratch_root"] == tmp_path
+    assert seen["deadline"] == 123.0
+
+
+def test_bundled_catalog_acquisition_owns_scratch_and_rejects_stderr(tmp_path: Path) -> None:
+    from autoskillit.execution.backends._codex_catalog import (
+        CodexCatalogAcquisitionError,
+        CodexProcessOutput,
+        acquire_bundled_codex_catalog,
+    )
+
+    scratch_root = tmp_path / "scratch"
+    seen_commands: list[tuple[str, ...]] = []
+
+    def successful_runner(command, *, cwd, **kwargs):
+        del kwargs
+        seen_commands.append(tuple(command))
+        (cwd / "probe-artifact").write_text("owned", encoding="utf-8")
+        return CodexProcessOutput(0, b'{"models":[]}', b"")
+
+    assert (
+        acquire_bundled_codex_catalog(
+            "/usr/bin/codex",
+            scratch_root=scratch_root,
+            environment={},
+            deadline=123.0,
+            runner=successful_runner,
+        )
+        == b'{"models":[]}'
+    )
+    assert seen_commands == [("/usr/bin/codex", "debug", "models", "--bundled")]
+    assert list(scratch_root.iterdir()) == []
+
+    def stderr_runner(command, *, cwd, **kwargs):
+        del command, cwd, kwargs
+        return CodexProcessOutput(0, b"{}", b"warning")
+
+    with pytest.raises(CodexCatalogAcquisitionError, match="catalog_probe_failed"):
+        acquire_bundled_codex_catalog(
+            "/usr/bin/codex",
+            scratch_root=scratch_root,
+            environment={},
+            deadline=123.0,
+            runner=stderr_runner,
+        )
+    assert list(scratch_root.iterdir()) == []
 
 
 @pytest.mark.parametrize(

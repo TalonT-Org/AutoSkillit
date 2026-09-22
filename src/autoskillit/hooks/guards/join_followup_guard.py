@@ -45,12 +45,22 @@ from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     active_batch,
+    is_terminal_non_success_batch,
     resolve_flag_dir,
+)
+from _session_registry_bridge import (  # type: ignore[import-not-found]  # noqa: E402
+    is_authenticated_top_level_cook,
 )
 
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
+)
+_RECOVERY_DECLARE_TOOL_NAMES = frozenset(
+    {
+        "mcp__autoskillit__declare_join_batch",
+        "mcp__plugin_autoskillit_autoskillit__declare_join_batch",
+    }
 )
 
 
@@ -82,7 +92,11 @@ def main() -> None:
 
     session_id = resolve_binding_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if not session_id or not payload_cwd or not session_join_required(payload_cwd, session_id):
+    if not session_id or not payload_cwd:
+        sys.exit(0)
+    if is_authenticated_top_level_cook(data, payload_cwd, session_id):
+        sys.exit(0)
+    if not session_join_required(payload_cwd, session_id):
         sys.exit(0)
 
     tool_name = data.get("tool_name")
@@ -138,6 +152,8 @@ def main() -> None:
     )
 
     if batch is None or not _is_unresolved(batch):
+        sys.exit(0)
+    if tool_name in _RECOVERY_DECLARE_TOOL_NAMES and is_terminal_non_success_batch(batch):
         sys.exit(0)
 
     write_join_diagnostic(

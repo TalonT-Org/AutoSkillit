@@ -50,6 +50,9 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     can_release_stop,
     resolve_flag_dir,
 )
+from _session_registry_bridge import (  # type: ignore[import-not-found]  # noqa: E402
+    is_authenticated_top_level_cook,
+)
 
 
 def _block_stop(*, reason: str, denial_reason: str) -> NoReturn:
@@ -89,6 +92,8 @@ def main() -> None:
         )
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if is_authenticated_top_level_cook(data, payload_cwd, sid):
+        sys.exit(0)
     admission = session_join_admission(payload_cwd, sid)
     if not admission.enforce or admission.binding_dict is None:
         sys.exit(0)

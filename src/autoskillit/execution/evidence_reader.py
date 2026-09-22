@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import secrets
-import selectors
 import shutil
 import stat
-import subprocess
 import tempfile
-import time
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,7 +23,13 @@ from autoskillit.core import (
     atomic_write,
     canonical_reader_tools_to_bare,
 )
-from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+from autoskillit.execution.backends._codex_catalog import (
+    CodexCatalogAcquisitionError,
+    CodexProcessOutput,
+    acquire_bundled_codex_catalog,
+    project_codex_catalog,
+    run_owned_bounded,
+)
 from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
 from autoskillit.execution.backends._probe_cache import (
     ProbeResult,
@@ -100,16 +102,9 @@ from autoskillit.execution.evidence.reader._protocol import (
 from autoskillit.execution.evidence.reader._protocol import (
     _validate_stream as _validate_stream,
 )
-from autoskillit.execution.process._lifecycle.owned_group import (
-    OwnedProcessGroup,
-    spawn_owned_process,
-)
-from autoskillit.execution.process._process_tether import TetherSpec
+from autoskillit.execution.process._lifecycle.owned_group import spawn_owned_process
 
 _SUPPORTED_CODEX_CLI_VERSION = "codex-cli 0.147.0"
-_STREAM_CHUNK = 64 * 1024
-_CATALOG_LIMIT = 2_000_000
-_STDERR_LIMIT = 64 * 1024
 _CODEX_STDIN_NOTICE = b"Reading additional input from stdin...\n"
 _MAX_STREAM_BYTES = 2_000_000
 _MAX_RESULT_BYTES = 256_000
@@ -126,11 +121,7 @@ _PROBE_CACHE_NAME = "codex-evidence-reader-probe-cache.json"
 _PROBE_POLICY = "codex-evidence-reader-v1"
 
 
-@dataclass(frozen=True, slots=True)
-class _ProcessOutput:
-    returncode: int
-    stdout: bytes
-    stderr: bytes
+_ProcessOutput = CodexProcessOutput
 
 
 def _real_root(path: Path, label: str) -> Path:
@@ -198,40 +189,12 @@ def _write_private(path: Path, content: str | bytes) -> None:
 
 
 def _deadline_remaining(deadline: float) -> float:
-    if (
-        not isinstance(deadline, (int, float))
-        or isinstance(deadline, bool)
-        or not math.isfinite(deadline)
-    ):
-        raise EvidenceReaderLaunchError("deadline_invalid")
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise EvidenceReaderLaunchError("deadline_exceeded")
-    return remaining
+    from autoskillit.execution.backends._codex_catalog import deadline_remaining
 
-
-def _drain_bounded_output(
-    selector: selectors.BaseSelector,
-    owner: OwnedProcessGroup,
-    output: dict[str, bytearray],
-    deadline: float,
-    stdout_limit: int,
-) -> None:
-    while selector.get_map() or owner.observe_exit() is None:
-        remaining = _deadline_remaining(deadline)
-        if not selector.get_map():
-            time.sleep(min(0.01, remaining))
-            continue
-        for key, _ in selector.select(min(0.1, remaining)):
-            descriptor = key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
-            chunk = os.read(descriptor, _STREAM_CHUNK)
-            if not chunk:
-                selector.unregister(key.fileobj)
-                continue
-            limit = stdout_limit if key.data == "stdout" else _STDERR_LIMIT
-            if len(output[key.data]) + len(chunk) > limit:
-                raise EvidenceReaderLaunchError("stream_limit_exceeded")
-            output[key.data].extend(chunk)
+    try:
+        return deadline_remaining(deadline)
+    except CodexCatalogAcquisitionError as exc:
+        raise EvidenceReaderLaunchError(exc.code) from exc
 
 
 def _run_bounded(
@@ -243,42 +206,17 @@ def _run_bounded(
     stdout_limit: int,
 ) -> _ProcessOutput:
     try:
-        owner = spawn_owned_process(
-            tuple(command),
+        return run_owned_bounded(
+            command,
             cwd=cwd,
-            env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-            tether=TetherSpec(origin="evidence_reader", ceiling_seconds=3600.0),
+            environment=environment,
+            deadline=deadline,
+            stdout_limit=stdout_limit,
+            spawn=spawn_owned_process,
+            remaining=_deadline_remaining,
         )
-    except OSError as exc:
-        raise EvidenceReaderLaunchError("codex_unavailable") from exc
-    output = {"stdout": bytearray(), "stderr": bytearray()}
-    selector_factory = selectors.DefaultSelector
-    selector = selector_factory()
-    try:
-        assert owner.process.stdout is not None and owner.process.stderr is not None
-        selector.register(owner.process.stdout, selectors.EVENT_READ, "stdout")
-        selector.register(owner.process.stderr, selectors.EVENT_READ, "stderr")
-        _drain_bounded_output(selector, owner, output, deadline, stdout_limit)
-        returncode, cleanup = owner.settle(timeout=min(2.0, _deadline_remaining(deadline)))
-        if not cleanup.complete:
-            raise EvidenceReaderLaunchError("process_cleanup_incomplete")
-        return _ProcessOutput(returncode, bytes(output["stdout"]), bytes(output["stderr"]))
-    except BaseException as exc:
-        cleanup = owner.settle_preserving(
-            exc, timeout=min(2.0, max(0.0, deadline - time.monotonic()))
-        )
-        if not cleanup.complete:
-            raise EvidenceReaderLaunchError("process_cleanup_incomplete") from exc
-        raise
-    finally:
-        selector.close()
-        for stream in (owner.process.stdout, owner.process.stderr):
-            if stream is not None:
-                stream.close()
+    except CodexCatalogAcquisitionError as exc:
+        raise EvidenceReaderLaunchError(exc.code) from exc
 
 
 def _probe_catalog(
@@ -289,21 +227,21 @@ def _probe_catalog(
     environment: Mapping[str, str],
     deadline: float,
 ) -> bytes:
-    result = _run_bounded(
-        (codex, "debug", "models", "--bundled"),
-        cwd=cwd,
-        environment=environment,
-        deadline=deadline,
-        stdout_limit=_CATALOG_LIMIT,
-    )
-    if result.returncode != 0 or result.stderr:
-        raise EvidenceReaderLaunchError("catalog_probe_failed")
     try:
+        raw = acquire_bundled_codex_catalog(
+            codex,
+            scratch_root=cwd,
+            environment=environment,
+            deadline=deadline,
+            runner=_run_bounded,
+        )
         projection = project_codex_catalog(
-            result.stdout,
+            raw,
             expected_model=str(definition.codex.model),
             expected_reasoning_effort=str(definition.codex.reasoning_effort),
         )
+    except CodexCatalogAcquisitionError as exc:
+        raise EvidenceReaderLaunchError(exc.code) from exc
     except ValueError as exc:
         raise EvidenceReaderLaunchError("catalog_invalid") from exc
     return projection.canonical_projected_bytes

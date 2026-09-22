@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,8 +19,11 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._codex_catalog import (
+    CodexCatalogAcquisitionError,
     CodexCatalogProjection,
+    acquire_bundled_codex_catalog,
     project_codex_catalog,
+    resolve_codex_catalog_effort,
 )
 from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 from autoskillit.execution.backends._codex_hooks import (
@@ -32,32 +37,37 @@ if TYPE_CHECKING:
     from autoskillit.execution.backends.codex import CodexBackend
 
 
-def resolve_managed_parent_identity(
+def prepare_managed_codex_catalog(
     backend: CodexBackend,
     configured_model: str,
-) -> tuple[str, str]:
-    """Resolve a managed Codex model and its effective reasoning effort."""
+    *,
+    scratch_root: Path,
+    deadline: float,
+) -> tuple[str, str, CodexCatalogProjection]:
+    """Acquire and project the installed bundled catalog for managed issuance."""
+    if not backend.capabilities.managed_fixed_batch_route_capable:
+        raise ValueError("backend has no managed fixed-batch route")
     model = backend.translate_model(configured_model)
     if model not in CODEX_VALID_MODEL_IDS:
         raise ValueError(f"unsupported managed Codex model: {model}")
+    codex = shutil.which(backend.binary_name())
+    if codex is None:
+        raise CodexCatalogAcquisitionError("codex_unavailable")
+    raw_catalog = acquire_bundled_codex_catalog(
+        codex,
+        scratch_root=scratch_root,
+        environment=os.environ,
+        deadline=deadline,
+    )
     effort = CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
     if effort is None:
-        source_home = backend.source_codex_home
-        if source_home is None:
-            raise ValueError("managed Codex route has no source Codex home")
-        catalog = json.loads((source_home / "models_cache.json").read_text(encoding="utf-8"))
-        models = catalog.get("models") if isinstance(catalog, dict) else None
-        if not isinstance(models, list):
-            raise ValueError("managed Codex catalog is missing the 'models' list")
-        matches = [
-            entry for entry in models if isinstance(entry, dict) and entry.get("slug") == model
-        ]
-        if len(matches) != 1:
-            raise ValueError(f"managed Codex catalog does not contain {model}")
-        effort = matches[0].get("default_reasoning_level")
-    if not isinstance(effort, str) or not effort:
-        raise ValueError(f"managed Codex model {model} has no default reasoning level")
-    return model, effort
+        effort = resolve_codex_catalog_effort(raw_catalog, expected_model=model)
+    projection = project_codex_catalog(
+        raw_catalog,
+        expected_model=model,
+        expected_reasoning_effort=effort,
+    )
+    return model, effort, projection
 
 
 def project_source_catalog(
@@ -65,7 +75,7 @@ def project_source_catalog(
     model: str,
     effort: str,
 ) -> CodexCatalogProjection:
-    """Project a direct-mode managed catalog from the configured Codex home."""
+    """Project the source cache retained for materialization and persisted recovery."""
     source_home = backend.source_codex_home
     if source_home is None:
         raise ValueError("managed Codex route has no source Codex home")

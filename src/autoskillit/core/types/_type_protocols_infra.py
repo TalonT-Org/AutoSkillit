@@ -53,6 +53,7 @@ class ManagedJoinAttestationAuthority(Protocol):
         resolved_model: str,
         resolved_reasoning_effort: str,
         codex_catalog_digest: str,
+        managed_codex_catalog: bytes | None = None,
         fixed_batch_tool_registry_digest: str,
         hook_registry_digest: str,
         skill_load_applies: bool,

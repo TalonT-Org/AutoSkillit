@@ -615,6 +615,15 @@ def active_batch(
         return {"_corrupted": True, "error": str(exc)}
 
 
+def is_terminal_non_success_batch(batch: Mapping[str, object] | None) -> bool:
+    """Return whether a readable active batch settled with a non-success outcome."""
+    return bool(
+        batch is not None
+        and not batch.get("_corrupted")
+        and batch.get("wave_outcome") in _NON_SUCCESS_WAVE_OUTCOMES
+    )
+
+
 def can_release_stop(
     flag_dir: Path,
     *,
@@ -648,7 +657,7 @@ OUTCOME_CANCELLED OUTCOME_FAILURE OUTCOME_INTERRUPTION OUTCOME_LAUNCH_FAILED
 OUTCOME_MISSING OUTCOME_PENDING OUTCOME_REAPED OUTCOME_SUCCESS OUTCOME_TIMEOUT
 WAVE_CANCELLED WAVE_COMPLETE WAVE_FAILURE WAVE_INTERRUPTION WAVE_LAUNCH_FAILED
 WAVE_MISSING_CHILD WAVE_PARTIAL WAVE_PARTIAL_TIMEOUT WAVE_PENDING WAVE_REAPED
-active_batch admit_assignment aggregate_batch can_release_stop
+active_batch admit_assignment aggregate_batch can_release_stop is_terminal_non_success_batch
 cancel_batch claim_assignment declare_batch ledger_paths mark_assignment_running
 open_or_replay reconcile_batch resolve_flag_dir settle_assignment
 settle_unadmitted_assignment write_join_ledger

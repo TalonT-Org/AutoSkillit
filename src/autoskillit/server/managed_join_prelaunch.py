@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext, get_logger
+from autoskillit.core import (
+    CodingAgentBackend,
+    SemanticAdaptationContext,
+    get_logger,
+    resolve_temp_dir,
+)
 from autoskillit.execution.backends import managed_codex_route_digest
+from autoskillit.execution.backends._codex_catalog import (
+    CodexCatalogAcquisitionError,
+)
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 from autoskillit.server._managed_join_attestation import (
     DefaultManagedJoinAttestationAuthority,
@@ -15,6 +24,8 @@ from autoskillit.server._managed_join_attestation import (
 )
 
 logger = get_logger(__name__)
+
+_MANAGED_CODEX_PREPARATION_TIMEOUT_SECONDS = 10.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,14 +101,16 @@ def prepare_managed_join_context(
             reason=f"backend {backend.name!r} has no managed fixed-batch route"
         )
     try:
-        resolve_identity = getattr(backend, "resolve_managed_parent_identity", None)
-        project_catalog = getattr(backend, "project_source_catalog", None)
-        if not callable(resolve_identity) or not callable(project_catalog):
+        prepare_catalog = getattr(backend, "prepare_managed_codex_catalog", None)
+        if not callable(prepare_catalog):
             return ManagedJoinIssuanceRefusal(
                 reason=f"backend {backend.name!r} cannot issue a managed Codex context"
             )
-        model, effort = resolve_identity(configured_model)
-        projection = project_catalog(model, effort)
+        model, effort, projection = prepare_catalog(
+            configured_model,
+            scratch_root=resolve_temp_dir(state_root) / "managed-codex-preparation",
+            deadline=time.monotonic() + _MANAGED_CODEX_PREPARATION_TIMEOUT_SECONDS,
+        )
         return DefaultManagedJoinAttestationAuthority(
             record_store=ManagedJoinRecordStore(state_root),
             backend=backend,
@@ -109,10 +122,11 @@ def prepare_managed_join_context(
             resolved_model=model,
             resolved_reasoning_effort=effort,
             codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+            managed_codex_catalog=projection.canonical_projected_bytes,
             fixed_batch_tool_registry_digest=managed_codex_route_digest(),
             hook_registry_digest=HOOK_REGISTRY_HASH,
             skill_load_applies=True,
             guards_apply=True,
         )
-    except (OSError, ValueError) as exc:
+    except (CodexCatalogAcquisitionError, OSError, ValueError) as exc:
         return ManagedJoinIssuanceRefusal(reason=str(exc))

@@ -331,7 +331,9 @@ def test_registry_bridge_lock_contention_stops_at_its_fake_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The permit-path registry bridge never waits indefinitely for its flock."""
-    from autoskillit.hooks.guards import open_kitchen_guard as guard_module  # noqa: PLC0415
+    from autoskillit.hooks._runtime import (  # noqa: PLC0415
+        _session_registry_bridge as bridge_module,
+    )
 
     timestamps = iter((0.0, 1.0, 2.0))
     sleeps: list[float] = []
@@ -342,15 +344,15 @@ def test_registry_bridge_lock_contention_stops_at_its_fake_deadline(
         attempts += 1
         raise BlockingIOError("session registry lock is held")
 
-    monkeypatch.setattr(guard_module.time, "monotonic", lambda: next(timestamps))
-    monkeypatch.setattr(guard_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(bridge_module.time, "monotonic", lambda: next(timestamps))
+    monkeypatch.setattr(bridge_module.time, "sleep", sleeps.append)
     monkeypatch.setattr(fcntl, "flock", always_contended)
 
     with pytest.raises(BlockingIOError):
-        guard_module._acquire_registry_lock(17)
+        bridge_module._acquire_registry_lock(17)
 
     assert attempts == 2
-    assert sleeps == [guard_module._LOCK_RETRY_INTERVAL_SECONDS]
+    assert sleeps == [bridge_module._LOCK_RETRY_INTERVAL_SECONDS]
 
 
 def test_guard_bridges_launch_id_to_registry(tmp_path: Path) -> None:

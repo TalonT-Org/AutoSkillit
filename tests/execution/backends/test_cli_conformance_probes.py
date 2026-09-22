@@ -1910,6 +1910,16 @@ def test_codex_managed_fixed_batch_smoke_conformance(
 ) -> None:
     """Exercise server-owned managed batches without relying on model prompt choices."""
 
+    from autoskillit.execution.backends import _codex_managed_route
+
+    bundled_catalog = json.dumps(installed_catalog()).encode("utf-8")
+    monkeypatch.setattr(_codex_managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+    monkeypatch.setattr(
+        _codex_managed_route,
+        "acquire_bundled_codex_catalog",
+        lambda *args, **kwargs: bundled_catalog,
+    )
+
     async def exercise() -> None:
         parent_id = "managed-smoke-parent"
         request_id = "managed-smoke-transport"

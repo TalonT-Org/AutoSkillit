@@ -76,6 +76,9 @@ from autoskillit.execution.backends._codex_explorer_projection import (
     refresh_explorer_binding_env,
 )
 from autoskillit.execution.backends._codex_managed_route import (
+    prepare_managed_codex_catalog as _prepare_managed_codex_catalog,
+)
+from autoskillit.execution.backends._codex_managed_route import (
     project_managed_route,
 )
 from autoskillit.execution.backends._codex_managed_route import (
@@ -83,9 +86,6 @@ from autoskillit.execution.backends._codex_managed_route import (
 )
 from autoskillit.execution.backends._codex_managed_route import (
     projected_manifest_path as _projected_manifest_path,
-)
-from autoskillit.execution.backends._codex_managed_route import (
-    resolve_managed_parent_identity as _resolve_managed_parent_identity,
 )
 from autoskillit.execution.backends._codex_managed_route import (
     verify_managed_session_dir as _verify_managed_session_dir,
@@ -351,7 +351,10 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         base = strip_context_window_suffix(model)
         return CODEX_MODEL_ALIASES.get(base, base)
 
-    resolve_managed_parent_identity = _resolve_managed_parent_identity
+    prepare_managed_codex_catalog = _prepare_managed_codex_catalog
+    # Materialization and persisted recovery still validate against the copied
+    # source cache; remove this compatibility surface when those callers consume
+    # SemanticAdaptationContext.managed_codex_catalog directly.
     project_source_catalog = _project_source_catalog
     projected_manifest_path = _projected_manifest_path
     verify_managed_session_dir = _verify_managed_session_dir

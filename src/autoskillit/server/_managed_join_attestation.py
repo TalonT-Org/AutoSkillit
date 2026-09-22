@@ -218,6 +218,7 @@ class DefaultManagedJoinAttestationAuthority:
         resolved_model: str,
         resolved_reasoning_effort: str,
         codex_catalog_digest: str,
+        managed_codex_catalog: bytes | None = None,
         fixed_batch_tool_registry_digest: str,
         hook_registry_digest: str,
         skill_load_applies: bool,
@@ -242,7 +243,8 @@ class DefaultManagedJoinAttestationAuthority:
                     skill_load_applies=skill_load_applies,
                     guards_apply=guards_apply,
                     provenance="autoskillit-server",
-                )
+                ),
+                managed_codex_catalog=managed_codex_catalog,
             )
             if self._record_store is not None:
                 self._record_store.write(
@@ -331,6 +333,8 @@ class DefaultManagedJoinAttestationAuthority:
         with self._lock:
             if self._recovery_gate is not None and not self._recovery_gate():
                 return None
+            # Persisted catalog-byte recovery migrates separately; source-home
+            # validation above remains the compatibility authority until then.
             context = SemanticAdaptationContext(managed_join_attestation=attestation)
             self._issued[context.digest] = context
         return self.verify(context, backend=backend, parent_session_id=parent_session_id)

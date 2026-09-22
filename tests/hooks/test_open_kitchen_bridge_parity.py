@@ -38,10 +38,10 @@ def _bridge(
     launch_id: str,
     session_id: str,
 ) -> None:
-    from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
+    from autoskillit.hooks._runtime._session_registry_bridge import bridge_session_registry
 
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
-    _bridge_session_registry(session_id, str(project_dir))
+    bridge_session_registry(session_id, str(project_dir))
 
 
 def _race_bridge(
@@ -52,7 +52,7 @@ def _race_bridge(
     barrier: Any,
     outcomes: Any,
 ) -> None:
-    from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
+    from autoskillit.hooks._runtime._session_registry_bridge import bridge_session_registry
 
     project = Path(project_dir)
     if implementation == "hook":
@@ -61,13 +61,112 @@ def _race_bridge(
     barrier.wait(timeout=5)
     try:
         if implementation == "hook":
-            _bridge_session_registry(session_id, project_dir)
+            bridge_session_registry(session_id, project_dir)
         else:
             bridge_claude_session_id(project, launch_id, session_id)
     except ValueError:
         outcomes.put((implementation, "refused"))
     else:
         outcomes.put((implementation, "success"))
+
+
+def test_authenticated_cook_requires_one_persisted_native_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.hooks._runtime._session_registry_bridge import (
+        is_authenticated_top_level_cook,
+    )
+
+    registry_file = _write_registry(
+        tmp_path,
+        {
+            "cook-launch": {
+                "session_type": "cook",
+                "claude_session_id": "native-session",
+            }
+        },
+    )
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", "cook-launch")
+    payload = {"session_id": "native-session", "cwd": str(tmp_path)}
+
+    assert is_authenticated_top_level_cook(payload, str(tmp_path), "native-session")
+
+    registry_file.write_text(
+        json.dumps(
+            {
+                "cook-launch": {
+                    "session_type": "cook",
+                    "claude_session_id": "native-session",
+                },
+                "duplicate": {
+                    "session_type": "cook",
+                    "claude_session_id": "native-session",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not is_authenticated_top_level_cook(payload, str(tmp_path), "native-session")
+
+    registry_file.write_text(
+        json.dumps(
+            {
+                "cook-launch": {
+                    "session_type": "order",
+                    "claude_session_id": "native-session",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert not is_authenticated_top_level_cook(payload, str(tmp_path), "native-session")
+
+
+def test_authenticated_managed_codex_cook_requires_parent_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.hooks._runtime._session_registry_bridge import (
+        is_authenticated_top_level_cook,
+    )
+    from autoskillit.hooks._session_binding import (
+        SessionBinding,
+        resolve_binding_path,
+        write_binding,
+    )
+
+    launch_id = "managed-cook"
+    _write_registry(
+        tmp_path,
+        {launch_id: {"session_type": "cook", "claude_session_id": None}},
+    )
+    binding_path = resolve_binding_path(str(tmp_path), launch_id)
+    binding = SessionBinding(
+        schema_version=3,
+        session_id=launch_id,
+        join_required=True,
+        binding_valid=True,
+        artifact_digest="artifact",
+        loaded_skills=(),
+        managed_parent_id=launch_id,
+        managed_route="interactive-parent",
+        managed_guard_set=("join_followup_guard", "join_stop_guard"),
+        managed_config_digest="config",
+    )
+    write_binding(binding_path, binding)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
+    monkeypatch.setenv("AUTOSKILLIT_MANAGED_JOIN_PARENT_ID", launch_id)
+    payload = {"session_id": "codex-thread", "cwd": str(tmp_path)}
+
+    assert is_authenticated_top_level_cook(payload, str(tmp_path), launch_id)
+
+    write_binding(binding_path, binding._replace(managed_leaf_id="leaf"))
+    assert not is_authenticated_top_level_cook(payload, str(tmp_path), launch_id)
 
 
 @pytest.mark.parametrize(

@@ -72,7 +72,12 @@ _SETTLEMENT_EVENT_CASES = _settlement_event_cases()
 def _child_env(tmp_path: Path, *, overrides: dict[str, str] | None = None) -> dict[str, str]:
     """Build a hook-process environment without retired authority channels."""
     env = production_interpreter_env()
-    for name in (*_RETIRED_JOIN_ENV, "AUTOSKILLIT_STATE_ROOT"):
+    for name in (
+        *_RETIRED_JOIN_ENV,
+        "AUTOSKILLIT_LAUNCH_ID",
+        MANAGED_JOIN_PARENT_ID_ENV_VAR,
+        "AUTOSKILLIT_STATE_ROOT",
+    ):
         env.pop(name, None)
     env.update(
         {
@@ -164,6 +169,22 @@ def _stdout_json(completed: subprocess.CompletedProcess[str]) -> dict[str, objec
     return parsed
 
 
+def _write_cook_registry(worktree: Path, *, launch_id: str, session_id: str | None) -> None:
+    registry_path = worktree / ".autoskillit" / "temp" / "session_registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                launch_id: {
+                    "session_type": "cook",
+                    "claude_session_id": session_id,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_claim_guard_denies_an_undeclared_agent_call_in_a_real_session(tmp_path: Path) -> None:
     session_id = "claim-deny"
     worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
@@ -237,6 +258,125 @@ def test_settle_guard_maps_every_registered_event_type(
     batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
     assert batch is not None
     assert batch["assignments"][0]["outcome"] == expected_outcome
+
+
+def test_authenticated_top_level_cook_bypasses_all_join_guards_without_mutation(
+    tmp_path: Path,
+) -> None:
+    session_id = "interactive-cook"
+    launch_id = "cook-launch"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+    env = {"AUTOSKILLIT_LAUNCH_ID": launch_id}
+
+    events = (
+        (
+            "join_claim_guard.py",
+            _agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
+        ),
+        (
+            "join_settle_guard.py",
+            {
+                **_agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
+                "hook_event_name": "PostToolUse",
+                "tool_response": "complete",
+            },
+        ),
+        (
+            "join_followup_guard.py",
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "true"},
+                "session_id": session_id,
+                "cwd": str(worktree),
+            },
+        ),
+        (
+            "join_stop_guard.py",
+            {"session_id": session_id, "cwd": str(worktree)},
+        ),
+    )
+    for script_name, payload in events:
+        completed = _run_hook(
+            tmp_path,
+            _GUARDS_DIR / script_name,
+            payload,
+            cwd=worktree,
+            env_overrides=env,
+        )
+        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert not completed.stdout, script_name
+
+    batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
+    assert batch is not None
+    assert batch["wave_outcome"] == "pending"
+    assert batch["assignments"][0]["tool_use_id"] is None
+
+
+def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path) -> None:
+    payload_session_id = "codex-thread-id"
+    managed_join_id = "managed-join-id"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=payload_session_id)
+    payload_binding = read_binding(resolve_binding_path(str(worktree), payload_session_id))
+    assert payload_binding is not None
+    write_binding(
+        resolve_binding_path(str(worktree), managed_join_id),
+        payload_binding._replace(
+            session_id=managed_join_id,
+            managed_parent_id=managed_join_id,
+            managed_route="parent",
+            managed_config_digest="managed-config",
+        ),
+    )
+    flag_dir = resolve_flag_dir(worktree)
+    declare_batch(
+        flag_dir,
+        session_id=managed_join_id,
+        top_level_parent=managed_join_id,
+        skill_name="join-bearing",
+        artifact_digest="artdigest-1",
+        assignments=("worker",),
+    )
+    env = {
+        "AUTOSKILLIT_AGENT_BACKEND": "codex",
+        MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_id,
+    }
+    payload = _agent_payload(
+        worktree,
+        session_id=payload_session_id,
+        tool_use_id="agent-1",
+    )
+
+    claimed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_claim_guard.py",
+        payload,
+        cwd=worktree,
+        env_overrides=env,
+    )
+    assert claimed.returncode == 0, claimed.stderr
+    assert not claimed.stdout
+
+    settled = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_settle_guard.py",
+        {
+            **payload,
+            "hook_event_name": "PostToolUse",
+            "tool_response": "complete",
+        },
+        cwd=worktree,
+        env_overrides=env,
+    )
+    assert settled.returncode == 0, settled.stderr
+    batch = active_batch(
+        flag_dir,
+        session_id=managed_join_id,
+        top_level_parent=managed_join_id,
+    )
+    assert batch is not None
+    assert batch["wave_outcome"] == "complete"
 
 
 def test_stop_guard_blocks_on_an_unresolved_wave_using_payload_identity(tmp_path: Path) -> None:
@@ -339,6 +479,167 @@ def test_followup_guard_blocks_a_followup_while_a_wave_is_unresolved(tmp_path: P
 
     assert completed.returncode == 2
     assert _stdout_json(completed)["decision"] == "block"
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    (
+        "mcp__autoskillit__declare_join_batch",
+        "mcp__plugin_autoskillit_autoskillit__declare_join_batch",
+    ),
+)
+def test_followup_guard_allows_exact_recovery_declaration_after_terminal_failure(
+    tmp_path: Path,
+    tool_name: str,
+) -> None:
+    session_id = "followup-recovery"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    claim_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+    )
+    settle_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+        outcome=OUTCOME_FAILURE,
+    )
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_followup_guard.py",
+        {
+            "tool_name": tool_name,
+            "tool_input": {},
+            "session_id": session_id,
+            "cwd": str(worktree),
+        },
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not completed.stdout
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    ("Bash", "foreign__declare_join_batch", "Stop"),
+)
+def test_followup_guard_keeps_other_effects_blocked_after_terminal_failure(
+    tmp_path: Path,
+    tool_name: str,
+) -> None:
+    session_id = f"followup-terminal-block-{tool_name}"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    claim_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+    )
+    settle_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+        outcome=OUTCOME_FAILURE,
+    )
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_followup_guard.py",
+        {
+            "tool_name": tool_name,
+            "tool_input": {},
+            "session_id": session_id,
+            "cwd": str(worktree),
+        },
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert _stdout_json(completed)["decision"] == "block"
+
+
+def test_followup_guard_blocks_recovery_declaration_while_wave_is_pending(
+    tmp_path: Path,
+) -> None:
+    session_id = "followup-pending-recovery"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    _declare_one_assignment(worktree, session_id=session_id)
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_followup_guard.py",
+        {
+            "tool_name": "mcp__autoskillit__declare_join_batch",
+            "tool_input": {},
+            "session_id": session_id,
+            "cwd": str(worktree),
+        },
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert _stdout_json(completed)["decision"] == "block"
+
+
+def test_followup_guard_blocks_recovery_declaration_when_ledger_is_corrupt(
+    tmp_path: Path,
+) -> None:
+    session_id = "followup-corrupt-recovery"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    (flag_dir / "join_ledger.json").write_text("not-json", encoding="utf-8")
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_followup_guard.py",
+        {
+            "tool_name": "mcp__autoskillit__declare_join_batch",
+            "tool_input": {},
+            "session_id": session_id,
+            "cwd": str(worktree),
+        },
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert _stdout_json(completed)["decision"] == "block"
+
+
+def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None:
+    session_id = "stop-terminal-failure"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    claim_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+    )
+    settle_assignment(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+        tool_use_id="agent-1",
+        outcome=OUTCOME_FAILURE,
+    )
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_stop_guard.py",
+        {"session_id": session_id, "cwd": str(worktree)},
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert "settled non-success" in str(_stdout_json(completed)["reason"])
 
 
 def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> None:

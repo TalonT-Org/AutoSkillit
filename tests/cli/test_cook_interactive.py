@@ -340,12 +340,6 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
             return PreLaunchReadiness((), {})
 
-        def resolve_managed_parent_identity(self, configured_model: str) -> tuple[str, str]:
-            return self._command_backend.resolve_managed_parent_identity(configured_model)
-
-        def project_source_catalog(self, model: str, effort: str) -> object:
-            return self._command_backend.project_source_catalog(model, effort)
-
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]

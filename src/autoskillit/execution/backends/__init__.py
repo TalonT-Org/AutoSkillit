@@ -24,9 +24,13 @@ from ._codex_execution_identity import extract_codex_execution_identity
 from ._codex_hooks import (
     MANAGED_CODEX_LEAF_GUARD_SET,
     MANAGED_CODEX_PARENT_GUARD_SET,
+    MANAGED_CODEX_ROUTE_NAMES,
     _is_autoskillit_hook_entry,
     find_broken_codex_hook_commands,
     generate_codex_hooks_config,
+    managed_codex_guard_set,
+    managed_codex_route_digest,
+    managed_codex_route_for_launch_context,
     sync_hooks_to_codex_config,
 )
 from ._codex_parse import CodexResultParser, CodexStreamParser
@@ -101,6 +105,10 @@ __all__ = [
     "CODEX_MANAGED_HOME_ROUTE",
     "MANAGED_CODEX_LEAF_GUARD_SET",
     "MANAGED_CODEX_PARENT_GUARD_SET",
+    "MANAGED_CODEX_ROUTE_NAMES",
+    "managed_codex_guard_set",
+    "managed_codex_route_digest",
+    "managed_codex_route_for_launch_context",
     "CompositeSessionLocator",
     "_is_autoskillit_hook_entry",
     "find_broken_codex_hook_commands",

@@ -128,6 +128,12 @@ class _RecordingBackend:
         backend = CodexBackend() if self.name == "codex" else ClaudeCodeBackend()
         return backend.interactive_ordering_flags()
 
+    def resolve_managed_parent_identity(self, configured_model: str) -> tuple[str, str]:
+        return CodexBackend().resolve_managed_parent_identity(configured_model)
+
+    def project_source_catalog(self, model: str, effort: str) -> object:
+        return CodexBackend().project_source_catalog(model, effort)
+
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         self.build_calls.append(kwargs)
         binding = kwargs.get("plugin_binding")

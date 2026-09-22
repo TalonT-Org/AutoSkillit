@@ -75,7 +75,21 @@ from autoskillit.execution.backends._codex_explorer_projection import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
-from autoskillit.execution.backends._codex_managed_route import project_managed_route
+from autoskillit.execution.backends._codex_managed_route import (
+    project_managed_route,
+)
+from autoskillit.execution.backends._codex_managed_route import (
+    project_source_catalog as _project_source_catalog,
+)
+from autoskillit.execution.backends._codex_managed_route import (
+    projected_manifest_path as _projected_manifest_path,
+)
+from autoskillit.execution.backends._codex_managed_route import (
+    resolve_managed_parent_identity as _resolve_managed_parent_identity,
+)
+from autoskillit.execution.backends._codex_managed_route import (
+    verify_managed_session_dir as _verify_managed_session_dir,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import (
     _staged_error,
@@ -263,7 +277,6 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         assert source_codex_home is not None
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
-            project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
             # Profile admission reads the same deprecated upstream user root.
             profile_skills_source=CODEX_MANAGED_HOME_ROUTE.discovery_root(source_codex_home),
             persistent_session_root_subdir=Path(CODEX_SESSIONS_SUBDIR),
@@ -337,6 +350,11 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
 
         base = strip_context_window_suffix(model)
         return CODEX_MODEL_ALIASES.get(base, base)
+
+    resolve_managed_parent_identity = _resolve_managed_parent_identity
+    project_source_catalog = _project_source_catalog
+    projected_manifest_path = _projected_manifest_path
+    verify_managed_session_dir = _verify_managed_session_dir
 
     def model_config_overrides(self, model: str) -> tuple[str, ...]:
         from autoskillit.core import strip_context_window_suffix

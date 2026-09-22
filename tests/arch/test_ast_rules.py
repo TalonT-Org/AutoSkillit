@@ -3118,6 +3118,7 @@ def test_fcntl_import_allowlist() -> None:
         "hooks/_join/storage.py",
         "hooks/_session_binding.py",
         "cli/session/_session_reload.py",
+        "server/_managed_join_attestation.py",
     }
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):

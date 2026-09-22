@@ -15,7 +15,7 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     write_versioned_json,
 )
-from autoskillit.hooks._join_ledger import aggregate_batch
+from autoskillit.hooks._join_ledger import active_batch, aggregate_batch, can_release_stop
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
@@ -75,7 +75,7 @@ def _binding(tmp_path, launch_leaf):
         launch=ManagedLaunchBinding(
             request_session_id="request-session",
             managed_parent_id="managed-parent",
-            parent_session_id="request-session",
+            parent_session_id="managed-parent",
             caller_key="request-key",
             attestation_epoch=3,
             recovery_ready=True,
@@ -122,6 +122,48 @@ async def test_supervisor_opens_once_replays_and_releases_each_owned_permit(tmp_
     assert len(seen_permits) == 2
     assert capacity.active_count == 0
     assert aggregate_batch(binding.flag_dir, batch_id=first.batch_id) == "complete"
+
+
+@pytest.mark.anyio
+async def test_ledger_entries_are_keyed_by_join_identity(tmp_path) -> None:
+    service = DefaultManagedFixedBatchSupervisor(
+        capacity=DefaultManagedWorkerCapacity(max_concurrent=2),
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+
+    def launch_leaf(projection, _permit):
+        return _prepared_leaf(projection, ManagedLeafLaunchResult())
+
+    binding = _binding(tmp_path, launch_leaf)
+    assert await service.reconcile_startup()
+    result = await service.run(binding)
+
+    batch = active_batch(
+        binding.flag_dir,
+        session_id="managed-parent",
+        top_level_parent="managed-parent",
+    )
+    assert batch is not None
+    assert batch["join_batch_id"] == result.batch_id
+    assert (
+        active_batch(
+            binding.flag_dir,
+            session_id="request-session",
+            top_level_parent="managed-parent",
+        )
+        is None
+    )
+    assert can_release_stop(
+        binding.flag_dir,
+        session_id="managed-parent",
+        top_level_parent="managed-parent",
+        session_binding={
+            "join_required": True,
+            "binding_valid": True,
+            "managed_parent_id": "managed-parent",
+        },
+    )[0]
 
 
 @pytest.mark.anyio
@@ -316,7 +358,7 @@ async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> N
                     "owner": ["batch", "assignment", "run"],
                     "permit_id": "permit-1",
                     "flag_dir": str(tmp_path / "channel"),
-                    "request_session_id": 7,
+                    "parent_session_id": 7,
                     "managed_parent_id": "parent",
                     "batch_id": "batch",
                     "assignment_id": "assignment",
@@ -325,7 +367,7 @@ async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> N
                 }
             ]
         },
-        2,
+        3,
     )
     service = DefaultManagedFixedBatchSupervisor(
         capacity=DefaultManagedWorkerCapacity(),
@@ -334,7 +376,7 @@ async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> N
     )
 
     assert not await service.reconcile_startup()
-    assert "request_session_id must be a non-empty string" in service.recovery_diagnostic
+    assert "parent_session_id must be a non-empty string" in service.recovery_diagnostic
 
 
 @pytest.mark.anyio
@@ -354,7 +396,7 @@ async def test_recovery_rejects_malformed_unadmitted_settlement_debt(tmp_path) -
                 }
             ],
         },
-        2,
+        3,
     )
     service = DefaultManagedFixedBatchSupervisor(
         capacity=DefaultManagedWorkerCapacity(),

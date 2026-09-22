@@ -20,6 +20,7 @@ from autoskillit.cli.session._session_launch import (
     render_skill_unavailability,
 )
 from autoskillit.core import (
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     PluginLaunchBinding,
     PluginLoadMode,
     SkillContractError,
@@ -30,6 +31,7 @@ from autoskillit.core import (
     resolve_project_dir,
     source_currency,
 )
+from autoskillit.execution.backends import managed_codex_route_for_launch_context
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
         CodingAgentBackend,
         RepositoryProfileId,
         ResumeSpec,
+        SemanticAdaptationContext,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
@@ -80,18 +83,24 @@ def _build_cook_projection_context(
     binding: PluginLaunchBinding | None,
     resolved_exploration_profile: RepositoryProfileId | None,
     *,
+    adaptation_context: SemanticAdaptationContext | None = None,
     explorer_provisioning_eligible: bool | None = None,
 ) -> SkillProjectionContext:
     """Bind scripts to the exact artifact selected for this cook session."""
     if binding is None:
         raise RuntimeError("cook projection requires a retained plugin artifact binding")
 
+    managed_codex_route = None
+    if adaptation_context is not None:
+        managed_codex_route = managed_codex_route_for_launch_context("interactive")
     base = skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
         backend=backend,
         durable_scripts_root=binding.identity.managed_path,
         resolved_exploration_profile=resolved_exploration_profile,
+        adaptation_context=adaptation_context,
+        managed_codex_route=managed_codex_route,
     )
     if explorer_provisioning_eligible is not None:
         return replace(
@@ -282,41 +291,6 @@ def cook(
         temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
         default_base_branch=config.branching.default_base_branch,
     )
-    try:
-        session_catalog = skill_resolver.list_effective(
-            project_dir,
-            SkillExecutionRole.SESSION,
-            visibility=skill_visibility,
-            cook_session=True,
-        )
-    except SkillContractError as exc:
-        render_skill_contract_composition_failure(exc)
-        raise SystemExit(1) from exc
-    render_skill_catalog_exclusions(session_catalog.exclusions)
-    skill_compilation = compile_session_skill_catalog(session_catalog, backend)
-    session_catalog = skill_compilation.catalog
-    requires_resolved_exploration_profile = any(
-        vector.disposition is ExplorationVectorDisposition.MIGRATED
-        and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
-        and vector.profile is RepositoryProfileId.AUTO
-        for member in session_catalog.skills
-        for vector in member.exploration_vectors
-    )
-    resolved_exploration_profile = (
-        resolve_repository_profile(project_dir) if requires_resolved_exploration_profile else None
-    )
-
-    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
-
-    # The selected authority also owns the scripts rendered into the catalog.
-    artifact_authority, load_mode = interactive_plugin_authority(
-        backend=backend,
-        default_base_branch=config.branching.default_base_branch,
-        project_dir=project_dir,
-        skill_catalog=session_catalog,
-        generated_home_available=True,
-        retain_projection_source=True,
-    )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
         ephemeral_root,
@@ -353,6 +327,56 @@ def cook(
             )
             claimed_launch_id = launch_id
 
+    managed_join_context: SemanticAdaptationContext | None = None
+    if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
+
+        evidence = acquire_managed_join_evidence(
+            backend=backend,
+            configured_model=config.model.model_override or config.model.default_model,
+            state_root=project_dir,
+            parent_id=launch_id,
+            launch_context="interactive",
+        )
+        if evidence is not None:
+            managed_join_context = evidence.context
+    try:
+        session_catalog = skill_resolver.list_effective(
+            project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=skill_visibility,
+            cook_session=True,
+        )
+    except SkillContractError as exc:
+        render_skill_contract_composition_failure(exc)
+        raise SystemExit(1) from exc
+    render_skill_catalog_exclusions(session_catalog.exclusions)
+    skill_compilation = compile_session_skill_catalog(
+        session_catalog, backend, adaptation_context=managed_join_context
+    )
+    session_catalog = skill_compilation.catalog
+    requires_resolved_exploration_profile = any(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
+        and vector.profile is RepositoryProfileId.AUTO
+        for member in session_catalog.skills
+        for vector in member.exploration_vectors
+    )
+    resolved_exploration_profile = (
+        resolve_repository_profile(project_dir) if requires_resolved_exploration_profile else None
+    )
+
+    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
+
+    # The selected authority also owns the scripts rendered into the catalog.
+    artifact_authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        default_base_branch=config.branching.default_base_branch,
+        project_dir=project_dir,
+        skill_catalog=session_catalog,
+        generated_home_available=True,
+        retain_projection_source=True,
+    )
     projection_load_mode = (
         load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
@@ -398,6 +422,11 @@ def cook(
             SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
             LAUNCH_ID_ENV_VAR: launch_id,
         }
+        if managed_join_context is not None:
+            # cook() runs in-process as the parent, so reuse its launch_id as
+            # the managed-join parent identity (cli/order paths mint a distinct
+            # child parent_id via new_managed_launch_id()).
+            cook_env_extras[MANAGED_JOIN_PARENT_ID_ENV_VAR] = launch_id
         if profile is not None:
             cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile
             cook_env_extras.update(
@@ -565,6 +594,7 @@ def cook(
                     backend,
                     projection_binding,
                     resolved_exploration_profile,
+                    adaptation_context=managed_join_context,
                     explorer_provisioning_eligible=(
                         True if backend.capabilities.session_scoped_explorer_capable else None
                     ),

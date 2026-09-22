@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,6 +37,10 @@ def _make_test_config(
         {
             "features": {"fleet": fleet, "fleet_headless_run": fleet_headless_run},
             "experimental_enabled": experimental_enabled,
+            "model": SimpleNamespace(
+                model_override=None,
+                default_model="gpt-5.2-codex",
+            ),
         },
     )()
 
@@ -83,6 +88,7 @@ def _mock_backend() -> MagicMock:
     backend.capabilities.claude_marketplace_tool_prefix_capable = False
     backend.capabilities.has_unguarded_filesystem_access = False
     backend.capabilities.anthropic_provider_capable = False
+    backend.capabilities.managed_fixed_batch_route_capable = False
     return backend
 
 

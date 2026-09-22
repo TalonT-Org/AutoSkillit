@@ -513,6 +513,7 @@ class TestOrderResumeParsing:
             backend=None,
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
+            adaptation_context=None,
         ):
             captured["launch"] = launch
             captured["project_dir"] = project_dir
@@ -576,6 +577,7 @@ class TestOrderResumeParsing:
             backend=None,
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
+            adaptation_context=None,
         ):
             captured["launch"] = launch
             captured["project_dir"] = project_dir
@@ -618,6 +620,7 @@ class TestOrderResumeParsing:
             backend=None,
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
+            adaptation_context=None,
         ):
             captured["launch"] = launch
             captured["project_dir"] = project_dir
@@ -665,6 +668,7 @@ class TestOrderResumeParsing:
             backend=None,
             force_inactive_agent_teams=False,
             mcp_tool_timeout_sec=None,
+            adaptation_context=None,
         ):
             captured["launch"] = launch
 

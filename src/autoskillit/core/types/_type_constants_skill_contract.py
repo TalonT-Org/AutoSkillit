@@ -148,6 +148,16 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         action=RemediationAction.ADVISORY,
         hint="fix the malformed semantic_requirements mapping named in the detail message",
     ),
+    SkillContractRemediationDef(
+        kind=SkillInvalidityKind.CONTRACT_FLOOR_WEAKENED,
+        introduced_in="0.10.1197",
+        action=RemediationAction.ADVISORY,
+        hint=(
+            "restore the bundled skill's semantic_requirements (join, concurrency, evidence) "
+            "in the project-local override, or delete the override directory so the bundled "
+            "definition is effective"
+        ),
+    ),
 )
 SKILL_CONTRACT_REMEDIATIONS: Mapping[SkillInvalidityKind, SkillContractRemediationDef] = (
     MappingProxyType(

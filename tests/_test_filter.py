@@ -1392,6 +1392,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_managed_fixed_batch.py",
             "server/test_fixed_batch_results.py",
             "server/test_managed_leaf.py",
+            "server/test_managed_join_prelaunch.py",
+            "server/test_managed_join_record_store.py",
+            "server/test_write_managed_parent_binding.py",
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
@@ -1426,6 +1429,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_kitchen_envelope_validation.py",
             "server/test_tools_kitchen_preflight.py",
             "server/test_preflight_explicit_backend.py",
+            "server/test_managed_join_prelaunch.py",
             "server/test_tools_fleet_dispatch_preflight.py",
             "server/test_lifespan.py",
             # file-level: live output-budget E2E imports the hook registry directly

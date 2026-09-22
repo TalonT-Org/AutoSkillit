@@ -8,9 +8,19 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import ManagedJoinAttestation, atomic_write
+from autoskillit.core import (
+    CODEX_EFFORT_MAPPING,
+    CODEX_VALID_MODEL_IDS,
+    ManagedJoinAttestation,
+    atomic_write,
+    strip_context_window_suffix,
+)
 from autoskillit.execution.backends import _codex_config as _codex_cfg
-from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+from autoskillit.execution.backends._codex_catalog import (
+    CodexCatalogProjection,
+    project_codex_catalog,
+)
+from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 from autoskillit.execution.backends._codex_hooks import (
     ManagedCodexRoute,
     managed_codex_guard_set,
@@ -20,6 +30,68 @@ from autoskillit.execution.backends._codex_hooks import (
 
 if TYPE_CHECKING:
     from autoskillit.execution.backends.codex import CodexBackend
+
+
+def resolve_managed_parent_identity(
+    backend: CodexBackend,
+    configured_model: str,
+) -> tuple[str, str]:
+    """Resolve a managed Codex model and its effective reasoning effort."""
+    model = backend.translate_model(configured_model)
+    if model not in CODEX_VALID_MODEL_IDS:
+        raise ValueError(f"unsupported managed Codex model: {model}")
+    effort = CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
+    if effort is None:
+        source_home = backend.source_codex_home
+        if source_home is None:
+            raise ValueError("managed Codex route has no source Codex home")
+        catalog = json.loads((source_home / "models_cache.json").read_text(encoding="utf-8"))
+        models = catalog.get("models") if isinstance(catalog, dict) else None
+        if not isinstance(models, list):
+            raise ValueError("managed Codex catalog is missing the 'models' list")
+        matches = [
+            entry for entry in models if isinstance(entry, dict) and entry.get("slug") == model
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"managed Codex catalog does not contain {model}")
+        effort = matches[0].get("default_reasoning_level")
+    if not isinstance(effort, str) or not effort:
+        raise ValueError(f"managed Codex model {model} has no default reasoning level")
+    return model, effort
+
+
+def project_source_catalog(
+    backend: CodexBackend,
+    model: str,
+    effort: str,
+) -> CodexCatalogProjection:
+    """Project a direct-mode managed catalog from the configured Codex home."""
+    source_home = backend.source_codex_home
+    if source_home is None:
+        raise ValueError("managed Codex route has no source Codex home")
+    return project_codex_catalog(
+        (source_home / "models_cache.json").read_bytes(),
+        expected_model=model,
+        expected_reasoning_effort=effort,
+    )
+
+
+def projected_manifest_path(backend: CodexBackend, generated_home: Path) -> Path:
+    """Return the managed projection manifest associated with a generated home."""
+    del backend
+    catalog = CODEX_MANAGED_HOME_ROUTE.catalog_dir(generated_home)
+    return catalog.parent / f".{catalog.name}.autoskillit-projection.json"
+
+
+def verify_managed_session_dir(
+    backend: CodexBackend,
+    generated_home: Path,
+    attestation: ManagedJoinAttestation,
+    route: ManagedCodexRoute,
+) -> list[str]:
+    """Validate the live generated home against its managed-route attestation."""
+    del backend
+    return _managed_codex_config_errors(generated_home, attestation=attestation, route=route)
 
 
 def _rendered_codex_guard_scripts(hooks: object) -> set[str]:
@@ -85,8 +157,12 @@ def _managed_codex_config_errors(
     server = config.get("mcp_servers", {}).get("autoskillit")
     if not isinstance(server, dict):
         errors.append("managed Codex config has no autoskillit MCP server")
-    elif server.get("enabled_tools") != list(managed_codex_mcp_tools(route)):
-        errors.append("managed Codex config has a divergent direct-tool allow-list")
+    else:
+        allowed_tools = managed_codex_mcp_tools(route)
+        if (allowed_tools is None and "enabled_tools" in server) or (
+            allowed_tools is not None and server.get("enabled_tools") != list(allowed_tools)
+        ):
+            errors.append("managed Codex config has a divergent direct-tool allow-list")
     rendered_scripts = _rendered_codex_guard_scripts(config.get("hooks"))
     missing_guards = [
         guard for guard in managed_codex_guard_set(route) if guard not in rendered_scripts
@@ -109,15 +185,9 @@ def project_managed_route(
     """Project one attested route after source-config synchronization."""
     if not attestation.admits_backend("codex"):
         raise ValueError("managed Codex route requires a direct-mode Codex attestation")
-    source_codex_home = backend.source_codex_home
-    if not isinstance(source_codex_home, Path):
-        raise ValueError("managed Codex route has no source Codex home")
-    source_catalog = source_codex_home / "models_cache.json"
     try:
-        projection = project_codex_catalog(
-            source_catalog.read_bytes(),
-            expected_model=attestation.resolved_model,
-            expected_reasoning_effort=attestation.resolved_reasoning_effort,
+        projection = backend.project_source_catalog(
+            attestation.resolved_model, attestation.resolved_reasoning_effort
         )
     except (OSError, ValueError) as exc:
         raise ValueError(
@@ -137,7 +207,11 @@ def project_managed_route(
     if not isinstance(autoskillit_server, dict):
         raise ValueError("managed Codex config has no autoskillit MCP server")
     autoskillit_server["enabled"] = True
-    autoskillit_server["enabled_tools"] = list(managed_codex_mcp_tools(route))
+    allowed_tools = managed_codex_mcp_tools(route)
+    if allowed_tools is None:
+        autoskillit_server.pop("enabled_tools", None)
+    else:
+        autoskillit_server["enabled_tools"] = list(allowed_tools)
     config["model"] = attestation.resolved_model
     config["model_reasoning_effort"] = attestation.resolved_reasoning_effort
     atomic_write(config_path, _codex_cfg._serialize_toml(config))

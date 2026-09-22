@@ -9,6 +9,7 @@ authority surface.
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 from autoskillit.core import (
@@ -24,6 +25,7 @@ from autoskillit.core import (
     validate_skill_capability_roles,
 )
 
+from ._contract_floor import contract_floor_invalidities
 from ._exploration import (
     _bind_exploration_vector_markers,
     _load_exploration_sidecar,
@@ -59,6 +61,16 @@ _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
 _LIST_ALL_CACHE: list[SkillInfo] | None = None
 _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
+
+
+def _admit_project_local_candidate(candidate: SkillInfo, bundled: SkillInfo | None) -> SkillInfo:
+    floor = contract_floor_invalidities(candidate, bundled)
+    if not floor:
+        return candidate
+    return dataclasses.replace(
+        candidate,
+        invalidities=(*candidate.invalidities, *floor),
+    )
 
 
 def _dir_mtime(path: Path) -> float:
@@ -148,6 +160,16 @@ class DefaultSkillResolver:
         local candidate is returned so callers can still report why.
         """
         normalized_root = project_root.resolve() if project_root is not None else None
+        bundled: SkillInfo | None = None
+        bundled_loaded = False
+
+        def bundled_twin() -> SkillInfo | None:
+            nonlocal bundled_loaded, bundled
+            if not bundled_loaded:
+                bundled = next((skill for skill in self.list_all() if skill.name == name), None)
+                bundled_loaded = True
+            return bundled
+
         first_invalid: SkillInfo | None = None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -170,6 +192,7 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
+                candidate = _admit_project_local_candidate(candidate, bundled_twin())
                 if not candidate.invalidities:
                     return candidate
                 logger.warning(
@@ -181,8 +204,9 @@ class DefaultSkillResolver:
                 )
                 if first_invalid is None:
                     first_invalid = candidate
-        bundled = self.resolve(name)
-        return bundled if bundled is not None else first_invalid
+        if bundled_loaded:
+            return bundled if bundled is not None else first_invalid
+        return self.resolve(name)
 
     def resolve_local_candidate(self, name: str, project_root: Path | None) -> SkillInfo | None:
         """Return the first-path-match project-local candidate, valid or not.
@@ -270,6 +294,7 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
+                    candidate = _admit_project_local_candidate(candidate, by_name.get(entry.name))
                     if candidate.invalidities:
                         logger.warning(
                             "project_local_skill_rejected",

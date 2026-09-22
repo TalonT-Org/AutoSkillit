@@ -1,14 +1,21 @@
-"""Durable recovery-state codec for managed fixed-batch execution."""
+"""Durable recovery-state codec for managed fixed-batch execution.
+
+The recovery schema was bumped from v2 to v3 to rename ``request_session_id``
+to ``parent_session_id``. v2 debts are no longer silently readable; the
+reader must surface an explicit failure so that operators know an in-flight
+debt was dropped.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import SkillContractError, read_versioned_json, write_versioned_json
 
-_RECOVERY_SCHEMA_VERSION = 2
+_RECOVERY_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +23,7 @@ class _RecoveryDebt:
     owner: tuple[str, str, str]
     permit_id: str
     flag_dir: str
-    request_session_id: str
+    parent_session_id: str
     managed_parent_id: str
     batch_id: str
     assignment_id: str
@@ -34,7 +41,7 @@ class _RecoveryDebt:
             (
                 "permit_id",
                 "flag_dir",
-                "request_session_id",
+                "parent_session_id",
                 "managed_parent_id",
                 "batch_id",
                 "assignment_id",
@@ -73,10 +80,23 @@ def _validate_strings(value: object, subject: str, field_names: tuple[str, ...])
             raise ValueError(f"{subject} {field_name} must be a non-empty string")
 
 
+def _coerce_dict_list(value: object) -> list[dict[str, Any]]:
+    """Coerce an arbitrary payload field into a list of dicts."""
+    if not isinstance(value, Iterable) or isinstance(value, (str, bytes)):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def read_managed_recovery_state(
     state_path: Path,
 ) -> tuple[dict[str, _RecoveryDebt], dict[str, _UnadmittedSettlementDebt]]:
-    """Load and validate both kinds of managed recovery debt."""
+    """Load and validate both kinds of managed recovery debt.
+
+    The recovery schema was bumped from v2 to v3 to rename
+    ``request_session_id`` to ``parent_session_id``. v2 debts are no longer
+    silently readable; the reader must surface an explicit failure so that
+    operators know an in-flight debt was dropped.
+    """
     if not state_path.exists():
         return {}, {}
     try:
@@ -92,14 +112,14 @@ def read_managed_recovery_state(
                 owner=tuple(item["owner"]),
                 permit_id=item["permit_id"],
                 flag_dir=item["flag_dir"],
-                request_session_id=item["request_session_id"],
+                parent_session_id=item["parent_session_id"],
                 managed_parent_id=item["managed_parent_id"],
                 batch_id=item["batch_id"],
                 assignment_id=item["assignment_id"],
                 attempt_id=item["attempt_id"],
                 run_id=item["run_id"],
             )
-            for item in payload.get("debt", [])
+            for item in _coerce_dict_list(payload.get("debt", ()))
         }
         unadmitted_debt = {
             item["assignment_id"]: _UnadmittedSettlementDebt(
@@ -109,7 +129,7 @@ def read_managed_recovery_state(
                 terminal_event_id=item["terminal_event_id"],
                 terminal_payload_digest=item["terminal_payload_digest"],
             )
-            for item in payload.get("unadmitted_settlement_debt", [])
+            for item in _coerce_dict_list(payload.get("unadmitted_settlement_debt", ()))
         }
         return recovery_debt, unadmitted_debt
     except (OSError, ValueError, KeyError, TypeError) as exc:

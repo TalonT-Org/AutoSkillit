@@ -54,6 +54,15 @@ class TestEnsureCodexMcpRegisteredCreate:
         env_vars = data["mcp_servers"]["autoskillit"]["env_vars"]
         assert set(env_vars) == set(CODEX_MCP_ENV_FORWARD_VARS)
 
+    def test_env_vars_forward_managed_join_identity(self, fake_home: Path) -> None:
+        from autoskillit.core import CODEX_HOME_ENV_VAR, MANAGED_JOIN_PARENT_ID_ENV_VAR
+
+        ensure_codex_mcp_registered()
+        data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
+        env_vars = set(data["mcp_servers"]["autoskillit"]["env_vars"])
+
+        assert {CODEX_HOME_ENV_VAR, MANAGED_JOIN_PARENT_ID_ENV_VAR} <= env_vars
+
     def test_startup_timeout(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
@@ -96,6 +105,24 @@ class TestEnsureCodexMcpRegisteredIdempotent:
         ensure_codex_mcp_registered()
         raw = (fake_home / ".codex" / "config.toml").read_text()
         tomllib.loads(raw)
+
+    def test_existing_entry_is_resynced_with_managed_join_identity(self, fake_home: Path) -> None:
+        from autoskillit.core import CODEX_HOME_ENV_VAR, MANAGED_JOIN_PARENT_ID_ENV_VAR
+
+        config_path = fake_home / ".codex" / "config.toml"
+        config_path.parent.mkdir()
+        config_path.write_text(
+            "[mcp_servers.autoskillit]\n"
+            'command = "autoskillit"\n'
+            'env_vars = ["AUTOSKILLIT_HEADLESS"]\n'
+            f"startup_timeout_sec = {CODEX_MCP_STARTUP_TIMEOUT_SEC}\n"
+            f"tool_timeout_sec = {CODEX_MCP_TOOL_TIMEOUT_FLOOR}\n"
+        )
+
+        assert ensure_codex_mcp_registered() is True
+        data = tomllib.loads(config_path.read_text())
+        env_vars = set(data["mcp_servers"]["autoskillit"]["env_vars"])
+        assert {CODEX_HOME_ENV_VAR, MANAGED_JOIN_PARENT_ID_ENV_VAR} <= env_vars
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -34,11 +35,13 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     atomic_write,
     get_logger,
+    managed_join_parent_id,
     render_target_skill_command,
 )
-from autoskillit.execution import (
-    MANAGED_CODEX_LEAF_GUARD_SET,
-    MANAGED_CODEX_PARENT_GUARD_SET,
+from autoskillit.execution import MANAGED_CODEX_LEAF_GUARD_SET
+from autoskillit.execution.backends import (
+    managed_codex_guard_set,
+    managed_codex_route_for_launch_context,
 )
 from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS, JoinLedgerError
 from autoskillit.hooks._runtime._hook_settings import validate_session_id
@@ -55,6 +58,7 @@ from autoskillit.hooks._session_binding import (
     write_binding,
 )
 from autoskillit.server import mcp
+from autoskillit.server._managed_join_attestation import _write_managed_parent_binding
 from autoskillit.server._misc import project_agent_skill_document
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
@@ -210,6 +214,15 @@ class _ManagedLeafLaunchAdapter:
             caller_session_id=self.launch.parent_session_id,
             child_role=leaf_projection.binding.assignment.role,
             child_attribution_skill=self.source_name,
+            provider_extras=(
+                {
+                    MANAGED_JOIN_PARENT_ID_ENV_VAR: (
+                        leaf_projection.binding.assignment.generated_home_id
+                    ),
+                }
+                if backend.capabilities.managed_fixed_batch_route_capable
+                else None
+            ),
         )
         if isinstance(result, CandidatePreSpawnRejection):
             raise SkillContractError("Managed fixed-batch leaf rejected before its runner started")
@@ -680,11 +693,36 @@ def _request_facts(
 ) -> _ManagedRequestFacts:
     request_session_id = _request_session_identity(request_context)
     validate_session_id(request_session_id)
-    normalized_skill_name = normalize_skill_name(skill_name)
-    binding_path = resolve_binding_path(str(tool_ctx.project_dir), request_session_id)
-    admission = admit_join(
-        binding_path, session_id=request_session_id, skill_name=normalized_skill_name
+    backend = tool_ctx.backend
+    if backend is None or not backend.capabilities.managed_fixed_batch_route_capable:
+        raise SkillContractError("run_fixed_batch requires a managed-route backend")
+    parent_id = managed_join_parent_id()
+    if not parent_id:
+        raise SkillContractError("run_fixed_batch cannot identify its managed join parent")
+    validate_session_id(parent_id)
+    authority = tool_ctx.managed_join_attestation_authority
+    service = tool_ctx.managed_fixed_batch_supervisor
+    if authority is None or service is None:
+        raise SkillContractError("run_fixed_batch managed authority is unavailable")
+    adaptation_context = authority.find_verified_context(
+        backend=backend.name,
+        parent_session_id=parent_id,
     )
+    if adaptation_context is None:
+        raise SkillContractError("run_fixed_batch requires a current server-issued attestation")
+    attestation = adaptation_context.managed_join_attestation
+    if attestation is None:
+        raise SkillContractError("run_fixed_batch requires a current server-issued attestation")
+    normalized_skill_name = normalize_skill_name(skill_name)
+    binding_path = resolve_binding_path(str(tool_ctx.project_dir), parent_id)
+    _write_managed_parent_binding(
+        binding_path=binding_path,
+        binding_session_id=parent_id,
+        normalized_skill_name=normalized_skill_name,
+        backend=backend,
+        attestation=attestation,
+    )
+    admission = admit_join(binding_path, session_id=parent_id, skill_name=normalized_skill_name)
     if admission.outcome is JoinAdmissionOutcome.INVALID_BINDING:
         raise SkillContractError("run_fixed_batch session binding is invalid")
     if (
@@ -708,23 +746,11 @@ def _request_facts(
         raise SkillContractError(
             "run_fixed_batch source binding lacks immutable identity evidence"
         )
-    backend = tool_ctx.backend
-    authority = tool_ctx.managed_join_attestation_authority
-    service = tool_ctx.managed_fixed_batch_supervisor
-    if backend is None or authority is None or service is None:
-        raise SkillContractError("run_fixed_batch managed authority is unavailable")
-    adaptation_context = authority.find_verified_context(
-        backend=backend.name,
-        parent_session_id=request_session_id,
-    )
-    if adaptation_context is None:
-        raise SkillContractError("run_fixed_batch requires a current server-issued attestation")
-    attestation = adaptation_context.managed_join_attestation
-    if attestation is None or not service.recovery_ready:
+    if not service.recovery_ready:
         raise SkillContractError("run_fixed_batch is blocked by managed recovery")
     binding = _bind_managed_parent_route(
         binding_path,
-        request_session_id=request_session_id,
+        binding_session_id=parent_id,
         attestation=attestation,
     )
     return _ManagedRequestFacts(
@@ -747,11 +773,12 @@ def _request_facts(
 def _bind_managed_parent_route(
     binding_path: Path,
     *,
-    request_session_id: str,
+    binding_session_id: str,
     attestation: ManagedJoinAttestation,
 ) -> SessionBinding:
-    """Mint or verify the server-owned parent route under the binding lock."""
-    expected_guards = tuple(sorted(MANAGED_CODEX_PARENT_GUARD_SET))
+    """Verify the server-owned parent route under the binding lock."""
+    route = managed_codex_route_for_launch_context(attestation.launch_context)
+    expected_guards = tuple(sorted(managed_codex_guard_set(route)))
     config_digest = attestation.hook_registry_digest
     if not isinstance(config_digest, str) or not config_digest:
         raise SkillContractError("run_fixed_batch attestation lacks a managed config digest")
@@ -759,7 +786,7 @@ def _bind_managed_parent_route(
         current = read_binding(binding_path)
         if (
             current is None
-            or current.session_id != request_session_id
+            or current.session_id != binding_session_id
             or not current.binding_valid
         ):
             raise SkillContractError(
@@ -767,15 +794,9 @@ def _bind_managed_parent_route(
             )
         if current.managed_leaf_id:
             raise SkillContractError("run_fixed_batch is unavailable to managed leaf sessions")
-        if current.managed_route == "":
-            current = current._replace(
-                managed_route="parent",
-                managed_guard_set=expected_guards,
-                managed_config_digest=config_digest,
-            )
-            write_binding(binding_path, current)
         if (
-            current.managed_route != "parent"
+            current.managed_parent_id != binding_session_id
+            or current.managed_route != route
             or current.managed_guard_set != expected_guards
             or current.managed_config_digest != config_digest
         ):

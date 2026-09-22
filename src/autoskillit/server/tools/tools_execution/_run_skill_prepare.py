@@ -10,13 +10,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -26,6 +27,7 @@ from autoskillit.core import (
     SkillContractError,
     closure_authority_spec_from_args,
     get_logger,
+    new_managed_launch_id,
     parse_plan_paths,
     render_target_skill_command,
 )
@@ -37,6 +39,10 @@ from autoskillit.server.lifecycle._guards import (
     _check_dry_walkthrough,
     _check_input_contracts,
     _profile_to_env,
+)
+from autoskillit.server.managed_join_prelaunch import (
+    ManagedJoinIssuanceRefusal,
+    acquire_managed_join_evidence,
 )
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._backend_compat import _candidate_backend_rejection_reason
@@ -369,6 +375,43 @@ async def _prepare_dispatch_backend(
         )
         if state._candidate_rejection_reason is not None:
             return None
+
+    backend = state._effective_backend_obj
+    if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
+        managed_join_parent_id = state._managed_join_parent_id
+        if not managed_join_parent_id:
+            stored_entry = state._stored_contract_entry
+            stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
+            managed_join_parent_id = (
+                stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
+            )
+        state._managed_join_parent_id = managed_join_parent_id
+
+        def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+            logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+        evidence = acquire_managed_join_evidence(
+            backend=backend,
+            configured_model=state.effective_model,
+            state_root=state.tool_ctx.project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="direct",
+            on_refusal=_log_refusal,
+        )
+        if evidence is None:
+            state._managed_join_parent_id = ""
+        else:
+            if state.projection_context is None:
+                raise SkillContractError("Managed execution lacks projection authority")
+            state.projection_context = replace(
+                state.projection_context,
+                adaptation_context=evidence.context,
+                managed_codex_route="parent",
+            )
+            state.provider_extras = {
+                **(state.provider_extras or {}),
+                MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
+            }
 
     if state._stored_contract is None:
         if state.projection_context is None:

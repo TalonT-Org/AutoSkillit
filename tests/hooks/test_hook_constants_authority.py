@@ -18,6 +18,7 @@ from autoskillit.hooks._runtime._hook_constants import (
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
 )
@@ -51,6 +52,10 @@ def test_risky_gh_subcommands_matches_literal() -> None:
             ("pr", "create"),
         }
     )
+
+
+def test_managed_join_parent_id_env_var_matches_literal() -> None:
+    assert MANAGED_JOIN_PARENT_ID_ENV_VAR == "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 
 def test_exempt_skills_by_guard_covers_all_three_guards() -> None:

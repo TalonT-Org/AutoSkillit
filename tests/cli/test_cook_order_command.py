@@ -184,7 +184,10 @@ class TestCLIOrderCommand:
         def compile_with_refusal(
             catalog: EffectiveSkillCatalog,
             _backend: object,
+            *,
+            adaptation_context: object | None = None,
         ) -> CompiledSessionSkillCatalog:
+            del adaptation_context
             return CompiledSessionSkillCatalog(
                 backend=getattr(_backend, "name"),
                 catalog=catalog,
@@ -599,6 +602,8 @@ class TestCLIOrderCommand:
         mock_config.providers.profiles = {}
         mock_config.subsets.disabled = []
         mock_config.packs.enabled = []
+        mock_config.model.model_override = None
+        mock_config.model.default_model = "gpt-5.6-sol"
         mock_config.branching.default_base_branch = "develop"
         mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
@@ -776,3 +781,12 @@ def test_launch_cook_session_required_env_is_required_keyword_only() -> None:
     param = sig.parameters["required_env"]
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
     assert param.default is inspect.Parameter.empty
+
+
+def test_order_launch_env_forwards_managed_join_parent_identity() -> None:
+    from autoskillit.cli.session._session_launch import _order_launch_env
+    from autoskillit.core import MANAGED_JOIN_PARENT_ID_ENV_VAR
+
+    env = _order_launch_env("tracking-id", "managed-join-id")
+
+    assert env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == "managed-join-id"

@@ -103,11 +103,9 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
     make_session_skill_manager,
 ) -> None:
     from autoskillit.core import (
-        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
         ExplorationVectorApplicabilityId,
-        ManagedJoinAttestation,
-        SemanticAdaptationContext,
     )
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
     from autoskillit.workspace import (
         DefaultSkillResolver,
         SkillProjectionContext,
@@ -127,23 +125,18 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
         resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
         active_exploration_applicabilities=frozenset(ExplorationVectorApplicabilityId),
         parent_sandbox_mode="read-only",
-        adaptation_context=SemanticAdaptationContext(
-            managed_join_attestation=ManagedJoinAttestation(
-                schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
-                backend="codex",
-                launch_context="direct",
-                parent_session_id="parent-1",
-                activation_epoch=0,
-                direct_tool_mode=True,
-                resolved_model="gpt-5.6-sol",
-                resolved_reasoning_effort="high",
-                codex_catalog_digest="c" * 64,
-                fixed_batch_tool_registry_digest="a" * 64,
-                hook_registry_digest="b" * 64,
-                skill_load_applies=True,
-                guards_apply=True,
-                provenance="autoskillit-server",
-            )
+        adaptation_context=DefaultManagedJoinAttestationAuthority().issue(
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="parent-1",
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="c" * 64,
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
         ),
     )
 

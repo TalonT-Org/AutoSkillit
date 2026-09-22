@@ -380,6 +380,11 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
 
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
+# Mirror of _hook_constants.MANAGED_JOIN_PARENT_ID_ENV_VAR. The hook-settings
+# bridge is loaded as a bare script by hook subprocesses (no parent package),
+# so relative imports fail; tests/hooks/test_hook_constants_authority.py
+# enforces parity with the canonical constant.
+_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 
 def read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -644,7 +649,7 @@ def session_managed_codex_route(
     guards = binding.get("managed_guard_set")
     config_digest = binding.get("managed_config_digest")
     if (
-        route not in ("parent", "leaf")
+        route not in ("parent", "leaf", "interactive-parent")
         or not isinstance(guards, list)
         or any(not isinstance(guard, str) or not guard for guard in guards)
         or len(set(guards)) != len(guards)
@@ -653,6 +658,15 @@ def session_managed_codex_route(
     ):
         return None
     return str(route), frozenset(guards), config_digest
+
+
+def resolve_binding_session_id(payload: dict[str, object]) -> str:
+    """Prefer the managed join identity delivered to a Codex hook process."""
+    managed_parent_id = os.environ.get(_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV, "")
+    if managed_parent_id:
+        return managed_parent_id
+    session_id = payload.get("session_id", "")
+    return session_id if isinstance(session_id, str) else ""
 
 
 def payload_managed_codex_route(

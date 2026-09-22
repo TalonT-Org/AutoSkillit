@@ -26,6 +26,7 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
 )
+from autoskillit.execution.backends import managed_codex_route_for_launch_context
 
 logger = get_logger(__name__)
 
@@ -58,6 +59,8 @@ def _fleet_session_launcher(
     mcp_tool_timeout_sec: float,
     cook_ceiling_seconds: float,
     systemd_scope_enabled: bool,
+    adaptation_context: Any | None = None,
+    managed_join_parent_id: str | None = None,
 ) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
     """Keep one leased wrapper home through a fleet session's retry loop."""
     from autoskillit.cli.session._session_launch import _run_interactive_session
@@ -66,9 +69,14 @@ def _fleet_session_launcher(
         launch: InteractiveLaunch,
         extra_env: dict[str, str],
     ) -> Any:
+        launch_env = dict(extra_env)
+        if managed_join_parent_id is not None:
+            from autoskillit.core import MANAGED_JOIN_PARENT_ID_ENV_VAR
+
+            launch_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] = managed_join_parent_id
         return _run_interactive_session(
             launch=launch,
-            extra_env=extra_env,
+            extra_env=launch_env,
             project_dir=project_dir,
             required_env=FLEET_SESSION_REQUIRED_ENV,
             backend=backend,
@@ -87,6 +95,7 @@ def _fleet_session_launcher(
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
+        MANAGED_JOIN_PARENT_ID_ENV_VAR,
         PluginLoadMode,
         plugin_launch_binding_scope,
         resolve_temp_dir,
@@ -134,11 +143,16 @@ def _fleet_session_launcher(
     ) as projection_binding:
         if projection_binding is None:
             raise RuntimeError("retained projection mode did not produce a binding")
+        managed_codex_route = None
+        if adaptation_context is not None:
+            managed_codex_route = managed_codex_route_for_launch_context("interactive")
         projection_context = provider.catalog_projection_context(
             skill_compilation.catalog,
             project_dir,
             backend=backend,
             durable_scripts_root=projection_binding.identity.managed_path,
+            adaptation_context=adaptation_context,
+            managed_codex_route=managed_codex_route,
         )
         with manager.managed_session(
             launch_id,
@@ -157,6 +171,8 @@ def _fleet_session_launcher(
                 nonlocal attempt
                 attempt += 1
                 launch_env = {**extra_env, LAUNCH_ID_ENV_VAR: launch_id}
+                if managed_join_parent_id is not None:
+                    launch_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] = managed_join_parent_id
                 return _run_interactive_session(
                     launch=launch,
                     extra_env=launch_env,
@@ -222,9 +238,28 @@ def _launch_fleet_session(
     )
     _backend_caps = _backend.capabilities
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
+    managed_join_context = None
+    managed_join_parent_id: str | None = None
+    if getattr(_backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.core import new_managed_launch_id
+        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
+
+        managed_join_parent_id = new_managed_launch_id()
+        evidence = acquire_managed_join_evidence(
+            backend=_backend,
+            configured_model=cfg.model.model_override or cfg.model.default_model,
+            state_root=project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="interactive",
+        )
+        if evidence is not None:
+            managed_join_context = evidence.context
+        else:
+            managed_join_parent_id = None
     skill_compilation = compile_session_skill_catalog(
         default_skill_resolver().list_effective(project_dir, SkillExecutionRole.ORCHESTRATOR),
         _backend,
+        adaptation_context=managed_join_context,
     )
     render_skill_unavailability(skill_compilation.unavailability_payload)
 
@@ -356,6 +391,8 @@ def _launch_fleet_session(
         mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
         cook_ceiling_seconds=cfg.process_tether.cook_ceiling_seconds,
         systemd_scope_enabled=cfg.process_tether.systemd_scope_enabled,
+        adaptation_context=managed_join_context,
+        managed_join_parent_id=managed_join_parent_id,
     ) as launch_session:
         while True:
             session_signal = launch_session(

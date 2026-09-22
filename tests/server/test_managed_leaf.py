@@ -3,21 +3,41 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 
 from autoskillit.core import (
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
+    EffectiveSkillInvocationAuthority,
+    HeadlessExecutor,
+    RetryReason,
     SessionSkillManager,
     SkillContractError,
+    SkillResult,
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceIdentity,
+    ValidatedAddDir,
     WriteBehaviorSpec,
 )
-from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.execution.backends import CodexBackend
+from autoskillit.hooks._session_binding import (
+    LoadedSkillEntry,
+    read_binding,
+    resolve_binding_path,
+)
+from autoskillit.pipeline import ToolContext
+from autoskillit.server.tools.tools_execution._fixed_batch_handlers import (
+    _ManagedLeafLaunchAdapter,
+)
+from autoskillit.server.tools.tools_execution._managed_fixed_batch import ManagedLaunchBinding
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
+    ManagedLeafBinding,
+    ManagedLeafProjection,
     _ChildResourceOwnerRequest,
     bind_managed_leaf,
     classify_managed_leaf_workspace,
@@ -25,7 +45,8 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
     project_managed_leaf,
     scoped_child_resource_owner,
 )
-from autoskillit.workspace import AgentSkillDocument
+from autoskillit.workspace import AgentSkillDocument, SkillProjectionContext
+from tests.fakes import make_managed_codex_context
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -228,3 +249,101 @@ async def test_child_resource_owner_cleans_materialized_home_after_preparation_f
             pytest.fail("owner yielded after failed preparation")
 
     assert events == ["cleanup:headless-owner"]
+
+
+@pytest.mark.anyio
+async def test_leaf_env_carries_join_identity_equal_to_binding_key(tmp_path: Path) -> None:
+    parent_id = "managed-parent-1"
+    assignment = plan_managed_leaf_identities(
+        "request-1",
+        (ManagedLeafAssignmentInput("reviewer", "review", "Inspect the change."),),
+    ).assignments[0]
+    leaf_session_id = assignment.generated_home_id
+    selected_source = LoadedSkillEntry(
+        skill_name="review-skill",
+        ts="2026-09-21T00:00:00Z",
+        join_required=True,
+        child_spawn_cardinality={"reviewer": 1},
+        semantic_digest="semantic-source",
+        adaptation_digest="adaptation-source",
+        projected_digest="projected-source",
+        canonical_digest="canonical-source",
+        source_artifact_digest="source-artifact",
+        source_artifact_incarnation_id="incarnation-1",
+        binding_valid=True,
+        binding_error=None,
+    )
+    projection = ManagedLeafProjection(
+        binding=ManagedLeafBinding(
+            assignment=assignment,
+            source_artifact_digest=selected_source.source_artifact_digest,
+            source_artifact_incarnation_id=selected_source.source_artifact_incarnation_id,
+            source_projected_digest=selected_source.projected_digest,
+            canonical_digest=selected_source.canonical_digest,
+            semantic_digest=selected_source.semantic_digest,
+            adaptation_digest=selected_source.adaptation_digest,
+            model="gpt-5.6-luna",
+            reasoning_effort="high",
+            workspace=classify_managed_leaf_workspace(
+                read_only=True, write_behavior=WriteBehaviorSpec()
+            ),
+        ),
+        prompt="Inspect the change.",
+        leaf_projection_artifact_digest="leaf-projection",
+    )
+    launch = ManagedLaunchBinding(
+        request_session_id="transport-session",
+        managed_parent_id=parent_id,
+        parent_session_id=parent_id,
+        caller_key="caller",
+        attestation_epoch=0,
+        recovery_ready=True,
+        selected_source=selected_source,
+    )
+    adapter = _ManagedLeafLaunchAdapter(
+        tool_ctx=cast(ToolContext, SimpleNamespace(project_dir=tmp_path)),
+        launch=launch,
+        invocation=cast(
+            EffectiveSkillInvocationAuthority,
+            SimpleNamespace(root=SimpleNamespace(source=SkillSource.BUNDLED_EXTENDED)),
+        ),
+        projection_context=cast(
+            SkillProjectionContext,
+            SimpleNamespace(adaptation_context=make_managed_codex_context(parent_id)),
+        ),
+        source_name="review-skill",
+        write_behavior=WriteBehaviorSpec(),
+        read_only=True,
+        adaptation=SkillSemanticAdaptationResult(),
+    )
+    adapter._write_leaf_binding(leaf_session_id, projection)
+
+    executor = AsyncMock()
+    executor.run.return_value = SkillResult(
+        success=True,
+        result="done",
+        session_id="leaf-thread",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+    )
+    backend = CodexBackend()
+    await adapter._execute_leaf(
+        cast(HeadlessExecutor, executor),
+        backend,
+        tmp_path,
+        projection,
+        cast(ValidatedAddDir, tmp_path),
+        backend.conventions,
+    )
+
+    assert executor.run.await_args.kwargs["provider_extras"] == {
+        MANAGED_JOIN_PARENT_ID_ENV_VAR: leaf_session_id
+    }
+    binding = read_binding(resolve_binding_path(str(tmp_path), leaf_session_id))
+    assert binding is not None
+    assert binding.session_id == leaf_session_id
+    assert binding.managed_parent_id == parent_id

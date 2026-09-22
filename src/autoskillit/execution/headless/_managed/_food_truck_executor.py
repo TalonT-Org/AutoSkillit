@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -368,6 +369,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     backend=backend,
                     binding=projection_binding,
                 )
+                if projection_context.adaptation_context is not None:
+                    # The materializer returns a dataclass behind the IL-1 authority protocol.
+                    projection_context = replace(
+                        projection_context,  # type: ignore[type-var]
+                        managed_codex_route="parent",
+                    )
                 managed_catalog_scope = session_skill_manager.managed_catalog(
                     uuid.uuid4().hex[:16],
                     cast(EffectiveSkillCatalogAuthority, capability_preparation.catalog),

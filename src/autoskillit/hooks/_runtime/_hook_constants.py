@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Final
 
 CODEX_AUTO_COMPACTION_DENIED_REASON: Final[str] = "autoskillit_auto_compaction_denied"
+MANAGED_JOIN_PARENT_ID_ENV_VAR: Final[str] = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
 
 # ── Risky operations requiring PreToolUse guard coverage ──────────────────────
 

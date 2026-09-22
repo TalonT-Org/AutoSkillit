@@ -94,8 +94,10 @@ def _managed_guard_set(value: object) -> tuple[str, ...]:
 
 
 def _managed_route(value: object) -> str:
-    if value not in ("", "parent", "leaf"):
-        raise SessionBindingError("managed_route must be empty, parent, or leaf")
+    if value not in ("", "parent", "leaf", "interactive-parent"):
+        raise SessionBindingError(
+            "managed_route must be empty, parent, leaf, or interactive-parent"
+        )
     return str(value)
 
 

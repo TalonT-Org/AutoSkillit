@@ -385,16 +385,15 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.workspace import DefaultSkillResolver
 
+    resolver = DefaultSkillResolver()
+    bundled = resolver.resolve("investigate")
+    assert bundled is not None
     skills_dir = tmp_path / ".claude" / "skills"
     skill_md = skills_dir / "investigate" / "SKILL.md"
     skill_md.parent.mkdir(parents=True)
     skill_md.write_text(
-        "---\n"
-        "name: investigate\n"
-        "description: Project override.\n"
-        "execution_role: session\n"
-        "---\n"
-        "project override body\n"
+        bundled.canonical_content + "\nproject override body\n",
+        encoding="utf-8",
     )
     contract = {
         "bundled_manifest_version": load_bundled_manifest()["version"],
@@ -403,7 +402,7 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
 
     stale = check_contract_staleness(
         contract,
-        resolver=DefaultSkillResolver(),
+        resolver=resolver,
         project_root=tmp_path,
     )
 

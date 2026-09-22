@@ -322,7 +322,27 @@ def order(
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
     render_skill_catalog_exclusions(skill_catalog.exclusions)
-    skill_compilation = compile_session_skill_catalog(skill_catalog, backend)
+    managed_join_context = None
+    managed_join_parent_id: str | None = None
+    if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        from autoskillit.core import new_managed_launch_id
+        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
+
+        managed_join_parent_id = new_managed_launch_id()
+        evidence = acquire_managed_join_evidence(
+            backend=backend,
+            configured_model=config.model.model_override or config.model.default_model,
+            state_root=project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="interactive",
+        )
+        if evidence is not None:
+            managed_join_context = evidence.context
+        else:
+            managed_join_parent_id = None
+    skill_compilation = compile_session_skill_catalog(
+        skill_catalog, backend, adaptation_context=managed_join_context
+    )
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
@@ -435,7 +455,11 @@ def order(
     claimed_launch_id: str | None = None
     match launch:
         case FreshLaunch():
-            launch_id, launch_env = _write_order_entry(project_dir, recipe)
+            launch_id, launch_env = _write_order_entry(
+                project_dir,
+                recipe,
+                managed_join_parent_id,
+            )
             claimed_launch_id = launch_id
         case (
             RestoreSession(session_id=claude_session_id)
@@ -450,7 +474,7 @@ def order(
                 recipe_name=recipe,
             )
             claimed_launch_id = launch_id
-            launch_env = _order_launch_env(launch_id)
+            launch_env = _order_launch_env(launch_id, managed_join_parent_id)
         case _:
             assert_never(launch)
 
@@ -468,6 +492,7 @@ def order(
             workspace_temp_dir=config.workspace.temp_dir,
             force_inactive_agent_teams=config.agent_backend.force_inactive_agent_teams,
             mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
+            adaptation_context=managed_join_context,
         )
     finally:
         if claimed_launch_id is not None:

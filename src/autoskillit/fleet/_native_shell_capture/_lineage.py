@@ -156,12 +156,13 @@ def _create_food_truck_lineage(
     capture_decision: NativeShellCaptureDecision,
     lineage_backend_name: str,
     dispatch_id: str,
+    launch_id: str | None = None,
 ) -> ManagedHeadlessSessionLineage:
     """Create the durable FOOD_TRUCK lineage or raise the public sentinel."""
     try:
         return tool_ctx.managed_headless_session_lineage_store.create(
             lineage_anchor=lineage_anchor,
-            launch_id=new_managed_launch_id(),
+            launch_id=launch_id or new_managed_launch_id(),
             decision=capture_decision,
             backend=lineage_backend_name,
             session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
@@ -259,6 +260,7 @@ def prepare_food_truck_lineage(
     resume_preparer: Callable[[], ResumePreflight | None],
     native_shell_capture_mode: NativeShellCaptureMode | None,
     lineage_backend_name: str,
+    launch_id: str | None = None,
 ) -> FoodTruckLineagePreparation:
     """Validate resume lineage or create one fresh FOOD_TRUCK lineage."""
     handle = identity_preparation.handle
@@ -359,6 +361,7 @@ def prepare_food_truck_lineage(
             capture_decision=capture_decision,
             lineage_backend_name=lineage_backend_name,
             dispatch_id=dispatch_id,
+            launch_id=launch_id,
         )
         managed_lineage_ref = managed_lineage.reference
     if managed_lineage_ref is None:

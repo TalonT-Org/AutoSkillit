@@ -37,6 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    resolve_binding_session_id,
     session_join_required,
     session_managed_codex_route,
     session_managed_scope,
@@ -51,11 +52,6 @@ JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
 )
-
-
-def _resolve_session_id(data: dict[str, object]) -> str:
-    sid = data.get("session_id", "")
-    return sid if isinstance(sid, str) else ""
 
 
 def _is_unresolved(batch: dict[str, object]) -> bool:
@@ -84,7 +80,7 @@ def main() -> None:
     if not isinstance(data, dict) or data.get("agent_id"):
         sys.exit(0)
 
-    session_id = _resolve_session_id(data)
+    session_id = resolve_binding_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if not session_id or not payload_cwd or not session_join_required(payload_cwd, session_id):
         sys.exit(0)

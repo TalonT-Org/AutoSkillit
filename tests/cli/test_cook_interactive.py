@@ -113,6 +113,7 @@ class _Backend:
         cook_exact_binding_probe_required=False,
         skill_injection_capable=True,
         supports_tool_list_changed=True,
+        managed_fixed_batch_route_capable=False,
     )
     adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
@@ -338,6 +339,12 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
 
         def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
             return PreLaunchReadiness((), {})
+
+        def resolve_managed_parent_identity(self, configured_model: str) -> tuple[str, str]:
+            return self._command_backend.resolve_managed_parent_identity(configured_model)
+
+        def project_source_catalog(self, model: str, effort: str) -> object:
+            return self._command_backend.project_source_catalog(model, effort)
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
@@ -972,6 +979,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             cook_exact_binding_probe_required=False,
             skill_injection_capable=True,
             supports_tool_list_changed=True,
+            managed_fixed_batch_route_capable=False,
         )
         adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 

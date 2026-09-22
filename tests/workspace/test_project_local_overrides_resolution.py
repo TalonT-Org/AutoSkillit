@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,174 @@ import pytest
 from tests.workspace._helpers import _write_effective_skill
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+
+_MAKE_PLAN_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "make-plan"
+    / "SKILL.md"
+)
+
+
+def _weaken_make_plan_contract(content: str, weakened_requirement: str) -> str:
+    if weakened_requirement == "plan":
+        return re.sub(
+            r"\nsemantic_version: 1\nsemantic_requirements:.*?\n---",
+            "\n---",
+            content,
+            count=1,
+            flags=re.DOTALL,
+        )
+    replacements = {
+        "join": ("  join:\n    required: true", "  join:\n    required: false"),
+        "concurrency": (
+            "  concurrency:\n    required: true",
+            "  concurrency:\n    required: false",
+        ),
+        "evidence": (
+            "  evidence:\n    required: true\n    independent: true",
+            "  evidence:\n    required: false\n    independent: false",
+        ),
+        "independent_evidence": (
+            "  evidence:\n    required: true\n    independent: true",
+            "  evidence:\n    required: true\n    independent: false",
+        ),
+    }
+    old, new = replacements[weakened_requirement]
+    assert old in content
+    return content.replace(old, new, 1)
+
+
+def _write_make_plan_override(project_root: Path, content: str) -> Path:
+    path = project_root / ".claude" / "skills" / "make-plan" / "SKILL.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _assert_weakened_make_plan_is_rejected(project_root: Path) -> None:
+    from autoskillit.core import (
+        SkillExecutionRole,
+        SkillInvalidityKind,
+        SkillSemanticOperation,
+        SkillSource,
+    )
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.workspace import compile_session_skill_catalog
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    resolved = resolver.resolve_effective("make-plan", project_root)
+
+    assert resolved is not None
+    assert resolved.source is SkillSource.BUNDLED_EXTENDED
+
+    catalog = resolver.list_effective(
+        project_root,
+        SkillExecutionRole.SESSION,
+        cook_session=True,
+    )
+    exclusion = next(item for item in catalog.exclusions if item.name == "make-plan")
+    assert {item.kind for item in exclusion.invalidities} == {
+        SkillInvalidityKind.CONTRACT_FLOOR_WEAKENED
+    }
+    assert exclusion.fallback is SkillSource.BUNDLED_EXTENDED
+    assert exclusion.hints == (
+        "restore the bundled skill's semantic_requirements (join, concurrency, evidence) "
+        "in the project-local override, or delete the override directory so the bundled "
+        "definition is effective",
+    )
+
+    compilation = compile_session_skill_catalog(catalog, CodexBackend())
+    unavailable = next(item for item in compilation.unavailable if item.skill == "make-plan")
+    assert unavailable.operation is SkillSemanticOperation.REQUIRED_JOIN
+
+
+@pytest.mark.parametrize(
+    "weakened_requirement",
+    ("plan", "join", "concurrency", "evidence", "independent_evidence"),
+)
+def test_weakened_override_is_rejected_and_bundled_twin_is_effective(
+    tmp_path: Path, weakened_requirement: str
+) -> None:
+    """A local skill cannot lower its bundled join, concurrency, or evidence floor."""
+    content = _weaken_make_plan_contract(
+        _MAKE_PLAN_PATH.read_text(encoding="utf-8"), weakened_requirement
+    )
+    _write_make_plan_override(tmp_path, content)
+
+    _assert_weakened_make_plan_is_rejected(tmp_path)
+
+
+def test_gitignored_override_is_rejected_identically(tmp_path: Path) -> None:
+    """Resolver admission inspects disk, independent of Git's tracked-file view."""
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    exclude_path = tmp_path / ".git" / "info" / "exclude"
+    exclude_path.write_text(".claude/\n", encoding="utf-8")
+    _write_make_plan_override(
+        tmp_path,
+        _weaken_make_plan_contract(_MAKE_PLAN_PATH.read_text(encoding="utf-8"), "plan"),
+    )
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout == ""
+    _assert_weakened_make_plan_is_rejected(tmp_path)
+
+
+def test_both_resolution_entry_points_apply_the_same_floor(tmp_path: Path) -> None:
+    """Single-name and catalog resolution share the project-local contract floor."""
+    _write_make_plan_override(
+        tmp_path,
+        _weaken_make_plan_contract(_MAKE_PLAN_PATH.read_text(encoding="utf-8"), "join"),
+    )
+    from autoskillit.core import SkillSource
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    resolved = resolver.resolve_effective("make-plan", tmp_path)
+    skills, exclusions = resolver.scan_effective(tmp_path)
+
+    assert resolved is not None
+    assert resolved.source is SkillSource.BUNDLED_EXTENDED
+    assert next(skill for skill in skills if skill.name == "make-plan").source is (
+        SkillSource.BUNDLED_EXTENDED
+    )
+    assert [item.name for item in exclusions if item.name == "make-plan"] == ["make-plan"]
+
+
+def test_matching_or_stricter_override_is_effective(tmp_path: Path) -> None:
+    """A byte-identical or resource-extended local definition remains admissible."""
+    from autoskillit.core import SkillSource
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = _MAKE_PLAN_PATH.read_text(encoding="utf-8")
+    resolver = DefaultSkillResolver()
+    _write_make_plan_override(tmp_path, bundled)
+
+    matching = resolver.resolve_effective("make-plan", tmp_path)
+    assert matching is not None
+    assert matching.source is SkillSource.PROJECT_LOCAL
+    assert not resolver.scan_effective(tmp_path)[1]
+
+    extended = bundled.replace(
+        "activate_deps:\n- write-recipe\n",
+        "activate_deps:\n- write-recipe\nrequires_resources:\n- arch-constraint-catalog\n",
+        1,
+    )
+    _write_make_plan_override(tmp_path, extended)
+    stricter = resolver.resolve_effective("make-plan", tmp_path)
+
+    assert stricter is not None
+    assert stricter.source is SkillSource.PROJECT_LOCAL
 
 
 def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
@@ -59,14 +229,26 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
 
 
 def test_project_local_rewrite_reclassifies_with_process_cache(
-    tmp_path, evidence_cache, scan_calls
+    tmp_path, monkeypatch, evidence_cache, scan_calls
 ) -> None:
     """Changed canonical bytes must bypass a resident semantic classification."""
     import autoskillit.workspace.skill_capabilities as capability_module
+    import autoskillit.workspace.skills as skills_module
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project = tmp_path / "project"
     skill_root = project / ".claude" / "skills"
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    bundled.mkdir()
+    extended.mkdir()
+    _write_effective_skill(
+        bundled,
+        "cache-rewrite-target",
+        capabilities=("test_check",),
+        execution_role="session",
+        body="bundled sentinel.",
+    )
     skill_path = _write_effective_skill(
         skill_root,
         "cache-rewrite-target",
@@ -75,6 +257,10 @@ def test_project_local_rewrite_reclassifies_with_process_cache(
         body="Call `test_check()` for the first sentinel.",
     )
     resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE_KEY", None)
 
     first = resolver.resolve_effective("cache-rewrite-target", project)
 
@@ -108,7 +294,12 @@ def test_project_local_rewrite_reclassifies_with_process_cache(
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
     assert not second.invalidities
-    assert scan_calls == [
+    local_scan_calls = [
+        call
+        for call in scan_calls
+        if call[0] in {first.canonical_content, second.canonical_content}
+    ]
+    assert local_scan_calls == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),
     ]
@@ -351,12 +542,13 @@ def test_project_local_internal_override_is_not_duplicated(tmp_path) -> None:
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project = tmp_path / "project"
-    override_path = _write_effective_skill(
-        project / ".claude" / "skills",
-        "sous-chef",
-        capabilities=("run_skill",),
-        execution_role="orchestrator",
-        body='Call run_skill("child").',
+    bundled = DefaultSkillResolver().resolve("sous-chef")
+    assert bundled is not None
+    override_path = project / ".claude" / "skills" / "sous-chef" / "SKILL.md"
+    override_path.parent.mkdir(parents=True)
+    override_path.write_text(
+        bundled.canonical_content + '\nCall run_skill("child").\n',
+        encoding="utf-8",
     )
 
     catalog = DefaultSkillResolver().list_effective(

@@ -141,6 +141,13 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "The Codex builder serializes the lineage delivered to shell capture.",
     ),
     HookEnvVarDef(
+        "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID",
+        "autoskillit",
+        "autoskillit.cli.session._session_launch:_order_launch_env",
+        "autoskillit.cli.session._session_launch:_order_launch_env",
+        "Order launch setup forwards the issued managed join identity to hook processes.",
+    ),
+    HookEnvVarDef(
         "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE",
         "autoskillit",
         "autoskillit.execution.backends._backend_cmd_builder_base:_managed_native_shell_env",

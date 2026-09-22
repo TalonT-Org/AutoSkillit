@@ -11,6 +11,7 @@ import functools
 import json
 import os
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -184,12 +185,18 @@ def _rebuild_owned_dispatch_context(
         previous_projection = state.projection_context
         if previous_projection is None:
             raise SkillContractError("Fresh execution lacks projection authority")
+        rebuilt_projection = build_fresh_projection_context(
+            state.cwd,
+            state.invocation,
+            adaptation_context=previous_projection.adaptation_context,
+        )
+        if previous_projection.managed_codex_route is not None:
+            rebuilt_projection = replace(
+                rebuilt_projection,
+                managed_codex_route=previous_projection.managed_codex_route,
+            )
         state.projection_context = bind_projection_backend(
-            build_fresh_projection_context(
-                state.cwd,
-                state.invocation,
-                adaptation_context=previous_projection.adaptation_context,
-            ),
+            rebuilt_projection,
             state._effective_backend_obj,
             resolution=state._explicit_resolution,
             parent_sandbox_mode=state._fresh_parent_sandbox_mode or "workspace-write",
@@ -489,6 +496,7 @@ async def _prepare_owned_dispatch_session(
         resume_session_id=state.resume_session_id,
         requested_mode=state.native_shell_capture_mode,
         is_resume=state._stored_contract_entry is not None,
+        launch_id=state._managed_join_parent_id or None,
     )
     state._native_shell_capture_decision = state._lineage_preparation.decision
     state._managed_lineage_ref = state._lineage_preparation.reference

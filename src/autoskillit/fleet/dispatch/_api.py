@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         ManagedWorkerCapacity,
         ManagedWorkerPermit,
         NativeShellCaptureMode,
+        SemanticAdaptationContext,
         SessionCheckpoint,
     )
     from autoskillit.fleet.dispatch._lineage import ReadyLineage
@@ -298,6 +299,8 @@ async def execute_dispatch(
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
+    managed_join_parent_id: str | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -346,6 +349,8 @@ async def execute_dispatch(
             effective_backend_map=effective_backend_map,
             provenance=provenance,
             native_shell_capture_mode=native_shell_capture_mode,
+            managed_join_parent_id=managed_join_parent_id,
+            adaptation_context=adaptation_context,
         )
     except asyncio.CancelledError:
         raise
@@ -386,6 +391,8 @@ async def _run_dispatch(
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
+    managed_join_parent_id: str | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — acquires capacity after durable dispatch identity.
 
@@ -432,6 +439,8 @@ async def _run_dispatch(
         provenance=provenance,
         native_shell_capture_mode=native_shell_capture_mode,
         timeout_sec=timeout_sec,
+        managed_join_parent_id=managed_join_parent_id,
+        adaptation_context=adaptation_context,
     )
     if isinstance(lineage_result, DispatchResult):
         return lineage_result
@@ -535,6 +544,7 @@ async def _run_dispatch(
             sentinel_contract=ready.identity.sentinel_contract,
             dispatches_dir=ready.dispatches_dir,
             resolved_timeout=ready.resolved_timeout,
+            managed_join_parent_id=ready.managed_join_parent_id,
         )
         if execution_result is None:
             raise RuntimeError("run_execution returned None — Phase B/C contract violation")

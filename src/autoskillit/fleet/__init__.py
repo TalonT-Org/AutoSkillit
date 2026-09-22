@@ -95,6 +95,7 @@ from .campaign_state.state_recovery import (
     prepare_resume,
     resolve_stale_running,
 )
+from .dispatch._lineage import resume_managed_join_parent_id
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
     IssueSidecarEntry,
@@ -181,6 +182,7 @@ __all__ = [
     "mark_dispatch_running",
     "read_all_campaign_captures",
     "read_state",
+    "resume_managed_join_parent_id",
     "reset_blocking_dispatch",
     "resume_campaign_from_state",
     "update_orchestrator_session_id",

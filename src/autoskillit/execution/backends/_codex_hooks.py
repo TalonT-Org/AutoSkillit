@@ -7,6 +7,7 @@ execution/backends (IL-1) without layer violations.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -41,7 +42,10 @@ from autoskillit.hooks import MANAGED_PARENT_ALLOWED_TOOLS
 
 logger = get_logger(__name__)
 
-ManagedCodexRoute = Literal["parent", "leaf"]
+ManagedCodexRoute = Literal["parent", "leaf", "interactive-parent"]
+
+MANAGED_CODEX_ROUTE_NAMES: tuple[ManagedCodexRoute, ...] = ("parent", "leaf", "interactive-parent")
+"""Canonical ordered tuple of all valid managed Codex routes."""
 
 MANAGED_CODEX_PARENT_MCP_TOOLS: tuple[str, ...] = MANAGED_PARENT_ALLOWED_TOOLS
 """The complete AutoSkillit MCP surface for a managed parent."""
@@ -60,6 +64,9 @@ MANAGED_CODEX_PARENT_GUARD_SET: frozenset[str] = frozenset(
 MANAGED_CODEX_LEAF_GUARD_SET: frozenset[str] = frozenset(
     {"skill_orchestration_guard", "background_exec_guard"}
 )
+MANAGED_CODEX_INTERACTIVE_PARENT_GUARD_SET: frozenset[str] = frozenset(
+    {"background_exec_guard", "join_followup_guard", "join_stop_guard"}
+)
 
 
 def managed_codex_guard_set(route: ManagedCodexRoute) -> frozenset[str]:
@@ -68,43 +75,74 @@ def managed_codex_guard_set(route: ManagedCodexRoute) -> frozenset[str]:
         return MANAGED_CODEX_PARENT_GUARD_SET
     if route == "leaf":
         return MANAGED_CODEX_LEAF_GUARD_SET
+    if route == "interactive-parent":
+        return MANAGED_CODEX_INTERACTIVE_PARENT_GUARD_SET
     raise ValueError(f"unsupported managed Codex route: {route!r}")
 
 
-def managed_codex_mcp_tools(route: ManagedCodexRoute) -> tuple[str, ...]:
+def managed_codex_mcp_tools(route: ManagedCodexRoute) -> tuple[str, ...] | None:
     """Return the explicit MCP allow-list projected into one generated home."""
     if route == "parent":
         return MANAGED_CODEX_PARENT_MCP_TOOLS
     if route == "leaf":
         return MANAGED_CODEX_LEAF_MCP_TOOLS
+    if route == "interactive-parent":
+        return None
     raise ValueError(f"unsupported managed Codex route: {route!r}")
+
+
+def managed_codex_route_for_launch_context(launch_context: str) -> ManagedCodexRoute:
+    if launch_context == "interactive":
+        return "interactive-parent"
+    if launch_context == "direct":
+        return "parent"
+    raise ValueError(f"unsupported managed Codex launch context: {launch_context!r}")
+
+
+def managed_codex_route_digest() -> str:
+    routes = {
+        route: {
+            "mcp_tools": managed_codex_mcp_tools(route),
+            "guards": sorted(managed_codex_guard_set(route)),
+        }
+        for route in MANAGED_CODEX_ROUTE_NAMES
+    }
+    payload = json.dumps({"routes": routes}, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
     """Return route-only hooks without changing global Codex applicability."""
-    hooks = [
-        HookDef(
-            matcher=r"mcp__.*autoskillit.*__.*",
-            scripts=["guards/skill_orchestration_guard.py"],
-            session_scope="headless_only",
-            mechanism="deny",
-            enforcement_strength={"codex": "hard"},
-        ),
+    scope: Literal["any", "headless_only"] = (
+        "any" if route == "interactive-parent" else "headless_only"
+    )
+    hooks = []
+    if route != "interactive-parent":
+        hooks.append(
+            HookDef(
+                matcher=r"mcp__.*autoskillit.*__.*",
+                scripts=["guards/skill_orchestration_guard.py"],
+                session_scope=scope,
+                mechanism="deny",
+                enforcement_strength={"codex": "hard"},
+            )
+        )
+    hooks.append(
         HookDef(
             matcher=r"Agent|spawn_agent|code_mode|background",
             scripts=["guards/background_exec_guard.py"],
-            session_scope="headless_only",
+            session_scope=scope,
             mechanism="deny",
             enforcement_strength={"codex": "hard"},
-        ),
-    ]
-    if route == "parent":
+        )
+    )
+    if route in ("parent", "interactive-parent"):
         hooks.extend(
             (
                 HookDef(
                     matcher="",
                     scripts=["guards/join_followup_guard.py"],
-                    session_scope="headless_only",
+                    session_scope=scope,
                     mechanism="deny",
                     enforcement_strength={"codex": "hard"},
                 ),
@@ -112,7 +150,7 @@ def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
                     matcher="",
                     event_type="Stop",
                     scripts=["guards/join_stop_guard.py"],
-                    session_scope="headless_only",
+                    session_scope=scope,
                     mechanism="deny",
                     enforcement_strength={"codex": "hard"},
                 ),
@@ -120,7 +158,7 @@ def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
                     matcher="",
                     event_type="Stop",
                     scripts=["lifecycle/child_outcome_hook.py"],
-                    session_scope="headless_only",
+                    session_scope=scope,
                     mechanism="side-effect",
                     enforcement_strength={"codex": "soft"},
                 ),
@@ -294,13 +332,16 @@ def generate_codex_hooks_config(
     )
     hooks_dir = _resolve_codex_hooks_dir(plugin_dir)
     groups: dict[str, dict[tuple[str, str], dict]] = {}
+    session_scope: Literal["interactive", "headless"] = (
+        "interactive" if managed_route == "interactive-parent" else "headless"
+    )
     applicable = [
         hook_def
         for hook_def in registry
         if hook_applies_to_backend(
             hook_def,
             backend="codex",
-            session_scope="headless",
+            session_scope=session_scope,
         )
         and (include_runtime_only or not hook_def.runtime_only)
     ]

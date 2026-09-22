@@ -1,4 +1,8 @@
-"""Declaration normalization for the stdlib-only join ledger."""
+"""Declaration normalization for the stdlib-only join ledger.
+
+The persisted ``request_session_id`` is the session identity the binding is keyed
+by: the caller session for Claude and the managed join identity for managed Codex.
+"""
 
 from __future__ import annotations
 

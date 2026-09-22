@@ -40,6 +40,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    resolve_binding_session_id,
     session_join_admission,
     session_managed_codex_route,
     session_managed_scope,
@@ -78,8 +79,8 @@ def main() -> None:
             denial_reason="non_object_payload",
         )
 
-    sid = data.get("session_id")
-    if not isinstance(sid, str) or not sid:
+    sid = resolve_binding_session_id(data)
+    if not sid:
         _block_stop(
             reason=(
                 "Stop payload has no session_id; cannot verify required-join wave completion."

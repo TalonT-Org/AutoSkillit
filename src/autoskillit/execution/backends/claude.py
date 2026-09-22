@@ -179,11 +179,6 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
     def conventions(self) -> BackendConventions:
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR,
-            project_local_skill_search_dirs=(
-                ".claude/skills",
-                ".autoskillit/skills",
-                ".agents/skills",
-            ),
             skill_sigil=self.capabilities.skill_sigil,
             managed_skill_discovery=CLAUDE_ADD_DIR_SKILLS_ROUTE,
         )

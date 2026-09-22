@@ -524,9 +524,14 @@ def _record_module_collection_reads(
             prefixes.update(members)
             continue
         name_matches = "env" in target.lower()
-        members_upper = bool(members) and all(_UPPER_SNAKE_RE.match(m) for m in members)
-        if name_matches or members_upper:
-            for member in members:
+        upper_members = frozenset(member for member in members if _UPPER_SNAKE_RE.match(member))
+        # `members_upper` requires every member uppercase; `upper_members` may be
+        # non-empty while `members_upper` is False (mixed-case ``__all__``).
+        members_upper = bool(members) and len(upper_members) == len(members)
+        constants_export = target == "__all__" and rel == "core/types/_type_constants_env.py"
+        relevant_members = upper_members if constants_export else members
+        if name_matches or members_upper or (constants_export and upper_members):
+            for member in relevant_members:
                 reads.append(EnvRead(var=member, file=rel, line=value.lineno, rule="R4"))
 
 
@@ -978,7 +983,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/tools/tools_execution/_run_skill_prepare.py:110": (
+    "server/tools/tools_execution/_run_skill_prepare.py:116": (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from the persisted launch contract, not a statically resolvable name."
     ),
@@ -994,7 +999,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:156": (
+    "cli/session/_session_launch.py:157": (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
@@ -1010,7 +1015,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:328": (
+    "execution/backends/claude.py:323": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
@@ -1565,6 +1570,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "between sibling or nested sessions."
         ),
     ),
+    "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID": AmbientEnvDisposition(
+        var="AUTOSKILLIT_MANAGED_JOIN_PARENT_ID",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "AutoSkillit-private managed-join parent identity in the"
+            " AUTOSKILLIT_PRIVATE_ENV_VARS baseline; it must not leak between"
+            " sibling or nested sessions."
+        ),
+    ),
     "AUTOSKILLIT_MANAGED_LAUNCH_ID": AmbientEnvDisposition(
         var="AUTOSKILLIT_MANAGED_LAUNCH_ID",
         disposition="scrub",
@@ -2077,6 +2092,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: the __all__ export name of the CODEX_HOME"
             "env-var-name constant; never set as a real OS environment variable itself."
+        ),
+    ),
+    "MANAGED_JOIN_PARENT_ID_ENV_VAR": AmbientEnvDisposition(
+        var="MANAGED_JOIN_PARENT_ID_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: the __all__ export name of the"
+            " managed-join parent-id env-var-name constant; it is never itself"
+            " set as an OS environment variable."
         ),
     ),
     "CODEX_INTAKE_DISCIPLINE_DIGEST": AmbientEnvDisposition(

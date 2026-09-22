@@ -28,7 +28,7 @@ _DIRECT_TOOL_MODE = "direct"
 _BUNDLED_APPLY_PATCH_TOOL_TYPE = "freeform"
 _DISABLED_APPLY_PATCH_TOOL_TYPE = None
 _STREAM_CHUNK = 64 * 1024
-_CATALOG_LIMIT = 2_000_000
+CODEX_CATALOG_LIMIT = 2_000_000
 _STDERR_LIMIT = 64 * 1024
 
 
@@ -190,7 +190,7 @@ def acquire_bundled_codex_catalog(
             cwd=scratch,
             environment=environment,
             deadline=deadline,
-            stdout_limit=_CATALOG_LIMIT,
+            stdout_limit=CODEX_CATALOG_LIMIT,
         )
         if result.returncode != 0 or result.stderr:
             raise CodexCatalogAcquisitionError("catalog_probe_failed")

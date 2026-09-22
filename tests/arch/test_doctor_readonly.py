@@ -1,7 +1,9 @@
 """AST guard: diagnostic doctor remains read-only (REQ-DOCTOR-READONLY).
 
-``run_doctor`` reads and reports without mutation. Safe repair is a distinct,
-opt-in entry point selected only by the CLI's ``repair=True`` branch.
+``run_doctor`` performs no durable mutation. Its one permitted write surface is
+disposable managed-Codex probe scratch beneath the configured project temp root.
+Safe repair is a distinct, opt-in entry point selected only by the CLI's
+``repair=True`` branch.
 """
 
 from __future__ import annotations
@@ -44,7 +46,7 @@ def _find_function(tree: ast.Module, name: str) -> ast.FunctionDef | None:
 
 
 def test_doctor_performs_no_writes() -> None:
-    """REQ-DOCTOR-READONLY: run_doctor() must not perform filesystem mutations."""
+    """REQ-DOCTOR-READONLY: run_doctor() must not directly mutate the filesystem."""
     source = (SRC / "cli" / "doctor" / "__init__.py").read_text()
     tree = ast.parse(source)
 
@@ -62,6 +64,41 @@ def test_doctor_performs_no_writes() -> None:
         "run_doctor() must be read-only — found forbidden write call(s):\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_managed_preparation_probe_scratch_is_project_temp_scoped() -> None:
+    """The diagnostic write exception is limited to disposable project-temp scratch."""
+    source = (SRC / "cli" / "doctor" / "_doctor_codex_preparation.py").read_text()
+    tree = ast.parse(source)
+    func = _find_function(tree, "_check_codex_managed_preparation")
+    assert func is not None
+
+    scratch_assignments = [
+        node
+        for node in ast.walk(func)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "scratch_root" for target in node.targets
+        )
+    ]
+    assert len(scratch_assignments) == 1
+    assert ast.unparse(scratch_assignments[0].value) == (
+        "resolve_temp_dir(project_dir, workspace_temp_dir) / 'doctor-managed-codex-preparation'"
+    )
+    preparation_calls = [
+        node
+        for node in ast.walk(func)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "prepare_managed_codex_catalog"
+    ]
+    assert len(preparation_calls) == 1
+    scratch_keywords = [
+        keyword.value for keyword in preparation_calls[0].keywords if keyword.arg == "scratch_root"
+    ]
+    assert len(scratch_keywords) == 1
+    assert isinstance(scratch_keywords[0], ast.Name)
+    assert scratch_keywords[0].id == "scratch_root"
 
 
 def test_repair_entry_point_is_only_reachable_with_the_flag() -> None:

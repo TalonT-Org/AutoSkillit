@@ -151,6 +151,15 @@ loads it and verifies the generated `CODEX_HOME` model, effort, catalog digest,
 route guards, current route and hook digests, and recovery readiness before
 admitting a batch. An issuance refusal leaves join-required skills unavailable.
 
+Interactive `cook` applies this route at runtime when the selected backend
+advertises managed fixed-batch support. Preparation invokes the bound Codex
+executable's exact `debug models --bundled` command in disposable project-temp
+scratch, validates and projects the configured model, and does not depend on a
+pre-existing source-home `models_cache.json`. `autoskillit doctor` runs the same
+preparation probe without issuing an attestation; failures report the concrete
+preparation reason, and a refused cook prints that reason once beside the
+resulting `required_join` exclusions.
+
 With the attestation, catalog compilation, projection binding, and generated
 skill documents carry the same adaptation context. Interactive Codex parents
 use the `interactive-parent` route, with normal kitchen tool visibility and
@@ -164,6 +173,15 @@ result-store request identity. The managed parent cannot use native spawning or
 cannot mint managed authority. Each worker is launched as an isolated managed
 leaf with its own binding and a deliberately small direct-tool surface. Leaves
 cannot launch batches, spawn, follow up, or stop the parent.
+
+The adaptation context binds the canonical projected catalog bytes to the
+attested digest. Generated-home materialization copies those exact bytes rather
+than reopening mutable source-home cache state. Persisted recovery is narrower:
+only when the in-memory context is absent may the authority read one stable,
+size-bounded, contained snapshot from the already-generated home, verify it
+against the persisted digest and route, and restore that same snapshot to the
+context. Recovery never broadens authority by reprojection or by consulting a
+later source-home catalog.
 
 The ledger's active batch is parent-scoped. It records immutable assignment and
 attempt identities, then progresses through admission, running, and one

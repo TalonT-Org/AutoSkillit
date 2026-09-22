@@ -53,6 +53,31 @@ def test_render_skill_unavailability_groups_and_sorts(capsys: pytest.CaptureFixt
     ]
 
 
+def test_render_skill_unavailability_reports_managed_preparation_refusal_once(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = _payload(
+        SkillUnavailableMetadata(
+            skill="compose-pr",
+            backend="codex",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic="fixed join unavailable",
+        )
+    )
+
+    render_skill_unavailability(
+        payload,
+        managed_join_refusal="managed join issuance refused: catalog_probe_failed",
+    )
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == (
+        "1 skills unavailable on this backend (required_join: fixed join unavailable): compose-pr"
+    )
+    assert lines[-1] == "WARNING: managed join issuance refused: catalog_probe_failed"
+    assert lines.count("WARNING: managed join issuance refused: catalog_probe_failed") == 1
+
+
 def test_append_skill_unavailability_preserves_none_and_appends_canonical_block() -> None:
     payload = _payload(
         SkillUnavailableMetadata(

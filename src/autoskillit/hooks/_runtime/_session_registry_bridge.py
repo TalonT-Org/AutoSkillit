@@ -43,6 +43,59 @@ def _acquire_registry_lock(fd: int) -> None:
             return
 
 
+def _load_bridge_registry(registry_file: Path) -> dict[str, object] | None:
+    try:
+        registry = json.loads(registry_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return registry if isinstance(registry, dict) else None
+
+
+def _claim_session_id(registry: dict[str, object], launch_id: str, session_id: str) -> bool:
+    row = registry.get(launch_id)
+    if not isinstance(row, dict):
+        return False
+    existing_session_id = row.get("claude_session_id")
+    if existing_session_id == session_id:
+        return False
+    if existing_session_id is not None:
+        raise ValueError(
+            f"Launch {launch_id!r} is already bound to session "
+            f"{existing_session_id!r}; cannot bind {session_id!r}"
+        )
+    for existing_launch_id, existing_row in registry.items():
+        if existing_launch_id == launch_id or not isinstance(existing_row, dict):
+            continue
+        if existing_row.get("claude_session_id") == session_id:
+            raise ValueError(
+                f"Session {session_id!r} is already claimed by launch "
+                f"{existing_launch_id!r}; cannot assign it to launch {launch_id!r}"
+            )
+    row["claude_session_id"] = session_id
+    return True
+
+
+def _write_registry(registry_file: Path, registry: dict[str, object]) -> None:
+    fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(registry))
+        os.replace(tmp, registry_file)
+    except (OSError, TypeError, ValueError):
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _bridge_locked_registry(registry_file: Path, launch_id: str, session_id: str) -> None:
+    registry = _load_bridge_registry(registry_file)
+    if registry is None or not _claim_session_id(registry, launch_id, session_id):
+        return
+    _write_registry(registry_file, registry)
+
+
 def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     """Bind the selected launch row to one unique native session identity."""
     launch_id = os.environ.get(_LAUNCH_ID_ENV, "")
@@ -62,46 +115,7 @@ def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     try:
         _acquire_registry_lock(lock_fd)
         locked = True
-        try:
-            registry = json.loads(registry_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
-        if not isinstance(registry, dict):
-            return
-        row = registry.get(launch_id)
-        if not isinstance(row, dict):
-            return
-
-        existing_session_id = row.get("claude_session_id")
-        if existing_session_id == session_id:
-            return
-        if existing_session_id is not None:
-            raise ValueError(
-                f"Launch {launch_id!r} is already bound to session "
-                f"{existing_session_id!r}; cannot bind {session_id!r}"
-            )
-
-        for existing_launch_id, existing_row in registry.items():
-            if existing_launch_id == launch_id or not isinstance(existing_row, dict):
-                continue
-            if existing_row.get("claude_session_id") == session_id:
-                raise ValueError(
-                    f"Session {session_id!r} is already claimed by launch "
-                    f"{existing_launch_id!r}; cannot assign it to launch {launch_id!r}"
-                )
-
-        row["claude_session_id"] = session_id
-        fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(json.dumps(registry))
-            os.replace(tmp, registry_file)
-        except (OSError, TypeError, ValueError):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        _bridge_locked_registry(registry_file, launch_id, session_id)
     finally:
         try:
             if locked:

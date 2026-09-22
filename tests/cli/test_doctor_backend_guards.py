@@ -16,6 +16,133 @@ _STUB_MCP_CONFIG_CAPABLE = SimpleNamespace(
 )
 
 
+class TestCheckCodexManagedPreparation:
+    def test_skips_non_codex_backend(self, tmp_path: Path) -> None:
+        from autoskillit.cli.doctor import Severity, _check_codex_managed_preparation
+
+        result = _check_codex_managed_preparation(
+            backend=_STUB_MCP_CONFIG_CAPABLE,
+            configured_model="sonnet",
+            project_dir=tmp_path,
+        )
+
+        assert result.severity == Severity.OK
+        assert result.check == "codex_managed_preparation"
+        assert result.message.startswith("Skipped (")
+
+    def test_prepares_configured_model_in_project_scratch_without_attestation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli.doctor import Severity, _check_codex_managed_preparation
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        source_home = tmp_path / "source-home"
+        source_home.mkdir()
+        source_config = source_home / "config.toml"
+        source_config.write_text('cli_auth_credentials_store = "keyring"\n', encoding="utf-8")
+        before = source_config.read_bytes()
+        seen: dict[str, object] = {}
+
+        def prepare(
+            _self: CodexBackend,
+            configured_model: str,
+            *,
+            scratch_root: Path,
+            deadline: float,
+        ) -> tuple[str, str, object]:
+            seen.update(
+                configured_model=configured_model,
+                scratch_root=scratch_root,
+                deadline=deadline,
+            )
+            return "gpt-5.6-sol", "high", object()
+
+        monkeypatch.setattr(CodexBackend, "prepare_managed_codex_catalog", prepare)
+        result = _check_codex_managed_preparation(
+            backend=CodexBackend(source_codex_home=source_home),
+            configured_model="sonnet",
+            project_dir=tmp_path / "project",
+            workspace_temp_dir=".autoskillit/temp",
+        )
+
+        assert result.severity == Severity.OK
+        assert result.message == (
+            "Managed Codex preparation ready for model=gpt-5.6-sol, effort=high."
+        )
+        assert seen["configured_model"] == "sonnet"
+        assert seen["scratch_root"] == (
+            tmp_path / "project" / ".autoskillit/temp/doctor-managed-codex-preparation"
+        )
+        assert isinstance(seen["deadline"], float)
+        assert source_config.read_bytes() == before
+        assert not (tmp_path / "project" / ".autoskillit" / "managed-join").exists()
+
+    def test_surfaces_preparation_refusal(self, tmp_path: Path, monkeypatch) -> None:
+        from autoskillit.cli.doctor import Severity, _check_codex_managed_preparation
+        from autoskillit.execution.backends._codex_catalog import CodexCatalogAcquisitionError
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        def refuse(*_args: object, **_kwargs: object) -> None:
+            raise CodexCatalogAcquisitionError("catalog_probe_failed")
+
+        monkeypatch.setattr(CodexBackend, "prepare_managed_codex_catalog", refuse)
+        result = _check_codex_managed_preparation(
+            backend=CodexBackend(),
+            configured_model="sonnet",
+            project_dir=tmp_path,
+        )
+
+        assert result.severity == Severity.WARNING
+        assert result.message == "Managed Codex preparation unavailable: catalog_probe_failed"
+
+    @pytest.mark.parametrize(
+        ("override", "expected"),
+        [(None, "sonnet"), ("gpt-5.6-sol", "gpt-5.6-sol")],
+    )
+    def test_doctor_registry_passes_effective_model_and_project_temp_root(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        override: str | None,
+        expected: str,
+    ) -> None:
+        from autoskillit.cli import _init_helpers
+        from autoskillit.cli import doctor as doctor_mod
+        from autoskillit.cli.doctor import DoctorResult, Severity
+        from tests.cli._doctor_helpers import select_doctor_checks
+
+        cfg = SimpleNamespace(
+            agent_backend=SimpleNamespace(backend="codex"),
+            codex_runtime=SimpleNamespace(resolve=lambda: None),
+            model=SimpleNamespace(default_model="sonnet", model_override=override),
+            workspace=SimpleNamespace(temp_dir="project-temp"),
+            features={},
+            experimental_enabled=False,
+            run_skill=SimpleNamespace(),
+            fleet=SimpleNamespace(),
+            linux_tracing=SimpleNamespace(log_dir=None),
+        )
+        seen: dict[str, object] = {}
+
+        def check(**kwargs: object) -> DoctorResult:
+            seen.update(kwargs)
+            return DoctorResult(Severity.OK, "codex_managed_preparation", "ready")
+
+        check.__name__ = "_check_codex_managed_preparation"
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(doctor_mod, "_load_config_guarded", lambda _path: (cfg, []))
+        monkeypatch.setattr(doctor_mod, "_check_codex_managed_preparation", check)
+        monkeypatch.setattr(_init_helpers, "_is_plugin_installed", lambda: False)
+        select_doctor_checks(monkeypatch, {"codex_managed_preparation"})
+
+        results = doctor_mod._collect_doctor_results()
+
+        assert [result.check for result in results] == ["codex_managed_preparation"]
+        assert seen["configured_model"] == expected
+        assert seen["project_dir"] == tmp_path
+        assert seen["workspace_temp_dir"] == "project-temp"
+
+
 # ---------------------------------------------------------------------------
 # REQ-DOCTOR-001 — _check_claude_process_state_breakdown
 # ---------------------------------------------------------------------------

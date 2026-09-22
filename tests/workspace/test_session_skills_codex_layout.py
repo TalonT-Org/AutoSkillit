@@ -105,7 +105,9 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
     from autoskillit.core import (
         ExplorationVectorApplicabilityId,
     )
-    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from autoskillit.server._managed_join_attestation import (
+        DefaultManagedJoinAttestationAuthority,
+    )
     from autoskillit.workspace import (
         DefaultSkillResolver,
         SkillProjectionContext,
@@ -143,6 +145,65 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
     document = project_agent_skill_document(invocation.root, context)
 
     assert "Use the server-owned managed fixed-batch route" in document.content
+
+
+@pytest.mark.parametrize("route", ["parent", "leaf"])
+def test_managed_materialization_forwards_complete_catalog_context(
+    make_session_skill_manager,
+    tmp_path: Path,
+    route: str,
+) -> None:
+    import json
+
+    from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from autoskillit.workspace import DefaultSkillResolver, SkillProjectionContext
+    from tests.execution.backends._codex_fixtures import installed_catalog
+
+    manager = make_session_skill_manager()
+    backend = _make_codex_backend()
+    invocation = DefaultSkillResolver().resolve_invocation(
+        "make-arch-diag",
+        tmp_path,
+        SkillExecutionRole.SESSION,
+    )
+    projection = project_codex_catalog(
+        json.dumps(installed_catalog()).encode("utf-8"),
+        expected_model="gpt-5.6-luna",
+        expected_reasoning_effort="high",
+    )
+    adaptation_context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-luna",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+
+    manager.materialize_invocation(
+        f"managed-{route}",
+        invocation,
+        SkillProjectionContext(
+            cwd=tmp_path,
+            invocation=invocation,
+            backend=backend,
+            adaptation_context=adaptation_context,
+            managed_codex_route=route,
+        ),
+    )
+
+    backend.configure_managed_session_dir.assert_called_once_with(
+        tmp_path / "codex-root" / f"managed-{route}",
+        adaptation_context=adaptation_context,
+        route=route,
+    )
 
 
 def test_materialization_forwards_only_server_explorer_binding_env(

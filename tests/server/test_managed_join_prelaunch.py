@@ -271,11 +271,22 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     )
     backend.configure_managed_session_dir(
         home,
-        attestation=attestation,
+        adaptation_context=context,
         route="interactive-parent",
     )
+    (source_home / "models_cache.json").unlink()
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
     record_store = ManagedJoinRecordStore(state_root)
+
+    original_reader = type(backend).read_managed_session_catalog
+    catalog_reads = 0
+
+    def count_catalog_read(self, generated_home):
+        nonlocal catalog_reads
+        catalog_reads += 1
+        return original_reader(self, generated_home)
+
+    monkeypatch.setattr(type(backend), "read_managed_session_catalog", count_catalog_read)
 
     authority = DefaultManagedJoinAttestationAuthority(
         record_store=record_store,
@@ -284,8 +295,12 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     loaded = authority.find_verified_context(backend="codex", parent_session_id="abc123")
     assert loaded is not None
     assert loaded.managed_join_attestation == context.managed_join_attestation
-    assert loaded.managed_codex_catalog is None
+    assert loaded.managed_codex_catalog == context.managed_codex_catalog
     assert authority.verify(loaded, backend="codex", parent_session_id="abc123") == loaded
+    assert catalog_reads == 1
+    assert authority.find_verified_context(backend="codex", parent_session_id="abc123") is loaded
+    assert catalog_reads == 1
+    monkeypatch.setattr(type(backend), "read_managed_session_catalog", original_reader)
 
     record_path = record_store.path_for("abc123")
     original_record = record_path.read_text(encoding="utf-8")
@@ -311,6 +326,58 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         is None
     )
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
+
+    catalog_path = home / "models_cache.json"
+    original_catalog = catalog_path.read_bytes()
+    catalog_path.unlink()
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
+
+    catalog_path.write_bytes(b'{"models":["tampered"]}')
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
+
+    replacement = tmp_path / "replacement-models-cache.json"
+    replacement.write_bytes(original_catalog)
+    catalog_path.unlink()
+    catalog_path.symlink_to(replacement)
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.unlink()
+        catalog_path.write_bytes(original_catalog)
+
+    from autoskillit.execution.backends._codex_catalog import CODEX_CATALOG_LIMIT
+
+    catalog_path.write_bytes(b" " * (CODEX_CATALOG_LIMIT + 1))
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
 
     config_path = home / "config.toml"
     original_config = config_path.read_text(encoding="utf-8")

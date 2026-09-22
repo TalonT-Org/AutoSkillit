@@ -1927,9 +1927,6 @@ def test_codex_managed_fixed_batch_smoke_conformance(
         generated_home = tmp_path / "interactive-parent-home"
         source_home.mkdir()
         generated_home.mkdir()
-        (source_home / "models_cache.json").write_text(
-            json.dumps(installed_catalog()), encoding="utf-8"
-        )
         (generated_home / "config.toml").write_text(
             '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
             encoding="utf-8",
@@ -1947,7 +1944,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
         assert attestation is not None
         backend.configure_managed_session_dir(
             generated_home,
-            attestation=attestation,
+            adaptation_context=context,
             route="interactive-parent",
         )
         monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(generated_home))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tomllib
 from collections.abc import Callable
@@ -43,6 +44,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from tests.cli._interactive_process import interactive_launch_metadata
+from tests.execution.backends._codex_fixtures import managed_selection_catalog
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -407,7 +409,7 @@ def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     assert event_names[-1] == "managed-exit"
 
 
-def test_codex_cook_excludes_refused_compose_pr_roles(
+def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -433,11 +435,6 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
     )
     compose_pr = next(member for member in catalog.skills if member.name == "compose-pr")
     assert compose_pr.semantic_plan is not None
-    # compose-pr declares join.required=true, so Codex refuses it at
-    # admission (REQUIRED_JOIN) rather than returning a role mapping.
-    # Its native role names are unchanged by Codex's mapping rule (neither
-    # is 'autoskillit:'-prefixed nor equal to 'delegated-worker'), so the
-    # expected mapped targets are the declared role names themselves.
     mapped_targets = {spawn.role for spawn in compose_pr.semantic_plan.child_spawns}
     captured: dict[str, object] = {}
 
@@ -455,6 +452,7 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         compose_projection = generated_home / "add-dir" / "skills" / "compose-pr" / "SKILL.md"
         role_names = effective_codex_agent_names(generated_home)
         captured["compose_projected"] = compose_projection.is_file()
+        captured["source_cache_exists"] = (source_home / "models_cache.json").exists()
         captured["mapped_targets"] = mapped_targets
         captured["role_names"] = role_names
         kwargs["on_spawn"](101, 101)  # type: ignore[operator]
@@ -462,8 +460,18 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
+    bundled_catalog = tmp_path / "bundled-models.json"
+    atomic_write(bundled_catalog, json.dumps(managed_selection_catalog()))
     codex_shim = tmp_path / "codex"
-    atomic_write(codex_shim, "#!/bin/sh\nexit 0\n")
+    atomic_write(
+        codex_shim,
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        "import sys\n"
+        "if sys.argv[1:] != ['debug', 'models', '--bundled']:\n"
+        "    raise SystemExit(64)\n"
+        f"sys.stdout.buffer.write(pathlib.Path({str(bundled_catalog)!r}).read_bytes())\n",
+    )
     codex_shim.chmod(0o755)
 
     monkeypatch.chdir(project_root)
@@ -520,12 +528,40 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
 
     cli.cook(backend=backend)
 
-    assert captured["compose_projected"] is False
+    assert captured["compose_projected"] is True
+    assert captured["source_cache_exists"] is False
+    assert not (source_home / "models_cache.json").exists()
     assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
     role_names = captured["role_names"]
     assert isinstance(role_names, frozenset)
-    assert "pr-synthesizer" not in role_names
-    assert "pr-source-reader" not in role_names
+    assert "pr-synthesizer" in role_names
+    assert "pr-source-reader" in role_names
+
+
+def test_cook_captures_managed_preparation_refusal_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.server import managed_join_prelaunch
+
+    backend = _Backend()
+    capabilities = vars(backend.capabilities) | {"managed_fixed_batch_route_capable": True}
+    backend.capabilities = SimpleNamespace(**capabilities)
+    _install_harness(monkeypatch, tmp_path)
+
+    def refuse(**kwargs: object) -> None:
+        on_refusal = kwargs["on_refusal"]
+        assert callable(on_refusal)
+        on_refusal(managed_join_prelaunch.ManagedJoinIssuanceRefusal("catalog_probe_failed"))
+        return None
+
+    monkeypatch.setattr(managed_join_prelaunch, "acquire_managed_join_evidence", refuse)
+
+    cli.cook(backend=backend)
+
+    output = capsys.readouterr().out
+    assert output.count("WARNING: managed join issuance refused: catalog_probe_failed") == 1
 
 
 def test_notification_capable_cook_has_no_pre_reveal_guidance(

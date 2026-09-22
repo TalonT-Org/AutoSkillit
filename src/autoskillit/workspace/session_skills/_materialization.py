@@ -259,18 +259,14 @@ def _configure_managed_session_route(
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend,
 ) -> None:
-    attestation = (
-        projection_context.adaptation_context.managed_join_attestation
-        if projection_context.adaptation_context is not None
-        else None
-    )
-    if backend.capabilities.managed_fixed_batch_route_capable and attestation is not None:
+    adaptation_context = projection_context.adaptation_context
+    if backend.capabilities.managed_fixed_batch_route_capable and adaptation_context is not None:
         configure_managed_home = getattr(backend, "configure_managed_session_dir", None)
         if not callable(configure_managed_home):
             raise SkillContractError("managed-route backend cannot configure a generated home")
         configure_managed_home(
             generated_home,
-            attestation=attestation,
+            adaptation_context=adaptation_context,
             route=projection_context.managed_codex_route or "parent",
         )
 

@@ -10,6 +10,7 @@ from autoskillit.core import Severity, get_logger, is_feature_enabled
 from autoskillit.execution import get_backend
 
 from ._doctor_capture_store import _check_capture_store_stats
+from ._doctor_codex_preparation import _check_codex_managed_preparation
 from ._doctor_config import (
     _check_config_layers_for_secrets,
     _check_gitignore_completeness,
@@ -244,6 +245,17 @@ def _collect_doctor_results() -> list[DoctorResult]:
     results.extend(_run_check(functools.partial(_check_standing_backend_pins_feasibility)))
     results.extend(_run_check(functools.partial(_check_local_recipe_validity)))
     results.extend(_run_check(functools.partial(_check_codex_limits_verified, backend=_backend)))
+    results.extend(
+        _run_check(
+            functools.partial(
+                _check_codex_managed_preparation,
+                backend=_backend,
+                configured_model=cfg.model.model_override or cfg.model.default_model,
+                project_dir=Path.cwd(),
+                workspace_temp_dir=cfg.workspace.temp_dir,
+            )
+        )
+    )
     results.extend(
         _run_check(
             functools.partial(

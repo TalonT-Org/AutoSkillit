@@ -230,17 +230,14 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
     assert adaptation.instruction_fragments[-1].startswith("Use the server-owned managed")
 
 
-@pytest.mark.parametrize("route", ["parent", "interactive-parent"])
+@pytest.mark.parametrize("route", ["parent", "leaf", "interactive-parent"])
 def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, route) -> None:
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
-    source_home = tmp_path / "source"
     session_home = tmp_path / "session"
-    source_home.mkdir()
     session_home.mkdir()
     raw_catalog = _catalog_bytes(_installed_catalog())
-    (source_home / "models_cache.json").write_bytes(raw_catalog)
     (session_home / "config.toml").write_text(
         '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
         encoding="utf-8",
@@ -258,17 +255,15 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         resolved_model=_READER_MODEL,
         resolved_reasoning_effort=_READER_REASONING_EFFORT,
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
         fixed_batch_tool_registry_digest="a" * 64,
         hook_registry_digest="b" * 64,
         skill_load_applies=True,
         guards_apply=True,
     )
-    attestation = context.managed_join_attestation
-    assert attestation is not None
-
-    CodexBackend(source_codex_home=source_home).configure_managed_session_dir(
+    CodexBackend(source_codex_home=tmp_path / "missing-source").configure_managed_session_dir(
         session_home,
-        attestation=attestation,
+        adaptation_context=context,
         route=route,
     )
 
@@ -280,9 +275,46 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         assert "join_stop_guard" in rendered
         assert "join_followup_guard" in rendered
         assert "skill_orchestration_guard" not in rendered
-    else:
+    elif route == "parent":
         assert tools == ["run_fixed_batch", "read_fixed_batch_result"]
+    else:
+        assert tools == ["test_check"]
     assert "Stop" in config["hooks"]
+    assert (session_home / "models_cache.json").read_bytes() == (
+        projection.canonical_projected_bytes
+    )
     projected_model = json.loads((session_home / "models_cache.json").read_bytes())["models"][1]
     assert projected_model["tool_mode"] == "direct"
     assert projected_model["apply_patch_tool_type"] is None
+
+
+def test_managed_home_refuses_context_without_attested_catalog_snapshot(tmp_path) -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    session_home = tmp_path / "session"
+    session_home.mkdir()
+    (session_home / "config.toml").write_text(
+        '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+        encoding="utf-8",
+    )
+    context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model=_READER_MODEL,
+        resolved_reasoning_effort=_READER_REASONING_EFFORT,
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+
+    with pytest.raises(ValueError, match="attested catalog snapshot"):
+        CodexBackend().configure_managed_session_dir(
+            session_home,
+            adaptation_context=context,
+            route="parent",
+        )

@@ -239,6 +239,19 @@ class TestTaskfile:
         assert "python -m pytest" not in commands
         assert re.search(r"(^|\s)pytest(?:\s|$)", commands) is None
 
+    def test_codex_smoke_includes_managed_route_live_gate(self) -> None:
+        data = self._load()
+        smoke_commands = "\n".join(
+            str(command) for command in data["tasks"]["test-smoke-codex"].get("cmds", [])
+        )
+        local_commands = "\n".join(
+            str(command) for command in data["tasks"]["test-local-gate"].get("cmds", [])
+        )
+
+        assert "tests/execution/backends/test_codex_managed_route_live_gate.py" in smoke_commands
+        assert 'AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE:-0}" == "1"' in local_commands
+        assert "task test-smoke-codex" in local_commands
+
     def test_output_budget_e2e_target_selects_credentialed_smoke_test(self) -> None:
         data = self._load()
         task = data["tasks"]["test-smoke-output-budget-e2e"]

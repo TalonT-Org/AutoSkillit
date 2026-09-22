@@ -123,18 +123,6 @@ def _tool_result(output: str, *, required_keys: frozenset[str]) -> dict[str, Any
     return matches[0]
 
 
-def _write_bundled_models_cache(profile_codex_home: Path, env: dict[str, str]) -> None:
-    completed = subprocess.run(  # noqa: S603
-        ["codex", "debug", "models", "--bundled"],
-        env=env,
-        capture_output=True,
-        timeout=30,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
-    profile_codex_home.joinpath("models_cache.json").write_bytes(completed.stdout)
-
-
 def _stop_guard_env(env: dict[str, str]) -> dict[str, str]:
     """Combine the live parent environment with production interpreter settings."""
     isolated = production_interpreter_env()
@@ -194,7 +182,6 @@ def test_live_codex_interactive_managed_route_gate(
         parent_sandbox_mode="workspace-write",
         copy_source_auth=True,
     )
-    _write_bundled_models_cache(prepared.profile_codex_home, prepared.env)
     backend = CodexBackend()
     parent_id = uuid4().hex
     issuance = prepare_managed_join_context(
@@ -228,7 +215,7 @@ def test_live_codex_interactive_managed_route_gate(
     )
     backend.configure_managed_session_dir(
         prepared.session_home,
-        attestation=attestation,
+        adaptation_context=issuance,
         route="interactive-parent",
     )
     catalog_digest = hashlib.sha256(

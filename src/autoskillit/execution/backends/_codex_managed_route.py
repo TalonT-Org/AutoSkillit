@@ -13,12 +13,16 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     CODEX_EFFORT_MAPPING,
     CODEX_VALID_MODEL_IDS,
+    ContainmentError,
     ManagedJoinAttestation,
+    SemanticAdaptationContext,
     atomic_write,
+    read_stable_contained_bytes,
     strip_context_window_suffix,
 )
 from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._codex_catalog import (
+    CODEX_CATALOG_LIMIT,
     CodexCatalogAcquisitionError,
     CodexCatalogProjection,
     acquire_bundled_codex_catalog,
@@ -70,20 +74,18 @@ def prepare_managed_codex_catalog(
     return model, effort, projection
 
 
-def project_source_catalog(
-    backend: CodexBackend,
-    model: str,
-    effort: str,
-) -> CodexCatalogProjection:
-    """Project the source cache retained for materialization and persisted recovery."""
-    source_home = backend.source_codex_home
-    if source_home is None:
-        raise ValueError("managed Codex route has no source Codex home")
-    return project_codex_catalog(
-        (source_home / "models_cache.json").read_bytes(),
-        expected_model=model,
-        expected_reasoning_effort=effort,
-    )
+def read_managed_codex_catalog(backend: CodexBackend, generated_home: Path) -> bytes:
+    """Read one stable, bounded catalog snapshot from a generated home."""
+    del backend
+    try:
+        _, catalog = read_stable_contained_bytes(
+            generated_home / "models_cache.json",
+            generated_home,
+            max_size_bytes=CODEX_CATALOG_LIMIT,
+        )
+    except (ContainmentError, OSError) as exc:
+        raise ValueError(f"managed Codex catalog is unreadable: {exc}") from exc
+    return catalog
 
 
 def projected_manifest_path(backend: CodexBackend, generated_home: Path) -> Path:
@@ -98,10 +100,21 @@ def verify_managed_session_dir(
     generated_home: Path,
     attestation: ManagedJoinAttestation,
     route: ManagedCodexRoute,
+    *,
+    managed_codex_catalog: bytes | None = None,
 ) -> list[str]:
     """Validate the live generated home against its managed-route attestation."""
-    del backend
-    return _managed_codex_config_errors(generated_home, attestation=attestation, route=route)
+    if managed_codex_catalog is None:
+        try:
+            managed_codex_catalog = read_managed_codex_catalog(backend, generated_home)
+        except ValueError as exc:
+            return [str(exc)]
+    return _managed_codex_config_errors(
+        generated_home,
+        attestation=attestation,
+        route=route,
+        managed_codex_catalog=managed_codex_catalog,
+    )
 
 
 def _rendered_codex_guard_scripts(hooks: object) -> set[str]:
@@ -122,15 +135,16 @@ def _rendered_codex_guard_scripts(hooks: object) -> set[str]:
 
 
 def _managed_codex_catalog_error(
-    catalog_path: Path,
+    catalog_bytes: bytes,
     *,
     attestation: ManagedJoinAttestation,
 ) -> str | None:
     """Validate the projected catalog and its attested digest."""
     try:
-        catalog_bytes = catalog_path.read_bytes()
         catalog = json.loads(catalog_bytes)
         models = catalog["models"]
+        if not isinstance(models, list) or not all(isinstance(model, dict) for model in models):
+            raise TypeError("models must be a list of objects")
         selected = [model for model in models if model.get("slug") == attestation.resolved_model]
         if len(selected) != 1:
             raise ValueError("selected model is not unique")
@@ -151,11 +165,11 @@ def _managed_codex_config_errors(
     *,
     attestation: ManagedJoinAttestation,
     route: ManagedCodexRoute,
+    managed_codex_catalog: bytes,
 ) -> list[str]:
     """Validate the generated-home contract that makes a managed route live."""
     errors: list[str] = []
     config_path = session_dir / "config.toml"
-    catalog_path = session_dir / "models_cache.json"
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
@@ -179,32 +193,23 @@ def _managed_codex_config_errors(
     ]
     if missing_guards:
         errors.append(f"managed Codex config is missing guards: {', '.join(missing_guards)}")
-    catalog_error = _managed_codex_catalog_error(catalog_path, attestation=attestation)
+    catalog_error = _managed_codex_catalog_error(
+        managed_codex_catalog,
+        attestation=attestation,
+    )
     if catalog_error is not None:
         errors.append(catalog_error)
     return errors
 
 
-def project_managed_route(
-    backend: CodexBackend,
+def _write_managed_codex_route(
     session_dir: Path,
     *,
     attestation: ManagedJoinAttestation,
     route: ManagedCodexRoute,
+    catalog: bytes,
 ) -> None:
-    """Project one attested route after source-config synchronization."""
-    if not attestation.admits_backend("codex"):
-        raise ValueError("managed Codex route requires a direct-mode Codex attestation")
-    try:
-        projection = backend.project_source_catalog(
-            attestation.resolved_model, attestation.resolved_reasoning_effort
-        )
-    except (OSError, ValueError) as exc:
-        raise ValueError(
-            f"managed Codex route cannot project the installed model catalog: {exc}"
-        ) from exc
-    if projection.projected_sha256.removeprefix("sha256:") != attestation.codex_catalog_digest:
-        raise ValueError("managed Codex catalog differs from the attested projection")
+    """Validate the synchronized config and write the attested route projection."""
     config_path = session_dir / "config.toml"
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -225,12 +230,43 @@ def project_managed_route(
     config["model"] = attestation.resolved_model
     config["model_reasoning_effort"] = attestation.resolved_reasoning_effort
     atomic_write(config_path, _codex_cfg._serialize_toml(config))
-    atomic_write(session_dir / "models_cache.json", projection.canonical_projected_bytes)
+    atomic_write(session_dir / "models_cache.json", catalog)
     sync_managed_codex_hooks_to_config(config_path, route=route)
+
+
+def project_managed_route(
+    backend: CodexBackend,
+    session_dir: Path,
+    *,
+    adaptation_context: SemanticAdaptationContext,
+    route: ManagedCodexRoute,
+) -> None:
+    """Project one attested route after source-config synchronization."""
+    del backend
+    attestation = adaptation_context.managed_join_attestation
+    if attestation is None:
+        raise ValueError("managed Codex route requires a managed-join attestation")
+    if not attestation.admits_backend("codex"):
+        raise ValueError("managed Codex route requires a direct-mode Codex attestation")
+    catalog = adaptation_context.managed_codex_catalog
+    if catalog is None:
+        raise ValueError("managed Codex route requires its attested catalog snapshot")
+    if hashlib.sha256(catalog).hexdigest() != attestation.codex_catalog_digest:
+        raise ValueError("managed Codex catalog differs from the attested projection")
+    catalog_error = _managed_codex_catalog_error(catalog, attestation=attestation)
+    if catalog_error is not None:
+        raise ValueError(catalog_error)
+    _write_managed_codex_route(
+        session_dir,
+        attestation=attestation,
+        route=route,
+        catalog=catalog,
+    )
     errors = _managed_codex_config_errors(
         session_dir,
         attestation=attestation,
         route=route,
+        managed_codex_catalog=catalog,
     )
     if errors:
         raise ValueError("; ".join(errors))

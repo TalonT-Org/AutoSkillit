@@ -68,7 +68,7 @@ def _block_stop(*, reason: str, denial_reason: str) -> NoReturn:
     raise SystemExit(2)
 
 
-def main() -> None:
+def _read_stop_payload() -> tuple[dict[str, object], str]:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -90,6 +90,11 @@ def main() -> None:
             ),
             denial_reason="missing_session_id",
         )
+    return data, sid
+
+
+def main() -> None:
+    data, sid = _read_stop_payload()
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if is_authenticated_top_level_cook(data, payload_cwd, sid):

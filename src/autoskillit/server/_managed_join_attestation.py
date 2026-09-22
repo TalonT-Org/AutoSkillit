@@ -322,10 +322,17 @@ class DefaultManagedJoinAttestationAuthority:
         if not home.is_dir() or home != home.resolve():
             return None
         verifier = getattr(self._backend, "verify_managed_session_dir", None)
-        if not callable(verifier):
+        catalog_reader = getattr(self._backend, "read_managed_session_catalog", None)
+        if not callable(verifier) or not callable(catalog_reader):
             return None
         try:
-            errors = verifier(home, attestation, route)
+            managed_codex_catalog = catalog_reader(home)
+            errors = verifier(
+                home,
+                attestation,
+                route,
+                managed_codex_catalog=managed_codex_catalog,
+            )
         except (OSError, ValueError):
             return None
         if errors:
@@ -333,8 +340,9 @@ class DefaultManagedJoinAttestationAuthority:
         with self._lock:
             if self._recovery_gate is not None and not self._recovery_gate():
                 return None
-            # Persisted catalog-byte recovery migrates separately; source-home
-            # validation above remains the compatibility authority until then.
-            context = SemanticAdaptationContext(managed_join_attestation=attestation)
+            context = SemanticAdaptationContext(
+                managed_join_attestation=attestation,
+                managed_codex_catalog=managed_codex_catalog,
+            )
             self._issued[context.digest] = context
         return self.verify(context, backend=backend, parent_session_id=parent_session_id)

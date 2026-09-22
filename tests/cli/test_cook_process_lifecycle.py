@@ -465,6 +465,11 @@ def test_posix_job_control_foreground_handoff_propagates_restore_failure_only(
     monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
     monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
     monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+    monkeypatch.setattr(
+        _session_process.os,
+        "killpg",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ProcessLookupError),
+    )
 
     def fake_tcsetpgrp(fd: int, pgid: int) -> None:
         foreground_changes.append((fd, pgid))

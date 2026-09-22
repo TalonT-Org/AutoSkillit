@@ -69,7 +69,16 @@ _OWNED_PROCESS_SPAWN_TOKEN = object()
 
 
 class OwnedProcessError(RuntimeError):
-    """The runner could not prove complete process-group settlement."""
+    """The runner could not prove complete process-group settlement.
+
+    NOTE: ``autoskillit.execution.process._lifecycle.owned_group.OwnedProcessStoppedError``
+    is the dedicated subclass for the stopped-leader condition in the
+    lifecycle layer. The hooks instance shares the same ``leader_pid``,
+    ``pgid``, and ``stop_signal`` payload (populated at the stopped-leader
+    raise site) so downstream ``except`` clauses that read these fields work
+    identically across both hierarchies. Unification is intentionally
+    avoided: hooks is contractually stdlib-only.
+    """
 
     def __init__(
         self,

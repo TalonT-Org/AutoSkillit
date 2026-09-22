@@ -72,7 +72,15 @@ class OwnedProcessCleanupError(RuntimeError):
 
 
 class OwnedProcessStoppedError(RuntimeError):
-    """Raised when a non-reaping observation finds a stopped group leader."""
+    """Raised when a non-reaping observation finds a stopped group leader.
+
+    NOTE: ``autoskillit.hooks._capture_process.OwnedProcessError`` carries the
+    same ``(leader_pid, pgid, stop_signal)`` payload for the same condition in
+    the hooks layer. The two hierarchies remain parallel because the hooks
+    package is contractually stdlib-only
+    (``src/autoskillit/hooks/AGENTS.md``) and may not import this module's
+    psutil-backed lifecycle code.
+    """
 
     def __init__(self, leader_pid: int, pgid: int, stop_signal: int) -> None:
         super().__init__(

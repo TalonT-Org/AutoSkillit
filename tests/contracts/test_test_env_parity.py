@@ -98,6 +98,11 @@ _TASKFILE_NON_PARITY_VARS: frozenset[str] = frozenset(
         "RESEARCH_SMOKE_TEST",
         "SMOKE_TEST",
         "TMPDIR",
+        # Pin Hypothesis storage to a per-run pytest tmp dir under TMPDIR so
+        # the pytest-hypothesis entry-point plugin (which loads BEFORE
+        # conftest.py) cannot create `.hypothesis/constants/` at the repo
+        # root — that path is monitored by the root-debris detector.
+        "HYPOTHESIS_STORAGE_DIR",
     }
 )
 

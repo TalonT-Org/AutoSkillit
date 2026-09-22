@@ -216,7 +216,7 @@ class _ManagedLeafLaunchAdapter:
             child_attribution_skill=self.source_name,
             provider_extras=(
                 {
-                    MANAGED_JOIN_PARENT_ID_ENV_VAR: self.launch.parent_session_id,
+                    MANAGED_JOIN_PARENT_ID_ENV_VAR: leaf_projection.binding.assignment.generated_home_id,
                 }
                 if backend.capabilities.managed_fixed_batch_route_capable
                 else None

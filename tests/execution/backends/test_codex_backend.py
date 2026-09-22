@@ -68,7 +68,6 @@ from autoskillit.execution.backends.codex import (
     CodexBackend as _CodexBackend,
 )
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
-from tests._env_forward_helpers import codex_mcp_env_forward_vars_minus_parent_id
 from tests.execution.backends._generated_home_backend import (
     GeneratedHomeCodexBackend,
     bind_generated_home_backend,
@@ -1909,20 +1908,52 @@ class TestCodexForwardVarsInjection:
         monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
 
     @pytest.mark.parametrize(
-        "var",
-        sorted(codex_mcp_env_forward_vars_minus_parent_id()),
+        "builder_kind",
+        ("skill_session", "food_truck", "headless", "resume", "interactive"),
     )
-    def test_skill_session_has_forward_var(self, var: str) -> None:
-        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
-        assert var in spec.env, f"{var} missing from build_skill_session_cmd env"
+    def test_mcp_config_capability_covers_private_builder_env(self, builder_kind: str) -> None:
+        """Inverse invariant: any private env value emitted must be declared.
 
-    @pytest.mark.parametrize(
-        "var",
-        sorted(codex_mcp_env_forward_vars_minus_parent_id()),
-    )
-    def test_food_truck_has_forward_var(self, var: str) -> None:
-        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
-        assert var in spec.env, f"{var} missing from build_food_truck_cmd env"
+        Mirrors the upstream HEAD pattern (PR #5116). Asserts that every private
+        env value present in the builder output is declared in
+        ``mcp_env_forward_vars`` or ``CODEX_MCP_ENV_SERVER_EXCLUDED_VARS``,
+        rather than asserting that every forward var is auto-injected (which
+        would require the builder to inject the full set, contradicting the
+        opt-in explicit-extras design for ``MANAGED_JOIN_PARENT_ID_ENV_VAR``
+        and the curated ``SHARED_BASELINE_ENV`` baseline).
+        """
+        from autoskillit.core import (
+            AUTOSKILLIT_PRIVATE_ENV_VARS,
+            CODEX_MCP_ENV_SERVER_EXCLUDED_VARS,
+        )
+
+        backend = CodexBackend()
+        if not backend.capabilities.mcp_config_capable:
+            pytest.skip("CodexBackend is mcp_config_capable — covered by other tests")
+        if builder_kind == "skill_session":
+            spec = backend.build_skill_session_cmd(**self.SKILL_BASE)
+        elif builder_kind == "food_truck":
+            spec = backend.build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        elif builder_kind == "headless":
+            if not hasattr(backend, "build_headless_cmd"):
+                pytest.skip("CodexBackend has no build_headless_cmd")
+            spec = backend.build_headless_cmd("do stuff")
+        elif builder_kind == "resume":
+            if not backend.capabilities.session_resume_capable:
+                pytest.skip("CodexBackend is session_resume_capable")
+            spec = backend.build_resume_cmd(resume_session_id="abc123", prompt="go")
+        elif builder_kind == "interactive":
+            spec = backend.build_interactive_cmd()
+        else:
+            raise AssertionError(f"Unknown builder kind: {builder_kind}")
+
+        undeclared_private_vars = (
+            set(spec.env) & AUTOSKILLIT_PRIVATE_ENV_VARS
+        ) - backend.capabilities.mcp_env_forward_vars
+        assert undeclared_private_vars <= CODEX_MCP_ENV_SERVER_EXCLUDED_VARS, (
+            f"Codex {builder_kind} emits private env values absent from "
+            f"mcp_env_forward_vars: {sorted(undeclared_private_vars)}"
+        )
 
     def test_managed_join_parent_identity_is_forwarded_from_explicit_extras(self) -> None:
         parent_id = "managed-parent"

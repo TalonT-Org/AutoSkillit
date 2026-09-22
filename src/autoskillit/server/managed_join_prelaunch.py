@@ -6,7 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext
+from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext, get_logger
+
+logger = get_logger(__name__)
 from autoskillit.execution.backends import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 from autoskillit.server._managed_join_attestation import (
@@ -70,8 +72,8 @@ def acquire_managed_join_evidence(
 
 
 def _default_managed_join_refusal_handler(refusal: ManagedJoinIssuanceRefusal) -> None:
-    """Print a one-line operator-visible warning for a managed-join refusal."""
-    print(f"WARNING: {render_managed_join_refusal(refusal)}")
+    """Log a one-line operator-visible warning for a managed-join refusal."""
+    logger.warning("managed_join_issuance_refused", reason=render_managed_join_refusal(refusal))
 
 
 def prepare_managed_join_context(

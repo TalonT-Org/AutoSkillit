@@ -47,6 +47,7 @@ def _seed_projection(home: Path, skill_name: str) -> None:
                     skill_name: {
                         "join_required": True,
                         "source_artifact_digest": "d" * 64,
+                        "write_paths": None,
                     }
                 },
             }

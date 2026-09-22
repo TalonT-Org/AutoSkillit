@@ -13,7 +13,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 _ALLOWED = {
     "src/autoskillit/core/types/_type_skill_semantics.py",
     "src/autoskillit/server/_managed_join_attestation.py",
+    "src/autoskillit/server/managed_join_prelaunch.py",
     "tests/fakes.py",
+    "tests/server/_managed_join_fixtures.py",
     "tests/server/test_managed_join_record_store.py",
     "tests/server/test_write_managed_parent_binding.py",
 }

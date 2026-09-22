@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
-_PREPARE = "prepare_managed_join_context"
+_PREPARE = "acquire_managed_join_evidence"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _EXPECTED_PREPARE_CALLERS = Counter(
     {

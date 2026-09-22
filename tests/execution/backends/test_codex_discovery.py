@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -881,14 +882,39 @@ def test_managed_attestation_accepts_one_exact_alias_or_canonical_primary(
     assert result.pre_spawn_check is not None
 
 
-def test_managed_attestation_rejects_alias_identity_before_probe(
+@pytest.mark.parametrize(
+    "alias_state",
+    (
+        "missing",
+        "dangling",
+        "directory",
+        "wrong-target",
+        "absolute-token",
+        "wrong-relative-token",
+    ),
+)
+def test_managed_attestation_rejects_invalid_alias_before_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    alias_state: str,
 ) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     alias_root = _discovery_root(catalog_dir)
     alias_root.unlink()
-    alias_root.mkdir()
+    if alias_state == "missing":
+        pass
+    elif alias_state == "dangling":
+        alias_root.symlink_to("missing-catalog", target_is_directory=True)
+    elif alias_state == "directory":
+        alias_root.mkdir()
+    elif alias_state == "wrong-target":
+        wrong_target = tmp_path / "wrong-target"
+        wrong_target.mkdir()
+        alias_root.symlink_to(wrong_target, target_is_directory=True)
+    elif alias_state == "absolute-token":
+        alias_root.symlink_to(catalog_dir, target_is_directory=True)
+    else:
+        alias_root.symlink_to("./add-dir/skills", target_is_directory=True)
 
     def probe_must_not_run(*_args: object, **_kwargs: object) -> None:
         pytest.fail("invalid managed alias must fail before prompt-input")
@@ -906,7 +932,7 @@ def test_managed_attestation_rejects_alias_identity_before_probe(
         version="0.153.4",
     )
 
-    assert any("alias" in error for error in result.errors)
+    assert result.errors
 
 
 @pytest.mark.parametrize(
@@ -917,6 +943,7 @@ def test_managed_attestation_rejects_alias_identity_before_probe(
         "duplicate-alias-primary",
         "duplicate-canonical-primary",
         "non-exact-alias",
+        "non-exact-alias-dot",
         "system-descendant",
         "additional-alias-to-catalog",
     ),
@@ -951,6 +978,8 @@ def test_managed_attestation_rejects_root_policy_variants(
         )
     elif case == "non-exact-alias":
         output = output.replace(str(alias_root), f"{alias_root}/", 1)
+    elif case == "non-exact-alias-dot":
+        output = output.replace(str(alias_root), f"{alias_root}/.", 1)
     elif case == "system-descendant":
         output = output.replace(str(catalog_dir / ".system"), str(catalog_dir / ".system/child"))
     else:
@@ -976,16 +1005,29 @@ def test_managed_attestation_rejects_root_policy_variants(
     assert any("root-policy" in error for error in errors)
 
 
-def test_managed_attestation_check_rejects_alias_replacement_after_probe(tmp_path: Path) -> None:
+@pytest.mark.parametrize("probe_result", ("success", "nonzero"))
+def test_managed_attestation_rejects_same_token_alias_replacement_after_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    probe_result: str,
+) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     alias_root = _discovery_root(catalog_dir)
-    command, env = _install_prompt_stub(
-        tmp_path,
-        _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
-    )
+    original_inode = alias_root.lstat().st_ino
+    replacement = tmp_path / "replacement-alias"
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir)
+
+    def replace_alias(*_args: object, **_kwargs: object) -> probes._BoundedProbeResult:
+        replacement.symlink_to("add-dir/skills", target_is_directory=True)
+        os.replace(replacement, alias_root)
+        if probe_result == "nonzero":
+            return probes._BoundedProbeResult(23, b"", b"expected failure")
+        return probes._BoundedProbeResult(0, output.encode(), b"")
+
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", replace_alias)
     result = discovery.attest_catalog_discovery(
-        probe_command=command,
-        env=env,
+        probe_command=("codex", "debug", "prompt-input"),
+        env={},
         cwd=str(tmp_path),
         catalog_dir=catalog_dir,
         expected_discovery_root=alias_root,
@@ -993,10 +1035,7 @@ def test_managed_attestation_check_rejects_alias_replacement_after_probe(tmp_pat
         expected_entries=expected_entries,
         version="0.153.4",
     )
-    assert result.pre_spawn_check is not None
-
-    alias_root.unlink()
-    alias_root.symlink_to("add-dir/other", target_is_directory=True)
-
-    with pytest.raises(RuntimeError, match="final integrity check failed"):
-        result.pre_spawn_check()
+    assert alias_root.lstat().st_ino != original_inode
+    assert any("mutated the managed alias" in error for error in result.errors)
+    if probe_result == "nonzero":
+        assert any("exited with status 23" in error for error in result.errors)

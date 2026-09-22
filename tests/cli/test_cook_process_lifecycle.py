@@ -382,6 +382,97 @@ def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
     callbacks.reaped.assert_not_called()
 
 
+def test_pty_pre_spawn_check_closes_descriptors_without_spawning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_process
+    from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    openpty = os.openpty
+    opened: list[int] = []
+
+    def tracked_openpty() -> tuple[int, int]:
+        master_fd, slave_fd = openpty()
+        opened.extend((master_fd, slave_fd))
+        return master_fd, slave_fd
+
+    monkeypatch.setattr(_session_process.os, "openpty", tracked_openpty)
+    spawn = Mock()
+    monkeypatch.setattr(_session_process, "spawn_owned_process", spawn)
+    observer = PtyObserver(readiness_probe=None)
+    closed_masters: list[int] = []
+    close_master = PtyObserver.close_master
+
+    def record_close_master(self: PtyObserver, master_fd: int) -> None:
+        closed_masters.append(master_fd)
+        close_master(self, master_fd)
+
+    monkeypatch.setattr(PtyObserver, "close_master", record_close_master)
+    callbacks = Mock()
+    try:
+        with pytest.raises(RuntimeError, match="catalog changed"):
+            run_cook_attempt(
+                CmdSpec(
+                    cmd=(sys.executable, "-c", "pass"),
+                    env=dict(os.environ),
+                    cwd=str(tmp_path.resolve()),
+                    skill_discovery_route=CODEX_MANAGED_HOME_ROUTE,
+                ),
+                pass_fds=(),
+                on_spawn=callbacks.spawn,
+                on_reaped=callbacks.reaped,
+                trace=Mock(),
+                observer=observer,
+                not_after=time.time() + 60,
+                pre_spawn_check=lambda: (_ for _ in ()).throw(RuntimeError("catalog changed")),
+            )
+        assert len(opened) == 2
+        assert closed_masters == [opened[0]]
+        with pytest.raises(OSError):
+            os.fstat(opened[0])
+        with pytest.raises(OSError):
+            os.fstat(opened[1])
+        spawn.assert_not_called()
+        callbacks.spawn.assert_not_called()
+        callbacks.reaped.assert_not_called()
+    finally:
+        for fd in opened:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+@pytest.mark.parametrize("route", (None, "projected"))
+def test_pre_spawn_check_is_only_required_for_managed_codex(
+    tmp_path: Path,
+    route: str | None,
+) -> None:
+    from autoskillit.execution.backends._codex_discovery import CODEX_PROJECTED_HOME_ROUTE
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    result = run_cook_attempt(
+        CmdSpec(
+            cmd=(sys.executable, "-c", "pass"),
+            env=dict(os.environ),
+            cwd=str(tmp_path.resolve()),
+            skill_discovery_route=CODEX_PROJECTED_HOME_ROUTE if route else None,
+        ),
+        pass_fds=(),
+        on_spawn=lambda _pid, _pgid: None,
+        on_reaped=lambda _pid, _pgid: None,
+        trace=Mock(),
+        observer=None,
+        not_after=time.time() + 60,
+    )
+
+    assert result.returncode == 0
+
+
 def test_managed_launch_requires_a_retained_pre_spawn_check(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

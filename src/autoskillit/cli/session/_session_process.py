@@ -249,7 +249,7 @@ def _foreground_process_group(pgid: int) -> Iterator[None]:
         try:
             os.killpg(pgid, signal.SIGCONT)
         except ProcessLookupError:
-            logger.debug("foreground_process_group_cont_lookup_raced", extra={"pgid": pgid})
+            logger.debug("owned_process_foreground_cont_lookup_raced", extra={"pgid": pgid})
         yield
     except BaseException as exc:
         primary_error = exc

@@ -166,8 +166,8 @@ def attest(
     expected_entries: Sequence[tuple[str, str]],
     route: SkillDiscoveryRouteDef,
     version: str,
-    managed_root_scope: Path | None,
-    timeout_seconds: float,
+    managed_root_scope: Path | None = None,
+    timeout_seconds: float = discovery.CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
 ) -> InteractiveInvocationValidation:
     executable = probe_command[0] if probe_command else "<missing>"
     context = discovery._contract_context(

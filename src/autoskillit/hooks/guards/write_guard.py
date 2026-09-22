@@ -66,16 +66,11 @@ _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     }
 )
 
-# Module-scoped set tracking prefix values that already produced a realpath-failure
-# warning. Each hook process gets a fresh set (GIL/import boundary guarantees
-# per-process state); pytest-xdist workers likewise receive isolated copies.
+# Per-process set of prefix values that already produced a realpath-failure warning;
+# pytest-xdist workers get isolated copies via the import boundary.
 _WARNED_PREFIXES: set[str] = set()
 _LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
-
-# Configuration hint appended to the empty-boundary denial reason, keyed by
-# activation source. Surfaced verbatim so users can grep for the env var or
-# binding field they need to inspect. Stays one sentence so the JSON
-# `permissionDecisionReason` payload doesn't bloat.
+# Empty-boundary denial hint, keyed by activation. Kept terse to bound JSON payload size.
 _EMPTY_BOUNDARY_HINT_BY_ACTIVATION: dict[str, str] = {
     "headless": (
         "every prefix in AUTOSKILLIT_ALLOWED_WRITE_PREFIX "
@@ -291,9 +286,10 @@ def _normalize_prefixes(raw_prefixes: list[str], *, source_label: str) -> list[s
         except (OSError, ValueError) as exc:
             if prefix not in _WARNED_PREFIXES:
                 _LOGGER.warning(
-                    "write_guard: dropping prefix %r (realpath failed: %s; source=%s)",
+                    "write_guard: dropping prefix %r (realpath failed: %s: %s; source=%s)",
                     prefix,
                     type(exc).__name__,
+                    exc,
                     source_label,
                 )
                 _WARNED_PREFIXES.add(prefix)
@@ -486,19 +482,15 @@ def main() -> None:
         _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
         sys.exit(0)
     if policy_state in {"empty", "unresolved"}:
-        if policy_state == "empty":
-            deny_message = (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-                f"(empty boundary: {_EMPTY_BOUNDARY_HINT_BY_ACTIVATION[activation]})"
-            )
-        else:
-            deny_message = (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-                f"({policy_state} boundary)."
-            )
+        hint = _EMPTY_BOUNDARY_HINT_BY_ACTIVATION.get(activation)
+        suffix = (
+            f"empty boundary: {hint}"
+            if hint is not None
+            else f"{policy_state} boundary (activation={activation})"
+        )
         _deny(
             data,
-            deny_message,
+            (f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} ({suffix})."),
             reason_code=policy_state,
             activation=activation,
         )

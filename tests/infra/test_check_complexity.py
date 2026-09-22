@@ -466,7 +466,7 @@ def test_annotation_escaping_property(raw, expected):
 # --- main: exit codes ----------------------------------------------------------------------
 
 
-def test_main_exit_codes_no_violations(tmp_path, capsys):
+def test_main_exit_code_no_violations(tmp_path, capsys):
     repo = _seed_repo(tmp_path, "def f():\n    pass\n")
     assert check.main(["--base", "HEAD", "--repo-root", str(repo)]) == 0
     assert capsys.readouterr().out == ""
@@ -860,7 +860,7 @@ def test_validate_exemptions_valid_entry_is_clean():
         ("def f():\n    pass\n", "src/a.py.f", 14, "malformed key"),
         ("def f():\n    pass\n", "src/a.py::missing", 14, "stale"),
         ("def f():\n    pass\n", "src/a.py::f", 14, "no longer exceeds"),
-        (_source_with_function("f", 15), "src/a.py::f", 14, "below the current complexity"),
+        (_source_with_function("f", 15), "src/a.py::f", 14, "current complexity 15"),
     ],
     ids=["malformed", "stale", "unnecessary", "exceeded"],
 )

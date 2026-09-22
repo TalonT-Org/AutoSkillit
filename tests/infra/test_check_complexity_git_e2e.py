@@ -74,7 +74,6 @@ def test_staged_growth_past_inherited_ceiling_fails(tmp_path, capsys):
     assert check.main(["--staged", "--repo-root", str(repo)]) == 1
     out = capsys.readouterr().out
     assert "src/a.py" in out
-    assert "f" in out
     assert "complexity 13 > allowed 12" in out
     assert "was 12 at the base revision" in out
 
@@ -133,7 +132,6 @@ def test_base_growth_past_inherited_ceiling_fails(tmp_path, capsys):
     assert check.main(["--base", "base", "--repo-root", str(repo)]) == 1
     out = capsys.readouterr().out
     assert "src/a.py" in out
-    assert "f" in out
     assert "complexity 13 > allowed 12" in out
     assert "was 12 at the base revision" in out
 

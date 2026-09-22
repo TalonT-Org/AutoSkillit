@@ -219,7 +219,7 @@ def attest(
         return InteractiveInvocationValidation(errors=tuple(errors))
     return _successful_attestation(
         alias_state=alias_state,
-        catalog_dir=catalog_dir,
+        catalog_dir=canonical_catalog,
         expected_discovery_root=expected_discovery_root,
         expected_entries=expected_entries,
         expected_paths=expected_paths,

@@ -138,7 +138,9 @@ def test_every_exemption_key_matches_an_existing_file() -> None:
 
     A key matching nothing is dead weight no test can ever exercise -- exactly
     how types.py, session.py, and _doctor.py sat unnoticed until #4662's
-    basename-fallback fix.
+    basename-fallback fix. An entry whose target exists but does NOT exceed
+    750 non-import lines is stale (the ceiling has nothing to cover) and is
+    also raised as a violation by ``_line_limit_registry_target_violations``.
     """
     violations = _line_limit_registry_target_violations(_LINE_LIMIT_EXEMPTIONS, SRC_ROOT)
     assert not violations, "_LINE_LIMIT_EXEMPTIONS targets are invalid:\n  " + "\n  ".join(
@@ -157,6 +159,19 @@ def test_line_limit_registry_rejects_missing_and_stale_targets(tmp_path: Path) -
         and "remove the obsolete exemption" in violation
         for violation in violations
     )
+
+
+def test_line_limit_registry_accepts_target_above_limit(tmp_path: Path) -> None:
+    """Positive branch: a target strictly above 750 non-import lines produces no violations.
+
+    Guards against a regression where the helper always appends a violation
+    (or where the empty-registry happy path is the only path covered).
+    """
+    (tmp_path / "above_limit.py").write_text("value = 1\n" * 751, encoding="utf-8")
+
+    violations = _line_limit_registry_target_violations({"above_limit.py"}, tmp_path)
+
+    assert violations == []
 
 
 def test_no_exemption_ceiling_equals_current_line_count() -> None:

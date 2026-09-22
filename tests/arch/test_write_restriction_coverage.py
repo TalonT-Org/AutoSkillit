@@ -11,7 +11,11 @@ import autoskillit.hooks  # noqa: F401  (populates the deferred registry)
 from autoskillit.core import load_yaml
 from autoskillit.hook_registry import HOOK_REGISTRY, hook_applies_to_backend
 from autoskillit.recipe._skill_placeholder_parser import extract_never_block
-from autoskillit.workspace.skills._format import parse_frontmatter_content
+from autoskillit.workspace.skills._format import (
+    SkillFrontmatterParseResult,
+    parse_frontmatter_content,
+    validate_skill_frontmatter,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -63,8 +67,36 @@ def _has_write_restriction_prose(content: str) -> bool:
     return any(re.search(pattern, never) for pattern in _WRITE_RESTRICTION_PATTERNS)
 
 
+def _collect_write_paths_violations(
+    parsed: SkillFrontmatterParseResult,
+    skill_name: str,
+) -> list[str]:
+    """Return human-readable violations for write_paths under a never-modify claim.
+
+    Skills whose NEVER-block prose restricts writes must declare a non-empty
+    write_paths list intersecting the restricted prefix surface. The presence,
+    non-null, and non-empty-list checks are the test's tightening over what
+    production accepts (which silently permits absent/null/empty write_paths);
+    the per-entry shape and prefix checks delegate to validate_skill_frontmatter
+    to keep this helper's surface aligned with the runtime contract.
+    """
+    if not parsed.is_valid or parsed.data is None:
+        return [f"{skill_name}: frontmatter is not parseable or missing mapping"]
+    if "write_paths" not in parsed.data:
+        return [f"{skill_name}: 'write_paths' key missing from frontmatter"]
+    write_paths = parsed.data["write_paths"]
+    if write_paths is None:
+        return [f"{skill_name}: 'write_paths' must be declared (got null)"]
+    if not isinstance(write_paths, list):
+        return [f"{skill_name}: 'write_paths' must be a list (got {type(write_paths).__name__})"]
+    if len(write_paths) == 0:
+        return [f"{skill_name}: 'write_paths' must be a non-empty list"]
+    full_errors = validate_skill_frontmatter(parsed.data, skill_name)
+    return [f"{skill_name}: {err}" for err in full_errors if "write_paths" in err]
+
+
 def test_never_modify_source_skills_have_write_prefix() -> None:
-    missing: list[str] = []
+    violations: list[str] = []
     for skill_path in sorted(_SKILLS_ROOT.glob("*/SKILL.md")):
         content = skill_path.read_text(encoding="utf-8")
         if not _has_write_restriction_prose(content):
@@ -72,9 +104,10 @@ def test_never_modify_source_skills_have_write_prefix() -> None:
         if skill_path.parent.name in UNRESTRICTED_WRITE_SKILLS:
             continue
         parsed = parse_frontmatter_content(content)
-        if not parsed.is_valid or parsed.data is None or "write_paths" not in parsed.data:
-            missing.append(skill_path.parent.name)
-    assert not missing, f"write-restricted skills lack write_paths: {missing}"
+        violations.extend(_collect_write_paths_violations(parsed, skill_path.parent.name))
+    assert not violations, (
+        "write-restricted skills have invalid write_paths:\n  - " + "\n  - ".join(violations)
+    )
 
 
 def test_planner_skills_always_have_output_dir() -> None:
@@ -111,3 +144,108 @@ def test_skill_md_guard_claims_are_true() -> None:
             ):
                 violations.append(f"{skill_path.parent.name}: {claim.group(0)}")
     assert not violations, f"unreachable guard claims: {violations}"
+
+
+@pytest.mark.parametrize(
+    ("frontmatter_text", "expected_violation_count", "expected_substring"),
+    [
+        pytest.param(
+            "---\nname: foo\ndescription: bar\n---\nbody\n",
+            1,
+            "missing",
+            id="no_write_paths_key",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: null\n---\nbody\n",
+            1,
+            "must be declared",
+            id="write_paths_null",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: 123\n---\nbody\n",
+            1,
+            "must be a list",
+            id="write_paths_not_list",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths: []\n---\nbody\n",
+            1,
+            "non-empty",
+            id="write_paths_empty_list",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- 123\n---\nbody\n",
+            1,
+            "must be a non-empty string",
+            id="write_paths_non_string_entry",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- ''\n---\nbody\n",
+            1,
+            "must be a non-empty string",
+            id="write_paths_empty_string_entry",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n- /tmp/foo\n---\nbody\n",
+            1,
+            "must start with",
+            id="write_paths_wrong_prefix",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n"
+            "- '{{AUTOSKILLIT_TEMP}}/foo/'\n---\nbody\n",
+            0,
+            "",
+            id="write_paths_valid_placeholder",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\nwrite_paths:\n"
+            "- .autoskillit/temp/foo/\n---\nbody\n",
+            0,
+            "",
+            id="write_paths_valid_resolved",
+        ),
+        pytest.param(
+            "no frontmatter at all\n",
+            1,
+            "not parseable",
+            id="write_paths_missing_opening_delimiter",
+        ),
+        pytest.param(
+            "---\nname: foo\ndescription: bar\n",
+            1,
+            "not parseable",
+            id="write_paths_missing_closing_delimiter",
+        ),
+        pytest.param(
+            "---\n- a\n- b\n---\n",
+            1,
+            "not parseable",
+            id="write_paths_non_mapping_root",
+        ),
+        pytest.param(
+            "---\nname: [bad yaml\n---\n",
+            1,
+            "not parseable",
+            id="write_paths_malformed_yaml_within_delimiters",
+        ),
+    ],
+)
+def test_collect_write_paths_violations(
+    frontmatter_text: str,
+    expected_violation_count: int,
+    expected_substring: str,
+) -> None:
+    parsed = parse_frontmatter_content(frontmatter_text)
+    result = _collect_write_paths_violations(parsed, "foo")
+    assert len(result) == expected_violation_count, (
+        f"frontmatter={frontmatter_text!r}\n"
+        f"expected {expected_violation_count} violations, "
+        f"got {len(result)}: {result}"
+    )
+    if expected_substring:
+        assert all(expected_substring in violation for violation in result), (
+            f"frontmatter={frontmatter_text!r}\n"
+            f"expected substring {expected_substring!r} in every violation, "
+            f"got: {result}"
+        )

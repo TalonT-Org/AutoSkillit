@@ -115,7 +115,6 @@ repos:
         entry: python scripts/check_complexity.py --staged
         files: ^(src|tests|scripts)/.*\.py$
         pass_filenames: false
-        verbose: true
         always_run: true
 
       - id: check-policy-relaxation

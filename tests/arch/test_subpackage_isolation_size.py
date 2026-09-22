@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+from pathlib import Path
+
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
@@ -7,6 +10,22 @@ from tests.arch._line_budget import count_budget_lines
 from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+
+def _line_limit_registry_target_violations(keys: Collection[str], source_root: Path) -> list[str]:
+    violations: list[str] = []
+    for key in sorted(keys):
+        target = source_root / key
+        if not target.is_file():
+            violations.append(f"{key}: no matching source file")
+            continue
+        line_count = count_budget_lines(target)
+        if line_count <= 750:
+            violations.append(
+                f"{key}: {line_count} non-import lines is at or below the ordinary "
+                "750-line limit; remove the obsolete exemption"
+            )
+    return violations
 
 
 def test_pipeline_shard_size_ceiling() -> None:
@@ -115,14 +134,29 @@ def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> N
 
 
 def test_every_exemption_key_matches_an_existing_file() -> None:
-    """Every _LINE_LIMIT_EXEMPTIONS key must resolve to a real file under SRC_ROOT.
+    """Every _LINE_LIMIT_EXEMPTIONS key must resolve to a source file above 750 lines.
 
     A key matching nothing is dead weight no test can ever exercise -- exactly
     how types.py, session.py, and _doctor.py sat unnoticed until #4662's
     basename-fallback fix.
     """
-    dead = sorted(key for key in _LINE_LIMIT_EXEMPTIONS if not (SRC_ROOT / key).is_file())
-    assert not dead, f"_LINE_LIMIT_EXEMPTIONS keys with no matching file: {dead}"
+    violations = _line_limit_registry_target_violations(_LINE_LIMIT_EXEMPTIONS, SRC_ROOT)
+    assert not violations, "_LINE_LIMIT_EXEMPTIONS targets are invalid:\n  " + "\n  ".join(
+        violations
+    )
+
+
+def test_line_limit_registry_rejects_missing_and_stale_targets(tmp_path: Path) -> None:
+    (tmp_path / "at_limit.py").write_text("value = 1\n" * 750, encoding="utf-8")
+
+    violations = _line_limit_registry_target_violations({"missing.py", "at_limit.py"}, tmp_path)
+
+    assert "missing.py: no matching source file" in violations
+    assert any(
+        "at_limit.py: 750 non-import lines" in violation
+        and "remove the obsolete exemption" in violation
+        for violation in violations
+    )
 
 
 def test_no_exemption_ceiling_equals_current_line_count() -> None:

@@ -195,8 +195,14 @@ registered higher ceilings measured in non-import lines. Do not apply the
 diff-scoped 1000 non-import lines absolute maximum to untouched legacy
 exemptions; changing one of those files subjects it to the diff-scoped gate.
 
+Automated sessions respond to a line-limit violation by decomposing the file
+first. An exemption is a human-approved last resort. If decomposition is
+genuinely infeasible, stop and give a human the path, measured count, and
+justification. An automated session must not add or relax
+`_LINE_LIMIT_EXEMPTIONS` or create its `PolicyRelaxationApproval`.
+
 **Audit Strategy:**
-- For changed `src/autoskillit/**/*.py` files, flag files over 750 non-import lines without a matching predicate-backed exemption whose ceiling is at most 1000 non-import lines
+- For changed `src/autoskillit/**/*.py` files, flag files over 750 non-import lines for decomposition; only a human may use the existing exemption-plus-`PolicyRelaxationApproval` path
 - For repository-wide scans, apply the retained guard's default of 1000 non-import lines and registered legacy ceilings measured in non-import lines
 - Flag changed source files approaching 700+ non-import lines as warnings
 

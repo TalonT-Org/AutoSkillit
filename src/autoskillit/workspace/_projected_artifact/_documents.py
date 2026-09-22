@@ -165,7 +165,14 @@ class _SemanticAdaptationOutcome:
 
 @dataclass(frozen=True, slots=True)
 class SkillProjectionContext:
-    """Execution-local inputs that may affect an agent-visible projection."""
+    """Execution-local inputs that may affect an agent-visible projection.
+
+    ``explorer_provisioning_eligible`` is tri-state: ``False`` selects the
+    unavailable fallback, ``None`` preserves native dispatch without projecting
+    session-scoped provisioning instructions, and ``True`` authorizes those
+    instructions when the bound backend supports them. The later provisioning
+    call still validates request identity, session scope, and store state.
+    """
 
     cwd: Path
     project_root: Path | None = None
@@ -541,6 +548,10 @@ def _prepare_exploration_replacements(
     materialized = context.backend.exploration_dispatch_renderer.render(
         plan,
         active_vectors,
+        include_provisioning_preamble=(
+            context.explorer_provisioning_eligible is True
+            and context.backend.capabilities.session_scoped_explorer_capable
+        ),
         launch_context_ref=context.exploration_launch_context_ref or f"skill:{skill_name}",
     )
     if materialized.router_plan_digest != plan.digest:

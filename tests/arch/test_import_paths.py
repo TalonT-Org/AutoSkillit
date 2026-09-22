@@ -6,7 +6,7 @@ REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
 REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
-REQ-IMP-006: server/tools_kitchen.py has no direct import of DefaultGateState or pipeline.gate.
+REQ-IMP-006: server/tools/tools_kitchen/ has no direct import of DefaultGateState or pipeline.gate.
 REQ-IMP-010: cli/_init_helpers.py must not import autoskillit.recipe at module level.
 """
 
@@ -271,12 +271,12 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-IMP-006: server/tools_kitchen.py has no direct GateState import
+# REQ-IMP-006: server/tools/tools_kitchen/ has no direct GateState import
 # ---------------------------------------------------------------------------
 
 
 def test_req_imp_006_prompts_no_gate_state_import() -> None:
-    """server/tools_kitchen.py must not directly import DefaultGateState or pipeline.gate."""
+    """server/tools/tools_kitchen/ must not import DefaultGateState or pipeline.gate."""
     path = SRC / "server" / "tools" / "tools_kitchen"
     text = ""
     for py in sorted(path.rglob("*.py")):
@@ -372,7 +372,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
 
       server/_factory.py       — Composition Root, may import any layer
       server/git.py            — REQ-IMP-005 exemption
-      server/tools/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
+      server/tools/tools_kitchen/ — REQ-IMP-006 ban (covered separately)
       cli/app.py               — REQ-IMP-004 exemption (Typer composition)
       cli/session/_session_cook.py — REQ-IMP-011: session cook orchestrates recipe +
                                  workspace + execution

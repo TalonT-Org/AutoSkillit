@@ -17,13 +17,15 @@ Markdown instruction files (`SKILL.md`) that define what a headless Claude sessi
 Skills that adopt specialized repository exploration declare a reviewed vector inventory in a
 per-skill `exploration.yaml` sidecar (slim schema: `vectors` for migrated entries, `retained` for
 prose-only review ledger entries). Exact HTML markers in SKILL.md bind each vector to its canonical
-prose. Source resolution validates the sidecar schema and marker coverage; session projection then
-builds a deterministic router plan and replaces only migrated marker bodies after the backend is
-bound. Claude materializes native `Agent` calls and Codex materializes native `spawn_agent` calls,
-both using the same typed task packets and parent-owned merge/synthesis rules. Retained vectors
-remain prose, so a conditional or unsupported investigation is not silently promoted to
-unconditional native dispatch. The projection-cache `skill_identity` includes the sidecar content
-digest, so sidecar-only edits bust the cache. See [Explorer Agents](explorer-agents.md).
+prose. Source resolution validates the sidecar schema and marker coverage; session projection owns
+the backend-specific result after the backend is bound: interactive sessions receive explorer
+provisioning, while native headless or terminal sessions receive a deterministic router plan that
+replaces migrated marker bodies with native dispatch. Claude materializes native `Agent` calls and
+Codex materializes native `spawn_agent` calls, both using the same typed task packets and
+parent-owned merge/synthesis rules. Retained vectors remain prose only, so a conditional or
+unsupported investigation is not silently promoted to native dispatch. The projection-cache
+`skill_identity` includes the sidecar content digest, so sidecar-only edits bust the cache. See
+[Explorer Agents](explorer-agents.md).
 
 ### The Orchestrator
 When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).

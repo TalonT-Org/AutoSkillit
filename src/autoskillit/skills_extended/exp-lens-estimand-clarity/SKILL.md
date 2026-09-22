@@ -40,7 +40,6 @@ semantic_requirements:
 
 # Estimand Clarity Experimental Design Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Evidential
 **Primary Question:** "What exactly is the claim?"

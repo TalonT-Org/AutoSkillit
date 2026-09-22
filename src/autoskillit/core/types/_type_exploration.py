@@ -101,7 +101,9 @@ def render_exploration_failure_guidance(*, fallback_dispatch: str) -> str:
     return (
         f"For {fallback}, dispatch {fallback_dispatch}. "
         f"For {retry}, retry once and then surface the failure. "
-        f"For {surface}, surface the failure directly."
+        f"For {surface}, surface the failure directly. "
+        "Use the current local checkout for fallback investigation. Do not substitute "
+        "a remote or public copy; if local access is unavailable, surface the failure."
     )
 
 

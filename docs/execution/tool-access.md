@@ -164,15 +164,15 @@ TL = `telemetry`, FL = `fleet`
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `open_kitchen` | AS | `server/tools_kitchen.py` |
-| `close_kitchen` | AS | `server/tools_kitchen.py` |
-| `disable_quota_guard` | AS | `server/tools_kitchen.py` |
-| `enable_exploration` | AS | `server/tools_kitchen.py` |
-| `reload_session` | AS | `server/tools_kitchen.py` |
-| `configure_fleet` | AS | `server/tools_config.py` |
-| `configure_order` | AS | `server/tools_config.py` |
-| `lock_ingredients` | AS | `server/tools_kitchen.py` |
-| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
+| `open_kitchen` | AS | `server/tools/tools_kitchen/_open_kitchen/_orchestrator.py` |
+| `close_kitchen` | AS | `server/tools/tools_kitchen/_close_kitchen.py` |
+| `disable_quota_guard` | AS | `server/tools/tools_kitchen/_disable_quota_guard.py` |
+| `enable_exploration` | AS | `server/tools/tools_exploration.py` |
+| `reload_session` | AS | `server/tools/tools_kitchen/_reload_session.py` |
+| `configure_fleet` | AS | `server/tools/tools_config.py` |
+| `configure_order` | AS | `server/tools/tools_config.py` |
+| `lock_ingredients` | AS | `server/tools/tools_kitchen/_lock_ingredients.py` |
+| `declare_join_batch` | AS, K | `server/tools/tools_kitchen/_declare_join_batch.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
 | `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. |
 | `read_fixed_batch_result` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Reads bounded pages from an opaque managed-batch result only after reauthorizing the request, parent, source artifact/incarnation, batch, assignment, and digest. |
 

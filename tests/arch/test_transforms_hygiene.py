@@ -28,8 +28,8 @@ def _iter_tool_modules(tools_dir: Path) -> list[Path]:
         if entry.is_file() and entry.name.startswith("tools_") and entry.suffix == ".py":
             paths.append(entry)
         elif entry.is_dir() and entry.name.startswith("tools_") and entry.name != "tools_kitchen":
-            # tools_kitchen.py is a flat file consumed by other tests; the
-            # decomposed siblings are checked separately via their package.
+            # tools_kitchen is checked recursively by its dedicated structural tests;
+            # the decomposed siblings are checked here via their package.
             for submodule in sorted(entry.glob("*.py")):
                 if submodule.name == "__init__.py":
                     continue

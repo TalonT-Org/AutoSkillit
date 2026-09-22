@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: recipe-validation errors and pipeline-health demotion."""
+"""Tests for tools_kitchen package recipe-validation errors and health demotion."""
 
 from __future__ import annotations
 

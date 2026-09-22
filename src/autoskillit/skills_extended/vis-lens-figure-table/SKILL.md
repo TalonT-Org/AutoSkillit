@@ -42,7 +42,6 @@ semantic_requirements:
 
 # Decisional Layout Visualization Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Decisional
 **Primary Question:** "Should this result be a figure or a table?"

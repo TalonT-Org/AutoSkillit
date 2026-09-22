@@ -139,7 +139,7 @@ in [Claude startup readiness](claude-startup-readiness.md).
 
 ## Sous-chef injection
 
-`open_kitchen` (in `server/tools_kitchen.py`) materialises the internal
+`open_kitchen` (in `server/tools/tools_kitchen/_open_kitchen/_orchestrator.py`) materialises the internal
 `sous-chef` skill into the live session at runtime. Sous-chef is not
 registered as a slash command — it lives in `src/autoskillit/skills/` only so
 the plugin scanner picks up its directory metadata. The injection guarantees

@@ -36,7 +36,7 @@ def _make_mock_recipes(
 def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     from threading import RLock
 
-    from autoskillit.config import OutputBudgetConfig
+    from autoskillit.config import LinuxTracingConfig, OutputBudgetConfig
     from autoskillit.core import InstallationVersion, SkillResolver
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
@@ -50,6 +50,12 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx.kitchen_id = "test-mcp-overrides"
     mock_ctx.config.migration.suppressed = []
     mock_ctx.config.output_budget = OutputBudgetConfig()
+    # linux_tracing.log_dir must be a real str/Path value: resolve_log_dir
+    # raises TypeError for MagicMock inputs (it documents `str | Path`).
+    # LinuxTracingConfig.__post_init__ rejects the production tmpfs_path
+    # default ('/dev/shm') under PYTEST_CURRENT_TEST — pin tmpfs_path to the
+    # test temp_dir so the config is real, not a MagicMock.
+    mock_ctx.config.linux_tracing = LinuxTracingConfig(tmpfs_path=str(temp_dir))
     mock_ctx.gate.is_enabled.return_value = True
     mock_ctx.recipe_execution_lock = RLock()
     mock_ctx.recipe_initialization_state = NoActiveRecipe()

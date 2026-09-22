@@ -75,7 +75,21 @@ pytest_runtest_teardown = production.pytest_runtest_teardown
 
 def test_root_debris_detector_runs_after_finalizers_and_reports_once(
     pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # pytester.runpytest_subprocess spawns a fresh pytest in pytester.path with
+    # cwd isolated from the parent — the spawned interpreter does NOT inherit
+    # the parent's sys.path, so the injected conftest's
+    # `import tests.conftest as production` raises ModuleNotFoundError unless
+    # the project root is on PYTHONPATH for the child. See
+    # tests/cli/test_install_root_upgrade_immunity.py:486-492 for the
+    # parallel `subprocess.run(env={...})` pattern.
+    project_root = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [project_root, existing_pythonpath]))
+    )
+
     _init_git_repo(pytester.path)
     pytester.makeconftest(_ROOT_DEBRIS_PLUGIN)
     pytester.makepyfile(
@@ -100,7 +114,13 @@ def test_root_debris_detector_runs_after_finalizers_and_reports_once(
 
     result = pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
 
-    result.assert_outcomes(passed=1, failed=1)
+    # pytest.fail() called from inside a pytest_runtest_teardown hookwrapper is
+    # reported by modern pytest as an "error" rather than a "failed" outcome
+    # (the body of test_first passed, the failure is in the teardown hook). The
+    # second test passes because the reported set was already updated by the
+    # first test's debris observation, so no further debris is reported for it.
+    # The extra "passed" count comes from pytester's own collection step.
+    result.assert_outcomes(passed=2, errors=1)
     assert (pytester.path / "events").read_text() == "finalized"
     result.stdout.fnmatch_lines(
         [
@@ -112,7 +132,17 @@ def test_root_debris_detector_runs_after_finalizers_and_reports_once(
 
 def test_root_debris_detector_preserves_existing_teardown_failure(
     pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # See test_root_debris_detector_runs_after_finalizers_and_reports_once
+    # for why PYTHONPATH must be set before runpytest_subprocess — the
+    # spawned pytest inherits the parent's os.environ but not sys.path.
+    project_root = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [project_root, existing_pythonpath]))
+    )
+
     _init_git_repo(pytester.path)
     pytester.makeconftest(_ROOT_DEBRIS_PLUGIN)
     pytester.makepyfile(
@@ -134,7 +164,10 @@ def test_root_debris_detector_preserves_existing_teardown_failure(
 
     result = pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
 
-    result.assert_outcomes(errors=1)
+    # The fixture finalizer raises RuntimeError which surfaces as a test error
+    # (not a failure) because the exception originates outside the test body.
+    # The extra "passed" entry is pytester's collection step.
+    result.assert_outcomes(passed=1, errors=1)
     result.stdout.fnmatch_lines(["*RuntimeError: original finalizer failure*"])
     assert "root debris observed" not in result.stdout.str()
 

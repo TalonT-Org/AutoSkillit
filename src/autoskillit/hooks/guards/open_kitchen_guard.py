@@ -29,7 +29,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_kitchen_state_dir,
     resolve_state_root,
 )
-from _hook_settings import get_session_type, is_headless_session  # noqa: E402
+from _hook_settings import hook_session_shape  # noqa: E402
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
 _REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
@@ -216,13 +216,12 @@ def _deny(reason: str) -> None:
 
 
 def _enforce_session_authorization() -> None:
-    if is_headless_session():
-        current_session_type = get_session_type().lower()
+    headless, tier = hook_session_shape()
+    if headless:
+        if tier in ("fleet",):
+            _deny(f"open_kitchen cannot be called from {tier!r} sessions.")
 
-        if current_session_type in ("fleet",):
-            _deny(f"open_kitchen cannot be called from {current_session_type!r} sessions.")
-
-        if current_session_type not in ("orchestrator",):
+        if tier not in ("orchestrator",):
             # skill session, unset, or invalid — deny (fail-closed)
             _deny(
                 "open_kitchen cannot be called from skill sessions. "

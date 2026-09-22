@@ -111,15 +111,29 @@ def validate_protection_coverage(
     for waiver in waivers:
         allowed_backends = _PROTECTION_MECHANISM_BACKENDS.get(waiver.covering_mechanism)
         if allowed_backends is None:
-            raise ValueError(f"unknown protection delegate for {waiver.guard_script!r}")
+            raise ValueError(
+                f"unknown protection delegate for {waiver.guard_script!r}: "
+                f"covering_mechanism={waiver.covering_mechanism!r}"
+            )
         if waiver.backend not in allowed_backends:
-            raise ValueError(f"protection delegate is invalid for {waiver.backend}")
+            raise ValueError(
+                f"protection delegate is invalid for {waiver.backend}: "
+                f"guard_script={waiver.guard_script!r}, "
+                f"covering_mechanism={waiver.covering_mechanism!r}, "
+                f"allowed={sorted(allowed_backends)}"
+            )
         if waiver.covering_mechanism != "hook" or waiver.guard_script not in registered:
             continue
         if waiver.covering_guard_script is None:
-            raise ValueError(f"hook delegate missing for {waiver.guard_script!r}")
+            raise ValueError(
+                f"hook delegate missing for {waiver.guard_script!r}: "
+                f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
+            )
         if waiver.excluded_scope == "all":
-            raise ValueError("hook delegate requires one excluded session class")
+            raise ValueError(
+                f"hook delegate requires one excluded session class: "
+                f"guard_script={waiver.guard_script!r}"
+            )
         if not any(
             waiver.covering_guard_script in candidate.scripts
             and candidate.mechanism == "deny"
@@ -130,7 +144,11 @@ def validate_protection_coverage(
             )
             for candidate in registry
         ):
-            raise ValueError(f"unreachable protection delegate for {waiver.guard_script!r}")
+            raise ValueError(
+                f"unreachable protection delegate for {waiver.guard_script!r}: "
+                f"covering_guard_script={waiver.covering_guard_script!r}, "
+                f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
+            )
     for hook_def in registry:
         if hook_def.mechanism != "deny" or hook_def.session_scope == "any":
             continue
@@ -144,7 +162,10 @@ def validate_protection_coverage(
         internal_exclusions.append(("guards/write_guard.py", "all"))
     for script, excluded in internal_exclusions:
         if script in registered and (script, excluded, backend) not in covered:
-            raise ValueError(f"internal policy exclusion {script!r} has no protection waiver")
+            raise ValueError(
+                f"internal policy exclusion {script!r} has no protection waiver: "
+                f"excluded={excluded!r}, backend={backend!r}"
+            )
 
 
 def validate_lifecycle_contracts(

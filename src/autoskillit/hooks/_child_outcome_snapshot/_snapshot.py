@@ -44,7 +44,7 @@ from typing import Any, TypedDict, cast
 # means the bare top-level case, where ``hooks/``'s own siblings (plus
 # ``hooks/_runtime/``, also on sys.path) resolve by bare name.
 # Resolved dynamically via importlib (matching the existing precedent in
-# hooks/_runtime/_hook_settings.py:read_session_binding) rather than a literal
+# _session_binding.read_session_binding) rather than a literal
 # dual ``if __package__: from .. import X else: import X`` branch, which
 # would need a static-analysis suppression comment per branch.
 #

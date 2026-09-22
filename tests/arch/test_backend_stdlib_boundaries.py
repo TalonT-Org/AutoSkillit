@@ -78,28 +78,73 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
     values (from os.environ.get reads), then propagates through derived assignments
     until convergence, then collects strings from Compare nodes and SESSION_TYPE
     frozenset constants involving those variables.
+
+    Issue #5121 (T19) hardening rationale: the deleted get_session_type wrapper
+    had three call-site shapes that would otherwise silently bypass the unified
+    hook_session_shape() API:
+
+    1. Direct call: ``get_session_type()`` — caught at the import site by
+       ``test_no_guard_imports_deleted_session_class_wrappers`` (any direct
+       call would ImportError at runtime since the wrapper is deleted, so
+       no AST-level detection is needed here).
+    2. ``as`` rebind: ``from _hook_settings import get_session_type as g``
+       followed by ``g()`` — caught by walking ImportFrom nodes up front and
+       populating ``_forbidden_aliases`` with the bound ``asname`` (or the
+       original name when no ``asname`` is supplied).
+    3. Tuple destructure: ``headless, tier = hook_session_shape()`` — caught
+       by accepting Assign targets shaped as Tuple or List of two Name nodes
+       and registering the second element as the session-type variable
+       (because the deleted wrapper returned exactly the tier).
     """
 
     def __init__(self) -> None:
         self.found: set[str] = set()
         self._session_type_vars: set[str] = set()
+        # Populated from ImportFrom rebinds so a `get_session_type as g`
+        # call site still resolves to the deleted wrapper name.
+        self._forbidden_aliases: set[str] = set()
 
     def visit_Module(self, node: ast.Module) -> None:
         self._discover_session_type_vars(node)
         self.generic_visit(node)
 
     def _discover_session_type_vars(self, module: ast.Module) -> None:
-        assigns: list[tuple[str, ast.expr]] = []
+        # Walk ImportFrom nodes pre-emptively so the rest of the visitor
+        # can detect rebinds via 'as' without re-walking the import graph
+        # at every call site.
         for node in ast.walk(module):
-            if (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-            ):
-                assigns.append((node.targets[0].id, node.value))
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            for alias in node.names:
+                if alias.name == "get_session_type":
+                    # alias.asname is the bound name in the local namespace;
+                    # if absent, the original name is bound directly.
+                    self._forbidden_aliases.add(alias.asname or alias.name)
+
+        assigns: list[tuple[str, ast.expr]] = []
+        # Destructure pattern accepts Assign targets shaped as Tuple or List
+        # of two Name nodes so 'headless, tier = hook_session_shape()'
+        # registers both names — the second is the session-type variable
+        # and the first is bound unconditionally so the downstream fixed-
+        # point propagation can still match direct headless comparisons if
+        # any caller ever branches on headless directly.
+        for node in ast.walk(module):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            target = node.targets[0]
+            value = node.value
+            if isinstance(target, ast.Name):
+                assigns.append((target.id, value))
+            elif isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
+                second = target.elts[1]
+                if isinstance(second, ast.Name):
+                    assigns.append((second.id, value))
+                first = target.elts[0]
+                if isinstance(first, ast.Name):
+                    assigns.append((first.id, value))
 
         for name, value in assigns:
-            if self._is_session_type_env_read(value):
+            if self._is_session_type_env_read(value, frozenset(self._forbidden_aliases)):
                 self._session_type_vars.add(name)
 
         prev_size = -1
@@ -110,11 +155,27 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
                     self._session_type_vars.add(name)
 
     @staticmethod
-    def _is_session_type_env_read(node: ast.expr) -> bool:
+    def _is_session_type_env_read(
+        node: ast.expr, forbidden_aliases: frozenset[str] = frozenset()
+    ) -> bool:
+        # Canonical hook_session_shape() call is the session-type source.
+        # The function returns (headless, tier); the destructure pattern
+        # in _discover_session_type_vars extracts the tier name into
+        # _session_type_vars.
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id == "get_session_type"
+            and node.func.id == "hook_session_shape"
+        ):
+            return True
+        # ``as``-rebinding the deleted wrapper surfaces at the call site as
+        # ``g()`` which is identical to a direct wrapper call. The
+        # forbidden_aliases set is the precomputed set of every local name
+        # that resolves to the deleted wrapper via an 'as' rebind.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in forbidden_aliases
         ):
             return True
         if (
@@ -124,6 +185,19 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
             and node.args
             and isinstance(node.args[0], ast.Constant)
             and node.args[0].value == "AUTOSKILLIT_SESSION_TYPE"
+        ):
+            return True
+        # Match ``os.environ["AUTOSKILLIT_SESSION_TYPE"]`` subscript access —
+        # the pre-existing detector only matched the os.environ.get(...) call
+        # form, which would miss direct subscript lookups.
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "os"
+            and node.value.attr == "environ"
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "AUTOSKILLIT_SESSION_TYPE"
         ):
             return True
         return False
@@ -142,7 +216,7 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
         for n in (node.left, *node.comparators):
             if isinstance(n, ast.Name) and n.id in self._session_type_vars:
                 return True
-            if self._is_session_type_env_read(n):
+            if self._is_session_type_env_read(n, frozenset(self._forbidden_aliases)):
                 return True
         return False
 

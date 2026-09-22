@@ -28,7 +28,7 @@ from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
-    get_session_type,
+    hook_session_shape,
     payload_managed_codex_route,
 )
 
@@ -87,17 +87,16 @@ def main() -> None:
         sys.exit(0)
 
     # Headless: resolve session type, fail-closed for orchestration tools.
-    raw_session_type = get_session_type()
-    session_type = raw_session_type.lower()
-    if session_type == "orchestrator":
+    _headless, tier = hook_session_shape()
+    if tier == "orchestrator":
         sys.exit(0)
-    if session_type == "fleet" and tool in {"run_cmd", "run_python"}:
+    if tier == "fleet" and tool in {"run_cmd", "run_python"}:
         sys.exit(0)
 
     # skill, unset → deny below; unrecognized non-empty values also denied
-    _unrecognized_tier = bool(session_type) and session_type != "skill"
+    _unrecognized_tier = bool(tier) and tier != "skill"
 
-    if session_type == "fleet":
+    if tier == "fleet":
         denial_reason = (
             "run_skill cannot be called from fleet sessions. "
             "Only orchestrator sessions may call run_skill. "
@@ -111,7 +110,7 @@ def main() -> None:
         )
         if _unrecognized_tier:
             denial_reason += (
-                f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+                f" (AUTOSKILLIT_SESSION_TYPE={tier!r} is not a recognized tier;"
                 " expected: orchestrator, fleet, or skill)"
             )
     _deny(denial_reason)

@@ -477,7 +477,7 @@ def main() -> None:
             sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
             sys.exit(2)
 
-    headless, session_type = hook_session_shape()
+    headless, tier = hook_session_shape()
     if not headless:
         sys.exit(0)
 
@@ -492,7 +492,7 @@ def main() -> None:
     # Orchestrator-typed headless sessions bypass the destructive-op deny
     # but remain subject to the all-session ref preflight above (which runs
     # unconditionally before this branch).
-    if session_type in _DESTRUCTIVE_OP_EXEMPT_TIERS:
+    if tier in _DESTRUCTIVE_OP_EXEMPT_TIERS:
         sys.exit(0)
 
     # Hook config file is written by open_kitchen and removed by close_kitchen.

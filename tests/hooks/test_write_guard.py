@@ -1846,7 +1846,9 @@ class TestEmptyPolicyDenialHint:
         ``"none"`` and bypasses the hint branch).
         """
         _set_headless(monkeypatch, headless=True)
-        monkeypatch.setattr(write_guard, "_write_prefix_policy", lambda _data: ([], "", "empty"))
+        monkeypatch.setattr(
+            write_guard, "_write_prefix_policy", lambda _data, _headless: ([], "", "empty")
+        )
 
         event = {
             "tool_name": "Write",

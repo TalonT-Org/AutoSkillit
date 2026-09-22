@@ -180,8 +180,8 @@ def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) 
         return None
 
 
-_PATH_SAFE_LOOKBEHIND = r"(?<![.a-zA-Z0-9_/])"
-_PATH_SAFE_LOOKAHEAD = r"(?![.a-zA-Z0-9_/])"
+_PATH_SAFE_LOOKBEHIND = r"(?<![.a-zA-Z0-9_/-])"
+_PATH_SAFE_LOOKAHEAD = r"(?![.a-zA-Z0-9_/-])"
 
 
 def cmd_keyword_pattern(

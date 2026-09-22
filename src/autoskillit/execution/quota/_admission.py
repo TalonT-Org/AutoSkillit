@@ -22,7 +22,6 @@ from autoskillit.core import (
     RateLimitWindow,
     get_logger,
 )
-from autoskillit.core.io.paths import _coerce_str_or_path
 from autoskillit.execution.quota._quota_gate import (
     QuotaFetchResult,
     QuotaStatus,
@@ -68,7 +67,8 @@ class QuotaAdmission:
 
 def oauth_admission_lock_path(diagnostic_log_root: str | Path) -> Path:
     """Return the shared OAuth credential-read lock beneath the diagnostics root."""
-    _coerce_str_or_path("diagnostic_log_root", diagnostic_log_root)
+    if not isinstance(diagnostic_log_root, (str, Path)):
+        raise TypeError("diagnostic_log_root must be a str or Path")
     return Path(diagnostic_log_root) / "quota-admission" / "anthropic-oauth.lock"
 
 

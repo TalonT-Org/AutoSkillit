@@ -19,15 +19,11 @@ project's mandatory ``pre-commit run --all-files`` would otherwise turn the hook
 full-tree scan (scripts/check_file_lengths.py:13-16) -- hence ``pass_filenames: false`` on
 both local hooks and each script doing its own staged-diff discovery.
 
-Ships in ENFORCEMENT = "warn" (Phase 1): every violation is reported and annotated but the
-process always exits 0. Phase 2 promotion is the one-line change ENFORCEMENT = "fail";
-nothing else in this file, the pre-commit hook, or the CI step needs to change -- the CI
-step already propagates whatever exit code this script returns. Because ENFORCEMENT and
-MAX_COMPLEXITY are themselves capable of being loosened, the CI step (.github/workflows/
-tests.yml, "Cyclomatic complexity gate") runs the *base revision's* copy of this script
-against the working tree with --repo-root, exactly as the preceding "Policy relaxation
-gate" step does for scripts/check_policy_relaxation.py -- so a candidate diff cannot weaken
-the checker that judges it.
+Because the checker and MAX_COMPLEXITY are themselves capable of being loosened, the CI
+step (.github/workflows/tests.yml, "Cyclomatic complexity gate") runs the *base revision's*
+copy of this script against the working tree with --repo-root, exactly as the preceding
+"Policy relaxation gate" step does for scripts/check_policy_relaxation.py -- so a candidate
+diff cannot weaken the checker that judges it.
 
 Compatibility note: this counter is pinned to Ruff's C901 by a parity test
 (tests/infra/test_check_complexity_ruff_parity.py), which checks it against Ruff 0.15.15's
@@ -48,16 +44,12 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal
 
 import _git_plumbing
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LIMITS_PATH = Path("tests") / "arch" / "_complexity_limits.py"
 SCAN_ROOTS: tuple[str, ...] = ("src", "tests", "scripts")
-
-Enforcement = Literal["warn", "fail"]
-ENFORCEMENT: Enforcement = "warn"  # Phase 1. Phase 2 promotion: "fail". Nothing else changes.
 
 
 class PolicyUnavailable(RuntimeError):
@@ -618,19 +610,9 @@ _EXEMPTION_APPROVAL = """\
           session must not add the approval itself; stop and hand the decision to a human."""
 
 
-def render_report(
-    violations: Sequence[Violation], enforcement: Enforcement, policy: ComplexityPolicy
-) -> str:
-    banner = (
-        "Cyclomatic complexity check FAILED."
-        if enforcement == "fail"
-        else (
-            "Cyclomatic complexity check -- WARNING ONLY: nothing is blocked yet, but this check\n"
-            "will be promoted to a hard failure; fix these now while it is cheap."
-        )
-    )
+def render_report(violations: Sequence[Violation], policy: ComplexityPolicy) -> str:
     sections = [
-        banner,
+        "Cyclomatic complexity check FAILED.",
         "",
         f"{len(violations)} function(s) exceed their allowed complexity:",
         "",
@@ -671,13 +653,10 @@ def _annotation(violation: Violation, level: str, max_complexity: int) -> str:
     )
 
 
-def render_annotations(
-    violations: Sequence[Violation], enforcement: Enforcement, max_complexity: int
-) -> list[str]:
+def render_annotations(violations: Sequence[Violation], policy: ComplexityPolicy) -> list[str]:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return []
-    level = "error" if enforcement == "fail" else "warning"
-    return [_annotation(violation, level, max_complexity) for violation in violations]
+    return [_annotation(violation, "error", policy.max_complexity) for violation in violations]
 
 
 # --- CLI ------------------------------------------------------------------------------------
@@ -707,19 +686,19 @@ def _run(repo_root: Path, *, staged: bool, base: str | None) -> int:
     violations = evaluate(changes, head_source_for, base_source_for, policy)
     if not violations:
         return 0
-    for line in render_annotations(violations, ENFORCEMENT, policy.max_complexity):
+    for line in render_annotations(violations, policy):
         print(line)
-    print(render_report(violations, ENFORCEMENT, policy))
-    return 1 if ENFORCEMENT == "fail" else 0
+    print(render_report(violations, policy))
+    return 1
 
 
 def main(argv: list[str]) -> int:
     """Check the candidate diff against its base revision and enforce the complexity ratchet.
 
     ``--staged`` compares the index against HEAD; ``--base REF`` compares the working tree
-    against the merge base of HEAD and REF. Returns 0 when clean or (in ``warn`` mode) when
-    only report-and-continue violations were found, 1 when ``fail``-mode violations were
-    found, and 2 for a usage, policy, or git error.
+    against the merge base of HEAD and REF. Returns 0 when clean, 1 for non-exempt
+    complexity violations, and 2 for usage, policy, or git errors. Argparse raises its
+    standard ``SystemExit(2)`` for malformed syntax before this function returns.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

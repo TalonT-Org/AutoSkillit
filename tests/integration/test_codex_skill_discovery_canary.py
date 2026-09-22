@@ -33,8 +33,10 @@ from autoskillit.execution.backends._codex_discovery import (
     CODEX_MANAGED_HOME_ROUTE,
     CODEX_PROJECTED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
-    attest_catalog_discovery,
     parse_skills_instructions,
+)
+from autoskillit.execution.backends._codex_discovery_attestation import (
+    attest as attest_catalog_discovery,
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import run_managed_async

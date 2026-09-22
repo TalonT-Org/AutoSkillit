@@ -599,7 +599,7 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
         captured.update(kwargs)
         return InteractiveInvocationValidation(errors=tuple(discovery_errors))
 
-    monkeypatch.setattr(interactive_validation, "attest_catalog_discovery", attest)
+    monkeypatch.setattr(interactive_validation, "attest", attest)
 
     assert backend.validate_interactive_invocation(spec).errors == tuple(discovery_errors)
     managed_route = interactive_validation.CODEX_MANAGED_HOME_ROUTE
@@ -646,7 +646,7 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
         return InteractiveInvocationValidation(errors=())
 
     monkeypatch.setattr(interactive_validation, "probe_codex_version", probe_version)
-    monkeypatch.setattr(interactive_validation, "attest_catalog_discovery", attest)
+    monkeypatch.setattr(interactive_validation, "attest", attest)
 
     assert backend.validate_interactive_invocation(spec).errors == ()
     assert events == ["version", "prompt-input"]

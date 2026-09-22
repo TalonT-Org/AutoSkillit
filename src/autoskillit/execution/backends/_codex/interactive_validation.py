@@ -21,9 +21,9 @@ from autoskillit.execution.backends._codex_discovery import (
     CODEX_MANAGED_HOME_ROUTE,
     CODEX_PROJECTED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
-    attest_catalog_discovery,
     probe_codex_version,
 )
+from autoskillit.execution.backends._codex_discovery_attestation import attest
 from autoskillit.execution.backends._codex_probes import (
     _validate_inert_rollout_paths,
     _validate_mcp_probe,
@@ -79,7 +79,7 @@ def _run_interactive_native_probes(
     if version_errors:
         return InteractiveInvocationValidation(errors=tuple(version_errors))
 
-    discovery_validation = attest_catalog_discovery(
+    discovery_validation = attest(
         probe_command=(
             *_interactive_probe_prefix(origin),
             *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
@@ -169,7 +169,7 @@ def _validate_projected_interactive_invocation(
     )
     if version_errors:
         return InteractiveInvocationValidation(errors=tuple(version_errors))
-    return attest_catalog_discovery(
+    return attest(
         probe_command=(
             *_interactive_probe_prefix(origin),
             *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,

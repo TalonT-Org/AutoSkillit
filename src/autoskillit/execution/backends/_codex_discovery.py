@@ -15,7 +15,6 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import (
-    InteractiveInvocationValidation,
     PluginLaunchBinding,
     PluginLoadMode,
     SkillDiscoveryMechanism,
@@ -561,36 +560,6 @@ def probe_codex_version(
     return raw, normalized, []
 
 
-def attest_catalog_discovery(
-    *,
-    probe_command: tuple[str, ...],
-    env: Mapping[str, str],
-    cwd: str,
-    catalog_dir: Path,
-    expected_discovery_root: Path,
-    expected_entries: Sequence[tuple[str, str]],
-    route: SkillDiscoveryRouteDef,
-    version: str,
-    managed_root_scope: Path | None = None,
-    timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
-) -> InteractiveInvocationValidation:
-    """Require Codex's real prompt loader to expose the frozen managed catalog."""
-    from autoskillit.execution.backends._codex_discovery_attestation import attest
-
-    return attest(
-        probe_command=probe_command,
-        env=env,
-        cwd=cwd,
-        catalog_dir=catalog_dir,
-        expected_discovery_root=expected_discovery_root,
-        expected_entries=expected_entries,
-        route=route,
-        version=version,
-        managed_root_scope=managed_root_scope,
-        timeout_seconds=timeout_seconds,
-    )
-
-
 __all__ = [
     "CODEX_APP_SERVER_ROUTE",
     "CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS",
@@ -599,7 +568,6 @@ __all__ = [
     "CODEX_SKILL_DISCOVERY_CONTRACT",
     "CodexSkillDiscoveryContractDef",
     "DiscoveredSkills",
-    "attest_catalog_discovery",
     "parse_skills_instructions",
     "probe_codex_version",
     "select_interactive_discovery_route",

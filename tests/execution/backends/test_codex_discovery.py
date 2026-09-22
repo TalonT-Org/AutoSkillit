@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends import _codex_discovery as discovery
+from autoskillit.execution.backends import _codex_discovery_attestation as attestation
 from autoskillit.execution.backends import _codex_probes as probes
 from tests.fixtures.codex import fixture_path
 
@@ -306,7 +307,7 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
         output,
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -338,7 +339,7 @@ def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -362,7 +363,7 @@ def test_attest_catalog_discovery_rejects_scope_root_itself(tmp_path: Path) -> N
         _loader_output_with_extra_root("discovery_prompt_input_v0153.json", catalog_dir, scope),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -385,7 +386,7 @@ def test_attest_catalog_discovery_accepts_system_cache_under_expected_root(tmp_p
         _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -412,7 +413,7 @@ def test_attest_catalog_discovery_ignores_roots_outside_scope(tmp_path: Path) ->
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -447,7 +448,7 @@ def test_attest_catalog_discovery_reports_missing_expected_name_with_context(
         ),
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -473,7 +474,7 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
     )
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -531,7 +532,7 @@ def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
         expected_fragment = "roots contain duplicate expected discovery root"
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -562,7 +563,7 @@ def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -590,7 +591,7 @@ def test_attest_catalog_discovery_rejects_symlinked_catalog_before_probe(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -618,7 +619,7 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
     )
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -661,7 +662,7 @@ def test_attest_catalog_discovery_reports_bounded_probe_failures(
     catalog_dir, expected_entries = _catalog(tmp_path)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", lambda *_args, **_kwargs: result)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -685,7 +686,7 @@ def test_attest_catalog_discovery_rejects_missing_managed_path_before_probe(
     catalog_dir, expected_entries = _catalog(tmp_path)
     (catalog_dir / "beta" / "SKILL.md").unlink()
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=("missing-codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -708,7 +709,7 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
         mutate_path=catalog_dir / "alpha" / "SKILL.md",
     )
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -743,7 +744,7 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
 
     monkeypatch.setattr(discovery, "_fingerprint_managed_files", fingerprint)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -834,7 +835,7 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
     )
     assert (raw, normalized, errors) == ("codex-cli 0.153.4", "0.153.4", [])
 
-    discovery.attest_catalog_discovery(
+    attestation.attest(
         probe_command=("bound-codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -866,7 +867,7 @@ def test_managed_attestation_accepts_one_exact_alias_or_canonical_primary(
     output = output.replace(str(alias_root), str(primary))
     command, env = _install_prompt_stub(tmp_path, output)
 
-    result = discovery.attest_catalog_discovery(
+    result = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -922,7 +923,7 @@ def test_managed_attestation_rejects_invalid_alias_before_probe(
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", probe_must_not_run)
 
-    result = discovery.attest_catalog_discovery(
+    result = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),
@@ -993,7 +994,7 @@ def test_managed_attestation_rejects_root_policy_variants(
         )
     command, env = _install_prompt_stub(tmp_path, output)
 
-    errors = discovery.attest_catalog_discovery(
+    errors = attestation.attest(
         probe_command=command,
         env=env,
         cwd=str(tmp_path),
@@ -1028,7 +1029,7 @@ def test_managed_attestation_rejects_same_token_alias_replacement_after_probe(
         return probes._BoundedProbeResult(0, output.encode(), b"")
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", replace_alias)
-    result = discovery.attest_catalog_discovery(
+    result = attestation.attest(
         probe_command=("codex", "debug", "prompt-input"),
         env={},
         cwd=str(tmp_path),

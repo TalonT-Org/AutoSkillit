@@ -8,6 +8,7 @@ reaches ``LaunchPreparation``.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -176,7 +177,7 @@ async def test_retired_codex_model_fails_during_real_command_preparation_before_
 def _build_real_codex_attempt_kwargs_for_retired_model(
     model_id: str,
     tmp_path,
-) -> tuple[dict[str, object], AsyncMock]:
+) -> tuple[dict[str, Any], AsyncMock]:
     """Build the kwargs dict for one retired-Codex-model launch attempt.
 
     A new required parameter on ``_run_headless_attempt`` will break this helper

@@ -18,7 +18,7 @@ from autoskillit.execution.backends._codex_catalog import (
     run_owned_bounded,
 )
 from tests.conftest import production_interpreter_env
-from tests.execution.backends import test_codex_managed_route_live_gate as live
+from tests.execution.backends._live_codex_parent import joined_pending_wave_watcher
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -81,32 +81,10 @@ def test_bounded_runner_settles_child_when_selector_creation_fails(tmp_path: Pat
     assert stdout.closed and stderr.closed
 
 
-def test_pending_wave_watcher_finishes_when_native_run_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    watchers: list[threading.Thread] = []
-
-    def create_watcher(**kwargs) -> threading.Thread:
-        watcher = threading.Thread(**kwargs)
-        watchers.append(watcher)
-        return watcher
-
-    def failed_run(**kwargs):
-        raise RuntimeError("native launch failed")
-
-    monkeypatch.setattr(
-        live, "threading", SimpleNamespace(Event=threading.Event, Thread=create_watcher)
-    )
-    monkeypatch.setattr(live, "run_live_codex_parent_bounded", failed_run)
-    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
+def test_pending_wave_watcher_finishes_when_native_run_raises() -> None:
+    finished = threading.Event()
+    watcher = threading.Thread(target=finished.wait)
     with pytest.raises(RuntimeError, match="native launch failed"):
-        live._run_denial_then_release(
-            repository=tmp_path,
-            env={},
-            launch_id="cleanup-session",
-            artifact_digest="digest",
-            log_dir=tmp_path / "logs",
-            label="cleanup",
-            evidence_dir=tmp_path / "evidence",
-        )
-    assert watchers and all(not watcher.is_alive() for watcher in watchers)
+        with joined_pending_wave_watcher(watcher, finished):
+            raise RuntimeError("native launch failed")
+    assert not watcher.is_alive()

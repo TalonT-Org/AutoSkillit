@@ -50,6 +50,7 @@ from autoskillit.workspace._projected_artifact._publication import (
     _projection_skills_manifest,
 )
 from tests.execution.backends._live_codex_parent import (
+    joined_pending_wave_watcher,
     prepare_live_codex_parent,
     run_live_codex_parent_bounded,
 )
@@ -214,8 +215,7 @@ def _run_denial_then_release(
             watcher_errors.append(exc)
 
     watcher = threading.Thread(target=_release_after_denial)
-    watcher.start()
-    try:
+    with joined_pending_wave_watcher(watcher, finished):
         completed = run_live_codex_parent_bounded(
             env=env,
             cwd=repository,
@@ -233,9 +233,6 @@ def _run_denial_then_release(
             trust_generated_hooks=True,
             sandbox="workspace-write",
         )
-    finally:
-        finished.set()
-        watcher.join(timeout=10)
     assert not watcher.is_alive(), "pending-wave watcher did not finish"
     if watcher_errors:
         raise watcher_errors[0]

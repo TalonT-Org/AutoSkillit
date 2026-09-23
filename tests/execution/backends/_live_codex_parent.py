@@ -7,9 +7,11 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,19 @@ class LiveCodexParentSession:
     session_home: Path
     env: dict[str, str]
     explorer_binding_env: dict[str, dict[str, str]] | None
+
+
+@contextmanager
+def joined_pending_wave_watcher(
+    watcher: threading.Thread, finished: threading.Event
+) -> Iterator[None]:
+    """Join the pending-wave watcher even when the live parent raises."""
+    watcher.start()
+    try:
+        yield
+    finally:
+        finished.set()
+        watcher.join(timeout=10)
 
 
 def write_luna_direct_catalog(session_home: Path, env: dict[str, str]) -> None:

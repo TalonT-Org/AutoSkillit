@@ -14,7 +14,7 @@ from tests.execution.backends._codex_fixtures import installed_catalog
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _READER_MODEL = "gpt-6-luna"
-_READER_REASONING_EFFORT = "medium"
+_READER_REASONING_EFFORT = "xhigh"
 
 
 def _installed_catalog() -> dict[str, object]:

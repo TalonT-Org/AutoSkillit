@@ -185,10 +185,23 @@ def acquire_bundled_codex_catalog(
         raise CodexCatalogAcquisitionError("scratch_invalid") from exc
     assert scratch is not None
     try:
+        home = scratch / "home"
+        codex_home = home / ".codex"
+        sqlite_home = scratch / "sqlite"
+        for directory in (home, codex_home, sqlite_home):
+            directory.mkdir(mode=0o700)
+        probe_environment = dict(environment)
+        probe_environment.update(
+            {
+                "HOME": str(home),
+                "CODEX_HOME": str(codex_home),
+                "CODEX_SQLITE_HOME": str(sqlite_home),
+            }
+        )
         result = runner(
             (codex, "debug", "models", "--bundled"),
             cwd=scratch,
-            environment=environment,
+            environment=probe_environment,
             deadline=deadline,
             stdout_limit=CODEX_CATALOG_LIMIT,
         )

@@ -105,7 +105,11 @@ def test_bundled_catalog_acquisition_owns_scratch_and_rejects_stderr(tmp_path: P
     seen_commands: list[tuple[str, ...]] = []
 
     def successful_runner(command, *, cwd, **kwargs):
-        del kwargs
+        environment = kwargs["environment"]
+        for name in ("HOME", "CODEX_HOME", "CODEX_SQLITE_HOME"):
+            directory = Path(environment[name])
+            assert directory.is_dir()
+            assert directory.is_relative_to(cwd)
         seen_commands.append(tuple(command))
         (cwd / "probe-artifact").write_text("owned", encoding="utf-8")
         return CodexProcessOutput(0, b'{"models":[]}', b"")

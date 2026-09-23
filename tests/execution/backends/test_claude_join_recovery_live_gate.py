@@ -24,6 +24,7 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
     SkillProjectionContext,
     materialize_sanitized_plugin_root,
+    write_generated_hooks_json,
 )
 from tests.conftest import production_interpreter_env
 
@@ -123,6 +124,7 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
         mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
     assert manifest_path.is_file()
+    write_generated_hooks_json(plugin)
     hooks_json = plugin / "hooks" / "hooks.json"
     assert hooks_json.read_text(encoding="utf-8") == render_hooks_json_text()
     assert (plugin / "skills" / "dry-walkthrough" / "SKILL.md").is_file()

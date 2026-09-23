@@ -338,6 +338,7 @@ def test_live_codex_interactive_managed_route_gate(
     catalog_digest = hashlib.sha256(
         (prepared.session_home / "models_cache.json").read_bytes()
     ).hexdigest()
+    assert catalog_digest == attestation.codex_catalog_digest
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(prepared.session_home))
     binding_path = resolve_binding_path(str(repository), launch_id)
     _write_managed_parent_binding(
@@ -388,11 +389,6 @@ def test_live_codex_interactive_managed_route_gate(
     stdout_path.write_bytes(result.stdout)
     stderr_path.write_bytes(result.stderr)
     assert result.returncode == 0, result.stderr[-4_000:].decode("utf-8", errors="replace")
-    assert (
-        hashlib.sha256((prepared.session_home / "models_cache.json").read_bytes()).hexdigest()
-        == catalog_digest
-    )
-
     events = _bounded_events(stdout_path)
     thread_ids = {
         str(event["thread_id"])

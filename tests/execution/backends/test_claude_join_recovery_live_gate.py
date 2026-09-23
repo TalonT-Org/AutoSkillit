@@ -14,6 +14,7 @@ import pytest
 
 from autoskillit.core import MARKETPLACE_PREFIX, SkillExecutionRole, pkg_root
 from autoskillit.execution.backends._codex_catalog import run_owned_bounded
+from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.hooks._join import OUTCOME_FAILURE, OUTCOME_SUCCESS
 from autoskillit.hooks._join_ledger import active_batch, ledger_paths
 from autoskillit.hooks._session_binding import resolve_channel_dir
@@ -122,7 +123,8 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
         mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
     assert manifest_path.is_file()
-    assert (plugin / "hooks" / "hooks.json").is_file()
+    hooks_json = plugin / "hooks" / "hooks.json"
+    assert hooks_json.read_text(encoding="utf-8") == render_hooks_json_text()
     assert (plugin / "skills" / "dry-walkthrough" / "SKILL.md").is_file()
     return manifest_path
 

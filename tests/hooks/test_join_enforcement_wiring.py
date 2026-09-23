@@ -599,7 +599,6 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
         session_id=session_id,
         case="descendant",
     )
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.delenv(MANAGED_JOIN_PARENT_ID_ENV_VAR, raising=False)
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(worktree))

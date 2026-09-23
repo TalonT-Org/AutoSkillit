@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from autoskillit.core import CODEX_MODEL_ALIASES
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 _STUB_MCP_CONFIG_CAPABLE = SimpleNamespace(
@@ -55,7 +57,7 @@ class TestCheckCodexManagedPreparation:
                 scratch_root=scratch_root,
                 deadline=deadline,
             )
-            return "gpt-5.6-sol", "high", object()
+            return CODEX_MODEL_ALIASES["sonnet"], "high", object()
 
         monkeypatch.setattr(CodexBackend, "prepare_managed_codex_catalog", prepare)
         result = _check_codex_managed_preparation(
@@ -67,7 +69,8 @@ class TestCheckCodexManagedPreparation:
 
         assert result.severity == Severity.OK
         assert result.message == (
-            "Managed Codex preparation ready for model=gpt-5.6-sol, effort=high."
+            "Managed Codex preparation ready for "
+            f"model={CODEX_MODEL_ALIASES['sonnet']}, effort=high."
         )
         assert seen["configured_model"] == "sonnet"
         assert seen["scratch_root"] == (
@@ -97,7 +100,7 @@ class TestCheckCodexManagedPreparation:
 
     @pytest.mark.parametrize(
         ("override", "expected"),
-        [(None, "sonnet"), ("gpt-5.6-sol", "gpt-5.6-sol")],
+        [(None, "sonnet"), (CODEX_MODEL_ALIASES["sonnet"], CODEX_MODEL_ALIASES["sonnet"])],
     )
     def test_doctor_registry_passes_effective_model_and_project_temp_root(
         self,

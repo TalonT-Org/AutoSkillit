@@ -10,6 +10,7 @@ import pytest
 
 import autoskillit.workspace.session_skills._materialization as session_skill_materialization
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
     ClaudeDirectoryConventions,
     ExplorationVectorApplicabilityId,
     ManagedSessionHome,
@@ -175,7 +176,7 @@ def test_managed_materialization_forwards_complete_catalog_context(
     )
     projection = project_codex_catalog(
         json.dumps(installed_catalog()).encode("utf-8"),
-        expected_model="gpt-5.6-luna",
+        expected_model=CODEX_MODEL_ALIASES["haiku"],
         expected_reasoning_effort="high",
     )
     adaptation_context = DefaultManagedJoinAttestationAuthority().issue(
@@ -183,7 +184,7 @@ def test_managed_materialization_forwards_complete_catalog_context(
         launch_context="direct",
         parent_session_id="parent-1",
         direct_tool_mode=True,
-        resolved_model="gpt-5.6-luna",
+        resolved_model=CODEX_MODEL_ALIASES["haiku"],
         resolved_reasoning_effort="high",
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
         managed_codex_catalog=projection.canonical_projected_bytes,

@@ -35,6 +35,7 @@ def _source_home(tmp_path: Path, *, include_sol: bool = True) -> tuple[Path, byt
 )
 def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     configured_model: str,
     expected_model: str,
 ) -> None:
@@ -42,7 +43,8 @@ def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
-    source_home, _ = _source_home(tmp_path)
+    source_home, raw_catalog = _source_home(tmp_path)
+    _use_bundled_catalog(monkeypatch, raw_catalog)
     context = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
         configured_model=configured_model,
@@ -164,7 +166,14 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(
     )
 
     state_root = tmp_path / "state"
-    source_home, raw_catalog = _source_home(tmp_path / "no-default")
+    source_home, _ = _source_home(tmp_path / "no-default")
+    missing_default_catalog = installed_catalog()
+    models = missing_default_catalog["models"]
+    assert isinstance(models, list)
+    sol = models[0]
+    assert isinstance(sol, dict)
+    sol.pop("default_reasoning_level")
+    raw_catalog = json.dumps(missing_default_catalog).encode("utf-8")
     _use_bundled_catalog(monkeypatch, raw_catalog)
     missing_default = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
@@ -275,6 +284,7 @@ def test_prelaunch_issuance_converts_bundled_acquisition_errors_to_refusal(
 def test_authority_atomically_caches_complete_catalog_context() -> None:
     import hashlib
 
+    from autoskillit.core import CODEX_MODEL_ALIASES
     from autoskillit.server._managed_join_attestation import (
         DefaultManagedJoinAttestationAuthority,
     )
@@ -286,7 +296,7 @@ def test_authority_atomically_caches_complete_catalog_context() -> None:
         launch_context="direct",
         parent_session_id="complete-context",
         direct_tool_mode=True,
-        resolved_model="gpt-5.6-sol",
+        resolved_model=CODEX_MODEL_ALIASES["sonnet"],
         resolved_reasoning_effort="high",
         codex_catalog_digest=hashlib.sha256(catalog).hexdigest(),
         managed_codex_catalog=catalog,

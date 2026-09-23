@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core.agent_definition import AgentDef
+from autoskillit.execution.backends._codex_catalog import CodexProcessOutput, run_owned_bounded
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._explorer_conformance import project_codex_luna_catalog
@@ -157,6 +159,25 @@ def prepare_live_codex_parent(
     )
 
 
+def _live_codex_parent_invocation(
+    *,
+    model: str,
+    prompt: str,
+    resume_thread_id: str | None,
+    extra_overrides: tuple[str, ...],
+    sandbox: str,
+) -> list[str]:
+    invocation = ["codex", "exec", "--json", "--sandbox", sandbox, "--model", model]
+    for override in extra_overrides:
+        invocation.extend(("-c", override))
+    if resume_thread_id is not None:
+        if not resume_thread_id.strip():
+            raise ValueError("resume_thread_id must be a non-empty string")
+        invocation.extend(("resume", resume_thread_id))
+    invocation.append(prompt)
+    return invocation
+
+
 def run_live_codex_parent(
     *,
     env: dict[str, str],
@@ -172,22 +193,13 @@ def run_live_codex_parent(
     sandbox: str = "read-only",
 ) -> subprocess.CompletedProcess[Any]:
     """Execute or resume the common real-Codex parent used by both live gates."""
-    invocation = [
-        "codex",
-        "exec",
-        "--json",
-        "--sandbox",
-        sandbox,
-        "--model",
-        model,
-    ]
-    for override in extra_overrides:
-        invocation.extend(("-c", override))
-    if resume_thread_id is not None:
-        if not resume_thread_id.strip():
-            raise ValueError("resume_thread_id must be a non-empty string")
-        invocation.extend(("resume", resume_thread_id))
-    invocation.append(prompt)
+    invocation = _live_codex_parent_invocation(
+        model=model,
+        prompt=prompt,
+        resume_thread_id=resume_thread_id,
+        extra_overrides=extra_overrides,
+        sandbox=sandbox,
+    )
     return subprocess.run(  # noqa: S603
         invocation,
         cwd=cwd,
@@ -197,4 +209,33 @@ def run_live_codex_parent(
         text=text,
         timeout=timeout,
         check=False,
+    )
+
+
+def run_live_codex_parent_bounded(
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    model: str,
+    prompt: str,
+    timeout: int,
+    max_output_bytes: int,
+    resume_thread_id: str | None = None,
+    extra_overrides: tuple[str, ...] = (),
+    sandbox: str = "read-only",
+) -> CodexProcessOutput:
+    """Run a live parent with owned-process cleanup and a hard output ceiling."""
+    invocation = _live_codex_parent_invocation(
+        model=model,
+        prompt=prompt,
+        resume_thread_id=resume_thread_id,
+        extra_overrides=extra_overrides,
+        sandbox=sandbox,
+    )
+    return run_owned_bounded(
+        invocation,
+        cwd=cwd,
+        environment=env,
+        deadline=time.monotonic() + timeout,
+        stdout_limit=max_output_bytes,
     )

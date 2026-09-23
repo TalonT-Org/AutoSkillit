@@ -30,6 +30,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    _RECOVERY_DECLARE_TOOL_PARTS,
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
@@ -53,12 +54,6 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
-)
-_RECOVERY_DECLARE_TOOL_PARTS = frozenset(
-    {
-        ("mcp", "autoskillit", "declare_join_batch"),
-        ("mcp", "plugin_autoskillit_autoskillit", "declare_join_batch"),
-    }
 )
 
 
@@ -85,6 +80,18 @@ def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] |
     if not session_id or not payload_cwd:
         return None
     if is_authenticated_top_level_cook(data, payload_cwd, session_id):
+        scope = session_managed_scope(payload_cwd, session_id)
+        managed_parent_id, managed_leaf_id = scope or ("", "")
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "status": "cook_bypass",
+                "session_id": session_id,
+                "managed_parent_id": managed_parent_id,
+                "managed_leaf_id": managed_leaf_id,
+            },
+            caller="join_followup_guard",
+        )
         return None
     if not session_join_required(payload_cwd, session_id):
         return None
@@ -166,6 +173,17 @@ def main() -> None:
     if tuple(
         tool_name.split("__")
     ) in _RECOVERY_DECLARE_TOOL_PARTS and is_terminal_non_success_batch(batch):
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "status": "recovery_declaration_allowed",
+                "session_id": session_id,
+                "top_level_parent": top_level_parent,
+                "join_batch_id": batch.get("join_batch_id", ""),
+                "tool_name": tool_name,
+            },
+            caller="join_followup_guard",
+        )
         sys.exit(0)
 
     write_join_diagnostic(

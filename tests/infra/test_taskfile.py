@@ -259,6 +259,37 @@ class TestTaskfile:
         assert 'AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE:-0}" == "1"' in local_commands
         assert "task test-smoke-codex" in local_commands
 
+    def test_native_join_live_gate_is_exact_non_skippable_pair(self) -> None:
+        task = self._load()["tasks"]["test-smoke-native-join-live-gates"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert set(re.findall(r"tests/[\w/-]+\.py", commands)) == {
+            "tests/execution/backends/test_codex_managed_route_live_gate.py",
+            "tests/execution/backends/test_claude_join_recovery_live_gate.py",
+        }
+        assert (
+            commands.count("tests/execution/backends/test_codex_managed_route_live_gate.py") == 1
+        )
+        assert (
+            commands.count("tests/execution/backends/test_claude_join_recovery_live_gate.py") == 1
+        )
+        assert "len(cases) != 2 or skipped" in commands
+        assert "--junitxml" in commands
+        assert "test-local-gate" not in commands
+
+    def test_native_join_live_gate_forwards_opt_ins_and_checks_auth(self) -> None:
+        task = self._load()["tasks"]["test-smoke-native-join-live-gates"]
+        assert task["env"]["AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE"] == "1"
+        assert task["env"]["AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_LIVE"] == "1"
+        preconditions = "\n".join(str(item) for item in task["preconditions"])
+        assert "command -v codex" in preconditions
+        assert "command -v claude" in preconditions
+        assert "CODEX_API_KEY" in preconditions
+        assert "OPENAI_API_KEY" in preconditions
+        assert ".codex/auth.json" in preconditions
+        assert "ANTHROPIC_API_KEY" in preconditions
+        assert "CLAUDE_CODE_OAUTH_TOKEN" in preconditions
+        assert ".claude/.credentials.json" in preconditions
+
     def test_output_budget_e2e_target_selects_credentialed_smoke_test(self) -> None:
         data = self._load()
         task = data["tasks"]["test-smoke-output-budget-e2e"]

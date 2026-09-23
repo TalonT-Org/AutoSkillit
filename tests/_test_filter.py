@@ -1443,6 +1443,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
             "server/test_claude_explorer_live_gate.py",
+            "execution/backends/test_claude_join_recovery_live_gate.py",
             # infra/ narrowed to 7 files
             "infra/test_adr_runtime_guard_coverage.py",
             "infra/test_command_guard_completeness.py",

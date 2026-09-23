@@ -89,6 +89,18 @@ def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] |
     if not sid or not payload_cwd:
         return None
     if is_authenticated_top_level_cook(data, payload_cwd, sid):
+        scope = session_managed_scope(payload_cwd, sid)
+        managed_parent_id, managed_leaf_id = scope or ("", "")
+        write_join_diagnostic(
+            {
+                "gate": "join_settle_guard",
+                "status": "cook_bypass",
+                "session_id": sid,
+                "managed_parent_id": managed_parent_id,
+                "managed_leaf_id": managed_leaf_id,
+            },
+            caller="join_settle_guard",
+        )
         return None
     if not session_join_required(payload_cwd, sid):
         return None

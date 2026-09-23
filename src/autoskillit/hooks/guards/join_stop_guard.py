@@ -96,6 +96,18 @@ def main() -> None:
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if is_authenticated_top_level_cook(data, payload_cwd, sid):
+        scope = session_managed_scope(payload_cwd, sid)
+        managed_parent_id, managed_leaf_id = scope or ("", "")
+        write_join_diagnostic(
+            {
+                "gate": "join_stop_guard",
+                "status": "cook_bypass",
+                "session_id": sid,
+                "managed_parent_id": managed_parent_id,
+                "managed_leaf_id": managed_leaf_id,
+            },
+            caller="join_stop_guard",
+        )
         sys.exit(0)
     admission = session_join_admission(payload_cwd, sid)
     if not admission.enforce or admission.binding_dict is None:

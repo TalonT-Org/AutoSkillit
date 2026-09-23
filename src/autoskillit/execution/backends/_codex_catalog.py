@@ -292,9 +292,14 @@ def resolve_codex_catalog_effort(raw: bytes, *, expected_model: str) -> str:
     if not isinstance(effort, str) or not effort:
         raise ValueError(f"{expected_model} has no default reasoning level")
     levels = model.get("supported_reasoning_levels")
-    if not isinstance(levels, list) or effort not in {
-        entry.get("effort") for entry in levels if isinstance(entry, dict)
-    }:
+    if (
+        not isinstance(levels, list)
+        or not all(
+            isinstance(entry, dict) and isinstance(entry.get("effort"), str) and entry["effort"]
+            for entry in levels
+        )
+        or not any(entry["effort"] == effort for entry in levels)
+    ):
         raise ValueError(f"{expected_model} default reasoning level is not supported")
     return effort
 

@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+from autoskillit.execution.backends._codex_catalog import (
+    project_codex_catalog,
+    resolve_codex_catalog_effort,
+)
 from tests.execution.backends._codex_fixtures import (
     installed_catalog,
     managed_selection_catalog,
@@ -200,6 +203,19 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
             expected_model=_READER_MODEL,
             expected_reasoning_effort=_READER_REASONING_EFFORT,
         )
+
+
+@pytest.mark.parametrize("malformed_effort", [[], {}])
+def test_managed_effort_refuses_unhashable_catalog_level(malformed_effort: object) -> None:
+    catalog = managed_selection_catalog()
+    models = catalog["models"]
+    assert isinstance(models, list)
+    model = models[0]
+    assert isinstance(model, dict)
+    model["supported_reasoning_levels"].insert(0, {"effort": malformed_effort})
+
+    with pytest.raises(ValueError, match="default reasoning level is not supported"):
+        resolve_codex_catalog_effort(_catalog_bytes(catalog), expected_model="gpt-5.6-sol")
 
 
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:

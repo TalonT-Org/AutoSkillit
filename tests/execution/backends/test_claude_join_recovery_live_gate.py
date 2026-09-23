@@ -159,10 +159,13 @@ def _configure_mcp(plugin: Path, project: Path, log_dir: Path) -> None:
 
 def _prompt(session_id: str, plan: Path, missing_agent: str) -> str:
     return f"""
-Invoke the projected dry-walkthrough skill with plan_path {plan}. Then call open_kitchen with no
-arguments and call the AutoSkillit declare_join_batch tool with skill_name "dry-walkthrough",
+/dry-walkthrough {plan}
+
+After the dry-walkthrough skill loads, call open_kitchen with no arguments and call the AutoSkillit
+declare_join_batch tool with skill_name "dry-walkthrough",
 session_id "{session_id}",
-top_level_parent "top_level", and exactly one assignment label "replacement-worker".
+and exactly one assignment label "replacement-worker". Omit top_level_parent so the server uses
+the binding-authoritative parent.
 Call the Agent tool with subagent_type "{missing_agent}" and a short prompt. It must fail because
 that agent type does not exist. After the failure, call declare_join_batch again with the exact
 same session, parent, skill, and one assignment label. Attempt to end your response with
@@ -232,6 +235,7 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     rows = _json_rows(completed.stdout)
     rendered = completed.stdout.decode("utf-8", errors="replace")
+    assert "skill_load_post_hook" in rendered or "UserPromptExpansion" in rendered
     calls = _agent_calls(rows)
     assert len(calls) == 2, rendered[-8_000:]
     missing_call = next(

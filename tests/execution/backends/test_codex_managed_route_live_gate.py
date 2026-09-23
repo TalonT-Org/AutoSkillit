@@ -264,13 +264,16 @@ def _run_denial_then_release(
 @_skip_unless_live_gate
 @pytest.mark.smoke
 def test_live_codex_interactive_managed_route_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Exercise real MCP results and real Stop decisions under one join identity."""
     from autoskillit.execution.backends.codex import CodexBackend
 
-    repository = tmp_path / "repository"
-    repository.mkdir()
+    repository = Path.cwd() / ".autoskillit" / "temp" / f"codex-managed-live-{uuid4().hex}"
+    repository.mkdir(parents=True)
+    request.addfinalizer(lambda: shutil.rmtree(repository, ignore_errors=True))
     (repository / ".autoskillit" / "temp").mkdir(parents=True)
     (repository / "README.md").write_text("managed route live gate\n", encoding="utf-8")
     source_auth = _SOURCE_AUTH if _SOURCE_AUTH.is_file() else tmp_path / "missing-auth.json"

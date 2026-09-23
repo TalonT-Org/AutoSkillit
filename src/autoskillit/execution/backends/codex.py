@@ -18,6 +18,9 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
     CODEX_VALID_MODEL_IDS,
+    RETIRED_CODEX_MODEL_BASE_IDS,
+    RETIRED_CODEX_MODEL_PREFIXES,
+    RETIRED_CODEX_MODEL_SUFFIXES,
     BackendCapabilities,
     BackendConventions,
     CapabilityNotSupportedError,
@@ -349,7 +352,11 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         )
 
         base = strip_context_window_suffix(model)
-        if base == "gpt-5.6" or base.startswith("gpt-5.6-") or base.endswith("-terra"):
+        if (
+            base in RETIRED_CODEX_MODEL_BASE_IDS
+            or base.startswith(RETIRED_CODEX_MODEL_PREFIXES)
+            or base.endswith(RETIRED_CODEX_MODEL_SUFFIXES)
+        ):
             raise ValueError(f"Retired Codex model: {base}")
         return CODEX_MODEL_ALIASES.get(base, base)
 

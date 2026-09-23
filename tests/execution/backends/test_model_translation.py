@@ -20,7 +20,7 @@ from tests.execution.backends._generated_home_backend import (
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
 _CODEX_SKILL_ADD_DIRS = codex_skill_add_dirs("/repo")
 CodexBackend = GeneratedHomeCodexBackend

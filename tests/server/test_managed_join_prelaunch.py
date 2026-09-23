@@ -9,7 +9,7 @@ import pytest
 
 from tests.execution.backends._codex_fixtures import installed_catalog
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.model_contract]
 
 
 def _source_home(tmp_path: Path, *, include_sol: bool = True) -> tuple[Path, bytes]:

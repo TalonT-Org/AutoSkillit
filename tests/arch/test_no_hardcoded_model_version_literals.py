@@ -6,6 +6,11 @@ tests that hardcode the same wrong value pass silently.
 
 Passthrough tests (e.g., translate_model("o3") == "o3") are NOT flagged because
 they test native model IDs, not alias-resolved values.
+
+Tests that legitimately pin model-version literals (catalog fixtures, alias
+round-trip tests) opt in via ``@pytest.mark.model_contract``. The allowlist is
+discovered at pytest collection time, so adding a new model-contract test does
+not require updating this guard.
 """
 
 from __future__ import annotations
@@ -16,31 +21,43 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small, pytest.mark.model_contract]
 
 _TESTS_ROOT = Path(__file__).parent.parent
 _MODEL_VERSION_RE = re.compile(r"gpt-[0-9]+(?:\.[0-9]+)?(?:-[a-z]+)?")
-_MODEL_CONTRACT_TESTS = frozenset(
-    {
-        "execution/test_model_alias_registry.py",
-        "execution/test_model_backend_launch_contract.py",
-        "execution/backends/test_model_translation.py",
-        "execution/backends/test_codex_catalog.py",
-        "execution/backends/_codex_fixtures.py",
-        "server/test_managed_join_prelaunch.py",
-    }
-)
 
 
-def test_gpt_version_literals_are_limited_to_model_contract_tests() -> None:
+def _is_pytest_collected(path: Path) -> bool:
+    """Match pytest's default collection pattern (test_*.py)."""
+    return path.name.startswith("test_") and path.suffix == ".py"
+
+
+def _collect_marked_model_contract_paths(request: pytest.FixtureRequest) -> set[Path]:
+    """Return absolute paths of every test file containing a @pytest.mark.model_contract test."""
+    marked: set[Path] = set()
+    for item in request.session.items:
+        if item.get_closest_marker("model_contract") is None:
+            continue
+        fspath = getattr(item, "fspath", None) or getattr(item, "path", None)
+        if fspath is None:
+            continue
+        marked.add(Path(str(fspath)).resolve())
+    return marked
+
+
+def test_gpt_version_literals_are_limited_to_model_contract_tests(
+    request: pytest.FixtureRequest,
+) -> None:
+    allowed_paths = _collect_marked_model_contract_paths(request)
     violations: dict[str, list[str]] = {}
     for path in _TESTS_ROOT.rglob("*.py"):
-        relative = str(path.relative_to(_TESTS_ROOT))
-        if relative in _MODEL_CONTRACT_TESTS:
+        if not _is_pytest_collected(path):
+            continue
+        if path.resolve() in allowed_paths:
             continue
         literals = set(_MODEL_VERSION_RE.findall(path.read_text()))
         if literals:
-            violations[relative] = sorted(literals)
+            violations[str(path.relative_to(_TESTS_ROOT))] = sorted(literals)
     assert not violations, f"Unrelated tests pin GPT model versions: {violations}"
 
 

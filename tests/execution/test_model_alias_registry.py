@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
 VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "claude-opus-5", "haiku"})
 

@@ -11,7 +11,7 @@ import pytest
 from autoskillit.execution.backends._codex_catalog import project_codex_catalog
 from tests.execution.backends._codex_fixtures import installed_catalog
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium, pytest.mark.model_contract]
 
 _READER_MODEL = "gpt-6-luna"
 _READER_REASONING_EFFORT = "xhigh"

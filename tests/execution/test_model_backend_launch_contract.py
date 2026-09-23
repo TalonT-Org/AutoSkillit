@@ -19,7 +19,7 @@ from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
 from .conftest import _backend_authority, _launch_inputs, _mock_backend
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
 _CODEX_NATIVE_MODELS = ("gpt-6-luna", "gpt-6-sol")
 _MODEL_KEY_PATH = "model.recipe_overrides.implementation.review_pr"

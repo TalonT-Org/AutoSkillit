@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tracemalloc
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -374,6 +375,58 @@ def test_archive_streams_complete_lines_and_checkpoints_skipped_progress(
         handle.write(b"\n")
     resumed = list(iter_report_walk(root, watermark))
     assert [item.source_id for item in resumed if item.kind == "session"] == ["pending"]
+
+
+def test_peak_memory_stays_with_one_record_and_transcript(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    root.mkdir()
+    transcript = tmp_path / "parent.jsonl"
+    transcript.write_bytes(
+        _json_line(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "t" * 32_768}]},
+            }
+        )
+    )
+    parent_subagents = tmp_path / "parent" / "subagents"
+    parent_subagents.mkdir(parents=True)
+    (parent_subagents / "agent-child.jsonl").write_bytes(transcript.read_bytes())
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [_session("retained", "retained-id", claude_code_log=str(transcript))],
+    )
+
+    archive = root / "sessions-archive.jsonl"
+    active = root / "otlp.jsonl"
+    with archive.open("wb") as archive_file, active.open("wb") as otlp_file:
+        for index in range(96):
+            archive_file.write(
+                _json_line(
+                    {
+                        **_session(
+                            f"archived-{index}", f"sid-{index}", claude_code_log=str(transcript)
+                        ),
+                        "padding": "a" * 32_768,
+                    }
+                )
+            )
+            otlp_file.write(_json_line(_otlp(f"otlp-{index}", payload={"blob": "o" * 32_768})))
+
+    # The retained projection has one row. At a yield the walk may also hold one
+    # session summary, its subagent paths, one transcript and merged turns, and
+    # the current source record; the multi-megabyte streams must not accumulate.
+    assert archive.stat().st_size + active.stat().st_size > 6_000_000
+    tracemalloc.start()
+    try:
+        kinds = Counter(item.kind for item in iter_report_walk(root))
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert kinds["otlp"] == 96
+    assert kinds["session"] == 97
+    assert peak < 1_000_000
 
 
 def test_removal_only_snapshot_commits_checkpoint_and_reader_accepts_final_line(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TokenMeasure, get_logger
@@ -75,6 +75,25 @@ def _unique_count_attribute(attributes: list[object], *keys: str) -> int | None:
     return None
 
 
+def _claude_log_records(resource_logs: list[object]) -> Iterator[object]:
+    for resource_log in resource_logs:
+        if not isinstance(resource_log, dict):
+            continue
+        scope_logs = resource_log.get("scopeLogs")
+        if not isinstance(scope_logs, list):
+            continue
+        for scope_log in scope_logs:
+            if not isinstance(scope_log, dict):
+                continue
+            scope = scope_log.get("scope")
+            scope_name = scope.get("name") if isinstance(scope, dict) else None
+            if scope_name != "com.anthropic.claude_code.events":
+                continue
+            records = scope_log.get("logRecords")
+            if isinstance(records, list):
+                yield from records
+
+
 def project_token_observations(signal: str, payload: object) -> tuple[TokenObservation, ...]:
     """Project only request-correlated parent accounting from native Claude logs.
 
@@ -88,65 +107,47 @@ def project_token_observations(signal: str, payload: object) -> tuple[TokenObser
     if not isinstance(resource_logs, list):
         return ()
     observations: list[TokenObservation] = []
-    for resource_log in resource_logs:
-        if not isinstance(resource_log, dict):
+    for record in _claude_log_records(resource_logs):
+        attributes = record_attributes(record)
+        if (
+            attributes is None
+            or unique_string_attribute(attributes, "event.name") != "api_request"
+        ):
             continue
-        scope_logs = resource_log.get("scopeLogs")
-        if not isinstance(scope_logs, list):
+        if unique_string_attribute(attributes, "query_source") != "sdk":
             continue
-        for scope_log in scope_logs:
-            if not isinstance(scope_log, dict):
-                continue
-            scope = scope_log.get("scope")
-            scope_name = scope.get("name") if isinstance(scope, dict) else None
-            # Codex 0.153.4 logs carry no stable request ID and no conversation ID
-            # — full architectural rationale in docs/developer/diagnostics.md.
-            if scope_name != "com.anthropic.claude_code.events":
-                continue
-            records = scope_log.get("logRecords")
-            if not isinstance(records, list):
-                continue
-            for record in records:
-                attributes = record_attributes(record)
-                if (
-                    attributes is None
-                    or unique_string_attribute(attributes, "event.name") != "api_request"
-                ):
-                    continue
-                if unique_string_attribute(attributes, "query_source") != "sdk":
-                    continue
-                if has_attribute(attributes, "agent.name"):
-                    continue
-                session_id = unique_string_attribute(attributes, "session.id")
-                request_id = unique_string_attribute(attributes, "request_id")
-                if not session_id or not request_id:
-                    continue
-                if len(observations) >= _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD:
-                    logger.debug(
-                        "token_observations_overflow",
-                        extra={
-                            "scope": scope_name,
-                            "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
-                            "count": len(observations),
-                        },
-                    )
-                    return tuple(observations)
-                observations.append(
-                    (
-                        session_id,
-                        request_id,
-                        {
-                            "input_tokens": _unique_count_attribute(attributes, "input_tokens"),
-                            "output_tokens": _unique_count_attribute(attributes, "output_tokens"),
-                            "cache_read_tokens": _unique_count_attribute(
-                                attributes, "cache_read_tokens", "cacheRead"
-                            ),
-                            "cache_write_tokens": _unique_count_attribute(
-                                attributes, "cache_creation_tokens", "cacheCreation"
-                            ),
-                        },
-                    )
-                )
+        if has_attribute(attributes, "agent.name"):
+            continue
+        session_id = unique_string_attribute(attributes, "session.id")
+        request_id = unique_string_attribute(attributes, "request_id")
+        if not session_id or not request_id:
+            continue
+        if len(observations) >= _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD:
+            logger.debug(
+                "token_observations_overflow",
+                extra={
+                    "scope": "com.anthropic.claude_code.events",
+                    "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
+                    "count": len(observations),
+                },
+            )
+            return tuple(observations)
+        observations.append(
+            (
+                session_id,
+                request_id,
+                {
+                    "input_tokens": _unique_count_attribute(attributes, "input_tokens"),
+                    "output_tokens": _unique_count_attribute(attributes, "output_tokens"),
+                    "cache_read_tokens": _unique_count_attribute(
+                        attributes, "cache_read_tokens", "cacheRead"
+                    ),
+                    "cache_write_tokens": _unique_count_attribute(
+                        attributes, "cache_creation_tokens", "cacheCreation"
+                    ),
+                },
+            )
+        )
     return tuple(observations)
 
 

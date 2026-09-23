@@ -544,6 +544,42 @@ class LocalOtlpSink:
             self._active_handlers -= 1
             self._condition.notify_all()
 
+    def _retain_model_observations(self, observations: tuple[_ModelObservation, ...]) -> None:
+        for session_id, parent_model, outcome in observations:
+            self._acceptance_ordinal += 1
+            ordinal = self._acceptance_ordinal
+            retained = self._model_evidence.get(session_id)
+            if retained is None:
+                if len(self._model_evidence) >= _MODEL_EVIDENCE_SESSION_CAPACITY:
+                    continue
+                retained = (None, [])
+                self._model_evidence[session_id] = retained
+            parent, outcomes = retained
+            if parent_model and parent is None:
+                parent = (ordinal, parent_model)
+                self._model_evidence[session_id] = (parent, outcomes)
+            if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
+                outcomes.append((ordinal, outcome))
+
+    def _retain_token_observations(
+        self, token_observations: tuple[_TokenObservation, ...]
+    ) -> None:
+        for session_id, request_id, usage in token_observations:
+            requests = self._token_evidence.get(session_id)
+            if requests is None:
+                if len(self._token_evidence) >= _TOKEN_EVIDENCE_SESSION_CAPACITY:
+                    self._token_evidence_overflow_sessions.add(session_id)
+                    continue
+                requests = {}
+                self._token_evidence[session_id] = requests
+            if request_id in requests:
+                if requests[request_id] != usage:
+                    requests[request_id] = None
+            elif len(requests) < _TOKEN_EVIDENCE_REQUEST_CAPACITY:
+                requests[request_id] = usage
+            else:
+                self._token_evidence_overflow_sessions.add(session_id)
+
     def _enqueue(
         self,
         line: bytes,
@@ -560,40 +596,9 @@ class LocalOtlpSink:
             except queue.Full:
                 self._counters["dropped_queue_full"] += 1
                 return "queue_full"
-            for session_id, parent_model, outcome in observations:
-                self._acceptance_ordinal += 1
-                ordinal = self._acceptance_ordinal
-                retained = self._model_evidence.get(session_id)
-                if retained is None:
-                    if len(self._model_evidence) >= _MODEL_EVIDENCE_SESSION_CAPACITY:
-                        continue
-                    retained = (None, [])
-                    self._model_evidence[session_id] = retained
-                parent, outcomes = retained
-                if parent_model and parent is None:
-                    parent = (ordinal, parent_model)
-                    self._model_evidence[session_id] = (parent, outcomes)
-                if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
-                    outcomes.append((ordinal, outcome))
-            # project_token_observations returns an empty tuple when the
-            # payload is not a logs signal or carries no valid observations;
-            # see _otlp_tokens.py:78. Iterating the empty tuple is a no-op,
-            # so no explicit None-handling branch is needed.
-            for session_id, request_id, usage in token_observations:
-                requests = self._token_evidence.get(session_id)
-                if requests is None:
-                    if len(self._token_evidence) >= _TOKEN_EVIDENCE_SESSION_CAPACITY:
-                        self._token_evidence_overflow_sessions.add(session_id)
-                        continue
-                    requests = {}
-                    self._token_evidence[session_id] = requests
-                if request_id in requests:
-                    if requests[request_id] != usage:
-                        requests[request_id] = None
-                elif len(requests) < _TOKEN_EVIDENCE_REQUEST_CAPACITY:
-                    requests[request_id] = usage
-                else:
-                    self._token_evidence_overflow_sessions.add(session_id)
+            self._retain_model_observations(observations)
+            # _token_observations() returns an empty tuple when no observations exist.
+            self._retain_token_observations(token_observations)
             return "accepted"
 
     def token_usage_for(

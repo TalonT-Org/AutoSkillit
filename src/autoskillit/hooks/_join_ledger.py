@@ -116,6 +116,27 @@ def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
 
 
+def _validate_expected_active_predecessor(
+    active: Mapping[str, object] | None,
+    expected_active_predecessor_id: str | None,
+) -> None:
+    if expected_active_predecessor_id is None:
+        return
+    if (
+        active is not None
+        and active.get("join_batch_id") == expected_active_predecessor_id
+        and active.get("wave_outcome") in _NON_SUCCESS_WAVE_OUTCOMES
+    ):
+        return
+    actual_id = active.get("join_batch_id") if active is not None else None
+    actual_outcome = active.get("wave_outcome") if active is not None else None
+    raise JoinLedgerError(
+        "active recovery predecessor changed: "
+        f"expected {expected_active_predecessor_id!r}, found {actual_id!r} "
+        f"with outcome {actual_outcome!r}"
+    )
+
+
 def open_or_replay(
     flag_dir: Path,
     *,
@@ -184,18 +205,7 @@ def open_or_replay(
                 normalized_parent["request_session_id"],
                 normalized_parent["managed_parent_id"],
             )
-            if expected_active_predecessor_id is not None and (
-                active is None
-                or active.get("join_batch_id") != expected_active_predecessor_id
-                or active.get("wave_outcome") not in _NON_SUCCESS_WAVE_OUTCOMES
-            ):
-                actual_id = active.get("join_batch_id") if active is not None else None
-                actual_outcome = active.get("wave_outcome") if active is not None else None
-                raise JoinLedgerError(
-                    "active recovery predecessor changed: "
-                    f"expected {expected_active_predecessor_id!r}, found {actual_id!r} "
-                    f"with outcome {actual_outcome!r}"
-                )
+            _validate_expected_active_predecessor(active, expected_active_predecessor_id)
             if active is not None and active.get("wave_outcome") == WAVE_PENDING:
                 raise JoinLedgerError(
                     "another wave is already open for "

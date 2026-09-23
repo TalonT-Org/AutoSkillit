@@ -42,7 +42,8 @@ def _admit_join_binding(
     channel_dir: Path,
     session_id: str,
     normalized_skill_name: str,
-) -> tuple[SessionBinding, LoadedSkillEntry] | dict[str, object]:
+    top_level_parent: str | None,
+) -> tuple[SessionBinding, LoadedSkillEntry, str] | dict[str, object]:
     """Validate a join-bearing loaded entry for the requested session."""
     admission = admit_join(binding_path, session_id=session_id, skill_name=normalized_skill_name)
     if admission.outcome is JoinAdmissionOutcome.NO_BINDING:
@@ -89,7 +90,98 @@ def _admit_join_binding(
             "error": (f"declare_join_batch: skill {normalized_skill_name!r} is not join-bearing"),
         }
     assert admission.binding is not None and admission.entry is not None
-    return admission.binding, admission.entry
+    parent = admission.binding.managed_parent_id
+    if not parent:
+        return {
+            "success": False,
+            "error": "declare_join_batch requires a non-empty binding managed_parent_id",
+        }
+    if top_level_parent is not None and top_level_parent != parent:
+        return {
+            "success": False,
+            "error": (
+                "declare_join_batch top_level_parent mismatch: "
+                f"requested {top_level_parent!r}, binding records {parent!r}"
+            ),
+        }
+    return admission.binding, admission.entry, parent
+
+
+def _binding_authoritative_recovery(
+    channel_dir: Path,
+    binding: SessionBinding,
+    session_id: str,
+    parent: str,
+    normalized_skill_name: str,
+) -> tuple[str, str | None] | dict[str, object]:
+    artifact_digest = binding.artifact_digest
+    if not artifact_digest:
+        return {
+            "success": False,
+            "error": "declare_join_batch requires a non-empty top-level artifact_digest",
+        }
+    predecessor = active_batch(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+    )
+    if not is_terminal_non_success_batch(predecessor):
+        return artifact_digest, None
+
+    assert predecessor is not None
+    predecessor_id = predecessor.get("join_batch_id")
+    if not isinstance(predecessor_id, str) or not predecessor_id:
+        return {
+            "success": False,
+            "error": "declare_join_batch recovery predecessor has no valid join_batch_id",
+        }
+    if predecessor.get("managed_parent_id") != parent:
+        return {
+            "success": False,
+            "error": "declare_join_batch recovery predecessor managed parent mismatch",
+        }
+    predecessor_skill = predecessor.get("skill_name")
+    if (
+        not isinstance(predecessor_skill, str)
+        or normalize_skill_name(predecessor_skill) != normalized_skill_name
+    ):
+        return {
+            "success": False,
+            "error": "declare_join_batch recovery predecessor skill mismatch",
+        }
+    if predecessor.get("source_artifact_digest") != artifact_digest:
+        return {
+            "success": False,
+            "error": "declare_join_batch recovery predecessor artifact digest mismatch",
+        }
+    return artifact_digest, predecessor_id
+
+
+def _declared_join_diagnostic(
+    *,
+    session_id: str,
+    parent: str,
+    normalized_skill_name: str,
+    batch: dict[str, object],
+    expected_predecessor_id: str | None,
+) -> dict[str, object]:
+    diagnostic: dict[str, object] = {
+        "gate": "declare_join_batch",
+        "session_id": session_id,
+        "top_level_parent": parent,
+        "join_batch_id": batch.get("join_batch_id", ""),
+        "skill_name": normalized_skill_name,
+        "status": "declared",
+    }
+    if expected_predecessor_id is not None:
+        diagnostic.update(
+            {
+                "status": "replacement_batch",
+                "original_join_batch_id": expected_predecessor_id,
+                "replacement_join_batch_id": batch.get("join_batch_id", ""),
+            }
+        )
+    return diagnostic
 
 
 def _declare_join_batch_handler(
@@ -119,24 +211,11 @@ def _declare_join_batch_handler(
         channel_dir,
         session_id,
         normalized_skill_name,
+        top_level_parent,
     )
     if isinstance(admission, dict):
         return admission
-    binding, selected_entry = admission
-    parent = binding.managed_parent_id
-    if not parent:
-        return {
-            "success": False,
-            "error": "declare_join_batch requires a non-empty binding managed_parent_id",
-        }
-    if top_level_parent is not None and top_level_parent != parent:
-        return {
-            "success": False,
-            "error": (
-                "declare_join_batch top_level_parent mismatch: "
-                f"requested {top_level_parent!r}, binding records {parent!r}"
-            ),
-        }
+    binding, selected_entry, parent = admission
     backend_name = (
         os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "claude-code").strip() or "claude-code"
     )
@@ -174,46 +253,16 @@ def _declare_join_batch_handler(
             ),
         }
 
-    artifact_digest = binding.artifact_digest
-    if not artifact_digest:
-        return {
-            "success": False,
-            "error": "declare_join_batch requires a non-empty top-level artifact_digest",
-        }
-    predecessor = active_batch(
+    recovery = _binding_authoritative_recovery(
         channel_dir,
-        session_id=session_id,
-        top_level_parent=parent,
+        binding,
+        session_id,
+        parent,
+        normalized_skill_name,
     )
-    expected_predecessor_id: str | None = None
-    if is_terminal_non_success_batch(predecessor):
-        assert predecessor is not None
-        predecessor_id = predecessor.get("join_batch_id")
-        if not isinstance(predecessor_id, str) or not predecessor_id:
-            return {
-                "success": False,
-                "error": "declare_join_batch recovery predecessor has no valid join_batch_id",
-            }
-        if predecessor.get("managed_parent_id") != parent:
-            return {
-                "success": False,
-                "error": "declare_join_batch recovery predecessor managed parent mismatch",
-            }
-        predecessor_skill = predecessor.get("skill_name")
-        if (
-            not isinstance(predecessor_skill, str)
-            or normalize_skill_name(predecessor_skill) != normalized_skill_name
-        ):
-            return {
-                "success": False,
-                "error": "declare_join_batch recovery predecessor skill mismatch",
-            }
-        if predecessor.get("source_artifact_digest") != artifact_digest:
-            return {
-                "success": False,
-                "error": "declare_join_batch recovery predecessor artifact digest mismatch",
-            }
-        expected_predecessor_id = predecessor_id
+    if isinstance(recovery, dict):
+        return recovery
+    artifact_digest, expected_predecessor_id = recovery
     try:
         batch = declare_batch(
             channel_dir,
@@ -235,23 +284,15 @@ def _declare_join_batch_handler(
             }
         )
         return {"success": False, "error": str(exc)}
-    diagnostic = {
-        "gate": "declare_join_batch",
-        "session_id": session_id,
-        "top_level_parent": parent,
-        "join_batch_id": batch.get("join_batch_id", ""),
-        "skill_name": normalized_skill_name,
-        "status": "declared",
-    }
-    if expected_predecessor_id is not None:
-        diagnostic.update(
-            {
-                "status": "replacement_batch",
-                "original_join_batch_id": expected_predecessor_id,
-                "replacement_join_batch_id": batch.get("join_batch_id", ""),
-            }
+    _emit_join_diagnostic(
+        _declared_join_diagnostic(
+            session_id=session_id,
+            parent=parent,
+            normalized_skill_name=normalized_skill_name,
+            batch=batch,
+            expected_predecessor_id=expected_predecessor_id,
         )
-    _emit_join_diagnostic(diagnostic)
+    )
     return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
 
 

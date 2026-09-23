@@ -38,7 +38,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    is_authenticated_top_level_cook,
+    record_cook_join_bypass,
     resolve_binding_session_id,
     session_join_required,
     session_managed_codex_route,
@@ -79,19 +79,7 @@ def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] |
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if not session_id or not payload_cwd:
         return None
-    if is_authenticated_top_level_cook(data, payload_cwd, session_id):
-        scope = session_managed_scope(payload_cwd, session_id)
-        managed_parent_id, managed_leaf_id = scope or ("", "")
-        write_join_diagnostic(
-            {
-                "gate": "join_followup_guard",
-                "status": "cook_bypass",
-                "session_id": session_id,
-                "managed_parent_id": managed_parent_id,
-                "managed_leaf_id": managed_leaf_id,
-            },
-            caller="join_followup_guard",
-        )
+    if record_cook_join_bypass(data, payload_cwd, session_id, gate="join_followup_guard"):
         return None
     if not session_join_required(payload_cwd, session_id):
         return None

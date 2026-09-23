@@ -676,6 +676,27 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     return (parent, leaf)
 
 
+def record_cook_join_bypass(
+    payload: dict[str, object], payload_cwd: str, session_id: str, *, gate: str
+) -> bool:
+    """Record the shared join-guard bypass for an authenticated cook session."""
+    if not is_authenticated_top_level_cook(payload, payload_cwd, session_id):
+        return False
+    scope = session_managed_scope(payload_cwd, session_id)
+    managed_parent_id, managed_leaf_id = scope or ("", "")
+    write_join_diagnostic(
+        {
+            "gate": gate,
+            "status": "cook_bypass",
+            "session_id": session_id,
+            "managed_parent_id": managed_parent_id,
+            "managed_leaf_id": managed_leaf_id,
+        },
+        caller=gate,
+    )
+    return True
+
+
 def session_managed_codex_route(
     payload_cwd: str,
     session_id: str,

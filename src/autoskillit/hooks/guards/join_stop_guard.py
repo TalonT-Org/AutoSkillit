@@ -40,7 +40,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    is_authenticated_top_level_cook,
+    record_cook_join_bypass,
     resolve_binding_session_id,
     session_join_admission,
     session_managed_codex_route,
@@ -95,19 +95,7 @@ def main() -> None:
     data, sid = _read_stop_payload()
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if is_authenticated_top_level_cook(data, payload_cwd, sid):
-        scope = session_managed_scope(payload_cwd, sid)
-        managed_parent_id, managed_leaf_id = scope or ("", "")
-        write_join_diagnostic(
-            {
-                "gate": "join_stop_guard",
-                "status": "cook_bypass",
-                "session_id": sid,
-                "managed_parent_id": managed_parent_id,
-                "managed_leaf_id": managed_leaf_id,
-            },
-            caller="join_stop_guard",
-        )
+    if record_cook_join_bypass(data, payload_cwd, sid, gate="join_stop_guard"):
         sys.exit(0)
     admission = session_join_admission(payload_cwd, sid)
     if not admission.enforce or admission.binding_dict is None:

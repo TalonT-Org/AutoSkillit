@@ -292,7 +292,6 @@ def _run_denial_then_release(
 
 
 @_skip_unless_live_gate
-@pytest.mark.smoke
 @pytest.mark.parametrize("scenario", ("cook", "batch"))
 def test_live_codex_interactive_managed_route_gate(
     tmp_path: Path,

@@ -134,13 +134,14 @@ def _write_bundled_models_cache(profile_codex_home: Path, env: dict[str, str]) -
         check=False,
     )
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
-    cli_version = (
-        subprocess.run(  # noqa: S603
-            ["codex", "--version"], env=env, capture_output=True, text=True, timeout=30, check=True
-        )
-        .stdout.strip()
-        .removeprefix("codex-cli ")
+    cli_version_raw = subprocess.run(  # noqa: S603
+        ["codex", "--version"], env=env, capture_output=True, text=True, timeout=30, check=True
+    ).stdout.strip()
+    assert cli_version_raw.startswith("codex-cli "), (
+        f"unexpected `codex --version` format: {cli_version_raw!r}; "
+        "expected leading 'codex-cli ' prefix"
     )
+    cli_version = cli_version_raw.removeprefix("codex-cli ")
     catalog = json.loads(completed.stdout)
     catalog.update(
         client_version=cli_version,

@@ -316,6 +316,26 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     ]
 
 
+def _queue_nested_shell_payloads(
+    payload: str,
+    queue: deque[tuple[str, bool, bool]],
+    *,
+    preserve_occurrence: bool,
+    include_process_substitutions: bool,
+) -> bool:
+    queue.extend(
+        (nested, preserve_occurrence, True) for nested in extract_shell_command_payloads(payload)
+    )
+    if include_process_substitutions:
+        for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
+            payload
+        ):
+            if not balanced:
+                return False
+            queue.append((body, True, True))
+    return True
+
+
 def _iter_shell_payload_segment_groups(
     command: str,
     *,
@@ -358,18 +378,14 @@ def _iter_shell_payload_segment_groups(
             return
         if include_outer or not is_outer:
             yield segments
-        queue.extend(
-            (nested, preserve_occurrence, True)
-            for nested in extract_shell_command_payloads(payload)
-        )
-        if include_process_substitutions:
-            for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
-                payload
-            ):
-                if not balanced:
-                    yield None
-                    return
-                queue.append((body, True, True))
+        if not _queue_nested_shell_payloads(
+            payload,
+            queue,
+            preserve_occurrence=preserve_occurrence,
+            include_process_substitutions=include_process_substitutions,
+        ):
+            yield None
+            return
 
 
 def tokenize_shell_payload_segments(

@@ -1196,6 +1196,17 @@ class InMemoryRecipeRepository(RecipeRepository):
         return result
 
 
+def _normalize_labels(labels: object, field: str) -> set[str]:
+    if not isinstance(labels, Sequence) or isinstance(labels, str):
+        requirement = (
+            "be a Sequence[str]" if field == "issue labels" else "map keys to Sequence[str]"
+        )
+        raise TypeError(f"{field} must {requirement}, got {type(labels).__name__}")
+    if not all(isinstance(label, str) for label in labels):
+        raise TypeError(f"{field} must contain only str entries")
+    return set(labels)
+
+
 class FakeGitHubFetcher(GitHubFetcher):
     """In-memory GitHub issue and label service for tool tests."""
 
@@ -1225,24 +1236,11 @@ class FakeGitHubFetcher(GitHubFetcher):
             seeded_issue["title"] = title
             seeded_issue["state"] = state
             labels = seeded_issue.get("labels", [])
-            if not isinstance(labels, Sequence) or isinstance(labels, str):
-                raise TypeError(
-                    f"issue labels must be a Sequence[str], got {type(labels).__name__}"
-                )
-            if not all(isinstance(label, str) for label in labels):
-                raise TypeError("issue labels must contain only str entries")
-            seeded_issue["labels"] = set(labels)
+            seeded_issue["labels"] = _normalize_labels(labels, "issue labels")
             self.issues[key] = seeded_issue
         self.repository_labels: dict[tuple[str, str], set[str]] = {}
         for repo_key, labels in (repository_labels or {}).items():
-            if not isinstance(labels, Sequence) or isinstance(labels, str):
-                raise TypeError(
-                    f"repository_labels must map keys to Sequence[str], "
-                    f"got {type(labels).__name__}"
-                )
-            if not all(isinstance(label, str) for label in labels):
-                raise TypeError("repository_labels must contain only str entries")
-            self.repository_labels[repo_key] = set(labels)
+            self.repository_labels[repo_key] = _normalize_labels(labels, "repository_labels")
         self.failure_results: dict[str, dict[str, Any]] = {}
         self.call_log: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 

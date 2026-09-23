@@ -28,6 +28,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
+    normalize_payload_cwd,
     parse_hook_command,
 )
 from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
@@ -192,6 +193,38 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
     return targets, unresolved_target
 
 
+def _resolve_targets(paths: list[str], cwd: str) -> tuple[list[str], bool]:
+    targets: list[str] = []
+    unresolved_target = False
+    for path in paths:
+        resolved = resolve_write_target(path, cwd)
+        if resolved is None:
+            unresolved_target = True
+        else:
+            targets.append(resolved)
+    return targets, unresolved_target
+
+
+def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], bool]:
+    tool_name = data.get("tool_name")
+    if not isinstance(tool_name, str):
+        return [], False
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if tool_name in {"Write", "Edit"}:
+        tool_input = data.get("tool_input")
+        path = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
+        if not isinstance(path, str) or not path:
+            return [], False
+        return _resolve_targets([path], payload_cwd)
+    if tool_name == "apply_patch":
+        command = extract_apply_patch_text(data) or ""
+        return _resolve_targets(extract_patch_paths(command), payload_cwd)
+    parsed = parse_hook_command(data)
+    if parsed.tool_kind in {"bash", "run_cmd"}:
+        return _bash_targets(parsed.command or "", parsed.execution_cwd)
+    return [], False
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -200,36 +233,7 @@ def main() -> None:
     if not isinstance(data, dict):
         sys.exit(0)
 
-    tool_name = data.get("tool_name", "")
-    if not isinstance(tool_name, str) or (
-        tool_name not in {"Write", "Edit", "Bash", "apply_patch"} and "run_cmd" not in tool_name
-    ):
-        sys.exit(0)
-
-    targets: list[str] = []
-    unresolved_target = False
-    payload_cwd = data.get("cwd", "")
-    cwd = payload_cwd if isinstance(payload_cwd, str) and os.path.isabs(payload_cwd) else ""
-    if tool_name in {"Write", "Edit"}:
-        tool_input = data.get("tool_input")
-        path = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
-        if isinstance(path, str) and path:
-            resolved = resolve_write_target(path, cwd)
-            if resolved is None:
-                unresolved_target = True
-            else:
-                targets.append(resolved)
-    elif tool_name == "apply_patch":
-        command = extract_apply_patch_text(data) or ""
-        for path in extract_patch_paths(command):
-            resolved = resolve_write_target(path, cwd)
-            if resolved is None:
-                unresolved_target = True
-            else:
-                targets.append(resolved)
-    else:
-        parsed = parse_hook_command(data)
-        targets, unresolved_target = _bash_targets(parsed.command or "", parsed.execution_cwd)
+    targets, unresolved_target = _collect_write_targets(data)
 
     if unresolved_target:
         _deny("unresolved-write-target", "Write target could not be resolved safely.")

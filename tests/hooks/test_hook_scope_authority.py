@@ -199,6 +199,17 @@ _DELETED_SESSION_CLASS_WRAPPERS: frozenset[str] = frozenset(
 )
 
 
+def _direct_assignment_names(node: ast.Assign | ast.AnnAssign) -> list[ast.Name]:
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    return [target for target in targets if isinstance(target, ast.Name)]
+
+
+def _imports_deleted_wrapper(node: ast.ImportFrom) -> bool:
+    return any(
+        alias.name == "*" or alias.name in _DELETED_SESSION_CLASS_WRAPPERS for alias in node.names
+    )
+
+
 def _wrapper_introduction_sites(source: str, filename: str) -> set[tuple[str, int]]:
     """Return ``(filename, lineno)`` for every deleted session-class wrapper re-introduction.
 
@@ -223,21 +234,14 @@ def _wrapper_introduction_sites(source: str, filename: str) -> set[tuple[str, in
     sites: set[tuple[str, int]] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                # Wildcard imports `from X import *` would silently re-introduce
-                # the deleted wrapper surface; flag the ImportFrom site so
-                # authors resolve explicit names instead of star-importing.
-                if alias.name == "*":
-                    sites.add((filename, node.lineno))
-                elif alias.name in _DELETED_SESSION_CLASS_WRAPPERS:
-                    sites.add((filename, node.lineno))
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id in _DELETED_SESSION_CLASS_WRAPPERS:
-                    sites.add((filename, node.lineno))
-        elif isinstance(node, ast.AnnAssign):
-            target = node.target
-            if isinstance(target, ast.Name) and target.id in _DELETED_SESSION_CLASS_WRAPPERS:
+            # Check imported source names (including wildcard imports), not aliases.
+            if _imports_deleted_wrapper(node):
+                sites.add((filename, node.lineno))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            if any(
+                target.id in _DELETED_SESSION_CLASS_WRAPPERS
+                for target in _direct_assignment_names(node)
+            ):
                 sites.add((filename, node.lineno))
     return sites
 

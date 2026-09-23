@@ -79,6 +79,16 @@ class OutputRedirectPartition:
     """True when at least one redirect target could not be resolved to a concrete path."""
 
 
+def _subshell_depth_after_token(token: str, depth: int) -> tuple[int, bool]:
+    opens_subshell = token == "(" or (token.startswith("(") and len(token) > 1)
+    closes_subshell = token == ")" or (token.endswith(")") and len(token) > 1)
+    if opens_subshell:
+        depth += 1
+    if closes_subshell and depth > 0:
+        depth -= 1
+    return depth, opens_subshell or closes_subshell
+
+
 def _partition_output_redirect_indices(
     tokens: Sequence[str],
     *,
@@ -100,22 +110,8 @@ def _partition_output_redirect_indices(
     i = 0
     while i < len(tokens):
         token = tokens[i]
-        if token == "(" or (token.startswith("(") and len(token) > 1):
-            depth += 1
-            if token.endswith(")") and len(token) > 1:
-                depth -= 1
-            segments.append(i)
-            i += 1
-            continue
-        if token == ")":
-            if depth > 0:
-                depth -= 1
-            segments.append(i)
-            i += 1
-            continue
-        if token.endswith(")") and len(token) > 1:
-            if depth > 0:
-                depth -= 1
+        depth, is_subshell_token = _subshell_depth_after_token(token, depth)
+        if is_subshell_token:
             segments.append(i)
             i += 1
             continue

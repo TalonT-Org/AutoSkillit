@@ -212,14 +212,7 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
     if not found_any_write:
         return None
 
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique: list[str] = []
-    for t in all_targets:
-        if t not in seen:
-            seen.add(t)
-            unique.append(t)
-    return unique
+    return list(dict.fromkeys(all_targets))
 
 
 def _bash_validation_error(
@@ -309,55 +302,73 @@ def _narrow_compatible_prefixes(left: list[str], right: list[str]) -> list[str]:
     return list(dict.fromkeys(result))
 
 
-def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
+def _load_interactive_policy_context(
+    data: dict[str, object],
+) -> tuple[tuple[str, list[object], dict[str, object]] | None, str]:
     payload_cwd = data.get("cwd")
     session_id = data.get("session_id")
     if not isinstance(payload_cwd, str) or not os.path.isabs(payload_cwd):
-        return [], "", "none"
+        return None, "none"
     if not isinstance(session_id, str) or not session_id:
-        return [], "", "none"
+        return None, "none"
     binding = read_session_binding(payload_cwd, session_id)
     if binding is None:
-        return [], "", "none"
+        return None, "none"
     loaded_skills = binding.get("loaded_skills")
     if not isinstance(loaded_skills, list):
-        return [], "", "unresolved"
+        return None, "unresolved"
     manifest_path = resolve_projection_manifest_path(Path(__file__))
     if manifest_path is None:
-        return [], "", "unresolved"
+        return None, "unresolved"
     try:
         manifest = read_manifest(manifest_path)
     except SessionBindingError:
-        return [], "", "unresolved"
+        return None, "unresolved"
     skills = manifest.get("skills")
     if not isinstance(skills, dict):
-        return [], "", "unresolved"
+        return None, "unresolved"
+    return (payload_cwd, loaded_skills, skills), ""
+
+
+def _loaded_skill_prefixes(
+    loaded: object, skills: dict[str, object], payload_cwd: str
+) -> tuple[list[str] | None, bool]:
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("skill_name"), str):
+        return None, True
+    if loaded.get("binding_valid") is not True:
+        return None, True
+    entry = skills.get(loaded["skill_name"])
+    if not isinstance(entry, dict) or "write_paths" not in entry:
+        return None, True
+    raw_paths = entry["write_paths"]
+    if raw_paths is None:
+        return None, False
+    if not isinstance(raw_paths, list) or any(not isinstance(path, str) for path in raw_paths):
+        return None, True
+    paths = [
+        (
+            os.path.join(payload_cwd, path)
+            if path.startswith(f"{TEMP_RELATIVE_DIR}/")
+            else path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/{TEMP_RELATIVE_DIR}")
+        )
+        for path in raw_paths
+    ]
+    return _normalize_prefixes(paths, source_label="session_binding"), False
+
+
+def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
+    context, state = _load_interactive_policy_context(data)
+    if context is None:
+        return [], "", state
+    payload_cwd, loaded_skills, skills = context
 
     effective: list[str] | None = None
     for loaded in loaded_skills:
-        if not isinstance(loaded, dict) or not isinstance(loaded.get("skill_name"), str):
+        prefixes, unresolved = _loaded_skill_prefixes(loaded, skills, payload_cwd)
+        if unresolved:
             return [], "", "unresolved"
-        if loaded.get("binding_valid") is not True:
-            return [], "", "unresolved"
-        entry = skills.get(loaded["skill_name"])
-        if not isinstance(entry, dict):
-            return [], "", "unresolved"
-        if "write_paths" not in entry:
-            return [], "", "unresolved"
-        raw_paths = entry["write_paths"]
-        if raw_paths is None:
+        if prefixes is None:
             continue
-        if not isinstance(raw_paths, list) or any(not isinstance(path, str) for path in raw_paths):
-            return [], "", "unresolved"
-        paths = [
-            (
-                os.path.join(payload_cwd, path)
-                if path.startswith(f"{TEMP_RELATIVE_DIR}/")
-                else path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/{TEMP_RELATIVE_DIR}")
-            )
-            for path in raw_paths
-        ]
-        prefixes = _normalize_prefixes(paths, source_label="session_binding")
         effective = (
             prefixes if effective is None else _narrow_compatible_prefixes(effective, prefixes)
         )
@@ -449,6 +460,34 @@ def _interpreter_validation_error(
     return _paths_validation_error(resolved, norm_prefixes, display_prefix)
 
 
+def _tool_validation_error(
+    tool_name: str,
+    data: dict[str, object],
+    norm_prefixes: list[str],
+    display_prefix: str,
+) -> str | None:
+    raw_tool_input = data.get("tool_input")
+    tool_input: dict[str, object] = raw_tool_input if isinstance(raw_tool_input, dict) else {}
+
+    if tool_name == "Bash" or "run_cmd" in tool_name:
+        parsed = parse_hook_command(data)
+        command = parsed.command or ""
+        reason = _interpreter_validation_error(
+            command, parsed.execution_cwd, norm_prefixes, display_prefix
+        )
+        if reason is not None:
+            return reason
+        return _bash_validation_error(command, parsed.execution_cwd, norm_prefixes, display_prefix)
+
+    if tool_name == "apply_patch":
+        command = extract_apply_patch_text(data) or ""
+        return _patch_validation_error(command, norm_prefixes, display_prefix)
+
+    raw_file_path = tool_input.get("file_path", "")
+    file_path = raw_file_path if isinstance(raw_file_path, str) else ""
+    return _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
+
+
 def main() -> None:
     enforce_session_scope("any")
     try:
@@ -524,44 +563,7 @@ def main() -> None:
         )
         sys.exit(0)
 
-    raw_tool_input = data.get("tool_input")
-    tool_input: dict[str, object] = raw_tool_input if isinstance(raw_tool_input, dict) else {}
-
-    if tool_name == "Bash" or "run_cmd" in tool_name:
-        parsed = parse_hook_command(data)
-        command = parsed.command or ""
-        reason = _interpreter_validation_error(
-            command, parsed.execution_cwd, norm_prefixes, display_prefix
-        )
-        if reason is not None:
-            _deny(data, reason, reason_code="scope_violation", activation=activation)
-            return
-        reason = _bash_validation_error(
-            command, parsed.execution_cwd, norm_prefixes, display_prefix
-        )
-        if reason is not None:
-            _deny(data, reason, reason_code="scope_violation", activation=activation)
-            return
-        _record(
-            data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
-        )
-        sys.exit(0)
-
-    if tool_name == "apply_patch":
-        command = extract_apply_patch_text(data) or ""
-        reason = _patch_validation_error(command, norm_prefixes, display_prefix)
-        if reason is not None:
-            _deny(data, reason, reason_code="scope_violation", activation=activation)
-            return
-        _record(
-            data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope"
-        )
-        sys.exit(0)
-
-    # Write or Edit
-    raw_file_path = tool_input.get("file_path", "")
-    file_path = raw_file_path if isinstance(raw_file_path, str) else ""
-    reason = _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
+    reason = _tool_validation_error(tool_name, data, norm_prefixes, display_prefix)
     if reason is not None:
         _deny(data, reason, reason_code="scope_violation", activation=activation)
         return

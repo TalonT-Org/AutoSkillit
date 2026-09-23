@@ -16,7 +16,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -122,6 +122,135 @@ def _claude_turn_key(
     return True, None
 
 
+class _TurnInterpretation(NamedTuple):
+    boundary: bool
+    candidate_found: bool
+    candidate_key: tuple[str, ...] | None
+    text: str | None
+
+
+def _skip_or_boundary(
+    candidate_found: bool, candidate_key: tuple[str, ...] | None
+) -> _TurnInterpretation:
+    return _TurnInterpretation(candidate_found, candidate_found, candidate_key, None)
+
+
+def _boundary_or_invalid(
+    candidate_found: bool, candidate_key: tuple[str, ...] | None
+) -> _TurnInterpretation | None:
+    if not candidate_found:
+        return None
+    return _TurnInterpretation(True, True, candidate_key, None)
+
+
+def _claude_assistant_excluded(record: dict[str, Any], session_id: str) -> bool:
+    record_session = record.get("session_id", record.get("sessionId"))
+    return bool(
+        (record_session is not None and record_session != session_id)
+        or record.get("isSidechain") is True
+        or record.get("isMeta") is True
+        or record.get("agent_id")
+        or record.get("agentId")
+    )
+
+
+def _claude_assistant_turn(
+    record: dict[str, Any],
+    message: dict[str, Any],
+    session_id: str,
+    candidate_found: bool,
+    candidate_key: tuple[str, ...] | None,
+) -> _TurnInterpretation | None:
+    if _claude_assistant_excluded(record, session_id):
+        return _skip_or_boundary(candidate_found, candidate_key)
+    valid_key, logical_key = _claude_turn_key(record, message)
+    if not valid_key:
+        return None
+    if candidate_found and (
+        candidate_key is None or logical_key is None or logical_key != candidate_key
+    ):
+        return _TurnInterpretation(True, True, candidate_key, None)
+    valid_content, text = _content_text(message.get("content"))
+    if not valid_content:
+        return None
+    return _TurnInterpretation(False, True, logical_key, text)
+
+
+def _claude_record_turn(
+    record: dict[str, Any],
+    session_id: str,
+    candidate_found: bool,
+    candidate_key: tuple[str, ...] | None,
+) -> _TurnInterpretation | None:
+    message = record.get("message")
+    if not isinstance(message, dict):
+        if record.get("type") == "system" and isinstance(record.get("subtype"), str):
+            return _TurnInterpretation(False, candidate_found, candidate_key, None)
+        return None
+    if record.get("type") == "assistant" and not is_parent_assistant_record(record):
+        return _skip_or_boundary(candidate_found, candidate_key)
+    role = message.get("role")
+    if role not in {"assistant", "user", "system", "tool"}:
+        return None
+    if role != "assistant":
+        return _boundary_or_invalid(candidate_found, candidate_key)
+    return _claude_assistant_turn(record, message, session_id, candidate_found, candidate_key)
+
+
+def _codex_assistant_excluded(
+    record: dict[str, Any], payload: dict[str, Any], session_id: str
+) -> bool:
+    record_session = record.get("session_id", record.get("sessionId"))
+    return bool(
+        (record_session is not None and record_session != session_id)
+        or payload.get("agent_id")
+        or payload.get("agentId")
+    )
+
+
+def _codex_message_turn(
+    record: dict[str, Any],
+    payload: dict[str, Any],
+    session_id: str,
+    candidate_found: bool,
+    candidate_key: tuple[str, ...] | None,
+) -> _TurnInterpretation | None:
+    role = payload.get("role")
+    if role not in {"assistant", "user", "system", "tool"}:
+        return None
+    if role != "assistant":
+        return _boundary_or_invalid(candidate_found, candidate_key)
+    if _codex_assistant_excluded(record, payload, session_id):
+        return _skip_or_boundary(candidate_found, candidate_key)
+    if candidate_found:
+        return _TurnInterpretation(True, True, candidate_key, None)
+    valid_content, text = _content_text(payload.get("content"))
+    if not valid_content:
+        return None
+    return _TurnInterpretation(False, True, None, text)
+
+
+def _codex_record_turn(
+    record: dict[str, Any],
+    candidate_found: bool,
+    candidate_key: tuple[str, ...] | None,
+    session_id: str,
+) -> _TurnInterpretation | None:
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    payload_type = payload.get("type")
+    if payload_type in {"function_call_output", "custom_tool_call_output"}:
+        return _boundary_or_invalid(candidate_found, candidate_key)
+    if payload_type == "function_call":
+        return _TurnInterpretation(False, candidate_found, candidate_key, None)
+    if payload_type == "message":
+        return _codex_message_turn(record, payload, session_id, candidate_found, candidate_key)
+    if not isinstance(payload_type, str):
+        return None
+    return _TurnInterpretation(False, candidate_found, candidate_key, None)
+
+
 def _load_transcript_records(path: Path) -> list[dict[str, Any]] | None:
     tail = _bounded_tail(path)
     if tail is None:
@@ -149,91 +278,21 @@ def _newest_logical_turn_assistant_text(path: Path, session_id: str) -> str | No
     for record in reversed(records):
         record_type = record.get("type")
         if record_type in {"assistant", "user", "system", "tool"}:
-            message = record.get("message")
-            if not isinstance(message, dict):
-                if record_type == "system" and isinstance(record.get("subtype"), str):
-                    continue
-                return None
-            if record_type == "assistant" and not is_parent_assistant_record(record):
-                if candidate_found:
-                    break
-                continue
-            role = message.get("role")
-            if role not in {"assistant", "user", "system", "tool"}:
-                return None
-            if role != "assistant":
-                if candidate_found:
-                    break
-                return None
-            record_session = record.get("session_id", record.get("sessionId"))
-            if (
-                (record_session is not None and record_session != session_id)
-                or record.get("isSidechain") is True
-                or record.get("isMeta") is True
-                or record.get("agent_id")
-                or record.get("agentId")
-            ):
-                if candidate_found:
-                    break
-                continue
-            valid_key, logical_key = _claude_turn_key(record, message)
-            if not valid_key:
-                return None
-            if candidate_found and (
-                candidate_key is None or logical_key is None or logical_key != candidate_key
-            ):
-                break
-            if not candidate_found:
-                candidate_found = True
-                candidate_key = logical_key
-            valid_content, text = _content_text(message.get("content"))
-            if not valid_content:
-                return None
-            if text is not None:
-                parts.append(text)
+            interpreted = _claude_record_turn(record, session_id, candidate_found, candidate_key)
+        elif record_type == "response_item":
+            interpreted = _codex_record_turn(record, candidate_found, candidate_key, session_id)
+        elif isinstance(record_type, str):
             continue
-        if record_type == "response_item":
-            payload = record.get("payload")
-            if not isinstance(payload, dict):
-                return None
-            payload_type = payload.get("type")
-            if payload_type in {"function_call_output", "custom_tool_call_output"}:
-                if candidate_found:
-                    break
-                return None
-            if payload_type == "function_call":
-                continue
-            if payload_type == "message":
-                role = payload.get("role")
-                if role not in {"assistant", "user", "system", "tool"}:
-                    return None
-                if role != "assistant":
-                    if candidate_found:
-                        break
-                    return None
-                record_session = record.get("session_id", record.get("sessionId"))
-                if (
-                    (record_session is not None and record_session != session_id)
-                    or payload.get("agent_id")
-                    or payload.get("agentId")
-                ):
-                    if candidate_found:
-                        break
-                    continue
-                if candidate_found:
-                    break
-                candidate_found = True
-                valid_content, text = _content_text(payload.get("content"))
-                if not valid_content:
-                    return None
-                if text is not None:
-                    parts.append(text)
-                continue
-            if not isinstance(payload_type, str):
-                return None
-            continue
-        if not isinstance(record_type, str):
+        else:
             return None
+        if interpreted is None:
+            return None
+        if interpreted.boundary:
+            break
+        candidate_found = interpreted.candidate_found
+        candidate_key = interpreted.candidate_key
+        if interpreted.text is not None:
+            parts.append(interpreted.text)
     if not candidate_found or not parts:
         return None
     return "".join(reversed(parts))

@@ -94,6 +94,55 @@ def _contract_session_scopes(
     return ("headless", "interactive")
 
 
+def _validate_protection_waiver_delegate(
+    registry: Sequence[HookDef],
+    waiver: ProtectionWaiverDef,
+    registered: set[str],
+    *,
+    backend: Literal["claude_code", "codex"],
+) -> None:
+    allowed_backends = _PROTECTION_MECHANISM_BACKENDS.get(waiver.covering_mechanism)
+    if allowed_backends is None:
+        raise ValueError(
+            f"unknown protection delegate for {waiver.guard_script!r}: "
+            f"covering_mechanism={waiver.covering_mechanism!r}"
+        )
+    if waiver.backend not in allowed_backends:
+        raise ValueError(
+            f"protection delegate is invalid for {waiver.backend}: "
+            f"guard_script={waiver.guard_script!r}, "
+            f"covering_mechanism={waiver.covering_mechanism!r}, "
+            f"allowed={sorted(allowed_backends)}"
+        )
+    if waiver.covering_mechanism != "hook" or waiver.guard_script not in registered:
+        return
+    if waiver.covering_guard_script is None:
+        raise ValueError(
+            f"hook delegate missing for {waiver.guard_script!r}: "
+            f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
+        )
+    if waiver.excluded_scope == "all":
+        raise ValueError(
+            f"hook delegate requires one excluded session class: "
+            f"guard_script={waiver.guard_script!r}"
+        )
+    if not any(
+        waiver.covering_guard_script in candidate.scripts
+        and candidate.mechanism == "deny"
+        and hook_applies_to_backend(
+            candidate,
+            backend=backend,
+            session_scope=waiver.excluded_scope,
+        )
+        for candidate in registry
+    ):
+        raise ValueError(
+            f"unreachable protection delegate for {waiver.guard_script!r}: "
+            f"covering_guard_script={waiver.covering_guard_script!r}, "
+            f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
+        )
+
+
 def validate_protection_coverage(
     registry: Sequence[HookDef],
     waivers: Sequence[ProtectionWaiverDef],
@@ -102,53 +151,17 @@ def validate_protection_coverage(
 ) -> None:
     """Reject undeclared exclusions and unreachable hook delegates."""
     keys = [(waiver.guard_script, waiver.excluded_scope, waiver.backend) for waiver in waivers]
-    if len(keys) != len(set(keys)):
+    covered = dict(zip(keys, waivers, strict=True))
+    if len(covered) != len(keys):
         raise ValueError("protection waivers contain duplicate keys")
-    covered = {
-        (waiver.guard_script, waiver.excluded_scope, waiver.backend): waiver for waiver in waivers
-    }
     registered = {script for hook_def in registry for script in hook_def.scripts}
     for waiver in waivers:
-        allowed_backends = _PROTECTION_MECHANISM_BACKENDS.get(waiver.covering_mechanism)
-        if allowed_backends is None:
-            raise ValueError(
-                f"unknown protection delegate for {waiver.guard_script!r}: "
-                f"covering_mechanism={waiver.covering_mechanism!r}"
-            )
-        if waiver.backend not in allowed_backends:
-            raise ValueError(
-                f"protection delegate is invalid for {waiver.backend}: "
-                f"guard_script={waiver.guard_script!r}, "
-                f"covering_mechanism={waiver.covering_mechanism!r}, "
-                f"allowed={sorted(allowed_backends)}"
-            )
-        if waiver.covering_mechanism != "hook" or waiver.guard_script not in registered:
-            continue
-        if waiver.covering_guard_script is None:
-            raise ValueError(
-                f"hook delegate missing for {waiver.guard_script!r}: "
-                f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
-            )
-        if waiver.excluded_scope == "all":
-            raise ValueError(
-                f"hook delegate requires one excluded session class: "
-                f"guard_script={waiver.guard_script!r}"
-            )
-        if not any(
-            waiver.covering_guard_script in candidate.scripts
-            and candidate.mechanism == "deny"
-            and hook_applies_to_backend(
-                candidate,
-                backend=backend,
-                session_scope=waiver.excluded_scope,
-            )
-            for candidate in registry
-        ):
-            raise ValueError(
-                f"unreachable protection delegate for {waiver.guard_script!r}: "
-                f"covering_guard_script={waiver.covering_guard_script!r}, "
-                f"excluded_scope={waiver.excluded_scope!r}, backend={waiver.backend!r}"
-            )
+        _validate_protection_waiver_delegate(
+            registry,
+            waiver,
+            registered,
+            backend=backend,
+        )
     for hook_def in registry:
         if hook_def.mechanism != "deny" or hook_def.session_scope == "any":
             continue

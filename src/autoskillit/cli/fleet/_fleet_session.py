@@ -200,6 +200,115 @@ def _fleet_session_launcher(
             trace.close(status="success")
 
 
+def _refresh_campaign_after_resume(
+    *,
+    state_path: Path,
+    campaign_recipe: Recipe,
+    campaign_id: str,
+    resume_session_id: str,
+    manifest_yaml: str,
+    mcp_prefix: str,
+    ingredients_table: str | None,
+    max_issues_per_food_truck: int,
+    has_unguarded_filesystem_access: bool,
+) -> bool:
+    from autoskillit.cli.prompts import _build_fleet_campaign_prompt
+    from autoskillit.fleet import (
+        FLEET_HALTED_SENTINEL,
+        resume_campaign_from_state,
+        update_orchestrator_session_id,
+    )
+
+    update_orchestrator_session_id(state_path, resume_session_id)
+    fresh_metadata = resume_campaign_from_state(state_path, campaign_recipe.continue_on_failure)
+    if fresh_metadata is None:
+        logger.error("Campaign state corrupted during resume — exiting")
+        return False
+    if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
+        logger.info("Campaign halted on failure during resume — exiting")
+        return False
+
+    _build_fleet_campaign_prompt(
+        campaign_recipe,
+        manifest_yaml,
+        fresh_metadata.completed_dispatches_block,
+        mcp_prefix,
+        campaign_id,
+        resumable_dispatch_name=(
+            fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
+        ),
+        resume_session_id=(
+            fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
+        ),
+        resume_retry_reason=(fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""),
+        ingredients_table=ingredients_table,
+        prior_dispatch_id=(fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""),
+        resume_checkpoint=(
+            fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
+        ),
+        max_issues_per_food_truck=max_issues_per_food_truck,
+        has_unguarded_filesystem_access=has_unguarded_filesystem_access,
+    )
+    return True
+
+
+def _run_fleet_session_loop(
+    *,
+    launch_session: Callable[[InteractiveLaunch, dict[str, str]], Any],
+    current_launch: InteractiveLaunch,
+    extra_env: dict[str, str],
+    campaign_recipe: Recipe | None,
+    state_path: Path | None,
+    campaign_id: str | None,
+    manifest_yaml: str,
+    mcp_prefix: str,
+    ingredients_table: str | None,
+    max_issues_per_food_truck: int,
+    has_unguarded_filesystem_access: bool,
+) -> None:
+    from autoskillit.cli.session._session_reload import admit_reload
+
+    seen_reload_ids: set[str] = set()
+    infra_resume_count = 0
+    while True:
+        session_signal = launch_session(current_launch, extra_env)
+        if session_signal is None:
+            break
+        if isinstance(session_signal, str):
+            resumed = admit_reload(session_signal, seen_reload_ids, _MAX_RELOADS)
+            current_launch = RestoreSession(session_id=resumed.session_id)
+            resume_session_id = session_signal
+        else:
+            if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
+                break
+            infra_resume_count += 1
+            if infra_resume_count >= _MAX_INFRA_RESUMES:
+                raise SystemExit(
+                    f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
+                    f"Last exit: {session_signal.category}"
+                )
+            resume_session_id = session_signal.session_id
+            current_launch = RestoreSession(session_id=resume_session_id)
+
+        if campaign_recipe is None:
+            continue
+        assert state_path is not None
+        assert campaign_id is not None
+        if not _refresh_campaign_after_resume(
+            state_path=state_path,
+            campaign_recipe=campaign_recipe,
+            campaign_id=campaign_id,
+            resume_session_id=resume_session_id,
+            manifest_yaml=manifest_yaml,
+            mcp_prefix=mcp_prefix,
+            ingredients_table=ingredients_table,
+            max_issues_per_food_truck=max_issues_per_food_truck,
+            has_unguarded_filesystem_access=has_unguarded_filesystem_access,
+        ):
+            break
+
+
 def _launch_fleet_session(
     campaign_recipe: Recipe | None,
     campaign_id: str | None,
@@ -213,25 +322,18 @@ def _launch_fleet_session(
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
     from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
-    from autoskillit.cli.session._session_launch import (
-        render_skill_unavailability,
-    )
-    from autoskillit.cli.session._session_reload import admit_reload
-
-    project_dir = Path.cwd()
-
-    from autoskillit.config import load_config  # noqa: PLC0415
-
-    cfg = load_config(project_dir)
-
     from autoskillit.cli.session._session_backend import (  # noqa: PLC0415
         resolve_global_backend,
     )
+    from autoskillit.cli.session._session_launch import render_skill_unavailability
+    from autoskillit.config import load_config  # noqa: PLC0415
     from autoskillit.workspace import (  # noqa: PLC0415
         compile_session_skill_catalog,
         default_skill_resolver,
     )
 
+    project_dir = Path.cwd()
+    cfg = load_config(project_dir)
     _backend = resolve_global_backend(
         cfg.agent_backend.backend,
         codex_runtime_spec=cfg.codex_runtime.resolve(),
@@ -240,7 +342,7 @@ def _launch_fleet_session(
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
     managed_join_context = None
     managed_join_parent_id: str | None = None
-    if getattr(_backend.capabilities, "managed_fixed_batch_route_capable", False):
+    if getattr(_backend_caps, "managed_fixed_batch_route_capable", False):
         from autoskillit.core import new_managed_launch_id
         from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
 
@@ -262,9 +364,9 @@ def _launch_fleet_session(
         adaptation_context=managed_join_context,
     )
     render_skill_unavailability(skill_compilation.unavailability_payload)
+    manifest_yaml = ""
 
     if campaign_recipe is None:
-        # Ad-hoc mode: no campaign, no state, bare kitchen open
         from autoskillit.cli.prompts import _build_fleet_dispatch_prompt
 
         prompt = _build_fleet_dispatch_prompt(
@@ -277,27 +379,19 @@ def _launch_fleet_session(
             project_root=project_dir,
             backend=_backend,
         )
-        env_spec = FleetSessionEnv(
+        extra_env = FleetSessionEnv(
             session_type="fleet",
             fleet_mode=fleet_mode,
             project_dir=str(project_dir),
-        )
-        extra_env: dict[str, str] = env_spec.to_dict()
+        ).to_dict()
         current_resume_spec: ResumeSpec = NoResume()
     else:
-        # Campaign-driven mode: full orchestrator prompt with manifest and state
         if campaign_id is None:
             raise ValueError("campaign_id must not be None in campaign-driven mode")
         if state_path is None:
             raise ValueError("state_path must not be None in campaign-driven mode")
         from autoskillit.cli.prompts import _build_fleet_campaign_prompt
-        from autoskillit.fleet import (
-            FLEET_HALTED_SENTINEL,
-            derive_orchestrator_resume_spec,
-            read_state,
-            resume_campaign_from_state,
-            update_orchestrator_session_id,
-        )
+        from autoskillit.fleet import derive_orchestrator_resume_spec, read_state
 
         manifest_yaml = dump_yaml_str(
             [dataclasses.asdict(d) for d in campaign_recipe.dispatches],
@@ -347,16 +441,14 @@ def _launch_fleet_session(
             max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
             has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
         )
-        env_spec = FleetSessionEnv(
+        extra_env = FleetSessionEnv(
             session_type="fleet",
             fleet_mode=fleet_mode,
             project_dir=str(project_dir),
             campaign_id=campaign_id,
             campaign_state_path=str(state_path),
             continue_on_failure=str(campaign_recipe.continue_on_failure).lower(),
-        )
-        extra_env = env_spec.to_dict()
-
+        ).to_dict()
         if resume_metadata is not None:
             state = read_state(state_path)
             current_resume_spec = (
@@ -373,13 +465,7 @@ def _launch_fleet_session(
             briefing=prompt,
         )
     else:
-        current_launch = FreshLaunch(
-            system_prompt=prompt,
-            initial_prompt=initial_message,
-        )
-
-    seen_reload_ids: set[str] = set()
-    infra_resume_count = 0
+        current_launch = FreshLaunch(system_prompt=prompt, initial_prompt=initial_message)
 
     with _fleet_session_launcher(
         backend=_backend,
@@ -394,72 +480,16 @@ def _launch_fleet_session(
         adaptation_context=managed_join_context,
         managed_join_parent_id=managed_join_parent_id,
     ) as launch_session:
-        while True:
-            session_signal = launch_session(
-                current_launch,
-                extra_env,
-            )
-            if session_signal is None:
-                break
-            if isinstance(session_signal, str):
-                resumed = admit_reload(session_signal, seen_reload_ids, _MAX_RELOADS)
-                current_launch = RestoreSession(session_id=resumed.session_id)
-                resume_session_id = session_signal
-            else:
-                if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
-                    print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
-                    break
-                infra_resume_count += 1
-                if infra_resume_count >= _MAX_INFRA_RESUMES:
-                    raise SystemExit(
-                        f"Too many infrastructure resumes ({_MAX_INFRA_RESUMES} max). "
-                        f"Last exit: {session_signal.category}"
-                    )
-                resume_session_id = session_signal.session_id
-                current_launch = RestoreSession(session_id=resume_session_id)
-
-            if campaign_recipe is None:
-                continue
-
-            assert state_path is not None
-            assert campaign_id is not None
-            update_orchestrator_session_id(state_path, resume_session_id)
-            fresh_metadata = resume_campaign_from_state(
-                state_path, campaign_recipe.continue_on_failure
-            )
-            if fresh_metadata is None:
-                logger.error("Campaign state corrupted during resume — exiting")
-                break
-            if fresh_metadata.completed_dispatches_block == FLEET_HALTED_SENTINEL:
-                logger.info("Campaign halted on failure during resume — exiting")
-                break
-
-            completed_dispatches = fresh_metadata.completed_dispatches_block
-            resumable_dispatch_name = (
-                fresh_metadata.next_dispatch_name if fresh_metadata.is_resumable else ""
-            )
-            resume_session_id = (
-                fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
-            )
-            resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
-            resume_retry_reason = (
-                fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
-            )
-            resume_checkpoint = (
-                fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
-            )
-            prompt = _build_fleet_campaign_prompt(
-                campaign_recipe,
-                manifest_yaml,
-                completed_dispatches,
-                mcp_prefix,
-                campaign_id,
-                resumable_dispatch_name=resumable_dispatch_name,
-                resume_session_id=resume_session_id,
-                resume_retry_reason=resume_retry_reason,
-                ingredients_table=ingredients_table,
-                prior_dispatch_id=resume_dispatch_id,
-                resume_checkpoint=resume_checkpoint,
-                max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
-                has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
-            )
+        _run_fleet_session_loop(
+            launch_session=launch_session,
+            current_launch=current_launch,
+            extra_env=extra_env,
+            campaign_recipe=campaign_recipe,
+            state_path=state_path,
+            campaign_id=campaign_id,
+            manifest_yaml=manifest_yaml,
+            mcp_prefix=mcp_prefix,
+            ingredients_table=ingredients_table,
+            max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+        )

@@ -1031,19 +1031,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         " Codex generic-prompt launch; the finalized generated home is layered by the caller."
     ),
-    "execution/backends/_codex/session_commands.py:186": (
+    "execution/backends/_codex/session_commands.py:187": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:517": (
+    "execution/backends/_codex/session_commands.py:518": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:204": (
+    "execution/backends/_codex/session_commands.py:205": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:730": (
+    "execution/backends/_codex/session_commands.py:731": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

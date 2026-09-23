@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.execution.process._lifecycle.owned_group import (
     OwnedProcessGroup,
     spawn_owned_process,
@@ -158,8 +158,10 @@ def run_owned_bounded(
                 stream.close()
         if capture_dir is not None:
             capture_dir.mkdir(parents=True, exist_ok=True)
-            atomic_write(
-                capture_dir / "command.json", json.dumps({"argv": list(command), "cwd": str(cwd)})
+            write_versioned_json(
+                capture_dir / "command.json",
+                {"argv": list(command), "cwd": str(cwd)},
+                schema_version=1,
             )
             for name, data in output.items():
                 atomic_write(capture_dir / f"{name}.txt", bytes(data))

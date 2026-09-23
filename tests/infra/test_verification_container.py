@@ -55,10 +55,17 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
     assert "uv venv /opt/pre-commit" in dockerfile
     assert "ARG MYPY_VERSION=1.19.1" in dockerfile
     assert "ARG TYPES_PYYAML_VERSION=6.0.12.20250915" in dockerfile
+    assert _docker_arg(dockerfile, "RIPGREP_VERSION") == "15.2.0"
+    assert _docker_arg(dockerfile, "JQ_VERSION") == "1.8.2"
+    assert "https://github.com/BurntSushi/ripgrep/releases/download/" in dockerfile
+    assert "https://github.com/jqlang/jq/releases/download/" in dockerfile
     assert "uv pip install --system" not in dockerfile
     assert "/workspace/.autoskillit/temp" in dockerfile
     assert "task regen-contracts" in dockerfile
-    assert 'git commit --message "exact source snapshot"' in dockerfile
+    assert "--mount=from=source_history,source=source.bundle,target=/source.bundle" in dockerfile
+    assert "git fetch /source.bundle HEAD" in dockerfile
+    assert 'git reset --mixed "${SOURCE_SHA}"' in dockerfile
+    assert 'test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"' in dockerfile
     assert "COPY .git" not in dockerfile
     assert re.findall(r"^USER (\S+)$", dockerfile, re.MULTILINE)[-1] == "verifier"
 

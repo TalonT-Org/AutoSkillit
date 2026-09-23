@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
@@ -39,6 +40,10 @@ def test_bounded_runner_keeps_partial_output_and_reaps_timed_out_child(tmp_path:
         )
     child_pid = int((capture / "stdout.txt").read_text())
     assert (capture / "stderr.txt").read_text() == "started\n"
+    command = json.loads((capture / "command.json").read_text())
+    assert command["schema_version"] == 1
+    assert command["argv"][0] == sys.executable
+    assert command["cwd"] == str(tmp_path)
     with pytest.raises(ProcessLookupError):
         os.kill(child_pid, 0)
 

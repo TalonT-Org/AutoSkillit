@@ -23,6 +23,7 @@ import psutil
 import pytest
 
 from autoskillit.cli._init_helpers import _register_mcp_server
+from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from tests.conftest import production_interpreter_env
 
@@ -303,6 +304,13 @@ def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
     if source_claude_state.is_file():
         shutil.copy2(source_claude_state, client_home / ".claude.json")
         claude_state = json.loads((client_home / ".claude.json").read_text())
+    claude_state.update(
+        {
+            "hasCompletedOnboarding": True,
+            "lastOnboardingVersion": CLAUDE_CODE_CAPABILITIES.min_version,
+            "theme": "dark",
+        }
+    )
     projects = claude_state.setdefault("projects", {})
     assert isinstance(projects, dict)
     projects[str(project)] = {"hasTrustDialogAccepted": True}

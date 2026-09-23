@@ -10,6 +10,8 @@ ARG GO_TASK_VERSION=3.43.3
 ARG PRE_COMMIT_VERSION=4.6.2
 ARG MYPY_VERSION=1.19.1
 ARG TYPES_PYYAML_VERSION=6.0.12.20250915
+ARG RIPGREP_VERSION=15.2.0
+ARG JQ_VERSION=1.8.2
 ARG VERIFIER_UID=1000
 ARG VERIFIER_GID=1000
 
@@ -48,6 +50,22 @@ RUN apt-get update \
     && test "$(codex --version 2>/dev/null)" = "codex-cli ${CODEX_VERSION}" \
     && claude --version 2>/dev/null | grep --quiet "^${CLAUDE_VERSION}"
 
+RUN tool_arch="$(dpkg --print-architecture)" \
+    && case "${tool_arch}" in \
+        amd64) rg_arch=x86_64 ;; \
+        arm64) rg_arch=aarch64 ;; \
+        *) exit 1 ;; \
+    esac \
+    && rg_archive="ripgrep-${RIPGREP_VERSION}-${rg_arch}-unknown-linux-musl" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/${rg_archive}.tar.gz" \
+        | tar --extract --gzip --strip-components=1 --directory /usr/local/bin "${rg_archive}/rg" \
+    && curl --fail --location --silent --show-error --output /usr/local/bin/jq \
+        "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-${tool_arch}" \
+    && chmod 0755 /usr/local/bin/jq \
+    && rg --version | grep --quiet "^ripgrep ${RIPGREP_VERSION}" \
+    && test "$(jq --version)" = "jq-${JQ_VERSION}"
+
 RUN groupadd --gid "${VERIFIER_GID}" verifier \
     && useradd --uid "${VERIFIER_UID}" --gid verifier --create-home --shell /bin/bash verifier \
     && install --directory --owner verifier --group verifier /workspace
@@ -62,6 +80,16 @@ RUN install --directory --owner verifier --group verifier /workspace/.autoskilli
 
 USER verifier
 
+ARG SOURCE_SHA
+RUN --mount=from=source_history,source=source.bundle,target=/source.bundle \
+    test -n "${SOURCE_SHA}" \
+    && git init \
+    && git config user.name "AutoSkillit Verification" \
+    && git config user.email "verification@localhost" \
+    && git fetch /source.bundle HEAD \
+    && git reset --mixed "${SOURCE_SHA}" \
+    && test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+
 # The optional BuildKit secret is needed only when the locked Git dependency is private.
 # Its value is scoped to this RUN instruction and never becomes an image layer or ENV value.
 RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \
@@ -75,11 +103,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \
     uv sync --locked --extra dev
 
 RUN task regen-contracts \
-    && task compile-recipes \
-    && git init \
-    && git config user.name "AutoSkillit Verification" \
-    && git config user.email "verification@localhost" \
-    && git add --all \
-    && git commit --message "exact source snapshot"
+    && task compile-recipes
 
 CMD ["bash"]

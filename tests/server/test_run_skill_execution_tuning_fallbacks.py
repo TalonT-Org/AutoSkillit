@@ -148,7 +148,7 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     local variable, which Python cannot dispatch generically by name
     without unsafe locals() mutation). This is the alternative safety net:
     every table entry must have a real ``_recipe_step.<field>`` read site
-    inside _prepare_dispatch_backend() — the run_skill prepare phase that
+    inside _apply_step_tuning_fallback() — the run_skill prepare phase that
     owns this fallback block (issue #4705 split run_skill's body across
     the tools_execution package) — so a table entry added without a
     matching if-block — the exact silent-no-op drift this table exists to
@@ -158,10 +158,18 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
 
     from autoskillit.server.tools import tools_execution
     from autoskillit.server.tools.tools_execution._run_skill_prepare import (
+        _apply_step_tuning_fallback,
         _prepare_dispatch_backend,
     )
 
-    tree = ast.parse(inspect.getsource(_prepare_dispatch_backend))
+    prepare_tree = ast.parse(inspect.getsource(_prepare_dispatch_backend))
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_apply_step_tuning_fallback"
+        for node in ast.walk(prepare_tree)
+    )
+    tree = ast.parse(inspect.getsource(_apply_step_tuning_fallback))
     read_fields = {
         node.attr
         for node in ast.walk(tree)
@@ -178,7 +186,7 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     assert not missing, (
         f"EXECUTION_TUNING RecipeStep field(s) in EXECUTION_TUNING_STEP_FIELDS have "
         f"no matching '_recipe_step.<field>' read site inside "
-        f"_prepare_dispatch_backend(): {missing}. "
+        f"_apply_step_tuning_fallback(): {missing}. "
         "A table entry with no runtime consumer silently does nothing — add the "
         "matching fallback if-block (see model/stale_threshold/idle_output_timeout "
         "for the pattern)."

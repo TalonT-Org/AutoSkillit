@@ -188,79 +188,163 @@ async def _prepare_dispatch_backend(
         extra={"cwd": state.cwd, "model": state.model or "default"},
     )
 
-    from autoskillit.server import _get_config  # circular-break
+    if (terminal := _check_dispatch_preconditions(state)) is not None:
+        return terminal
 
-    # Auto-enrich order_id from the fleet dispatcher's env variable when the
-    # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
-    # by fleet/_api.py into every L2 food truck session environment and inherited by all
-    # sub-sessions, ensuring token log entries carry the correct order_id without
-    # requiring recipe authors to thread it through every run_skill call.
-    state.effective_order_id = state.order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    step_model = _prepare_config_and_step_fallback(state, ordinal)
 
-    if (
-        not state.resume_session_id
-        and state._installed_execution is None
-        and state.skill_inputs is None
-    ):
-        if (
-            input_error := _check_input_contracts(
-                state.skill_command, state.cwd, state.tool_ctx.input_contract_resolver
-            )
-        ) is not None:
-            return input_error
+    _resolve_dispatch_backend_authority(state, candidate, ordinal)
+    assert state._effective_backend_obj is not None
+    assert state.resolved_command is not None
 
-    if _get_config().safety.require_dry_walkthrough and state._installed_execution is None:
-        if (gate_error := _check_dry_walkthrough(state.skill_command, state.cwd)) is not None:
-            return gate_error
+    if not _resolve_provider_binding(state, candidate, ordinal, step_model):
+        return None
 
-    if state.tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    state._candidate_rejection_reason = None
-    if ordinal and state._stored_contract_entry is None:
-        if state.invocation is None:
-            raise SkillContractError("Candidate selection lacks an invocation")
-        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
-
-    if ordinal == 0:
-        state.requested_step_provider = state.step_provider
-    state.provider_extras = None
-    state.provider_binding = None
-    state.model_pin = None
-    state.profile_name_out = ""
-    state.effective_model = state.model
-
-    state._cfg = _get_config()
-    state._in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
-    state._inspector_model = (
-        os.environ.get(FLEET_INSPECTOR_MODEL_ENV_VAR) or state._cfg.fleet.inspector_model
-        if state._in_fleet_dispatch
-        else ""
+    state.expected_output_patterns, state.write_spec, state._skill_contract = (
+        resolve_skill_dispatch_metadata(
+            state.tool_ctx,
+            state.skill_command,
+            state._stored_contract,
+            audit_output_mode=state._audit_output_mode,
+        )
     )
+    state._fresh_parent_sandbox_mode = (
+        "read-only"
+        if state.tool_ctx.read_only_resolver
+        and state.tool_ctx.read_only_resolver(state.skill_command)
+        else "workspace-write"
+    )
+    if state._stored_contract is None:
+        binary = state._effective_backend_obj.capabilities.process_name
+        state._candidate_rejection_reason = _candidate_backend_rejection_reason(
+            skill_info=state._effective_skill_contract,
+            effective_backend_obj=state._effective_backend_obj,
+            parent_sandbox_mode=state._fresh_parent_sandbox_mode,
+            write_spec=state.write_spec,
+            binary_available=not binary or shutil.which(binary) is not None,
+        )
+        if state._candidate_rejection_reason is not None:
+            return None
 
-    # step_provider's execution-tuning fallback lives here (pre-gate,
-    # profile-interplay semantics) rather than in the post-gate
-    # fallback loop — see core.EXECUTION_TUNING_EXTERNALLY_RESOLVED.
-    if (
-        not state.step_provider
-        and state.step_name
-        and state.tool_ctx.active_recipe_steps is not None
+    _prepare_managed_parent_projection(state)
+
+    _bind_dispatch_projection(state)
+
+    # Build validated add_dirs via DefaultSessionSkillManager
+    from uuid import uuid4
+
+    # Backend compatibility gate — fail-closed, fires before replay and live session paths.
+    if state._stored_contract is not None and (
+        compat_error := _te_pkg._check_backend_compat(
+            skill_command=state.skill_command,
+            resolved_command=state.resolved_command,
+            effective_order_id=state.effective_order_id,
+            target_name=state.target_name,
+            skill_info=state._effective_skill_contract,
+            effective_backend_obj=state._effective_backend_obj,
+            skill_resolver=(
+                state._effective_skill_resolver
+                if state._effective_skill_resolver is not None
+                else state._stored_contract_entry
+            ),
+        )
     ):
-        _recipe_step_pre = state.tool_ctx.active_recipe_steps.get(state.step_name)
-        if _recipe_step_pre is not None and _recipe_step_pre.provider:
-            state.step_provider = _recipe_step_pre.provider
-            logger.warning(
-                "step_provider_resolved_from_recipe",
-                step=state.step_name,
-                provider=state.step_provider,
-            )
+        return compat_error
 
-    step_model = state.model
-    if not step_model and state.step_name and state.tool_ctx.active_recipe_steps is not None:
+    _apply_step_tuning_fallback(state)
+
+    if (terminal := _te_pkg._resolve_dispatch_paths(state, base_cwd=Path(state.cwd))) is not None:
+        return terminal
+
+    _resolve_dispatch_scope(state)
+    state.invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
+    return None
+
+
+def _apply_step_tuning_fallback(state: _RunSkillDispatchState) -> None:
+    # Server-side recipe step parameter resolution.
+    # When a step_name is provided and the recipe's step definition is cached,
+    # auto-fill parameters the LLM may have omitted.
+    if state.step_name and state.tool_ctx.active_recipe_steps is not None:
         _recipe_step = state.tool_ctx.active_recipe_steps.get(state.step_name)
-        if _recipe_step is not None and _recipe_step.model and "${{" not in _recipe_step.model:
-            step_model = _recipe_step.model
+        if _recipe_step is not None:
+            if not state.output_dir and "output_dir" in _recipe_step.with_args:
+                _recipe_output_dir = _recipe_step.with_args["output_dir"]
+                # Skip values containing unresolved template references —
+                # a finalized projection may retain ${{ context.* }} placeholders.
+                if isinstance(_recipe_output_dir, str) and "${{" not in _recipe_output_dir:
+                    state.output_dir = _recipe_output_dir
+                    logger.warning(
+                        "output_dir_resolved_from_recipe",
+                        step=state.step_name,
+                        output_dir=state.output_dir,
+                    )
 
+            # Use each field's vacancy sentinel; zero is a valid explicit timeout.
+            # Under attestation this fallback only ever sees a genuine vacancy —
+            # an explicit caller value for these fields is denied upstream by the
+            # runtime gate before reaching here. For unattested calls, an explicit
+            # caller value survives untouched, as intended.
+            if state.stale_threshold is None and _recipe_step.stale_threshold is not None:
+                state.stale_threshold = _recipe_step.stale_threshold
+                logger.warning(
+                    "stale_threshold_resolved_from_recipe",
+                    step=state.step_name,
+                    value=state.stale_threshold,
+                )
+
+            if state.idle_output_timeout is None and _recipe_step.idle_output_timeout is not None:
+                state.idle_output_timeout = _recipe_step.idle_output_timeout
+                logger.warning(
+                    "idle_output_timeout_resolved_from_recipe",
+                    step=state.step_name,
+                    value=state.idle_output_timeout,
+                )
+
+
+def _prepare_managed_parent_projection(state: _RunSkillDispatchState) -> None:
+    backend = state._effective_backend_obj
+    if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
+        managed_join_parent_id = state._managed_join_parent_id
+        if not managed_join_parent_id:
+            stored_entry = state._stored_contract_entry
+            stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
+            managed_join_parent_id = (
+                stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
+            )
+        state._managed_join_parent_id = managed_join_parent_id
+
+        def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+            logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+        evidence = acquire_managed_join_evidence(
+            backend=backend,
+            configured_model=state.effective_model,
+            state_root=state.tool_ctx.project_dir,
+            parent_id=managed_join_parent_id,
+            launch_context="direct",
+            on_refusal=_log_refusal,
+        )
+        if evidence is None:
+            state._managed_join_parent_id = ""
+        else:
+            if state.projection_context is None:
+                raise SkillContractError("Managed execution lacks projection authority")
+            state.projection_context = replace(
+                state.projection_context,
+                adaptation_context=evidence.context,
+                managed_codex_route="parent",
+            )
+            state.provider_extras = {
+                **(state.provider_extras or {}),
+                MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
+            }
+
+
+def _resolve_dispatch_backend_authority(
+    state: _RunSkillDispatchState, candidate: ExecutionCandidateSpec | None, ordinal: int
+) -> None:
+    assert state._cfg is not None
     # The fresh branch resolved the complete effective invocation before any
     # notification or provider/executor work. Backend-specific rendering waits
     # until capability-driven backend selection is complete.
@@ -347,72 +431,79 @@ async def _prepare_dispatch_backend(
             state._backend_authority
         )
 
-    if not _resolve_provider_binding(state, candidate, ordinal, step_model):
-        return None
 
-    state.expected_output_patterns, state.write_spec, state._skill_contract = (
-        resolve_skill_dispatch_metadata(
-            state.tool_ctx,
-            state.skill_command,
-            state._stored_contract,
-            audit_output_mode=state._audit_output_mode,
-        )
+def _prepare_config_and_step_fallback(state: _RunSkillDispatchState, ordinal: int) -> str:
+    from autoskillit.server import _get_config  # circular-break
+
+    state._candidate_rejection_reason = None
+    if ordinal and state._stored_contract_entry is None:
+        if state.invocation is None:
+            raise SkillContractError("Candidate selection lacks an invocation")
+        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+
+    if ordinal == 0:
+        state.requested_step_provider = state.step_provider
+    state.provider_extras = None
+    state.provider_binding = None
+    state.model_pin = None
+    state.profile_name_out = ""
+    state.effective_model = state.model
+
+    state._cfg = _get_config()
+    state._in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
+    state._inspector_model = (
+        os.environ.get(FLEET_INSPECTOR_MODEL_ENV_VAR) or state._cfg.fleet.inspector_model
+        if state._in_fleet_dispatch
+        else ""
     )
-    state._fresh_parent_sandbox_mode = (
-        "read-only"
-        if state.tool_ctx.read_only_resolver
-        and state.tool_ctx.read_only_resolver(state.skill_command)
-        else "workspace-write"
-    )
-    if state._stored_contract is None:
-        binary = state._effective_backend_obj.capabilities.process_name
-        state._candidate_rejection_reason = _candidate_backend_rejection_reason(
-            skill_info=state._effective_skill_contract,
-            effective_backend_obj=state._effective_backend_obj,
-            parent_sandbox_mode=state._fresh_parent_sandbox_mode,
-            write_spec=state.write_spec,
-            binary_available=not binary or shutil.which(binary) is not None,
-        )
-        if state._candidate_rejection_reason is not None:
-            return None
 
-    backend = state._effective_backend_obj
-    if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
-        managed_join_parent_id = state._managed_join_parent_id
-        if not managed_join_parent_id:
-            stored_entry = state._stored_contract_entry
-            stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
-            managed_join_parent_id = (
-                stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
+    # step_provider's execution-tuning fallback lives here (pre-gate,
+    # profile-interplay semantics) rather than in the post-gate
+    # fallback loop — see core.EXECUTION_TUNING_EXTERNALLY_RESOLVED.
+    if (
+        not state.step_provider
+        and state.step_name
+        and state.tool_ctx.active_recipe_steps is not None
+    ):
+        _recipe_step_pre = state.tool_ctx.active_recipe_steps.get(state.step_name)
+        if _recipe_step_pre is not None and _recipe_step_pre.provider:
+            state.step_provider = _recipe_step_pre.provider
+            logger.warning(
+                "step_provider_resolved_from_recipe",
+                step=state.step_name,
+                provider=state.step_provider,
             )
-        state._managed_join_parent_id = managed_join_parent_id
 
-        def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
-            logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+    step_model = state.model
+    if not step_model and state.step_name and state.tool_ctx.active_recipe_steps is not None:
+        _recipe_step = state.tool_ctx.active_recipe_steps.get(state.step_name)
+        if _recipe_step is not None and _recipe_step.model and "${{" not in _recipe_step.model:
+            step_model = _recipe_step.model
 
-        evidence = acquire_managed_join_evidence(
-            backend=backend,
-            configured_model=state.effective_model,
-            state_root=state.tool_ctx.project_dir,
-            parent_id=managed_join_parent_id,
-            launch_context="direct",
-            on_refusal=_log_refusal,
+    return step_model
+
+
+def _resolve_dispatch_scope(state: _RunSkillDispatchState) -> None:
+    if state._stored_contract is not None:
+        state.is_read_only = state._stored_contract.read_only
+        state.scope_discipline_skill = state._stored_contract.scope_discipline
+        state.completion_required = state._stored_contract.completion_required
+    else:
+        if state.projection_context is None:
+            raise SkillContractError("Projection context was not prepared")
+        state.is_read_only = state.projection_context.parent_sandbox_mode == "read-only"
+        state.scope_discipline_skill = bool(
+            state._skill_contract and state._skill_contract.scope_discipline
         )
-        if evidence is None:
-            state._managed_join_parent_id = ""
-        else:
-            if state.projection_context is None:
-                raise SkillContractError("Managed execution lacks projection authority")
-            state.projection_context = replace(
-                state.projection_context,
-                adaptation_context=evidence.context,
-                managed_codex_route="parent",
-            )
-            state.provider_extras = {
-                **(state.provider_extras or {}),
-                MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
-            }
+        state.completion_required = bool(
+            state.tool_ctx.completion_required_resolver
+            and state.tool_ctx.completion_required_resolver(state.skill_command)
+        )
 
+
+def _bind_dispatch_projection(state: _RunSkillDispatchState) -> None:
+    assert state._fresh_parent_sandbox_mode is not None
+    assert state._backend_authority is not None
     if state._stored_contract is None:
         if state.projection_context is None:
             raise SkillContractError("Fresh execution lacks projection authority")
@@ -469,83 +560,34 @@ async def _prepare_dispatch_backend(
         target_sha=state.closure_target_sha,
     )
 
-    # Build validated add_dirs via DefaultSessionSkillManager
-    from uuid import uuid4
 
-    # Backend compatibility gate — fail-closed, fires before replay and live session paths.
-    if state._stored_contract is not None and (
-        compat_error := _te_pkg._check_backend_compat(
-            skill_command=state.skill_command,
-            resolved_command=state.resolved_command,
-            effective_order_id=state.effective_order_id,
-            target_name=state.target_name,
-            skill_info=state._effective_skill_contract,
-            effective_backend_obj=state._effective_backend_obj,
-            skill_resolver=(
-                state._effective_skill_resolver
-                if state._effective_skill_resolver is not None
-                else state._stored_contract_entry
-            ),
-        )
+def _check_dispatch_preconditions(state: _RunSkillDispatchState) -> str | None:
+    from autoskillit.server import _get_config  # circular-break
+
+    # Auto-enrich order_id from the fleet dispatcher's env variable when the
+    # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
+    # by fleet/_api.py into every L2 food truck session environment and inherited by all
+    # sub-sessions, ensuring token log entries carry the correct order_id without
+    # requiring recipe authors to thread it through every run_skill call.
+    state.effective_order_id = state.order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+
+    if (
+        not state.resume_session_id
+        and state._installed_execution is None
+        and state.skill_inputs is None
     ):
-        return compat_error
+        if (
+            input_error := _check_input_contracts(
+                state.skill_command, state.cwd, state.tool_ctx.input_contract_resolver
+            )
+        ) is not None:
+            return input_error
 
-    # Server-side recipe step parameter resolution.
-    # When a step_name is provided and the recipe's step definition is cached,
-    # auto-fill parameters the LLM may have omitted.
-    if state.step_name and state.tool_ctx.active_recipe_steps is not None:
-        _recipe_step = state.tool_ctx.active_recipe_steps.get(state.step_name)
-        if _recipe_step is not None:
-            if not state.output_dir and "output_dir" in _recipe_step.with_args:
-                _recipe_output_dir = _recipe_step.with_args["output_dir"]
-                # Skip values containing unresolved template references —
-                # a finalized projection may retain ${{ context.* }} placeholders.
-                if isinstance(_recipe_output_dir, str) and "${{" not in _recipe_output_dir:
-                    state.output_dir = _recipe_output_dir
-                    logger.warning(
-                        "output_dir_resolved_from_recipe",
-                        step=state.step_name,
-                        output_dir=state.output_dir,
-                    )
+    if _get_config().safety.require_dry_walkthrough and state._installed_execution is None:
+        if (gate_error := _check_dry_walkthrough(state.skill_command, state.cwd)) is not None:
+            return gate_error
 
-            # Use each field's vacancy sentinel; zero is a valid explicit timeout.
-            # Under attestation this fallback only ever sees a genuine vacancy —
-            # an explicit caller value for these fields is denied upstream by the
-            # runtime gate before reaching here. For unattested calls, an explicit
-            # caller value survives untouched, as intended.
-            if state.stale_threshold is None and _recipe_step.stale_threshold is not None:
-                state.stale_threshold = _recipe_step.stale_threshold
-                logger.warning(
-                    "stale_threshold_resolved_from_recipe",
-                    step=state.step_name,
-                    value=state.stale_threshold,
-                )
+    if state.tool_ctx.executor is None:
+        return json.dumps({"success": False, "error": "Executor not configured"})
 
-            if state.idle_output_timeout is None and _recipe_step.idle_output_timeout is not None:
-                state.idle_output_timeout = _recipe_step.idle_output_timeout
-                logger.warning(
-                    "idle_output_timeout_resolved_from_recipe",
-                    step=state.step_name,
-                    value=state.idle_output_timeout,
-                )
-
-    if (terminal := _te_pkg._resolve_dispatch_paths(state, base_cwd=Path(state.cwd))) is not None:
-        return terminal
-
-    if state._stored_contract is not None:
-        state.is_read_only = state._stored_contract.read_only
-        state.scope_discipline_skill = state._stored_contract.scope_discipline
-        state.completion_required = state._stored_contract.completion_required
-    else:
-        if state.projection_context is None:
-            raise SkillContractError("Projection context was not prepared")
-        state.is_read_only = state.projection_context.parent_sandbox_mode == "read-only"
-        state.scope_discipline_skill = bool(
-            state._skill_contract and state._skill_contract.scope_discipline
-        )
-        state.completion_required = bool(
-            state.tool_ctx.completion_required_resolver
-            and state.tool_ctx.completion_required_resolver(state.skill_command)
-        )
-    state.invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
     return None

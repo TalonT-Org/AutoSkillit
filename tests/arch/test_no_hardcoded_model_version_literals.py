@@ -38,23 +38,31 @@ def _is_pytest_collected(path: Path) -> bool:
     return path.name.startswith("test_") and path.suffix == ".py"
 
 
-def _collect_marked_model_contract_paths(request: pytest.FixtureRequest) -> set[Path]:
-    """Return absolute paths of every test file containing a @pytest.mark.model_contract test."""
+def _collect_marked_model_contract_paths() -> set[Path]:
+    """Return absolute paths of every test file that opts in via the model_contract marker.
+
+    A file is opted in if its source contains either ``@pytest.mark.model_contract``
+    on a test function/class or ``pytest.mark.model_contract`` inside a module-level
+    ``pytestmark`` list. The marker is statically inspected rather than read from
+    ``request.session.items`` because the latter only contains tests selected for the
+    current pytest invocation, which may not include every model-contract test in the
+    repo.
+    """
     marked: set[Path] = set()
-    for item in request.session.items:
-        if item.get_closest_marker("model_contract") is None:
+    for path in _TESTS_ROOT.rglob("*.py"):
+        if not _is_pytest_collected(path):
             continue
-        fspath = getattr(item, "fspath", None) or getattr(item, "path", None)
-        if fspath is None:
+        try:
+            source = path.read_text()
+        except OSError:
             continue
-        marked.add(Path(str(fspath)).resolve())
+        if "@pytest.mark.model_contract" in source or "pytest.mark.model_contract" in source:
+            marked.add(path.resolve())
     return marked
 
 
-def test_gpt_version_literals_are_limited_to_model_contract_tests(
-    request: pytest.FixtureRequest,
-) -> None:
-    allowed_paths = _collect_marked_model_contract_paths(request)
+def test_gpt_version_literals_are_limited_to_model_contract_tests() -> None:
+    allowed_paths = _collect_marked_model_contract_paths()
     violations: dict[str, list[str]] = {}
     for path in _TESTS_ROOT.rglob("*.py"):
         if not _is_pytest_collected(path):

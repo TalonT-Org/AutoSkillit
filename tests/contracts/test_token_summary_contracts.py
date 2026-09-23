@@ -83,8 +83,8 @@ def test_format_functions_use_no_legacy_cache_keys():
     """AST contract: format functions must not contain legacy cache field name literals.
 
     Guards against re-introducing cache_creation_input_tokens or cache_read_input_tokens
-    in _format_table, _format_efficiency_table, and _format_model_table after the
-    canonical migration (P2-A14-WP1).
+    in token summary formatting and source-total aggregation after the canonical migration
+    (P2-A14-WP1).
     """
     from autoskillit.hooks._runtime._hook_settings import _V1_TOKEN_FIELD_ALIASES
 
@@ -97,7 +97,12 @@ def test_format_functions_use_no_legacy_cache_keys():
     )
     tree = ast.parse(hook_path.read_text())
 
-    target_functions = {"_format_table", "_format_efficiency_table", "_format_model_table"}
+    target_functions = {
+        "_format_table",
+        "_format_efficiency_table",
+        "_aggregate_efficiency_source_totals",
+        "_format_model_table",
+    }
     found: set[str] = set()
 
     for node in ast.walk(tree):

@@ -381,6 +381,34 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _aggregate_efficiency_source_totals(
+    aggregated: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, dict[str, Any]]], dict[str, int]]:
+    """Aggregate efficiency measures and changed LoC by source."""
+    totals: dict[str, dict[str, dict[str, Any]]] = {}
+    source_locs: dict[str, int] = {}
+    for entry in aggregated.values():
+        loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
+        source = _source_label(entry)
+        source_locs[source] = source_locs.get(source, 0) + loc
+        total = totals.setdefault(
+            source,
+            {field: {"tokens": 0, "loc": 0, "unknown": False} for field in ("cr", "cw", "out")},
+        )
+        for field, measure in (
+            ("cr", measure_decode(entry.get("cache_read_tokens"))),
+            ("cw", measure_decode(entry.get("cache_write_tokens"))),
+            ("out", measure_decode(entry.get("output_tokens"))),
+        ):
+            state = measure["state"]
+            if state == "unknown":
+                total[field]["unknown"] = True
+            elif state in {"measured", "measured_zero"}:
+                total[field]["tokens"] += measure["value"]
+                total[field]["loc"] += loc
+    return totals, source_locs
+
+
 def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
     """Format aggregated token data as a markdown ## Token Efficiency table.
 
@@ -406,7 +434,7 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
         "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |",
         "|------|-------------|----------------|-----------------|------------|",
     ]
-    totals: dict[str, dict[str, Any]] = {}
+    totals, source_locs = _aggregate_efficiency_source_totals(aggregated)
     for entry in aggregated.values():
         loc = entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
         cr = measure_decode(entry.get("cache_read_tokens"))
@@ -417,17 +445,6 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
         lines.append(
             f"| {label} | {loc} | {_ratio(cr, loc)} | {_ratio(cw, loc)} | {_ratio(out, loc)} |"
         )
-        total = totals.setdefault(
-            source,
-            {field: {"tokens": 0, "loc": 0, "unknown": False} for field in ("cr", "cw", "out")},
-        )
-        for field, measure in (("cr", cr), ("cw", cw), ("out", out)):
-            state = measure["state"]
-            if state == "unknown":
-                total[field]["unknown"] = True
-            elif state in {"measured", "measured_zero"}:
-                total[field]["tokens"] += measure["value"]
-                total[field]["loc"] += loc
     for source, total in totals.items():
 
         def total_ratio(field: str) -> str:
@@ -439,11 +456,7 @@ def _format_efficiency_table(aggregated: dict[str, dict[str, Any]]) -> str:
             return _ratio(measure["tokens"], measure["loc"])
 
         label = f"Total ({source})" if source else "Total"
-        total_loc = sum(
-            entry.get("loc_insertions", 0) + entry.get("loc_deletions", 0)
-            for entry in aggregated.values()
-            if _source_label(entry) == source
-        )
+        total_loc = source_locs[source]
         lines.append(
             f"| **{label}** | **{total_loc}** | {total_ratio('cr')}"
             f" | {total_ratio('cw')} | {total_ratio('out')} |"

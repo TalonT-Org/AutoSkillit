@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from autoskillit.core import ArtifactLease, iter_merged_assistant_turns
+from autoskillit.core import ArtifactLease, get_logger, iter_merged_assistant_turns
 from autoskillit.execution.backends._codex_parse import _logical_rollout_reader
 from autoskillit.execution.child_outcomes import enumerate_claude_subagent_transcripts
 from autoskillit.execution.session_log.session_index import (
@@ -25,6 +25,8 @@ from autoskillit.execution.session_log.session_index import (
     read_tolerant_session_index_rows,
 )
 from autoskillit.execution.session_log.session_log import session_index_lock_path
+
+logger = get_logger(__name__)
 
 _LEASE_TIMEOUT_SECONDS = 2.0
 
@@ -191,7 +193,11 @@ def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                 end = handle.tell()
                 try:
                     record = json.loads(line)
-                except (UnicodeDecodeError, json.JSONDecodeError):
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    logger.debug(
+                        "report_walk_otlp_payload_decode_failed",
+                        extra={"generation": name, "offset": start, "error": str(exc)},
+                    )
                     record = None
                 record_id = _record_id_prefix(line)
                 state["otlp"] = {
@@ -252,14 +258,19 @@ def _session_record(row: dict[str, Any]) -> dict[str, Any]:
             continue
         has_transcript = True
         path = Path(raw)
-        paths: tuple[Path, ...] = (path,)
-        if backend == "claude":
-            paths += enumerate_claude_subagent_transcripts(path)
+        paths: tuple[Path, ...]
+        try:
+            paths = (path,) + (
+                enumerate_claude_subagent_transcripts(path) if backend == "claude" else ()
+            )
+        except OSError as exc:
+            unavailable_reasons.append(f"{field}:enumerate:{exc}")
+            continue
         for transcript in paths:
             try:
                 turns.extend(_transcript_turns(transcript, backend))
             except (OSError, UnicodeError, ValueError) as exc:
-                unavailable_reasons.append(f"{transcript}:{type(exc).__name__}")
+                unavailable_reasons.append(f"{transcript}:{exc}")
             except RuntimeError as exc:
                 # _logical_rollout_reader raises RuntimeError for non-regular
                 # rollout files (symlinks, devices). Treat as unavailable
@@ -361,7 +372,14 @@ def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
 def iter_report_walk(
     log_root: Path, watermark: dict[str, Any] | None = None
 ) -> Iterator[WalkItem]:
-    """Walk retained sources from a committed, JSON-serializable watermark."""
+    """Walk retained sources from a committed, JSON-serializable watermark.
+
+    The walk chains three sub-walkers (``_walk_otlp``, ``_walk_archive``,
+    ``_walk_projection``); only ``_walk_projection`` emits a final
+    ``kind="checkpoint"`` WalkItem to record that the live ``sessions.jsonl``
+    snapshot was fully observed. Consumers relying on a per-source checkpoint
+    should not assume one from ``_walk_otlp`` or ``_walk_archive``.
+    """
     state = _copy(watermark or {})
     for walk in (_walk_otlp, _walk_archive, _walk_projection):
         yield from walk(log_root, state)

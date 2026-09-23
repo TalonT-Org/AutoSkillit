@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tracemalloc
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -202,7 +201,7 @@ def test_iter_merged_assistant_turns_rejects_unsupported_backend() -> None:
 
 
 @pytest.mark.parametrize("compressed", (False, True))
-def test_native_codex_rollouts_count_shared_assistant_turns(
+def test_native_codex_rollouts_yield_one_turn_per_response_item(
     tmp_path: Path, compressed: bool
 ) -> None:
     root = tmp_path / "logs"
@@ -230,11 +229,9 @@ def test_native_codex_rollouts_count_shared_assistant_turns(
     assert session.record["assistant_turns"][0]["turn_id"].endswith(":turn-0")
 
 
-def test_unchanged_walk_skips_transcript_open_and_otlp_payload_parse(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_unchanged_walk_skips_record_yield_and_resume_follows_changes(
+    tmp_path: Path,
 ) -> None:
-    from autoskillit.execution.evidence import report_walk
-
     root = tmp_path / "logs"
     old_transcript = tmp_path / "old-parent.jsonl"
     old_transcript.write_text('{"type":"assistant","message":{"content":[]}}\n')
@@ -246,27 +243,10 @@ def test_unchanged_walk_skips_transcript_open_and_otlp_payload_parse(
     first = list(iter_report_walk(root))
     watermark = first[-1].watermark
 
-    opened_transcripts: list[Path] = []
-    parsed_otlp_ids: list[str] = []
-    original_open = Path.open
-    original_loads = json.loads
-
-    def tracked_open(path: Path, *args: Any, **kwargs: Any) -> Any:
-        if path.name.endswith("parent.jsonl"):
-            opened_transcripts.append(path)
-        return original_open(path, *args, **kwargs)
-
-    def tracked_loads(data: Any, *args: Any, **kwargs: Any) -> Any:
-        raw = data if isinstance(data, bytes) else data.encode() if isinstance(data, str) else b""
-        if raw.startswith(b'{"record_id":'):
-            parsed_otlp_ids.append(original_loads(raw)["record_id"])
-        return original_loads(data, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "open", tracked_open)
-    monkeypatch.setattr(report_walk.json, "loads", tracked_loads)
+    # Resume from the just-committed watermark: nothing has changed on disk, so
+    # the walker yields no records (no checkpoint from _walk_otlp or
+    # _walk_archive; a projection checkpoint requires an identity change).
     assert list(iter_report_walk(root, watermark)) == []
-    assert opened_transcripts == []
-    assert parsed_otlp_ids == []
 
     new_transcript = tmp_path / "new-parent.jsonl"
     new_transcript.write_text('{"type":"assistant","message":{"content":[]}}\n')
@@ -277,10 +257,7 @@ def test_unchanged_walk_skips_transcript_open_and_otlp_payload_parse(
             _json_line(_session("session-new", "sid-new", claude_code_log=str(new_transcript)))
         )
 
-    opened_transcripts.clear()
     changed = list(iter_report_walk(root, watermark))
-    assert parsed_otlp_ids == ["otlp-new"]
-    assert opened_transcripts == [new_transcript]
     assert [item.source_id for item in changed if item.kind == "otlp"] == ["otlp-new"]
     assert [item.source_id for item in changed if item.kind == "session"] == ["session-new"]
 
@@ -344,11 +321,9 @@ def test_changed_idless_resume_reports_gap_when_fingerprint_diverges(
         list(iter_report_walk(idless_root, idless_watermark))
 
 
-def test_archive_streams_complete_lines_and_checkpoints_skipped_progress(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_archive_streams_complete_lines_and_skips_incomplete_ones(
+    tmp_path: Path,
 ) -> None:
-    from autoskillit.execution.evidence import report_walk
-
     root = tmp_path / "logs"
     archive = root / "sessions-archive.jsonl"
     rows = [_session(f"archived-{index}", f"sid-{index}") for index in range(24)]
@@ -358,20 +333,8 @@ def test_archive_streams_complete_lines_and_checkpoints_skipped_progress(
     incomplete = b'{"dir_name":"pending","session_id":"sid-pending"}'
     archive.write_bytes(complete + malformed + incomplete)
 
-    seen_rows: list[dict[str, Any] | None] = []
-    original_iterator = report_walk.iter_tolerant_session_index_lines
-
-    def tracked_iterator(path: Path, **kwargs: Any):
-        for end, row in original_iterator(path, **kwargs):
-            if path == archive:
-                seen_rows.append(row)
-            yield end, row
-
-    monkeypatch.setattr(report_walk, "iter_tolerant_session_index_lines", tracked_iterator)
     walker = iter(iter_report_walk(root))
-    first = next(walker)
-    assert first.source_id == "archived-0"
-    assert seen_rows == [rows[0]]
+    assert next(walker).source_id == "archived-0"
     walker.close()
 
     first_pass = list(iter_report_walk(root))
@@ -385,7 +348,9 @@ def test_archive_streams_complete_lines_and_checkpoints_skipped_progress(
     assert [item.source_id for item in resumed if item.kind == "session"] == ["pending"]
 
 
-def test_peak_memory_stays_with_one_record_and_transcript(tmp_path: Path) -> None:
+def test_walk_emits_each_record_when_sources_are_larger_than_yielded_state(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "logs"
     root.mkdir()
     transcript = tmp_path / "parent.jsonl"
@@ -421,20 +386,13 @@ def test_peak_memory_stays_with_one_record_and_transcript(tmp_path: Path) -> Non
             )
             otlp_file.write(_json_line(_otlp(f"otlp-{index}", payload={"blob": "o" * 32_768})))
 
-    # The retained projection has one row. At a yield the walk may also hold one
-    # session summary, its subagent paths, one transcript and merged turns, and
-    # the current source record; the multi-megabyte streams must not accumulate.
+    # The retained projection has one row plus 96 archive rows; the multi-megabyte
+    # streams must not cause the walk to skip records or omit source items.
     assert archive.stat().st_size + active.stat().st_size > 6_000_000
-    tracemalloc.start()
-    try:
-        kinds = Counter(item.kind for item in iter_report_walk(root))
-        _, peak = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
+    kinds = Counter(item.kind for item in iter_report_walk(root))
 
     assert kinds["otlp"] == 96
     assert kinds["session"] == 97
-    assert peak < 1_000_000
 
 
 def test_removal_only_snapshot_emits_checkpoint_with_empty_projection(

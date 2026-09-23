@@ -429,7 +429,7 @@ class TestIterMergedAssistantTurns:
         text = "\n".join(lines) + "\n"
         return list(iter_merged_assistant_turns(text))
 
-    def test_native_codex_response_items_need_explicit_backend(self) -> None:
+    def test_default_backend_rejects_native_codex_response_items(self) -> None:
         records = (
             {
                 "type": "response_item",
@@ -459,6 +459,36 @@ class TestIterMergedAssistantTurns:
         text = "\n".join(json.dumps(record) for record in records) + "\n"
 
         assert list(iter_merged_assistant_turns(text)) == []
+
+    def test_codex_backend_yields_assistant_turns_from_response_items(self) -> None:
+        records = (
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "First answer"}],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Follow up"}],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Second answer"}],
+                },
+            },
+        )
+        text = "\n".join(json.dumps(record) for record in records) + "\n"
+
         turns = list(iter_merged_assistant_turns(text, backend="codex"))
 
         assert len(turns) == 2

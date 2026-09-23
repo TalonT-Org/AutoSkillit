@@ -36,7 +36,6 @@ pytestmark = [
     pytest.mark.ambient_env("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"),
 ]
 
-_ROOT = Path(__file__).resolve().parents[3]
 _LIVE_ENV = "AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_LIVE"
 _AUTH_ENV_NAMES = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 _SOURCE_CREDENTIALS = Path("~/.claude/.credentials.json").expanduser()
@@ -132,7 +131,9 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
 
 
 def _configure_mcp(plugin: Path, project: Path, log_dir: Path) -> None:
-    executable = _ROOT / ".venv" / "bin" / "autoskillit"
+    executable_path = shutil.which("autoskillit")
+    assert executable_path is not None
+    executable = Path(executable_path)
     assert executable.is_file()
     (plugin / ".mcp.json").write_text(
         json.dumps(

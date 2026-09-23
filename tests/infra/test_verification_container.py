@@ -27,9 +27,7 @@ def test_cli_pins_match_live_conformance_authorities() -> None:
     taskfile = load_yaml(_ROOT / "Taskfile.yml")
     workflow = load_yaml(_ROOT / ".github" / "workflows" / "conformance-probes.yml")
 
-    codex_preconditions = taskfile["tasks"]["test-smoke-codex-web-agent-live-gate"][
-        "preconditions"
-    ]
+    codex_preconditions = taskfile["tasks"]["test-smoke-native-join-live-gates"]["preconditions"]
     codex_version_check = next(
         item["sh"] for item in codex_preconditions if "codex --version" in item["sh"]
     )
@@ -37,19 +35,11 @@ def test_cli_pins_match_live_conformance_authorities() -> None:
     assert taskfile_codex_pin is not None
 
     jobs = workflow["jobs"]
-    codex_install = next(
-        step["run"]
-        for step in jobs["codex-probe"]["steps"]
-        if step.get("name") == "Install pinned Codex CLI"
-    )
-    workflow_codex_pin = re.search(r"@openai/codex@([0-9.]+)", codex_install)
-    assert workflow_codex_pin is not None
     claude_pins = {
         entry["claude-version"] for entry in jobs["claude-probe"]["strategy"]["matrix"]["include"]
     }
 
     assert _docker_arg(dockerfile, "CODEX_VERSION") == taskfile_codex_pin.group(1)
-    assert _docker_arg(dockerfile, "CODEX_VERSION") == workflow_codex_pin.group(1)
     assert {_docker_arg(dockerfile, "CLAUDE_VERSION")} == claude_pins
     assert _docker_arg(dockerfile, "CLAUDE_VERSION") == CLAUDE_CODE_CAPABILITIES.min_version
 

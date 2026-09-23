@@ -691,6 +691,8 @@ tasks:
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
+      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.154.0"
+        msg: "Native join gate requires codex-cli 0.154.0"
       - sh: command -v claude >/dev/null 2>&1
         msg: "Claude Code CLI must be installed"
       - sh: test -n "$CODEX_API_KEY" || test -n "$OPENAI_API_KEY" || test -f "$HOME/.codex/auth.json"

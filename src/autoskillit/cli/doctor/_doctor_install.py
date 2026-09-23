@@ -446,6 +446,62 @@ def _regular_files(root: Path) -> Iterator[Path]:
         return
 
 
+def _verify_record_entry(
+    installation: _Installation,
+    site_packages: Path,
+    row: list[str],
+    tracked: set[str],
+) -> DoctorResult | None:
+    if len(row) < 2:
+        return None
+    relative = Path(row[0])
+    if relative.is_absolute() or ".." in relative.parts:
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_invalid",
+            f"Invalid RECORD path {row[0]!r} in {_display(installation)}",
+        )
+    candidate = site_packages / relative
+    try:
+        package_relative = candidate.relative_to(installation.package_root)
+    except ValueError:
+        pass
+    else:
+        tracked.add(package_relative.as_posix())
+    if not row[1]:
+        return None
+    parsed_hash = _record_hash(row[1])
+    if parsed_hash is None:
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_invalid",
+            f"Invalid RECORD hash for {row[0]} in {_display(installation)}",
+        )
+    algorithm, expected = parsed_hash
+    try:
+        observed = hashlib.new(algorithm, candidate.read_bytes()).digest()
+    except ValueError:
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_unknown_algorithm",
+            f"Unknown RECORD hash algorithm {algorithm!r} "
+            f"for {candidate} in {_display(installation)}",
+        )
+    except OSError:
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_unreadable_entry",
+            f"Unreadable RECORD entry {candidate} in {_display(installation)}",
+        )
+    if observed != expected:
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_mismatch",
+            f"RECORD hash mismatch for {candidate} in {_display(installation)}",
+        )
+    return None
+
+
 def _verify_record(installation: _Installation) -> tuple[list[DoctorResult], set[str]]:
     """Verify hashed RECORD members and return its package-tree membership."""
     results: list[DoctorResult] = []
@@ -454,67 +510,9 @@ def _verify_record(installation: _Installation) -> tuple[list[DoctorResult], set
     try:
         rows = csv.reader(installation.record_path.read_text(encoding="utf-8").splitlines())
         for row in rows:
-            if len(row) < 2:
-                continue
-            relative = Path(row[0])
-            if relative.is_absolute() or ".." in relative.parts:
-                results.append(
-                    DoctorResult(
-                        Severity.ERROR,
-                        "installation_record_invalid",
-                        f"Invalid RECORD path {row[0]!r} in {_display(installation)}",
-                    )
-                )
-                continue
-            candidate = site_packages / relative
-            try:
-                package_relative = candidate.relative_to(installation.package_root)
-            except ValueError:
-                package_relative = None
-            if package_relative is not None:
-                tracked.add(package_relative.as_posix())
-            if not row[1]:
-                continue
-            parsed_hash = _record_hash(row[1])
-            if parsed_hash is None:
-                results.append(
-                    DoctorResult(
-                        Severity.ERROR,
-                        "installation_record_invalid",
-                        f"Invalid RECORD hash for {row[0]} in {_display(installation)}",
-                    )
-                )
-                continue
-            algorithm, expected = parsed_hash
-            try:
-                observed = hashlib.new(algorithm, candidate.read_bytes()).digest()
-            except ValueError:
-                results.append(
-                    DoctorResult(
-                        Severity.ERROR,
-                        "installation_record_unknown_algorithm",
-                        f"Unknown RECORD hash algorithm {algorithm!r} "
-                        f"for {candidate} in {_display(installation)}",
-                    )
-                )
-                continue
-            except OSError:
-                results.append(
-                    DoctorResult(
-                        Severity.ERROR,
-                        "installation_record_unreadable_entry",
-                        f"Unreadable RECORD entry {candidate} in {_display(installation)}",
-                    )
-                )
-                continue
-            if observed != expected:
-                results.append(
-                    DoctorResult(
-                        Severity.ERROR,
-                        "installation_record_mismatch",
-                        f"RECORD hash mismatch for {candidate} in {_display(installation)}",
-                    )
-                )
+            result = _verify_record_entry(installation, site_packages, row, tracked)
+            if result is not None:
+                results.append(result)
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
         results.append(
             DoctorResult(

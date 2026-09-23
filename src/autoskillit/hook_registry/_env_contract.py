@@ -101,7 +101,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_LAUNCH_ID",
         "autoskillit",
-        "autoskillit.cli.session._session_cook:cook",
+        "autoskillit.cli.session._session_cook:_build_cook_attempt_env",
         "autoskillit.cli.session._session_cook:cook",
         "Interactive cook startup binds hook state to the managed launch identity.",
     ),
@@ -164,7 +164,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_PROVIDER_PROFILE",
         "autoskillit",
-        "autoskillit.cli.session._session_cook:cook",
+        "autoskillit.cli.session._session_cook:_build_cook_attempt_env",
         "autoskillit.cli.session._session_cook:cook",
         "Cook startup selects the provider profile inherited by hook policy.",
     ),
@@ -192,7 +192,7 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_SESSION_TYPE",
         "autoskillit",
-        "autoskillit.cli.session._session_cook:cook",
+        "autoskillit.cli.session._session_cook:_build_cook_attempt_env",
         "autoskillit.cli.session._session_cook:cook",
         "Cook startup identifies the orchestration tier consumed by hook gates.",
     ),

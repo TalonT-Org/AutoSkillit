@@ -20,7 +20,6 @@ from autoskillit.cli.session._session_launch import (
     render_skill_unavailability,
 )
 from autoskillit.core import (
-    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     PluginLaunchBinding,
     PluginLoadMode,
     SkillContractError,
@@ -34,13 +33,21 @@ from autoskillit.core import (
 from autoskillit.execution.backends import managed_codex_route_for_launch_context
 
 if TYPE_CHECKING:
+    from autoskillit.cli.session._session_process import CookAttemptResult
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.cli.session.pty._observer import PtyObserver
+    from autoskillit.config import AutomationConfig
     from autoskillit.core import (
         CodingAgentBackend,
+        FreshLaunch,
+        InteractiveLaunch,
+        ManagedSessionHome,
         RepositoryProfileId,
+        RestoreSession,
         ResumeSpec,
+        ResumeWithBriefing,
         SemanticAdaptationContext,
+        SkillUnavailabilityPayload,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
@@ -60,9 +67,9 @@ _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
 )
 
 
-def _print_source_currency_warning(
-    status: str, behind_by: int | None, yellow: str, reset: str
-) -> None:
+def _print_source_currency_warning(status: str, behind_by: int | None, color: bool) -> None:
+    yellow = "\x1b[33m" if color else ""
+    reset = "\x1b[0m" if color else ""
     if status == "stale":
         print(
             f"{yellow}WARNING: installed AutoSkillit generation is {behind_by} commits "
@@ -73,6 +80,77 @@ def _print_source_currency_warning(
             f"{yellow}WARNING: installed AutoSkillit generation diverges from this checkout. "
             f"Run `autoskillit install` to refresh it.{reset}"
         )
+
+
+def _validate_provider_profile(profile: str | None, config: AutomationConfig) -> None:
+    if profile is None:
+        return
+    if not is_feature_enabled(
+        "providers", config.features, experimental_enabled=config.experimental_enabled
+    ):
+        print(
+            "Error: --profile requires the 'providers' feature to be enabled.\n"
+            "Enable it in .autoskillit/config.yaml:\n  features:\n    providers: true",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if profile not in config.providers.profiles:
+        known = ", ".join(sorted(config.providers.profiles)) or "(none defined)"
+        print(
+            f"Error: Unknown provider profile {profile!r}. Known profiles: {known}\n"
+            "Define profiles in .autoskillit/config.yaml under providers.profiles.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+def _render_cook_banner(config: AutomationConfig, *, color: bool) -> None:
+    from autoskillit import __version__
+    from autoskillit.config import iter_display_categories
+
+    bold, cyan, dim = ("\x1b[1m", "\x1b[96m", "\x1b[2m") if color else ("", "", "")
+    green, yellow, reset = ("\x1b[32m", "\x1b[33m", "\x1b[0m") if color else ("", "", "")
+    print(
+        f"{bold}{cyan}AUTOSKILLIT {__version__}{reset} {dim}Kitchen open. All tools active.{reset}"
+    )
+    for name, tools in iter_display_categories(
+        config.features, experimental_enabled=config.experimental_enabled
+    ):
+        if name not in {"Telemetry & Diagnostics", "Kitchen"}:
+            tool_list = f"{dim}, {reset}".join(f"{green}{tool}{reset}" for tool in tools)
+            print(f"  {yellow}{name:>20}{reset}  {tool_list}")
+    print()
+
+
+def _resolve_cook_backend(
+    config: AutomationConfig, backend: CodingAgentBackend | None
+) -> CodingAgentBackend:
+    if backend is not None:
+        return backend
+    from autoskillit.cli.session._session_backend import resolve_global_backend
+
+    return resolve_global_backend(
+        config.agent_backend.backend,
+        codex_runtime_spec=config.codex_runtime.resolve(),
+    )
+
+
+def _require_cook_binary(backend: CodingAgentBackend) -> None:
+    if shutil.which(backend.binary_name()) is None:
+        print(
+            f"ERROR: '{backend.binary_name()}' not found. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        )
+        raise SystemExit(1)
+
+
+def _resolve_cook_trace_enabled(backend: CodingAgentBackend) -> bool:
+    import autoskillit.core as core
+
+    trace_setting = os.environ.pop(core.CODEX_STARTUP_TRACE_ENV_VAR, None)
+    if trace_setting not in {None, "1"}:
+        raise ValueError(f"{core.CODEX_STARTUP_TRACE_ENV_VAR} must be absent or exactly '1'")
+    return trace_setting == "1" and backend.capabilities.cook_startup_observer_capable
 
 
 def _build_cook_projection_context(
@@ -138,6 +216,287 @@ def _print_recipes_list() -> None:
         print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")
 
 
+def _resolve_cook_launch(
+    backend: CodingAgentBackend,
+    resume_spec: ResumeSpec,
+    project_dir: Path,
+    session_type: str,
+) -> InteractiveLaunch:
+    import autoskillit.core as core
+    from autoskillit.cli.session import _session_launch_intent
+
+    if not isinstance(resume_spec, core.NoResume):
+        _session_launch_intent.prepare_resume_housekeeping(backend, resume_spec=resume_spec)
+    return _session_launch_intent.resolve_interactive_launch(
+        resume_spec=resume_spec,
+        session_type=session_type,
+        project_dir=project_dir,
+        backend=backend,
+    )
+
+
+def _prepare_resumed_cook_launch(
+    project_dir: Path, launch: RestoreSession | ResumeWithBriefing
+) -> str:
+    import autoskillit.core as core
+
+    return core.claim_launch_for_session(
+        project_dir,
+        claude_session_id=launch.session_id,
+        session_type="cook",
+        recipe_name=None,
+    )
+
+
+def _prepare_fresh_cook_launch(
+    project_dir: Path,
+    launch: FreshLaunch,
+    launch_id: str,
+    session_type: str,
+    trace: StartupTrace,
+) -> str | None:
+    import autoskillit.core as core
+    from autoskillit.cli.session import _session_launch_intent
+
+    if not _session_launch_intent._run_fresh_launch_ceremony(
+        launch=launch,
+        is_tty=sys.stdin.isatty(),
+        label="autoskillit cook",
+    ):
+        return None
+    trace.record_launch_anchor()
+    core.write_registry_entry(project_dir, launch_id, session_type, None)
+    return launch_id
+
+
+def _prepare_cook_managed_launch(
+    launch: InteractiveLaunch,
+    system_prompt: str | None,
+    unavailability_payload: SkillUnavailabilityPayload,
+    project_dir: Path,
+    *,
+    color: bool,
+) -> tuple[InteractiveLaunch, bool]:
+    import autoskillit.core as core
+    from autoskillit.cli.session import _session_onboarding
+
+    render_skill_unavailability(unavailability_payload)
+    if not isinstance(launch, core.FreshLaunch):
+        return launch, False
+    initial_prompt = (
+        _session_onboarding.run_onboarding_menu(project_dir, color=color)
+        if _session_onboarding.is_first_run(project_dir)
+        else None
+    )
+    return replace(
+        launch,
+        system_prompt=append_skill_unavailability(system_prompt, unavailability_payload),
+        initial_prompt=initial_prompt,
+    ), initial_prompt is not None
+
+
+def _build_cook_attempt_env(
+    launch_id: str,
+    profile: str | None,
+    config: AutomationConfig,
+    managed_join_context: SemanticAdaptationContext | None,
+) -> dict[str, str]:
+    import autoskillit.core as core
+
+    extras = {
+        core.SESSION_TYPE_ENV_VAR: core.SessionType.SKILL.value,
+        core.LAUNCH_ID_ENV_VAR: launch_id,
+    }
+    if managed_join_context is not None:
+        extras[core.MANAGED_JOIN_PARENT_ID_ENV_VAR] = launch_id
+    if profile is not None:
+        extras[core.PROVIDER_PROFILE_ENV_VAR] = profile
+        extras.update(
+            {
+                key: value
+                for key, value in config.providers.profiles[profile].items()
+                if value is not None and key != core.CODEX_STARTUP_TRACE_ENV_VAR
+            }
+        )
+    extras.pop(core.CODEX_STARTUP_TRACE_ENV_VAR, None)
+    return extras
+
+
+def _execute_cook_attempt(
+    *,
+    backend: CodingAgentBackend,
+    project_dir: Path,
+    cook_env_extras: dict[str, str],
+    launch: InteractiveLaunch,
+    managed_home: ManagedSessionHome,
+    projection_binding: PluginLaunchBinding,
+    load_mode: PluginLoadMode,
+    launch_id: str,
+    attempt: int,
+    config: AutomationConfig,
+    trace: StartupTrace,
+    trace_enabled: bool,
+    force_inactive_agent_teams: bool,
+) -> tuple[CookAttemptResult, str | None]:
+    import autoskillit.core as core
+    from autoskillit.cli.session import _session_process, _session_reload
+    from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
+
+    match launch:
+        case core.FreshLaunch():
+            current_resume_spec: ResumeSpec = core.NoResume()
+        case (
+            core.RestoreSession(session_id=session_id)
+            | core.ResumeWithBriefing(session_id=session_id)
+        ):
+            current_resume_spec = core.NamedResume(session_id=session_id)
+    try:
+        prepared = prepare_interactive_launch(
+            backend,
+            project_dir=project_dir,
+            extra_env=cook_env_extras,
+            required_env=None,
+            plugin_binding=projection_binding if load_mode.consumes_artifact else None,
+            launch=launch,
+            add_dirs=[managed_home.skills_dir],
+            generated_home=managed_home.generated_home,
+            home_prepared=True,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
+        )
+    except ValueError as exc:
+        _exit_launch_preparation_error(exc)
+    built_spec = prepared.spec
+    spec = replace(
+        built_spec,
+        cmd=built_spec.cmd,
+        env=dict(built_spec.env),
+        cwd=str(project_dir),
+        origin=built_spec.origin,
+    )
+    variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
+    assert_interactive_ordering(
+        spec=spec,
+        variadic_flags=variadic_flags,
+        value_bearing_flags=value_bearing_flags,
+    )
+    assert_resume_purity(spec=spec, launch=launch)
+    validation = backend.validate_interactive_invocation(spec)
+    if validation.errors:
+        raise RuntimeError(
+            "Interactive invocation validation failed: " + "; ".join(validation.errors)
+        )
+    with backend.session_attempt_context(
+        session_home=managed_home.generated_home,
+        project_dir=project_dir,
+        launch_id=launch_id,
+        attempt=attempt,
+        current_resume_spec=current_resume_spec,
+        ceiling_seconds=config.process_tether.cook_ceiling_seconds,
+    ) as attempt_handle:
+        trace.record_attempt_anchor(attempt=attempt, view_id=attempt_handle.view_id)
+        observer = _startup_observer(
+            backend=backend,
+            trace=trace,
+            enabled=trace_enabled,
+            sqlite_home=managed_home.generated_home,
+            attempt=attempt,
+            view_id=attempt_handle.view_id,
+        )
+        pass_fds = tuple(
+            dict.fromkeys((*spec.inherited_fds, *managed_home.pass_fds, *attempt_handle.pass_fds))
+        )
+        if not executable_binding_matches_current_file(prepared.executable):
+            sys.stderr.write("ERROR: interactive executable changed after capability probing\n")
+            raise SystemExit(1)
+
+        def _record_spawn(pid: int, pgid: int) -> None:
+            attempt_handle.record_spawn(pid, pgid)
+            if not core.bind_session_owner(project_dir, launch_id, pid):
+                raise RuntimeError(
+                    f"session owner binding refused for launch {launch_id!r} and pid {pid}"
+                )
+
+        result = _session_process.run_cook_attempt(
+            spec,
+            pass_fds=pass_fds,
+            on_spawn=_record_spawn,
+            on_reaped=attempt_handle.record_reaped,
+            trace=trace,
+            observer=observer,
+            not_after=time.time() + config.process_tether.cook_ceiling_seconds,
+            systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
+            pre_spawn_check=validation.pre_spawn_check,
+        )
+        reload_session_id = _session_reload.consume_reload_sentinel(project_dir)
+        _require_observer_ready(observer)
+        trace.require_startup_budgets()
+    return result, reload_session_id
+
+
+def _run_managed_cook(
+    *,
+    backend: CodingAgentBackend,
+    project_dir: Path,
+    launch: InteractiveLaunch,
+    launch_id: str,
+    config: AutomationConfig,
+    cook_env_extras: dict[str, str],
+    managed_home: ManagedSessionHome,
+    projection_binding: PluginLaunchBinding | None,
+    load_mode: PluginLoadMode,
+    trace: StartupTrace,
+    trace_enabled: bool,
+    force_inactive_agent_teams: bool,
+    showed_onboarding: bool,
+) -> None:
+    import autoskillit.core as core
+    from autoskillit.cli.session import _session_onboarding, _session_reload
+
+    if projection_binding is None:
+        raise RuntimeError(
+            "cook: missing plugin launch binding — load_mode.consumes_artifact "
+            "must hold when entering the managed cook loop"
+        )
+    current_launch = launch
+    seen_reload_ids: set[str] = set()
+    max_reloads = 10
+    attempt = 0
+    try:
+        while True:
+            attempt += 1
+            result, reload_session_id = _execute_cook_attempt(
+                backend=backend,
+                project_dir=project_dir,
+                cook_env_extras=cook_env_extras,
+                launch=current_launch,
+                managed_home=managed_home,
+                projection_binding=projection_binding,
+                load_mode=load_mode,
+                launch_id=launch_id,
+                attempt=attempt,
+                config=config,
+                trace=trace,
+                trace_enabled=trace_enabled,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+            )
+            if reload_session_id is None:
+                if result.returncode != 0:
+                    raise SystemExit(result.returncode)
+                if showed_onboarding:
+                    _session_onboarding.mark_onboarded(project_dir)
+                trace.close(status="success")
+                return
+            current_launch = core.RestoreSession(
+                session_id=_session_reload.admit_reload(
+                    reload_session_id, seen_reload_ids, max_reloads
+                ).session_id
+            )
+    except BaseException:
+        trace.close(status="failed")
+        raise
+
+
 def cook(
     *,
     resume: bool = False,
@@ -146,7 +505,7 @@ def cook(
     backend: CodingAgentBackend | None = None,
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    from autoskillit.config import iter_display_categories, load_config
+    from autoskillit.config import load_config
     from autoskillit.execution import all_backends
     from autoskillit.exploration import resolve_repository_profile
     from autoskillit.workspace import (
@@ -161,10 +520,6 @@ def cook(
 
     config = load_config()
     force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
-    # Same derivation the MCP server uses (git toplevel -> cwd). Running `cook`
-    # from a repository subdirectory used to yield a different project_dir than
-    # the server derived on the same machine, and both values flow into the
-    # execution-bound dispatch contract.
     project_dir = resolve_project_dir()
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
@@ -173,411 +528,111 @@ def cook(
     except SkillContractError as exc:
         render_skill_contract_composition_failure(exc)
         raise SystemExit(1) from exc
-    if backend is None:
-        from autoskillit.cli.session._session_backend import resolve_global_backend
-
-        backend = resolve_global_backend(
-            config.agent_backend.backend,
-            codex_runtime_spec=config.codex_runtime.resolve(),
-        )
+    backend = _resolve_cook_backend(config, backend)
     cook_system_prompt = (
         _COOK_PRE_REVEALED_KITCHEN_PROMPT
         if not backend.capabilities.supports_tool_list_changed
         else None
     )
+    _require_cook_binary(backend)
 
-    if shutil.which(backend.binary_name()) is None:
-        print(
-            f"ERROR: '{backend.binary_name()}' not found. "
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
-        )
-        raise SystemExit(1)
-
-    from autoskillit import __version__
-    from autoskillit.cli.ui._ansi import supports_color
+    import autoskillit.core as core
+    from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
+    from autoskillit.cli.ui._ansi import permissions_warning, supports_color
 
     color = supports_color()
-    _B = "\x1b[1m" if color else ""
-    _C = "\x1b[96m" if color else ""
-    _D = "\x1b[2m" if color else ""
-    _G = "\x1b[32m" if color else ""
-    _Y = "\x1b[33m" if color else ""
-    _R = "\x1b[0m" if color else ""
-
     currency = source_currency(
         project_dir,
         generation_root=resolve_installed_generation_root(),
     )
-    _print_source_currency_warning(currency.status, currency.behind_by, _Y, _R)
-
-    if profile is not None:
-        if not is_feature_enabled(
-            "providers", config.features, experimental_enabled=config.experimental_enabled
-        ):
-            print(
-                "Error: --profile requires the 'providers' feature to be enabled.\n"
-                "Enable it in .autoskillit/config.yaml:\n"
-                "  features:\n"
-                "    providers: true",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        if profile not in config.providers.profiles:
-            known = ", ".join(sorted(config.providers.profiles)) or "(none defined)"
-            print(
-                f"Error: Unknown provider profile {profile!r}. Known profiles: {known}\n"
-                "Define profiles in .autoskillit/config.yaml under providers.profiles.",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-
-    print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
-    skip = {"Telemetry & Diagnostics", "Kitchen"}
-    for name, tools in iter_display_categories(
-        config.features, experimental_enabled=config.experimental_enabled
-    ):
-        if name in skip:
-            continue
-        tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)
-        print(f"  {_Y}{name:>20}{_R}  {tool_list}")
-    print()
-
-    from autoskillit.cli.ui._ansi import permissions_warning
-
+    _print_source_currency_warning(currency.status, currency.behind_by, color)
+    _validate_provider_profile(profile, config)
+    _render_cook_banner(config, color=color)
     print(permissions_warning())
 
-    from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
-    from autoskillit.cli.session._session_onboarding import is_first_run, run_onboarding_menu
-    from autoskillit.core import (
-        CODEX_STARTUP_TRACE_ENV_VAR,
-        LAUNCH_ID_ENV_VAR,
-        PROVIDER_PROFILE_ENV_VAR,
-        SESSION_TYPE_ENV_VAR,
-        ExplorationVectorApplicabilityId,
-        ExplorationVectorDisposition,
-        FreshLaunch,
-        NamedResume,
-        NoResume,
-        RepositoryProfileId,
-        RestoreSession,
-        ResumeWithBriefing,
-        SessionType,
-        SkillExecutionRole,
-        bind_session_owner,
-        claim_launch_for_session,
-        configure_logging,
-        release_session_claim,
-        resolve_temp_dir,
-        resume_spec_from_cli,
-        temp_dir_display_str,
-        write_registry_entry,
-    )
-
-    configure_logging()
-
-    resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
-    trace_setting = os.environ.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
-    if trace_setting not in {None, "1"}:
-        raise ValueError(f"{CODEX_STARTUP_TRACE_ENV_VAR} must be absent or exactly '1'")
-    trace_enabled = trace_setting == "1" and backend.capabilities.cook_startup_observer_capable
-
+    core.configure_logging()
+    resume_spec = core.resume_spec_from_cli(resume=resume, session_id=session_id)
+    trace_enabled = _resolve_cook_trace_enabled(backend)
     persistent_roots = resolve_persistent_session_roots(
-        resolve_temp_dir(project_dir, config.workspace.temp_dir),
+        core.resolve_temp_dir(project_dir, config.workspace.temp_dir),
         all_backends(),
         required_backend_names={backend.name},
     )
-    ephemeral_root = resolve_ephemeral_root()
     skills_provider = SkillsDirectoryProvider(
-        temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
+        temp_dir_relpath=core.temp_dir_display_str(config.workspace.temp_dir),
         default_base_branch=config.branching.default_base_branch,
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
-        ephemeral_root,
+        resolve_ephemeral_root(),
         persistent_roots=persistent_roots,
     )
     session_mgr.cleanup_stale()
 
-    from autoskillit.cli.session._session_launch_intent import (
-        prepare_resume_housekeeping,
-        resolve_interactive_launch,
-    )
-
-    if not isinstance(resume_spec, NoResume):
-        prepare_resume_housekeeping(backend, resume_spec=resume_spec)
-    launch = resolve_interactive_launch(
-        resume_spec=resume_spec,
-        session_type=SESSION_TYPE_COOK,
-        project_dir=project_dir,
-        backend=backend,
-    )
     claimed_launch_id: str | None = None
-    match launch:
-        case FreshLaunch():
-            launch_id = uuid.uuid4().hex[:16]
-        case (
-            RestoreSession(session_id=claude_session_id)
-            | ResumeWithBriefing(session_id=claude_session_id)
-        ):
-            launch_id = claim_launch_for_session(
-                project_dir,
-                claude_session_id=claude_session_id,
-                session_type=SESSION_TYPE_COOK,
-                recipe_name=None,
-            )
-            claimed_launch_id = launch_id
-
-    managed_join_context: SemanticAdaptationContext | None = None
-    if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
-        from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
-
-        evidence = acquire_managed_join_evidence(
-            backend=backend,
-            configured_model=config.model.model_override or config.model.default_model,
-            state_root=project_dir,
-            parent_id=launch_id,
-            launch_context="interactive",
-        )
-        if evidence is not None:
-            managed_join_context = evidence.context
     try:
-        session_catalog = skill_resolver.list_effective(
-            project_dir,
-            SkillExecutionRole.SESSION,
-            visibility=skill_visibility,
-            cook_session=True,
-        )
-    except SkillContractError as exc:
-        render_skill_contract_composition_failure(exc)
-        raise SystemExit(1) from exc
-    render_skill_catalog_exclusions(session_catalog.exclusions)
-    skill_compilation = compile_session_skill_catalog(
-        session_catalog, backend, adaptation_context=managed_join_context
-    )
-    session_catalog = skill_compilation.catalog
-    requires_resolved_exploration_profile = any(
-        vector.disposition is ExplorationVectorDisposition.MIGRATED
-        and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
-        and vector.profile is RepositoryProfileId.AUTO
-        for member in session_catalog.skills
-        for vector in member.exploration_vectors
-    )
-    resolved_exploration_profile = (
-        resolve_repository_profile(project_dir) if requires_resolved_exploration_profile else None
-    )
+        launch = _resolve_cook_launch(backend, resume_spec, project_dir, SESSION_TYPE_COOK)
+        match launch:
+            case core.FreshLaunch():
+                launch_id = uuid.uuid4().hex[:16]
+            case core.RestoreSession() | core.ResumeWithBriefing():
+                claimed_launch_id = _prepare_resumed_cook_launch(project_dir, launch)
+                launch_id = claimed_launch_id
 
-    from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
+        managed_join_context: SemanticAdaptationContext | None = None
+        if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+            from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
 
-    # The selected authority also owns the scripts rendered into the catalog.
-    artifact_authority, load_mode = interactive_plugin_authority(
-        backend=backend,
-        default_base_branch=config.branching.default_base_branch,
-        project_dir=project_dir,
-        skill_catalog=session_catalog,
-        generated_home_available=True,
-        retain_projection_source=True,
-    )
-    projection_load_mode = (
-        load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
-    )
-
-    def _run_managed() -> None:
-        nonlocal claimed_launch_id, cook_system_prompt, launch
-        render_skill_unavailability(managed_home.unavailability_payload)
-        cook_system_prompt = append_skill_unavailability(
-            cook_system_prompt,
-            managed_home.unavailability_payload,
-        )
-        from autoskillit.cli.session._session_launch_intent import _run_fresh_launch_ceremony
-
-        showed_onboarding = False
-        if isinstance(launch, FreshLaunch):
-            onboarding_result = (
-                run_onboarding_menu(project_dir, color=color)
-                if is_first_run(project_dir)
-                else None
+            evidence = acquire_managed_join_evidence(
+                backend=backend,
+                configured_model=config.model.model_override or config.model.default_model,
+                state_root=project_dir,
+                parent_id=launch_id,
+                launch_context="interactive",
             )
-            showed_onboarding = onboarding_result is not None
-            launch = replace(
-                launch,
-                system_prompt=cook_system_prompt,
-                initial_prompt=onboarding_result,
-            )
-
-        from autoskillit.cli.session._session_startup_trace import StartupTrace
-
-        trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
-        if not _run_fresh_launch_ceremony(
-            launch=launch,
-            is_tty=sys.stdin.isatty(),
-            label="autoskillit cook",
-        ):
-            return
-        trace.record_launch_anchor()
-        if isinstance(launch, FreshLaunch):
-            write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
-            claimed_launch_id = launch_id
-
-        cook_env_extras: dict[str, str] = {
-            SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
-            LAUNCH_ID_ENV_VAR: launch_id,
-        }
-        if managed_join_context is not None:
-            # cook() runs in-process as the parent, so reuse its launch_id as
-            # the managed-join parent identity (cli/order paths mint a distinct
-            # child parent_id via new_managed_launch_id()).
-            cook_env_extras[MANAGED_JOIN_PARENT_ID_ENV_VAR] = launch_id
-        if profile is not None:
-            cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile
-            cook_env_extras.update(
-                {
-                    key: value
-                    for key, value in config.providers.profiles[profile].items()
-                    if value is not None and key != CODEX_STARTUP_TRACE_ENV_VAR
-                }
-            )
-        cook_env_extras.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
-
-        current_launch = launch
-        max_reloads = 10
-        seen_reload_ids: set[str] = set()
-        attempt = 0
-
-        from autoskillit.cli.session._session_process import run_cook_attempt
-        from autoskillit.cli.session._session_reload import admit_reload, consume_reload_sentinel
-        from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
-
+            if evidence is not None:
+                managed_join_context = evidence.context
         try:
-            while True:
-                attempt += 1
-                match current_launch:
-                    case FreshLaunch():
-                        current_resume_spec: ResumeSpec = NoResume()
-                    case (
-                        RestoreSession(session_id=session_id)
-                        | ResumeWithBriefing(session_id=session_id)
-                    ):
-                        current_resume_spec = NamedResume(session_id=session_id)
-                launch_binding = projection_binding if load_mode.consumes_artifact else None
-                try:
-                    prepared = prepare_interactive_launch(
-                        backend,
-                        project_dir=project_dir,
-                        extra_env=cook_env_extras,
-                        required_env=None,
-                        plugin_binding=launch_binding,
-                        launch=current_launch,
-                        add_dirs=[managed_home.skills_dir],
-                        generated_home=managed_home.generated_home,
-                        home_prepared=True,
-                        force_inactive_agent_teams=force_inactive_agent_teams,
-                        mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
-                    )
-                except ValueError as exc:
-                    _exit_launch_preparation_error(exc)
-                built_spec = prepared.spec
-                final_cmd = built_spec.cmd
-                final_origin = built_spec.origin
-                final_env = dict(built_spec.env)
-                spec = replace(
-                    built_spec,
-                    cmd=final_cmd,
-                    env=final_env,
-                    cwd=str(project_dir),
-                    origin=final_origin,
-                )
-                variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
-                assert_interactive_ordering(
-                    spec=spec,
-                    variadic_flags=variadic_flags,
-                    value_bearing_flags=value_bearing_flags,
-                )
-                assert_resume_purity(spec=spec, launch=current_launch)
-                validation = backend.validate_interactive_invocation(spec)
-                if validation.errors:
-                    raise RuntimeError(
-                        "Interactive invocation validation failed: " + "; ".join(validation.errors)
-                    )
+            session_catalog = skill_resolver.list_effective(
+                project_dir,
+                core.SkillExecutionRole.SESSION,
+                visibility=skill_visibility,
+                cook_session=True,
+            )
+        except SkillContractError as exc:
+            render_skill_contract_composition_failure(exc)
+            raise SystemExit(1) from exc
+        render_skill_catalog_exclusions(session_catalog.exclusions)
+        skill_compilation = compile_session_skill_catalog(
+            session_catalog, backend, adaptation_context=managed_join_context
+        )
+        session_catalog = skill_compilation.catalog
+        requires_resolved_exploration_profile = any(
+            vector.disposition is core.ExplorationVectorDisposition.MIGRATED
+            and vector.applicability is core.ExplorationVectorApplicabilityId.ALWAYS
+            and vector.profile is core.RepositoryProfileId.AUTO
+            for member in session_catalog.skills
+            for vector in member.exploration_vectors
+        )
+        resolved_exploration_profile = (
+            resolve_repository_profile(project_dir)
+            if requires_resolved_exploration_profile
+            else None
+        )
 
-                with backend.session_attempt_context(
-                    session_home=managed_home.generated_home,
-                    project_dir=project_dir,
-                    launch_id=launch_id,
-                    attempt=attempt,
-                    current_resume_spec=current_resume_spec,
-                    ceiling_seconds=config.process_tether.cook_ceiling_seconds,
-                ) as attempt_handle:
-                    trace.record_attempt_anchor(
-                        attempt=attempt,
-                        view_id=attempt_handle.view_id,
-                    )
-                    observer = _startup_observer(
-                        backend=backend,
-                        trace=trace,
-                        enabled=trace_enabled,
-                        sqlite_home=managed_home.generated_home,
-                        attempt=attempt,
-                        view_id=attempt_handle.view_id,
-                    )
-                    pass_fds = tuple(
-                        dict.fromkeys(
-                            (
-                                *spec.inherited_fds,
-                                *managed_home.pass_fds,
-                                *attempt_handle.pass_fds,
-                            )
-                        )
-                    )
-                    if not executable_binding_matches_current_file(prepared.executable):
-                        sys.stderr.write(
-                            "ERROR: interactive executable changed after capability probing\n"
-                        )
-                        raise SystemExit(1)
+        from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 
-                    def _record_spawn(pid: int, pgid: int) -> None:
-                        attempt_handle.record_spawn(pid, pgid)
-                        if not bind_session_owner(project_dir, launch_id, pid):
-                            raise RuntimeError(
-                                f"session owner binding refused for launch {launch_id!r} "
-                                f"and pid {pid}"
-                            )
-
-                    result = run_cook_attempt(
-                        spec,
-                        pass_fds=pass_fds,
-                        on_spawn=_record_spawn,
-                        on_reaped=attempt_handle.record_reaped,
-                        trace=trace,
-                        observer=observer,
-                        not_after=time.time() + config.process_tether.cook_ceiling_seconds,
-                        systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
-                        pre_spawn_check=validation.pre_spawn_check,
-                    )
-                    reload_session_id = consume_reload_sentinel(project_dir)
-                    _require_observer_ready(observer)
-                    trace.require_startup_budgets()
-
-                if reload_session_id is None:
-                    if result.returncode != 0:
-                        raise SystemExit(result.returncode)
-                    if showed_onboarding:
-                        from autoskillit.cli.session._session_onboarding import mark_onboarded
-
-                        mark_onboarded(project_dir)
-                    trace.close(status="success")
-                    return
-
-                resumed = admit_reload(
-                    reload_session_id,
-                    seen_reload_ids,
-                    max_reloads,
-                )
-                current_launch = RestoreSession(session_id=resumed.session_id)
-        except BaseException:
-            trace.close(status="failed")
-            raise
-
-    try:
+        artifact_authority, load_mode = interactive_plugin_authority(
+            backend=backend,
+            default_base_branch=config.branching.default_base_branch,
+            project_dir=project_dir,
+            skill_catalog=session_catalog,
+            generated_home_available=True,
+            retain_projection_source=True,
+        )
+        projection_load_mode = (
+            load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
+        )
         with (
             plugin_launch_binding_scope(
                 authority=artifact_authority,
@@ -601,10 +656,45 @@ def cook(
                 ),
             ) as managed_home,
         ):
-            _run_managed()
+            launch, showed_onboarding = _prepare_cook_managed_launch(
+                launch,
+                cook_system_prompt,
+                managed_home.unavailability_payload,
+                project_dir,
+                color=color,
+            )
+            from autoskillit.cli.session._session_startup_trace import StartupTrace
+
+            trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
+            if isinstance(launch, core.FreshLaunch):
+                claimed_launch_id = _prepare_fresh_cook_launch(
+                    project_dir, launch, launch_id, SESSION_TYPE_COOK, trace
+                )
+                if claimed_launch_id is None:
+                    return
+            else:
+                trace.record_launch_anchor()
+            cook_env_extras = _build_cook_attempt_env(
+                launch_id, profile, config, managed_join_context
+            )
+            _run_managed_cook(
+                backend=backend,
+                project_dir=project_dir,
+                launch=launch,
+                launch_id=launch_id,
+                config=config,
+                cook_env_extras=cook_env_extras,
+                managed_home=managed_home,
+                projection_binding=projection_binding,
+                load_mode=load_mode,
+                trace=trace,
+                trace_enabled=trace_enabled,
+                force_inactive_agent_teams=force_inactive_agent_teams,
+                showed_onboarding=showed_onboarding,
+            )
     finally:
         if claimed_launch_id is not None:
-            release_session_claim(project_dir, claimed_launch_id)
+            core.release_session_claim(project_dir, claimed_launch_id)
 
 
 def _startup_observer(

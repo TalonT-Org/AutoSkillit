@@ -12,6 +12,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
+    AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CODEX_INTERACTIVE_REQUIRED_ENV,
@@ -177,11 +178,11 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             extras[reserved_key] = managed_catalog.session_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
+                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(exit_after_stop_delay_ms / 1000)
             )
         if stream_idle_timeout_ms:
             extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
+                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(stream_idle_timeout_ms / 1000)
             )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
@@ -508,11 +509,11 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             extras[reserved_key] = session_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
+                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(exit_after_stop_delay_ms / 1000)
             )
         if stream_idle_timeout_ms:
             extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
+                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(stream_idle_timeout_ms / 1000)
             )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(

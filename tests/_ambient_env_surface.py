@@ -1031,19 +1031,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         " Codex generic-prompt launch; the finalized generated home is layered by the caller."
     ),
-    "execution/backends/_codex/session_commands.py:186": (
+    "execution/backends/_codex/session_commands.py:187": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:517": (
+    "execution/backends/_codex/session_commands.py:518": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:204": (
+    "execution/backends/_codex/session_commands.py:205": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:730": (
+    "execution/backends/_codex/session_commands.py:731": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -2398,6 +2398,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     ),
     "FLEET_SESSION_REQUIRED_ENV": AmbientEnvDisposition(
         var="FLEET_SESSION_REQUIRED_ENV",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR",
         disposition="scrub",
         owner="autoskillit",
         justification=(

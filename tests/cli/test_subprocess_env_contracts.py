@@ -589,7 +589,7 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # cook finalizes a backend-built CmdSpec with an absolute cwd and reserved
         # generated-home values. ``replace`` is a dataclass copy, not a process launch;
         # its env starts from the backend policy's already-scrubbed ``built_spec.env``.
-        ("_session_cook.py", "cook"),
+        ("_session_cook.py", "_execute_cook_attempt"),
     }
 )
 

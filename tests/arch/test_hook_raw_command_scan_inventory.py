@@ -224,8 +224,9 @@ def _observed_raw_scans() -> tuple[tuple[str, str, str], ...]:
 # raw-scan census is designed to surface as a conscious, reviewed diff:
 # (1) `_classification/_tokenizer.py`'s own sites (the sole general parsing
 # authority for command text) and `_interpreters.py`'s own internal
-# tokenizer use in building that authority, and (2) `compose_pr_body_guard.py`'s
-# grouped projection of the shared per-evaluated-payload walk, needed because
+# tokenizer and payload-discovery use in building that authority, and (2)
+# `compose_pr_body_guard.py`'s grouped projection of the shared per-payload walk,
+# needed because
 # `all_evaluated_segments` flattens across payloads while `$VAR` resolution
 # must stay scoped to the one payload that defines it.
 _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
@@ -238,8 +239,8 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
             "str.splitlines",
         ),
         # _classification/_interpreters.py -- the authority's own internal
-        # tokenizer use (_iter_evaluated_segments / all_evaluated_segments_with_provenance /
-        # the grouped shell-payload walk feeding each other and the tokenizer facade).
+        # tokenizer and shell-payload use (_iter_evaluated_segments,
+        # all_evaluated_segments_with_provenance, and the grouped payload walk).
         (
             "hooks/_classification/_interpreters.py",
             "_iter_evaluated_segments",
@@ -252,7 +253,7 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
         ),
         (
             "hooks/_classification/_interpreters.py",
-            "_iter_shell_payload_segment_groups",
+            "_queue_nested_shell_payloads",
             "extract_shell_command_payloads",
         ),
         (

@@ -229,34 +229,32 @@ def non_flag_operands(args: list[str]) -> list[str]:
     return operands
 
 
+def _write_verb_operands(verb: str, segment: list[str], operands: list[str]) -> list[str]:
+    if verb == "sed":
+        has_inplace = any(token.startswith("-i") or token == "--in-place" for token in segment[1:])
+        if not has_inplace:
+            return []
+        return operands[-1:]
+    if verb in {"mv", "cp"}:
+        return operands[-1:] if len(operands) >= 2 else []
+    if verb == "install":
+        # GNU install's -t/--target-directory form takes its destination
+        # from a flag; otherwise the last operand is the destination.
+        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
+            return operands[:1]
+        if len(operands) < 2:
+            return []
+        return operands[-1:]
+    if verb == "patch":
+        return operands[:1]
+    return operands
+
+
 def extract_write_verb_targets(
     verb: str, segment: list[str], cwd: str = ""
 ) -> tuple[list[str], bool]:
     """Return write-verb targets and whether a write target could not resolve."""
-    operands = non_flag_operands(segment[1:])
-    if verb == "sed":
-        has_inplace = any(token.startswith("-i") or token == "--in-place" for token in segment[1:])
-        if not has_inplace:
-            return [], False
-        operands = operands[-1:]
-    elif verb in {"mv", "cp"}:
-        if len(operands) < 2:
-            return [], False
-        operands = operands[-1:]
-    elif verb == "install":
-        # GNU install: `install -t DIR SRC...` puts the destination in a
-        # `-t` flag (filtered out by non_flag_operands); without `-t` the
-        # last operand is the destination. Pick the target directory in
-        # both shapes.
-        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
-            operands = operands[:1]
-        else:
-            if len(operands) < 2:
-                return [], False
-            operands = operands[-1:]
-    elif verb == "patch":
-        operands = operands[:1]
-
+    operands = _write_verb_operands(verb, segment, non_flag_operands(segment[1:]))
     targets: list[str] = []
     unresolved_target = False
     for operand in operands:

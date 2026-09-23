@@ -8,6 +8,7 @@ ARG CODEX_VERSION=0.154.0
 ARG CLAUDE_VERSION=2.1.219
 ARG GO_TASK_VERSION=3.43.3
 ARG PRE_COMMIT_VERSION=4.6.2
+ARG MYPY_VERSION=1.19.1
 ARG VERIFIER_UID=1000
 ARG VERIFIER_GID=1000
 
@@ -37,8 +38,11 @@ RUN apt-get update \
         "${task_release}/task_linux_${task_arch}.tar.gz" \
         | tar --extract --gzip --directory /usr/local/bin task \
     && uv venv /opt/pre-commit \
-    && uv pip install --python /opt/pre-commit/bin/python "pre-commit==${PRE_COMMIT_VERSION}" \
+    && uv pip install --python /opt/pre-commit/bin/python \
+        "pre-commit==${PRE_COMMIT_VERSION}" \
+        "mypy==${MYPY_VERSION}" \
     && ln -s /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit \
+    && ln -s /opt/pre-commit/bin/mypy /usr/local/bin/mypy \
     && test "$(codex --version 2>/dev/null)" = "codex-cli ${CODEX_VERSION}" \
     && claude --version 2>/dev/null | grep --quiet "^${CLAUDE_VERSION}"
 
@@ -56,12 +60,6 @@ RUN install --directory --owner verifier --group verifier /workspace/.autoskilli
 
 USER verifier
 
-RUN git init \
-    && git config user.name "AutoSkillit Verification" \
-    && git config user.email "verification@localhost" \
-    && git add --all \
-    && git commit --message "exact source snapshot"
-
 # The optional BuildKit secret is needed only when the locked Git dependency is private.
 # Its value is scoped to this RUN instruction and never becomes an image layer or ENV value.
 RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \
@@ -73,5 +71,13 @@ RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \
         export GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
     uv sync --locked --extra dev
+
+RUN task regen-contracts \
+    && task compile-recipes \
+    && git init \
+    && git config user.name "AutoSkillit Verification" \
+    && git config user.email "verification@localhost" \
+    && git add --all \
+    && git commit --message "exact source snapshot"
 
 CMD ["bash"]

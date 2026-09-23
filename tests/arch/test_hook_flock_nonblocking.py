@@ -98,6 +98,16 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/evidence/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
     (
+        "execution/evidence/report_walk.py",
+        "_open_otlp",
+        "ArtifactLease.acquire_shared",
+    ),
+    (
+        "execution/evidence/report_walk.py",
+        "_walk_projection",
+        "ArtifactLease.acquire_shared",
+    ),
+    (
         "execution/session_log/_session_log_retention.py",
         "prune_execution_candidate_manifests_at_root",
         "ArtifactLease.acquire_exclusive",

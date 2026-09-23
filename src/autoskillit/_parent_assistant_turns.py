@@ -38,6 +38,37 @@ def _resolve_turn_id(rec: dict[str, object]) -> str:
     return ""
 
 
+def _resolve_codex_turn_id(rec: dict[str, object], active_turn_id: str) -> str:
+    payload = rec.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+    for value in (
+        _resolve_turn_id(rec),
+        rec.get("turn_id"),
+        payload.get("turn_id"),
+        active_turn_id,
+        payload.get("id"),
+        payload.get("call_id"),
+    ):
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _codex_assistant_payload(rec: object) -> dict[str, object] | None:
+    if not isinstance(rec, dict) or rec.get("type") != "response_item":
+        return None
+    payload = rec.get("payload")
+    if not isinstance(payload, dict) or payload.get("agent_id") or payload.get("agentId"):
+        return None
+    payload_type = payload.get("type")
+    if payload_type == "message" and payload.get("role") == "assistant":
+        return payload
+    if payload_type in {"function_call", "custom_tool_call"}:
+        return payload
+    return None
+
+
 def is_parent_assistant_record(rec: object) -> bool:
     """Return True iff ``rec`` is a transcript record for the parent assistant.
 
@@ -62,36 +93,81 @@ def is_parent_assistant_record(rec: object) -> bool:
     return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
 
 
-def iter_merged_assistant_turns(text: str, *, cap: int = TOOL_USE_CAP) -> Iterator[AssistantTurn]:
-    """Yield merged parent-assistant turns in their first-seen transcript order.
+def _assistant_content(
+    record: dict[str, object], backend: str, active_codex_turn_id: str
+) -> tuple[str | None, object, str] | None:
+    if backend == "codex":
+        context = record.get("payload")
+        if (
+            record.get("type") == "turn_context"
+            and isinstance(context, dict)
+            and isinstance(context.get("turn_id"), str)
+        ):
+            active_codex_turn_id = context["turn_id"]
+        message = _codex_assistant_payload(record)
+        if message is None:
+            return None, [], active_codex_turn_id
+        turn_id = _resolve_codex_turn_id(record, active_codex_turn_id)
+        if message.get("type") in {"function_call", "custom_tool_call"}:
+            return (
+                turn_id,
+                [{"type": "tool_use", "name": message.get("name")}],
+                active_codex_turn_id,
+            )
+        return turn_id, message.get("content") or [], active_codex_turn_id
+    if not is_parent_assistant_record(record):
+        return None
+    claude_message = record.get("message")
+    content = (claude_message.get("content") or []) if isinstance(claude_message, dict) else []
+    return _resolve_turn_id(record), content, active_codex_turn_id
 
-    A nonempty ``requestId`` is the preferred turn-grouping key, with
-    ``message.id`` as the alternative. Records without either key are distinct
-    turns. Tool fragments are accumulated before the cap is applied.
-    """
-    pending: OrderedDict[str, tuple[str, list[str]]] = OrderedDict()
-    insertion_order: list[tuple[str, str]] = []
-    no_id_turns: dict[str, AssistantTurn] = {}
-    no_id_counter = 0
 
+def _iter_transcript_records(text: str) -> Iterator[dict[str, object]]:
     for raw_line in text.splitlines():
-        raw_line = raw_line.strip()
-        if not raw_line:
+        if not raw_line.strip():
             continue
         try:
             record = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(record, dict) or not is_parent_assistant_record(record):
+        if isinstance(record, dict):
+            yield record
+
+
+def iter_merged_assistant_turns(
+    text: str, *, cap: int = TOOL_USE_CAP, backend: str = "claude"
+) -> Iterator[AssistantTurn]:
+    """Yield merged parent-assistant turns in their first-seen transcript order.
+
+    A nonempty ``requestId`` is the preferred turn-grouping key, with
+    ``message.id`` as the alternative. Records without either key are distinct
+    turns. Tool fragments are accumulated before the cap is applied. ``backend``
+    selects Claude transcript records or native Codex rollout records.
+    """
+    if backend not in {"claude", "codex"}:
+        raise ValueError(f"Unsupported transcript backend: {backend}")
+    pending: OrderedDict[str, tuple[str, list[str]]] = OrderedDict()
+    insertion_order: list[tuple[str, str]] = []
+    no_id_turns: dict[str, AssistantTurn] = {}
+    no_id_counter = 0
+    active_codex_turn_id = ""
+
+    for record in _iter_transcript_records(text):
+        resolved = _assistant_content(record, backend, active_codex_turn_id)
+        if resolved is None:
+            continue
+        turn_id, raw_content, active_codex_turn_id = resolved
+        if turn_id is None:
             continue
 
-        turn_id = _resolve_turn_id(record)
+        content = raw_content if isinstance(raw_content, list) else []
+
         timestamp = record.get("timestamp", "")
-        message = record.get("message")
+        if not isinstance(timestamp, str):
+            timestamp = ""
         # ``message.get("content")`` may be present-but-null in malformed
         # transcripts; ``or []`` coerces both missing and null to an empty
         # iterable so a single bad record cannot abort the iterator.
-        content = (message.get("content") or []) if isinstance(message, dict) else []
         tools = [
             str(block["name"])
             for block in content

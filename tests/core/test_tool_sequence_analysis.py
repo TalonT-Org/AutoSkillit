@@ -429,6 +429,40 @@ class TestIterMergedAssistantTurns:
         text = "\n".join(lines) + "\n"
         return list(iter_merged_assistant_turns(text))
 
+    def test_native_codex_response_items_need_explicit_backend(self) -> None:
+        records = (
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "First answer"}],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Follow up"}],
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Second answer"}],
+                },
+            },
+        )
+        text = "\n".join(json.dumps(record) for record in records) + "\n"
+
+        assert list(iter_merged_assistant_turns(text)) == []
+        turns = list(iter_merged_assistant_turns(text, backend="codex"))
+
+        assert len(turns) == 2
+
     def test_single_record_yields_one_turn(self) -> None:
         line = self._make_record(rid="r1", ts="ts1", tools=["Bash"])
         turns = self._parse(line)

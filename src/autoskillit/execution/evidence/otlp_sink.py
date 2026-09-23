@@ -6,6 +6,7 @@ import json
 import queue
 import threading
 import time
+import uuid
 import zlib
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -373,9 +374,14 @@ class _OtlpHandler(BaseHTTPRequestHandler):
             return
 
         sanitized_payload = _sanitize(payload)
+        record_id = uuid.uuid4().hex
         line = (
             json.dumps(
-                {"signal": signal, "payload": sanitized_payload},
+                {
+                    "record_id": record_id,
+                    "signal": signal,
+                    "payload": sanitized_payload,
+                },
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode("utf-8")

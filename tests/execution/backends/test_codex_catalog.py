@@ -285,12 +285,29 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         assert tools == ["test_check"]
     if route != "leaf":
         assert "Stop" in config["hooks"]
-    assert (session_home / "models_cache.json").read_bytes() == (
-        projection.canonical_projected_bytes
-    )
-    projected_model = json.loads((session_home / "models_cache.json").read_bytes())["models"][1]
+    catalog_path = Path(config["model_catalog_json"])
+    assert catalog_path.parent == session_home
+    assert catalog_path.name != "models_cache.json"
+    assert catalog_path.read_bytes() == projection.canonical_projected_bytes
+    projected_model = json.loads(catalog_path.read_bytes())["models"][1]
     assert projected_model["tool_mode"] == "direct"
     assert projected_model["apply_patch_tool_type"] is None
+
+    (session_home / "models_cache.json").write_bytes(raw_catalog)
+    backend = CodexBackend()
+    attestation = context.managed_join_attestation
+    assert attestation is not None
+    assert (
+        backend.read_managed_session_catalog(session_home) == projection.canonical_projected_bytes
+    )
+    assert backend.verify_managed_session_dir(session_home, attestation, route) == []
+    config_text = (session_home / "config.toml").read_text()
+    (session_home / "config.toml").write_text(
+        config_text.replace(str(catalog_path), str(session_home / "models_cache.json"))
+    )
+    assert "managed Codex config has an unattested model catalog path" in (
+        backend.verify_managed_session_dir(session_home, attestation, route)
+    )
 
 
 def test_managed_home_refuses_context_without_attested_catalog_snapshot(tmp_path) -> None:

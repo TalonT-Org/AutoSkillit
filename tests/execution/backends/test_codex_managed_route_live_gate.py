@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import threading
+import tomllib
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -88,21 +90,32 @@ def _bounded_events(path: Path) -> list[dict[str, Any]]:
     return events
 
 
-def _tool_name(payload: dict[str, Any]) -> str:
-    name = str(payload.get("name", ""))
-    namespace = str(payload.get("namespace", ""))
-    return f"{namespace}__{name}" if namespace else name
-
-
 def _calls(events: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
     return [
-        payload
+        item
         for event in events
-        if event.get("type") == "response_item"
-        and isinstance(payload := event.get("payload"), dict)
-        and payload.get("type") in {"function_call", "custom_tool_call"}
-        and _tool_name(payload) == f"mcp__autoskillit__{name}"
+        if event.get("type") == "item.completed"
+        and isinstance(item := event.get("item"), dict)
+        and item.get("type") == "mcp_tool_call"
+        and item.get("server") == "autoskillit"
+        and item.get("tool") == name
     ]
+
+
+def _json_values(value: object) -> list[object]:
+    values = [value]
+    if isinstance(value, str):
+        try:
+            values.extend(_json_values(json.loads(value)))
+        except json.JSONDecodeError:
+            pass
+    elif isinstance(value, dict):
+        for child in value.values():
+            values.extend(_json_values(child))
+    elif isinstance(value, list):
+        for child in value:
+            values.extend(_json_values(child))
+    return values
 
 
 def _parent_prompt(run_id: str) -> str:
@@ -272,11 +285,13 @@ def _run_denial_then_release(
 
 @_skip_unless_live_gate
 @pytest.mark.smoke
+@pytest.mark.parametrize("scenario", ("cook", "batch"))
 def test_live_codex_interactive_managed_route_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     request: pytest.FixtureRequest,
     native_join_evidence: Path,
+    scenario: str,
 ) -> None:
     """Exercise real MCP results and real Stop decisions under one join identity."""
     from autoskillit.execution.backends.codex import CodexBackend
@@ -308,7 +323,8 @@ def test_live_codex_interactive_managed_route_gate(
     attestation = issuance.managed_join_attestation
     assert attestation is not None
 
-    source = DefaultSkillResolver().resolve("dry-walkthrough")
+    skill_name = "analyze-pipeline-health" if scenario == "batch" else "dry-walkthrough"
+    source = DefaultSkillResolver().resolve(skill_name)
     assert source is not None and source.semantic_plan is not None
     catalog = EffectiveSkillCatalog(
         skills=(SkillCatalogEntry.from_skill_info(source),),
@@ -320,6 +336,8 @@ def test_live_codex_interactive_managed_route_gate(
         SkillProjectionContext(
             cwd=repository,
             catalog=catalog,
+            substitutions={"{{AUTOSKILLIT_TEMP}}": str(repository / ".autoskillit" / "temp")},
+            gating=False,
             backend=backend,
             adaptation_context=issuance,
             managed_codex_route="interactive-parent",
@@ -342,7 +360,7 @@ def test_live_codex_interactive_managed_route_gate(
         route="interactive-parent",
     )
     catalog_digest = hashlib.sha256(
-        (prepared.session_home / "models_cache.json").read_bytes()
+        backend.read_managed_session_catalog(prepared.session_home)
     ).hexdigest()
     assert catalog_digest == attestation.codex_catalog_digest
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(prepared.session_home))
@@ -350,7 +368,7 @@ def test_live_codex_interactive_managed_route_gate(
     _write_managed_parent_binding(
         binding_path=binding_path,
         binding_session_id=launch_id,
-        normalized_skill_name="dry-walkthrough",
+        normalized_skill_name=skill_name,
         backend=backend,
         attestation=attestation,
     )
@@ -375,6 +393,9 @@ def test_live_codex_interactive_managed_route_gate(
     )
 
     config_text = (prepared.session_home / "config.toml").read_text(encoding="utf-8")
+    server = tomllib.loads(config_text)["mcp_servers"]["autoskillit"]
+    server_command = shlex.join([server["command"], *server.get("args", [])])
+    server_command += f" 2>{shlex.quote(str(native_join_evidence / 'mcp.stderr.txt'))}"
     (native_join_evidence / "config.toml").write_text(config_text, encoding="utf-8")
     assert "join_followup_guard" in config_text
     assert "join_stop_guard" in config_text
@@ -382,15 +403,38 @@ def test_live_codex_interactive_managed_route_gate(
     assert "join_settle_guard" not in config_text
 
     run_id = uuid4().hex
-    stdout_path = native_join_evidence / "cook" / "stdout.txt"
+    prompt = _parent_prompt(run_id)
+    if scenario == "batch":
+        prompt = f"""
+Call open_kitchen with no arguments, then run_fixed_batch exactly once with
+skill_name "{skill_name}", idempotency_key "live-{run_id}", and one assignment:
+role "autoskillit:session-log-reader", label "live-worker", runtime_key "live-packet",
+task_prompt "Use only this supplied evidence packet: the native gate reached its worker.
+Return LIVE_BATCH_CHILD followed by ---pipeline-health-result---.
+This is the complete leaf assignment; no filesystem access is needed."
+After success, call read_fixed_batch_result with the returned batch_id and result_reference,
+skill_name "{skill_name}", assignment_id "", offset 0, page_size 8192.
+Use these real tools and finish only after reading the completed batch result.
+""".strip()
+    stdout_path = native_join_evidence / scenario / "stdout.txt"
     result = run_live_codex_parent_bounded(
         env=prepared.env,
         cwd=repository,
         model=_PARENT_MODEL,
-        prompt=_parent_prompt(run_id),
+        prompt=prompt,
         timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
         max_output_bytes=_MAX_CAPTURE_BYTES,
         capture_dir=stdout_path.parent,
+        extra_overrides=(
+            'mcp_servers.autoskillit.command="/bin/sh"',
+            f"mcp_servers.autoskillit.args={json.dumps(['-c', 'exec ' + server_command])}",
+            'mcp_servers.autoskillit.tools.open_kitchen.approval_mode="approve"',
+            'mcp_servers.autoskillit.tools.run_fixed_batch.approval_mode="approve"',
+            'mcp_servers.autoskillit.tools.read_fixed_batch_result.approval_mode="approve"',
+            'mcp_servers.autoskillit.env.AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED="true"',
+            f"mcp_servers.autoskillit.env.AUTOSKILLIT_LOG_DIR={json.dumps(str(log_dir))}",
+            f"log_dir={json.dumps(str(native_join_evidence / 'codex-logs'))}",
+        ),
         sandbox="workspace-write",
     )
     assert result.returncode == 0, result.stderr[-4_000:].decode("utf-8", errors="replace")
@@ -402,6 +446,36 @@ def test_live_codex_interactive_managed_route_gate(
     }
     assert len(thread_ids) == 1
     assert launch_id not in thread_ids
+    assert (
+        hashlib.sha256(backend.read_managed_session_catalog(prepared.session_home)).hexdigest()
+        == catalog_digest
+    )
+    assert (
+        backend.verify_managed_session_dir(
+            prepared.session_home, attestation, "interactive-parent"
+        )
+        == []
+    )
+    if scenario == "batch":
+        run_calls = _calls(events, "run_fixed_batch")
+        read_calls = _calls(events, "read_fixed_batch_result")
+        assert len(run_calls) == len(read_calls) == 1, json.dumps(events)[-8_000:]
+        run_result = next(
+            value
+            for value in _json_values(run_calls[0].get("result"))
+            if isinstance(value, dict) and {"batch_id", "result_reference"} <= value.keys()
+        )
+        assert run_result["success"] is True
+        assignments = next(
+            value["assignments"]
+            for value in _json_values(read_calls[0].get("result"))
+            if isinstance(value, dict) and isinstance(value.get("assignments"), list)
+        )
+        assert len(assignments) == 1
+        assert assignments[0]["assignment_id"] == f"{run_result['batch_id']}:0"
+        assert assignments[0]["outcome"] == OUTCOME_SUCCESS
+        return
+
     assert "LIVE_FOLLOWUP_TOOL" in json.dumps(events, sort_keys=True)
     assert not _calls(events, "run_fixed_batch")
 

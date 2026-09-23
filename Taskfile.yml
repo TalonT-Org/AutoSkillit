@@ -725,7 +725,7 @@ tasks:
         if [[ $PYTEST_EXIT -ne 0 ]]; then
           exit $PYTEST_EXIT
         fi
-        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 2 or skipped; sys.exit(f"native join gates require exactly two non-skipped tests, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 3 or skipped; sys.exit(f"native join gates require exactly three non-skipped tests, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
 
   test-smoke-cook-real-root:
     desc: Run the cook-loop real-project-root composition gate (#4684)

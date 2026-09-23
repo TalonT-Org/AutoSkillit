@@ -40,6 +40,8 @@ from autoskillit.execution.backends._codex_hooks import (
 if TYPE_CHECKING:
     from autoskillit.execution.backends.codex import CodexBackend
 
+_MANAGED_CATALOG_FILENAME = "autoskillit-models.json"
+
 
 def prepare_managed_codex_catalog(
     backend: CodexBackend,
@@ -79,7 +81,7 @@ def read_managed_codex_catalog(backend: CodexBackend, generated_home: Path) -> b
     del backend
     try:
         _, catalog = read_stable_contained_bytes(
-            generated_home / "models_cache.json",
+            generated_home / _MANAGED_CATALOG_FILENAME,
             generated_home,
             max_size_bytes=CODEX_CATALOG_LIMIT,
         )
@@ -178,6 +180,10 @@ def _managed_codex_config_errors(
         errors.append("managed Codex config has the wrong resolved model")
     if config.get("model_reasoning_effort") != attestation.resolved_reasoning_effort:
         errors.append("managed Codex config has the wrong resolved reasoning effort")
+    if config.get("model_catalog_json") != str(
+        (session_dir / _MANAGED_CATALOG_FILENAME).resolve()
+    ):
+        errors.append("managed Codex config has an unattested model catalog path")
     server = config.get("mcp_servers", {}).get("autoskillit")
     if not isinstance(server, dict):
         errors.append("managed Codex config has no autoskillit MCP server")
@@ -229,8 +235,10 @@ def _write_managed_codex_route(
         autoskillit_server["enabled_tools"] = list(allowed_tools)
     config["model"] = attestation.resolved_model
     config["model_reasoning_effort"] = attestation.resolved_reasoning_effort
+    catalog_path = session_dir / _MANAGED_CATALOG_FILENAME
+    config["model_catalog_json"] = str(catalog_path.resolve())
+    atomic_write(catalog_path, catalog)
     atomic_write(config_path, _codex_cfg._serialize_toml(config))
-    atomic_write(session_dir / "models_cache.json", catalog)
     sync_managed_codex_hooks_to_config(config_path, route=route)
 
 

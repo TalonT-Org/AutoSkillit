@@ -327,7 +327,7 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     )
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
 
-    catalog_path = home / "models_cache.json"
+    catalog_path = home / "autoskillit-models.json"
     original_catalog = catalog_path.read_bytes()
     catalog_path.unlink()
     try:

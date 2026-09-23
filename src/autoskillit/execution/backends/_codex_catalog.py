@@ -157,6 +157,9 @@ def run_owned_bounded(
                 stream.close()
         if capture_dir is not None:
             capture_dir.mkdir(parents=True, exist_ok=True)
+            (capture_dir / "command.json").write_text(
+                json.dumps({"argv": list(command), "cwd": str(cwd)}), encoding="utf-8"
+            )
             for name, data in output.items():
                 (capture_dir / f"{name}.txt").write_bytes(data)
 

@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -85,19 +83,19 @@ def _walk(value: object) -> list[object]:
     return values
 
 
-def _agent_calls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _tool_calls(rows: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
     return [
         value
         for row in rows
         for value in _walk(row)
         if isinstance(value, dict)
         and value.get("type") == "tool_use"
-        and value.get("name") == "Agent"
+        and value.get("name") == name
         and isinstance(value.get("id"), str)
     ]
 
 
-def _tool_result_text(rows: list[dict[str, Any]], tool_use_id: str) -> str:
+def _tool_results(rows: list[dict[str, Any]], tool_use_id: str) -> list[dict[str, Any]]:
     matches = [
         value
         for row in rows
@@ -107,7 +105,7 @@ def _tool_result_text(rows: list[dict[str, Any]], tool_use_id: str) -> str:
         and value.get("tool_use_id") == tool_use_id
     ]
     assert matches
-    return json.dumps(matches, sort_keys=True)
+    return matches
 
 
 def _diagnostics(log_dir: Path) -> list[dict[str, Any]]:
@@ -179,47 +177,29 @@ def _configure_mcp(plugin: Path, project: Path, log_dir: Path) -> None:
 
 def _prompt(session_id: str, plan: Path, missing_agent: str) -> str:
     return f"""
+First invoke the Skill tool with skill "autoskillit:dry-walkthrough" and args "{plan}".
+If activation fails, stop this probe and report that failure.
+This is a controlled native-hook recovery probe. After activation, perform only this sequence,
+one tool call at a time, waiting for each result:
 Call open_kitchen with no arguments and call the AutoSkillit declare_join_batch tool with
 skill_name "dry-walkthrough",
 session_id "{session_id}",
 and exactly one assignment label "replacement-worker". Omit top_level_parent so the server uses
 the binding-authoritative parent.
-Call the Agent tool with subagent_type "{missing_agent}" and a short prompt. It must fail because
-that agent type does not exist. After the failure, call declare_join_batch again with the exact
-same session, parent, skill, and one assignment label. Attempt to end your response with
-PENDING_STOP_PROBE before calling another tool; the Stop hook must reject that pending wave.
-When the hook continues the turn, call Agent once with subagent_type "general-purpose" and ask
+Call Agent with subagent_type "{missing_agent}" and a short prompt. It must fail because
+that agent type does not exist. Then attempt Bash "printf FAILED_EFFECT" and Write
+".autoskillit/temp/failed.md" with content FAILED_WRITE. Both must be denied.
+Attempt to end your response with FAILED_STOP_PROBE. When the hook continues the turn,
+call the namespaced AutoSkillit declare_join_batch again with the same session, parent, skill,
+and one assignment label. Then attempt Bash "printf PENDING_EFFECT" and Write
+".autoskillit/temp/pending.md" with content PENDING_WRITE. Both must be denied.
+Attempt to end your response with PENDING_STOP_PROBE. When the hook continues the turn,
+call Agent once with subagent_type "general-purpose" and ask
 it to return exactly VALID_REPLACEMENT. Do not use Task, teams,
-background execution, or any extra Agent calls. After the valid Agent returns, reply LIVE_JOIN_OK.
+background execution, or any extra Agent calls. After it returns, run Bash "printf RELEASED_EFFECT"
+and Write ".autoskillit/temp/released.md" with content RELEASED_WRITE. These must succeed.
+Then reply LIVE_JOIN_OK.
 """.strip()
-
-
-def _seed_projected_skill_binding(
-    plugin: Path,
-    project: Path,
-    session_id: str,
-    env: dict[str, str],
-) -> None:
-    payload = {
-        "hook_event_name": "UserPromptExpansion",
-        "expansion_type": "slash_command",
-        "command_name": "dry-walkthrough",
-        "session_id": session_id,
-        "cwd": str(project),
-    }
-    child_env = production_interpreter_env()
-    child_env.update(env)
-    completed = subprocess.run(
-        [sys.executable, "-B", str(plugin / "hooks" / "_dispatch.py"), "skill_load_post_hook"],
-        cwd=project,
-        env=child_env,
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
 
 
 @_skip_unless_live_gate
@@ -245,6 +225,9 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
     _configure_mcp(plugin, project, log_dir)
     shutil.copyfile(plugin / ".mcp.json", native_join_evidence / "mcp.json")
     shutil.copyfile(plugin / "hooks" / "hooks.json", native_join_evidence / "hooks.json")
+    shutil.copyfile(
+        plugin / "skills" / "dry-walkthrough" / "SKILL.md", native_join_evidence / "SKILL.md"
+    )
     ledger_path, _lock_path = ledger_paths(resolve_channel_dir(project))
 
     def preserve_ledger() -> None:
@@ -267,11 +250,7 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
             "AUTOSKILLIT_STATE_ROOT": str(project),
         }
     )
-    _seed_projected_skill_binding(plugin, project, session_id, env)
-    binding = read_binding(resolve_binding_path(str(project), session_id))
-    assert binding is not None and binding.binding_valid
-    assert binding.managed_parent_id == "top_level"
-    assert binding.managed_leaf_id == ""
+    assert not resolve_binding_path(str(project), session_id).exists()
     command = (
         "claude",
         "-p",
@@ -298,7 +277,15 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     rows = _json_rows(completed.stdout)
     rendered = completed.stdout.decode("utf-8", errors="replace")
-    calls = _agent_calls(rows)
+    binding = read_binding(resolve_binding_path(str(project), session_id))
+    assert binding is not None and binding.binding_valid, rendered[-8_000:]
+    assert binding.managed_parent_id == "top_level"
+    assert binding.managed_leaf_id == ""
+    skill_calls = _tool_calls(rows, "Skill")
+    assert len(skill_calls) == 1
+    assert skill_calls[0]["input"]["skill"] == "autoskillit:dry-walkthrough"
+    assert not any(row.get("is_error") for row in _tool_results(rows, skill_calls[0]["id"]))
+    calls = _tool_calls(rows, "Agent")
     assert len(calls) == 2, rendered[-8_000:]
     missing_call = next(
         call for call in calls if call.get("input", {}).get("subagent_type") == missing_agent
@@ -310,10 +297,10 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
     assert "PostToolUseFailure" in rendered
     assert "VALID_REPLACEMENT" in rendered
 
-    diagnostics = _diagnostics(log_dir)
+    diagnostics = [row for row in _diagnostics(log_dir) if row.get("session_id") == session_id]
     missing_id = str(missing_call["id"])
     valid_id = str(valid_call["id"])
-    missing_result = _tool_result_text(rows, missing_id).casefold()
+    missing_result = json.dumps(_tool_results(rows, missing_id)).casefold()
     assert any(token in missing_result for token in ("unknown", "not found", "does not exist"))
     assert any(
         row.get("gate") == "join_claim_guard"
@@ -342,10 +329,59 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
         and row.get("tool_use_id") == valid_id
         for row in diagnostics
     )
-    stop_statuses = {
-        row.get("status") for row in diagnostics if row.get("gate") == "join_stop_guard"
-    }
-    assert {"block", "allow"}.issubset(stop_statuses)
+    failure_index = next(
+        i
+        for i, row in enumerate(diagnostics)
+        if row.get("gate") == "join_settle_guard"
+        and row.get("tool_use_id") == missing_id
+        and row.get("status") == OUTCOME_FAILURE
+    )
+    replacement_index = diagnostics.index(replacement)
+    success_index = next(
+        i
+        for i, row in enumerate(diagnostics)
+        if row.get("gate") == "join_settle_guard"
+        and row.get("tool_use_id") == valid_id
+        and row.get("status") == OUTCOME_SUCCESS
+    )
+    assert failure_index < replacement_index < success_index
+    for phase, start, end in (
+        ("FAILED", failure_index, replacement_index),
+        ("PENDING", replacement_index, success_index),
+    ):
+        window = diagnostics[start + 1 : end]
+        for tool in ("Bash", "Write"):
+            effect = next(
+                call
+                for call in _tool_calls(rows, tool)
+                if f"{phase}_" in json.dumps(call.get("input"))
+            )
+            assert any(
+                row.get("gate") == "join_followup_guard"
+                and row.get("status") == "block"
+                and row.get("tool_use_id") == effect["id"]
+                for row in window
+            )
+            assert any(row.get("is_error") for row in _tool_results(rows, effect["id"]))
+        assert any(
+            row.get("gate") == "join_stop_guard" and row.get("status") == "block" for row in window
+        )
+        assert not (project / ".autoskillit" / "temp" / f"{phase.lower()}.md").exists()
+    released = next(
+        call
+        for call in _tool_calls(rows, "Bash")
+        if "RELEASED_EFFECT" in json.dumps(call.get("input"))
+    )
+    released_results = _tool_results(rows, released["id"])
+    assert not any(row.get("is_error") for row in released_results)
+    assert "RELEASED_EFFECT" in json.dumps(released_results)
+    assert (
+        project / ".autoskillit" / "temp" / "released.md"
+    ).read_text().strip() == "RELEASED_WRITE"
+    assert any(
+        row.get("gate") == "join_stop_guard" and row.get("status") == "allow"
+        for row in diagnostics[success_index + 1 :]
+    )
 
     flag_dir = resolve_channel_dir(project)
     ledger_path, _lock_path = ledger_paths(flag_dir)

@@ -109,8 +109,8 @@ def _calls(events: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
 
 def _parent_prompt(run_id: str) -> str:
     return f"""
-For live managed-route gate {run_id}, call open_kitchen with no arguments exactly once, then
-reply with LIVE_COOK_OK. Do not call any batch or agent tool.
+For live managed-route gate {run_id}, use the shell tool to run `printf LIVE_FOLLOWUP_TOOL`
+exactly once, then reply with LIVE_COOK_OK. Do not call any batch or agent tool.
 """.strip()
 
 
@@ -397,7 +397,7 @@ def test_live_codex_interactive_managed_route_gate(
     }
     assert len(thread_ids) == 1
     assert launch_id not in thread_ids
-    assert len(_calls(events, "open_kitchen")) == 1
+    assert "LIVE_FOLLOWUP_TOOL" in json.dumps(events, sort_keys=True)
     assert not _calls(events, "run_fixed_batch")
 
     diagnostics = _bounded_events(log_dir / "join_diagnostics.jsonl")

@@ -273,6 +273,7 @@ class TestTaskfile:
             commands.count("tests/execution/backends/test_claude_join_recovery_live_gate.py") == 1
         )
         assert "len(cases) != 2 or skipped" in commands
+        assert 'export AUTOSKILLIT_NATIVE_JOIN_ARTIFACT_DIR="$ARTIFACT_DIR"' in commands
         assert "--junitxml" in commands
         assert "test-local-gate" not in commands
 

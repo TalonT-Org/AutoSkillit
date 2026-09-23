@@ -229,6 +229,7 @@ def run_live_codex_parent_bounded(
     prompt: str,
     timeout: int,
     max_output_bytes: int,
+    capture_dir: Path | None = None,
     resume_thread_id: str | None = None,
     extra_overrides: tuple[str, ...] = (),
     sandbox: str = "read-only",
@@ -247,4 +248,5 @@ def run_live_codex_parent_bounded(
         environment=env,
         deadline=time.monotonic() + timeout,
         stdout_limit=max_output_bytes,
+        capture_dir=capture_dir,
     )

@@ -49,6 +49,8 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
 
     assert "COPY --chown=verifier:verifier . /workspace" in dockerfile
     assert "uv sync --locked --extra dev" in dockerfile
+    assert "UV_PROJECT_ENVIRONMENT=/workspace/.venv" in dockerfile
+    assert "PATH=/workspace/.venv/bin:" in dockerfile
     assert "FROM node:22-bookworm AS node" in dockerfile
     assert "uv venv /opt/pre-commit" in dockerfile
     assert "ARG MYPY_VERSION=1.19.1" in dockerfile

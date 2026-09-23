@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import threading
-import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -23,7 +22,6 @@ from autoskillit.core import (
     write_registry_entry,
     write_versioned_json,
 )
-from autoskillit.execution.backends._codex_catalog import CodexProcessOutput
 from autoskillit.hooks._join import OUTCOME_SUCCESS
 from autoskillit.hooks._join_ledger import (
     active_batch,
@@ -122,6 +120,7 @@ def _run_denial_then_release(
     artifact_digest: str,
     log_dir: Path,
     label: str,
+    evidence_dir: Path,
 ) -> str:
     flag_dir = resolve_channel_dir(repository)
     batch = declare_batch(
@@ -161,10 +160,48 @@ def _run_denial_then_release(
         else 0
     )
 
-    result: dict[str, CodexProcessOutput] = {}
+    finished = threading.Event()
+    observed: set[str] = set()
+    watcher_errors: list[BaseException] = []
 
-    def _run() -> None:
-        result["completed"] = run_live_codex_parent_bounded(
+    def _release_after_denial() -> None:
+        try:
+            while not finished.wait(0.1):
+                if not diagnostic_path.is_file():
+                    continue
+                rows = _bounded_events(diagnostic_path)
+                for gate, baseline in (
+                    ("join_stop_guard", baseline_blocks),
+                    ("join_followup_guard", baseline_followup_blocks),
+                ):
+                    if (
+                        sum(
+                            row.get("gate") == gate and row.get("status") == "block"
+                            for row in rows
+                        )
+                        > baseline
+                    ):
+                        observed.add(gate)
+                if len(observed) == 2:
+                    settle_assignment(
+                        flag_dir,
+                        session_id=launch_id,
+                        top_level_parent=launch_id,
+                        tool_use_id=tool_use_id,
+                        outcome=OUTCOME_SUCCESS,
+                        batch_id=str(batch["join_batch_id"]),
+                        assignment_id=str(assignment["assignment_id"]),
+                        attempt_id=attempt_id,
+                        run_id=run_id,
+                    )
+                    return
+        except BaseException as exc:
+            watcher_errors.append(exc)
+
+    watcher = threading.Thread(target=_release_after_denial)
+    watcher.start()
+    try:
+        completed = run_live_codex_parent_bounded(
             env=env,
             cwd=repository,
             model=_PARENT_MODEL,
@@ -172,52 +209,19 @@ def _run_denial_then_release(
                 "Call open_kitchen with no arguments exactly once, then reply with "
                 f"LIVE_RELEASE_{label.upper()}."
             ),
-            timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
+            timeout=180,
             max_output_bytes=_MAX_CAPTURE_BYTES,
+            capture_dir=evidence_dir / label,
             sandbox="workspace-write",
         )
-
-    runner = threading.Thread(target=_run, daemon=True)
-    runner.start()
-    deadline = time.monotonic() + 180
-    denied = False
-    followup_denied = False
-    while time.monotonic() < deadline and runner.is_alive():
-        if diagnostic_path.is_file():
-            rows = _bounded_events(diagnostic_path)
-            denied = (
-                sum(
-                    row.get("gate") == "join_stop_guard" and row.get("status") == "block"
-                    for row in rows
-                )
-                > baseline_blocks
-            )
-            followup_denied = (
-                sum(
-                    row.get("gate") == "join_followup_guard" and row.get("status") == "block"
-                    for row in rows
-                )
-                > baseline_followup_blocks
-            )
-            if denied and followup_denied:
-                break
-        time.sleep(0.1)
-    assert denied, "native Codex Stop did not observe the pending wave"
-    assert followup_denied, "native Codex follow-up guard did not observe the pending wave"
-    settle_assignment(
-        flag_dir,
-        session_id=launch_id,
-        top_level_parent=launch_id,
-        tool_use_id=tool_use_id,
-        outcome=OUTCOME_SUCCESS,
-        batch_id=str(batch["join_batch_id"]),
-        assignment_id=str(assignment["assignment_id"]),
-        attempt_id=attempt_id,
-        run_id=run_id,
-    )
-    runner.join(timeout=900)
-    assert not runner.is_alive(), "native Codex did not retry Stop after wave settlement"
-    completed = result["completed"]
+    finally:
+        finished.set()
+        watcher.join(timeout=10)
+    assert not watcher.is_alive(), "pending-wave watcher did not finish"
+    if watcher_errors:
+        raise watcher_errors[0]
+    assert "join_stop_guard" in observed, "native Codex Stop did not observe the pending wave"
+    assert "join_followup_guard" in observed, "native Codex follow-up did not observe the wave"
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     events = [
         json.loads(line)
@@ -242,6 +246,7 @@ def _run_denial_then_release(
         prompt=f"Reply with LIVE_RESUMED_{label.upper()} and do not call any tool.",
         timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
         max_output_bytes=_MAX_CAPTURE_BYTES,
+        capture_dir=evidence_dir / f"{label}-resumed",
         resume_thread_id=thread_id,
         sandbox="workspace-write",
     )
@@ -271,6 +276,7 @@ def test_live_codex_interactive_managed_route_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     request: pytest.FixtureRequest,
+    native_join_evidence: Path,
 ) -> None:
     """Exercise real MCP results and real Stop decisions under one join identity."""
     from autoskillit.execution.backends.codex import CodexBackend
@@ -355,7 +361,7 @@ def test_live_codex_interactive_managed_route_gate(
     assert session_managed_scope(str(repository), launch_id) == (launch_id, "")
     write_registry_entry(repository, launch_id, "cook", None)
 
-    log_dir = tmp_path / "hook-logs"
+    log_dir = native_join_evidence / "hook-logs"
     prepared.env.update(
         {
             "AUTOSKILLIT_AGENT_BACKEND": "codex",
@@ -369,14 +375,14 @@ def test_live_codex_interactive_managed_route_gate(
     )
 
     config_text = (prepared.session_home / "config.toml").read_text(encoding="utf-8")
+    (native_join_evidence / "config.toml").write_text(config_text, encoding="utf-8")
     assert "join_followup_guard" in config_text
     assert "join_stop_guard" in config_text
     assert "join_claim_guard" not in config_text
     assert "join_settle_guard" not in config_text
 
     run_id = uuid4().hex
-    stdout_path = tmp_path / "codex.stdout.jsonl"
-    stderr_path = tmp_path / "codex.stderr.txt"
+    stdout_path = native_join_evidence / "cook" / "stdout.txt"
     result = run_live_codex_parent_bounded(
         env=prepared.env,
         cwd=repository,
@@ -384,10 +390,9 @@ def test_live_codex_interactive_managed_route_gate(
         prompt=_parent_prompt(run_id),
         timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
         max_output_bytes=_MAX_CAPTURE_BYTES,
+        capture_dir=stdout_path.parent,
         sandbox="workspace-write",
     )
-    stdout_path.write_bytes(result.stdout)
-    stderr_path.write_bytes(result.stderr)
     assert result.returncode == 0, result.stderr[-4_000:].decode("utf-8", errors="replace")
     events = _bounded_events(stdout_path)
     thread_ids = {
@@ -421,6 +426,7 @@ def test_live_codex_interactive_managed_route_gate(
         artifact_digest=binding.artifact_digest,
         log_dir=log_dir,
         label="noncook",
+        evidence_dir=native_join_evidence,
     )
     headless_env = {
         **prepared.env,
@@ -435,6 +441,7 @@ def test_live_codex_interactive_managed_route_gate(
         artifact_digest=binding.artifact_digest,
         log_dir=log_dir,
         label="headless",
+        evidence_dir=native_join_evidence,
     )
     assert len({*thread_ids, noncook_thread, headless_thread}) == 3
     stop_rows = [

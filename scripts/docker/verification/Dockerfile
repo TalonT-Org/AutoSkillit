@@ -50,11 +50,11 @@ RUN apt-get update \
 
 RUN groupadd --gid "${VERIFIER_GID}" verifier \
     && useradd --uid "${VERIFIER_UID}" --gid verifier --create-home --shell /bin/bash verifier \
-    && install --directory --owner verifier --group verifier /opt/venv /workspace
+    && install --directory --owner verifier --group verifier /workspace
 
 ENV HOME=/home/verifier \
-    PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    PATH=/workspace/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+    UV_PROJECT_ENVIRONMENT=/workspace/.venv
 
 WORKDIR /workspace
 COPY --chown=verifier:verifier . /workspace

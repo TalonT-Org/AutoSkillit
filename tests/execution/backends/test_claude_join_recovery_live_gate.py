@@ -223,12 +223,14 @@ def _seed_projected_skill_binding(
 
 
 @_skip_unless_live_gate
-def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -> None:
+def test_native_claude_unknown_agent_replacement_releases_stop(
+    tmp_path: Path, native_join_evidence: Path, request: pytest.FixtureRequest
+) -> None:
     project = tmp_path / "project"
     plugin = tmp_path / "projected-plugin"
     home = tmp_path / "home"
     claude_config = home / ".claude"
-    log_dir = tmp_path / "hook-logs"
+    log_dir = native_join_evidence / "hook-logs"
     project.mkdir()
     claude_config.mkdir(parents=True)
     (project / ".autoskillit" / "temp").mkdir(parents=True)
@@ -241,6 +243,15 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
 
     manifest_path = _build_projected_plugin(plugin, project)
     _configure_mcp(plugin, project, log_dir)
+    shutil.copyfile(plugin / ".mcp.json", native_join_evidence / "mcp.json")
+    shutil.copyfile(plugin / "hooks" / "hooks.json", native_join_evidence / "hooks.json")
+    ledger_path, _lock_path = ledger_paths(resolve_channel_dir(project))
+
+    def preserve_ledger() -> None:
+        if ledger_path.is_file():
+            shutil.copyfile(ledger_path, native_join_evidence / "ledger.json")
+
+    request.addfinalizer(preserve_ledger)
     assert manifest_path.parent == plugin.parent
     assert manifest_path.name == f".{plugin.name}.autoskillit-projection.json"
 
@@ -282,6 +293,7 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
         deadline=time.monotonic()
         + int(os.environ.get("AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_TIMEOUT", "900")),
         stdout_limit=_MAX_CAPTURE_BYTES,
+        capture_dir=native_join_evidence / "native",
     )
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     rows = _json_rows(completed.stdout)

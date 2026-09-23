@@ -709,6 +709,7 @@ tasks:
         ARTIFACT_BASE="$(pwd)/.autoskillit/temp/native-join-live"
         mkdir -p "$ARTIFACT_BASE"
         ARTIFACT_DIR="$(mktemp -d "$ARTIFACT_BASE/run.XXXXXX")"
+        export AUTOSKILLIT_NATIVE_JOIN_ARTIFACT_DIR="$ARTIFACT_DIR"
         TEST_OUTPUT="$ARTIFACT_DIR/test-output.txt"
         JUNIT_REPORT="$ARTIFACT_DIR/junit.xml"
         set +e

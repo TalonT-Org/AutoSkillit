@@ -102,6 +102,7 @@ def run_owned_bounded(
     environment: Mapping[str, str],
     deadline: float,
     stdout_limit: int,
+    capture_dir: Path | None = None,
     spawn: Callable[..., OwnedProcessGroup] = spawn_owned_process,
     remaining: Callable[[float], float] = deadline_remaining,
     selector_factory: Callable[[], selectors.BaseSelector] = selectors.DefaultSelector,
@@ -154,6 +155,10 @@ def run_owned_bounded(
         for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
                 stream.close()
+        if capture_dir is not None:
+            capture_dir.mkdir(parents=True, exist_ok=True)
+            for name, data in output.items():
+                (capture_dir / f"{name}.txt").write_bytes(data)
 
 
 def acquire_bundled_codex_catalog(

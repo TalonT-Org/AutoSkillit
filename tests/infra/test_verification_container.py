@@ -53,6 +53,7 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
     assert "uv venv /opt/pre-commit" in dockerfile
     assert "uv pip install --system" not in dockerfile
     assert "/workspace/.autoskillit/temp" in dockerfile
+    assert 'git commit --message "exact source snapshot"' in dockerfile
     assert "COPY .git" not in dockerfile
     assert re.findall(r"^USER (\S+)$", dockerfile, re.MULTILINE)[-1] == "verifier"
 

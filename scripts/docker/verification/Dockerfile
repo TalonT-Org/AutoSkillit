@@ -56,6 +56,12 @@ RUN install --directory --owner verifier --group verifier /workspace/.autoskilli
 
 USER verifier
 
+RUN git init \
+    && git config user.name "AutoSkillit Verification" \
+    && git config user.email "verification@localhost" \
+    && git add --all \
+    && git commit --message "exact source snapshot"
+
 # The optional BuildKit secret is needed only when the locked Git dependency is private.
 # Its value is scoped to this RUN instruction and never becomes an image layer or ENV value.
 RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \

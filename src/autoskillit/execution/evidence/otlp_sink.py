@@ -597,7 +597,6 @@ class LocalOtlpSink:
                 self._counters["dropped_queue_full"] += 1
                 return "queue_full"
             self._retain_model_observations(observations)
-            # _token_observations() returns an empty tuple when no observations exist.
             self._retain_token_observations(token_observations)
             return "accepted"
 

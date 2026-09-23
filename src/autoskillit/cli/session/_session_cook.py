@@ -9,7 +9,7 @@ import time
 import uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
@@ -443,7 +443,7 @@ def _run_managed_cook(
     config: AutomationConfig,
     cook_env_extras: dict[str, str],
     managed_home: ManagedSessionHome,
-    projection_binding: PluginLaunchBinding,
+    projection_binding: PluginLaunchBinding | None,
     load_mode: PluginLoadMode,
     trace: StartupTrace,
     trace_enabled: bool,
@@ -453,6 +453,11 @@ def _run_managed_cook(
     import autoskillit.core as core
     from autoskillit.cli.session import _session_onboarding, _session_reload
 
+    if projection_binding is None:
+        raise RuntimeError(
+            "cook: missing plugin launch binding — load_mode.consumes_artifact "
+            "must hold when entering the managed cook loop"
+        )
     current_launch = launch
     seen_reload_ids: set[str] = set()
     max_reloads = 10
@@ -680,7 +685,7 @@ def cook(
                 config=config,
                 cook_env_extras=cook_env_extras,
                 managed_home=managed_home,
-                projection_binding=cast(PluginLaunchBinding, projection_binding),
+                projection_binding=projection_binding,
                 load_mode=load_mode,
                 trace=trace,
                 trace_enabled=trace_enabled,

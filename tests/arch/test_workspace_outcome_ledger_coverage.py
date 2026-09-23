@@ -41,7 +41,7 @@ _EXPECTED_INVENTORIES = {
     ),
     "commit_files": _ReturnInventory(
         helpers=1,
-        outer_finish=11,
+        outer_finish=6,
         outer_unavailable=1,
         helper_returns=1,
         ledger_record_calls=0,
@@ -187,6 +187,37 @@ def test_commit_outcome_authority_records_once() -> None:
     ]
     assert len(helpers) == 1
     assert _ledger_record_calls(helpers[0]) == 1
+
+
+def test_commit_transaction_returns_flow_through_entry_finish() -> None:
+    tree = ast.parse(TOOLS_PATH.read_text(encoding="utf-8"))
+    transaction = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_commit_transaction"
+    )
+    returns = _returns_in(transaction.body)
+    assert len(returns) == 6
+    assert all(isinstance(node.value, ast.Tuple) and len(node.value.elts) == 2 for node in returns)
+
+    entry = _target_functions(TOOLS_PATH.read_text(encoding="utf-8"))["commit_files"]
+    transaction_paths = [
+        node
+        for node in ast.walk(entry)
+        if isinstance(node, ast.Try)
+        and len(node.body) >= 2
+        and isinstance(node.body[0], ast.Assign)
+        and isinstance(node.body[0].value, ast.Await)
+        and isinstance(node.body[0].value.value, ast.Call)
+        and isinstance(node.body[0].value.value.func, ast.Name)
+        and node.body[0].value.value.func.id == "_commit_transaction"
+    ]
+    assert len(transaction_paths) == 1
+    assignment, terminal = transaction_paths[0].body[:2]
+    assert isinstance(assignment, ast.Assign)
+    assert ast.unparse(assignment.targets[0]) == "(response, failure_class)"
+    assert isinstance(terminal, ast.Return)
+    assert ast.unparse(terminal.value) == "_finish(response, failure_class=failure_class)"
 
 
 _CANARY_EXPECTED = _ReturnInventory(

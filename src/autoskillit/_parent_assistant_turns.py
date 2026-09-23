@@ -95,7 +95,7 @@ def is_parent_assistant_record(rec: object) -> bool:
 
 def _assistant_content(
     record: dict[str, object], backend: str, active_codex_turn_id: str, is_claude_assistant: bool
-) -> tuple[str | None, object, str] | None:
+) -> tuple[str | None, str | list[dict[str, object]] | None, str] | None:
     if backend == "codex":
         context = record.get("payload")
         if (
@@ -114,11 +114,22 @@ def _assistant_content(
                 [{"type": "tool_use", "name": message.get("name")}],
                 active_codex_turn_id,
             )
-        return turn_id, message.get("content") or [], active_codex_turn_id
+        codex_content = message.get("content")
+        return (
+            turn_id,
+            codex_content if isinstance(codex_content, (list, str)) else [],
+            active_codex_turn_id,
+        )
     if not is_claude_assistant:
         return None
     claude_message = record.get("message")
-    content = (claude_message.get("content") or []) if isinstance(claude_message, dict) else []
+    if isinstance(claude_message, dict):
+        claude_content = claude_message.get("content")
+        content: str | list[dict[str, object]] | None = (
+            claude_content if isinstance(claude_content, (list, str)) else []
+        )
+    else:
+        content = []
     return _resolve_turn_id(record), content, active_codex_turn_id
 
 
@@ -167,9 +178,6 @@ def iter_merged_assistant_turns(
         timestamp = record.get("timestamp", "")
         if not isinstance(timestamp, str):
             timestamp = ""
-        # ``message.get("content")`` may be present-but-null in malformed
-        # transcripts; ``or []`` coerces both missing and null to an empty
-        # iterable so a single bad record cannot abort the iterator.
         tools = [
             str(block["name"])
             for block in content

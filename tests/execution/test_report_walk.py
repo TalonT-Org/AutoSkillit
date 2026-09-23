@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 import zstandard
 
+from autoskillit.core import iter_merged_assistant_turns
 from autoskillit.execution.evidence.report_walk import (
     SourceGapError,
     WalkItem,
@@ -195,6 +196,11 @@ def test_unavailable_transcript_paths_are_not_reported_as_zero_turns(
     assert session.record["transcripts_available"] is False
 
 
+def test_iter_merged_assistant_turns_rejects_unsupported_backend() -> None:
+    with pytest.raises(ValueError, match="Unsupported transcript backend"):
+        list(iter_merged_assistant_turns("", backend="gemini"))
+
+
 @pytest.mark.parametrize("compressed", (False, True))
 def test_native_codex_rollouts_count_shared_assistant_turns(
     tmp_path: Path, compressed: bool
@@ -304,9 +310,7 @@ def test_rotation_resumes_from_record_id_and_keeps_equal_payloads_distinct(
     ]
 
 
-def test_lost_otlp_generation_and_changed_idless_resume_report_gaps(
-    tmp_path: Path,
-) -> None:
+def test_lost_otlp_generation_reports_gap_on_resume(tmp_path: Path) -> None:
     root = tmp_path / "logs"
     first = _otlp("old-id", payload={"same": True})
     active = root / "otlp.jsonl"
@@ -323,6 +327,10 @@ def test_lost_otlp_generation_and_changed_idless_resume_report_gaps(
     with pytest.raises(SourceGapError):
         list(iter_report_walk(root, committed))
 
+
+def test_changed_idless_resume_reports_gap_when_fingerprint_diverges(
+    tmp_path: Path,
+) -> None:
     idless_root = tmp_path / "idless-logs"
     idless_active = idless_root / "otlp.jsonl"
     idless_active.parent.mkdir(parents=True)
@@ -429,7 +437,7 @@ def test_peak_memory_stays_with_one_record_and_transcript(tmp_path: Path) -> Non
     assert peak < 1_000_000
 
 
-def test_removal_only_snapshot_commits_checkpoint_and_reader_accepts_final_line(
+def test_removal_only_snapshot_emits_checkpoint_with_empty_projection(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "logs"
@@ -445,6 +453,11 @@ def test_removal_only_snapshot_commits_checkpoint_and_reader_accepts_final_line(
     assert all(item.record is None for item in removed)
     assert removed[-1].watermark["projection"] == {}
 
-    no_newline = root / "valid-final-line.jsonl"
+
+def test_session_index_reader_accepts_final_line_without_newline(
+    tmp_path: Path,
+) -> None:
+    row = _session("removed", "sid-removed")
+    no_newline = tmp_path / "valid-final-line.jsonl"
     no_newline.write_bytes(json.dumps(row).encode("utf-8"))
     assert read_tolerant_session_index_rows(no_newline) == [row]

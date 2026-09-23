@@ -7,6 +7,7 @@ last committed watermark. A checkpoint item commits progress without a record.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -16,8 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from autoskillit._parent_assistant_turns import iter_merged_assistant_turns
-from autoskillit.core import ArtifactLease
+from autoskillit.core import ArtifactLease, iter_merged_assistant_turns
 from autoskillit.execution.backends._codex_parse import _logical_rollout_reader
 from autoskillit.execution.child_outcomes import enumerate_claude_subagent_transcripts
 from autoskillit.execution.session_log.session_index import (
@@ -28,9 +28,22 @@ from autoskillit.execution.session_log.session_log import session_index_lock_pat
 
 _LEASE_TIMEOUT_SECONDS = 2.0
 
+# Serialization contract shared with ``_OtlpHandler.do_PUT`` (see
+# ``execution/evidence/otlp_sink.py``). The OTLP writer emits one JSON object
+# per line with a leading ``record_id`` field; the walker's
+# ``_record_id_prefix`` reads the first 160 bytes to recover the key.
+_OTLP_RECORD_ID_PREFIX = b'{"record_id":"'
+_OTLP_RECORD_ID_SCAN_BYTES = 160
+
+_ARCHIVE_BOUNDARY_CHANGED = "Session archive boundary changed"
+_PROJECTION_DELETED_NO_RECORDS = "Session archive disappeared"
+
 
 class SourceGapError(RuntimeError):
     """A committed source boundary is no longer present in retained data."""
+
+
+_VALID_WALK_KINDS = frozenset({"otlp", "session", "checkpoint"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +53,26 @@ class WalkItem:
     session_id: str | None
     record: dict[str, Any] | None
     watermark: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.kind not in _VALID_WALK_KINDS:
+            raise ValueError(f"Unknown WalkItem kind: {self.kind!r}")
+        if self.source_id is not None and not isinstance(self.source_id, str):
+            raise TypeError(
+                f"WalkItem.source_id must be str or None, got {type(self.source_id).__name__}"
+            )
+        if self.session_id is not None and not isinstance(self.session_id, str):
+            raise TypeError(
+                f"WalkItem.session_id must be str or None, got {type(self.session_id).__name__}"
+            )
+        if self.record is not None and not isinstance(self.record, dict):
+            raise TypeError(
+                f"WalkItem.record must be dict or None, got {type(self.record).__name__}"
+            )
+        if not isinstance(self.watermark, dict):
+            raise TypeError(
+                f"WalkItem.watermark must be dict, got {type(self.watermark).__name__}"
+            )
 
 
 def _digest(data: bytes) -> str:
@@ -52,48 +85,53 @@ def _identity(handle: BinaryIO) -> list[int]:
 
 
 def _record_id_prefix(line: bytes) -> str | None:
-    prefix = b'{"record_id":"'
-    if not line.startswith(prefix):
+    if not line.startswith(_OTLP_RECORD_ID_PREFIX):
         return None
-    end = line.find(b'"', len(prefix), min(len(line), 160))
+    end = line.find(b'"', len(_OTLP_RECORD_ID_PREFIX), min(len(line), _OTLP_RECORD_ID_SCAN_BYTES))
     if end < 0:
         return None
     try:
-        return line[len(prefix) : end].decode("ascii")
+        return line[len(_OTLP_RECORD_ID_PREFIX) : end].decode("ascii")
     except UnicodeDecodeError:
         return None
 
 
-def _open_otlp(root: Path, stack: ExitStack) -> list[tuple[str, BinaryIO]]:
+def _open_otlp_handles(root: Path, stack: ExitStack) -> list[tuple[str, BinaryIO]]:
+    """Open OTLP source handles under the sink lease.
+
+    The lease is held for the lifetime of the returned handles via the
+    caller's ``ExitStack``; releasing it here would let writers append during
+    iteration and produce partial reads.
+    """
     paths = (("archive", root / "otlp.jsonl.1"), ("active", root / "otlp.jsonl"))
-    opened: list[tuple[str, BinaryIO]] = []
     lock = root / ".locks" / "otlp-sink.lock"
-    with ArtifactLease.acquire_shared(lock, timeout=_LEASE_TIMEOUT_SECONDS):
-        for name, path in paths:
-            try:
-                opened.append((name, stack.enter_context(path.open("rb"))))
-            except FileNotFoundError:
-                continue
+    stack.enter_context(ArtifactLease.acquire_shared(lock, timeout=_LEASE_TIMEOUT_SECONDS))
+    opened: list[tuple[str, BinaryIO]] = []
+    for name, path in paths:
+        try:
+            opened.append((name, stack.enter_context(path.open("rb"))))
+        except FileNotFoundError:
+            continue
     return opened
 
 
-def _boundary(handle: BinaryIO, cursor: dict[str, Any]) -> bool:
+def _validate_otlp_boundary(handle: BinaryIO, cursor: dict[str, Any]) -> bool:
     start, end = cursor["start"], cursor["end"]
     if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end <= start:
         return False
     if end > _identity(handle)[2]:
         return False
     handle.seek(start)
-    line = handle.read(min(end - start, 160))
+    line = handle.read(min(end - start, _OTLP_RECORD_ID_SCAN_BYTES))
     record_id = cursor.get("record_id")
     if record_id:
         return _record_id_prefix(line) == record_id
-    return _identity(handle) == cursor.get("identity") and _digest(line) == cursor.get(
-        "fingerprint"
-    )
+    # Without a record_id we rely on the line content fingerprint; concurrent
+    # appends change st_size/st_mtime_ns but preserve the line at ``start``.
+    return _digest(line) == cursor.get("fingerprint")
 
 
-def _session_id(record: dict[str, Any]) -> str | None:
+def _extract_otlp_session_id(record: dict[str, Any]) -> str | None:
     payload = record.get("payload")
     if not isinstance(payload, dict):
         return None
@@ -108,23 +146,39 @@ def _otlp_resume_position(
     handles: list[tuple[str, BinaryIO]], cursor: dict[str, Any] | None
 ) -> tuple[int, int]:
     if len(handles) == 2:
-        first_lines = []
+        first_lines: list[str | None] = []
         for _, handle in handles:
             handle.seek(0)
-            first_lines.append(_record_id_prefix(handle.read(160)))
+            first_lines.append(_record_id_prefix(handle.read(_OTLP_RECORD_ID_SCAN_BYTES)))
         if first_lines[0] is not None and first_lines[0] == first_lines[1]:
-            handles.pop()
+            # Both files share their first record (rotation overlap). Drop the
+            # file that does not hold the committed cursor so we never raise
+            # SourceGapError for a record that is still on disk.
+            archive, active = handles[0][1], handles[1][1]
+            if cursor is None:
+                handles.pop(0)  # no cursor → keep the newer active file
+            elif _validate_otlp_boundary(active, cursor) and not _validate_otlp_boundary(
+                archive, cursor
+            ):
+                handles.pop(0)  # cursor is in active → drop archive
+            elif _validate_otlp_boundary(archive, cursor) and not _validate_otlp_boundary(
+                active, cursor
+            ):
+                handles.pop(1)  # cursor is in archive → drop active
+            # If the cursor matches both or neither, leave both files in
+            # place; the boundary search below will resolve the location or
+            # raise SourceGapError when the record is genuinely gone.
     if not cursor:
         return 0, 0
     for index, (_, handle) in enumerate(handles):
-        if _boundary(handle, cursor):
+        if _validate_otlp_boundary(handle, cursor):
             return index, cursor["end"]
     raise SourceGapError("Committed OTLP record is outside retained generations")
 
 
 def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
     with ExitStack() as stack:
-        handles = _open_otlp(root, stack)
+        handles = _open_otlp_handles(root, stack)
         start_index, start_offset = _otlp_resume_position(handles, state.get("otlp"))
         for index in range(start_index, len(handles)):
             name, handle = handles[index]
@@ -140,24 +194,31 @@ def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     record = None
                 record_id = _record_id_prefix(line)
-                identity = _identity(handle)
                 state["otlp"] = {
                     "generation": name,
                     "start": start,
                     "end": end,
                     "record_id": record_id,
-                    "identity": identity,
-                    "fingerprint": _digest(line[:160]),
+                    "fingerprint": _digest(line[:_OTLP_RECORD_ID_SCAN_BYTES]),
                 }
                 if not isinstance(record, dict):
                     continue
-                source_id = record_id or f"historical:{identity}:{start}:{_digest(line)}"
-                yield WalkItem("otlp", source_id, _session_id(record), record, _copy(state))
-            start_offset = 0
+                # Resume identity is content-based: the record_id prefix when
+                # available, otherwise the line digest. Using identity (st_size
+                # / st_mtime_ns) here would break resume when the file is
+                # appended to between walks.
+                source_id = record_id or f"historical:{_digest(line)}"
+                yield WalkItem(
+                    "otlp",
+                    source_id,
+                    _extract_otlp_session_id(record),
+                    record,
+                    _copy(state),
+                )
 
 
 def _copy(state: dict[str, Any]) -> dict[str, Any]:
-    return json.loads(json.dumps(state))
+    return copy.deepcopy(state)
 
 
 def _transcript_turns(path: Path, backend: str) -> list[dict[str, Any]]:
@@ -178,15 +239,16 @@ def _transcript_turns(path: Path, backend: str) -> list[dict[str, Any]]:
 
 def _session_record(row: dict[str, Any]) -> dict[str, Any]:
     turns: list[dict[str, Any]] = []
-    unavailable = False
+    unavailable_reasons: list[str] = []
     has_transcript = False
     for field, backend in (("claude_code_log", "claude"), ("codex_log", "codex")):
         raw = row.get(field)
         if raw is None:
-            unavailable |= field in row
+            if field in row:
+                unavailable_reasons.append(f"{field}:null")
             continue
         if not isinstance(raw, str) or not raw or not Path(raw).is_absolute():
-            unavailable = True
+            unavailable_reasons.append(f"{field}:invalid-path")
             continue
         has_transcript = True
         path = Path(raw)
@@ -196,18 +258,28 @@ def _session_record(row: dict[str, Any]) -> dict[str, Any]:
         for transcript in paths:
             try:
                 turns.extend(_transcript_turns(transcript, backend))
-            except (OSError, UnicodeError, RuntimeError, ValueError):
-                unavailable = True
-    unavailable |= not has_transcript
+            except (OSError, UnicodeError, ValueError) as exc:
+                unavailable_reasons.append(f"{transcript}:{type(exc).__name__}")
+            except RuntimeError as exc:
+                # _logical_rollout_reader raises RuntimeError for non-regular
+                # rollout files (symlinks, devices). Treat as unavailable
+                # rather than masking the caller's intent.
+                unavailable_reasons.append(f"{transcript}:runtime:{exc}")
+    unavailable = not has_transcript or bool(unavailable_reasons)
     return {
         "row": row,
         "assistant_turn_count": None if unavailable else len(turns),
         "assistant_turns": turns,
         "transcripts_available": not unavailable,
+        "transcript_unavailable_reasons": unavailable_reasons,
     }
 
 
 def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
+    # The session archive is an append-only retention file with no concurrent
+    # writers in the live session workflow, so an ArtifactLease is not
+    # required; the file handle is closed promptly and identity is captured
+    # once for the lifetime of the walk.
     path = root / "sessions-archive.jsonl"
     cursor = state.get("archive", {})
     offset = cursor.get("offset", 0)
@@ -215,7 +287,7 @@ def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
         handle = path.open("rb")
     except FileNotFoundError:
         if offset:
-            raise SourceGapError("Session archive disappeared") from None
+            raise SourceGapError(_PROJECTION_DELETED_NO_RECORDS) from None
         return
     with handle:
         identity = _identity(handle)[:2]
@@ -224,20 +296,23 @@ def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                 raise SourceGapError("Session archive was replaced or truncated")
             handle.seek(offset - 1)
             if handle.read(1) != b"\n":
-                raise SourceGapError("Session archive boundary changed")
+                raise SourceGapError(_ARCHIVE_BOUNDARY_CHANGED)
             handle.seek(max(0, offset - 160))
             if _digest(handle.read(offset - handle.tell())) != cursor.get("boundary"):
-                raise SourceGapError("Session archive boundary changed")
+                raise SourceGapError(_ARCHIVE_BOUNDARY_CHANGED)
         for end, row in iter_tolerant_session_index_lines(path, offset=offset, complete_only=True):
             handle.seek(max(0, end - 160))
             boundary = _digest(handle.read(end - handle.tell()))
             state["archive"] = {"identity": identity, "offset": end, "boundary": boundary}
             if not row or not isinstance(row.get("dir_name"), str) or not row["dir_name"]:
                 continue
+            session_id = row.get("session_id")
+            if session_id is not None and not isinstance(session_id, str):
+                session_id = None
             yield WalkItem(
                 "session",
                 row["dir_name"],
-                row.get("session_id"),
+                session_id,
                 _session_record(row),
                 _copy(state),
             )
@@ -258,8 +333,11 @@ def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
             identity = None
             rows = []
     names = {row.get("dir_name") for row in rows if isinstance(row.get("dir_name"), str)}
-    previous = {key: value for key, value in state.get("projection", {}).items() if key in names}
+    previous: dict[str, str] = {}
     current: dict[str, str] = {}
+    for key, value in state.get("projection", {}).items():
+        if key in names:
+            previous[key] = value
     for row in rows:
         name = row.get("dir_name")
         if not isinstance(name, str) or not name:
@@ -268,9 +346,13 @@ def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
         current[name] = fingerprint
         if previous.get(name) == fingerprint:
             continue
+        previous = dict(previous)
         previous[name] = fingerprint
         state["projection"] = previous
-        yield WalkItem("session", name, row.get("session_id"), _session_record(row), _copy(state))
+        session_id = row.get("session_id")
+        if session_id is not None and not isinstance(session_id, str):
+            session_id = None
+        yield WalkItem("session", name, session_id, _session_record(row), _copy(state))
     state["projection"] = current
     state["projection_identity"] = identity
     yield WalkItem("checkpoint", None, None, None, _copy(state))
@@ -280,12 +362,6 @@ def iter_report_walk(
     log_root: Path, watermark: dict[str, Any] | None = None
 ) -> Iterator[WalkItem]:
     """Walk retained sources from a committed, JSON-serializable watermark."""
-    root = Path(log_root)
     state = _copy(watermark or {})
-    last = _copy(state)
     for walk in (_walk_otlp, _walk_archive, _walk_projection):
-        for item in walk(root, state):
-            last = item.watermark
-            yield item
-    if state != last:
-        yield WalkItem("checkpoint", None, None, None, _copy(state))
+        yield from walk(log_root, state)

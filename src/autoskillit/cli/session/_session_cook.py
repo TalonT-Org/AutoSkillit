@@ -250,15 +250,6 @@ def _acquire_cook_managed_join(
     return (evidence.context if evidence is not None else None), rendered_refusal
 
 
-def _render_cook_skill_unavailability(
-    unavailability_payload: SkillUnavailabilityPayload,
-    managed_join_refusal: str | None,
-) -> None:
-    render_skill_unavailability(unavailability_payload)
-    if managed_join_refusal is not None:
-        print(f"WARNING: {managed_join_refusal}")
-
-
 def _resolve_cook_launch(
     backend: CodingAgentBackend,
     resume_spec: ResumeSpec,
@@ -324,7 +315,9 @@ def _prepare_cook_managed_launch(
     import autoskillit.core as core
     from autoskillit.cli.session import _session_onboarding
 
-    _render_cook_skill_unavailability(unavailability_payload, managed_join_refusal)
+    render_skill_unavailability(unavailability_payload)
+    if managed_join_refusal is not None:
+        print(f"WARNING: {managed_join_refusal}")
     if not isinstance(launch, core.FreshLaunch):
         return launch, False
     initial_prompt = (

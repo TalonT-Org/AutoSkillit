@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from autoskillit.cli.session._session_cook import _render_cook_skill_unavailability
+from autoskillit.cli.session._session_cook import _prepare_cook_managed_launch
 from autoskillit.cli.session._session_launch import (
     append_skill_unavailability,
     render_skill_unavailability,
 )
-from autoskillit.core import SkillSemanticOperation, SkillUnavailabilityPayload
+from autoskillit.core import RestoreSession, SkillSemanticOperation, SkillUnavailabilityPayload
 from autoskillit.workspace import SkillUnavailableMetadata
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -56,6 +58,7 @@ def test_render_skill_unavailability_groups_and_sorts(capsys: pytest.CaptureFixt
 
 def test_render_skill_unavailability_reports_managed_preparation_refusal_once(
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     payload = _payload(
         SkillUnavailableMetadata(
@@ -66,9 +69,17 @@ def test_render_skill_unavailability_reports_managed_preparation_refusal_once(
         )
     )
 
-    _render_cook_skill_unavailability(
+    launch = RestoreSession("existing-session")
+    assert _prepare_cook_managed_launch(
+        launch,
+        None,
         payload,
-        "managed join issuance refused: catalog_probe_failed",
+        tmp_path,
+        color=False,
+        managed_join_refusal="managed join issuance refused: catalog_probe_failed",
+    ) == (
+        launch,
+        False,
     )
 
     lines = capsys.readouterr().out.splitlines()

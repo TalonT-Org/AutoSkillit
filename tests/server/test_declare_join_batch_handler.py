@@ -11,6 +11,15 @@ import pytest
 
 from autoskillit.core import PluginLoadMode, SkillExecutionRole
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.hooks._join_ledger import (
+    JOIN_LEDGER_SCHEMA_VERSION,
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    claim_assignment,
+    declare_batch,
+    ledger_paths,
+    settle_assignment,
+)
 from autoskillit.hooks._runtime._hook_settings import DIAGNOSTIC_KEYS
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
@@ -64,6 +73,7 @@ def _binding(
     entries: tuple[LoadedSkillEntry, ...] | None = None,
     binding_valid: bool = True,
     artifact_digest: str = "artifact-digest",
+    managed_parent_id: str = "top_level",
 ) -> SessionBinding:
     loaded = entries if entries is not None else (_entry(),)
     return SessionBinding(
@@ -73,6 +83,7 @@ def _binding(
         binding_valid=binding_valid,
         artifact_digest=artifact_digest,
         loaded_skills=loaded,
+        managed_parent_id=managed_parent_id,
     )
 
 
@@ -95,6 +106,59 @@ def _write_session_binding(
 
 def _capable_backend() -> SimpleNamespace:
     return SimpleNamespace(capabilities=SimpleNamespace(fixed_set_join_capable=True))
+
+
+def _run_join_guard(
+    state_root: Path,
+    project_root: Path,
+    session_id: str,
+    *,
+    tool_name: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = production_interpreter_env()
+    for name in (
+        "AUTOSKILLIT_HEADLESS",
+        "AUTOSKILLIT_LAUNCH_ID",
+        "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID",
+    ):
+        env.pop(name, None)
+    env.update(
+        {
+            "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
+            "AUTOSKILLIT_LOG_DIR": str(state_root / "logs"),
+            "AUTOSKILLIT_STATE_ROOT": str(state_root),
+            "AUTOSKILLIT_SESSION_TYPE": "skill",
+        }
+    )
+    guard = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "autoskillit"
+        / "hooks"
+        / "guards"
+        / ("join_followup_guard.py" if tool_name else "join_stop_guard.py")
+    )
+    payload: dict[str, object] = {"session_id": session_id, "cwd": str(project_root)}
+    if tool_name:
+        payload.update(
+            tool_name=tool_name,
+            tool_use_id=f"refused-replacement-{tool_name}",
+            tool_input=(
+                {"command": "printf SHOULD_NOT_RUN"}
+                if tool_name == "Bash"
+                else {"file_path": str(project_root / "blocked.txt"), "content": "blocked"}
+            ),
+        )
+    return subprocess.run(
+        [sys.executable, str(guard)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        cwd=project_root,
+        env=env,
+        timeout=10,
+    )
 
 
 def test_handler_rejects_session_id_path_traversal(
@@ -201,6 +265,7 @@ def test_end_to_end_real_projection_real_hook_real_handler(
         ("backend_not_capable", "does not attest fixed_set_join_capable"),
         ("assignment_count", "declares count=2; received 1 assignments"),
         ("empty_top_level_digest", "non-empty top-level artifact_digest"),
+        ("empty_managed_parent", "non-empty binding managed_parent_id"),
         ("wrong_session", "requested 'requested-session', recorded 'recorded-session'"),
     ],
 )
@@ -238,6 +303,8 @@ def test_each_refusal_names_a_distinct_cause(
         binding = _binding(requested_session_id, entries=(_entry(count=2),))
     elif case == "empty_top_level_digest":
         binding = _binding(requested_session_id, artifact_digest="")
+    elif case == "empty_managed_parent":
+        binding = _binding(requested_session_id, managed_parent_id="")
     elif case == "wrong_session":
         binding = _binding("recorded-session")
         _write_session_binding(state_root, "recorded-session", binding)
@@ -262,38 +329,34 @@ def test_each_refusal_names_a_distinct_cause(
     assert expected_error in str(result["error"])
 
 
+@pytest.mark.parametrize("requested_skill_name", ("rectify", "autoskillit:rectify"))
 def test_skill_name_matches_in_both_namespaced_and_bare_form(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    requested_skill_name: str,
 ) -> None:
     state_root = tmp_path / "state-root"
     state_root.mkdir()
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
     monkeypatch.setattr(declare_module, "get_backend", lambda _name: _capable_backend())
-    _write_session_binding(state_root, "session", _binding("session"))
+    session_id = f"session-{requested_skill_name.replace(':', '-')}"
+    _write_session_binding(state_root, session_id, _binding(session_id))
 
-    bare = declare_module._declare_join_batch_handler(
-        "rectify", ["bare"], "session", tmp_path, top_level_parent="bare-parent"
-    )
-    namespaced = declare_module._declare_join_batch_handler(
-        "autoskillit:rectify",
-        ["namespaced"],
-        "session",
+    result = declare_module._declare_join_batch_handler(
+        requested_skill_name,
+        ["assignment"],
+        session_id,
         tmp_path,
-        top_level_parent="namespaced-parent",
     )
     cardinality_violation = declare_module._declare_join_batch_handler(
         "autoskillit:rectify",
         ["one", "two"],
-        "session",
+        session_id,
         tmp_path,
-        top_level_parent="cardinality-parent",
     )
 
-    assert bare["success"] is True
-    assert namespaced["success"] is True
-    assert bare["wave"]["skill_name"] == "rectify"
-    assert namespaced["wave"]["skill_name"] == "rectify"
+    assert result["success"] is True
+    assert result["wave"]["skill_name"] == "rectify"
     assert cardinality_violation["success"] is False
     assert "declares count=1; received 2 assignments" in str(cardinality_violation["error"])
 
@@ -529,3 +592,242 @@ def test_ledger_and_binding_share_the_state_root_aware_path(
     assert result["success"] is True
     assert resolved_paths[0].parent == ledger_dirs[0]
     assert ledger_dirs[0] == state_root / ".autoskillit" / "temp"
+
+
+def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_root = tmp_path / "state-root"
+    project_root = tmp_path / "project"
+    state_root.mkdir()
+    project_root.mkdir()
+    session_id = "recovery-session"
+    parent = "managed-parent"
+    binding = _binding(
+        session_id,
+        entries=(_entry("rectify"), _entry("other")),
+        managed_parent_id=parent,
+    )
+    binding_path = _write_session_binding(state_root, session_id, binding)
+    channel_dir = binding_path.parent
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setattr(declare_module, "get_backend", lambda _name: _capable_backend())
+    diagnostics: list[dict[str, object]] = []
+    monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
+
+    original = declare_module._declare_join_batch_handler(
+        "rectify", ["original"], session_id, project_root
+    )
+    assert original["success"] is True
+    original_id = str(original["join_batch_id"])
+    claim_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="original-agent",
+    )
+    settle_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="original-agent",
+        outcome=OUTCOME_FAILURE,
+    )
+    ledger_path, _lock_path = ledger_paths(channel_dir)
+    rejected_baseline = ledger_path.read_bytes()
+
+    invalid_cardinality = declare_module._declare_join_batch_handler(
+        "rectify", ["one", "two"], session_id, project_root
+    )
+    wrong_parent = declare_module._declare_join_batch_handler(
+        "rectify", ["replacement"], session_id, project_root, top_level_parent="other-parent"
+    )
+    wrong_skill = declare_module._declare_join_batch_handler(
+        "other", ["replacement"], session_id, project_root
+    )
+    write_binding(binding_path, binding._replace(artifact_digest="different-artifact"))
+    wrong_artifact = declare_module._declare_join_batch_handler(
+        "rectify", ["replacement"], session_id, project_root
+    )
+    write_binding(binding_path, binding)
+
+    assert invalid_cardinality["success"] is False
+    assert "declares count=1" in str(invalid_cardinality["error"])
+    assert wrong_parent["success"] is False
+    assert "top_level_parent mismatch" in str(wrong_parent["error"])
+    assert wrong_skill["success"] is False
+    assert "predecessor skill mismatch" in str(wrong_skill["error"])
+    assert wrong_artifact["success"] is False
+    assert "artifact digest mismatch" in str(wrong_artifact["error"])
+    assert ledger_path.read_bytes() == rejected_baseline
+    rejected_state = json.loads(rejected_baseline)
+    assert len(rejected_state["batches"]) == 1
+    assert len(rejected_state["declaration_index"]) == 1
+    assert (
+        rejected_state["sessions"][session_id]["managed_parents"][parent]["active_batch_id"]
+        == original_id
+    )
+    for tool_name in ("Bash", "Write"):
+        denied = _run_join_guard(state_root, project_root, session_id, tool_name=tool_name)
+        assert denied.returncode == 2
+        assert json.loads(denied.stdout)["decision"] == "block"
+    failed_stop = _run_join_guard(state_root, project_root, session_id)
+    assert failed_stop.returncode == 2
+    assert json.loads(failed_stop.stdout)["decision"] == "block"
+
+    replacement = declare_module._declare_join_batch_handler(
+        "autoskillit:rectify", ["replacement"], session_id, project_root
+    )
+    assert replacement["success"] is True
+    replacement_id = str(replacement["join_batch_id"])
+    assert replacement_id != original_id
+    replacement_diagnostic = diagnostics[-1]
+    assert replacement_diagnostic["status"] == "replacement_batch"
+    assert replacement_diagnostic["original_join_batch_id"] == original_id
+    assert replacement_diagnostic["replacement_join_batch_id"] == replacement_id
+    assert replacement_diagnostic["session_id"] == session_id
+    assert replacement_diagnostic["top_level_parent"] == parent
+    assert replacement_diagnostic["skill_name"] == "rectify"
+    replacement_state = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert len(replacement_state["batches"]) == 2
+    assert len(replacement_state["declaration_index"]) == 2
+    assert replacement_state["batches"][replacement_id]["wave_outcome"] == "pending"
+    assert (
+        replacement_state["sessions"][session_id]["managed_parents"][parent]["active_batch_id"]
+        == replacement_id
+    )
+
+    pending_stop = _run_join_guard(state_root, project_root, session_id)
+    assert pending_stop.returncode == 2
+    assert json.loads(pending_stop.stdout)["decision"] == "block"
+
+    claim_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="replacement-agent",
+    )
+    settle_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="replacement-agent",
+        outcome=OUTCOME_SUCCESS,
+    )
+    final_stop = _run_join_guard(state_root, project_root, session_id)
+    assert final_stop.returncode == 0, final_stop.stderr
+    assert final_stop.stdout == ""
+
+    retained = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert retained["schema_version"] == JOIN_LEDGER_SCHEMA_VERSION == 2
+    assert len(retained["batches"]) == 2
+    assert len(retained["declaration_index"]) == 2
+    assert retained["batches"][original_id]["wave_outcome"] == "failure"
+    assert retained["batches"][replacement_id]["wave_outcome"] == "complete"
+    assert retained["batches"][original_id]["canonical_declaration"]
+    assert retained["batches"][replacement_id]["canonical_declaration"]
+    assert (
+        retained["sessions"][session_id]["managed_parents"][parent]["active_batch_id"]
+        == replacement_id
+    )
+
+    third = declare_module._declare_join_batch_handler(
+        "rectify", ["third"], session_id, project_root
+    )
+    assert third["success"] is True
+    third_id = str(third["join_batch_id"])
+    assert diagnostics[-1]["status"] == "declared"
+    assert "original_join_batch_id" not in diagnostics[-1]
+    final_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert len(final_ledger["batches"]) == 3
+    assert len(final_ledger["declaration_index"]) == 3
+    assert (
+        final_ledger["sessions"][session_id]["managed_parents"][parent]["active_batch_id"]
+        == third_id
+    )
+    assert final_ledger["batches"][original_id]["wave_outcome"] == "failure"
+    assert final_ledger["batches"][replacement_id]["wave_outcome"] == "complete"
+
+
+def test_recovery_declaration_rejects_a_stale_active_predecessor_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_root = tmp_path / "state-root"
+    project_root = tmp_path / "project"
+    state_root.mkdir()
+    project_root.mkdir()
+    session_id = "stale-recovery"
+    parent = "managed-parent"
+    binding_path = _write_session_binding(
+        state_root,
+        session_id,
+        _binding(session_id, managed_parent_id=parent),
+    )
+    channel_dir = binding_path.parent
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    monkeypatch.setattr(declare_module, "get_backend", lambda _name: _capable_backend())
+
+    original = declare_module._declare_join_batch_handler(
+        "rectify", ["original"], session_id, project_root
+    )
+    assert original["success"] is True
+    original_id = str(original["join_batch_id"])
+    claim_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="original-agent",
+    )
+    settle_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="original-agent",
+        outcome=OUTCOME_FAILURE,
+    )
+    original_wave = original["wave"]
+    assert isinstance(original_wave, dict)
+    stale_predecessor = {**original_wave, "wave_outcome": "failure"}
+
+    intervening = declare_batch(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        skill_name="rectify",
+        artifact_digest="artifact-digest",
+        assignments=("intervening",),
+        expected_active_predecessor_id=original_id,
+    )
+    claim_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="intervening-agent",
+    )
+    settle_assignment(
+        channel_dir,
+        session_id=session_id,
+        top_level_parent=parent,
+        tool_use_id="intervening-agent",
+        outcome=OUTCOME_FAILURE,
+    )
+    ledger_path, _lock_path = ledger_paths(channel_dir)
+    before = ledger_path.read_bytes()
+    monkeypatch.setattr(
+        declare_module,
+        "active_batch",
+        lambda *_args, **_kwargs: stale_predecessor,
+    )
+
+    result = declare_module._declare_join_batch_handler(
+        "rectify", ["stale"], session_id, project_root
+    )
+
+    assert result["success"] is False
+    assert "active recovery predecessor changed" in str(result["error"])
+    assert original_id in str(result["error"])
+    assert str(intervening["join_batch_id"]) in str(result["error"])
+    assert ledger_path.read_bytes() == before

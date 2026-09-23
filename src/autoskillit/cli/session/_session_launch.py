@@ -75,8 +75,10 @@ def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> N
             print(f"  hint: {hint}")
 
 
-def render_skill_unavailability(unavailability_payload: SkillUnavailabilityPayload) -> None:
-    """Print one deterministic operator warning per refusal reason."""
+def render_skill_unavailability(
+    unavailability_payload: SkillUnavailabilityPayload,
+) -> None:
+    """Print backend exclusions grouped by operation and diagnostic."""
     grouped: dict[tuple[str, str], list[str]] = {}
     for item in unavailability_payload["unavailable"]:
         grouped.setdefault((item["operation"], item["diagnostic"]), []).append(item["skill"])

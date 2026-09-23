@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+import hashlib
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
@@ -164,6 +165,7 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
         BackendCapabilities,
         JoinSpec,
         SemanticAdaptationContext,
+        SkillContractError,
         SkillSemanticPlan,
         required_join_is_unsupported,
     )
@@ -182,3 +184,25 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
     assert context.digest == SemanticAdaptationContext(managed_join_attestation=attestation).digest
     with pytest.raises(FrozenInstanceError):
         context.managed_join_attestation = None  # type: ignore[misc]
+
+    catalog = b'{"models":[]}'
+    catalog_attestation = replace(
+        attestation,
+        codex_catalog_digest=hashlib.sha256(catalog).hexdigest(),
+    )
+    complete = SemanticAdaptationContext(
+        managed_join_attestation=catalog_attestation,
+        managed_codex_catalog=catalog,
+    )
+    assert complete.managed_codex_catalog == catalog
+    assert (
+        complete.canonical_payload
+        == SemanticAdaptationContext(
+            managed_join_attestation=catalog_attestation
+        ).canonical_payload
+    )
+    with pytest.raises(SkillContractError, match="does not match its attestation"):
+        SemanticAdaptationContext(
+            managed_join_attestation=catalog_attestation,
+            managed_codex_catalog=b"tampered",
+        )

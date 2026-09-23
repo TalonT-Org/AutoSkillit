@@ -30,6 +30,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    _RECOVERY_DECLARE_TOOL_PARTS,
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
@@ -37,6 +38,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    record_cook_join_bypass,
     resolve_binding_session_id,
     session_join_required,
     session_managed_codex_route,
@@ -45,6 +47,7 @@ from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     active_batch,
+    is_terminal_non_success_batch,
     resolve_flag_dir,
 )
 
@@ -71,6 +74,39 @@ def _denial_reason(tool_name: str) -> str:
     )
 
 
+def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] | None:
+    session_id = resolve_binding_session_id(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not session_id or not payload_cwd:
+        return None
+    if record_cook_join_bypass(data, payload_cwd, session_id, gate="join_followup_guard"):
+        return None
+    if not session_join_required(payload_cwd, session_id):
+        return None
+    return session_id, payload_cwd
+
+
+def _managed_route_exempts(payload_cwd: str, session_id: str, tool_name: object) -> bool:
+    managed_route = session_managed_codex_route(payload_cwd, session_id)
+    if managed_route is None:
+        return False
+    route, guards, _config_digest = managed_route
+    if route != "leaf" and "join_followup_guard" not in guards:
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": "managed Codex parent binding omits join_followup_guard.",
+                }
+            )
+            + "\n"
+        )
+        raise SystemExit(2)
+    return route == "leaf" or (
+        isinstance(tool_name, str) and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
+    )
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -80,31 +116,14 @@ def main() -> None:
     if not isinstance(data, dict) or data.get("agent_id"):
         sys.exit(0)
 
-    session_id = resolve_binding_session_id(data)
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if not session_id or not payload_cwd or not session_join_required(payload_cwd, session_id):
+    context = _resolve_required_join_session(data)
+    if context is None:
         sys.exit(0)
+    session_id, payload_cwd = context
 
     tool_name = data.get("tool_name")
-    managed_route = session_managed_codex_route(payload_cwd, session_id)
-    if managed_route is not None:
-        route, guards, _config_digest = managed_route
-        if route != "leaf" and "join_followup_guard" not in guards:
-            sys.stdout.write(
-                json.dumps(
-                    {
-                        "decision": "block",
-                        "reason": "managed Codex parent binding omits join_followup_guard.",
-                    }
-                )
-                + "\n"
-            )
-            sys.exit(2)
-        if route == "leaf" or (
-            isinstance(tool_name, str)
-            and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
-        ):
-            sys.exit(0)
+    if _managed_route_exempts(payload_cwd, session_id, tool_name):
+        sys.exit(0)
     if not isinstance(tool_name, str) or tool_name == "Agent":
         sys.exit(0)
 
@@ -138,6 +157,21 @@ def main() -> None:
     )
 
     if batch is None or not _is_unresolved(batch):
+        sys.exit(0)
+    if tuple(
+        tool_name.split("__")
+    ) in _RECOVERY_DECLARE_TOOL_PARTS and is_terminal_non_success_batch(batch):
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "status": "recovery_declaration_allowed",
+                "session_id": session_id,
+                "top_level_parent": top_level_parent,
+                "join_batch_id": batch.get("join_batch_id", ""),
+                "tool_name": tool_name,
+            },
+            caller="join_followup_guard",
+        )
         sys.exit(0)
 
     write_join_diagnostic(

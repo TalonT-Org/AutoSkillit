@@ -40,6 +40,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    record_cook_join_bypass,
     resolve_binding_session_id,
     session_join_admission,
     session_managed_codex_route,
@@ -65,7 +66,7 @@ def _block_stop(*, reason: str, denial_reason: str) -> NoReturn:
     raise SystemExit(2)
 
 
-def main() -> None:
+def _read_stop_payload() -> tuple[dict[str, object], str]:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -87,8 +88,15 @@ def main() -> None:
             ),
             denial_reason="missing_session_id",
         )
+    return data, sid
+
+
+def main() -> None:
+    data, sid = _read_stop_payload()
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if record_cook_join_bypass(data, payload_cwd, sid, gate="join_stop_guard"):
+        sys.exit(0)
     admission = session_join_admission(payload_cwd, sid)
     if not admission.enforce or admission.binding_dict is None:
         sys.exit(0)

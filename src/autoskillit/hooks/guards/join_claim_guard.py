@@ -41,6 +41,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    record_cook_join_bypass,
+    resolve_binding_session_id,
     session_join_required,
     session_managed_scope,
     write_join_diagnostic,
@@ -57,8 +59,7 @@ JOIN_CLAIM_DENY_TRIGGER: str = (
 
 
 def _resolve_session_id(data: dict[str, object]) -> str:
-    sid = data.get("session_id", "")
-    return sid if isinstance(sid, str) else ""
+    return resolve_binding_session_id(data)
 
 
 def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] | None:
@@ -69,6 +70,8 @@ def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] |
     session_id = _resolve_session_id(data)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if not session_id or not payload_cwd:
+        return None
+    if record_cook_join_bypass(data, payload_cwd, session_id, gate="join_claim_guard"):
         return None
     if not session_join_required(payload_cwd, session_id):
         return None

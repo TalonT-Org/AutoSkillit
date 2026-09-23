@@ -86,7 +86,6 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafProjection,
     _ChildResourceOwnerRequest,
     _ChildWorktreeRequest,
-    bind_managed_leaf,
     project_managed_leaf,
 )
 
@@ -99,7 +98,7 @@ if TYPE_CHECKING:
         ValidatedAddDir,
     )
     from autoskillit.pipeline import ToolContext
-    from autoskillit.server._misc import SkillProjectionContext
+    from autoskillit.server._misc import AgentSkillDocument, SkillProjectionContext
 
 _MAX_IDEMPOTENCY_KEY_CHARS = 160
 _MAX_RESULT_PAGE_BYTES = 8_192
@@ -122,6 +121,7 @@ class _ManagedLeafLaunchAdapter:
     write_behavior: WriteBehaviorSpec
     read_only: bool
     adaptation: SkillSemanticAdaptationResult
+    source_document: AgentSkillDocument
 
     def _write_leaf_binding(self, leaf_session_id: str, projection: ManagedLeafProjection) -> None:
         adaptation_context = self.projection_context.adaptation_context
@@ -276,16 +276,9 @@ class _ManagedLeafLaunchAdapter:
                 semantic_adaptation=adaptation,
             )
             leaf_projection = project_managed_leaf(
-                bind_managed_leaf(
-                    assignment=projection.binding.assignment,
-                    selected_source=self.launch.selected_source,
-                    source_document=source_document,
-                    adaptation=adaptation,
-                    default_model=projection.binding.model,
-                    write_behavior=self.write_behavior,
-                    read_only=self.read_only,
-                ),
-                source_document,
+                projection.binding,
+                self.source_document,
+                leaf_document=source_document,
             )
             add_dir = manager.materialize_invocation(
                 leaf_session_id, self.invocation, leaf_context
@@ -447,6 +440,7 @@ def _resolve_launch_binding(
             write_behavior=write_behavior,
             read_only=read_only,
             adaptation=adaptation,
+            source_document=source_document,
         ),
     )
 

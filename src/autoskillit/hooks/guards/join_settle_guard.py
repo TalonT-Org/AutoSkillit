@@ -39,6 +39,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    record_cook_join_bypass,
+    resolve_binding_session_id,
     session_join_required,
     session_managed_scope,
     write_join_diagnostic,
@@ -81,6 +83,18 @@ def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
     return None
 
 
+def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] | None:
+    sid = resolve_binding_session_id(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not sid or not payload_cwd:
+        return None
+    if record_cook_join_bypass(data, payload_cwd, sid, gate="join_settle_guard"):
+        return None
+    if not session_join_required(payload_cwd, sid):
+        return None
+    return sid, payload_cwd
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -96,12 +110,10 @@ def main() -> None:
     event_type = data.get("hook_event_name")
     if not isinstance(event_type, str):
         sys.exit(0)
-    sid = data.get("session_id", "")
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if not isinstance(sid, str) or not sid or not payload_cwd:
+    context = _resolve_required_join_session(data)
+    if context is None:
         sys.exit(0)
-    if not session_join_required(payload_cwd, sid):
-        sys.exit(0)
+    sid, payload_cwd = context
     scope = session_managed_scope(payload_cwd, sid)
     if scope is None:
         write_join_diagnostic(

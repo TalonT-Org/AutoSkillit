@@ -24,6 +24,7 @@ from autoskillit.hooks._join_ledger import (
     can_release_stop,
     claim_assignment,
     declare_batch,
+    is_terminal_non_success_batch,
     resolve_flag_dir,
     settle_assignment,
 )
@@ -114,6 +115,12 @@ def test_post_tool_use_failure_settles(tmp_path: Path) -> None:
     batch = active_batch(flag_dir, session_id="s1", top_level_parent="p1")
     assert batch is not None
     assert batch["assignments"][0]["outcome"] == OUTCOME_FAILURE
+    assert is_terminal_non_success_batch(batch)
+    assert not is_terminal_non_success_batch({"wave_outcome": "pending"})
+    assert not is_terminal_non_success_batch({"wave_outcome": "complete"})
+    assert not is_terminal_non_success_batch({"wave_outcome": "unknown"})
+    assert not is_terminal_non_success_batch({"_corrupted": True, "wave_outcome": "failure"})
+    assert not is_terminal_non_success_batch(None)
 
 
 def test_unresolved_wave_denies_stop(tmp_path: Path) -> None:

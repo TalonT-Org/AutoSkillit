@@ -3115,6 +3115,7 @@ def test_fcntl_import_allowlist() -> None:
         "execution/session/_managed_headless_session_lineage_records.py",
         "execution/quota/_quota_observed.py",
         "hooks/guards/open_kitchen_guard.py",
+        "hooks/_runtime/_session_registry_bridge.py",
         "hooks/_join/storage.py",
         "hooks/_session_binding.py",
         "cli/session/_session_reload.py",

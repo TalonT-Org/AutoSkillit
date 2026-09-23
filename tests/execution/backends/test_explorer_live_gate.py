@@ -550,6 +550,7 @@ def test_live_parent_resume_uses_authenticated_read_only_thread(
         "codex",
         "exec",
         "--json",
+        "--skip-git-repo-check",
         "--sandbox",
         "read-only",
         "--model",

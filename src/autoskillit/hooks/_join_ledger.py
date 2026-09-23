@@ -116,6 +116,27 @@ def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
 
 
+def _validate_expected_active_predecessor(
+    active: Mapping[str, object] | None,
+    expected_active_predecessor_id: str | None,
+) -> None:
+    if expected_active_predecessor_id is None:
+        return
+    if (
+        active is not None
+        and active.get("join_batch_id") == expected_active_predecessor_id
+        and active.get("wave_outcome") in _NON_SUCCESS_WAVE_OUTCOMES
+    ):
+        return
+    actual_id = active.get("join_batch_id") if active is not None else None
+    actual_outcome = active.get("wave_outcome") if active is not None else None
+    raise JoinLedgerError(
+        "active recovery predecessor changed: "
+        f"expected {expected_active_predecessor_id!r}, found {actual_id!r} "
+        f"with outcome {actual_outcome!r}"
+    )
+
+
 def open_or_replay(
     flag_dir: Path,
     *,
@@ -123,11 +144,20 @@ def open_or_replay(
     selected_source: Mapping[str, object],
     key: str,
     declaration: Mapping[str, object],
+    expected_active_predecessor_id: str | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
-    """Open one immutable batch or replay its exact prior declaration."""
+    """Open one immutable batch or replay its exact prior declaration.
+
+    Before opening a new recovery batch, callers may require the active pointer
+    to still name one exact terminal non-success predecessor under the ledger lock.
+    """
     if not isinstance(key, str) or not key:
         raise JoinLedgerError("declaration key must be a non-empty string")
+    if expected_active_predecessor_id is not None and (
+        not isinstance(expected_active_predecessor_id, str) or not expected_active_predecessor_id
+    ):
+        raise JoinLedgerError("expected active predecessor ID must be a non-empty string")
     normalized_parent, normalized_source = _normalize_scope(parent, selected_source)
     normalized_declaration = json.loads(_canonical(dict(declaration)))
     if not isinstance(normalized_declaration, dict):
@@ -175,6 +205,7 @@ def open_or_replay(
                 normalized_parent["request_session_id"],
                 normalized_parent["managed_parent_id"],
             )
+            _validate_expected_active_predecessor(active, expected_active_predecessor_id)
             if active is not None and active.get("wave_outcome") == WAVE_PENDING:
                 raise JoinLedgerError(
                     "another wave is already open for "
@@ -215,6 +246,7 @@ def declare_batch(
     skill_name: str,
     artifact_digest: str,
     assignments: Iterable[str],
+    expected_active_predecessor_id: str | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     labels = list(assignments)
@@ -238,6 +270,7 @@ def declare_batch(
         },
         key=f"native:{_new_batch_id()}",
         declaration={"assignments": [{"label": label} for label in labels]},
+        expected_active_predecessor_id=expected_active_predecessor_id,
         now=now,
     )
 
@@ -615,6 +648,15 @@ def active_batch(
         return {"_corrupted": True, "error": str(exc)}
 
 
+def is_terminal_non_success_batch(batch: Mapping[str, object] | None) -> bool:
+    """Return whether a readable active batch settled with a non-success outcome."""
+    return bool(
+        batch is not None
+        and not batch.get("_corrupted")
+        and batch.get("wave_outcome") in _NON_SUCCESS_WAVE_OUTCOMES
+    )
+
+
 def can_release_stop(
     flag_dir: Path,
     *,
@@ -648,7 +690,7 @@ OUTCOME_CANCELLED OUTCOME_FAILURE OUTCOME_INTERRUPTION OUTCOME_LAUNCH_FAILED
 OUTCOME_MISSING OUTCOME_PENDING OUTCOME_REAPED OUTCOME_SUCCESS OUTCOME_TIMEOUT
 WAVE_CANCELLED WAVE_COMPLETE WAVE_FAILURE WAVE_INTERRUPTION WAVE_LAUNCH_FAILED
 WAVE_MISSING_CHILD WAVE_PARTIAL WAVE_PARTIAL_TIMEOUT WAVE_PENDING WAVE_REAPED
-active_batch admit_assignment aggregate_batch can_release_stop
+active_batch admit_assignment aggregate_batch can_release_stop is_terminal_non_success_batch
 cancel_batch claim_assignment declare_batch ledger_paths mark_assignment_running
 open_or_replay reconcile_batch resolve_flag_dir settle_assignment
 settle_unadmitted_assignment write_join_ledger

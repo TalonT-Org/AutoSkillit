@@ -24,7 +24,7 @@ from autoskillit.core import (
     write_registry_entry,
 )
 from autoskillit.execution.backends import ClaudeSessionLocator
-from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
+from autoskillit.hooks._runtime._session_registry_bridge import bridge_session_registry
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -157,7 +157,7 @@ def test_order_resume_preserves_cook_identity_through_hook_and_real_picker(
     assert launch_id == "cook-launch"
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
-    _bridge_session_registry(_SESSION_ID, str(tmp_path))
+    bridge_session_registry(_SESSION_ID, str(tmp_path), launch_id=launch_id)
 
     locator = _stage_claude_index(monkeypatch, tmp_path, _SESSION_ID)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")

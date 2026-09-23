@@ -17,15 +17,13 @@ inventory does not automatically discover future production call shapes.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from autoskillit.core import (
     SemanticAdaptationContext,
     SkillExecutionRole,
     SkillVisibilitySpec,
 )
-from autoskillit.execution.backends import CodexBackend, all_backends
+from autoskillit.execution.backends import all_backends
 from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
@@ -206,20 +204,19 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
 def _production_managed_codex_context() -> SemanticAdaptationContext:
     """Issue the managed Codex admission context from production digests.
 
-    Uses the production ``CodexBackend.project_source_catalog`` for a realistic
+    Uses the production catalog projector for a realistic
     ``codex_catalog_digest`` and ``managed_codex_route_digest`` for the
     fixed-batch tool registry. ``record_store=None`` / ``backend=None`` keep
     this helper in-process — it seeds the admission ledger, not the persistence
     surfaces.
     """
-    with TemporaryDirectory() as temp_dir:
-        source_home = Path(temp_dir)
-        (source_home / "models_cache.json").write_text(
-            json.dumps(installed_catalog()), encoding="utf-8"
-        )
-        projection = CodexBackend(source_codex_home=source_home).project_source_catalog(
-            "gpt-5.6-luna", "high"
-        )
+    from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+
+    projection = project_codex_catalog(
+        json.dumps(installed_catalog()).encode("utf-8"),
+        expected_model="gpt-5.6-luna",
+        expected_reasoning_effort="high",
+    )
 
     return DefaultManagedJoinAttestationAuthority(
         record_store=None,
@@ -232,6 +229,7 @@ def _production_managed_codex_context() -> SemanticAdaptationContext:
         resolved_model="gpt-5.6-luna",
         resolved_reasoning_effort="high",
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
         fixed_batch_tool_registry_digest=managed_codex_route_digest(),
         hook_registry_digest=HOOK_REGISTRY_HASH,
         skill_load_applies=True,

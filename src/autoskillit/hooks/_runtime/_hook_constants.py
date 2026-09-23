@@ -86,3 +86,13 @@ MANAGED_PARENT_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
     "read_fixed_batch_result",
 )
 MANAGED_PARENT_ALLOWED_TOOL_SET: Final[frozenset[str]] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)
+
+# Exact canonical MCP identities admitted while a failed join wave awaits a
+# replacement declaration. Guards compare the fully split tool name so bare,
+# suffixed, and foreign-server lookalikes remain blocked.
+_RECOVERY_DECLARE_TOOL_PARTS: Final[frozenset[tuple[str, ...]]] = frozenset(
+    {
+        ("mcp", "autoskillit", "declare_join_batch"),
+        ("mcp", "plugin_autoskillit_autoskillit", "declare_join_batch"),
+    }
+)

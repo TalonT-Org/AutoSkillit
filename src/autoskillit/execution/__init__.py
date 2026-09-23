@@ -25,6 +25,7 @@ from autoskillit.execution.backends import (
     ClaudeCodeBackend,
     CodexAttestationResult,
     CodexBackend,
+    CodexCatalogAcquisitionError,
     CodexHostCorrelation,
     CodexOuterBudgetAttestor,
     CodexStateReadinessProbe,
@@ -46,6 +47,7 @@ from autoskillit.execution.backends import (
     find_broken_codex_hook_commands,
     generate_codex_hooks_config,
     get_backend,
+    managed_codex_route_digest,
     read_rollout_thread_id,
     resolve_unique_codex_host_correlation,
     sync_hooks_to_codex_config,
@@ -480,4 +482,6 @@ __all__ = [
     # backends
     "all_backends",
     "get_backend",
+    "CodexCatalogAcquisitionError",
+    "managed_codex_route_digest",
 ]

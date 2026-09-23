@@ -12,7 +12,6 @@ ask_user_question_guard can verify the kitchen is open before allowing AskUserQu
 import json
 import os
 import sys
-import time
 from datetime import UTC
 from pathlib import Path
 
@@ -27,30 +26,10 @@ if _RUNTIME_DIR not in sys.path:
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_kitchen_state_dir,
-    resolve_state_root,
 )
-from _hook_settings import hook_session_shape  # noqa: E402
+from _hook_settings import bridge_session_registry, hook_session_shape  # noqa: E402
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
-_REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
-_LOCK_RETRY_INTERVAL_SECONDS = 0.01
-
-
-def _acquire_registry_lock(fd: int) -> None:
-    """Acquire the registry lock without delaying the permit path indefinitely."""
-    import fcntl
-
-    deadline = time.monotonic() + _REGISTRY_LOCK_TIMEOUT_SECONDS
-    while True:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise
-            time.sleep(min(_LOCK_RETRY_INTERVAL_SECONDS, remaining))
-        else:
-            return
 
 
 def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd: str = "") -> None:
@@ -80,82 +59,6 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
         except OSError:
             pass
         raise
-
-
-def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
-    """Bridge a launch row to its Claude session without violating one-to-one ownership."""
-    import fcntl
-    import tempfile
-
-    launch_id = os.environ.get("AUTOSKILLIT_LAUNCH_ID", "")
-    if not launch_id or not session_id:
-        return
-
-    registry_file = (
-        resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "session_registry.json"
-    )
-    if not registry_file.is_file():
-        return
-    registry_file.parent.mkdir(parents=True, exist_ok=True)
-    lock_fd = os.open(
-        str(registry_file.with_suffix(".lock")),
-        os.O_CREAT | os.O_RDWR | os.O_CLOEXEC,
-        0o644,
-    )
-    locked = False
-    try:
-        _acquire_registry_lock(lock_fd)
-        locked = True
-        try:
-            registry = json.loads(registry_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
-        if not isinstance(registry, dict):
-            return
-        row = registry.get(launch_id)
-        if not isinstance(row, dict):
-            return
-
-        existing_session_id = row.get("claude_session_id")
-        if existing_session_id == session_id:
-            return
-        if existing_session_id is not None:
-            raise ValueError(
-                f"Launch {launch_id!r} is already bound to session "
-                f"{existing_session_id!r}; cannot bind {session_id!r}"
-            )
-
-        for existing_launch_id, existing_row in registry.items():
-            if existing_launch_id == launch_id or not isinstance(existing_row, dict):
-                continue
-            if existing_row.get("claude_session_id") == session_id:
-                raise ValueError(
-                    f"Session {session_id!r} is already claimed by launch "
-                    f"{existing_launch_id!r}; cannot assign it to launch {launch_id!r}"
-                )
-
-        row["claude_session_id"] = session_id
-        content = json.dumps(registry)
-        fd, tmp = tempfile.mkstemp(dir=registry_file.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-            os.replace(tmp, registry_file)
-        except Exception:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-    finally:
-        try:
-            if locked:
-                try:
-                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                except OSError:
-                    pass
-        finally:
-            os.close(lock_fd)
 
 
 def _check_recipe_reload_block(
@@ -263,7 +166,7 @@ def main() -> None:
         if session_id:
             _write_kitchen_marker(session_id, recipe_name, payload_cwd)
             try:
-                _bridge_session_registry(session_id, payload_cwd)
+                bridge_session_registry(session_id, payload_cwd)
             except Exception as _bridge_err:
                 print(
                     f"[open_kitchen_guard] registry bridge failed: {_bridge_err}",

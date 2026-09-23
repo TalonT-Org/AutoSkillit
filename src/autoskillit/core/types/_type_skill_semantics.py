@@ -224,9 +224,23 @@ class SemanticAdaptationContext:
     """Immutable server evidence supplied to backend semantic adaptation."""
 
     managed_join_attestation: ManagedJoinAttestation | None = None
+    managed_codex_catalog: bytes | None = None
+
+    def __post_init__(self) -> None:
+        catalog = self.managed_codex_catalog
+        if catalog is None:
+            return
+        if type(catalog) is not bytes:
+            raise SkillContractError("managed Codex catalog must be immutable bytes")
+        attestation = self.managed_join_attestation
+        if attestation is None:
+            raise SkillContractError("managed Codex catalog requires a managed-join attestation")
+        if sha256(catalog).hexdigest() != attestation.codex_catalog_digest:
+            raise SkillContractError("managed Codex catalog does not match its attestation")
 
     @property
     def canonical_payload(self) -> Mapping[str, object]:
+        """Return identity evidence; catalog bytes are bound by the attested digest."""
         return MappingProxyType(
             {
                 "managed_join_attestation": (

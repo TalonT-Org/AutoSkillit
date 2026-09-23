@@ -10,6 +10,7 @@ keys, so filter-stats IPC is unaffected.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -30,6 +31,15 @@ from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS  # noqa:
 def update_fixtures(request: pytest.FixtureRequest) -> bool:
     """Expose --update-fixtures CLI flag as a fixture."""
     return bool(request.config.getoption("--update-fixtures"))
+
+
+@pytest.fixture
+def native_join_evidence(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
+    """Keep explicitly selected live artifacts outside disposable test homes."""
+    root = Path(os.environ.get("AUTOSKILLIT_NATIVE_JOIN_ARTIFACT_DIR", str(tmp_path)))
+    directory = root / request.node.name
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 # Local mirror of _SKIP_CODEX_STATUSES from autoskillit.execution.backends._codex_hooks.

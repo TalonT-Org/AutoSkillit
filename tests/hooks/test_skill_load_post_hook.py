@@ -33,6 +33,7 @@ def _run_hook(
     agent_backend: str | None = "claude-code",
     state_root: Path | None = None,
     hook_path: Path | None = None,
+    launch_id: str | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
     root = state_root if state_root is not None else tmp_dir
@@ -50,6 +51,7 @@ def _run_hook(
     for key in (
         "AUTOSKILLIT_PROVIDER_PROFILE",
         "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_STATE_ROOT",
     ):
         env_base.pop(key, None)
@@ -57,6 +59,8 @@ def _run_hook(
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
     if agent_backend is not None:
         env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
+    if launch_id is not None:
+        env_base["AUTOSKILLIT_LAUNCH_ID"] = launch_id
     env_base["AUTOSKILLIT_STATE_ROOT"] = str(root.resolve())
 
     if hook_path is not None:
@@ -125,6 +129,23 @@ def test_writes_flag_regardless_of_provider_profile(tmp_path: Path) -> None:
     )
     flag = tmp_path / _FLAG_RELPATH
     assert flag.exists(), "Flag file must be created when provider profile is empty"
+
+
+def test_skill_load_bridges_the_selected_cook_launch_before_writing(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core.runtime.session_registry import read_registry, write_registry_entry
+
+    write_registry_entry(tmp_path, "cook-launch", "cook", None)
+
+    _run_hook(
+        stdin_data=_make_skill_event(session_id="native-session"),
+        tmp_dir=tmp_path,
+        launch_id="cook-launch",
+    )
+
+    assert read_registry(tmp_path)["cook-launch"]["claude_session_id"] == "native-session"
+    assert (tmp_path / ".autoskillit" / "temp" / "skill_guard_native-session.flag").is_file()
 
 
 def test_skips_for_non_skill_tool(tmp_path: Path) -> None:

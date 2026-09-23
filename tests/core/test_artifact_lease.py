@@ -510,15 +510,15 @@ def test_acquire_preserves_primary_error_when_descriptor_cleanup_fails(
     def failing_close(_fd):
         raise OSError(errno.EBADF, "cleanup close failure")
 
-    monkeypatch.setattr(artifact_lease.os, "open", recording_open)
-    monkeypatch.setattr(artifact_lease.os, "close", failing_close)
-    monkeypatch.setattr(artifact_lease.fcntl, "flock", failing_flock)
-
     try:
-        with pytest.raises(OSError, match="primary flock failure") as caught:
-            ArtifactLease.acquire_shared(
-                tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
-            )
+        with monkeypatch.context() as scoped:
+            scoped.setattr(artifact_lease.os, "open", recording_open)
+            scoped.setattr(artifact_lease.os, "close", failing_close)
+            scoped.setattr(artifact_lease.fcntl, "flock", failing_flock)
+            with pytest.raises(OSError, match="primary flock failure") as caught:
+                ArtifactLease.acquire_shared(
+                    tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+                )
         assert caught.value.errno == errno.EIO
         assert sum("cleanup close failure" in note for note in caught.value.__notes__) == 2
     finally:
@@ -546,14 +546,14 @@ def test_directory_close_failure_releases_acquired_lease_fd(
             raise OSError(errno.EIO, "directory close failure")
         real_close(fd)
 
-    monkeypatch.setattr(artifact_lease.os, "open", recording_open)
-    monkeypatch.setattr(artifact_lease.os, "close", fail_directory_close)
-
     try:
-        with pytest.raises(OSError, match="directory close failure"):
-            ArtifactLease.acquire_shared(
-                tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
-            )
+        with monkeypatch.context() as scoped:
+            scoped.setattr(artifact_lease.os, "open", recording_open)
+            scoped.setattr(artifact_lease.os, "close", fail_directory_close)
+            with pytest.raises(OSError, match="directory close failure"):
+                ArtifactLease.acquire_shared(
+                    tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+                )
         assert len(opened_fds) == 2
         with pytest.raises(OSError):
             os.fstat(opened_fds[1])

@@ -166,6 +166,9 @@ src/autoskillit/agents/**:
 Taskfile.yml:
   - infra/
 
+scripts/docker/verification/*:
+  - infra/
+
 .gitattributes:
   - infra/
 

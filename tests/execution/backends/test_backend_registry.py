@@ -71,6 +71,7 @@ class TestBackendRegistry:
             "ClaudeSessionLocator",
             "ClaudeStreamParser",
             "CodexBackend",
+            "CodexCatalogAcquisitionError",
             "CodexAttestationResult",
             "CodexHostCorrelation",
             "CodexOuterBudgetAttestor",

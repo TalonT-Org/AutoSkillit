@@ -52,6 +52,7 @@ ENV HOME=/home/verifier \
 
 WORKDIR /workspace
 COPY --chown=verifier:verifier . /workspace
+RUN install --directory --owner verifier --group verifier /workspace/.autoskillit/temp
 
 USER verifier
 

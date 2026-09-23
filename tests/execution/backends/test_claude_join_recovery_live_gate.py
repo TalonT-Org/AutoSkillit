@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -159,10 +161,8 @@ def _configure_mcp(plugin: Path, project: Path, log_dir: Path) -> None:
 
 def _prompt(session_id: str, plan: Path, missing_agent: str) -> str:
     return f"""
-/dry-walkthrough {plan}
-
-After the dry-walkthrough skill loads, call open_kitchen with no arguments and call the AutoSkillit
-declare_join_batch tool with skill_name "dry-walkthrough",
+Call open_kitchen with no arguments and call the AutoSkillit declare_join_batch tool with
+skill_name "dry-walkthrough",
 session_id "{session_id}",
 and exactly one assignment label "replacement-worker". Omit top_level_parent so the server uses
 the binding-authoritative parent.
@@ -174,6 +174,32 @@ When the hook continues the turn, call Agent once with subagent_type "general-pu
 it to return exactly VALID_REPLACEMENT. Do not use Task, teams,
 background execution, or any extra Agent calls. After the valid Agent returns, reply LIVE_JOIN_OK.
 """.strip()
+
+
+def _seed_projected_skill_binding(
+    plugin: Path,
+    project: Path,
+    session_id: str,
+    env: dict[str, str],
+) -> None:
+    payload = {
+        "hook_event_name": "UserPromptExpansion",
+        "expansion_type": "slash_command",
+        "command_name": "dry-walkthrough",
+        "session_id": session_id,
+        "cwd": str(project),
+    }
+    completed = subprocess.run(
+        [sys.executable, "-B", str(plugin / "hooks" / "_dispatch.py"), "skill_load_post_hook"],
+        cwd=project,
+        env=env,
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 @_skip_unless_live_gate
@@ -210,6 +236,7 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
             "AUTOSKILLIT_STATE_ROOT": str(project),
         }
     )
+    _seed_projected_skill_binding(plugin, project, session_id, env)
     command = (
         "claude",
         "-p",
@@ -235,7 +262,6 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     rows = _json_rows(completed.stdout)
     rendered = completed.stdout.decode("utf-8", errors="replace")
-    assert "skill_load_post_hook" in rendered or "UserPromptExpansion" in rendered
     calls = _agent_calls(rows)
     assert len(calls) == 2, rendered[-8_000:]
     missing_call = next(

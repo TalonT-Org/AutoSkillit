@@ -167,7 +167,16 @@ def _live_codex_parent_invocation(
     extra_overrides: tuple[str, ...],
     sandbox: str,
 ) -> list[str]:
-    invocation = ["codex", "exec", "--json", "--sandbox", sandbox, "--model", model]
+    invocation = [
+        "codex",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        sandbox,
+        "--model",
+        model,
+    ]
     for override in extra_overrides:
         invocation.extend(("-c", override))
     if resume_thread_id is not None:

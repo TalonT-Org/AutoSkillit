@@ -95,7 +95,7 @@ def is_parent_assistant_record(rec: object) -> bool:
 
 def _assistant_content(
     record: dict[str, object], backend: str, active_codex_turn_id: str, is_claude_assistant: bool
-) -> tuple[str | None, str | list[dict[str, object]] | None, str] | None:
+) -> tuple[str | None, str | list[object], str] | None:
     if backend == "codex":
         context = record.get("payload")
         if (
@@ -125,7 +125,7 @@ def _assistant_content(
     claude_message = record.get("message")
     if isinstance(claude_message, dict):
         claude_content = claude_message.get("content")
-        content: str | list[dict[str, object]] | None = (
+        content: str | list[object] = (
             claude_content if isinstance(claude_content, (list, str)) else []
         )
     else:

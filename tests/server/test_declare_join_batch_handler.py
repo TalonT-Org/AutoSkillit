@@ -108,10 +108,12 @@ def _capable_backend() -> SimpleNamespace:
     return SimpleNamespace(capabilities=SimpleNamespace(fixed_set_join_capable=True))
 
 
-def _run_stop_guard(
+def _run_join_guard(
     state_root: Path,
     project_root: Path,
     session_id: str,
+    *,
+    tool_name: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = production_interpreter_env()
     for name in (
@@ -134,11 +136,22 @@ def _run_stop_guard(
         / "autoskillit"
         / "hooks"
         / "guards"
-        / "join_stop_guard.py"
+        / ("join_followup_guard.py" if tool_name else "join_stop_guard.py")
     )
+    payload: dict[str, object] = {"session_id": session_id, "cwd": str(project_root)}
+    if tool_name:
+        payload.update(
+            tool_name=tool_name,
+            tool_use_id=f"refused-replacement-{tool_name}",
+            tool_input=(
+                {"command": "printf SHOULD_NOT_RUN"}
+                if tool_name == "Bash"
+                else {"file_path": str(project_root / "blocked.txt"), "content": "blocked"}
+            ),
+        )
     return subprocess.run(
         [sys.executable, str(guard)],
-        input=json.dumps({"session_id": session_id, "cwd": str(project_root)}),
+        input=json.dumps(payload),
         text=True,
         capture_output=True,
         check=False,
@@ -656,6 +669,13 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
         rejected_state["sessions"][session_id]["managed_parents"][parent]["active_batch_id"]
         == original_id
     )
+    for tool_name in ("Bash", "Write"):
+        denied = _run_join_guard(state_root, project_root, session_id, tool_name=tool_name)
+        assert denied.returncode == 2
+        assert json.loads(denied.stdout)["decision"] == "block"
+    failed_stop = _run_join_guard(state_root, project_root, session_id)
+    assert failed_stop.returncode == 2
+    assert json.loads(failed_stop.stdout)["decision"] == "block"
 
     replacement = declare_module._declare_join_batch_handler(
         "autoskillit:rectify", ["replacement"], session_id, project_root
@@ -667,6 +687,9 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
     assert replacement_diagnostic["status"] == "replacement_batch"
     assert replacement_diagnostic["original_join_batch_id"] == original_id
     assert replacement_diagnostic["replacement_join_batch_id"] == replacement_id
+    assert replacement_diagnostic["session_id"] == session_id
+    assert replacement_diagnostic["top_level_parent"] == parent
+    assert replacement_diagnostic["skill_name"] == "rectify"
     replacement_state = json.loads(ledger_path.read_text(encoding="utf-8"))
     assert len(replacement_state["batches"]) == 2
     assert len(replacement_state["declaration_index"]) == 2
@@ -676,7 +699,7 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
         == replacement_id
     )
 
-    pending_stop = _run_stop_guard(state_root, project_root, session_id)
+    pending_stop = _run_join_guard(state_root, project_root, session_id)
     assert pending_stop.returncode == 2
     assert json.loads(pending_stop.stdout)["decision"] == "block"
 
@@ -693,7 +716,7 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
         tool_use_id="replacement-agent",
         outcome=OUTCOME_SUCCESS,
     )
-    final_stop = _run_stop_guard(state_root, project_root, session_id)
+    final_stop = _run_join_guard(state_root, project_root, session_id)
     assert final_stop.returncode == 0, final_stop.stderr
     assert final_stop.stdout == ""
 

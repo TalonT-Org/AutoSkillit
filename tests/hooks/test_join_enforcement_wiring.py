@@ -548,7 +548,7 @@ def test_cook_authentication_rejects_non_top_level_shapes(
         str(worktree),
         binding_session_id,
     )
-    if case not in {"headless", "ambiguous_registry_identity", "managed_leaf"}:
+    if case == "descendant":
         return
 
     claim = _run_hook(

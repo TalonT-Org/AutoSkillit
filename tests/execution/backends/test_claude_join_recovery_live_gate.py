@@ -315,6 +315,9 @@ def test_native_claude_unknown_agent_replacement_releases_stop(
         for row in diagnostics
     )
     replacement = next(row for row in diagnostics if row.get("status") == "replacement_batch")
+    assert replacement["session_id"] == session_id
+    assert replacement["top_level_parent"] == "top_level"
+    assert replacement["skill_name"] == "dry-walkthrough"
     assert replacement.get("original_join_batch_id")
     assert replacement.get("replacement_join_batch_id")
     assert any(

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, cast
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
     append_skill_unavailability,
+    prepare_interactive_launch,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
     render_skill_unavailability,
@@ -338,8 +339,8 @@ def _execute_cook_attempt(
     force_inactive_agent_teams: bool,
 ) -> tuple[CookAttemptResult, str | None]:
     import autoskillit.core as core
-    from autoskillit import execution
-    from autoskillit.cli.session import _session_launch, _session_process, _session_reload
+    from autoskillit.cli.session import _session_process, _session_reload
+    from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
 
     match launch:
         case core.FreshLaunch():
@@ -350,7 +351,7 @@ def _execute_cook_attempt(
         ):
             current_resume_spec = core.NamedResume(session_id=session_id)
     try:
-        prepared = _session_launch.prepare_interactive_launch(
+        prepared = prepare_interactive_launch(
             backend,
             project_dir=project_dir,
             extra_env=cook_env_extras,
@@ -374,12 +375,12 @@ def _execute_cook_attempt(
         origin=built_spec.origin,
     )
     variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
-    execution.assert_interactive_ordering(
+    assert_interactive_ordering(
         spec=spec,
         variadic_flags=variadic_flags,
         value_bearing_flags=value_bearing_flags,
     )
-    execution.assert_resume_purity(spec=spec, launch=launch)
+    assert_resume_purity(spec=spec, launch=launch)
     validation = backend.validate_interactive_invocation(spec)
     if validation.errors:
         raise RuntimeError(

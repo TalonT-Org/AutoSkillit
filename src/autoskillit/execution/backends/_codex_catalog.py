@@ -123,8 +123,9 @@ def run_owned_bounded(
     except OSError as exc:
         raise CodexCatalogAcquisitionError("codex_unavailable") from exc
     output = {"stdout": bytearray(), "stderr": bytearray()}
-    selector = selector_factory()
+    selector: selectors.BaseSelector | None = None
     try:
+        selector = selector_factory()
         assert owner.process.stdout is not None and owner.process.stderr is not None
         selector.register(owner.process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(owner.process.stderr, selectors.EVENT_READ, "stderr")
@@ -152,7 +153,8 @@ def run_owned_bounded(
             raise CodexCatalogAcquisitionError("process_cleanup_incomplete") from exc
         raise
     finally:
-        selector.close()
+        if selector is not None:
+            selector.close()
         for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
                 stream.close()

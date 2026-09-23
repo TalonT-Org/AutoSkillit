@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
@@ -46,6 +47,38 @@ def test_bounded_runner_keeps_partial_output_and_reaps_timed_out_child(tmp_path:
     assert command["cwd"] == str(tmp_path)
     with pytest.raises(ProcessLookupError):
         os.kill(child_pid, 0)
+
+
+def test_bounded_runner_settles_child_when_selector_creation_fails(tmp_path: Path) -> None:
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+    settled: list[BaseException] = []
+
+    def settle_preserving(exc: BaseException, *, timeout: float) -> SimpleNamespace:
+        settled.append(exc)
+        return SimpleNamespace(complete=True)
+
+    owner = SimpleNamespace(
+        process=SimpleNamespace(stdout=stdout, stderr=stderr),
+        settle_preserving=settle_preserving,
+    )
+
+    def fail_selector() -> None:
+        raise RuntimeError("selector unavailable")
+
+    with pytest.raises(RuntimeError, match="selector unavailable"):
+        run_owned_bounded(
+            ("codex",),
+            cwd=tmp_path,
+            environment={},
+            deadline=time.monotonic() + 1,
+            stdout_limit=4096,
+            spawn=lambda *_args, **_kwargs: owner,
+            selector_factory=fail_selector,
+        )
+
+    assert len(settled) == 1
+    assert stdout.closed and stderr.closed
 
 
 def test_pending_wave_watcher_finishes_when_native_run_raises(

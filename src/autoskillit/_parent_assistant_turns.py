@@ -94,7 +94,7 @@ def is_parent_assistant_record(rec: object) -> bool:
 
 
 def _assistant_content(
-    record: dict[str, object], backend: str, active_codex_turn_id: str
+    record: dict[str, object], backend: str, active_codex_turn_id: str, is_claude_assistant: bool
 ) -> tuple[str | None, object, str] | None:
     if backend == "codex":
         context = record.get("payload")
@@ -115,7 +115,7 @@ def _assistant_content(
                 active_codex_turn_id,
             )
         return turn_id, message.get("content") or [], active_codex_turn_id
-    if not is_parent_assistant_record(record):
+    if not is_claude_assistant:
         return None
     claude_message = record.get("message")
     content = (claude_message.get("content") or []) if isinstance(claude_message, dict) else []
@@ -153,7 +153,9 @@ def iter_merged_assistant_turns(
     active_codex_turn_id = ""
 
     for record in _iter_transcript_records(text):
-        resolved = _assistant_content(record, backend, active_codex_turn_id)
+        resolved = _assistant_content(
+            record, backend, active_codex_turn_id, is_parent_assistant_record(record)
+        )
         if resolved is None:
             continue
         turn_id, raw_content, active_codex_turn_id = resolved

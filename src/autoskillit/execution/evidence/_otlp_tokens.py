@@ -22,6 +22,10 @@ TokenObservation = tuple[str, str, dict[str, int | None]]
 
 _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD = 128
 
+# Scope name emitted by Claude Code's native OTLP logs. Defined once here so
+# the iterator filter and the overflow-debug log agree on the literal.
+_CLAUDE_CODE_SCOPE_NAME = "com.anthropic.claude_code.events"
+
 logger = get_logger(__name__)
 
 
@@ -87,7 +91,7 @@ def _claude_log_records(resource_logs: list[object]) -> Iterator[object]:
                 continue
             scope = scope_log.get("scope")
             scope_name = scope.get("name") if isinstance(scope, dict) else None
-            if scope_name != "com.anthropic.claude_code.events":
+            if scope_name != _CLAUDE_CODE_SCOPE_NAME:
                 continue
             records = scope_log.get("logRecords")
             if isinstance(records, list):
@@ -126,7 +130,7 @@ def project_token_observations(signal: str, payload: object) -> tuple[TokenObser
             logger.debug(
                 "token_observations_overflow",
                 extra={
-                    "scope": "com.anthropic.claude_code.events",
+                    "scope": _CLAUDE_CODE_SCOPE_NAME,
                     "limit": _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD,
                     "count": len(observations),
                 },

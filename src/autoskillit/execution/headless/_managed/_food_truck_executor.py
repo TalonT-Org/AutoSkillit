@@ -14,6 +14,7 @@ from typing import cast
 import anyio
 
 from autoskillit.core import (
+    AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     ApiFailureOutcome,
     BackendAuthority,
@@ -84,12 +85,14 @@ def _merge_food_truck_extras(
             )
         merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
     if idle_output_timeout is not None:
-        merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
+        merged_extras[AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR] = str(idle_output_timeout)
     elif fleet_idle_output_timeout > 0:
-        merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle_output_timeout))
+        merged_extras.setdefault(
+            AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(fleet_idle_output_timeout)
+        )
     elif run_skill_idle_output_timeout > 0:
         merged_extras.setdefault(
-            "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(run_skill_idle_output_timeout)
+            AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(run_skill_idle_output_timeout)
         )
     return merged_extras
 

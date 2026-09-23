@@ -11,6 +11,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from autoskillit.core import (
+    AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
     SESSION_TYPE_ENV_VAR,
     BackendCapabilities,
     CmdSpec,
@@ -502,13 +503,14 @@ def _resolve_idle_output_timeout(override: float | None, configured: float) -> f
     if override is not None:
         raw_idle = override
     else:
-        env_idle = os.environ.get("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT")
+        env_idle = os.environ.get(AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR)
         if env_idle is not None:
             try:
                 raw_idle = float(env_idle)
             except ValueError:
                 logger.warning(
-                    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT: invalid float — falling back to config",
+                    f"{AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR}: invalid float"
+                    " — falling back to config",
                     env_value=env_idle,
                     fallback=configured,
                 )

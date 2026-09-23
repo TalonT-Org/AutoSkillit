@@ -46,7 +46,9 @@ from autoskillit.workspace import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend, InteractiveLaunch, ResumeSpec
     from autoskillit.recipe import Recipe, RecipeInfo
+    from autoskillit.workspace import CompiledSessionSkillCatalog
 
 logger = get_logger(__name__)
 
@@ -268,6 +270,123 @@ def _show_order_ceremony_preview(
     print(permissions_warning())
 
 
+def _prepare_order_selection(
+    recipe: str | None,
+    session_id: str | None,
+    *,
+    resume: bool,
+    project_dir: Path,
+) -> tuple[str | None, ResumeSpec]:
+    from autoskillit.recipe import NON_INTERACTIVE_KINDS, list_recipes
+
+    initial_resume = resume or (session_id is not None)
+    resume_spec = resume_spec_from_cli(resume=initial_resume, session_id=session_id)
+    if initial_resume and recipe is not None and session_id is None and _UUID_RE.match(recipe):
+        session_id = recipe
+        recipe = None
+        resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
+
+    if not initial_resume and recipe is None:
+        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
+        from autoskillit.recipe import GROUP_LABELS, group_rank
+
+        available = list_recipes(
+            project_dir,
+            exclude_kinds=NON_INTERACTIVE_KINDS,
+        ).items
+        if not available:
+            print("No recipes found. Run 'autoskillit recipes list' to check.")
+            sys.exit(1)
+
+        resolved = run_selection_menu(
+            available,
+            header="Available recipes:",
+            slot_zero_label="Open kitchen (no recipe)",
+            group_classifier=group_rank,
+            group_labels=GROUP_LABELS,
+            name_key=lambda r: r.name,
+            timeout=120,
+            label="autoskillit order",
+        )
+        if resolved is None:
+            print("Invalid selection.")
+            sys.exit(1)
+        if resolved is not SLOT_ZERO_SELECTED:
+            if isinstance(resolved, str):
+                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
+            recipe = resolved.name
+    return recipe, resume_spec
+
+
+def _prepare_order_launch(
+    recipe: str | None,
+    *,
+    launch: InteractiveLaunch,
+    is_tty: bool,
+    mcp_prefix: str,
+    backend: CodingAgentBackend,
+    skill_compilation: CompiledSessionSkillCatalog,
+    project_dir: Path,
+) -> tuple[InteractiveLaunch, dict[str, str]] | None:
+    from autoskillit.cli.session._session_launch_intent import _run_fresh_launch_ceremony
+
+    automatic = not isinstance(launch, FreshLaunch) or not is_tty
+    if recipe is None:
+        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
+
+        if isinstance(launch, FreshLaunch):
+            launch = replace(
+                launch,
+                system_prompt=_build_open_kitchen_prompt(
+                    mcp_prefix=mcp_prefix,
+                    has_unguarded_filesystem_access=(
+                        backend.capabilities.has_unguarded_filesystem_access
+                    ),
+                    skill_compilation=skill_compilation,
+                    project_root=project_dir,
+                    backend=backend,
+                ),
+                initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
+            )
+        return launch, {}
+
+    recipe_info, parsed = _resolve_order_recipe(recipe, project_dir)
+    extra_env = _derive_order_feature_env(
+        parsed,
+        automatic=automatic,
+        project_dir=project_dir,
+    )
+    if extra_env is None or not _run_fresh_launch_ceremony(
+        launch=launch,
+        is_tty=is_tty,
+        label="autoskillit order",
+        before_prompt=lambda: _show_order_ceremony_preview(
+            recipe, parsed, recipe_info, project_dir
+        ),
+    ):
+        return None
+    if isinstance(launch, FreshLaunch):
+        from autoskillit.cli.prompts import _COOK_GREETINGS
+
+        ingredients_table = _get_ingredients_table(recipe, recipe_info, project_dir)
+        launch = replace(
+            launch,
+            system_prompt=_build_orchestrator_prompt(
+                recipe,
+                mcp_prefix=mcp_prefix,
+                ingredients_table=ingredients_table,
+                has_unguarded_filesystem_access=(
+                    backend.capabilities.has_unguarded_filesystem_access
+                ),
+                skill_compilation=skill_compilation,
+                project_root=project_dir,
+                backend=backend,
+            ),
+            initial_prompt=random.choice(_COOK_GREETINGS).format(recipe_name=recipe),
+        )
+    return launch, extra_env
+
+
 def order(
     recipe: str | None = None, session_id: str | None = None, *, resume: bool = False
 ) -> None:
@@ -287,11 +406,6 @@ def order(
     resume
         When True, attempt to restore a previous session.
     """
-    from autoskillit.recipe import (
-        NON_INTERACTIVE_KINDS,
-        list_recipes,
-    )
-
     if os.environ.get("CLAUDECODE"):
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
@@ -343,46 +457,14 @@ def order(
     skill_compilation = compile_session_skill_catalog(
         skill_catalog, backend, adaptation_context=managed_join_context
     )
-    _resume = resume or (session_id is not None)
-    resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
-
-    if _resume and recipe is not None and session_id is None and _UUID_RE.match(recipe):
-        session_id = recipe
-        recipe = None
-        resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
-
-    if not _resume and recipe is None:
-        from autoskillit.cli.ui._menu import SLOT_ZERO_SELECTED, run_selection_menu
-        from autoskillit.recipe import GROUP_LABELS, group_rank
-
-        available = list_recipes(
-            Path.cwd(),
-            exclude_kinds=NON_INTERACTIVE_KINDS,
-        ).items
-        if not available:
-            print("No recipes found. Run 'autoskillit recipes list' to check.")
-            sys.exit(1)
-
-        resolved = run_selection_menu(
-            available,
-            header="Available recipes:",
-            slot_zero_label="Open kitchen (no recipe)",
-            group_classifier=group_rank,
-            group_labels=GROUP_LABELS,
-            name_key=lambda r: r.name,
-            timeout=120,
-            label="autoskillit order",
-        )
-        if resolved is None:
-            print("Invalid selection.")
-            sys.exit(1)
-        if resolved is not SLOT_ZERO_SELECTED:
-            if isinstance(resolved, str):
-                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
-            recipe = resolved.name
+    recipe, resume_spec = _prepare_order_selection(
+        recipe,
+        session_id,
+        resume=resume,
+        project_dir=project_dir,
+    )
 
     from autoskillit.cli.session._session_launch_intent import (
-        _run_fresh_launch_ceremony,
         prepare_resume_housekeeping,
         resolve_interactive_launch,
     )
@@ -396,90 +478,47 @@ def order(
         project_dir=project_dir,
         backend=backend,
     )
-    automatic = not isinstance(launch, FreshLaunch) or not is_tty
-
-    if recipe is None:
-        from autoskillit.cli.prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
-
-        if isinstance(launch, FreshLaunch):
-            launch = replace(
-                launch,
-                system_prompt=_build_open_kitchen_prompt(
-                    mcp_prefix=mcp_prefix,
-                    has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-                    skill_compilation=skill_compilation,
-                    project_root=project_dir,
-                    backend=backend,
-                ),
-                initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
-            )
-        extra_env: dict[str, str] = {}
-    else:
-        recipe_info, parsed = _resolve_order_recipe(recipe, project_dir)
-        derived_env = _derive_order_feature_env(
-            parsed,
-            automatic=automatic,
-            project_dir=project_dir,
-        )
-        if derived_env is None:
-            return
-        extra_env = derived_env
-        if not _run_fresh_launch_ceremony(
-            launch=launch,
-            is_tty=is_tty,
-            label="autoskillit order",
-            before_prompt=lambda: _show_order_ceremony_preview(
-                recipe, parsed, recipe_info, project_dir
-            ),
-        ):
-            return
-
-        if isinstance(launch, FreshLaunch):
-            from autoskillit.cli.prompts import _COOK_GREETINGS
-
-            ingredients_table = _get_ingredients_table(recipe, recipe_info, project_dir)
-            launch = replace(
-                launch,
-                system_prompt=_build_orchestrator_prompt(
-                    recipe,
-                    mcp_prefix=mcp_prefix,
-                    ingredients_table=ingredients_table,
-                    has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
-                    skill_compilation=skill_compilation,
-                    project_root=project_dir,
-                    backend=backend,
-                ),
-                initial_prompt=random.choice(_COOK_GREETINGS).format(recipe_name=recipe),
-            )
+    prepared_launch = _prepare_order_launch(
+        recipe,
+        launch=launch,
+        is_tty=is_tty,
+        mcp_prefix=mcp_prefix,
+        backend=backend,
+        skill_compilation=skill_compilation,
+        project_dir=project_dir,
+    )
+    if prepared_launch is None:
+        return
+    launch, extra_env = prepared_launch
 
     claimed_launch_id: str | None = None
-    match launch:
-        case FreshLaunch():
-            launch_id, launch_env = _write_order_entry(
-                project_dir,
-                recipe,
-                managed_join_parent_id,
-            )
-            claimed_launch_id = launch_id
-        case (
-            RestoreSession(session_id=claude_session_id)
-            | ResumeWithBriefing(session_id=claude_session_id)
-        ):
-            from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
-
-            launch_id = claim_launch_for_session(
-                project_dir,
-                claude_session_id=claude_session_id,
-                session_type=SESSION_TYPE_ORDER,
-                recipe_name=recipe,
-            )
-            claimed_launch_id = launch_id
-            launch_env = _order_launch_env(launch_id, managed_join_parent_id)
-        case _:
-            assert_never(launch)
-
-    launch_extra_env = {**extra_env, **launch_env}
     try:
+        match launch:
+            case FreshLaunch():
+                launch_id, launch_env = _write_order_entry(
+                    project_dir,
+                    recipe,
+                    managed_join_parent_id,
+                )
+                claimed_launch_id = launch_id
+            case (
+                RestoreSession(session_id=claude_session_id)
+                | ResumeWithBriefing(session_id=claude_session_id)
+            ):
+                from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
+
+                launch_id = claim_launch_for_session(
+                    project_dir,
+                    claude_session_id=claude_session_id,
+                    session_type=SESSION_TYPE_ORDER,
+                    recipe_name=recipe,
+                )
+                claimed_launch_id = launch_id
+                launch_env = _order_launch_env(launch_id, managed_join_parent_id)
+            case _:
+                assert_never(launch)
+
+        launch_extra_env = {**extra_env, **launch_env}
         _launch_cook_session(
             launch=launch,
             extra_env=launch_extra_env,

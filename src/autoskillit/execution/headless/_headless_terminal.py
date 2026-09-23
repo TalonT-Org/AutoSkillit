@@ -10,6 +10,7 @@ from typing import Any
 from autoskillit.core import (
     CodingAgentBackend,
     ContinuationRecommendation,
+    ExecutionCandidateAttempt,
     ExecutionSelection,
     KillReason,
     ModelIdentity,
@@ -52,57 +53,24 @@ def finalize_terminal_selection(
     backend: CodingAgentBackend,
 ) -> tuple[ExecutionSelection | None, ProviderOutcome]:
     """Complete the admitted candidate and attach a safe continuation recommendation."""
-    selection = (
-        execution_selection_provider()
-        if execution_selection_provider is not None
-        else execution_selection
+    selection, provider_fallback = _resolve_terminal_selection(
+        execution_selection=execution_selection,
+        execution_selection_provider=execution_selection_provider,
+        same_binding_nudge_attempted=same_binding_nudge_attempted,
     )
-    if selection is None:
-        selection = execution_selection
-    if same_binding_nudge_attempted and selection is not None:
-        if selection.remaining_retry_budget is not None:
-            selection = dataclasses.replace(
-                selection,
-                remaining_retry_budget=max(0, selection.remaining_retry_budget - 1),
-            )
-
-    terminal_attempt = selection.attempts[-1] if selection and selection.attempts else None
-    terminal_provider = provider_name
-    if current_launch_contract is not None:
-        contract_provider = current_launch_contract.provider
-        if contract_provider and contract_provider != current_launch_contract.effective_backend:
-            terminal_provider = contract_provider
-        elif not terminal_provider:
-            terminal_provider = contract_provider
-    provider_fallback = selection.provider_fallback if selection is not None else False
-    terminal_binding_matches = bool(
-        terminal_attempt is not None
-        and current_launch_contract is not None
-        and terminal_attempt.effective_backend == current_launch_contract.effective_backend
-        and terminal_attempt.effective_provider == current_launch_contract.provider
+    (
+        selection,
+        terminal_provider,
+        terminal_attempt,
+        terminal_binding_matches,
+    ) = _complete_terminal_attempt(
+        selection=selection,
+        current_launch_contract=current_launch_contract,
+        provider_name=provider_name,
+        provider_fallback=provider_fallback,
+        execution_started=execution_started,
+        skill_result=skill_result,
     )
-    if terminal_attempt is not None:
-        assert selection is not None
-        terminal_attempt = dataclasses.replace(
-            terminal_attempt,
-            effective_backend=(
-                current_launch_contract.effective_backend
-                if current_launch_contract is not None
-                else terminal_attempt.effective_backend
-            ),
-            effective_provider=terminal_provider,
-            execution_started=execution_started,
-            child_session_id=skill_result.session_id or None,
-        )
-        selection = dataclasses.replace(
-            selection,
-            attempts=(*selection.attempts[:-1], terminal_attempt),
-            terminal_candidate_id=terminal_attempt.candidate_id,
-            completed=True,
-            provider_fallback=provider_fallback,
-        )
-        terminal_provider = terminal_attempt.effective_provider
-
     if selection is not None and skill_result.retry_reason == RetryReason.RATE_LIMITED:
         now_epoch = time.time()
         deadline_epoch = selection.invocation_deadline_epoch
@@ -114,33 +82,24 @@ def finalize_terminal_selection(
         reset_after_seconds = (
             max(0, int(reset_epoch - now_epoch)) if reset_epoch is not None else 0
         )
-        unavailable_reason: str | None = None
-        if not skill_result.session_id:
-            unavailable_reason = "missing_terminal_session"
-        elif terminal_attempt is None or not terminal_attempt.execution_started:
-            unavailable_reason = "missing_terminal_binding"
-        elif terminal_attempt.child_session_id != skill_result.session_id:
-            unavailable_reason = "missing_terminal_binding"
-        elif current_launch_contract is None or not terminal_binding_matches:
-            unavailable_reason = "launch_contract_mismatch"
-        elif not backend.capabilities.session_resume_capable:
-            unavailable_reason = "backend_resume_unsupported"
-        elif selection.remaining_retry_budget is None or selection.remaining_retry_budget <= 0:
-            unavailable_reason = "provider_retry_disabled"
-        elif deadline_epoch is None or remaining_deadline_seconds == 0:
-            unavailable_reason = "invocation_deadline_elapsed"
-        elif reset_epoch is None:
-            unavailable_reason = "rate_limit_reset_unavailable"
-        elif reset_after_seconds > 60 or remaining_deadline_seconds <= reset_after_seconds:
-            unavailable_reason = "rate_limit_reset_outside_deadline"
+        unavailable_reason = _rate_limit_unavailable_reason(
+            session_id=skill_result.session_id,
+            terminal_attempt=terminal_attempt,
+            terminal_binding_matches=terminal_binding_matches,
+            current_launch_contract=current_launch_contract,
+            backend=backend,
+            remaining_retry_budget=selection.remaining_retry_budget,
+            deadline_epoch=deadline_epoch,
+            remaining_deadline_seconds=remaining_deadline_seconds,
+            reset_epoch=reset_epoch,
+            reset_after_seconds=reset_after_seconds,
+        )
         selection = dataclasses.replace(
             selection,
-            continuation=ContinuationRecommendation(
-                resume_session_id=(
-                    None if unavailable_reason is not None else skill_result.session_id
-                ),
-                reason=unavailable_reason,
-                reset_after_seconds=(reset_after_seconds if reset_after_seconds <= 60 else 0),
+            continuation=_rate_limit_continuation(
+                session_id=skill_result.session_id,
+                unavailable_reason=unavailable_reason,
+                reset_after_seconds=reset_after_seconds,
                 remaining_deadline_seconds=remaining_deadline_seconds,
             ),
         )
@@ -154,6 +113,147 @@ def finalize_terminal_selection(
     return selection, ProviderOutcome(
         provider_used=terminal_provider,
         fallback_activated=provider_fallback,
+    )
+
+
+def _resolve_terminal_selection(
+    *,
+    execution_selection: ExecutionSelection | None,
+    execution_selection_provider: Callable[[], ExecutionSelection | None] | None,
+    same_binding_nudge_attempted: bool,
+) -> tuple[ExecutionSelection | None, bool]:
+    """Snapshot terminal selection evidence and record nudge budget consumption."""
+    selection = (
+        execution_selection_provider()
+        if execution_selection_provider is not None
+        else execution_selection
+    )
+    if selection is None:
+        selection = execution_selection
+    if same_binding_nudge_attempted and selection is not None:
+        if selection.remaining_retry_budget is not None:
+            selection = dataclasses.replace(
+                selection,
+                remaining_retry_budget=max(0, selection.remaining_retry_budget - 1),
+            )
+    return selection, selection.provider_fallback if selection is not None else False
+
+
+def _complete_terminal_attempt(
+    *,
+    selection: ExecutionSelection | None,
+    current_launch_contract: ResolvedLaunchContract | None,
+    provider_name: str,
+    provider_fallback: bool,
+    execution_started: bool,
+    skill_result: SkillResult,
+) -> tuple[ExecutionSelection | None, str, ExecutionCandidateAttempt | None, bool]:
+    """Replace the selected attempt with its immutable terminal execution evidence."""
+    original_attempt = selection.attempts[-1] if selection and selection.attempts else None
+    terminal_provider = provider_name
+    if current_launch_contract is not None:
+        contract_provider = current_launch_contract.provider
+        if contract_provider and contract_provider != current_launch_contract.effective_backend:
+            terminal_provider = contract_provider
+        elif not terminal_provider:
+            terminal_provider = contract_provider
+    terminal_binding_matches = bool(
+        original_attempt is not None
+        and current_launch_contract is not None
+        and original_attempt.effective_backend == current_launch_contract.effective_backend
+        and original_attempt.effective_provider == current_launch_contract.provider
+    )
+    if original_attempt is None:
+        return selection, terminal_provider, None, terminal_binding_matches
+    terminal_attempt = dataclasses.replace(
+        original_attempt,
+        effective_backend=(
+            current_launch_contract.effective_backend
+            if current_launch_contract is not None
+            else original_attempt.effective_backend
+        ),
+        effective_provider=terminal_provider,
+        execution_started=execution_started,
+        child_session_id=skill_result.session_id or None,
+    )
+    assert selection is not None
+    selection = dataclasses.replace(
+        selection,
+        attempts=(*selection.attempts[:-1], terminal_attempt),
+        terminal_candidate_id=terminal_attempt.candidate_id,
+        completed=True,
+        provider_fallback=provider_fallback,
+    )
+    return (
+        selection,
+        terminal_attempt.effective_provider,
+        terminal_attempt,
+        terminal_binding_matches,
+    )
+
+
+def _rate_limit_unavailable_reason(
+    *,
+    session_id: str,
+    terminal_attempt: ExecutionCandidateAttempt | None,
+    terminal_binding_matches: bool,
+    current_launch_contract: ResolvedLaunchContract | None,
+    backend: CodingAgentBackend,
+    remaining_retry_budget: int | None,
+    deadline_epoch: int | None,
+    remaining_deadline_seconds: int,
+    reset_epoch: int | None,
+    reset_after_seconds: int,
+) -> str | None:
+    """Return the first ordered condition that prevents same-binding continuation."""
+    unavailable_checks = (
+        ("missing_terminal_session", not session_id),
+        (
+            "missing_terminal_binding",
+            terminal_attempt is None or not terminal_attempt.execution_started,
+        ),
+        (
+            "missing_terminal_binding",
+            terminal_attempt is not None and terminal_attempt.child_session_id != session_id,
+        ),
+        (
+            "launch_contract_mismatch",
+            current_launch_contract is None or not terminal_binding_matches,
+        ),
+        ("backend_resume_unsupported", not backend.capabilities.session_resume_capable),
+        (
+            "provider_retry_disabled",
+            remaining_retry_budget is None or remaining_retry_budget <= 0,
+        ),
+        (
+            "invocation_deadline_elapsed",
+            deadline_epoch is None or remaining_deadline_seconds == 0,
+        ),
+        ("rate_limit_reset_unavailable", reset_epoch is None),
+        (
+            "rate_limit_reset_outside_deadline",
+            reset_after_seconds > 60 or remaining_deadline_seconds <= reset_after_seconds,
+        ),
+    )
+    return next(
+        (reason for reason, unavailable in unavailable_checks if unavailable),
+        None,
+    )
+
+
+def _rate_limit_continuation(
+    *,
+    session_id: str,
+    unavailable_reason: str | None,
+    reset_after_seconds: int,
+    remaining_deadline_seconds: int,
+) -> ContinuationRecommendation:
+    """Build the accepted continuation or its terminal evidence."""
+    return ContinuationRecommendation(
+        resume_session_id=None if unavailable_reason is not None else session_id,
+        reason=unavailable_reason,
+        reset_after_seconds=reset_after_seconds if reset_after_seconds <= 60 else 0,
+        remaining_deadline_seconds=remaining_deadline_seconds,
     )
 
 

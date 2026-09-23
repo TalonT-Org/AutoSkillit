@@ -112,6 +112,19 @@ class ManagedJoinRecordStore:
         return attestation, document["route"]
 
 
+def _valid_recovered_record(attestation: ManagedJoinAttestation, route: str, backend: str) -> bool:
+    try:
+        expected_route = managed_codex_route_for_launch_context(attestation.launch_context)
+    except ValueError:
+        return False
+    return (
+        attestation.backend == backend
+        and route == expected_route
+        and attestation.hook_registry_digest == HOOK_REGISTRY_HASH
+        and attestation.fixed_batch_tool_registry_digest == managed_codex_route_digest()
+    )
+
+
 def _write_managed_parent_binding(
     *,
     binding_path: Path,
@@ -295,25 +308,24 @@ class DefaultManagedJoinAttestationAuthority:
             ]
         if len(matches) == 1:
             return self.verify(matches[0], backend=backend, parent_session_id=parent_session_id)
-        if matches or self._record_store is None or self._backend is None:
+        if matches:
             return None
-        if self._backend.name != backend:
+        return self._recover_verified_context(backend=backend, parent_session_id=parent_session_id)
+
+    def _recover_verified_context(
+        self,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None:
+        if self._record_store is None or self._backend is None or self._backend.name != backend:
             return None
 
         loaded = self._record_store.load(parent_session_id)
         if loaded is None:
             return None
         attestation, route = loaded
-        try:
-            expected_route = managed_codex_route_for_launch_context(attestation.launch_context)
-        except ValueError:
-            return None
-        if (
-            attestation.backend != backend
-            or route != expected_route
-            or attestation.hook_registry_digest != HOOK_REGISTRY_HASH
-            or attestation.fixed_batch_tool_registry_digest != managed_codex_route_digest()
-        ):
+        if not _valid_recovered_record(attestation, route, backend):
             return None
         home_text = os.environ.get(CODEX_HOME_ENV_VAR)
         if not home_text:

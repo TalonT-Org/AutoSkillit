@@ -11,7 +11,6 @@ from autoskillit.core import (
     PLAN_SET_AUTHORITY_ID_DOMAIN,
     PLAN_SET_MAX_ISSUE_BYTES,
     PLAN_SET_MAX_PART_BYTES,
-    AllocationRowDef,
     CoverageResultDef,
     CoverageStatus,
     GitHubFetcher,
@@ -121,12 +120,49 @@ class DefaultPlanSetMaterializer:
             return _failure(PlanSetRejectReason.INTERNAL, f"{type(exc).__name__}: {exc}")
 
     async def _bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:
+        admitted = self._admit_parts(request)
+        if isinstance(admitted, PlanSetBindResult):
+            return admitted
+        root, parent, loaded, append = admitted
+
+        snapshot = await self._snapshot_issue(request, root, parent, loaded)
+        if isinstance(snapshot, PlanSetBindResult):
+            return snapshot
+        issue, authority_id = snapshot
+
+        authority = self._assemble_authority(
+            request, root, parent, loaded, append, issue, authority_id
+        )
+        if isinstance(authority, PlanSetBindResult):
+            return authority
+        artifact_dir = root / "plan-set-authority" / authority_id
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = artifact_dir / f"{authority.authority_digest[7:31]}.json"
+        try:
+            write_canonical_versioned_json(
+                artifact_path,
+                authority.to_dict(),
+                authority.schema_version,
+                exclusive=True,
+            )
+        except FileExistsError:
+            _, existing = read_stable_contained_bytes(
+                artifact_path, root, max_size_bytes=PLAN_SET_MAX_PART_BYTES
+            )
+            if existing != canonical_json_bytes(authority.to_dict()):
+                return _failure(
+                    PlanSetRejectReason.INTERNAL, "authority path contains different bytes"
+                )
+        return _result(authority, artifact_path)
+
+    def _admit_parts(
+        self, request: PlanSetBindRequest
+    ) -> tuple[Path, PlanSetAuthority | None, list[tuple[Path, bytes]], bool] | PlanSetBindResult:
         raw_paths = parse_plan_paths(request.plan_parts_raw)
         if not raw_paths:
             return _failure(PlanSetRejectReason.NO_PARTS, "plan_parts is empty")
         root = request.allowed_root.resolve()
         parent: PlanSetAuthority | None = None
-        parent_path: Path | None = None
         if request.parent_authority_path:
             verified = verify_plan_set_authority(
                 request.parent_authority_path,
@@ -144,8 +180,21 @@ class DefaultPlanSetMaterializer:
                     "; ".join(verified.detail),
                 )
             parent = verified.authority
-            parent_path = Path(request.parent_authority_path).resolve()
 
+        loaded = self._read_parts(raw_paths, root)
+        if isinstance(loaded, PlanSetBindResult):
+            return loaded
+        append = False
+        if parent is not None:
+            update = self._admit_parent_update(request, root, parent, loaded)
+            if isinstance(update, PlanSetBindResult):
+                return update
+            append = update
+        return root, parent, loaded, append
+
+    def _read_parts(
+        self, raw_paths: tuple[str, ...], root: Path
+    ) -> list[tuple[Path, bytes]] | PlanSetBindResult:
         loaded: list[tuple[Path, bytes]] = []
         try:
             for raw_path in raw_paths:
@@ -162,55 +211,57 @@ class DefaultPlanSetMaterializer:
             return _failure(
                 PlanSetRejectReason.PART_LIST_CHANGED, "plan parts contain duplicate locators"
             )
+        return loaded
 
-        append = False
-        renew = False
-        parts: list[PlanPartRef] = []
-        allocations: list[AllocationRowDef] = []
-        issue = None
-        issue_body = ""
-        revision = 1
-        authority_id = ""
-        if parent is not None:
-            parent_locators = tuple(part.locator for part in parent.parts)
-            members = tuple(locator in parent_locators for locator in locators)
-            if all(members) and locators == parent_locators:
-                renew = True
-            elif not any(members) and parent.state is PlanSetState.OPEN:
-                append = True
-            else:
+    def _admit_parent_update(
+        self,
+        request: PlanSetBindRequest,
+        root: Path,
+        parent: PlanSetAuthority,
+        loaded: list[tuple[Path, bytes]],
+    ) -> bool | PlanSetBindResult:
+        locators = tuple(str(path) for path, _ in loaded)
+        parent_locators = tuple(part.locator for part in parent.parts)
+        members = tuple(locator in parent_locators for locator in locators)
+        renew = all(members) and locators == parent_locators
+        append = not any(members) and parent.state is PlanSetState.OPEN
+        if not (renew or append):
+            return _failure(
+                PlanSetRejectReason.PART_LIST_CHANGED, "parent part list cannot be changed"
+            )
+        if append:
+            unchanged_parent = verify_plan_set_authority(
+                request.parent_authority_path,
+                allowed_root=root,
+                expected_execution_generation=request.execution_generation,
+                expected_kitchen_id=request.kitchen_id,
+                expected_binding_mode=request.binding_mode,
+                current_plan_path=None,
+                require_sealed=False,
+            )
+            if not unchanged_parent.accepted:
                 return _failure(
-                    PlanSetRejectReason.PART_LIST_CHANGED, "parent part list cannot be changed"
+                    unchanged_parent.reason or PlanSetRejectReason.AUTHORITY_INVALID,
+                    "; ".join(unchanged_parent.detail),
                 )
-            if append:
-                unchanged_parent = verify_plan_set_authority(
-                    request.parent_authority_path,
-                    allowed_root=root,
-                    expected_execution_generation=request.execution_generation,
-                    expected_kitchen_id=request.kitchen_id,
-                    expected_binding_mode=request.binding_mode,
-                    current_plan_path=None,
-                    require_sealed=False,
-                )
-                if not unchanged_parent.accepted:
-                    return _failure(
-                        unchanged_parent.reason or PlanSetRejectReason.AUTHORITY_INVALID,
-                        "; ".join(unchanged_parent.detail),
-                    )
-            parts.extend(parent.parts)
-            allocations.extend(parent.allocations)
-            issue = parent.issue
-            authority_id = parent.plan_set_authority_id
-            revision = parent.revision + 1
-            if renew and request.seal and parent.state is PlanSetState.SEALED:
-                if all(
-                    part.byte_size == len(data) and part.content_digest == compute_bytes_hash(data)
-                    for part, (_, data) in zip(parent.parts, loaded, strict=True)
-                ):
-                    return _result(parent, parent_path or Path(request.parent_authority_path))
+        if renew and request.seal and parent.state is PlanSetState.SEALED:
+            if all(
+                part.byte_size == len(data) and part.content_digest == compute_bytes_hash(data)
+                for part, (_, data) in zip(parent.parts, loaded, strict=True)
+            ):
+                return _result(parent, Path(request.parent_authority_path).resolve())
+        return append
 
-        if parent is None:
-            if request.issue_url:
+    async def _snapshot_issue(
+        self,
+        request: PlanSetBindRequest,
+        root: Path,
+        parent: PlanSetAuthority | None,
+        loaded: list[tuple[Path, bytes]],
+    ) -> tuple[IssueSnapshotRef | None, str] | PlanSetBindResult:
+        if parent is not None:
+            issue = parent.issue
+            if request.seal and issue is not None and request.issue_url:
                 if self._github_client is None:
                     return _failure(
                         PlanSetRejectReason.ISSUE_FETCH_FAILED, "GitHub client is unavailable"
@@ -223,50 +274,18 @@ class DefaultPlanSetMaterializer:
                         PlanSetRejectReason.ISSUE_FETCH_FAILED,
                         str(fetched.get("error", "issue fetch failed")),
                     )
-                issue_body = str(fetched.get("body", ""))
-                issue_number = fetched.get("issue_number")
-                provisional = (
-                    "planset-"
-                    + compute_canonical_hash(
-                        {
-                            "execution_generation": request.execution_generation,
-                            "kitchen_id": request.kitchen_id,
-                            "issue_locator": request.issue_url,
-                            "initial_part_locators": list(locators),
-                        },
-                        domain=PLAN_SET_AUTHORITY_ID_DOMAIN,
-                    )[7:31]
-                )
-                snapshot_root = root / "plan-set-authority" / provisional
-                snapshot_root.mkdir(parents=True, exist_ok=True)
-                issue_bytes = issue_body.encode("utf-8")
-                digest = compute_bytes_hash(issue_bytes)
-                snapshot_path = snapshot_root / f"issue.{digest[7:31]}.md"
-                _write_or_verify(snapshot_path, issue_bytes, root)
-                issue = IssueSnapshotRef(
-                    issue_url=request.issue_url,
-                    issue_number=issue_number if isinstance(issue_number, int) else None,
-                    locator=str(snapshot_path),
-                    byte_size=len(issue_bytes),
-                    content_digest=digest,
-                    fetched_at=datetime.now(UTC).isoformat(),
-                )
-                authority_id = provisional
-            else:
-                authority_id = (
-                    "planset-"
-                    + compute_canonical_hash(
-                        {
-                            "execution_generation": request.execution_generation,
-                            "kitchen_id": request.kitchen_id,
-                            "issue_locator": "",
-                            "initial_part_locators": list(locators),
-                        },
-                        domain=PLAN_SET_AUTHORITY_ID_DOMAIN,
-                    )[7:31]
-                )
+                if (
+                    compute_bytes_hash(str(fetched.get("body", "")).encode("utf-8"))
+                    != issue.content_digest
+                ):
+                    return _failure(
+                        PlanSetRejectReason.ISSUE_DRIFT, "issue body changed since snapshot"
+                    )
+            return issue, parent.plan_set_authority_id
 
-        if parent is not None and request.seal and issue is not None and request.issue_url:
+        issue_body = ""
+        issue_number = None
+        if request.issue_url:
             if self._github_client is None:
                 return _failure(
                     PlanSetRejectReason.ISSUE_FETCH_FAILED, "GitHub client is unavailable"
@@ -279,30 +298,62 @@ class DefaultPlanSetMaterializer:
                     PlanSetRejectReason.ISSUE_FETCH_FAILED,
                     str(fetched.get("error", "issue fetch failed")),
                 )
-            if (
-                compute_bytes_hash(str(fetched.get("body", "")).encode("utf-8"))
-                != issue.content_digest
-            ):
-                return _failure(
-                    PlanSetRejectReason.ISSUE_DRIFT, "issue body changed since snapshot"
-                )
+            issue_body = str(fetched.get("body", ""))
+            issue_number = fetched.get("issue_number")
+        authority_id = (
+            "planset-"
+            + compute_canonical_hash(
+                {
+                    "execution_generation": request.execution_generation,
+                    "kitchen_id": request.kitchen_id,
+                    "issue_locator": request.issue_url or "",
+                    "initial_part_locators": [str(path) for path, _ in loaded],
+                },
+                domain=PLAN_SET_AUTHORITY_ID_DOMAIN,
+            )[7:31]
+        )
+        if not request.issue_url:
+            return None, authority_id
+        snapshot_root = root / "plan-set-authority" / authority_id
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        issue_bytes = issue_body.encode("utf-8")
+        digest = compute_bytes_hash(issue_bytes)
+        snapshot_path = snapshot_root / f"issue.{digest[7:31]}.md"
+        _write_or_verify(snapshot_path, issue_bytes, root)
+        issue = IssueSnapshotRef(
+            issue_url=request.issue_url,
+            issue_number=issue_number if isinstance(issue_number, int) else None,
+            locator=str(snapshot_path),
+            byte_size=len(issue_bytes),
+            content_digest=digest,
+            fetched_at=datetime.now(UTC).isoformat(),
+        )
+        return issue, authority_id
 
-        if renew:
-            parts.clear()
-            allocations.clear()
-        if append or parent is None or renew:
-            start = len(parts) + 1
-            for ordinal, (path, data) in enumerate(loaded, start=start):
-                parts.append(
-                    PlanPartRef(
-                        ordinal=ordinal,
-                        part_key=f"P{ordinal}",
-                        part_suffix=_part_suffix(path, only_part=len(loaded) == 1 and not parts),
-                        locator=str(path),
-                        byte_size=len(data),
-                        content_digest=compute_bytes_hash(data),
-                    )
+    def _assemble_authority(
+        self,
+        request: PlanSetBindRequest,
+        root: Path,
+        parent: PlanSetAuthority | None,
+        loaded: list[tuple[Path, bytes]],
+        append: bool,
+        issue: IssueSnapshotRef | None,
+        authority_id: str,
+    ) -> PlanSetAuthority | PlanSetBindResult:
+        parts = list(parent.parts) if append and parent is not None else []
+        allocations = list(parent.allocations) if append and parent is not None else []
+        start = len(parts) + 1
+        for ordinal, (path, data) in enumerate(loaded, start=start):
+            parts.append(
+                PlanPartRef(
+                    ordinal=ordinal,
+                    part_key=f"P{ordinal}",
+                    part_suffix=_part_suffix(path, only_part=len(loaded) == 1 and not parts),
+                    locator=str(path),
+                    byte_size=len(data),
+                    content_digest=compute_bytes_hash(data),
                 )
+            )
         errors: list[str] = []
         loaded_by_locator = {str(path): data for path, data in loaded}
         for part in parts:
@@ -355,7 +406,9 @@ class DefaultPlanSetMaterializer:
                 success=False,
                 reason=PlanSetRejectReason.COVERAGE_FAILED,
                 error="plan-set coverage has gaps",
-                plan_set_authority_path=str(parent_path) if parent_path else "",
+                plan_set_authority_path=(
+                    str(Path(request.parent_authority_path).resolve()) if parent else ""
+                ),
                 plan_set_authority_digest=parent.authority_digest if parent else "",
                 plan_set_authority_id=authority_id,
                 coverage=coverage,
@@ -376,7 +429,7 @@ class DefaultPlanSetMaterializer:
             kitchen_id=request.kitchen_id,
             dispatch_id=request.dispatch_id,
             plan_set_authority_id=authority_id,
-            revision=revision,
+            revision=parent.revision + 1 if parent else 1,
             parent_authority_digest=parent.authority_digest if parent else None,
             state=PlanSetState.SEALED if request.seal else PlanSetState.OPEN,
             inventory_mode=mode,
@@ -388,22 +441,4 @@ class DefaultPlanSetMaterializer:
             unparsed_marker_lines=tuple(unparsed),
             generated_at=datetime.now(UTC).isoformat(),
         )
-        artifact_dir = root / "plan-set-authority" / authority_id
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        artifact_path = artifact_dir / f"{authority.authority_digest[7:31]}.json"
-        try:
-            write_canonical_versioned_json(
-                artifact_path,
-                authority.to_dict(),
-                authority.schema_version,
-                exclusive=True,
-            )
-        except FileExistsError:
-            _, existing = read_stable_contained_bytes(
-                artifact_path, root, max_size_bytes=PLAN_SET_MAX_PART_BYTES
-            )
-            if existing != canonical_json_bytes(authority.to_dict()):
-                return _failure(
-                    PlanSetRejectReason.INTERNAL, "authority path contains different bytes"
-                )
-        return _result(authority, artifact_path)
+        return authority

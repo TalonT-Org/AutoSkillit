@@ -22,7 +22,7 @@ _PREPARE_CONTEXT = "prepare_managed_join_context"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _EXPECTED_PREPARE_LAUNCH_CALLERS = Counter(
     {
-        ("cli/session/_session_cook.py", "cook"): 1,
+        ("cli/session/_session_cook.py", "_acquire_cook_managed_join"): 1,
         ("cli/session/_session_order.py", "order"): 1,
         ("cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         ("cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,

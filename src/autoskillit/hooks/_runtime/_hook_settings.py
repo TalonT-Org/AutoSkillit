@@ -386,6 +386,8 @@ _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 # so relative imports fail; tests/hooks/test_hook_constants_authority.py
 # enforces parity with the canonical constant.
 _AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV = "AUTOSKILLIT_MANAGED_JOIN_PARENT_ID"
+_AUTOSKILLIT_LAUNCH_ID_ENV = "AUTOSKILLIT_LAUNCH_ID"
+_AUTOSKILLIT_AGENT_BACKEND_ENV = "AUTOSKILLIT_AGENT_BACKEND"
 
 
 def read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
@@ -471,8 +473,11 @@ DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
         "session_id",
         "top_level_parent",
         "join_batch_id",
+        "original_join_batch_id",
+        "replacement_join_batch_id",
         "assignment",
         "tool_use_id",
+        "tool_name",
         "skill_name",
         "semantic_digest",
         "adaptation_digest",
@@ -614,6 +619,40 @@ def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission"
     )
 
 
+def is_authenticated_top_level_cook(
+    payload: dict[str, object],
+    payload_cwd: str,
+    binding_session_id: str,
+) -> bool:
+    """Apply canonical session shape before consulting durable cook identity."""
+    module_name = (
+        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
+    )
+    return bool(
+        getattr(importlib.import_module(module_name), "is_authenticated_top_level_cook")(
+            payload,
+            payload_cwd,
+            binding_session_id,
+            headless=hook_session_shape()[0],
+            backend=os.environ.get(_AUTOSKILLIT_AGENT_BACKEND_ENV, "").strip(),
+            launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
+            managed_parent_id=os.environ.get(_AUTOSKILLIT_MANAGED_JOIN_PARENT_ID_ENV, ""),
+        )
+    )
+
+
+def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
+    """Bind the hook session through the canonical launch-id accessor."""
+    module_name = (
+        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
+    )
+    getattr(importlib.import_module(module_name), "bridge_session_registry")(
+        session_id,
+        payload_cwd,
+        launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
+    )
+
+
 def session_join_required(payload_cwd: str, session_id: str) -> bool:
     """Return whether the payload-identified binding requires a fixed-set join."""
     return session_join_admission(payload_cwd, session_id).enforce
@@ -635,6 +674,27 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     if not isinstance(parent, str) or not parent or not isinstance(leaf, str):
         return None
     return (parent, leaf)
+
+
+def record_cook_join_bypass(
+    payload: dict[str, object], payload_cwd: str, session_id: str, *, gate: str
+) -> bool:
+    """Record the shared join-guard bypass for an authenticated cook session."""
+    if not is_authenticated_top_level_cook(payload, payload_cwd, session_id):
+        return False
+    scope = session_managed_scope(payload_cwd, session_id)
+    managed_parent_id, managed_leaf_id = scope or ("", "")
+    write_join_diagnostic(
+        {
+            "gate": gate,
+            "status": "cook_bypass",
+            "session_id": session_id,
+            "managed_parent_id": managed_parent_id,
+            "managed_leaf_id": managed_leaf_id,
+        },
+        caller=gate,
+    )
+    return True
 
 
 def session_managed_codex_route(

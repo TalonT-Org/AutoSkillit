@@ -258,6 +258,7 @@ _GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
     **{flag: _FlagArity.BOOLEAN for flag in (_GIT_GLOBAL_FLAGS - _GIT_GLOBAL_FLAGS_WITH_VALUE)},
     "--namespace": _FlagArity.VALUE,
     "--config-env": _FlagArity.VALUE,
+    "--super-prefix": _FlagArity.VALUE,
     # --exec-path[=<path>] is optional-value (usable bare, or with `=`); this
     # module's binary arity model can't express "optional". BOOLEAN is the
     # correct default for its common bare usage; the rare `=`-form

@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
+from subprocess import TimeoutExpired
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import autoskillit.cli._preview as _patch_cli__preview
 import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
@@ -648,7 +650,11 @@ class TestCLIOrderCommand:
             captured["env"] = kwargs.get("env", {}) or {}
             return InteractiveProcessStub()
 
-        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(
+            _patch_session__session_launch,
+            "subprocess",
+            SimpleNamespace(Popen=fake_popen, TimeoutExpired=TimeoutExpired),
+        )
 
         def fake_cook_attempt(spec, **kwargs):
             captured["cmd"] = list(spec.cmd)
@@ -665,9 +671,7 @@ class TestCLIOrderCommand:
 
         cli.order("test-script")
 
-        assert "cmd" in captured, (
-            "cli.order() did not invoke subprocess.Popen — check for early exit"
-        )
+        assert "cmd" in captured, "cli.order() did not launch the backend — check for early exit"
         cmd = captured["cmd"]
         env = captured["env"]
 

@@ -1911,6 +1911,16 @@ def test_codex_managed_fixed_batch_smoke_conformance(
 ) -> None:
     """Exercise server-owned managed batches without relying on model prompt choices."""
 
+    from autoskillit.execution.backends import _codex_managed_route
+
+    bundled_catalog = json.dumps(installed_catalog()).encode("utf-8")
+    monkeypatch.setattr(_codex_managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+    monkeypatch.setattr(
+        _codex_managed_route,
+        "acquire_bundled_codex_catalog",
+        lambda *args, **kwargs: bundled_catalog,
+    )
+
     async def exercise() -> None:
         parent_id = "managed-smoke-parent"
         request_id = "managed-smoke-transport"
@@ -1918,9 +1928,6 @@ def test_codex_managed_fixed_batch_smoke_conformance(
         generated_home = tmp_path / "interactive-parent-home"
         source_home.mkdir()
         generated_home.mkdir()
-        (source_home / "models_cache.json").write_text(
-            json.dumps(installed_catalog()), encoding="utf-8"
-        )
         (generated_home / "config.toml").write_text(
             '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
             encoding="utf-8",
@@ -1938,7 +1945,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
         assert attestation is not None
         backend.configure_managed_session_dir(
             generated_home,
-            attestation=attestation,
+            adaptation_context=context,
             route="interactive-parent",
         )
         monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(generated_home))
@@ -2022,6 +2029,60 @@ def test_codex_managed_fixed_batch_smoke_conformance(
             ),
             encoding="utf-8",
         )
+
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        authority = tool_ctx.managed_join_attestation_authority
+        manager = tool_ctx.session_skill_manager
+        assert authority is not None and manager is not None
+        recovered_contexts: list[SemanticAdaptationContext] = []
+        materialization_contexts: list[SemanticAdaptationContext | None] = []
+        find_verified_context = authority.find_verified_context
+        materialize_invocation = manager.materialize_invocation
+
+        def record_recovered_context(**kwargs):
+            recovered = find_verified_context(**kwargs)
+            if recovered is not None:
+                recovered_contexts.append(recovered)
+            return recovered
+
+        def record_materialization_context(
+            session_id,
+            invocation,
+            projection_context,
+            **kwargs,
+        ):
+            materialization_contexts.append(projection_context.adaptation_context)
+            return materialize_invocation(
+                session_id,
+                invocation,
+                projection_context,
+                **kwargs,
+            )
+
+        monkeypatch.setattr(authority, "find_verified_context", record_recovered_context)
+        monkeypatch.setattr(manager, "materialize_invocation", record_materialization_context)
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+        recovered_binding = _fixed_batch_handlers._resolve_launch_binding(
+            skill_name=static_source.skill_name,
+            assignments=(
+                ManagedLeafAssignmentInput(
+                    role="delegated-worker",
+                    label="recovered-context",
+                    task_prompt="Prove the recovered context reaches materialization.",
+                ),
+            ),
+            idempotency_key="recovered-context-key",
+            request_context=SimpleNamespace(session_id=request_id),  # type: ignore[arg-type]
+            tool_ctx=tool_ctx,
+        )
+        recovered_result = await service.run(recovered_binding)
+
+        assert recovered_result.wave_outcome == "complete"
+        assert len(recovered_contexts) == 1
+        assert recovered_contexts[0] == context
+        assert len(materialization_contexts) == 1
+        assert materialization_contexts[0] is recovered_contexts[0]
 
         monkeypatch.setattr(
             _fixed_batch_handlers,

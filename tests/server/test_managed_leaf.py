@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -131,6 +132,18 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
     assert "managed fixed-batch route" not in leaf.prompt
     assert "Inspect the first change." in leaf.prompt
     assert document.content != leaf.prompt
+
+    relocated = replace(document, content="Worker worktree contract.", projected_digest="worker")
+    relocated_leaf = project_managed_leaf(binding, document, leaf_document=relocated)
+    assert relocated_leaf.binding is binding
+    assert relocated_leaf.binding.source_projected_digest == document.projected_digest
+    assert "Worker worktree contract." in relocated_leaf.prompt
+    assert relocated_leaf.leaf_projection_artifact_digest != leaf.leaf_projection_artifact_digest
+    for identity in ("canonical_digest", "semantic_digest", "adaptation_digest"):
+        with pytest.raises(SkillContractError, match=f"changed {identity}"):
+            project_managed_leaf(
+                binding, document, leaf_document=replace(relocated, **{identity: "other"})
+            )
 
 
 def test_managed_leaf_workspace_classification_binds_isolation_and_effects() -> None:
@@ -317,6 +330,12 @@ async def test_leaf_env_carries_join_identity_equal_to_binding_key(tmp_path: Pat
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
         adaptation=SkillSemanticAdaptationResult(),
+        source_document=AgentSkillDocument(
+            content="Inspect the change.",
+            projected_digest=selected_source.projected_digest,
+            canonical_digest=selected_source.canonical_digest,
+            source_identity=SkillSourceIdentity(SkillSource.BUNDLED_EXTENDED, "review-skill"),
+        ),
     )
     adapter._write_leaf_binding(leaf_session_id, projection)
 

@@ -16,7 +16,7 @@ from autoskillit.core import (
     write_registry_entry,
 )
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
-from autoskillit.hooks.guards.open_kitchen_guard import _bridge_session_registry
+from autoskillit.hooks._runtime._session_registry_bridge import bridge_session_registry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -66,7 +66,11 @@ def test_resumed_codex_identity_stays_aligned_across_hook_storage_and_index(
     write_registry_entry(project_dir, _LAUNCH_ID, "cook", None)
 
     monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", _LAUNCH_ID)
-    _bridge_session_registry(_SANITIZED_THREAD_ID, str(project_dir))
+    bridge_session_registry(
+        _SANITIZED_THREAD_ID,
+        str(project_dir),
+        launch_id=_LAUNCH_ID,
+    )
     launch_id = claim_launch_for_session(
         project_dir,
         claude_session_id=_SANITIZED_THREAD_ID,

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from autoskillit.cli.session._session_cook import _prepare_cook_managed_launch
 from autoskillit.cli.session._session_launch import (
     append_skill_unavailability,
     render_skill_unavailability,
 )
-from autoskillit.core import SkillSemanticOperation, SkillUnavailabilityPayload
+from autoskillit.core import RestoreSession, SkillSemanticOperation, SkillUnavailabilityPayload
 from autoskillit.workspace import SkillUnavailableMetadata
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -51,6 +54,40 @@ def test_render_skill_unavailability_groups_and_sorts(capsys: pytest.CaptureFixt
         "2 skills unavailable on this backend (child_spawn: child spawn unavailable): alpha, beta",
         "1 skills unavailable on this backend (required_join: fixed join unavailable): zeta",
     ]
+
+
+def test_render_skill_unavailability_reports_managed_preparation_refusal_once(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    payload = _payload(
+        SkillUnavailableMetadata(
+            skill="compose-pr",
+            backend="codex",
+            operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic="fixed join unavailable",
+        )
+    )
+
+    launch = RestoreSession("existing-session")
+    assert _prepare_cook_managed_launch(
+        launch,
+        None,
+        payload,
+        tmp_path,
+        color=False,
+        managed_join_refusal="managed join issuance refused: catalog_probe_failed",
+    ) == (
+        launch,
+        False,
+    )
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == (
+        "1 skills unavailable on this backend (required_join: fixed join unavailable): compose-pr"
+    )
+    assert lines[-1] == "WARNING: managed join issuance refused: catalog_probe_failed"
+    assert lines.count("WARNING: managed join issuance refused: catalog_probe_failed") == 1
 
 
 def test_append_skill_unavailability_preserves_none_and_appends_canonical_block() -> None:

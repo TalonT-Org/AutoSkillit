@@ -999,7 +999,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:157": (
+    "cli/session/_session_launch.py:159": (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
@@ -2811,6 +2811,30 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
+    ),
+    "OTEL_EXPORTER_OTLP_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_LOGS_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_LOGS_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_METRICS_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_METRICS_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_TRACES_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_TRACES_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
     ),
     "OTEL_LOGS_EXPORTER": AmbientEnvDisposition(
         var="OTEL_LOGS_EXPORTER",

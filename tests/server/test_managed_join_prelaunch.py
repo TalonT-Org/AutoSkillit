@@ -86,8 +86,20 @@ def test_prelaunch_issuance_refuses_retired_native_models_before_attestation(
     assert not (state_root / ".autoskillit").exists()
 
 
+def _use_bundled_catalog(monkeypatch: pytest.MonkeyPatch, raw_catalog: bytes) -> None:
+    from autoskillit.execution.backends import _codex_managed_route
+
+    monkeypatch.setattr(_codex_managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+    monkeypatch.setattr(
+        _codex_managed_route,
+        "acquire_bundled_codex_catalog",
+        lambda *args, **kwargs: raw_catalog,
+    )
+
+
 def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import (
         CODEX_EFFORT_MAPPING,
@@ -105,6 +117,8 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     source_home, raw_catalog = _source_home(tmp_path)
     state_root = tmp_path / "state"
     backend = CodexBackend(source_codex_home=source_home)
+    _use_bundled_catalog(monkeypatch, raw_catalog)
+    (source_home / "models_cache.json").write_text("source cache is not issuance authority")
 
     context = prepare_managed_join_context(
         backend=backend,
@@ -132,12 +146,17 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     assert attestation.codex_catalog_digest == expected_projection.projected_sha256.removeprefix(
         "sha256:"
     )
+    assert context.managed_codex_catalog == expected_projection.canonical_projected_bytes
+    assert "managed_codex_catalog" not in context.canonical_payload
     assert (resolve_channel_dir(state_root) / "managed_join_attestation_abc123.json").is_file()
     plan = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
     assert backend.adapt_skill_semantics(plan, context).unsupported_operation is None
 
 
-def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) -> None:
+def test_prelaunch_issuance_refuses_unresolvable_model_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
     from autoskillit.server.managed_join_prelaunch import (
         ManagedJoinIssuanceRefusal,
@@ -145,19 +164,8 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) 
     )
 
     state_root = tmp_path / "state"
-    source_home, _ = _source_home(tmp_path / "no-default")
-    catalog_path = source_home / "models_cache.json"
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    models = catalog["models"]
-    assert isinstance(models, list)
-    removed_default = False
-    for model in models:
-        if isinstance(model, dict) and model.get("slug") == "gpt-6-sol":
-            assert model.get("default_reasoning_level") == "medium"
-            del model["default_reasoning_level"]
-            removed_default = True
-    assert removed_default
-    catalog_path.write_text(json.dumps(catalog, sort_keys=True), encoding="utf-8")
+    source_home, raw_catalog = _source_home(tmp_path / "no-default")
+    _use_bundled_catalog(monkeypatch, raw_catalog)
     missing_default = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
         configured_model="gpt-6-sol",
@@ -167,9 +175,9 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) 
     )
     assert isinstance(missing_default, ManagedJoinIssuanceRefusal)
     assert "gpt-6-sol" in missing_default.reason
-    assert not (state_root / ".autoskillit").exists()
 
-    absent_home, _ = _source_home(tmp_path / "absent", include_sol=False)
+    absent_home, absent_catalog = _source_home(tmp_path / "absent", include_sol=False)
+    _use_bundled_catalog(monkeypatch, absent_catalog)
     absent_model = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=absent_home),
         configured_model="gpt-6-sol",
@@ -192,7 +200,10 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) 
     assert not (state_root / ".autoskillit").exists()
 
 
-def test_prelaunch_issuance_refuses_malformed_catalog(tmp_path: Path) -> None:
+def test_prelaunch_issuance_refuses_malformed_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A catalog missing its ``models`` list surfaces a clear ``ManagedJoinIssuanceRefusal``."""
     import json
 
@@ -207,6 +218,7 @@ def test_prelaunch_issuance_refuses_malformed_catalog(tmp_path: Path) -> None:
     (source_home / "models_cache.json").write_text(
         json.dumps({"version": "missing-models-list"}), encoding="utf-8"
     )
+    _use_bundled_catalog(monkeypatch, b'{"version":"missing-models-list"}')
 
     # ``gpt-6-luna`` is a valid Codex model id but is not in the
     # CODEX_EFFORT_MAPPING shortcut table, so ``resolve_managed_parent_identity``
@@ -223,6 +235,73 @@ def test_prelaunch_issuance_refuses_malformed_catalog(tmp_path: Path) -> None:
     assert "models" in refusal.reason
 
 
+def test_prelaunch_issuance_converts_bundled_acquisition_errors_to_refusal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import CodexBackend, _codex_managed_route
+    from autoskillit.execution.backends._codex_catalog import (
+        CodexCatalogAcquisitionError,
+    )
+    from autoskillit.server.managed_join_prelaunch import (
+        ManagedJoinIssuanceRefusal,
+        prepare_managed_join_context,
+    )
+
+    monkeypatch.setattr(_codex_managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+
+    def fail_acquisition(*args, **kwargs):
+        del args, kwargs
+        raise CodexCatalogAcquisitionError("deadline_exceeded")
+
+    monkeypatch.setattr(
+        _codex_managed_route,
+        "acquire_bundled_codex_catalog",
+        fail_acquisition,
+    )
+
+    refusal = prepare_managed_join_context(
+        backend=CodexBackend(source_codex_home=tmp_path / "unused-source"),
+        configured_model="haiku",
+        state_root=tmp_path,
+        parent_id="acquisition-failed",
+        launch_context="interactive",
+    )
+
+    assert isinstance(refusal, ManagedJoinIssuanceRefusal)
+    assert refusal.reason == "deadline_exceeded"
+
+
+def test_authority_atomically_caches_complete_catalog_context() -> None:
+    import hashlib
+
+    from autoskillit.server._managed_join_attestation import (
+        DefaultManagedJoinAttestationAuthority,
+    )
+
+    catalog = b'{"models":[]}'
+    authority = DefaultManagedJoinAttestationAuthority()
+    context = authority.issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="complete-context",
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest=hashlib.sha256(catalog).hexdigest(),
+        managed_codex_catalog=catalog,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+
+    assert context.managed_codex_catalog == catalog
+    assert (
+        authority.verify(context, backend="codex", parent_session_id="complete-context") is context
+    )
+
+
 def test_server_authority_loads_and_revalidates_prelaunch_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -236,7 +315,8 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
-    source_home, _ = _source_home(tmp_path)
+    source_home, raw_catalog = _source_home(tmp_path)
+    _use_bundled_catalog(monkeypatch, raw_catalog)
     state_root = tmp_path / "state"
     backend = CodexBackend(source_codex_home=source_home)
     context = prepare_managed_join_context(
@@ -256,19 +336,36 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
     )
     backend.configure_managed_session_dir(
         home,
-        attestation=attestation,
+        adaptation_context=context,
         route="interactive-parent",
     )
+    (source_home / "models_cache.json").unlink()
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
     record_store = ManagedJoinRecordStore(state_root)
+
+    original_reader = type(backend).read_managed_session_catalog
+    catalog_reads = 0
+
+    def count_catalog_read(self, generated_home):
+        nonlocal catalog_reads
+        catalog_reads += 1
+        return original_reader(self, generated_home)
+
+    monkeypatch.setattr(type(backend), "read_managed_session_catalog", count_catalog_read)
 
     authority = DefaultManagedJoinAttestationAuthority(
         record_store=record_store,
         backend=backend,
     )
     loaded = authority.find_verified_context(backend="codex", parent_session_id="abc123")
-    assert loaded == context
-    assert authority.verify(loaded, backend="codex", parent_session_id="abc123") == context
+    assert loaded is not None
+    assert loaded.managed_join_attestation == context.managed_join_attestation
+    assert loaded.managed_codex_catalog == context.managed_codex_catalog
+    assert authority.verify(loaded, backend="codex", parent_session_id="abc123") == loaded
+    assert catalog_reads == 1
+    assert authority.find_verified_context(backend="codex", parent_session_id="abc123") is loaded
+    assert catalog_reads == 1
+    monkeypatch.setattr(type(backend), "read_managed_session_catalog", original_reader)
 
     record_path = record_store.path_for("abc123")
     original_record = record_path.read_text(encoding="utf-8")
@@ -294,6 +391,58 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         is None
     )
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
+
+    catalog_path = home / "autoskillit-models.json"
+    original_catalog = catalog_path.read_bytes()
+    catalog_path.unlink()
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
+
+    catalog_path.write_bytes(b'{"models":["tampered"]}')
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
+
+    replacement = tmp_path / "replacement-models-cache.json"
+    replacement.write_bytes(original_catalog)
+    catalog_path.unlink()
+    catalog_path.symlink_to(replacement)
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.unlink()
+        catalog_path.write_bytes(original_catalog)
+
+    from autoskillit.execution.backends._codex_catalog import CODEX_CATALOG_LIMIT
+
+    catalog_path.write_bytes(b" " * (CODEX_CATALOG_LIMIT + 1))
+    try:
+        assert (
+            DefaultManagedJoinAttestationAuthority(
+                record_store=record_store, backend=backend
+            ).find_verified_context(backend="codex", parent_session_id="abc123")
+            is None
+        )
+    finally:
+        catalog_path.write_bytes(original_catalog)
 
     config_path = home / "config.toml"
     original_config = config_path.read_text(encoding="utf-8")

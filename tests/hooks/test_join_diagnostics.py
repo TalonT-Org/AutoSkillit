@@ -39,7 +39,15 @@ def test_diagnostics_write_redacts_to_bounded_keys(tmp_path: Path, monkeypatch) 
             "session_id": "4575",
             "top_level_parent": "p1",
             "tool_use_id": "t1",
+            "tool_name": "mcp__autoskillit__declare_join_batch",
+            "original_join_batch_id": "batch-1",
+            "replacement_join_batch_id": "batch-2",
             "child_body": "secret-prompt-text",
+            "prompt": "also-secret",
+            "command": "credential-bearing command",
+            "command_body": "credential-bearing command body",
+            "credential": "secret-token",
+            "child_payload": {"prompt": "secret child task"},
             "private_task_id": "ant-private-abc",
             "selection": "name",
             "status": "block",
@@ -55,6 +63,14 @@ def test_diagnostics_write_redacts_to_bounded_keys(tmp_path: Path, monkeypatch) 
     # No child bodies or private task IDs are persisted.
     assert "child_body" not in records[0]
     assert "private_task_id" not in records[0]
+    assert "prompt" not in records[0]
+    assert "command" not in records[0]
+    assert "command_body" not in records[0]
+    assert "credential" not in records[0]
+    assert "child_payload" not in records[0]
+    assert records[0]["tool_name"] == "mcp__autoskillit__declare_join_batch"
+    assert records[0]["original_join_batch_id"] == "batch-1"
+    assert records[0]["replacement_join_batch_id"] == "batch-2"
 
 
 def test_diagnostics_reconstruct_wave_from_evidence(tmp_path: Path, monkeypatch) -> None:
@@ -211,6 +227,9 @@ def test_diagnostics_keys_are_bounded() -> None:
     assert "gate" in DIAGNOSTIC_KEYS
     assert "session_id" in DIAGNOSTIC_KEYS
     assert "tool_use_id" in DIAGNOSTIC_KEYS
+    assert "tool_name" in DIAGNOSTIC_KEYS
+    assert "original_join_batch_id" in DIAGNOSTIC_KEYS
+    assert "replacement_join_batch_id" in DIAGNOSTIC_KEYS
     # Forbidden keys are absent.
     assert "child_body" not in DIAGNOSTIC_KEYS
     assert "private_task_id" not in DIAGNOSTIC_KEYS

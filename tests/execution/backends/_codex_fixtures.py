@@ -48,3 +48,23 @@ def installed_catalog() -> dict[str, object]:
         ],
         "metadata": {"catalog": "installed", "schema_version": 7},
     }
+
+
+def managed_selection_catalog() -> dict[str, object]:
+    """Catalog with a valid Sol selection, separate from the unsuitable fixture."""
+    catalog = installed_catalog()
+    models = catalog["models"]
+    assert isinstance(models, list)
+    models[0] = {
+        "slug": "gpt-5.6-sol",
+        "tool_mode": "code_mode_only",
+        "apply_patch_tool_type": "freeform",
+        "supported_reasoning_levels": [
+            {"effort": "medium", "description": "Medium"},
+            {"effort": "high", "description": "High"},
+            {"effort": "ultra", "description": "Ultra"},
+        ],
+        "default_reasoning_level": "ultra",
+        "sentinel": {"valid_selection": True},
+    }
+    return catalog

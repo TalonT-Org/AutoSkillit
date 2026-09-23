@@ -29,6 +29,7 @@ from _guard_decision_diagnostics import (  # noqa: E402
 )
 from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
+    bridge_session_registry,
     resolve_quota_log_dir,
     write_quota_log_event,
 )
@@ -119,9 +120,6 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    if data.get("agent_id"):
-        sys.exit(0)
-
     backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":
         log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")
@@ -136,15 +134,20 @@ def main() -> None:
         )
         sys.exit(0)
 
-    session_id: str = data.get("session_id", "")
+    session_id_value = data.get("session_id", "")
+    session_id = session_id_value if isinstance(session_id_value, str) else ""
     invocation = _invocation_skill(data)
-    if invocation is None or not session_id:
+    if data.get("agent_id") or invocation is None or not session_id:
         sys.exit(0)
     event_name, skill_name_value = invocation
     skill_name: str = (
         normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
     )
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    try:
+        bridge_session_registry(session_id, payload_cwd)
+    except Exception as exc:
+        sys.stderr.write(f"skill_load_post_hook: registry bridge failed: {exc}\n")
     flag_path = resolve_binding_path(payload_cwd, session_id)
 
     ts = datetime.now(UTC).isoformat()

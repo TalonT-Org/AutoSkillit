@@ -22,7 +22,7 @@ _REGISTRY_FILENAME = "session_registry.json"
 _DIRECT_PERSISTENCE_PATHS = frozenset(
     {
         "core/runtime/session_registry.py",
-        "hooks/guards/open_kitchen_guard.py",
+        "hooks/_runtime/_session_registry_bridge.py",
     }
 )
 _ROW_WRITE_WRAPPERS = frozenset({"write_registry_entry", "claim_launch_for_session"})
@@ -77,8 +77,8 @@ _EXPECTED_REGISTRY_WRITES = (
         "_atomic_write",
     ),
     (
-        "hooks/guards/open_kitchen_guard.py",
-        "_bridge_session_registry",
+        "hooks/_runtime/_session_registry_bridge.py",
+        "_write_registry",
         "os.replace",
     ),
 )

@@ -207,7 +207,7 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
 def _production_managed_codex_context() -> SemanticAdaptationContext:
     """Issue the managed Codex admission context from production digests.
 
-    Uses the production ``CodexBackend.project_source_catalog`` for a realistic
+    Uses the production catalog projector for a realistic
     ``codex_catalog_digest`` and ``managed_codex_route_digest`` for the
     fixed-batch tool registry. ``record_store=None`` / ``backend=None`` keep
     this helper in-process — it seeds the admission ledger, not the persistence
@@ -234,6 +234,7 @@ def _production_managed_codex_context() -> SemanticAdaptationContext:
         resolved_model=model,
         resolved_reasoning_effort="high",
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
         fixed_batch_tool_registry_digest=managed_codex_route_digest(),
         hook_registry_digest=HOOK_REGISTRY_HASH,
         skill_load_applies=True,

@@ -51,15 +51,17 @@ class TestCodexEnvPolicy:
         assert result["HOME"] == "/home/user"
 
     @pytest.mark.parametrize("source", ["base", "extras"])
-    def test_claude_activation_exporter_and_prefix_vars_are_always_stripped(
-        self, source: str
-    ) -> None:
+    def test_unsupported_activation_and_compression_are_always_stripped(self, source: str) -> None:
         denied = {
             "CLAUDE_CODE_AUTO_CONNECT_IDE": "0",
             "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
             "OTEL_LOGS_EXPORTER": "otlp",
             "OTEL_METRICS_EXPORTER": "otlp",
             "OTEL_METRICS_INCLUDE_SESSION_ID": "true",
+            "OTEL_EXPORTER_OTLP_COMPRESSION": "gzip",
+            "OTEL_EXPORTER_OTLP_TRACES_COMPRESSION": "gzip",
+            "OTEL_EXPORTER_OTLP_METRICS_COMPRESSION": "gzip",
+            "OTEL_EXPORTER_OTLP_LOGS_COMPRESSION": "gzip",
         }
         kwargs = {"extras": denied} if source == "extras" else {}
         base = {"PATH": "/usr/bin", **(denied if source == "base" else {})}

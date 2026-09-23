@@ -216,6 +216,40 @@ def _print_recipes_list() -> None:
         print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")
 
 
+def _acquire_cook_managed_join(
+    backend: CodingAgentBackend,
+    *,
+    configured_model: str,
+    project_dir: Path,
+    launch_id: str,
+) -> tuple[SemanticAdaptationContext | None, str | None]:
+    """Acquire cook readiness evidence and retain any rendered refusal."""
+    if not getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
+        return None, None
+
+    from autoskillit.server.managed_join_prelaunch import (
+        ManagedJoinIssuanceRefusal,
+        acquire_managed_join_evidence,
+        render_managed_join_refusal,
+    )
+
+    rendered_refusal: str | None = None
+
+    def capture_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+        nonlocal rendered_refusal
+        rendered_refusal = render_managed_join_refusal(refusal)
+
+    evidence = acquire_managed_join_evidence(
+        backend=backend,
+        configured_model=configured_model,
+        state_root=project_dir,
+        parent_id=launch_id,
+        launch_context="interactive",
+        on_refusal=capture_refusal,
+    )
+    return (evidence.context if evidence is not None else None), rendered_refusal
+
+
 def _resolve_cook_launch(
     backend: CodingAgentBackend,
     resume_spec: ResumeSpec,
@@ -276,11 +310,14 @@ def _prepare_cook_managed_launch(
     project_dir: Path,
     *,
     color: bool,
+    managed_join_refusal: str | None,
 ) -> tuple[InteractiveLaunch, bool]:
     import autoskillit.core as core
     from autoskillit.cli.session import _session_onboarding
 
     render_skill_unavailability(unavailability_payload)
+    if managed_join_refusal is not None:
+        print(f"WARNING: {managed_join_refusal}")
     if not isinstance(launch, core.FreshLaunch):
         return launch, False
     initial_prompt = (
@@ -579,19 +616,12 @@ def cook(
                 claimed_launch_id = _prepare_resumed_cook_launch(project_dir, launch)
                 launch_id = claimed_launch_id
 
-        managed_join_context: SemanticAdaptationContext | None = None
-        if getattr(backend.capabilities, "managed_fixed_batch_route_capable", False):
-            from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
-
-            evidence = acquire_managed_join_evidence(
-                backend=backend,
-                configured_model=config.model.model_override or config.model.default_model,
-                state_root=project_dir,
-                parent_id=launch_id,
-                launch_context="interactive",
-            )
-            if evidence is not None:
-                managed_join_context = evidence.context
+        managed_join_context, managed_join_refusal = _acquire_cook_managed_join(
+            backend,
+            configured_model=config.model.model_override or config.model.default_model,
+            project_dir=project_dir,
+            launch_id=launch_id,
+        )
         try:
             session_catalog = skill_resolver.list_effective(
                 project_dir,
@@ -662,6 +692,7 @@ def cook(
                 managed_home.unavailability_payload,
                 project_dir,
                 color=color,
+                managed_join_refusal=managed_join_refusal,
             )
             from autoskillit.cli.session._session_startup_trace import StartupTrace
 

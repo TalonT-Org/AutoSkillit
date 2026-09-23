@@ -132,10 +132,19 @@ tasks:
         LOCAL_GATE_EXIT=$?
         set -e
 
-        if [ "$LOCAL_GATE_EXIT" -ne 0 ]; then
+        MANAGED_ROUTE_LIVE_EXIT=0
+        if [[ "${AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE:-0}" == "1" ]]; then
+          set +e
+          task test-smoke-codex
+          MANAGED_ROUTE_LIVE_EXIT=$?
+          set -e
+        fi
+
+        if [ "$LOCAL_GATE_EXIT" -ne 0 ] || [ "$MANAGED_ROUTE_LIVE_EXIT" -ne 0 ]; then
           echo ""
           echo "TEST_RESULT=FAIL"
           echo "LOCAL_GATE_EXIT_CODE=$LOCAL_GATE_EXIT"
+          echo "MANAGED_ROUTE_LIVE_EXIT_CODE=$MANAGED_ROUTE_LIVE_EXIT"
           exit 1
         else
           echo ""
@@ -312,7 +321,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/execution/test_smoke_codex.py tests/execution/backends/test_cli_conformance_probes.py tests/execution/backends/test_codex_recipe_delivery_conformance.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/execution/test_smoke_codex.py tests/execution/backends/test_cli_conformance_probes.py tests/execution/backends/test_codex_recipe_delivery_conformance.py tests/execution/backends/test_codex_managed_route_live_gate.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -709,6 +718,56 @@ tasks:
         fi
         $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); sys.exit(f"Claude explorer gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if len(cases) != 1 or skipped else 0)' "$JUNIT_REPORT"
         $PYTHON_CMD -c 'import json, sys; rows=[json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]; values={row.get("tool"): row.get("session_id") for row in rows if isinstance(row.get("tool"), str)}; expected={"enable_exploration", "submit_exploration_query"}; bad=set(values) != expected or not values.get("enable_exploration") or values.get("submit_exploration_query") != values.get("enable_exploration"); sys.exit(f"invalid Claude explorer correlation evidence: {rows!r}" if bad else 0)' "$EVIDENCE"
+
+  test-smoke-native-join-live-gates:
+    desc: Run the native Codex and Claude required-join delivery gates without skips
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE: "1"
+      AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_LIVE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.154.0"
+        msg: "Native join gate requires codex-cli 0.154.0"
+      - sh: command -v claude >/dev/null 2>&1
+        msg: "Claude Code CLI must be installed"
+      - sh: test -n "$CODEX_API_KEY" || test -n "$OPENAI_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication is required"
+      - sh: test -n "$ANTHROPIC_API_KEY" || test -n "$CLAUDE_CODE_OAUTH_TOKEN" || test -f "$HOME/.claude/.credentials.json"
+        msg: "Claude authentication is required"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        ARTIFACT_BASE="$(pwd)/.autoskillit/temp/native-join-live"
+        mkdir -p "$ARTIFACT_BASE"
+        ARTIFACT_DIR="$(mktemp -d "$ARTIFACT_BASE/run.XXXXXX")"
+        export AUTOSKILLIT_NATIVE_JOIN_ARTIFACT_DIR="$ARTIFACT_DIR"
+        TEST_OUTPUT="$ARTIFACT_DIR/test-output.txt"
+        JUNIT_REPORT="$ARTIFACT_DIR/junit.xml"
+        set +e
+        $PYTHON_CMD -m pytest \
+          tests/execution/backends/test_codex_managed_route_live_gate.py \
+          tests/execution/backends/test_claude_join_recovery_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 3 or skipped; sys.exit(f"native join gates require exactly three non-skipped tests, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
 
   test-smoke-cook-real-root:
     desc: Run the cook-loop real-project-root composition gate (#4684)

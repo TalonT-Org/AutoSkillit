@@ -105,6 +105,10 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/execution/recording/_recording_skills.py": (
         "Informational manifest — never read back"
     ),
+    "src/autoskillit/execution/backends/_codex_catalog.py": (
+        "command.json is diagnostic argv/cwd evidence; AutoSkillit never reads it back. "
+        "Native catalog reads use their separate Codex schema."
+    ),
     "src/autoskillit/execution/quota/_quota_observed.py": (
         "record_observed_rate_limit's read-modify-write reads the same "
         "observed-constraints file back via quota_constraints.safe_decode_observed_constraints "

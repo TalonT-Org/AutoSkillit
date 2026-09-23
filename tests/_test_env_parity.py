@@ -67,6 +67,24 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE": HarnessEnvOverride(
+        var="AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE",
+        value="1",
+        justification=(
+            "Enables only the explicitly selected native Codex required-join live gate; "
+            "ordinary test tasks leave this credentialed gate disabled."
+        ),
+        parity_fixture=None,
+    ),
+    "AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_LIVE": HarnessEnvOverride(
+        var="AUTOSKILLIT_CLAUDE_JOIN_RECOVERY_LIVE",
+        value="1",
+        justification=(
+            "Enables only the explicitly selected native Claude replacement live gate; "
+            "ordinary test tasks leave this credentialed gate disabled."
+        ),
+        parity_fixture=None,
+    ),
     "AUTOSKILLIT_WEB_AGENT_LIVE_GATE": HarnessEnvOverride(
         var="AUTOSKILLIT_WEB_AGENT_LIVE_GATE",
         value="1",

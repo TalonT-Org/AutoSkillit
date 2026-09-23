@@ -8,8 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends._codex_catalog import project_codex_catalog
-from tests.execution.backends._codex_fixtures import installed_catalog
+from autoskillit.execution.backends._codex_catalog import (
+    project_codex_catalog,
+    resolve_codex_catalog_effort,
+)
+from tests.execution.backends._codex_fixtures import (
+    installed_catalog,
+    managed_selection_catalog,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium, pytest.mark.model_contract]
 
@@ -55,6 +61,88 @@ def test_reader_projection_preserves_the_complete_installed_catalog() -> None:
     assert projection.bundled_sha256.startswith("sha256:")
     assert projection.projected_sha256.startswith("sha256:")
     assert projection.bundled_sha256 != projection.projected_sha256
+
+
+def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.execution.backends import _codex_managed_route as managed_route
+
+    raw = _catalog_bytes(managed_selection_catalog())
+    seen: dict[str, object] = {}
+
+    def acquire(codex, *, scratch_root, environment, deadline):
+        seen.update(
+            codex=codex,
+            scratch_root=scratch_root,
+            environment=environment,
+            deadline=deadline,
+        )
+        return raw
+
+    monkeypatch.setattr(managed_route, "acquire_bundled_codex_catalog", acquire)
+    monkeypatch.setattr(managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
+
+    model, effort, projection = CodexBackend().prepare_managed_codex_catalog(
+        "gpt-5.6-sol",
+        scratch_root=tmp_path,
+        deadline=123.0,
+    )
+
+    assert (model, effort) == ("gpt-5.6-sol", "ultra")
+    assert json.loads(projection.canonical_projected_bytes)["models"][0]["tool_mode"] == "direct"
+    assert seen["scratch_root"] == tmp_path
+    assert seen["deadline"] == 123.0
+
+
+def test_bundled_catalog_acquisition_owns_scratch_and_rejects_stderr(tmp_path: Path) -> None:
+    from autoskillit.execution.backends._codex_catalog import (
+        CodexCatalogAcquisitionError,
+        CodexProcessOutput,
+        acquire_bundled_codex_catalog,
+    )
+
+    scratch_root = tmp_path / "scratch"
+    seen_commands: list[tuple[str, ...]] = []
+
+    def successful_runner(command, *, cwd, **kwargs):
+        environment = kwargs["environment"]
+        for name in ("HOME", "CODEX_HOME", "CODEX_SQLITE_HOME"):
+            directory = Path(environment[name])
+            assert directory.is_dir()
+            assert directory.is_relative_to(cwd)
+        seen_commands.append(tuple(command))
+        (cwd / "probe-artifact").write_text("owned", encoding="utf-8")
+        return CodexProcessOutput(0, b'{"models":[]}', b"")
+
+    assert (
+        acquire_bundled_codex_catalog(
+            "/usr/bin/codex",
+            scratch_root=scratch_root,
+            environment={},
+            deadline=123.0,
+            runner=successful_runner,
+        )
+        == b'{"models":[]}'
+    )
+    assert seen_commands == [("/usr/bin/codex", "debug", "models", "--bundled")]
+    assert list(scratch_root.iterdir()) == []
+
+    def stderr_runner(command, *, cwd, **kwargs):
+        del command, cwd, kwargs
+        return CodexProcessOutput(0, b"{}", b"warning")
+
+    with pytest.raises(CodexCatalogAcquisitionError, match="catalog_probe_failed"):
+        acquire_bundled_codex_catalog(
+            "/usr/bin/codex",
+            scratch_root=scratch_root,
+            environment={},
+            deadline=123.0,
+            runner=stderr_runner,
+        )
+    assert list(scratch_root.iterdir()) == []
 
 
 @pytest.mark.parametrize(
@@ -117,6 +205,19 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
         )
 
 
+@pytest.mark.parametrize("malformed_effort", [[], {}])
+def test_managed_effort_refuses_unhashable_catalog_level(malformed_effort: object) -> None:
+    catalog = managed_selection_catalog()
+    models = catalog["models"]
+    assert isinstance(models, list)
+    model = models[0]
+    assert isinstance(model, dict)
+    model["supported_reasoning_levels"].insert(0, {"effort": malformed_effort})
+
+    with pytest.raises(ValueError, match="default reasoning level is not supported"):
+        resolve_codex_catalog_effort(_catalog_bytes(catalog), expected_model="gpt-5.6-sol")
+
+
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
     from autoskillit.core import JoinSpec, SkillSemanticPlan
     from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
@@ -147,17 +248,14 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
     assert adaptation.instruction_fragments[-1].startswith("Use the server-owned managed")
 
 
-@pytest.mark.parametrize("route", ["parent", "interactive-parent"])
+@pytest.mark.parametrize("route", ["parent", "leaf", "interactive-parent"])
 def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, route) -> None:
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
-    source_home = tmp_path / "source"
     session_home = tmp_path / "session"
-    source_home.mkdir()
     session_home.mkdir()
     raw_catalog = _catalog_bytes(_installed_catalog())
-    (source_home / "models_cache.json").write_bytes(raw_catalog)
     (session_home / "config.toml").write_text(
         '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
         encoding="utf-8",
@@ -175,17 +273,15 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         resolved_model=_READER_MODEL,
         resolved_reasoning_effort=_READER_REASONING_EFFORT,
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
         fixed_batch_tool_registry_digest="a" * 64,
         hook_registry_digest="b" * 64,
         skill_load_applies=True,
         guards_apply=True,
     )
-    attestation = context.managed_join_attestation
-    assert attestation is not None
-
-    CodexBackend(source_codex_home=source_home).configure_managed_session_dir(
+    CodexBackend(source_codex_home=tmp_path / "missing-source").configure_managed_session_dir(
         session_home,
-        attestation=attestation,
+        adaptation_context=context,
         route=route,
     )
 
@@ -197,9 +293,64 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         assert "join_stop_guard" in rendered
         assert "join_followup_guard" in rendered
         assert "skill_orchestration_guard" not in rendered
-    else:
+    elif route == "parent":
         assert tools == ["run_fixed_batch", "read_fixed_batch_result"]
-    assert "Stop" in config["hooks"]
-    projected_model = json.loads((session_home / "models_cache.json").read_bytes())["models"][1]
+    else:
+        assert tools == ["test_check"]
+    if route != "leaf":
+        assert "Stop" in config["hooks"]
+    catalog_path = Path(config["model_catalog_json"])
+    assert catalog_path.parent == session_home
+    assert catalog_path.name != "models_cache.json"
+    assert catalog_path.read_bytes() == projection.canonical_projected_bytes
+    projected_model = json.loads(catalog_path.read_bytes())["models"][1]
     assert projected_model["tool_mode"] == "direct"
     assert projected_model["apply_patch_tool_type"] is None
+
+    (session_home / "models_cache.json").write_bytes(raw_catalog)
+    backend = CodexBackend()
+    attestation = context.managed_join_attestation
+    assert attestation is not None
+    assert (
+        backend.read_managed_session_catalog(session_home) == projection.canonical_projected_bytes
+    )
+    assert backend.verify_managed_session_dir(session_home, attestation, route) == []
+    config_text = (session_home / "config.toml").read_text()
+    (session_home / "config.toml").write_text(
+        config_text.replace(str(catalog_path), str(session_home / "models_cache.json"))
+    )
+    assert "managed Codex config has an unattested model catalog path" in (
+        backend.verify_managed_session_dir(session_home, attestation, route)
+    )
+
+
+def test_managed_home_refuses_context_without_attested_catalog_snapshot(tmp_path) -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    session_home = tmp_path / "session"
+    session_home.mkdir()
+    (session_home / "config.toml").write_text(
+        '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+        encoding="utf-8",
+    )
+    context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model=_READER_MODEL,
+        resolved_reasoning_effort=_READER_REASONING_EFFORT,
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+
+    with pytest.raises(ValueError, match="attested catalog snapshot"):
+        CodexBackend().configure_managed_session_dir(
+            session_home,
+            adaptation_context=context,
+            route="parent",
+        )

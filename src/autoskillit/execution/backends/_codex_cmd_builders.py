@@ -82,11 +82,16 @@ NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
 )
 
 
-_CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST: frozenset[str] = frozenset(
+_CODEX_ENV_UNSUPPORTED_TELEMETRY: frozenset[str] = frozenset(
     {
         "OTEL_LOGS_EXPORTER",
         "OTEL_METRICS_EXPORTER",
         "OTEL_METRICS_INCLUDE_SESSION_ID",
+        # The supported Codex binary lacks gzip-http; the sink also accepts plain OTLP.
+        "OTEL_EXPORTER_OTLP_COMPRESSION",
+        "OTEL_EXPORTER_OTLP_TRACES_COMPRESSION",
+        "OTEL_EXPORTER_OTLP_METRICS_COMPRESSION",
+        "OTEL_EXPORTER_OTLP_LOGS_COMPRESSION",
     }
 )
 
@@ -99,7 +104,7 @@ CODEX_ENV_DENYLIST: frozenset[str] = (
             "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
         }
     )
-    | _CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST
+    | _CODEX_ENV_UNSUPPORTED_TELEMETRY
 )
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
@@ -326,7 +331,7 @@ class CodexEnvPolicy:
                 (key, value)
                 for key, value in filtered_extras.items()
                 if key != CODEX_STARTUP_TRACE_ENV_VAR
-                and key not in _CODEX_ENV_CLAUDE_TELEMETRY_DENYLIST
+                and key not in _CODEX_ENV_UNSUPPORTED_TELEMETRY
                 and not any(key.startswith(p) for p in self.denylist_prefixes)
             )
         out.setdefault(AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR, "")  # Outer-cook control only.

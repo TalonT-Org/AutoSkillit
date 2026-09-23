@@ -383,6 +383,8 @@ def bind_managed_leaf(
 def project_managed_leaf(
     binding: ManagedLeafBinding,
     source_document: AgentSkillDocument,
+    *,
+    leaf_document: AgentSkillDocument | None = None,
 ) -> ManagedLeafProjection:
     """Wrap a source-bound document without mutating it or importing parent context."""
     source_projected_digest = _required_attribute(
@@ -390,7 +392,15 @@ def project_managed_leaf(
     )
     if source_projected_digest != binding.source_projected_digest:
         raise SkillContractError("managed leaf projection source digest changed after binding")
-    content = _required_attribute(source_document, "content", "source document")
+    if leaf_document is not None:
+        for identity in ("canonical_digest", "semantic_digest", "adaptation_digest"):
+            if getattr(leaf_document, identity) != getattr(binding, identity):
+                raise SkillContractError(f"managed leaf document changed {identity}")
+    content = _required_attribute(
+        leaf_document if leaf_document is not None else source_document,
+        "content",
+        "leaf document",
+    )
     content = content.replace(f"- {_PARENT_JOIN_INSTRUCTION}", "")
     prompt = (
         content.rstrip()

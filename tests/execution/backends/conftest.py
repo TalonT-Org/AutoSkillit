@@ -23,7 +23,7 @@ import autoskillit.hooks  # noqa: F401,I001  (side effect: populates HOOK_REGIST
 # ``autoskillit.hooks`` here at conftest load triggers that post-import
 # population so the cached invariants match the test-time list. The import
 # is a side-effect-only dependency (no symbol from the module is referenced).
-from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS  # noqa: I001
+from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS, HookDef  # noqa: I001
 
 
 @pytest.fixture
@@ -136,6 +136,29 @@ def normalize_probe_mode(row: dict) -> tuple[str, str]:
     return session_class, backend
 
 
+def _strength_waiver_failure(
+    row: dict,
+    hooks_by_stem: dict[str, tuple[HookDef, str]],
+    covered: set[tuple[str, str, str]],
+) -> str | None:
+    if row.get("strength") != "none" or row.get("hook") not in hooks_by_stem:
+        return None
+    hook, script = hooks_by_stem[row["hook"]]
+    session_class, backend = normalize_probe_mode(row)
+    excluded_scope = None
+    if hook.session_scope == "headless_only" and session_class == "interactive":
+        excluded_scope = "interactive"
+    elif hook.session_scope == "interactive_only" and session_class == "headless":
+        excluded_scope = "headless"
+    elif script == "guards/write_guard.py" and backend == "codex":
+        excluded_scope = "all"
+    elif script == "guards/git_ops_guard.py" and session_class == "interactive":
+        excluded_scope = "interactive"
+    if excluded_scope is None or (script, excluded_scope, backend) in covered:
+        return None
+    return f"{script} has strength none in {session_class}/{backend} without a waiver"
+
+
 def validate_strength_matrix(rows: list[dict]) -> list[str]:
     """Return invariant failures for a completed deny-strength matrix."""
 
@@ -145,14 +168,15 @@ def validate_strength_matrix(rows: list[dict]) -> list[str]:
             f"expected {EXPECTED_NON_INERT_COMBINATIONS} combinations, got {len(rows)}"
         )
 
-    works_as_is = {
-        Path(script).stem
-        for hook in HOOK_REGISTRY
-        if hook.event_type == "PreToolUse"
-        and hook.mechanism == "deny"
-        and hook.codex_status == "works-as-is"
-        for script in hook.scripts
-    }
+    registry_scripts = [
+        (Path(script).stem, hook, script) for hook in HOOK_REGISTRY for script in hook.scripts
+    ]
+    deny_scripts = [
+        (stem, hook, script)
+        for stem, hook, script in registry_scripts
+        if hook.event_type == "PreToolUse" and hook.mechanism == "deny"
+    ]
+    works_as_is = {stem for stem, hook, _ in deny_scripts if hook.codex_status == "works-as-is"}
     effective = {
         row["hook"]
         for row in rows
@@ -162,42 +186,20 @@ def validate_strength_matrix(rows: list[dict]) -> list[str]:
         failures.append(f"works-as-is hooks missing soft/hard rows: {sorted(missing)}")
 
     not_applicable = {
-        Path(script).stem
-        for hook in HOOK_REGISTRY
-        if hook.codex_status == "not-applicable"
-        for script in hook.scripts
+        stem for stem, hook, _ in registry_scripts if hook.codex_status == "not-applicable"
     }
-    if leaked := not_applicable & {row["hook"] for row in rows}:
+    matrix_hooks = {row["hook"] for row in rows}
+    if leaked := not_applicable & matrix_hooks:
         failures.append(f"not-applicable hooks appeared in matrix: {sorted(leaked)}")
 
-    hooks_by_stem = {
-        Path(script).stem: (hook, script)
-        for hook in HOOK_REGISTRY
-        if hook.event_type == "PreToolUse" and hook.mechanism == "deny"
-        for script in hook.scripts
-    }
+    hooks_by_stem = {stem: (hook, script) for stem, hook, script in deny_scripts}
     covered = {
         (waiver.guard_script, waiver.excluded_scope, waiver.backend)
         for waiver in PROTECTION_WAIVERS
     }
     for row in rows:
-        if row.get("strength") != "none" or row.get("hook") not in hooks_by_stem:
-            continue
-        hook, script = hooks_by_stem[row["hook"]]
-        session_class, backend = normalize_probe_mode(row)
-        excluded_scope = None
-        if hook.session_scope == "headless_only" and session_class == "interactive":
-            excluded_scope = "interactive"
-        elif hook.session_scope == "interactive_only" and session_class == "headless":
-            excluded_scope = "headless"
-        elif script == "guards/write_guard.py" and backend == "codex":
-            excluded_scope = "all"
-        elif script == "guards/git_ops_guard.py" and session_class == "interactive":
-            excluded_scope = "interactive"
-        if excluded_scope is not None and (script, excluded_scope, backend) not in covered:
-            failures.append(
-                f"{script} has strength none in {session_class}/{backend} without a waiver"
-            )
+        if failure := _strength_waiver_failure(row, hooks_by_stem, covered):
+            failures.append(failure)
     return failures
 
 

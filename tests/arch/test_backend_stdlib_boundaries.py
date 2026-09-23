@@ -109,39 +109,18 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _discover_session_type_vars(self, module: ast.Module) -> None:
-        # Walk ImportFrom nodes pre-emptively so the rest of the visitor
-        # can detect rebinds via 'as' without re-walking the import graph
-        # at every call site.
-        for node in ast.walk(module):
-            if not isinstance(node, ast.ImportFrom):
-                continue
-            for alias in node.names:
-                if alias.name == "get_session_type":
-                    # alias.asname is the bound name in the local namespace;
-                    # if absent, the original name is bound directly.
-                    self._forbidden_aliases.add(alias.asname or alias.name)
-
+        # Gather aliases and assignments together, then classify assignments
+        # after the full set of forbidden aliases is known.
         assigns: list[tuple[str, ast.expr]] = []
-        # Destructure pattern accepts Assign targets shaped as Tuple or List
-        # of two Name nodes so 'headless, tier = hook_session_shape()'
-        # registers both names — the second is the session-type variable
-        # and the first is bound unconditionally so the downstream fixed-
-        # point propagation can still match direct headless comparisons if
-        # any caller ever branches on headless directly.
         for node in ast.walk(module):
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
-                continue
-            target = node.targets[0]
-            value = node.value
-            if isinstance(target, ast.Name):
-                assigns.append((target.id, value))
-            elif isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
-                second = target.elts[1]
-                if isinstance(second, ast.Name):
-                    assigns.append((second.id, value))
-                first = target.elts[0]
-                if isinstance(first, ast.Name):
-                    assigns.append((first.id, value))
+            if isinstance(node, ast.ImportFrom):
+                self._forbidden_aliases.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "get_session_type"
+                )
+            elif isinstance(node, ast.Assign):
+                assigns.extend(self._session_type_assignment_bindings(node))
 
         for name, value in assigns:
             if self._is_session_type_env_read(value, frozenset(self._forbidden_aliases)):
@@ -153,6 +132,23 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
             for name, value in assigns:
                 if name not in self._session_type_vars and self._derives_from_known_var(value):
                     self._session_type_vars.add(name)
+
+    @staticmethod
+    def _session_type_assignment_bindings(node: ast.Assign) -> list[tuple[str, ast.expr]]:
+        """Return names bound by a supported session-shape assignment."""
+        if len(node.targets) != 1:
+            return []
+        target = node.targets[0]
+        if isinstance(target, ast.Name):
+            return [(target.id, node.value)]
+        if not isinstance(target, (ast.Tuple, ast.List)) or len(target.elts) != 2:
+            return []
+
+        return [
+            (element.id, node.value)
+            for element in reversed(target.elts)
+            if isinstance(element, ast.Name)
+        ]
 
     @staticmethod
     def _is_session_type_env_read(

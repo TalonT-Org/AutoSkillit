@@ -23,7 +23,8 @@ _EXPECTED_CALLERS = Counter(
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "_request_facts",
         ): 1,
-        ("verify", "server/_managed_join_attestation.py", "find_verified_context"): 2,
+        ("verify", "server/_managed_join_attestation.py", "find_verified_context"): 1,
+        ("verify", "server/_managed_join_attestation.py", "_recover_verified_context"): 1,
     }
 )
 

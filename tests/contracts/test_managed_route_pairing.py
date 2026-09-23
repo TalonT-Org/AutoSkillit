@@ -27,7 +27,10 @@ _EXPECTED_PREPARE_LAUNCH_CALLERS = Counter(
         ("cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         ("cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,
         ("server/tools/tools_fleet_dispatch/_handlers.py", "_prepare_managed_join"): 1,
-        ("server/tools/tools_execution/_run_skill_prepare.py", "_prepare_dispatch_backend"): 1,
+        (
+            "server/tools/tools_execution/_run_skill_prepare.py",
+            "_prepare_managed_parent_projection",
+        ): 1,
     }
 )
 

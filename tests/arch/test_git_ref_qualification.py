@@ -185,7 +185,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "server/tools/tools_workspace.py",
         "_commit_transaction",
-        102,
+        68,
         "<unresolved>",
         "UNRESOLVABLE",
     ),

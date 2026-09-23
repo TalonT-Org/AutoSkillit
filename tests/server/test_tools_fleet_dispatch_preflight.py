@@ -27,21 +27,21 @@ class TestFleetDispatchPreflightWiring:
     """Structural tests confirming preflight is wired into dispatch_food_truck."""
 
     def test_dispatch_food_truck_calls_preflight(self) -> None:
-        """dispatch_food_truck source must call _check_dispatch_feasibility."""
+        """The dispatch path must call the helper that runs feasibility preflight."""
         from autoskillit.server.tools import tools_fleet_dispatch
+        from autoskillit.server.tools.tools_fleet_dispatch._handlers import _prepare_dispatch
 
-        source = inspect.getsource(tools_fleet_dispatch.dispatch_food_truck)
-        assert "_check_dispatch_feasibility" in source, (
-            "dispatch_food_truck must call _check_dispatch_feasibility"
-        )
+        dispatch_source = inspect.getsource(tools_fleet_dispatch.dispatch_food_truck)
+        prepare_source = inspect.getsource(_prepare_dispatch)
+        assert "_prepare_dispatch(" in dispatch_source
+        assert "_check_dispatch_feasibility(" in prepare_source
 
     def test_preflight_called_before_execute_dispatch(self) -> None:
-        """In the source order, _check_dispatch_feasibility must appear before
-        the execute_dispatch call."""
+        """The helper that runs preflight must precede execute_dispatch."""
         from autoskillit.server.tools import tools_fleet_dispatch
 
         source = inspect.getsource(tools_fleet_dispatch.dispatch_food_truck)
-        preflight_pos = source.find("_check_dispatch_feasibility")
+        preflight_pos = source.find("_prepare_dispatch(")
         execute_pos = source.find("execute_dispatch(")
         assert preflight_pos > 0
         assert execute_pos > 0

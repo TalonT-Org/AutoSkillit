@@ -14,12 +14,21 @@ from uuid import uuid4
 
 import pytest
 
-from autoskillit.core import MARKETPLACE_PREFIX, SkillExecutionRole, pkg_root
+from autoskillit.core import (
+    MARKETPLACE_PREFIX,
+    SkillExecutionRole,
+    pkg_root,
+    write_versioned_json,
+)
 from autoskillit.execution.backends._codex_catalog import run_owned_bounded
 from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.hooks._join import OUTCOME_FAILURE, OUTCOME_SUCCESS
 from autoskillit.hooks._join_ledger import active_batch, ledger_paths
-from autoskillit.hooks._session_binding import resolve_channel_dir
+from autoskillit.hooks._session_binding import (
+    read_binding,
+    resolve_binding_path,
+    resolve_channel_dir,
+)
 from autoskillit.workspace import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
@@ -28,6 +37,7 @@ from autoskillit.workspace import (
     materialize_sanitized_plugin_root,
     write_generated_hooks_json,
 )
+from autoskillit.workspace._projected_artifact import projected_plugin_artifact_digest
 from tests.conftest import production_interpreter_env
 
 pytestmark = [
@@ -126,6 +136,14 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
     )
     assert manifest_path.is_file()
     write_generated_hooks_json(plugin)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.update(
+        {
+            "artifact_digest": projected_plugin_artifact_digest(plugin),
+            "incarnation_id": f"live-{uuid4().hex}",
+        }
+    )
+    write_versioned_json(manifest_path, manifest, schema_version=2)
     hooks_json = plugin / "hooks" / "hooks.json"
     assert hooks_json.read_text(encoding="utf-8") == render_hooks_json_text()
     assert (plugin / "skills" / "dry-walkthrough" / "SKILL.md").is_file()
@@ -237,6 +255,10 @@ def test_native_claude_unknown_agent_replacement_releases_stop(tmp_path: Path) -
         }
     )
     _seed_projected_skill_binding(plugin, project, session_id, env)
+    binding = read_binding(resolve_binding_path(str(project), session_id))
+    assert binding is not None and binding.binding_valid
+    assert binding.managed_parent_id == "top_level"
+    assert binding.managed_leaf_id == ""
     command = (
         "claude",
         "-p",

@@ -21,6 +21,7 @@ from autoskillit.core import (
     SemanticAdaptationContext,
     SkillExecutionRole,
     write_registry_entry,
+    write_versioned_json,
 )
 from autoskillit.execution.backends._codex_catalog import CodexProcessOutput
 from autoskillit.hooks._join import OUTCOME_SUCCESS
@@ -44,6 +45,9 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
     SkillProjectionContext,
     materialize_agent_skill_tree,
+)
+from autoskillit.workspace._projected_artifact._publication import (
+    _projection_skills_manifest,
 )
 from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
@@ -304,7 +308,7 @@ def test_live_codex_interactive_managed_route_gate(
         skills=(SkillCatalogEntry.from_skill_info(source),),
         execution_role=SkillExecutionRole.SESSION,
     )
-    materialize_agent_skill_tree(
+    documents = materialize_agent_skill_tree(
         prepared.session_home / "add-dir" / "skills",
         catalog,
         SkillProjectionContext(
@@ -315,6 +319,16 @@ def test_live_codex_interactive_managed_route_gate(
             managed_codex_route="interactive-parent",
             parent_sandbox_mode="workspace-write",
         ),
+    )
+    write_versioned_json(
+        backend.projected_manifest_path(prepared.session_home),
+        {
+            "schema_version": 2,
+            "artifact_digest": source.canonical_digest,
+            "incarnation_id": f"live-{uuid4().hex}",
+            "skills": _projection_skills_manifest(tuple(catalog.skills), documents),
+        },
+        schema_version=2,
     )
     backend.configure_managed_session_dir(
         prepared.session_home,

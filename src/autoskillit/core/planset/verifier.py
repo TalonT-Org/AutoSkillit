@@ -43,6 +43,14 @@ _REASON_MAP: dict[str, PlanSetRejectReason] = {
     "world_writable": PlanSetRejectReason.WORLD_WRITABLE,
     "metadata_drift": PlanSetRejectReason.METADATA_DRIFT,
 }
+_MESSAGE_REASONS = (
+    ("escapes allowed root", PlanSetRejectReason.PATH_ESCAPE),
+    ("symlink", PlanSetRejectReason.SYMLINK),
+    ("hardlink", PlanSetRejectReason.HARDLINK),
+    ("too large", PlanSetRejectReason.OVERSIZED),
+    ("world-writable", PlanSetRejectReason.WORLD_WRITABLE),
+    ("modified between reads", PlanSetRejectReason.METADATA_DRIFT),
+)
 
 
 def _read_reject_reason(exc: Exception, *, part: bool = False) -> PlanSetRejectReason:
@@ -55,19 +63,113 @@ def _read_reject_reason(exc: Exception, *, part: bool = False) -> PlanSetRejectR
     if isinstance(exc, FileNotFoundError):
         return PlanSetRejectReason.CONTAINMENT
     message = str(exc).lower()
-    if "escapes allowed root" in message:
-        return PlanSetRejectReason.PATH_ESCAPE
-    if "symlink" in message:
-        return PlanSetRejectReason.SYMLINK
-    if "hardlink" in message:
-        return PlanSetRejectReason.HARDLINK
-    if "too large" in message:
-        return PlanSetRejectReason.OVERSIZED
-    if "world-writable" in message:
-        return PlanSetRejectReason.WORLD_WRITABLE
-    if "modified between reads" in message:
-        return PlanSetRejectReason.METADATA_DRIFT
-    return PlanSetRejectReason.CONTAINMENT
+    return next(
+        (reason for phrase, reason in _MESSAGE_REASONS if phrase in message),
+        PlanSetRejectReason.CONTAINMENT,
+    )
+
+
+def _identity_failures(
+    authority: PlanSetAuthority,
+    expected_execution_generation: str | None,
+    expected_kitchen_id: str | None,
+    expected_binding_mode: PlanSetBindingMode | None,
+    require_sealed: bool,
+) -> list[tuple[PlanSetRejectReason, str]]:
+    failures: list[tuple[PlanSetRejectReason, str]] = []
+    if (
+        expected_execution_generation is not None
+        and authority.execution_generation != expected_execution_generation
+    ):
+        failures.append(
+            (
+                PlanSetRejectReason.EXECUTION_GENERATION,
+                "authority execution generation does not match",
+            )
+        )
+    expected_mode = expected_binding_mode or (
+        PlanSetBindingMode.RECIPE if expected_execution_generation is not None else None
+    )
+    if expected_mode is not None and authority.binding_mode is not expected_mode:
+        failures.append(
+            (PlanSetRejectReason.BINDING_MODE, "authority binding mode does not match")
+        )
+    if expected_kitchen_id is not None and authority.kitchen_id != expected_kitchen_id:
+        failures.append((PlanSetRejectReason.KITCHEN_ID, "authority kitchen ID does not match"))
+    if require_sealed and authority.state is not PlanSetState.SEALED:
+        failures.append((PlanSetRejectReason.AUTHORITY_NOT_SEALED, "authority is not sealed"))
+    return failures
+
+
+def _issue_snapshot_failure(
+    authority: PlanSetAuthority, allowed_root: str | Path
+) -> tuple[PlanSetRejectReason, str] | None:
+    if authority.issue is None:
+        return None
+    try:
+        _, data = read_stable_contained_bytes(
+            authority.issue.locator,
+            allowed_root,
+            max_size_bytes=PLAN_SET_MAX_ISSUE_BYTES,
+        )
+        if (
+            len(data) != authority.issue.byte_size
+            or compute_bytes_hash(data) != authority.issue.content_digest
+        ):
+            return PlanSetRejectReason.PART_CONTENT_CHANGED, "issue snapshot content changed"
+    except (ContainmentError, OSError) as exc:
+        return _read_reject_reason(exc), f"issue snapshot: {exc}"
+    return None
+
+
+def _bound_artifact_failures(
+    authority: PlanSetAuthority,
+    allowed_root: str | Path,
+    current_plan_path: str | Path | None,
+    allow_part_drift: bool,
+) -> tuple[str | None, list[tuple[PlanSetRejectReason, str]]]:
+    failures: list[tuple[PlanSetRejectReason, str]] = []
+    part_key: str | None = None
+    wanted: Path | None = None
+    if current_plan_path is not None:
+        try:
+            wanted, _ = read_stable_contained_bytes(
+                current_plan_path,
+                allowed_root,
+                max_size_bytes=PLAN_SET_MAX_PART_BYTES,
+            )
+        except (ContainmentError, OSError) as exc:
+            failures.append((_read_reject_reason(exc, part=True), f"current plan: {exc}"))
+
+    for part in authority.parts:
+        try:
+            path, data = read_stable_contained_bytes(
+                part.locator,
+                allowed_root,
+                max_size_bytes=PLAN_SET_MAX_PART_BYTES,
+            )
+        except (ContainmentError, OSError) as exc:
+            failures.append((_read_reject_reason(exc, part=True), f"{part.part_key}: {exc}"))
+            continue
+        if (
+            len(data) != part.byte_size or compute_bytes_hash(data) != part.content_digest
+        ) and not allow_part_drift:
+            failures.append(
+                (
+                    PlanSetRejectReason.PART_CONTENT_CHANGED,
+                    f"{part.part_key}: part content changed",
+                )
+            )
+        if wanted is not None and path == wanted:
+            part_key = part.part_key
+    issue_failure = _issue_snapshot_failure(authority, allowed_root)
+    if issue_failure is not None:
+        failures.append(issue_failure)
+    if wanted is not None and part_key is None:
+        failures.append(
+            (PlanSetRejectReason.PART_NOT_FOUND, "current plan is not bound by the authority")
+        )
+    return part_key, failures
 
 
 def verify_plan_set_authority(
@@ -115,82 +217,17 @@ def verify_plan_set_authority(
         return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, [str(exc)])
     if details:
         return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details)
-    failures: list[tuple[PlanSetRejectReason, str]] = []
-    if (
-        expected_execution_generation is not None
-        and authority.execution_generation != expected_execution_generation
-    ):
-        failures.append(
-            (
-                PlanSetRejectReason.EXECUTION_GENERATION,
-                "authority execution generation does not match",
-            )
-        )
-    expected_mode = expected_binding_mode or (
-        PlanSetBindingMode.RECIPE if expected_execution_generation is not None else None
+    failures = _identity_failures(
+        authority,
+        expected_execution_generation,
+        expected_kitchen_id,
+        expected_binding_mode,
+        require_sealed,
     )
-    if expected_mode is not None and authority.binding_mode is not expected_mode:
-        failures.append(
-            (PlanSetRejectReason.BINDING_MODE, "authority binding mode does not match")
-        )
-    if expected_kitchen_id is not None and authority.kitchen_id != expected_kitchen_id:
-        failures.append((PlanSetRejectReason.KITCHEN_ID, "authority kitchen ID does not match"))
-    if require_sealed and authority.state is not PlanSetState.SEALED:
-        failures.append((PlanSetRejectReason.AUTHORITY_NOT_SEALED, "authority is not sealed"))
-
-    part_key: str | None = None
-    wanted: Path | None = None
-    if current_plan_path is not None:
-        try:
-            wanted, _ = read_stable_contained_bytes(
-                current_plan_path,
-                allowed_root,
-                max_size_bytes=PLAN_SET_MAX_PART_BYTES,
-            )
-        except (ContainmentError, OSError) as exc:
-            failures.append((_read_reject_reason(exc, part=True), f"current plan: {exc}"))
-
-    for part in authority.parts:
-        try:
-            path, data = read_stable_contained_bytes(
-                part.locator,
-                allowed_root,
-                max_size_bytes=PLAN_SET_MAX_PART_BYTES,
-            )
-        except (ContainmentError, OSError) as exc:
-            failures.append((_read_reject_reason(exc, part=True), f"{part.part_key}: {exc}"))
-            continue
-        if (
-            len(data) != part.byte_size or compute_bytes_hash(data) != part.content_digest
-        ) and not allow_part_drift:
-            failures.append(
-                (
-                    PlanSetRejectReason.PART_CONTENT_CHANGED,
-                    f"{part.part_key}: part content changed",
-                )
-            )
-        if wanted is not None and path == wanted:
-            part_key = part.part_key
-    if authority.issue is not None:
-        try:
-            _, data = read_stable_contained_bytes(
-                authority.issue.locator,
-                allowed_root,
-                max_size_bytes=PLAN_SET_MAX_ISSUE_BYTES,
-            )
-            if (
-                len(data) != authority.issue.byte_size
-                or compute_bytes_hash(data) != authority.issue.content_digest
-            ):
-                failures.append(
-                    (PlanSetRejectReason.PART_CONTENT_CHANGED, "issue snapshot content changed")
-                )
-        except (ContainmentError, OSError) as exc:
-            failures.append((_read_reject_reason(exc), f"issue snapshot: {exc}"))
-    if wanted is not None and part_key is None:
-        failures.append(
-            (PlanSetRejectReason.PART_NOT_FOUND, "current plan is not bound by the authority")
-        )
+    part_key, artifact_failures = _bound_artifact_failures(
+        authority, allowed_root, current_plan_path, allow_part_drift
+    )
+    failures.extend(artifact_failures)
     if failures:
         return _rejection(failures[0][0], [detail for _, detail in failures])
     selected_part = next((part for part in authority.parts if part.part_key == part_key), None)

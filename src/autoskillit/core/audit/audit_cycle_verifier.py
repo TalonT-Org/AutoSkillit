@@ -11,6 +11,7 @@ from ..logging import get_logger
 from ..types._type_audit_artifact_ref import ArtifactRef
 from ..types._type_audit_cycle_authority import (
     AUDIT_CYCLE_SCHEMA_VERSION,
+    AuditAssessmentRow,
     AuditCycleAuthority,
     AuditCycleHead,
     AuditVerdict,
@@ -20,6 +21,7 @@ from ..types._type_audit_cycle_disposition import (
     AuditFindingWaiver,
     InventoryAdmissionDecision,
     PlanDispositionReport,
+    PlanDispositionRow,
 )
 from .audit_semantic_codec import (
     implementation_step_blocks,
@@ -65,6 +67,56 @@ class VerifiedAuditCycle:
 
 def _reject(reason: AdmissionReason, detail: str) -> InventoryAdmissionDecision:
     return InventoryAdmissionDecision.reject(reason, detail)
+
+
+def _verify_legacy_rows(
+    authority: AuditCycleAuthority,
+    legacy_rows: tuple[tuple[AuditAssessmentRow, PlanDispositionRow], ...],
+    step_blocks: dict[str, str],
+) -> InventoryAdmissionDecision | None:
+    for assessment, disposition in legacy_rows:
+        step = disposition.implementation_step
+        blocking = assessment.assessment.blocking
+        carried = disposition.disposition == "carried@step"
+        block = step_blocks.get(step or "") if blocking and carried else None
+        citation_is_missing = (
+            blocking
+            and carried
+            and (
+                block is None
+                or re.search(
+                    rf"(?<![A-Za-z0-9_-]){re.escape(assessment.requirement_id)}"
+                    r"(?![A-Za-z0-9_-])",
+                    block,
+                )
+                is None
+            )
+        )
+        row_is_invalid = (blocking and (not carried or citation_is_missing)) or (
+            not blocking and disposition.satisfied_round != authority.audit_round
+        )
+        if row_is_invalid:
+            reason, detail = (
+                (
+                    AdmissionReason.UNMAPPED_REQUIREMENT,
+                    f"{assessment.requirement_id} is blocking but not carried",
+                )
+                if blocking and not carried
+                else (
+                    (
+                        AdmissionReason.IMPLEMENTATION_STEP_MISSING,
+                        f"{assessment.requirement_id} is not cited by {step!r}",
+                    )
+                    if blocking
+                    else (
+                        AdmissionReason.SATISFIED_ROUND_MISMATCH,
+                        f"{assessment.requirement_id} must be satisfied-by-round-"
+                        f"{authority.audit_round}",
+                    )
+                )
+            )
+            return _reject(reason, detail)
+    return None
 
 
 class InventoryAdmissionEvaluator:
@@ -387,48 +439,9 @@ class InventoryAdmissionEvaluator:
             )
         except ValueError as exc:
             return _reject(AdmissionReason.IMPLEMENTATION_STEP_MISSING, str(exc))
-        for assessment, disposition in legacy_rows:
-            step = disposition.implementation_step
-            blocking = assessment.assessment.blocking
-            carried = disposition.disposition == "carried@step"
-            block = step_blocks.get(step or "") if blocking and carried else None
-            citation_is_missing = (
-                blocking
-                and carried
-                and (
-                    block is None
-                    or re.search(
-                        rf"(?<![A-Za-z0-9_-]){re.escape(assessment.requirement_id)}"
-                        r"(?![A-Za-z0-9_-])",
-                        block,
-                    )
-                    is None
-                )
-            )
-            row_is_invalid = (blocking and (not carried or citation_is_missing)) or (
-                not blocking and disposition.satisfied_round != authority.audit_round
-            )
-            if row_is_invalid:
-                reason, detail = (
-                    (
-                        AdmissionReason.UNMAPPED_REQUIREMENT,
-                        f"{assessment.requirement_id} is blocking but not carried",
-                    )
-                    if blocking and not carried
-                    else (
-                        (
-                            AdmissionReason.IMPLEMENTATION_STEP_MISSING,
-                            f"{assessment.requirement_id} is not cited by {step!r}",
-                        )
-                        if blocking
-                        else (
-                            AdmissionReason.SATISFIED_ROUND_MISMATCH,
-                            f"{assessment.requirement_id} must be satisfied-by-round-"
-                            f"{authority.audit_round}",
-                        )
-                    )
-                )
-                return _reject(reason, detail)
+        legacy_issue = _verify_legacy_rows(authority, legacy_rows, step_blocks)
+        if legacy_issue is not None:
+            return legacy_issue
         return InventoryAdmissionDecision.admitted(report.dispositions)
 
 

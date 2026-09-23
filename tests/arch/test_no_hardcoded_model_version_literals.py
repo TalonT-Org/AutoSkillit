@@ -11,6 +11,12 @@ Tests that legitimately pin model-version literals (catalog fixtures, alias
 round-trip tests) opt in via ``@pytest.mark.model_contract``. The allowlist is
 discovered at pytest collection time, so adding a new model-contract test does
 not require updating this guard.
+
+Scope: this guard walks only pytest-collected test files (``test_*.py``), not
+fixture modules, ``conftest.py``, or ``__init__.py``. Fixture files that pin
+model-version literals (e.g., ``tests/execution/backends/_codex_fixtures.py``)
+are not directly checkable but are implicitly blessed through the
+``model_contract`` marker on their consumer tests.
 """
 
 from __future__ import annotations

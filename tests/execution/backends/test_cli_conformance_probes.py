@@ -91,6 +91,7 @@ from autoskillit.execution.backends._explorer_conformance import (
     validate_published_explorer_release_readiness,
 )
 from autoskillit.execution.backends._probe_cache import (
+    CODEX_RECIPE_PROBE_MODEL_IDENTITY,
     PROBE_POLICY_IDENTITY,
     ProbeResult,
     read_probe_cache,
@@ -266,9 +267,9 @@ def _run_probe_with_discrimination(
     try:
         assertion_fn(probe_output)
     except AssertionError as exc:
-        record_failure(ErrorKind.SCHEMA, probe_name, probe_output.cli_version, str(exc))
+        record_failure(ErrorKind.SCHEMA, probe_name, cli_version, str(exc))
         raise
-    record_success(probe_output.cli_version)
+    record_success(cli_version)
 
 
 def _get_codex_version() -> str:
@@ -1741,7 +1742,7 @@ def test_codex_selects_local_skill_and_explicit_recipe_delegation(
         monkeypatch.delenv(headless_flag, raising=False)
 
     source_codex_home = _prepare_codex_selection_profile(tmp_path, workspace)
-    model = os.environ.get("GENERATED_CHILD_SMOKE_MODEL", "gpt-5.4")
+    model = os.environ.get("GENERATED_CHILD_SMOKE_MODEL", CODEX_RECIPE_PROBE_MODEL_IDENTITY)
 
     local_skill = _run_codex_selection_case(
         case_root=tmp_path / "local-skill-case",
@@ -1801,16 +1802,41 @@ def _load_managed_fixed_batch_smoke_skill(
     name: str,
     backend: CodexBackend,
     adaptation_context: SemanticAdaptationContext,
+    tool_ctx,
+    parent_sandbox_mode: str,
 ) -> tuple[
     LoadedSkillEntry,
     AgentSkillDocument,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
 ]:
-    skill = DefaultSkillResolver().resolve(name)
-    assert skill is not None and not skill.invalidities
-    plan = skill.semantic_plan
+    from autoskillit.core import RepositoryProfileId, SkillExecutionRole
+    from autoskillit.server._misc import project_agent_skill_document
+    from autoskillit.server.tools._execution_helpers import (
+        bind_projection_backend,
+        build_fresh_projection_context,
+    )
+
+    invocation = tool_ctx.skill_resolver.resolve_invocation(
+        name,
+        tool_ctx.project_dir,
+        SkillExecutionRole.SESSION,
+        visibility=tool_ctx.config.skill_visibility_spec(),
+        recipe_packs=tool_ctx.active_recipe_packs,
+        recipe_features=tool_ctx.active_recipe_features,
+    )
+    plan = invocation.root.semantic_plan
     assert plan is not None and plan.join is not None and plan.join.required
+    projection_context = bind_projection_backend(
+        build_fresh_projection_context(
+            str(tool_ctx.project_dir),
+            invocation,
+            adaptation_context=adaptation_context,
+        ),
+        backend,
+        parent_sandbox_mode=parent_sandbox_mode,
+        resolved_exploration_profile=RepositoryProfileId.LANGUAGE_NEUTRAL,
+    )
     adaptation = backend.adapt_skill_semantics(plan, adaptation_context)
     assert adaptation.unsupported_operation is None
     cardinality: dict[str, int | str] = {}
@@ -1820,27 +1846,24 @@ def _load_managed_fixed_batch_smoke_skill(
         else:
             assert spawn.count is not None
             cardinality[spawn.role] = spawn.count
+    document = project_agent_skill_document(
+        invocation.root,
+        projection_context,
+        semantic_adaptation=adaptation,
+    )
     source = LoadedSkillEntry(
-        skill_name=skill.name,
+        skill_name=invocation.root.name,
         ts="2026-08-28T00:00:00Z",
         join_required=True,
         child_spawn_cardinality=cardinality,
-        semantic_digest=plan.digest,
-        adaptation_digest=adaptation.digest,
-        projected_digest=skill.canonical_digest,
-        canonical_digest=skill.canonical_digest,
-        source_artifact_digest=skill.canonical_digest,
-        source_artifact_incarnation_id=f"smoke-{skill.name}",
+        semantic_digest=document.semantic_digest,
+        adaptation_digest=document.adaptation_digest,
+        projected_digest=document.projected_digest,
+        canonical_digest=document.canonical_digest,
+        source_artifact_digest=invocation.root.canonical_digest,
+        source_artifact_incarnation_id=f"smoke-{invocation.root.name}",
         binding_valid=True,
         binding_error=None,
-    )
-    document = AgentSkillDocument(
-        content=skill.canonical_content,
-        projected_digest=source.projected_digest,
-        canonical_digest=source.canonical_digest,
-        source_identity=skill.source_identity,
-        semantic_digest=source.semantic_digest,
-        adaptation_digest=source.adaptation_digest,
     )
     return source, document, adaptation, plan
 
@@ -1869,7 +1892,7 @@ def _managed_fixed_batch_smoke_binding(
         source_document=document,
         adaptation=adaptation,
         assignments=assignments,
-        default_model="gpt-5.6-sol",
+        default_model=CODEX_RECIPE_PROBE_MODEL_IDENTITY,
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
         launch_leaf=launch_leaf,
@@ -1954,11 +1977,20 @@ def test_codex_managed_fixed_batch_smoke_conformance(
             record_store=ManagedJoinRecordStore(tool_ctx.project_dir),
             backend=backend,
         )
+        # Mark the test fixture's audit-bugs/investigate skills as read-only
+        # so the handler's parent_sandbox_mode matches the loader's
+        # "read-only" pass-through and the managed leaf workspace
+        # classification succeeds without needing an isolated worktree.
+        tool_ctx.read_only_resolver = lambda _cmd: True
         static_source, static_document, static_adaptation, static_plan = (
-            _load_managed_fixed_batch_smoke_skill("audit-bugs", backend, context)
+            _load_managed_fixed_batch_smoke_skill(
+                "audit-bugs", backend, context, tool_ctx, "read-only"
+            )
         )
         dynamic_source, dynamic_document, dynamic_adaptation, _dynamic_plan = (
-            _load_managed_fixed_batch_smoke_skill("investigate", backend, context)
+            _load_managed_fixed_batch_smoke_skill(
+                "investigate", backend, context, tool_ctx, "read-only"
+            )
         )
 
         assert backend.capabilities.fixed_set_join_capable is False
@@ -2021,6 +2053,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
                             "adaptation_digest": static_source.adaptation_digest,
                             "projected_digest": static_source.projected_digest,
                             "canonical_digest": static_source.canonical_digest,
+                            "write_paths": None,
                         }
                     },
                 },

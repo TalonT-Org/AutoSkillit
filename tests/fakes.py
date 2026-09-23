@@ -77,7 +77,7 @@ def make_managed_codex_context(parent_session_id: str) -> SemanticAdaptationCont
             parent_session_id=parent_session_id,
             activation_epoch=0,
             direct_tool_mode=True,
-            resolved_model="gpt-5.6-sol",
+            resolved_model="fixture-codex-model",
             resolved_reasoning_effort="high",
             codex_catalog_digest="c" * 64,
             fixed_batch_tool_registry_digest="a" * 64,

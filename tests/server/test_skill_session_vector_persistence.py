@@ -102,7 +102,7 @@ Inspect consumers.
                 plan_digest=vector.digest,
                 definition_digest="definition-digest",
                 requested_backend="codex",
-                requested_model="gpt-5.6-luna",
+                requested_model="gpt-synthetic",
                 requested_effort="max",
             ),
         ),

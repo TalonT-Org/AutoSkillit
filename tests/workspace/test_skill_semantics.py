@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoskillit.core import SkillSemanticOperation, SkillSource
+from autoskillit.core import CODEX_MODEL_ALIASES, SkillSemanticOperation, SkillSource
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
@@ -320,7 +320,7 @@ def test_unknown_or_retired_semantic_declaration_rejects_only_that_skill(
         ("send_message", "semantic_requirements.join"),
         ("wait_agent", "semantic_requirements.join"),
         ("subagent_type=", "semantic_requirements.logical_roles"),
-        ("gpt-5.6-sol", "semantic_requirements.child_model_policies.model_class"),
+        (CODEX_MODEL_ALIASES["sonnet"], "semantic_requirements.child_model_policies.model_class"),
     ],
 )
 def test_raw_backend_native_portable_syntax_is_rejected_per_skill(

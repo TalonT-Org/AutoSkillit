@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import SkillSource, load_bundled_agent_definitions
+from autoskillit.core.plugins import CODEX_EXPLORER_IDENTITY
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -46,7 +47,7 @@ def test_audit_docs_uses_existing_read_only_luna_explorer_definitions() -> None:
     for role in ("semantic-code-navigator", "repository-impact-profiler"):
         projection = definitions[role].codex
         assert projection is not None
-        assert projection.model == "gpt-5.6-luna"
+        assert projection.model == CODEX_EXPLORER_IDENTITY[0]
         assert projection.reasoning_effort == "max"
         assert projection.sandbox_mode == "read-only"
         assert projection.agents_enabled is False

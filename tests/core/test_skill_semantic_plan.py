@@ -145,7 +145,7 @@ def test_skill_semantic_adaptation_result_enforces_exact_diagnostic_boundary() -
         instruction_fragments=("Launch one child for logical role 'audit'.",),
         logical_role_mapping={"audit": "audit-impl-slice-auditor"},
         sibling_skill_targets={"investigate": "$investigate"},
-        model_effort_policy={"audit": ("gpt-5.6-sol", "high")},
+        model_effort_policy={"audit": ("fixture-codex-model", "high")},
     )
     assert supported.unsupported_operation is None
     assert supported.diagnostic is None

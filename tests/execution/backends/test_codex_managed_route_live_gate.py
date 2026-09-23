@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.core import (
     CODEX_HOME_ENV_VAR,
+    CODEX_MODEL_ALIASES,
     LAUNCH_ID_ENV_VAR,
     MANAGED_JOIN_PARENT_ID_ENV_VAR,
     SemanticAdaptationContext,
@@ -66,7 +67,7 @@ pytestmark = [
 _LIVE_ENV = "AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
 _SOURCE_AUTH = Path("~/.codex/auth.json").expanduser()
-_PARENT_MODEL = "gpt-5.6-luna"
+_PARENT_MODEL = CODEX_MODEL_ALIASES["haiku"]
 _MAX_CAPTURE_BYTES = 4 * 1024 * 1024
 
 _skip_unless_live_gate = pytest.mark.skipif(

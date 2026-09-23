@@ -1,4 +1,4 @@
-"""Architectural guard: translation tests must not hardcode alias-resolved model IDs.
+"""Guard model-version literals in tests against unrelated pinning.
 
 Tests must assert against the backend alias registries rather than literal alias output
 strings. This prevents co-authoring of wrong values: if an alias dict is wrong,
@@ -6,16 +6,73 @@ tests that hardcode the same wrong value pass silently.
 
 Passthrough tests (e.g., translate_model("o3") == "o3") are NOT flagged because
 they test native model IDs, not alias-resolved values.
+
+Tests that legitimately pin model-version literals (catalog fixtures, alias
+round-trip tests) opt in via ``@pytest.mark.model_contract``. The allowlist is
+discovered at pytest collection time, so adding a new model-contract test does
+not require updating this guard.
+
+Scope: this guard walks only pytest-collected test files (``test_*.py``), not
+fixture modules, ``conftest.py``, or ``__init__.py``. Fixture files that pin
+model-version literals (e.g., ``tests/execution/backends/_codex_fixtures.py``)
+are not directly checkable but are implicitly blessed through the
+``model_contract`` marker on their consumer tests.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small, pytest.mark.model_contract]
+
+_TESTS_ROOT = Path(__file__).parent.parent
+_MODEL_VERSION_RE = re.compile(r"gpt-[0-9]+(?:\.[0-9]+)?(?:-[a-z]+)?")
+
+
+def _is_pytest_collected(path: Path) -> bool:
+    """Match pytest's default collection pattern (test_*.py)."""
+    return path.name.startswith("test_") and path.suffix == ".py"
+
+
+def _collect_marked_model_contract_paths() -> set[Path]:
+    """Return absolute paths of every test file that opts in via the model_contract marker.
+
+    A file is opted in if its source contains either ``@pytest.mark.model_contract``
+    on a test function/class or ``pytest.mark.model_contract`` inside a module-level
+    ``pytestmark`` list. The marker is statically inspected rather than read from
+    ``request.session.items`` because the latter only contains tests selected for the
+    current pytest invocation, which may not include every model-contract test in the
+    repo.
+    """
+    marked: set[Path] = set()
+    for path in _TESTS_ROOT.rglob("*.py"):
+        if not _is_pytest_collected(path):
+            continue
+        try:
+            source = path.read_text()
+        except OSError:
+            continue
+        if "@pytest.mark.model_contract" in source or "pytest.mark.model_contract" in source:
+            marked.add(path.resolve())
+    return marked
+
+
+def test_gpt_version_literals_are_limited_to_model_contract_tests() -> None:
+    allowed_paths = _collect_marked_model_contract_paths()
+    violations: dict[str, list[str]] = {}
+    for path in _TESTS_ROOT.rglob("*.py"):
+        if not _is_pytest_collected(path):
+            continue
+        if path.resolve() in allowed_paths:
+            continue
+        literals = set(_MODEL_VERSION_RE.findall(path.read_text()))
+        if literals:
+            violations[str(path.relative_to(_TESTS_ROOT))] = sorted(literals)
+    assert not violations, f"Unrelated tests pin GPT model versions: {violations}"
 
 
 def _get_test_model_translation_path() -> Path:

@@ -47,7 +47,7 @@ async def _prepared_leaf(projection, result: ManagedLeafLaunchResult):
 def _binding(tmp_path, launch_leaf):
     adaptation = SkillSemanticAdaptationResult(
         logical_role_mapping={"worker": "worker"},
-        model_effort_policy={"worker": ("gpt-5.6-luna", "high")},
+        model_effort_policy={"worker": ("gpt-synthetic", "high")},
     )
     source = LoadedSkillEntry(
         skill_name="fixed-batch-skill",
@@ -88,7 +88,7 @@ def _binding(tmp_path, launch_leaf):
             ManagedLeafAssignmentInput(role="worker", label="first", task_prompt="first task"),
             ManagedLeafAssignmentInput(role="worker", label="second", task_prompt="second task"),
         ),
-        default_model="gpt-5.6-sol",
+        default_model="gpt-synthetic",
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
         launch_leaf=launch_leaf,

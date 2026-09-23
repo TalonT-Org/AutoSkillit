@@ -6,7 +6,7 @@ model: sonnet
 maxTurns: 80
 provisioning: baseline
 codex:
-  model: gpt-5.6-luna
+  model: gpt-6-luna
   reasoning_effort: max
   sandbox_mode: read-only
   disabled_features: [apps, browser_use, browser_use_external, browser_use_full_cdp_access, code_mode, code_mode_buffered_exec, code_mode_host, code_mode_only, computer_use, enable_mcp_apps, goals, image_generation, in_app_browser, multi_agent, multi_agent_v2, plugin_sharing, plugins, remote_plugin, request_permissions_tool, shell_tool, standalone_web_search, tool_suggest, unified_exec, unified_exec_zsh_fork]

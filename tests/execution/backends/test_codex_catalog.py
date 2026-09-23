@@ -12,14 +12,11 @@ from autoskillit.execution.backends._codex_catalog import (
     project_codex_catalog,
     resolve_codex_catalog_effort,
 )
-from tests.execution.backends._codex_fixtures import (
-    installed_catalog,
-    managed_selection_catalog,
-)
+from tests.execution.backends._codex_fixtures import installed_catalog
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium, pytest.mark.model_contract]
 
-_READER_MODEL = "gpt-5.6-luna"
+_READER_MODEL = "gpt-6-luna"
 _READER_REASONING_EFFORT = "xhigh"
 
 
@@ -70,7 +67,7 @@ def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.execution.backends import _codex_managed_route as managed_route
 
-    raw = _catalog_bytes(managed_selection_catalog())
+    raw = _catalog_bytes(installed_catalog())
     seen: dict[str, object] = {}
 
     def acquire(codex, *, scratch_root, environment, deadline):
@@ -86,12 +83,12 @@ def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
     monkeypatch.setattr(managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
 
     model, effort, projection = CodexBackend().prepare_managed_codex_catalog(
-        "gpt-5.6-sol",
+        "gpt-6-sol",
         scratch_root=tmp_path,
         deadline=123.0,
     )
 
-    assert (model, effort) == ("gpt-5.6-sol", "ultra")
+    assert (model, effort) == ("gpt-6-sol", "medium")
     assert json.loads(projection.canonical_projected_bytes)["models"][0]["tool_mode"] == "direct"
     assert seen["scratch_root"] == tmp_path
     assert seen["deadline"] == 123.0
@@ -207,7 +204,7 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
 
 @pytest.mark.parametrize("malformed_effort", [[], {}])
 def test_managed_effort_refuses_unhashable_catalog_level(malformed_effort: object) -> None:
-    catalog = managed_selection_catalog()
+    catalog = installed_catalog()
     models = catalog["models"]
     assert isinstance(models, list)
     model = models[0]
@@ -215,14 +212,12 @@ def test_managed_effort_refuses_unhashable_catalog_level(malformed_effort: objec
     model["supported_reasoning_levels"].insert(0, {"effort": malformed_effort})
 
     with pytest.raises(ValueError, match="default reasoning level is not supported"):
-        resolve_codex_catalog_effort(_catalog_bytes(catalog), expected_model="gpt-5.6-sol")
+        resolve_codex_catalog_effort(_catalog_bytes(catalog), expected_model="gpt-6-sol")
 
 
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
-    from autoskillit.core import (
-        JoinSpec,
-        SkillSemanticPlan,
-    )
+    from autoskillit.core import JoinSpec, SkillSemanticPlan
+    from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
@@ -232,8 +227,8 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
         launch_context="direct",
         parent_session_id="parent-1",
         direct_tool_mode=True,
-        resolved_model="gpt-5.6-sol",
-        resolved_reasoning_effort="high",
+        resolved_model=CODEX_MODEL_ALIASES["opus"],
+        resolved_reasoning_effort=CODEX_EFFORT_MAPPING["opus"],
         codex_catalog_digest="c" * 64,
         fixed_batch_tool_registry_digest="a" * 64,
         hook_registry_digest="b" * 64,

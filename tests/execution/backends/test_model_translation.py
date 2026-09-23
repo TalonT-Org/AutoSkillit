@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import SkillSessionConfig
-from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
+from autoskillit.core.types._type_backend import (
+    CLAUDE_MODEL_ALIASES,
+    CODEX_EFFORT_MAPPING,
+    CODEX_MODEL_ALIASES,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from tests.execution.backends._generated_home_backend import (
     GeneratedHomeCodexBackend,
@@ -16,7 +20,7 @@ from tests.execution.backends._generated_home_backend import (
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
 _CODEX_SKILL_ADD_DIRS = codex_skill_add_dirs("/repo")
 CodexBackend = GeneratedHomeCodexBackend
@@ -38,9 +42,17 @@ class TestCodexTranslateModel:
         assert "[1m]" not in result
         assert result == CODEX_MODEL_ALIASES["opus"]
 
-    @pytest.mark.parametrize("model_id", ["gpt-5.5", "gpt-5.6-sol"])
+    @pytest.mark.parametrize("model_id", ["gpt-5.5", "gpt-6-luna", "gpt-6-sol"])
     def test_passthrough_native(self, model_id: str) -> None:
         assert CodexBackend().translate_model(model_id) == model_id
+
+    @pytest.mark.parametrize(
+        "model_id",
+        ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-terra[1m]"],
+    )
+    def test_rejects_retired_native_models(self, model_id: str) -> None:
+        with pytest.raises(ValueError):
+            CodexBackend().translate_model(model_id)
 
     @pytest.mark.parametrize(
         "model_id",
@@ -70,7 +82,7 @@ class TestClaudeTranslateModel:
 
     @pytest.mark.parametrize(
         "model_id",
-        ["custom-model-xyz", "gpt-5.6-sol"],
+        ["custom-model-xyz", CODEX_MODEL_ALIASES["sonnet"]],
         ids=["unknown", "codex_native_on_claude"],
     )
     def test_unknown_passthrough(self, model_id: str) -> None:
@@ -155,19 +167,19 @@ class TestClaudeBuildCmdTranslatesModel:
 class TestCodexModelConfigOverrides:
     def test_returns_effort_for_sonnet_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("sonnet")
-        assert "model_reasoning_effort=medium" in overrides
+        assert f"model_reasoning_effort={CODEX_EFFORT_MAPPING['sonnet']}" in overrides
 
     def test_returns_effort_for_opus_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("opus")
-        assert "model_reasoning_effort=high" in overrides
+        assert f"model_reasoning_effort={CODEX_EFFORT_MAPPING['opus']}" in overrides
 
     def test_returns_effort_for_haiku_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("haiku")
-        assert "model_reasoning_effort=high" in overrides
+        assert f"model_reasoning_effort={CODEX_EFFORT_MAPPING['haiku']}" in overrides
 
     def test_strips_context_suffix_before_lookup(self) -> None:
         overrides = CodexBackend().model_config_overrides("opus[1m]")
-        assert "model_reasoning_effort=high" in overrides
+        assert f"model_reasoning_effort={CODEX_EFFORT_MAPPING['opus']}" in overrides
 
     def test_no_effort_for_native_model(self) -> None:
         overrides = CodexBackend().model_config_overrides("gpt-5.5")
@@ -187,15 +199,24 @@ class TestCodexEffortInjectionInCmds:
         spec = CodexBackend().build_headless_cmd("test prompt", model="sonnet")
         assert "model_reasoning_effort" not in " ".join(spec.cmd)
         assert spec.app_server_plan is not None
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["sonnet"]
+        )
 
     def test_headless_cmd_opus_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="opus")
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["opus"]
+        )
 
     def test_headless_cmd_haiku_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="haiku")
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["haiku"]
+        )
 
     def test_skill_session_cmd_has_effort(self) -> None:
         config = SkillSessionConfig(
@@ -203,7 +224,10 @@ class TestCodexEffortInjectionInCmds:
         )
         spec = CodexBackend().build_skill_session_cmd("/test", "/repo", config)
         assert spec.app_server_plan is not None
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["sonnet"]
+        )
 
     def test_food_truck_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -215,7 +239,10 @@ class TestCodexEffortInjectionInCmds:
             managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         )
         assert "model_reasoning_effort" not in " ".join(spec.cmd)
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["sonnet"]
+        )
 
     def test_food_truck_opus_suffix_uses_shared_model_with_high_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -229,14 +256,18 @@ class TestCodexEffortInjectionInCmds:
         assert "--model" not in spec.cmd
         assert spec.app_server_plan.model == CODEX_MODEL_ALIASES["opus"]
         assert "[1m]" not in spec.app_server_plan.model
-        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
+        assert (
+            spec.app_server_plan.config_overrides["model_reasoning_effort"]
+            == CODEX_EFFORT_MAPPING["opus"]
+        )
 
     def test_interactive_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_interactive_cmd(model="sonnet")
-        assert "model_reasoning_effort=medium" in list(spec.cmd)
+        assert f"model_reasoning_effort={CODEX_EFFORT_MAPPING['sonnet']}" in list(spec.cmd)
 
-    def test_no_effort_for_native_model_in_headless_cmd(self) -> None:
-        spec = CodexBackend().build_headless_cmd("test prompt", model="gpt-5.5")
+    @pytest.mark.parametrize("model_id", ["gpt-5.5", "gpt-6-luna", "gpt-6-sol"])
+    def test_no_effort_for_native_model_in_headless_cmd(self, model_id: str) -> None:
+        spec = CodexBackend().build_headless_cmd("test prompt", model=model_id)
         assert "model_reasoning_effort" not in spec.app_server_plan.config_overrides
 
 

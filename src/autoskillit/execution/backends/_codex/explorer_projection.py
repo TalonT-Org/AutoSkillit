@@ -117,7 +117,8 @@ def _validate_injected_explorer_parent_policy(
     )
     if requires_read_only_parent and parent_sandbox_mode != "read-only":
         raise ValueError(
-            "gpt-5.6-luna/max/read-only agent projection requires parent_sandbox_mode='read-only'"
+            f"{CODEX_EXPLORER_IDENTITY[0]}/{CODEX_EXPLORER_IDENTITY[1]}/read-only "
+            "agent projection requires parent_sandbox_mode='read-only'"
         )
 
 

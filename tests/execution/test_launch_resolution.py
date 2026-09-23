@@ -11,6 +11,7 @@ import pytest
 
 from autoskillit.core import (
     CANONICAL_LAUNCH_DIGEST_FIELDS,
+    CODEX_MODEL_ALIASES,
     CODEX_VALID_MODEL_IDS,
     LAUNCH_CONTRACT_SCHEMA_VERSION,
     BackendAuthority,
@@ -45,7 +46,7 @@ STEP = LaunchValueSource(LaunchValueSourceKind.STEP, "recipe.steps.build.backend
 CALLER = LaunchValueSource(LaunchValueSourceKind.CALLER, "request.backend")
 ADAPTER = LaunchValueSource(LaunchValueSourceKind.ADAPTER, "adapter.model")
 
-_CODEX_NATIVE_MODEL_ID = "gpt-5.6-sol"
+_CODEX_NATIVE_MODEL_ID = CODEX_MODEL_ALIASES["sonnet"]
 
 
 def _authority(
@@ -439,7 +440,7 @@ def test_launch_preparation_keeps_the_winning_source_for_each_value() -> None:
         {"model": "sonnet"},
         {"model": "opus"},
         {"model": "haiku"},
-        {"model": "gpt-5.1-codex"},
+        {"model": "gpt-synthetic"},
         {"model": "codex-mini"},
         {"model": "prod-profile"},
         {"ANTHROPIC_BASE_URL": "https://proxy.invalid"},
@@ -1011,7 +1012,7 @@ def test_claude_model_id_on_codex_backend_is_accepted() -> None:
 
 
 @pytest.mark.parametrize("backend", ["claude-code", "codex"])
-@pytest.mark.parametrize("model", ["MiniMax-M3", "gpt-9.9-unreleased"])
+@pytest.mark.parametrize("model", ["MiniMax-M3", "gpt-future-synthetic"])
 def test_model_owned_by_no_backend_is_accepted(model: str, backend: str) -> None:
     """Deliberately fail-open — see BackendCapabilities.native_model_ids for
     the rationale (provider-profile models, future-dated ids)."""

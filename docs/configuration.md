@@ -186,7 +186,7 @@ providers:
       profile: partner-gateway
       model: partner-sonnet
     - backend: codex
-      model: gpt-5.6
+      model: gpt-6-sol
 ```
 
 `api_key_env` names an environment variable; keep its value in the environment
@@ -216,13 +216,13 @@ threshold; other provider candidates do not poll the Anthropic quota endpoint.
 ## Specialized Explorer Agents
 
 `semantic-code-navigator` and `repository-impact-profiler` are built-in terminal Codex explorer
-roles. Their `gpt-5.6-luna`, maximum reasoning-effort, and read-only policy is fixed by the
+roles. Their `gpt-6-luna`, maximum reasoning-effort, and read-only policy is fixed by the
 registered role definition and is not controlled by `model.default`, `model.override`, or a
 project configuration setting. An L1 parent owns routing and synthesis; callers must not add
 per-role model, permission, or delegation overrides. See [Explorer agents](execution/explorer-agents.md).
 
 `web-evidence-researcher` is likewise definition-owned on Codex: it always launches as a
-`gpt-5.6-luna`/xhigh, read-only terminal child with live web search and no descendant-agent
+`gpt-6-luna`/xhigh, read-only terminal child with live web search and no descendant-agent
 capability. `model.default` and `model.override` select neither that Codex child identity nor
 its permissions. On Claude, the same packless role omits a model override and therefore
 inherits the configured/default child model.

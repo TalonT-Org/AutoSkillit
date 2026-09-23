@@ -16,6 +16,8 @@ from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
@@ -96,7 +98,7 @@ def _contract(tmp_path: Path, projected_text: str):
                     plan_digest="plan-digest",
                     definition_digest="definition-digest",
                     requested_backend="codex",
-                    requested_model="gpt-5.6-luna",
+                    requested_model=_SYNTHETIC_MODEL_ID,
                     requested_effort="max",
                 ),
             ),
@@ -196,7 +198,7 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
         stored.contract.exploration_vectors["root"][0].applicability.value
         == "planner-extract-domain-deep"
     )
-    assert stored.contract.execution_identity.children[0].requested_model == "gpt-5.6-luna"
+    assert stored.contract.execution_identity.children[0].requested_model == _SYNTHETIC_MODEL_ID
     assert stored.contract.parent_sandbox_mode == "read-only"
     assert stored.raw_session_id == "backend/session:final"
     assert (stored.snapshot_dir / ".claude/skills/root/SKILL.md").read_text() == text

@@ -15,7 +15,12 @@ from typing import Any
 import pytest
 
 import autoskillit.server.tools.tools_evidence_reader as delegate_module
-from autoskillit.core import SessionShape, SessionType, agent_definition_digest
+from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
+    SessionShape,
+    SessionType,
+    agent_definition_digest,
+)
 from autoskillit.execution import CodexBackend
 from autoskillit.execution.evidence_reader import (
     EvidenceCitation,
@@ -94,7 +99,8 @@ def test_static_reader_role_uses_the_single_bundled_definition_and_digest() -> N
     )
 
     assert definition.name == "pr-source-reader"
-    assert definition.codex.model == "gpt-5.6-luna"
+    assert definition.codex.model == CODEX_MODEL_ALIASES["haiku"]
+    assert definition.codex.reasoning_effort == "xhigh"
     assert bare_tools == ("get_authorized_artifact_page", "read_authorized_artifact")
     assert definition_digest == agent_definition_digest(definition)
     with pytest.raises(delegate_module._DelegateError) as ineligible:

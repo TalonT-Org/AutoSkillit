@@ -830,7 +830,7 @@ class TestCacheColumnSuppression:
     def test_none_cache_produces_unknown_in_model_table(self) -> None:
         model_totals = [
             {
-                "model": "gpt-4o",
+                "model": "fixture-model",
                 "step_count": 1,
                 "input_tokens": 500,
                 "output_tokens": 200,

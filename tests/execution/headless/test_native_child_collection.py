@@ -134,7 +134,7 @@ def test_codex_backend_dispatches_to_codex_rollout_collection(tmp_path) -> None:
                 },
                 {
                     "type": "turn_context",
-                    "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                    "payload": {"model": "gpt-synthetic", "effort": "medium"},
                 },
             ]
         )

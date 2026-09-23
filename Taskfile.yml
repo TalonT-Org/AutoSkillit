@@ -632,7 +632,49 @@ tasks:
           echo "Live web-agent gate did not publish fresh evidence: $EVIDENCE"
           exit 1
         fi
-        $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-web-agent-codex-0.147.0","cli_version":"codex-cli 0.147.0","parent_web_search":"disabled","child_web_search":"live","child_model":"gpt-5.6-luna","child_reasoning_effort":"xhigh","child_sandbox_mode":"read-only","child_agents_enabled":False}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live web-agent evidence: {data!r}" if bad else 0)' "$EVIDENCE"
+        $PYTHON_CMD -c 'import json, sys; from autoskillit.core import CODEX_MODEL_ALIASES; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-web-agent-codex-0.147.0","cli_version":"codex-cli 0.147.0","parent_web_search":"disabled","child_web_search":"live","child_model":CODEX_MODEL_ALIASES["haiku"],"child_reasoning_effort":"xhigh","child_sandbox_mode":"read-only","child_agents_enabled":False}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live web-agent evidence: {data!r}" if bad else 0)' "$EVIDENCE"
+
+  test-smoke-codex-managed-route-live-gate:
+    desc: Run the authenticated interactive Codex managed-route gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CODEX_SMOKE_TEST: "1"
+      AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        ARTIFACT_DIR=".autoskillit/temp/conformance/live-managed-route-gate"
+        TEST_OUTPUT="$ARTIFACT_DIR/pytest-output.txt"
+        JUNIT_REPORT="$ARTIFACT_DIR/pytest-report.xml"
+        mkdir -p "$ARTIFACT_DIR"
+        rm -f "$TEST_OUTPUT" "$JUNIT_REPORT"
+        set +e
+        $PYTHON_CMD -m pytest tests/execution/backends/test_codex_managed_route_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          echo "Live managed-route gate failed; bounded output is saved to: $TEST_OUTPUT"
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 1 or skipped; sys.exit(f"live managed-route gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
 
   test-smoke-claude-explorer-live-gate:
     desc: Run the Claude session-scoped explorer conformance gate

@@ -17,6 +17,8 @@ from tests.execution.backends._codex_fixtures import app_server_fixture
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 _SESSION_HOME = "/tmp/session"
 _CATALOG_ROOT = "/tmp/session/add-dir/skills"
 _CWD = "/tmp/session"
@@ -31,7 +33,7 @@ def _make_plan(**overrides: object) -> CodexAppServerPlan:
         expected_skill_entries=(("foo", "foo/SKILL.md"),),
         cwd=_CWD,
         prompt="do the thing",
-        model="gpt-5.6-sol",
+        model=_SYNTHETIC_MODEL_ID,
         sandbox="workspace-write",
         approval_policy="never",
         bypass_hook_trust=True,
@@ -202,7 +204,7 @@ class TestSkillsList:
         assert obj["id"] == 4
         assert obj["method"] == "thread/start"
         assert obj["params"]["cwd"] == _CWD
-        assert obj["params"]["model"] == "gpt-5.6-sol"
+        assert obj["params"]["model"] == _SYNTHETIC_MODEL_ID
         assert obj["params"]["sandbox"] == "workspace-write"
         assert obj["params"]["approvalPolicy"] == "never"
         assert obj["params"]["developerInstructions"] is None

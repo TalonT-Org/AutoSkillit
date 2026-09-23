@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import CODEX_MODEL_ALIASES
 from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
@@ -29,7 +30,7 @@ _RUN_ID_ENV = "AUTOSKILLIT_EVIDENCE_READER_LIVE_GATE_RUN_ID"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
 _SOURCE_AUTH = Path("~/.codex/auth.json").expanduser()
 _ROLE = "pr-source-reader"
-_PARENT_MODEL = "gpt-5.6-luna"
+_PARENT_MODEL = CODEX_MODEL_ALIASES["haiku"]
 _ARTIFACTS = ("tracked.txt", "dirty.txt", "untracked.txt")
 _REQUESTED_FIELDS = (
     "title",

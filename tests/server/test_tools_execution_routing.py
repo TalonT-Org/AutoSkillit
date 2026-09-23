@@ -44,7 +44,7 @@ async def test_run_skill_preserves_execution_identity_in_response(
 
     identity = ExecutionIdentity(
         effective_parent_backend="codex",
-        effective_parent_model="gpt-5.6-sol",
+        effective_parent_model="gpt-synthetic",
         children=(
             ChildExecutionIdentity(
                 task_id="task-a",

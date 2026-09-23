@@ -110,7 +110,7 @@ def test_codex_app_server_plan_frozen_slots_and_exact_fields():
         expected_skill_entries=(("foo", "foo/SKILL.md"),),
         cwd="/tmp/session",
         prompt="do the thing",
-        model="gpt-5.6-sol",
+        model="fixture-codex-model",
         sandbox="workspace-write",
         approval_policy="never",
         bypass_hook_trust=True,

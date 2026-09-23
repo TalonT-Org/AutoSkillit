@@ -44,7 +44,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from tests.cli._interactive_process import interactive_launch_metadata
-from tests.execution.backends._codex_fixtures import managed_selection_catalog
+from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [
@@ -458,7 +458,7 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
     bundled_catalog = tmp_path / "bundled-models.json"
-    atomic_write(bundled_catalog, json.dumps(managed_selection_catalog()))
+    atomic_write(bundled_catalog, json.dumps(installed_catalog()))
     codex_shim = tmp_path / "codex"
     atomic_write(
         codex_shim,

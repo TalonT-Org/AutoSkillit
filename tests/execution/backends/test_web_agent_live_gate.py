@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
     OUTPUT_DISCIPLINE_DIGEST,
     WEB_EVIDENCE_RESEARCHER_ROLE,
     agent_definition_digest,
@@ -196,10 +197,14 @@ https://docs.python.org/ URL through its terminal verdict envelope. Wait for the
 child, then return its URL and the marker WEB_AGENT_GATE_COMPLETE. Do not search
 the web in the parent.
 """.strip()
+    parent_model = CODEX_MODEL_ALIASES["sonnet"]
+    model = definition.codex.model
+    reasoning_effort = definition.codex.reasoning_effort
+    assert model is not None and reasoning_effort is not None
     result = run_live_codex_parent(
         env=prepared.env,
         cwd=workspace,
-        model="gpt-5.6-sol",
+        model=parent_model,
         prompt=prompt,
         timeout=int(os.environ.get("WEB_AGENT_LIVE_GATE_TIMEOUT", "900")),
         stdout=subprocess.PIPE,
@@ -216,10 +221,10 @@ the web in the parent.
         parent_id=rollout.parent_id,
         agent_role=WEB_EVIDENCE_RESEARCHER_ROLE,
         output_discipline_digest=OUTPUT_DISCIPLINE_DIGEST,
-        expected_parent_model="gpt-5.6-sol",
+        expected_parent_model=parent_model,
         expected_parent_sandbox_mode="read-only",
-        expected_model="gpt-5.6-luna",
-        expected_reasoning_effort="xhigh",
+        expected_model=model,
+        expected_reasoning_effort=reasoning_effort,
         expected_sandbox_mode="read-only",
         expected_definition_digest=digest,
     )

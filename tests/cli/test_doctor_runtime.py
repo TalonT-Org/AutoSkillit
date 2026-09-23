@@ -23,15 +23,6 @@ class TestCheckCodexModelAliasStaleness:
 
         recent = (date.today() - timedelta(days=1)).isoformat()
         monkeypatch.setattr(mod, "CODEX_MODEL_ALIASES_LAST_VERIFIED", recent)
-        monkeypatch.setattr(
-            mod,
-            "CODEX_MODEL_ALIASES",
-            {
-                "sonnet": "gpt-5.6-sol",
-                "opus": "gpt-5.6-sol",
-                "haiku": "gpt-5.6-sol",
-            },
-        )
         result = mod._check_codex_model_alias_staleness()
         assert result.severity == Severity.OK
         assert result.check == "codex_model_alias_staleness"
@@ -54,7 +45,7 @@ class TestCheckCodexModelAliasStaleness:
         monkeypatch.setattr(
             mod,
             "CODEX_MODEL_ALIASES",
-            {"sonnet": "gpt-5.6-sol", "opus": "BOGUS-MODEL"},
+            {"sonnet": mod.CODEX_MODEL_ALIASES["sonnet"], "opus": "BOGUS-MODEL"},
         )
         result = mod._check_codex_model_alias_staleness()
         assert result.severity == Severity.WARNING

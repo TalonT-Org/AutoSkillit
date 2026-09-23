@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 import pytest
 import structlog
 
+from autoskillit.core import CODEX_MODEL_ALIASES
 from autoskillit.execution.evidence.otlp_sink import _SIGNALS as _OTLP_SIGNALS
 from tests.execution.conftest import _flush
 
@@ -362,7 +363,7 @@ def test_native_log_id_joins_authoritative_session_record(
             "opus",
             "conversation.id",
             "codex-conversation-sentinel",
-            "gpt-5.6-sol",
+            CODEX_MODEL_ALIASES["opus"],
         ),
     ),
 )

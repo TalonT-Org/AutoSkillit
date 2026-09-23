@@ -28,6 +28,9 @@ __all__ = [
     "RetiredArtifactShape",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RETIRED_READINESS_TOKENS",
+    "RETIRED_CODEX_MODEL_BASE_IDS",
+    "RETIRED_CODEX_MODEL_PREFIXES",
+    "RETIRED_CODEX_MODEL_SUFFIXES",
 ]
 
 
@@ -354,3 +357,15 @@ RETIRED_READINESS_TOKENS: frozenset[str] = frozenset(
         "sigterm_handler_ready",
     }
 )
+
+
+# Codex model identifiers that have been retired and must be rejected at the
+# backend adapter's translate_model() entry point. Append-only — adding an entry
+# atomically with the model deprecation commit. Consumed by
+# src/autoskillit/execution/backends/codex.py:translate_model. The literal
+# ``gpt-5.6`` is the canonical retired base; the ``gpt-5.6-`` prefix covers its
+# variants (e.g. ``gpt-5.6-sol``); the ``-terra`` suffix covers the retired
+# Codex tier suffix attached to otherwise-unrelated model IDs.
+RETIRED_CODEX_MODEL_BASE_IDS: frozenset[str] = frozenset({"gpt-5.6"})
+RETIRED_CODEX_MODEL_PREFIXES: tuple[str, ...] = ("gpt-5.6-",)
+RETIRED_CODEX_MODEL_SUFFIXES: tuple[str, ...] = ("-terra",)

@@ -110,6 +110,7 @@ markers = [
     "large: full integration — everything allowed (default for unannotated tests)",
     "feature(name): marks tests requiring a specific feature gate to be enabled",
     "ambient_env(*names): preserve named ambient env vars for this test instead of scrubbing them",
+    "model_contract: marks tests that legitimately pin model-version literals (catalog fixtures, alias-registry round-trip tests). Tests without this marker must not hardcode gpt-N(.N)?(-word)? literals.",
 ]
 filterwarnings = [
     "error::SyntaxWarning",

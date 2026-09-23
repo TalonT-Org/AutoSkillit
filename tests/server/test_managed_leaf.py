@@ -51,6 +51,8 @@ from tests.fakes import make_managed_codex_context
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 
 def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
     assignments = (
@@ -77,7 +79,7 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
 
     adaptation = SkillSemanticAdaptationResult(
         logical_role_mapping={"reviewer": "reviewer"},
-        model_effort_policy={"reviewer": ("gpt-5.6-luna", "high")},
+        model_effort_policy={"reviewer": (_SYNTHETIC_MODEL_ID, "high")},
     )
     document = AgentSkillDocument(
         content=(
@@ -111,14 +113,14 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
         selected_source=selected_source,
         source_document=document,
         adaptation=adaptation,
-        default_model="gpt-5.6-sol",
+        default_model=_SYNTHETIC_MODEL_ID,
         write_behavior=WriteBehaviorSpec(mode="conditional"),
         read_only=False,
     )
     leaf = project_managed_leaf(binding, document)
 
     assert leaf.binding is binding
-    assert leaf.binding.model == "gpt-5.6-luna"
+    assert leaf.binding.model == _SYNTHETIC_MODEL_ID
     assert leaf.leaf_projection_artifact_digest != document.projected_digest
     assert (
         leaf.ledger_attempt_evidence["generated_home_id"] == plan.assignments[0].generated_home_id
@@ -295,7 +297,7 @@ async def test_leaf_env_carries_join_identity_equal_to_binding_key(tmp_path: Pat
             canonical_digest=selected_source.canonical_digest,
             semantic_digest=selected_source.semantic_digest,
             adaptation_digest=selected_source.adaptation_digest,
-            model="gpt-5.6-luna",
+            model=_SYNTHETIC_MODEL_ID,
             reasoning_effort="high",
             workspace=classify_managed_leaf_workspace(
                 read_only=True, write_behavior=WriteBehaviorSpec()

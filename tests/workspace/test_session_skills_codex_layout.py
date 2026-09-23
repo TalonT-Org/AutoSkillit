@@ -130,7 +130,7 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
             launch_context="direct",
             parent_session_id="parent-1",
             direct_tool_mode=True,
-            resolved_model="gpt-5.6-sol",
+            resolved_model="fixture-codex-model",
             resolved_reasoning_effort="high",
             codex_catalog_digest="c" * 64,
             fixed_batch_tool_registry_digest="a" * 64,

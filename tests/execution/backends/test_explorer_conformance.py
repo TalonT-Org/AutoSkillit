@@ -133,7 +133,7 @@ def test_luna_catalog_projection_changes_only_execution_surface() -> None:
         {
             "models": [
                 {
-                    "slug": "gpt-5.6-sol",
+                    "slug": "other-model",
                     "tool_mode": "code_mode",
                     "sentinel": {"unchanged": True},
                 },
@@ -147,7 +147,7 @@ def test_luna_catalog_projection_changes_only_execution_surface() -> None:
     projected = json.loads(projection.canonical_projected_bytes)
 
     assert projected["models"][0] == {
-        "slug": "gpt-5.6-sol",
+        "slug": "other-model",
         "tool_mode": "code_mode",
         "sentinel": {"unchanged": True},
     }
@@ -209,7 +209,7 @@ def test_attestation_rejects_replayed_or_future_evidence(observed_at: str, messa
     [
         ("cache_miss", False),
         ("schema_version", 1),
-        ("child_model", "gpt-5.6-sol"),
+        ("child_model", "unexpected-model"),
         ("child_reasoning_effort", "high"),
         ("parent_sandbox_mode", "workspace-write"),
         ("child_sandbox_mode", "workspace-write"),

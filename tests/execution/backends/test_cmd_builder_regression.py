@@ -70,7 +70,7 @@ def test_origin_round_trips_role_bearing_positionals() -> None:
     spec = (
         CmdBuilder("codex")
         .mode_flag("resume")
-        .kv_flag("--model", "gpt-5.6-sol")
+        .kv_flag("--model", "gpt-synthetic")
         .positional("thread-123", role=PositionalRole.RESUME_TARGET)
         .positional("continue the investigation", role=PositionalRole.PROMPT)
         .variadic_pair("--add-dir", "/workspace")

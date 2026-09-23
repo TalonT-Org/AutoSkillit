@@ -91,6 +91,7 @@ from autoskillit.execution.backends._explorer_conformance import (
     validate_published_explorer_release_readiness,
 )
 from autoskillit.execution.backends._probe_cache import (
+    CODEX_RECIPE_PROBE_MODEL_IDENTITY,
     PROBE_POLICY_IDENTITY,
     ProbeResult,
     read_probe_cache,
@@ -266,9 +267,9 @@ def _run_probe_with_discrimination(
     try:
         assertion_fn(probe_output)
     except AssertionError as exc:
-        record_failure(ErrorKind.SCHEMA, probe_name, probe_output.cli_version, str(exc))
+        record_failure(ErrorKind.SCHEMA, probe_name, cli_version, str(exc))
         raise
-    record_success(probe_output.cli_version)
+    record_success(cli_version)
 
 
 def _get_codex_version() -> str:
@@ -1741,7 +1742,7 @@ def test_codex_selects_local_skill_and_explicit_recipe_delegation(
         monkeypatch.delenv(headless_flag, raising=False)
 
     source_codex_home = _prepare_codex_selection_profile(tmp_path, workspace)
-    model = os.environ.get("GENERATED_CHILD_SMOKE_MODEL", "gpt-5.4")
+    model = os.environ.get("GENERATED_CHILD_SMOKE_MODEL", CODEX_RECIPE_PROBE_MODEL_IDENTITY)
 
     local_skill = _run_codex_selection_case(
         case_root=tmp_path / "local-skill-case",
@@ -1869,7 +1870,7 @@ def _managed_fixed_batch_smoke_binding(
         source_document=document,
         adaptation=adaptation,
         assignments=assignments,
-        default_model="gpt-5.6-sol",
+        default_model=CODEX_RECIPE_PROBE_MODEL_IDENTITY,
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
         launch_leaf=launch_leaf,

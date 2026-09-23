@@ -60,7 +60,7 @@ def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_val
         profiles={
             "anthropic": {
                 "base_url": "https://example.invalid",
-                "model": "gpt-4",  # non-retired unrecognized key — must pass through
+                "model": "provider-model-example",
                 retired_key: raw_value,
             },
         },
@@ -75,7 +75,7 @@ def test_resolved_profiles_silently_drops_retired_keys(retired_key: str, raw_val
         f"Retired key {retired_key!r}={raw_value!r} leaked into raw_env; "
         f"the retirement loop ran AFTER raw_env=copy assignment. raw_env={profile.raw_env!r}"
     )
-    assert profile.raw_env == {"model": "gpt-4"}
+    assert profile.raw_env == {"model": "provider-model-example"}
 
 
 @pytest.mark.parametrize("retired_key", sorted(RETIRED_PROFILE_KEYS))

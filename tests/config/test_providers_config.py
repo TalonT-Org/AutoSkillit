@@ -267,7 +267,7 @@ class TestProvidersConfigYaml:
         config_data = {
             "providers": {
                 "profiles": {
-                    "fast": {"model": "gpt-4o-mini", "api_base": "https://api.openai.com"},
+                    "fast": {"model": "example-fast-model", "api_base": "https://api.openai.com"},
                 }
             }
         }
@@ -275,7 +275,7 @@ class TestProvidersConfigYaml:
         cfg = load_config(tmp_path)
         # Defaults (anthropic sentinel) are merged with user-provided profiles
         assert cfg.providers.profiles["fast"] == {
-            "model": "gpt-4o-mini",
+            "model": "example-fast-model",
             "api_base": "https://api.openai.com",
         }
         assert "anthropic" in cfg.providers.profiles
@@ -409,35 +409,35 @@ class TestResolvedProfiles:
             profiles={
                 "test": {
                     "base_url": "https://example.com",
-                    "model": "gpt-4",
+                    "model": "example-provider-model",
                     "extra_flag": "true",
                 }
             }
         )
         raw = cfg.resolved_profiles["test"].raw_env
-        assert raw == {"model": "gpt-4", "extra_flag": "true"}
+        assert raw == {"model": "example-provider-model", "extra_flag": "true"}
 
     def test_resolved_profiles_no_mutation(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
-        cfg = ProvidersConfig(profiles={"test": {"model": "gpt-4"}})
+        cfg = ProvidersConfig(profiles={"test": {"model": "example-provider-model"}})
         cfg.resolved_profiles
-        assert cfg.profiles == {"test": {"model": "gpt-4"}}
+        assert cfg.profiles == {"test": {"model": "example-provider-model"}}
 
     def test_resolved_profiles_multiple_profiles(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
         cfg = ProvidersConfig(
             profiles={
-                "fast": {"timeout_seconds": "10", "model": "gpt-4o-mini"},
-                "large": {"model": "gpt-4o"},
+                "fast": {"timeout_seconds": "10", "model": "example-fast-model"},
+                "large": {"model": "example-large-model"},
             }
         )
         result = cfg.resolved_profiles
         assert len(result) == 2
         assert result["fast"].timeout_seconds == 10
-        assert result["fast"].raw_env == {"model": "gpt-4o-mini"}
-        assert result["large"].raw_env == {"model": "gpt-4o"}
+        assert result["fast"].raw_env == {"model": "example-fast-model"}
+        assert result["large"].raw_env == {"model": "example-large-model"}
 
     def test_resolved_profiles_null_sentinel(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef
@@ -535,9 +535,13 @@ class TestProvidersConfigCoercion:
     def test_resolved_profiles_does_not_mutate_profiles(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 
-        cfg = ProvidersConfig(profiles={"test": {"model": "gpt-4", "timeout_seconds": "30"}})
+        cfg = ProvidersConfig(
+            profiles={"test": {"model": "example-provider-model", "timeout_seconds": "30"}}
+        )
         cfg.resolved_profiles
-        assert cfg.profiles == {"test": {"model": "gpt-4", "timeout_seconds": "30"}}
+        assert cfg.profiles == {
+            "test": {"model": "example-provider-model", "timeout_seconds": "30"}
+        }
 
     def test_resolved_profiles_mixed_profiles(self) -> None:
         from autoskillit.config._config_dataclasses import ProviderProfileDef

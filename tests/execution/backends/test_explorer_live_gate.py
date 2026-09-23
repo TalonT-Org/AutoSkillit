@@ -24,6 +24,7 @@ from autoskillit.core.agent_definition import (
 )
 from autoskillit.execution.backends._explorer_conformance import (
     EXPLORER_MODEL,
+    EXPLORER_PARENT_MODEL,
     EXPLORER_REASONING_EFFORT,
     EXPLORER_SANDBOX_MODE,
 )
@@ -48,6 +49,7 @@ _SUBMIT_TOOL = "mcp__autoskillit__submit_exploration_query"
 _PARENT_QUERY = "What are the main top-level repository files and their purposes?"
 _LIVE_ENV = "AUTOSKILLIT_EXPLORER_LIVE_GATE"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
+_SOURCE_AUTH = Path.home() / ".codex" / "auth.json"
 _MAX_CAPTURE_BYTES = 4 * 1024 * 1024
 _PARENT_TIMEOUT_SECONDS = 240
 
@@ -55,7 +57,7 @@ _skip_unless_live_gate = pytest.mark.skipif(
     not os.environ.get(_LIVE_ENV)
     or not shutil.which("codex")
     or not any(os.environ.get(name) for name in _AUTH_ENV_NAMES)
-    and not (Path.home() / ".codex" / "auth.json").is_file(),
+    and not _SOURCE_AUTH.is_file(),
     reason=f"Set {_LIVE_ENV}=1 and provide Codex authentication for the live explorer gate",
 )
 
@@ -746,7 +748,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
         service=DefaultExplorationService(),
     )
     session_id = "live-explorer-gate"
-    original_auth = Path("~/.codex/auth.json").expanduser()
+    original_auth = _SOURCE_AUTH
     original_auth_exists = original_auth.is_file()
     prepared = prepare_live_codex_parent(
         tmp_path=tmp_path,
@@ -811,7 +813,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
 
     stdout_path = tmp_path / "codex.stdout.jsonl"
     stderr_path = tmp_path / "codex.stderr.txt"
-    parent_model = os.environ.get("AUTOSKILLIT_EXPLORER_LIVE_GATE_MODEL", "gpt-5.6-sol")
+    parent_model = os.environ.get("AUTOSKILLIT_EXPLORER_LIVE_GATE_MODEL", EXPLORER_PARENT_MODEL)
     network_thread.start()
     try:
         with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:

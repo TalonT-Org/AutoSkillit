@@ -60,13 +60,14 @@ class TestCodexStepRecordFields:
             record.step_name = "other"  # type: ignore[misc]
 
     def test_required_fields(self) -> None:
+        model_id = "gpt-synthetic"
         record = CodexStepRecord(
-            step_name="s1", exit_code=1, duration_ms=200, model="gpt-4", stdout_path=Path("/a")
+            step_name="s1", exit_code=1, duration_ms=200, model=model_id, stdout_path=Path("/a")
         )
         assert record.step_name == "s1"
         assert record.exit_code == 1
         assert record.duration_ms == 200
-        assert record.model == "gpt-4"
+        assert record.model == model_id
         assert record.stdout_path == Path("/a")
 
     def test_result_summary_default_none(self) -> None:

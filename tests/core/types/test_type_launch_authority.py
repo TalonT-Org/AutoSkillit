@@ -206,7 +206,7 @@ class TestLaunchFallbackRoute:
             "backend": "codex",
             "provider": "openai",
             "profile": "explore",
-            "model": "gpt-5",
+            "model": "fixture-model",
             "source": _source(),
         }
         defaults.update(overrides)
@@ -234,20 +234,20 @@ class TestLaunchFallbackRoute:
         assert payload["backend"] == "codex"
         assert payload["provider"] == "openai"
         assert payload["profile"] == "explore"
-        assert payload["model"] == "gpt-5"
+        assert payload["model"] == "fixture-model"
         assert payload["source"] == dict(route.source.to_payload())
 
     def test_frozen_blocks_mutation(self) -> None:
         route = self._route()
         with pytest.raises(AttributeError):
-            route.model = "gpt-6"  # type: ignore[misc]
+            route.model = "replacement-model"  # type: ignore[misc]
 
 
 class TestModelPinResolution:
     def test_frozen_blocks_mutation(self) -> None:
-        resolution = ModelPinResolution(model="gpt-5", source=_source())
+        resolution = ModelPinResolution(model="fixture-model", source=_source())
         with pytest.raises(AttributeError):
-            resolution.model = "gpt-6"  # type: ignore[misc]
+            resolution.model = "replacement-model"  # type: ignore[misc]
 
 
 class TestLaunchSurfaceEnum:

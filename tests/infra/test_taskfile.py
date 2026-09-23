@@ -277,6 +277,14 @@ class TestTaskfile:
         assert '"child_web_search":"live"' in commands
         assert '"parent_web_search":"disabled"' in commands
 
+    def test_live_managed_route_gate_requires_a_non_skipped_smoke_test(self) -> None:
+        task = self._load()["tasks"]["test-smoke-codex-managed-route-live-gate"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert task["env"]["AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE"] == "1"
+        assert "tests/execution/backends/test_codex_managed_route_live_gate.py" in commands
+        assert "-m smoke" in commands
+        assert "requires exactly one non-skipped test" in commands
+
     def test_claude_startup_target_selects_exact_interactive_probe(self) -> None:
         data = self._load()
         task = data["tasks"]["test-smoke-claude-startup"]

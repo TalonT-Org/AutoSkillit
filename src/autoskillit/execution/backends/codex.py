@@ -349,6 +349,8 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         )
 
         base = strip_context_window_suffix(model)
+        if base == "gpt-5.6" or base.startswith("gpt-5.6-") or base.endswith("-terra"):
+            raise ValueError(f"Retired Codex model: {base}")
         return CODEX_MODEL_ALIASES.get(base, base)
 
     resolve_managed_parent_identity = _resolve_managed_parent_identity

@@ -12,6 +12,10 @@ from autoskillit.execution.backends._codex_execution_identity import (
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_SYNTHETIC_PARENT_MODEL = "gpt-synthetic-parent"
+_SYNTHETIC_CHILD_MODEL = "gpt-synthetic-child"
+_SYNTHETIC_CONFLICTING_MODEL = "gpt-synthetic-conflicting"
+
 
 def _write_rollout(path, events: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
@@ -42,7 +46,7 @@ def test_extracts_effective_identity_only_from_linked_rollouts(tmp_path) -> None
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.5", "effort": "high"},
+                "payload": {"model": _SYNTHETIC_PARENT_MODEL, "effort": "high"},
             },
             {
                 "type": "event_msg",
@@ -75,7 +79,7 @@ def test_extracts_effective_identity_only_from_linked_rollouts(tmp_path) -> None
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.6-luna", "effort": "max"},
+                "payload": {"model": _SYNTHETIC_CHILD_MODEL, "effort": "max"},
             },
             {
                 "type": "response_item",
@@ -114,9 +118,9 @@ def test_extracts_effective_identity_only_from_linked_rollouts(tmp_path) -> None
     )
 
     assert observed.requested_parent_model == "opus"
-    assert observed.effective_parent_model == "gpt-5.5"
+    assert observed.effective_parent_model == _SYNTHETIC_PARENT_MODEL
     assert observed.children[0].requested_model == "sonnet"
-    assert observed.children[0].effective_model == "gpt-5.6-luna"
+    assert observed.children[0].effective_model == _SYNTHETIC_CHILD_MODEL
     assert observed.children[0].effective_effort == "max"
     assert observed.parent_session_id == "parent-id"
     assert observed.children[0].session_id == "child-id"
@@ -145,7 +149,7 @@ def test_extracts_observed_child_metadata_without_a_requested_plan(tmp_path) -> 
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                "payload": {"model": _SYNTHETIC_CHILD_MODEL, "effort": "medium"},
             },
         ],
     )
@@ -161,7 +165,7 @@ def test_extracts_observed_child_metadata_without_a_requested_plan(tmp_path) -> 
         "parent_session_id": "parent-thread-id",
         "child_id": "child-thread-id",
         "role": "plan-foundation-auditor",
-        "effective_model": "gpt-5.6-sol",
+        "effective_model": _SYNTHETIC_CHILD_MODEL,
         "effective_effort": "medium",
     }
 
@@ -289,7 +293,7 @@ def test_extracts_all_children_in_task_order_for_mixed_and_repeated_roles(tmp_pa
         parent,
         [
             {"type": "session_meta", "payload": {"id": "parent-id"}},
-            {"type": "turn_context", "payload": {"model": "gpt-5.5"}},
+            {"type": "turn_context", "payload": {"model": _SYNTHETIC_PARENT_MODEL}},
             *(
                 {
                     "type": "event_msg",
@@ -354,7 +358,7 @@ def test_rejects_unlinked_child_rollout(tmp_path) -> None:
         parent,
         [
             {"type": "session_meta", "payload": {"id": "parent-id"}},
-            {"type": "turn_context", "payload": {"model": "gpt-5.5"}},
+            {"type": "turn_context", "payload": {"model": _SYNTHETIC_PARENT_MODEL}},
             {
                 "type": "event_msg",
                 "payload": {
@@ -374,7 +378,7 @@ def test_rejects_unlinked_child_rollout(tmp_path) -> None:
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.6-luna", "effort": "max"},
+                "payload": {"model": _SYNTHETIC_CHILD_MODEL, "effort": "max"},
             },
         ],
     )
@@ -402,8 +406,8 @@ def test_rejects_conflicting_codex_owned_effective_values(tmp_path) -> None:
         parent,
         [
             {"type": "session_meta", "payload": {"id": "parent-id"}},
-            {"type": "turn_context", "payload": {"model": "gpt-5.5"}},
-            {"type": "turn_context", "payload": {"model": "gpt-5.6"}},
+            {"type": "turn_context", "payload": {"model": _SYNTHETIC_PARENT_MODEL}},
+            {"type": "turn_context", "payload": {"model": _SYNTHETIC_CONFLICTING_MODEL}},
         ],
     )
 

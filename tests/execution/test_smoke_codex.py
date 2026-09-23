@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import NamedTuple
 
@@ -36,6 +37,17 @@ _SKIP_REASON = (
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_SOURCE_AUTH = Path.home() / ".codex" / "auth.json"
+
+
+def _generated_home(tmp_path: Path) -> Path:
+    home = tmp_path / "generated-home"
+    home.mkdir()
+    if _SOURCE_AUTH.is_file():
+        auth = home / "auth.json"
+        shutil.copyfile(_SOURCE_AUTH, auth)
+        auth.chmod(0o600)
+    return home
 
 
 class _CodexSessionData(NamedTuple):
@@ -49,7 +61,7 @@ _skip_unless_codex_smoke = pytest.mark.skipif(
     or (
         not os.environ.get("CODEX_API_KEY")
         and not os.environ.get("OPENAI_API_KEY")
-        and not Path("~/.codex/auth.json").expanduser().exists()
+        and not _SOURCE_AUTH.is_file()
     ),
     reason=_SKIP_REASON,
 )
@@ -69,9 +81,11 @@ class TestCodexSmokeExecution:
     """
 
     @pytest.mark.anyio
-    async def test_codex_exec_ndjson_parseable(self) -> None:
+    async def test_codex_exec_ndjson_parseable(self, tmp_path: Path) -> None:
         backend = CodexBackend()
-        spec = backend.build_headless_cmd("Respond with exactly: hello")
+        spec = backend.build_headless_cmd(
+            "Respond with exactly: hello", model="sonnet", generated_home=_generated_home(tmp_path)
+        )
         result = await run_managed_async(
             list(spec.cmd),
             cwd=Path.cwd(),
@@ -113,8 +127,12 @@ class TestCodexSmokeExecution:
 class TestCodexSmokeInteractiveCmdBuild:
     """Verify CodexBackend.build_interactive_cmd produces a valid CmdSpec."""
 
-    def test_interactive_cmd_builds_without_error(self) -> None:
-        cmd = CodexBackend().build_interactive_cmd(launch=FreshLaunch(initial_prompt="Hello"))
+    def test_interactive_cmd_builds_without_error(self, tmp_path: Path) -> None:
+        cmd = CodexBackend().build_interactive_cmd(
+            launch=FreshLaunch(initial_prompt="Hello"),
+            model="sonnet",
+            generated_home=_generated_home(tmp_path),
+        )
         assert cmd.cmd[0] == "codex"
         assert "--dangerously-bypass-approvals-and-sandbox" in cmd.cmd
 
@@ -172,8 +190,11 @@ class TestCodexSmokeRecipeComposition:
         because this repo's ``anyio_backend`` fixture is function-scoped, and
         this fixture must span every test method in the class.
         """
+        tmp_dir = tmp_path_factory.mktemp("codex_smoke")
         backend = CodexBackend()
-        spec = backend.build_headless_cmd("Respond with exactly: hello")
+        spec = backend.build_headless_cmd(
+            "Respond with exactly: hello", model="sonnet", generated_home=_generated_home(tmp_dir)
+        )
         proc = anyio.run(
             lambda: run_managed_async(
                 list(spec.cmd),
@@ -194,7 +215,6 @@ class TestCodexSmokeRecipeComposition:
             if not thread_id and evt.kind == BackendEventKind.SESSION_META and evt.session_id:
                 thread_id = evt.session_id
 
-        tmp_dir = tmp_path_factory.mktemp("codex_smoke")
         rollout = tmp_dir / "codex-sessions" / "rollout.jsonl"
         rollout.parent.mkdir(parents=True)
         rollout.write_text(proc.stdout)

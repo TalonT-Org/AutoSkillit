@@ -39,7 +39,7 @@ def _make_test_config(
             "experimental_enabled": experimental_enabled,
             "model": SimpleNamespace(
                 model_override=None,
-                default_model="gpt-5.2-codex",
+                default_model="fixture-default-model",
             ),
         },
     )()

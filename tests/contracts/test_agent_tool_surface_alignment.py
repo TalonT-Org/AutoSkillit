@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
+    CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
     EXPLORATION_TOOLS,
     MARKETPLACE_PREFIX,
@@ -106,7 +107,7 @@ def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() 
         ToolInitializationOperation.INSPECTION
     )
     assert definition.model == "haiku"
-    assert definition.codex.model == "gpt-5.6-luna"
+    assert definition.codex.model == CODEX_MODEL_ALIASES["haiku"]
     assert definition.codex.reasoning_effort == "xhigh"
     assert definition.codex.sandbox_mode == "read-only"
     assert definition.codex.agents_enabled is False

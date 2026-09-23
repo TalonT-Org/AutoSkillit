@@ -35,12 +35,14 @@ def test_codex_alias_values_in_allowlist() -> None:
 
 
 def test_codex_aliases_map_classes_to_tiers() -> None:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+    from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
 
-    assert set(CODEX_MODEL_ALIASES) == {"sonnet", "opus", "haiku"}
-    assert CODEX_MODEL_ALIASES["sonnet"] == "gpt-5.6-sol"
-    assert CODEX_MODEL_ALIASES["opus"] == "gpt-5.6-sol"
-    assert CODEX_MODEL_ALIASES["haiku"] == "gpt-5.6-luna"
+    assert dict(CODEX_MODEL_ALIASES) == {
+        "sonnet": "gpt-6-sol",
+        "opus": "gpt-6-sol",
+        "haiku": "gpt-6-luna",
+    }
+    assert CODEX_EFFORT_MAPPING == {"sonnet": "medium", "opus": "high", "haiku": "high"}
 
 
 def test_codex_native_model_allowlist_preserves_compatibility() -> None:
@@ -49,10 +51,12 @@ def test_codex_native_model_allowlist_preserves_compatibility() -> None:
         is_valid_codex_model_id,
     )
 
-    assert is_valid_codex_model_id("gpt-5.6-sol")
-    assert is_valid_codex_model_id("gpt-5.6-luna")
-    assert is_valid_codex_model_id("gpt-5.6-terra")
+    assert is_valid_codex_model_id("gpt-6-sol")
+    assert is_valid_codex_model_id("gpt-6-luna")
     assert is_valid_codex_model_id("gpt-5.5")
+    assert not is_valid_codex_model_id("gpt-5.6-sol")
+    assert not is_valid_codex_model_id("gpt-5.6-luna")
+    assert not is_valid_codex_model_id("gpt-5.6-terra")
     assert not is_valid_codex_model_id("gpt-5.4")
     assert not is_valid_codex_model_id("gpt-5.4-mini")
     assert "max" in CODEX_VALID_REASONING_EFFORTS

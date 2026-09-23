@@ -21,6 +21,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
     SemanticAdaptationContext,
     SkillExecutionRole,
     SkillVisibilitySpec,
@@ -212,13 +213,14 @@ def _production_managed_codex_context() -> SemanticAdaptationContext:
     this helper in-process — it seeds the admission ledger, not the persistence
     surfaces.
     """
+    model = CODEX_MODEL_ALIASES["sonnet"]
     with TemporaryDirectory() as temp_dir:
         source_home = Path(temp_dir)
         (source_home / "models_cache.json").write_text(
             json.dumps(installed_catalog()), encoding="utf-8"
         )
         projection = CodexBackend(source_codex_home=source_home).project_source_catalog(
-            "gpt-5.6-luna", "high"
+            model, "high"
         )
 
     return DefaultManagedJoinAttestationAuthority(
@@ -229,7 +231,7 @@ def _production_managed_codex_context() -> SemanticAdaptationContext:
         launch_context="direct",
         parent_session_id="managed-admission-ledger",
         direct_tool_mode=True,
-        resolved_model="gpt-5.6-luna",
+        resolved_model=model,
         resolved_reasoning_effort="high",
         codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
         fixed_batch_tool_registry_digest=managed_codex_route_digest(),

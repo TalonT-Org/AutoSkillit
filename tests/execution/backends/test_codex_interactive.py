@@ -102,9 +102,10 @@ class TestCodexInteractiveCmdLaunchVariants:
         assert CodexFlags.RESUME_SUBCOMMAND not in spec.cmd
 
     def test_resume_with_briefing_includes_resume_session_and_briefing(self) -> None:
+        model_id = "gpt-synthetic"
         spec = CodexBackend().build_interactive_cmd(
             launch=ResumeWithBriefing(session_id="abc123", briefing="continue"),
-            model="gpt-5.6-sol",
+            model=model_id,
             generated_home=Path("/session/home"),
             add_dirs=[Path("/first"), Path("/second")],
             env_extras={"AUTOSKILLIT_PROVIDER_PROFILE": "test-profile"},
@@ -116,7 +117,7 @@ class TestCodexInteractiveCmdLaunchVariants:
             CodexFlags.PROFILE,
             "test-profile",
             CodexFlags.MODEL,
-            "gpt-5.6-sol",
+            model_id,
             "abc123",
             "continue",
             CodexFlags.CONFIG_OVERRIDE,
@@ -136,7 +137,7 @@ class TestCodexInteractiveCmdLaunchVariants:
             ),
             kv_flags=(
                 (CodexFlags.PROFILE, "test-profile"),
-                (CodexFlags.MODEL, "gpt-5.6-sol"),
+                (CodexFlags.MODEL, model_id),
             ),
             positional=(
                 (PositionalRole.RESUME_TARGET, "abc123"),

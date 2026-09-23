@@ -86,7 +86,7 @@ materialization, so the pin selects the backend without changing the chosen lens
 
 ## Policy
 
-Both roles use the validated native Codex policy: `gpt-5.6-luna`, maximum reasoning effort, and
+Both roles use the validated native Codex policy: `gpt-6-luna`, maximum reasoning effort, and
 read-only access. These settings are part of the role contract, not user configuration. The
 effective parent sandbox must also be read-only: a Codex child role cannot narrow a more permissive
 parent sandbox.

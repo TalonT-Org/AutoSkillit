@@ -16,14 +16,17 @@ import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core import LaunchValueSourceKind
 from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
-from .conftest import _backend_authority, _mock_backend
+from .conftest import _backend_authority, _launch_inputs, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_CODEX_NATIVE_MODEL = "gpt-5.6-sol"
-_RECIPE_OVERRIDES = {"implementation": {"review_pr": _CODEX_NATIVE_MODEL}}
+_CODEX_NATIVE_MODELS = ("gpt-6-luna", "gpt-6-sol")
 _MODEL_KEY_PATH = "model.recipe_overrides.implementation.review_pr"
 _MODEL_KEY_PATH_RE = _MODEL_KEY_PATH.replace(".", r"\.")
+
+
+def _recipe_overrides(model_id: str) -> dict[str, dict[str, str]]:
+    return {"implementation": {"review_pr": model_id}}
 
 
 def _skill_result_success() -> SkillResult:
@@ -41,11 +44,15 @@ def _skill_result_success() -> SkillResult:
 
 
 @pytest.mark.anyio
-async def test_codex_model_pinned_without_backend_pin_fails_before_launch(minimal_ctx):
+@pytest.mark.parametrize("model_id", _CODEX_NATIVE_MODELS)
+async def test_codex_model_pinned_without_backend_pin_fails_before_launch(
+    minimal_ctx,
+    model_id,
+):
     """A Codex-native model pinned via recipe_overrides, with no backend pin,
     must fail closed before any subprocess is spawned — the global Claude Code
     authority wins and a foreign-backend model may never redirect it."""
-    minimal_ctx.config.model.recipe_overrides = _RECIPE_OVERRIDES
+    minimal_ctx.config.model.recipe_overrides = _recipe_overrides(model_id)
     minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.runner = AsyncMock()
 
@@ -68,11 +75,12 @@ async def test_codex_model_pinned_without_backend_pin_fails_before_launch(minima
 
 
 @pytest.mark.anyio
-async def test_codex_model_with_matching_backend_pin_launches(minimal_ctx):
+@pytest.mark.parametrize("model_id", _CODEX_NATIVE_MODELS)
+async def test_codex_model_with_matching_backend_pin_launches(minimal_ctx, model_id):
     """The same Codex-native model, paired with an explicit codex
     backend_authority pin, proceeds past resolution with no model/backend
     drift error."""
-    minimal_ctx.config.model.recipe_overrides = _RECIPE_OVERRIDES
+    minimal_ctx.config.model.recipe_overrides = _recipe_overrides(model_id)
     minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.runner = AsyncMock()
 
@@ -103,15 +111,16 @@ async def test_codex_model_with_matching_backend_pin_launches(minimal_ctx):
     mock_exec.assert_called_once()
     launch_preparation = mock_exec.call_args.kwargs["launch_preparation"]
     assert launch_preparation.selected_backend == "codex"
-    assert launch_preparation.configured_model == _CODEX_NATIVE_MODEL
+    assert launch_preparation.configured_model == model_id
 
 
 @pytest.mark.anyio
-async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
+@pytest.mark.parametrize("model_id", _CODEX_NATIVE_MODELS)
+async def test_model_key_path_reaches_launch_preparation(minimal_ctx, model_id):
     """Provenance of the resolved model must be the model's own config key path
     (model.recipe_overrides.<recipe>.<step>), not the backend authority's key
     path (agent_backend.backend)."""
-    minimal_ctx.config.model.recipe_overrides = _RECIPE_OVERRIDES
+    minimal_ctx.config.model.recipe_overrides = _recipe_overrides(model_id)
     minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.runner = AsyncMock()
 
@@ -145,3 +154,56 @@ async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
     request = mock_prepare.call_args.args[0]
     assert request.configured_model_source.key_path == _MODEL_KEY_PATH
     assert request.configured_model_source.kind is LaunchValueSourceKind.RECIPE
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("model_id", ["gpt-5.6-sol", "gpt-5.6-terra[1m]"])
+async def test_retired_codex_model_fails_during_real_command_preparation_before_runner(
+    model_id: str,
+    tmp_path,
+) -> None:
+    """The real Codex command builder rejects retired targets before runner invocation."""
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.execution.headless._headless_launch import _run_headless_attempt
+
+    backend = CodexBackend()
+    resolver, preparation = _launch_inputs(backend, cwd=str(tmp_path))
+    runner = AsyncMock()
+
+    def build_spec(_binding, _extras, _managed_attempt_id=None):
+        return backend.build_headless_cmd("test prompt", model=model_id)
+
+    with pytest.raises(ValueError):
+        await _run_headless_attempt(
+            build_spec,
+            runner=runner,
+            backend=backend,
+            launch_resolver=resolver,
+            launch_preparation=preparation,
+            expected_launch_contract=None,
+            plugin_authority=None,
+            plugin_load_mode=PluginLoadMode.NONE,
+            provider_extras=None,
+            timeout=60,
+            pty_override=None,
+            completion_marker="%%DONE%%",
+            stale_threshold=1,
+            completion_drain_timeout=0,
+            natural_exit_grace_seconds=0,
+            linux_tracing_config=None,
+            idle_output_timeout=None,
+            max_suppression_seconds=0,
+            child_deferral_ceiling=0,
+            on_spawn=None,
+            enable_deadline_extension=False,
+            max_extension_seconds=0,
+            marker_dir=None,
+            session_id=None,
+            on_session_id_resolved=None,
+            stream_parser=None,
+            backend_resume_session_id="",
+            lifecycle_observation_enabled=False,
+        )
+
+    runner.assert_not_awaited()

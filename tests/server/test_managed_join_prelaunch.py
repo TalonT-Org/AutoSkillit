@@ -22,17 +22,79 @@ def _source_home(tmp_path: Path, *, include_sol: bool = True) -> tuple[Path, byt
         catalog["models"] = [
             model
             for model in models
-            if isinstance(model, dict) and model.get("slug") != "gpt-5.6-sol"
+            if isinstance(model, dict) and model.get("slug") != "gpt-6-sol"
         ]
     raw_catalog = json.dumps(catalog, sort_keys=True).encode("utf-8")
     (source_home / "models_cache.json").write_bytes(raw_catalog)
     return source_home, raw_catalog
 
 
+@pytest.mark.parametrize(
+    ("configured_model", "expected_model"),
+    [("gpt-6-luna", "gpt-6-luna"), ("gpt-6-sol", "gpt-6-sol")],
+)
+def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
+    tmp_path: Path,
+    configured_model: str,
+    expected_model: str,
+) -> None:
+    from autoskillit.core import SemanticAdaptationContext
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
+
+    source_home, _ = _source_home(tmp_path)
+    context = prepare_managed_join_context(
+        backend=CodexBackend(source_codex_home=source_home),
+        configured_model=configured_model,
+        state_root=tmp_path / "state",
+        parent_id=f"native-{configured_model}",
+        launch_context="interactive",
+    )
+
+    assert isinstance(context, SemanticAdaptationContext)
+    attestation = context.managed_join_attestation
+    assert attestation is not None
+    assert attestation.resolved_model == expected_model
+    assert attestation.resolved_reasoning_effort == "medium"
+
+
+@pytest.mark.parametrize(
+    "retired_model",
+    ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
+)
+def test_prelaunch_issuance_refuses_retired_native_models_before_attestation(
+    tmp_path: Path,
+    retired_model: str,
+) -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server.managed_join_prelaunch import (
+        ManagedJoinIssuanceRefusal,
+        prepare_managed_join_context,
+    )
+
+    source_home, _ = _source_home(tmp_path)
+    state_root = tmp_path / "state"
+    refusal = prepare_managed_join_context(
+        backend=CodexBackend(source_codex_home=source_home),
+        configured_model=retired_model,
+        state_root=state_root,
+        parent_id=f"retired-{retired_model}",
+        launch_context="interactive",
+    )
+
+    assert isinstance(refusal, ManagedJoinIssuanceRefusal)
+    assert not (state_root / ".autoskillit").exists()
+
+
 def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     tmp_path: Path,
 ) -> None:
-    from autoskillit.core import JoinSpec, SemanticAdaptationContext, SkillSemanticPlan
+    from autoskillit.core import (
+        CODEX_EFFORT_MAPPING,
+        JoinSpec,
+        SemanticAdaptationContext,
+        SkillSemanticPlan,
+    )
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.execution.backends._codex_catalog import project_codex_catalog
     from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
@@ -57,14 +119,14 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     assert attestation is not None
     expected_projection = project_codex_catalog(
         raw_catalog,
-        expected_model="gpt-5.6-luna",
-        expected_reasoning_effort="high",
+        expected_model="gpt-6-luna",
+        expected_reasoning_effort=CODEX_EFFORT_MAPPING["haiku"],
     )
     assert attestation.provenance == "autoskillit-server"
     assert attestation.parent_session_id == "abc123"
     assert attestation.launch_context == "interactive"
-    assert attestation.resolved_model == "gpt-5.6-luna"
-    assert attestation.resolved_reasoning_effort == "high"
+    assert attestation.resolved_model == "gpt-6-luna"
+    assert attestation.resolved_reasoning_effort == CODEX_EFFORT_MAPPING["haiku"]
     assert attestation.hook_registry_digest == HOOK_REGISTRY_HASH
     assert attestation.fixed_batch_tool_registry_digest == managed_codex_route_digest()
     assert attestation.codex_catalog_digest == expected_projection.projected_sha256.removeprefix(
@@ -84,27 +146,39 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(tmp_path: Path) 
 
     state_root = tmp_path / "state"
     source_home, _ = _source_home(tmp_path / "no-default")
+    catalog_path = source_home / "models_cache.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    models = catalog["models"]
+    assert isinstance(models, list)
+    removed_default = False
+    for model in models:
+        if isinstance(model, dict) and model.get("slug") == "gpt-6-sol":
+            assert model.get("default_reasoning_level") == "medium"
+            del model["default_reasoning_level"]
+            removed_default = True
+    assert removed_default
+    catalog_path.write_text(json.dumps(catalog, sort_keys=True), encoding="utf-8")
     missing_default = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
-        configured_model="gpt-5.6-sol",
+        configured_model="gpt-6-sol",
         state_root=state_root,
         parent_id="missing-default",
         launch_context="interactive",
     )
     assert isinstance(missing_default, ManagedJoinIssuanceRefusal)
-    assert "gpt-5.6-sol" in missing_default.reason
+    assert "gpt-6-sol" in missing_default.reason
     assert not (state_root / ".autoskillit").exists()
 
     absent_home, _ = _source_home(tmp_path / "absent", include_sol=False)
     absent_model = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=absent_home),
-        configured_model="gpt-5.6-sol",
+        configured_model="gpt-6-sol",
         state_root=state_root,
         parent_id="absent-model",
         launch_context="interactive",
     )
     assert isinstance(absent_model, ManagedJoinIssuanceRefusal)
-    assert "gpt-5.6-sol" in absent_model.reason
+    assert "gpt-6-sol" in absent_model.reason
 
     unsupported = prepare_managed_join_context(
         backend=ClaudeCodeBackend(),
@@ -134,13 +208,13 @@ def test_prelaunch_issuance_refuses_malformed_catalog(tmp_path: Path) -> None:
         json.dumps({"version": "missing-models-list"}), encoding="utf-8"
     )
 
-    # ``gpt-5.6-luna`` is a valid Codex model id but is not in the
+    # ``gpt-6-luna`` is a valid Codex model id but is not in the
     # CODEX_EFFORT_MAPPING shortcut table, so ``resolve_managed_parent_identity``
     # falls through to the catalog-parsing branch — which is the site guarded
     # against a missing ``models`` list.
     refusal = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
-        configured_model="gpt-5.6-luna",
+        configured_model="gpt-6-luna",
         state_root=tmp_path / "state",
         parent_id="malformed-catalog",
         launch_context="interactive",

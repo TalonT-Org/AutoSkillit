@@ -17,6 +17,8 @@ from tests.execution.conftest import _sink_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 
 def _success_result() -> SubprocessResult:
     return SubprocessResult(
@@ -105,7 +107,7 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
         close_raises=close_raises,
         evidence={
             "sess-idle-test": (
-                "gpt-5.6-sol",
+                _SYNTHETIC_MODEL_ID,
                 (
                     {
                         "model": "claude-sonnet-5",
@@ -161,7 +163,7 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
     assert isinstance(resolved_identity, ModelIdentity)
     assert isinstance(telemetry, SessionTelemetry)
     assert resolved_identity.configured_model == "opus"
-    assert resolved_identity.effective_model == "gpt-5.6-sol"
+    assert resolved_identity.effective_model == _SYNTHETIC_MODEL_ID
     assert telemetry.subagent_model_outcomes[0]["model_swapped"] is True
     runner_env = runner.call_args_list[0][3]["env"]
     assert {key: runner_env[key] for key in sink_env} == sink_env

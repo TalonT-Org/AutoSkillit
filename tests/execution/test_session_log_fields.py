@@ -29,6 +29,8 @@ from tests.execution.conftest import (
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 
 class _FakeLocator:
     def __init__(self, path: Path | None) -> None:
@@ -101,7 +103,7 @@ def test_execution_identity_reaches_summary_and_current_schema_index(tmp_path):
         requested_parent_backend="codex",
         effective_parent_backend="codex",
         requested_parent_model="opus",
-        effective_parent_model="gpt-5.5",
+        effective_parent_model=_SYNTHETIC_MODEL_ID,
         cli_version="0.146.0",
         override_tier="recipe_step",
         override_key_path="agent_backend.recipe_overrides.planner.analyze",
@@ -115,7 +117,7 @@ def test_execution_identity_reaches_summary_and_current_schema_index(tmp_path):
                 requested_backend="codex",
                 effective_backend="codex",
                 requested_model="sonnet",
-                effective_model="gpt-5.6-luna",
+                effective_model=_SYNTHETIC_MODEL_ID,
                 requested_effort="high",
                 effective_effort="max",
                 session_id="child-id",
@@ -796,7 +798,7 @@ def test_resolved_model_and_subagent_outcomes_are_consistent_across_artifacts(tm
         versions=_VERSIONS,
         model_identity=ModelIdentity(
             configured_model="opus",
-            effective_model="gpt-5.6-sol",
+            effective_model=_SYNTHETIC_MODEL_ID,
             profile_name="",
         ),
         token_usage={"input_tokens": 10, "output_tokens": 5},
@@ -809,10 +811,10 @@ def test_resolved_model_and_subagent_outcomes_are_consistent_across_artifacts(tm
     token_usage = json.loads((session_dir / "token_usage.json").read_text())
     index_entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
 
-    assert summary["versions"]["model_identifier"] == "gpt-5.6-sol"
-    assert token_usage["model_identifier"] == "gpt-5.6-sol"
+    assert summary["versions"]["model_identifier"] == _SYNTHETIC_MODEL_ID
+    assert token_usage["model_identifier"] == _SYNTHETIC_MODEL_ID
     assert token_usage["configured_model"] == "opus"
-    assert index_entry["model_identifier"] == "gpt-5.6-sol"
+    assert index_entry["model_identifier"] == _SYNTHETIC_MODEL_ID
     assert index_entry["configured_model"] == "opus"
     assert index_entry["subagent_model_outcomes"] == [outcome]
 
@@ -1864,7 +1866,7 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
 
 @pytest.mark.parametrize(
     "provider_model",
-    ["MiniMax-M2.7-highspeed", "gpt-4o"],
+    ["MiniMax-M2.7-highspeed", _SYNTHETIC_MODEL_ID],
 )
 def test_non_anthropic_provider_model_identity_round_trip(tmp_path, provider_model):
     """Non-Anthropic provider sessions must write the effective provider model, not the Anthropic alias."""

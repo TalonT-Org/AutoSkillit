@@ -5,8 +5,8 @@ tools: [Read]
 model: sonnet
 maxTurns: 80
 codex:
-  model: gpt-5.6-terra
-  reasoning_effort: xhigh
+  model: gpt-6-luna
+  reasoning_effort: max
   sandbox_mode: read-only
 ---
 

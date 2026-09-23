@@ -96,7 +96,7 @@ def _child_rollout(path: Path, child_id: str, parent_id: str) -> bytes:
         },
         {
             "type": "turn_context",
-            "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+            "payload": {"model": "gpt-synthetic", "effort": "medium"},
         },
     ]
     content = ("\n".join(json.dumps(row) for row in rows) + "\n").encode()

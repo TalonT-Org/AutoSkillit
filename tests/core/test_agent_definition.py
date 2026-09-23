@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CODEX_EXPLORER_IDENTITY,
+    CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
     EXPLORATION_TOOLS,
     REPOSITORY_IMPACT_PROFILER_ROLE,
@@ -62,23 +63,23 @@ _READER_DISABLED_FEATURES = (
 )
 
 _SKILL_CHILD_ROLE_EXPECTATIONS = {
-    "pr-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
-    "pr-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "high"),
-    "research-source-reader": (("Read",), "sonnet", 80, "gpt-5.6-luna", "xhigh"),
-    "research-synthesizer": (("Read",), "sonnet", 80, "gpt-5.6-terra", "xhigh"),
+    "pr-source-reader": (("Read",), "sonnet", 80, CODEX_MODEL_ALIASES["haiku"], "xhigh"),
+    "pr-synthesizer": (("Read",), "sonnet", 80, CODEX_MODEL_ALIASES["haiku"], "max"),
+    "research-source-reader": (("Read",), "sonnet", 80, CODEX_MODEL_ALIASES["haiku"], "xhigh"),
+    "research-synthesizer": (("Read",), "sonnet", 80, CODEX_MODEL_ALIASES["haiku"], "max"),
     "friction-batch-scanner": (
         ("Read", "Grep"),
         "haiku",
         80,
-        "gpt-5.6-luna",
+        CODEX_MODEL_ALIASES["haiku"],
         "medium",
     ),
     "friction-category-analyzer": (
         ("Read", "Grep"),
         "sonnet",
         80,
-        "gpt-5.6-terra",
-        "xhigh",
+        CODEX_MODEL_ALIASES["haiku"],
+        "max",
     ),
 }
 
@@ -97,7 +98,7 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
 
     assert frozenset(definition.tools) == _EXPLORATION_BROKER_TOOLS
     assert definition.model == "sonnet"
-    assert definition.codex.model == "gpt-5.6-luna"
+    assert CODEX_EXPLORER_IDENTITY == (CODEX_MODEL_ALIASES["haiku"], "max")
     assert definition.codex.reasoning_effort == "max"
     assert (
         definition.codex.model,
@@ -122,7 +123,7 @@ def test_web_evidence_researcher_is_a_terminal_live_web_leaf() -> None:
     assert definition.tools == ("WebSearch", "WebFetch")
     assert definition.model is None
     assert definition.max_turns == 80
-    assert definition.codex.model == "gpt-5.6-luna"
+    assert definition.codex.model == CODEX_MODEL_ALIASES["haiku"]
     assert definition.codex.reasoning_effort == "xhigh"
     assert definition.codex.sandbox_mode == "read-only"
     assert definition.codex.web_search == "live"
@@ -262,7 +263,7 @@ def test_pr_source_reader_separates_claude_and_restricted_codex_tool_surfaces() 
     assert definition.tools == ("Read",)
     assert definition.reader_tools == _PR_SOURCE_READER_TOOLS
     assert definition.codex == CodexAgentProjectionDef(
-        model="gpt-5.6-luna",
+        model=CODEX_MODEL_ALIASES["haiku"],
         reasoning_effort="xhigh",
         sandbox_mode="read-only",
         disabled_features=_READER_DISABLED_FEATURES,
@@ -339,7 +340,7 @@ def test_reader_tools_definition_requires_an_immutable_tuple() -> None:
         ),
         (
             CodexAgentProjectionDef(
-                "gpt-5.6-luna",
+                CODEX_MODEL_ALIASES["haiku"],
                 "xhigh",
                 "workspace-write",
                 _READER_DISABLED_FEATURES,
@@ -350,7 +351,7 @@ def test_reader_tools_definition_requires_an_immutable_tuple() -> None:
         ),
         (
             CodexAgentProjectionDef(
-                "gpt-5.6-luna",
+                CODEX_MODEL_ALIASES["haiku"],
                 "xhigh",
                 "read-only",
                 _READER_DISABLED_FEATURES,
@@ -361,7 +362,7 @@ def test_reader_tools_definition_requires_an_immutable_tuple() -> None:
         ),
         (
             CodexAgentProjectionDef(
-                "gpt-5.6-luna",
+                CODEX_MODEL_ALIASES["haiku"],
                 "xhigh",
                 "read-only",
                 _READER_DISABLED_FEATURES,
@@ -372,7 +373,7 @@ def test_reader_tools_definition_requires_an_immutable_tuple() -> None:
         ),
         (
             CodexAgentProjectionDef(
-                "gpt-5.6-luna",
+                CODEX_MODEL_ALIASES["haiku"],
                 "xhigh",
                 "read-only",
                 _READER_DISABLED_FEATURES[1:],
@@ -441,7 +442,7 @@ def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Pat
         "model: sonnet\n"
         "maxTurns: 12\n"
         "codex:\n"
-        "  model: gpt-5.6-luna\n"
+        f"  model: {CODEX_MODEL_ALIASES['haiku']}\n"
         "  reasoning_effort: max\n"
         "  sandbox_mode: read-only\n"
         "  disabled_features: [apps, shell_tool]\n"
@@ -454,7 +455,7 @@ def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Pat
     definition = load_agent_definition(path)
     assert definition.model == "sonnet"
     assert definition.codex == CodexAgentProjectionDef(
-        model="gpt-5.6-luna",
+        model=CODEX_MODEL_ALIASES["haiku"],
         reasoning_effort="max",
         sandbox_mode="read-only",
         disabled_features=("apps", "shell_tool"),
@@ -505,7 +506,7 @@ def test_definition_and_projection_are_frozen() -> None:
         model="sonnet",
         max_turns=1,
         body="Return evidence.",
-        codex=CodexAgentProjectionDef("gpt-5.6-luna", "max", "read-only"),
+        codex=CodexAgentProjectionDef(CODEX_MODEL_ALIASES["haiku"], "max", "read-only"),
     )
     with pytest.raises(FrozenInstanceError):
         definition.name = "changed"  # type: ignore[misc]
@@ -515,18 +516,25 @@ def test_definition_and_projection_are_frozen() -> None:
     ("projection", "error"),
     [
         (("unknown", "max", "read-only"), None),
-        (("gpt-5.6-luna", "unknown", "read-only"), None),
-        (("gpt-5.6-luna", "max", "danger-full-access"), None),
+        ((CODEX_MODEL_ALIASES["haiku"], "unknown", "read-only"), None),
+        ((CODEX_MODEL_ALIASES["haiku"], "max", "danger-full-access"), None),
         (
             ("unknown", "max", "read-only", ("apps", "apps"), "false", "invalid"),
             "unsupported Codex model",
         ),
         (
-            ("gpt-5.6-luna", "max", "read-only", ("apps", "apps"), "false", "invalid"),
+            (
+                CODEX_MODEL_ALIASES["haiku"],
+                "max",
+                "read-only",
+                ("apps", "apps"),
+                "false",
+                "invalid",
+            ),
             "disabled_features must not contain duplicates",
         ),
         (
-            ("gpt-5.6-luna", "max", "read-only", ("apps",), "false", "invalid"),
+            (CODEX_MODEL_ALIASES["haiku"], "max", "read-only", ("apps",), "false", "invalid"),
             "agents_enabled must be a boolean",
         ),
     ],
@@ -542,7 +550,7 @@ def test_invalid_native_projection_fails_closed(
 def test_invalid_web_search_policy_fails_closed(web_search: object) -> None:
     with pytest.raises(AgentDefinitionError, match="web_search must be one of"):
         CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             web_search=web_search,  # type: ignore[arg-type]
@@ -552,7 +560,7 @@ def test_invalid_web_search_policy_fails_closed(web_search: object) -> None:
 @pytest.mark.parametrize("web_search", ["disabled", "cached", "indexed", "live"])
 def test_valid_codex_web_search_modes(web_search: str) -> None:
     projection = CodexAgentProjectionDef(
-        "gpt-5.6-luna",
+        CODEX_MODEL_ALIASES["haiku"],
         "max",
         "read-only",
         web_search=web_search,  # type: ignore[arg-type]
@@ -564,7 +572,7 @@ def test_valid_codex_web_search_modes(web_search: str) -> None:
 def test_web_search_policy_is_optional_and_positional_arguments_remain_stable() -> None:
     assert CodexAgentProjectionDef(None, None, "read-only").web_search is None
     projection = CodexAgentProjectionDef(
-        "gpt-5.6-luna",
+        CODEX_MODEL_ALIASES["haiku"],
         "max",
         "read-only",
         ("apps",),
@@ -578,7 +586,7 @@ def test_web_search_policy_is_optional_and_positional_arguments_remain_stable() 
 def test_retired_codex_features_fail_closed(disabled_feature: str) -> None:
     with pytest.raises(AgentDefinitionError, match="unsupported Codex disabled features"):
         CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             (disabled_feature,),
@@ -598,7 +606,7 @@ def test_retired_codex_features_fail_closed(disabled_feature: str) -> None:
 def test_invalid_disabled_features_fail_closed(disabled_features: object) -> None:
     with pytest.raises(AgentDefinitionError):
         CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             disabled_features,  # type: ignore[arg-type]
@@ -617,7 +625,7 @@ def test_extension_surface_disabled_features_are_valid_and_canonical() -> None:
         "tool_suggest",
     )
     projection = CodexAgentProjectionDef(
-        "gpt-5.6-luna",
+        CODEX_MODEL_ALIASES["haiku"],
         "max",
         "read-only",
         disabled_features,
@@ -629,7 +637,7 @@ def test_extension_surface_disabled_features_are_valid_and_canonical() -> None:
 def test_invalid_agents_enabled_fails_closed(agents_enabled: object) -> None:
     with pytest.raises(AgentDefinitionError, match="agents_enabled must be a boolean"):
         CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             agents_enabled=agents_enabled,  # type: ignore[arg-type]
@@ -644,7 +652,7 @@ def test_disabled_features_frontmatter_requires_a_string_list(tmp_path: Path) ->
         "description: Bounded semantic navigation\n"
         "tools: [Read, Grep, Glob]\n"
         "codex:\n"
-        "  model: gpt-5.6-luna\n"
+        f"  model: {CODEX_MODEL_ALIASES['haiku']}\n"
         "  reasoning_effort: max\n"
         "  sandbox_mode: read-only\n"
         "  disabled_features: shell_tool\n"
@@ -664,7 +672,7 @@ def test_agents_enabled_frontmatter_requires_a_boolean(tmp_path: Path) -> None:
         "description: Bounded semantic navigation\n"
         "tools: [Read, Grep, Glob]\n"
         "codex:\n"
-        "  model: gpt-5.6-luna\n"
+        f"  model: {CODEX_MODEL_ALIASES['haiku']}\n"
         "  reasoning_effort: max\n"
         "  sandbox_mode: read-only\n"
         '  agents_enabled: "false"\n'
@@ -684,7 +692,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         model="sonnet",
         max_turns=1,
         body="Return evidence.",
-        codex=CodexAgentProjectionDef("gpt-5.6-luna", "max", "read-only"),
+        codex=CodexAgentProjectionDef(CODEX_MODEL_ALIASES["haiku"], "max", "read-only"),
     )
     digest = agent_definition_digest(definition)
     changed = AgentDef(
@@ -704,7 +712,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         max_turns=definition.max_turns,
         body=definition.body,
         codex=CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             ("apps",),
@@ -718,7 +726,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         max_turns=definition.max_turns,
         body=definition.body,
         codex=CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             agents_enabled=False,
@@ -732,7 +740,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         max_turns=definition.max_turns,
         body=definition.body,
         codex=CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             web_search="disabled",
@@ -746,7 +754,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         max_turns=definition.max_turns,
         body=definition.body,
         codex=CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             web_search="live",
@@ -756,7 +764,7 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
         definition,
         reader_tools=(f"{DIRECT_PREFIX}read_authorized_artifact",),
         codex=CodexAgentProjectionDef(
-            "gpt-5.6-luna",
+            CODEX_MODEL_ALIASES["haiku"],
             "max",
             "read-only",
             _READER_DISABLED_FEATURES,

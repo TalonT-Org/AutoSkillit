@@ -5,7 +5,7 @@ tools: [Read, Grep]
 model: haiku
 maxTurns: 80
 codex:
-  model: gpt-5.6-luna
+  model: gpt-6-luna
   reasoning_effort: medium
   sandbox_mode: read-only
 ---

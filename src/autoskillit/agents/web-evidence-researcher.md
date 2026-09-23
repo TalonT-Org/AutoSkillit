@@ -4,7 +4,7 @@ description: "Terminal single-topic specialist for bounded external web evidence
 tools: [WebSearch, WebFetch]
 maxTurns: 80
 codex:
-  model: gpt-5.6-luna
+  model: gpt-6-luna
   reasoning_effort: xhigh
   sandbox_mode: read-only
   disabled_features: [apps, browser_use, browser_use_external, browser_use_full_cdp_access, code_mode, code_mode_buffered_exec, code_mode_host, code_mode_only, computer_use, enable_mcp_apps, goals, image_generation, in_app_browser, multi_agent, multi_agent_v2, plugin_sharing, plugins, remote_plugin, request_permissions_tool, shell_tool, tool_suggest, unified_exec, unified_exec_zsh_fork]

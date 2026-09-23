@@ -145,7 +145,9 @@ def test_classify_evidence_reason_table(evidence: dict, expected_reason: str) ->
     assert snap.classify_evidence(evidence) == expected_reason
 
 
-@pytest.mark.parametrize("effective_model", ["claude-opus-5", "minimax-abab7", "gpt-5.1"])
+@pytest.mark.parametrize(
+    "effective_model", ["claude-opus-5", "minimax-abab7", "fixture-codex-model"]
+)
 @pytest.mark.parametrize("role", ["reviewer", "explorer", ""])
 @pytest.mark.parametrize("carries_end_turn", [True, False])
 def test_classification_is_provider_role_and_end_turn_invariant(
@@ -401,7 +403,7 @@ def test_duplicate_metadata_evidence_can_clear_and_restore_native_settings(
     monkeypatch.setattr(snapshot_impl, "_write_document", tracking_write)
     resolved = {
         "role": "plan-foundation-auditor",
-        "effective_model": "gpt-5.6-sol",
+        "effective_model": "fixture-codex-model",
         "effective_effort": "medium",
     }
     conflict = {
@@ -440,7 +442,7 @@ def test_duplicate_metadata_evidence_can_clear_and_restore_native_settings(
     assert conflicted_outcome["role"] == "plan-foundation-auditor"
     restored_entry = restored["children"]["child-1"]
     restored_outcome = restored_entry["outcome"]
-    assert restored_outcome["effective_model"] == "gpt-5.6-sol"
+    assert restored_outcome["effective_model"] == "fixture-codex-model"
     assert restored_outcome["effective_effort"] == "medium"
     assert (
         restored_outcome["terminal_reason"]

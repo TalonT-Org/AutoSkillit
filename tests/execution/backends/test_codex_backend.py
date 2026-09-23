@@ -19,6 +19,7 @@ from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
+    CODEX_EXPLORER_IDENTITY,
     CODEX_MODEL_ALIASES,
     CODEX_RESERVED_HOME_ENV_VARS,
     DIRECT_PREFIX,
@@ -2394,8 +2395,8 @@ class TestCodexBackendSetupSessionDir:
             max_turns=8,
             body="Return bounded evidence only.",
             codex=CodexAgentProjectionDef(
-                "gpt-5.6-luna",
-                "max",
+                CODEX_EXPLORER_IDENTITY[0],
+                CODEX_EXPLORER_IDENTITY[1],
                 "read-only",
                 disabled_features,
                 agents_enabled,
@@ -2491,7 +2492,7 @@ class TestCodexBackendSetupSessionDir:
         reader = tomllib.loads(
             (self.session_dir / "agents" / "session-log-reader.toml").read_text()
         )
-        assert reader["model"] == "gpt-5.6-luna"
+        assert reader["model"] == CODEX_MODEL_ALIASES["haiku"]
         assert reader["model_reasoning_effort"] == "xhigh"
         assert reader["sandbox_mode"] == "read-only"
         assert reader["web_search"] == "disabled"
@@ -2705,8 +2706,10 @@ class TestCodexBackendSetupSessionDir:
         generated = tuple((self.session_dir / "agents").glob("*.toml"))
         assert [path.name for path in generated] == ["semantic-code-navigator.toml"]
         parsed = tomllib.loads(generated[0].read_text(encoding="utf-8"))
-        assert parsed["model"] == "gpt-5.6-luna"
-        assert parsed["model_reasoning_effort"] == "max"
+        assert (
+            parsed["model"],
+            parsed["model_reasoning_effort"],
+        ) == CODEX_EXPLORER_IDENTITY
         assert parsed["sandbox_mode"] == "read-only"
         assert "features" not in parsed
         assert "agents" not in parsed
@@ -2752,8 +2755,10 @@ class TestCodexBackendSetupSessionDir:
             assert projection == expected_projection
             role_projections.append(projection)
             assert agent_definition_digest(definition) in parsed["developer_instructions"]
-            assert parsed["model"] == "gpt-5.6-luna"
-            assert parsed["model_reasoning_effort"] == "max"
+            assert (
+                parsed["model"],
+                parsed["model_reasoning_effort"],
+            ) == CODEX_EXPLORER_IDENTITY
             assert parsed["sandbox_mode"] == "read-only"
 
         parent_config = tomllib.loads(
@@ -3285,7 +3290,7 @@ class TestCodexBackendSetupSessionDir:
         generated = self.session_dir / "agents" / f"{WEB_EVIDENCE_RESEARCHER_ROLE}.toml"
         generated_text = generated.read_text(encoding="utf-8")
         parsed = tomllib.loads(generated_text)
-        assert parsed["model"] == "gpt-5.6-luna"
+        assert parsed["model"] == CODEX_MODEL_ALIASES["haiku"]
         assert parsed["model_reasoning_effort"] == "xhigh"
         assert parsed["sandbox_mode"] == "read-only"
         assert parsed["web_search"] == "live"
@@ -3305,7 +3310,10 @@ class TestCodexBackendSetupSessionDir:
 
         with pytest.raises(
             ValueError,
-            match="gpt-5.6-luna/max/read-only agent projection requires",
+            match=(
+                f"{CODEX_EXPLORER_IDENTITY[0]}/{CODEX_EXPLORER_IDENTITY[1]}"
+                "/read-only agent projection requires"
+            ),
         ):
             CodexBackend().setup_session_dir(
                 self.session_dir,

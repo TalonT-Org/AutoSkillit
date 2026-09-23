@@ -353,19 +353,17 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
 
 CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     {
-        "sonnet": "gpt-5.6-sol",
-        "opus": "gpt-5.6-sol",
+        "sonnet": "gpt-6-sol",
+        "opus": "gpt-6-sol",
         # The haiku class marks volume-heavy, logic-light work; Luna is the
         # Codex tier for that class, never Sol.
-        "haiku": "gpt-5.6-luna",
+        "haiku": "gpt-6-luna",
     }
 )
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-13"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-09-23"
 
-CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset(
-    {"gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
-)
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-6-luna", "gpt-6-sol"})
 CODEX_VALID_REASONING_EFFORTS: frozenset[str] = frozenset(
     {"low", "medium", "high", "xhigh", "max", "ultra"}
 )

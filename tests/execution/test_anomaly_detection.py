@@ -520,7 +520,8 @@ def test_normalize_model_id_full_id_unchanged():
 
 
 def test_normalize_model_id_non_anthropic_passthrough():
-    assert normalize_model_id("gpt-4o") == "gpt-4o"
+    model_id = "gpt-synthetic"
+    assert normalize_model_id(model_id) == model_id
 
 
 def test_normalize_model_id_strips_context_window_suffix():
@@ -542,7 +543,7 @@ def test_detect_model_drift_suppressed_when_profile_routed_cross_vendor():
         # Profile-routed to non-Anthropic: suppress (standard production case)
         ("opus", "MiniMax-M2.7", "minimax", False),
         ("opus[1m]", "MiniMax-M2.7", "minimax", False),
-        ("claude-opus-4-6", "gpt-4o", "openai", False),
+        ("claude-opus-4-6", "gpt-synthetic", "openai", False),
         ("sonnet", "MiniMax-M2.7", "minimax", False),
         # Profile-routed, both non-Anthropic: suppress
         ("MiniMax-M1", "MiniMax-M2.7", "minimax", False),

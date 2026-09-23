@@ -8,7 +8,7 @@ reader_tools:
 model: sonnet
 maxTurns: 80
 codex:
-  model: gpt-5.6-luna
+  model: gpt-6-luna
   reasoning_effort: xhigh
   sandbox_mode: read-only
   disabled_features:

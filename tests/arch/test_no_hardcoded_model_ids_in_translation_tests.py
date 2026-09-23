@@ -1,4 +1,4 @@
-"""Architectural guard: translation tests must not hardcode alias-resolved model IDs.
+"""Guard model-version literals in tests against unrelated pinning.
 
 Tests must assert against the backend alias registries rather than literal alias output
 strings. This prevents co-authoring of wrong values: if an alias dict is wrong,
@@ -11,11 +11,37 @@ they test native model IDs, not alias-resolved values.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+_TESTS_ROOT = Path(__file__).parent.parent
+_MODEL_VERSION_RE = re.compile(r"gpt-[0-9]+(?:\.[0-9]+)?(?:-[a-z]+)?")
+_MODEL_CONTRACT_TESTS = frozenset(
+    {
+        "execution/test_model_alias_registry.py",
+        "execution/test_model_backend_launch_contract.py",
+        "execution/backends/test_model_translation.py",
+        "execution/backends/test_codex_catalog.py",
+        "execution/backends/_codex_fixtures.py",
+        "server/test_managed_join_prelaunch.py",
+    }
+)
+
+
+def test_gpt_version_literals_are_limited_to_model_contract_tests() -> None:
+    violations: dict[str, list[str]] = {}
+    for path in _TESTS_ROOT.rglob("*.py"):
+        relative = str(path.relative_to(_TESTS_ROOT))
+        if relative in _MODEL_CONTRACT_TESTS:
+            continue
+        literals = set(_MODEL_VERSION_RE.findall(path.read_text()))
+        if literals:
+            violations[relative] = sorted(literals)
+    assert not violations, f"Unrelated tests pin GPT model versions: {violations}"
 
 
 def _get_test_model_translation_path() -> Path:

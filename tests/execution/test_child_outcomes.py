@@ -20,6 +20,8 @@ from autoskillit.hooks import _child_outcome_snapshot as snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
 
 # --- collect_child_outcomes ---------------------------------------------------
 
@@ -223,7 +225,7 @@ def test_collect_codex_observed_children_finds_started_activity(tmp_path) -> Non
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                "payload": {"model": _SYNTHETIC_MODEL_ID, "effort": "medium"},
             },
         ],
     )
@@ -244,7 +246,7 @@ def test_collect_codex_observed_children_finds_started_activity(tmp_path) -> Non
         "parent_session_id": "parent-1",
         "role": "plan-foundation-auditor",
         "attribution_skill": "",
-        "effective_model": "gpt-5.6-sol",
+        "effective_model": _SYNTHETIC_MODEL_ID,
         "effective_effort": "medium",
         "effective_provider": "",
         "terminal_reason": snap.REASON_UNKNOWN,
@@ -452,7 +454,7 @@ def test_collect_codex_observed_children_refines_metadata_as_rollout_appears(
                     "agent_role": "plan-foundation-auditor",
                 },
             },
-            {"type": "turn_context", "payload": {"model": "gpt-5.6-sol"}},
+            {"type": "turn_context", "payload": {"model": _SYNTHETIC_MODEL_ID}},
         ],
     )
     assert co.collect_codex_observed_children(
@@ -474,7 +476,7 @@ def test_collect_codex_observed_children_refines_metadata_as_rollout_appears(
             },
             {
                 "type": "turn_context",
-                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                "payload": {"model": _SYNTHETIC_MODEL_ID, "effort": "medium"},
             },
         ],
     )
@@ -490,7 +492,7 @@ def test_collect_codex_observed_children_refines_metadata_as_rollout_appears(
     )
     assert len(outcomes) == 1
     assert outcomes[0]["role"] == "plan-foundation-auditor"
-    assert outcomes[0]["effective_model"] == "gpt-5.6-sol"
+    assert outcomes[0]["effective_model"] == _SYNTHETIC_MODEL_ID
     assert outcomes[0]["effective_effort"] == "medium"
 
 
@@ -638,7 +640,7 @@ def test_codex_role_rows_preserve_distinct_parent_child_pairs(tmp_path) -> None:
                 },
                 {
                     "type": "turn_context",
-                    "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                    "payload": {"model": _SYNTHETIC_MODEL_ID, "effort": "medium"},
                 },
             ],
         )

@@ -603,7 +603,7 @@ class TestCLIOrderCommand:
         mock_config.subsets.disabled = []
         mock_config.packs.enabled = []
         mock_config.model.model_override = None
-        mock_config.model.default_model = "gpt-5.6-sol"
+        mock_config.model.default_model = "fixture-default-model"
         mock_config.branching.default_base_branch = "develop"
         mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)

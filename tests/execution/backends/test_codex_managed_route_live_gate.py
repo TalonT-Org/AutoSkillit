@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -17,6 +18,7 @@ from uuid import uuid4
 import pytest
 
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
     MANAGED_JOIN_PARENT_ID_ENV_VAR,
     SemanticAdaptationContext,
     SkillExecutionRole,
@@ -43,7 +45,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.tim
 _LIVE_ENV = "AUTOSKILLIT_CODEX_MANAGED_ROUTE_LIVE"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
 _SOURCE_AUTH = Path("~/.codex/auth.json").expanduser()
-_PARENT_MODEL = "gpt-5.6-luna"
+_PARENT_MODEL = CODEX_MODEL_ALIASES["haiku"]
 _MAX_CAPTURE_BYTES = 4 * 1024 * 1024
 
 _skip_unless_live_gate = pytest.mark.skipif(
@@ -132,7 +134,20 @@ def _write_bundled_models_cache(profile_codex_home: Path, env: dict[str, str]) -
         check=False,
     )
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
-    profile_codex_home.joinpath("models_cache.json").write_bytes(completed.stdout)
+    cli_version = (
+        subprocess.run(  # noqa: S603
+            ["codex", "--version"], env=env, capture_output=True, text=True, timeout=30, check=True
+        )
+        .stdout.strip()
+        .removeprefix("codex-cli ")
+    )
+    catalog = json.loads(completed.stdout)
+    catalog.update(
+        client_version=cli_version,
+        fetched_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        etag=None,
+    )
+    profile_codex_home.joinpath("models_cache.json").write_text(json.dumps(catalog))
 
 
 def _stop_guard_env(env: dict[str, str]) -> dict[str, str]:
@@ -183,6 +198,7 @@ def test_live_codex_interactive_managed_route_gate(
 
     repository = tmp_path / "repository"
     repository.mkdir()
+    subprocess.run(["git", "init", "--quiet"], cwd=repository, check=True, timeout=30)
     (repository / ".autoskillit" / "temp").mkdir(parents=True)
     (repository / "README.md").write_text("managed route live gate\n", encoding="utf-8")
     source_auth = _SOURCE_AUTH if _SOURCE_AUTH.is_file() else tmp_path / "missing-auth.json"

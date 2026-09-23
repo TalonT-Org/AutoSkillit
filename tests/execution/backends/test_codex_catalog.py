@@ -13,8 +13,8 @@ from tests.execution.backends._codex_fixtures import installed_catalog
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
-_READER_MODEL = "gpt-5.6-luna"
-_READER_REASONING_EFFORT = "xhigh"
+_READER_MODEL = "gpt-6-luna"
+_READER_REASONING_EFFORT = "medium"
 
 
 def _installed_catalog() -> dict[str, object]:
@@ -118,10 +118,8 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
 
 
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
-    from autoskillit.core import (
-        JoinSpec,
-        SkillSemanticPlan,
-    )
+    from autoskillit.core import JoinSpec, SkillSemanticPlan
+    from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
@@ -131,8 +129,8 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
         launch_context="direct",
         parent_session_id="parent-1",
         direct_tool_mode=True,
-        resolved_model="gpt-5.6-sol",
-        resolved_reasoning_effort="high",
+        resolved_model=CODEX_MODEL_ALIASES["opus"],
+        resolved_reasoning_effort=CODEX_EFFORT_MAPPING["opus"],
         codex_catalog_digest="c" * 64,
         fixed_batch_tool_registry_digest="a" * 64,
         hook_registry_digest="b" * 64,

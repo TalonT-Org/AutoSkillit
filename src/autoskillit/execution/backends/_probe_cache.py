@@ -46,7 +46,7 @@ PROBE_SUITE_CONTRACT: tuple[str, ...] = (
 PROBE_SUITE_CONTRACT_DIGEST: str = hashlib.sha256(
     "\n".join(PROBE_SUITE_CONTRACT).encode("utf-8")
 ).hexdigest()
-CODEX_RECIPE_PROBE_MODEL_IDENTITY = "gpt-5.6-sol"
+CODEX_RECIPE_PROBE_MODEL_IDENTITY = "gpt-6-sol"
 _SUPPORTED_RECIPE_EVIDENCE_DIGEST = hashlib.sha256(
     json.dumps(
         {

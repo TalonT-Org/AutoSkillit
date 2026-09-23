@@ -16,7 +16,7 @@ definition only into the live probe.
 ## Native Codex policy
 
 The Codex projection is independently validated against native model and reasoning-effort
-registries. The explorer policy is `gpt-5.6-luna`, `max`, and `read-only`; Claude model aliases
+registries. The explorer policy is `gpt-6-luna`, `max`, and `read-only`; Claude model aliases
 remain unchanged. A canonical, domain-separated `AgentDef` digest is embedded in generated
 developer instructions and must be present in the child rollout's Codex-owned
 `session_meta.base_instructions`.
@@ -147,7 +147,7 @@ The attestation is accepted only when it is a cache miss and exactly matches the
 model-catalog digest, probe-policy/contract version, effective read-only parent and child policy,
 never approval, restricted network, exact parent/child identities, role/agent path, canonical
 definition digest, tool-surface digest, required-boundary results, and optional capability
-statuses. It also pins the `gpt-5.6-sol` parent model, validates a fresh timestamp and the exact
+statuses. It also pins the `gpt-6-sol` parent model, validates a fresh timestamp and the exact
 versioned attestation artifact schema, and runs with an allowlisted isolated `HOME`, `CODEX_HOME`,
 and XDG environment. A SHA-256 sidecar binds the exact published payload; the separate readiness
 step verifies it plus the installed CLI and current projected catalog, and requires enforced

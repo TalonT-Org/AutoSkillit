@@ -45,7 +45,7 @@ def _turn_usage_row(
         "message_id": f"message-{index}",
         "request_id": f"request-{index}",
         "timestamp": f"2026-09-10T10:00:{index % 60:02d}+00:00",
-        "model": "claude-sonnet-4-6" if backend == "claude-code" else "gpt-5.4",
+        "model": "claude-sonnet-4-6" if backend == "claude-code" else "gpt-synthetic",
         "input_tokens": 100 + index,
         "output_tokens": 20 + index,
         "cache_read_tokens": 80,
@@ -1312,7 +1312,7 @@ def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
         message_id=None,
         request_id=None,
         timestamp="2026-09-10T11:00:00+00:00",
-        model="gpt-5.4",
+        model="gpt-synthetic",
     )
 
     _flush(

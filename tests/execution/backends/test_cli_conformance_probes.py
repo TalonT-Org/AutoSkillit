@@ -2022,6 +2022,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
                             "adaptation_digest": static_source.adaptation_digest,
                             "projected_digest": static_source.projected_digest,
                             "canonical_digest": static_source.canonical_digest,
+                            "write_paths": None,
                         }
                     },
                 },

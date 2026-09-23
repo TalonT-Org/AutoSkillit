@@ -120,7 +120,8 @@ def _json_values(value: object) -> list[object]:
 
 def _parent_prompt(run_id: str) -> str:
     return f"""
-For live managed-route gate {run_id}, use the shell tool to run `printf LIVE_FOLLOWUP_TOOL`
+For live managed-route gate {run_id}, call open_kitchen with no arguments once. Then call
+AutoSkillit's run_python with callable "textwrap.dedent" and args {{"text":"LIVE_FOLLOWUP_TOOL"}}
 exactly once, then reply with LIVE_COOK_OK. Do not call any batch or agent tool.
 """.strip()
 
@@ -134,6 +135,7 @@ def _run_denial_then_release(
     log_dir: Path,
     label: str,
     evidence_dir: Path,
+    extra_overrides: tuple[str, ...] = (),
 ) -> str:
     flag_dir = resolve_channel_dir(repository)
     batch = declare_batch(
@@ -219,12 +221,16 @@ def _run_denial_then_release(
             cwd=repository,
             model=_PARENT_MODEL,
             prompt=(
-                "Call open_kitchen with no arguments exactly once, then reply with "
-                f"LIVE_RELEASE_{label.upper()}."
+                "Call open_kitchen with no arguments, then call run_python with callable "
+                f'textwrap.dedent and args {{"text":"LIVE_RELEASE_{label.upper()}"}}. '
+                "If denied, attempt to finish with PENDING_STOP_PROBE. When continued, "
+                "retry the call and return its result."
             ),
             timeout=180,
             max_output_bytes=_MAX_CAPTURE_BYTES,
             capture_dir=evidence_dir / label,
+            extra_overrides=extra_overrides,
+            trust_generated_hooks=True,
             sandbox="workspace-write",
         )
     finally:
@@ -260,6 +266,8 @@ def _run_denial_then_release(
         timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
         max_output_bytes=_MAX_CAPTURE_BYTES,
         capture_dir=evidence_dir / f"{label}-resumed",
+        extra_overrides=extra_overrides,
+        trust_generated_hooks=True,
         resume_thread_id=thread_id,
         sandbox="workspace-write",
     )
@@ -310,6 +318,13 @@ def test_live_codex_interactive_managed_route_gate(
         parent_sandbox_mode="workspace-write",
         copy_source_auth=True,
     )
+
+    def preserve_parent_transcripts() -> None:
+        for transcript in (prepared.session_home / "sessions").rglob("*.jsonl"):
+            assert transcript.stat().st_size <= _MAX_CAPTURE_BYTES
+            shutil.copyfile(transcript, native_join_evidence / transcript.name)
+
+    request.addfinalizer(preserve_parent_transcripts)
     backend = CodexBackend()
     launch_id = uuid4().hex[:16]
     issuance = prepare_managed_join_context(
@@ -395,7 +410,7 @@ def test_live_codex_interactive_managed_route_gate(
     config_text = (prepared.session_home / "config.toml").read_text(encoding="utf-8")
     server = tomllib.loads(config_text)["mcp_servers"]["autoskillit"]
     server_command = shlex.join([server["command"], *server.get("args", [])])
-    server_command += f" 2>{shlex.quote(str(native_join_evidence / 'mcp.stderr.txt'))}"
+    server_command += f" 2>>{shlex.quote(str(native_join_evidence / 'mcp.stderr.txt'))}"
     (native_join_evidence / "config.toml").write_text(config_text, encoding="utf-8")
     assert "join_followup_guard" in config_text
     assert "join_stop_guard" in config_text
@@ -417,6 +432,17 @@ skill_name "{skill_name}", assignment_id "", offset 0, page_size 8192.
 Use these real tools and finish only after reading the completed batch result.
 """.strip()
     stdout_path = native_join_evidence / scenario / "stdout.txt"
+    overrides = (
+        'mcp_servers.autoskillit.command="/bin/sh"',
+        f"mcp_servers.autoskillit.args={json.dumps(['-c', 'exec ' + server_command])}",
+        'mcp_servers.autoskillit.tools.open_kitchen.approval_mode="approve"',
+        'mcp_servers.autoskillit.tools.run_python.approval_mode="approve"',
+        'mcp_servers.autoskillit.tools.run_fixed_batch.approval_mode="approve"',
+        'mcp_servers.autoskillit.tools.read_fixed_batch_result.approval_mode="approve"',
+        'mcp_servers.autoskillit.env.AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED="true"',
+        f"mcp_servers.autoskillit.env.AUTOSKILLIT_LOG_DIR={json.dumps(str(log_dir))}",
+        f"log_dir={json.dumps(str(native_join_evidence / 'codex-logs'))}",
+    )
     result = run_live_codex_parent_bounded(
         env=prepared.env,
         cwd=repository,
@@ -425,16 +451,8 @@ Use these real tools and finish only after reading the completed batch result.
         timeout=int(os.environ.get("AUTOSKILLIT_CODEX_MANAGED_ROUTE_TIMEOUT", "900")),
         max_output_bytes=_MAX_CAPTURE_BYTES,
         capture_dir=stdout_path.parent,
-        extra_overrides=(
-            'mcp_servers.autoskillit.command="/bin/sh"',
-            f"mcp_servers.autoskillit.args={json.dumps(['-c', 'exec ' + server_command])}",
-            'mcp_servers.autoskillit.tools.open_kitchen.approval_mode="approve"',
-            'mcp_servers.autoskillit.tools.run_fixed_batch.approval_mode="approve"',
-            'mcp_servers.autoskillit.tools.read_fixed_batch_result.approval_mode="approve"',
-            'mcp_servers.autoskillit.env.AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED="true"',
-            f"mcp_servers.autoskillit.env.AUTOSKILLIT_LOG_DIR={json.dumps(str(log_dir))}",
-            f"log_dir={json.dumps(str(native_join_evidence / 'codex-logs'))}",
-        ),
+        extra_overrides=overrides,
+        trust_generated_hooks=True,
         sandbox="workspace-write",
     )
     assert result.returncode == 0, result.stderr[-4_000:].decode("utf-8", errors="replace")
@@ -476,7 +494,10 @@ Use these real tools and finish only after reading the completed batch result.
         assert assignments[0]["outcome"] == OUTCOME_SUCCESS
         return
 
-    assert "LIVE_FOLLOWUP_TOOL" in json.dumps(events, sort_keys=True)
+    followup = _calls(events, "run_python")
+    assert len(followup) == 1
+    assert followup[0].get("error") is None
+    assert "LIVE_FOLLOWUP_TOOL" in _json_values(followup[0].get("result"))
     assert not _calls(events, "run_fixed_batch")
 
     diagnostics = _bounded_events(log_dir / "join_diagnostics.jsonl")
@@ -501,6 +522,7 @@ Use these real tools and finish only after reading the completed batch result.
         log_dir=log_dir,
         label="noncook",
         evidence_dir=native_join_evidence,
+        extra_overrides=overrides,
     )
     headless_env = {
         **prepared.env,
@@ -516,6 +538,7 @@ Use these real tools and finish only after reading the completed batch result.
         log_dir=log_dir,
         label="headless",
         evidence_dir=native_join_evidence,
+        extra_overrides=overrides,
     )
     assert len({*thread_ids, noncook_thread, headless_thread}) == 3
     stop_rows = [
@@ -525,6 +548,10 @@ Use these real tools and finish only after reading the completed batch result.
     ]
     assert sum(row.get("status") == "block" for row in stop_rows) >= 2
     assert sum(row.get("status") == "allow" for row in stop_rows) >= 2
+    assert all(row.get("session_id") == launch_id for row in stop_rows)
+    assert all(
+        row.get("managed_parent_id", row.get("top_level_parent")) == launch_id for row in stop_rows
+    )
     followup_rows = [
         row
         for row in _bounded_events(log_dir / "join_diagnostics.jsonl")

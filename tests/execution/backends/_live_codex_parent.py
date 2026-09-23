@@ -18,6 +18,7 @@ import pytest
 
 from autoskillit.core.agent_definition import AgentDef
 from autoskillit.execution.backends._codex_catalog import CodexProcessOutput, run_owned_bounded
+from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._explorer_conformance import project_codex_luna_catalog
@@ -166,6 +167,7 @@ def _live_codex_parent_invocation(
     resume_thread_id: str | None,
     extra_overrides: tuple[str, ...],
     sandbox: str,
+    trust_generated_hooks: bool = False,
 ) -> list[str]:
     invocation = [
         "codex",
@@ -177,6 +179,8 @@ def _live_codex_parent_invocation(
         "--model",
         model,
     ]
+    if trust_generated_hooks:
+        invocation.append(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
     for override in extra_overrides:
         invocation.extend(("-c", override))
     if resume_thread_id is not None:
@@ -233,6 +237,7 @@ def run_live_codex_parent_bounded(
     resume_thread_id: str | None = None,
     extra_overrides: tuple[str, ...] = (),
     sandbox: str = "read-only",
+    trust_generated_hooks: bool = False,
 ) -> CodexProcessOutput:
     """Run a live parent with owned-process cleanup and a hard output ceiling."""
     invocation = _live_codex_parent_invocation(
@@ -241,6 +246,7 @@ def run_live_codex_parent_bounded(
         resume_thread_id=resume_thread_id,
         extra_overrides=extra_overrides,
         sandbox=sandbox,
+        trust_generated_hooks=trust_generated_hooks,
     )
     return run_owned_bounded(
         invocation,

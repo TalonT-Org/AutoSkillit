@@ -9,6 +9,7 @@ ARG CLAUDE_VERSION=2.1.219
 ARG GO_TASK_VERSION=3.43.3
 ARG PRE_COMMIT_VERSION=4.6.2
 ARG MYPY_VERSION=1.19.1
+ARG TYPES_PYYAML_VERSION=6.0.12.20250915
 ARG VERIFIER_UID=1000
 ARG VERIFIER_GID=1000
 
@@ -41,6 +42,7 @@ RUN apt-get update \
     && uv pip install --python /opt/pre-commit/bin/python \
         "pre-commit==${PRE_COMMIT_VERSION}" \
         "mypy==${MYPY_VERSION}" \
+        "types-PyYAML==${TYPES_PYYAML_VERSION}" \
     && ln -s /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit \
     && ln -s /opt/pre-commit/bin/mypy /usr/local/bin/mypy \
     && test "$(codex --version 2>/dev/null)" = "codex-cli ${CODEX_VERSION}" \

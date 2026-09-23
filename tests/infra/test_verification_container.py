@@ -52,6 +52,7 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
     assert "FROM node:22-bookworm AS node" in dockerfile
     assert "uv venv /opt/pre-commit" in dockerfile
     assert "ARG MYPY_VERSION=1.19.1" in dockerfile
+    assert "ARG TYPES_PYYAML_VERSION=6.0.12.20250915" in dockerfile
     assert "uv pip install --system" not in dockerfile
     assert "/workspace/.autoskillit/temp" in dockerfile
     assert "task regen-contracts" in dockerfile

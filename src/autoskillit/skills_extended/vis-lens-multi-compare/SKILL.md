@@ -43,7 +43,6 @@ semantic_requirements:
 
 # Compositional Layout Visualization Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Compositional
 **Primary Question:** "Which layout — small multiples vs overlay — best reveals the comparison?"

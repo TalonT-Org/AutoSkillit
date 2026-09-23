@@ -604,8 +604,70 @@ def _write_order_entry(
     from autoskillit.core import write_registry_entry
 
     launch_id = uuid.uuid4().hex[:16]
+    launch_env = _order_launch_env(launch_id, managed_join_parent_id)
     write_registry_entry(project_dir, launch_id, SESSION_TYPE_ORDER, recipe_name)
-    return launch_id, _order_launch_env(launch_id, managed_join_parent_id)
+    return launch_id, launch_env
+
+
+def _run_cook_session_loop(
+    launch: InteractiveLaunch,
+    *,
+    extra_env: dict[str, str] | None,
+    project_dir: Path,
+    required_env: frozenset[str],
+    backend: CodingAgentBackend,
+    skill_compilation: CompiledSessionSkillCatalog,
+    default_base_branch: str,
+    managed_home: ManagedSessionHome | None = None,
+    launch_binding: PluginLaunchBinding | None = None,
+    retained_binding: PluginLaunchBinding | None = None,
+    trace: StartupTrace | None = None,
+    force_inactive_agent_teams: bool = False,
+    mcp_tool_timeout_sec: float | None = None,
+) -> None:
+    from autoskillit.cli.session._session_reload import admit_reload
+
+    max_reloads = 10
+    max_infra_resumes = 3
+    current_launch = launch
+    seen_reload_ids: set[str] = set()
+    infra_resume_count = 0
+    attempt = 0
+    while True:
+        if managed_home is not None:
+            attempt += 1
+        session_signal = _run_interactive_session(
+            launch=current_launch,
+            extra_env=extra_env,
+            project_dir=project_dir,
+            required_env=required_env,
+            backend=backend,
+            skill_compilation=skill_compilation,
+            default_base_branch=default_base_branch,
+            managed_home=managed_home,
+            plugin_binding=launch_binding,
+            retained_projection_binding=retained_binding,
+            startup_trace=trace,
+            attempt=attempt if managed_home is not None else None,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
+        if session_signal is None:
+            return
+        if isinstance(session_signal, _InfraExitSignal):
+            if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
+                return
+            infra_resume_count += 1
+            if infra_resume_count >= max_infra_resumes:
+                raise SystemExit(
+                    f"Too many infrastructure resumes ({max_infra_resumes} max). "
+                    f"Last exit: {session_signal.category}"
+                )
+            current_launch = RestoreSession(session_id=session_signal.session_id)
+            continue
+        resumed = admit_reload(session_signal, seen_reload_ids, max_reloads)
+        current_launch = RestoreSession(session_id=resumed.session_id)
 
 
 def _launch_cook_session(
@@ -624,60 +686,8 @@ def _launch_cook_session(
     adaptation_context: SemanticAdaptationContext | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
-    from autoskillit.cli.session._session_reload import admit_reload
-
-    _max_reloads = 10
-    _max_infra_resumes = 3
     launch_project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
     unavailability_payload = skill_compilation.unavailability_payload
-
-    seen_reload_ids: set[str] = set()
-    infra_resume_count = 0
-
-    def run_loop(
-        *,
-        managed_home: ManagedSessionHome | None = None,
-        launch_binding: PluginLaunchBinding | None = None,
-        retained_binding: PluginLaunchBinding | None = None,
-        trace: StartupTrace | None = None,
-    ) -> None:
-        nonlocal launch, infra_resume_count
-        attempt = 0
-        while True:
-            if managed_home is not None:
-                attempt += 1
-            session_signal = _run_interactive_session(
-                launch=launch,
-                extra_env=extra_env,
-                project_dir=launch_project_dir,
-                required_env=required_env,
-                backend=backend,
-                skill_compilation=skill_compilation,
-                default_base_branch=default_base_branch,
-                managed_home=managed_home,
-                plugin_binding=launch_binding,
-                retained_projection_binding=retained_binding,
-                startup_trace=trace,
-                attempt=attempt if managed_home is not None else None,
-                force_inactive_agent_teams=force_inactive_agent_teams,
-                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-            )
-            if session_signal is None:
-                return
-            if isinstance(session_signal, _InfraExitSignal):
-                if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
-                    print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
-                    return
-                infra_resume_count += 1
-                if infra_resume_count >= _max_infra_resumes:
-                    raise SystemExit(
-                        f"Too many infrastructure resumes ({_max_infra_resumes} max). "
-                        f"Last exit: {session_signal.category}"
-                    )
-                launch = RestoreSession(session_id=session_signal.session_id)
-                continue
-            resumed = admit_reload(session_signal, seen_reload_ids, _max_reloads)
-            launch = RestoreSession(session_id=resumed.session_id)
 
     if not backend.capabilities.session_dir_persistent:
         render_skill_unavailability(unavailability_payload)
@@ -689,7 +699,17 @@ def _launch_cook_session(
                     unavailability_payload,
                 ),
             )
-        run_loop()
+        _run_cook_session_loop(
+            launch,
+            extra_env=extra_env,
+            project_dir=launch_project_dir,
+            required_env=required_env,
+            backend=backend,
+            skill_compilation=skill_compilation,
+            default_base_branch=default_base_branch,
+            force_inactive_agent_teams=force_inactive_agent_teams,
+            mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+        )
         return
 
     from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
@@ -770,11 +790,20 @@ def _launch_cook_session(
             trace.record_launch_anchor()
             launch_binding = projection_binding if launch_load_mode.consumes_artifact else None
             try:
-                run_loop(
+                _run_cook_session_loop(
+                    launch,
+                    extra_env=extra_env,
+                    project_dir=launch_project_dir,
+                    required_env=required_env,
+                    backend=backend,
+                    skill_compilation=skill_compilation,
+                    default_base_branch=default_base_branch,
                     managed_home=managed_home,
                     launch_binding=launch_binding,
                     retained_binding=projection_binding,
                     trace=trace,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
+                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
                 )
             except BaseException:
                 trace.close(status="failed")

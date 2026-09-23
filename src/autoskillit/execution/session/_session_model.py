@@ -332,6 +332,45 @@ def extract_token_usage(
     if not raw_rows and result_usage is None:
         return None, []
 
+    model_buckets, peak_context, turn_usage = _build_turn_usage_and_model_buckets(
+        raw_rows, provider_used, model_windows
+    )
+
+    totals: dict[str, TokenMeasure]
+    if result_usage is not None:
+        totals = {
+            name: classify_token_measure(
+                AGENT_BACKEND_CLAUDE_CODE, provider_used, name, result_usage.get(name)
+            )
+            for name in _CANONICAL_TOKEN_FIELDS
+        }
+    else:
+        totals = {}
+        for bucket in model_buckets.values():
+            for name in _CANONICAL_TOKEN_FIELDS:
+                if name not in totals:
+                    totals[name] = bucket[name]
+                    continue
+                totals[name] = TokenMeasure.combine_or_unknown(totals[name], bucket[name])
+
+    return {
+        "backend": AGENT_BACKEND_CLAUDE_CODE,
+        "provider_used": provider_used,
+        **{name: measure.to_dict() for name, measure in totals.items()},
+        "model_breakdown": {
+            model: {name: measure.to_dict() for name, measure in bucket.items()}
+            for model, bucket in model_buckets.items()
+        },
+        "peak_context": (peak_context or TokenMeasure.unknown()).to_dict(),
+        "turn_count": len(raw_rows),
+    }, turn_usage
+
+
+def _build_turn_usage_and_model_buckets(
+    raw_rows: list[TurnTokenEntry],
+    provider_used: str,
+    model_windows: dict[str, set[int]],
+) -> tuple[dict[str, dict[str, TokenMeasure]], TokenMeasure | None, list[TurnTokenEntry]]:
     model_buckets: dict[str, dict[str, TokenMeasure]] = {}
     peak_context: TokenMeasure | None = None
     turn_usage: list[TurnTokenEntry] = []
@@ -394,34 +433,7 @@ def extract_token_usage(
             )
         )
 
-    totals: dict[str, TokenMeasure]
-    if result_usage is not None:
-        totals = {
-            name: classify_token_measure(
-                AGENT_BACKEND_CLAUDE_CODE, provider_used, name, result_usage.get(name)
-            )
-            for name in _CANONICAL_TOKEN_FIELDS
-        }
-    else:
-        totals = {}
-        for bucket in model_buckets.values():
-            for name in _CANONICAL_TOKEN_FIELDS:
-                if name not in totals:
-                    totals[name] = bucket[name]
-                    continue
-                totals[name] = TokenMeasure.combine_or_unknown(totals[name], bucket[name])
-
-    return {
-        "backend": AGENT_BACKEND_CLAUDE_CODE,
-        "provider_used": provider_used,
-        **{name: measure.to_dict() for name, measure in totals.items()},
-        "model_breakdown": {
-            model: {name: measure.to_dict() for name, measure in bucket.items()}
-            for model, bucket in model_buckets.items()
-        },
-        "peak_context": (peak_context or TokenMeasure.unknown()).to_dict(),
-        "turn_count": len(raw_rows),
-    }, turn_usage
+    return model_buckets, peak_context, turn_usage
 
 
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(

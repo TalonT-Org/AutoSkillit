@@ -53,7 +53,7 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
 )
 MANAGED_SKILL_FILENAME = "SKILL.md"
 # Static resources are now compiled into projected SKILL.md bytes.
-SKILL_PROJECTION_VERSION = 8
+SKILL_PROJECTION_VERSION = 9
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 5
 PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
 _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")

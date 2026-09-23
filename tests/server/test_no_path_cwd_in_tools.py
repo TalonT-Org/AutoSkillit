@@ -1,6 +1,6 @@
 """Structural guard: Path.cwd() must not appear in server tool handlers.
 
-The one allowed site (_reload_session_handler in tools_kitchen.py) is excluded
+The one allowed site (_reload_session_handler in tools_kitchen/_reload_session.py) is excluded
 because it uses cwd to find the server's own log directory, not the project root.
 """
 

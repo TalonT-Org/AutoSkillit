@@ -13,12 +13,13 @@ exists at this stage, so ``per_dispatch_state_path=None``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.core import (
     CodingAgentBackend,
     FleetErrorCode,
     ProcessStaleError,
+    RecipeRepository,
     get_logger,
 )
 from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
@@ -104,35 +105,16 @@ async def run_pre_launch_gating(
     _effective_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
     _caller_backend_name = tool_ctx.backend.name if tool_ctx.backend is not None else ""
 
-    try:
-        validation_result = tool_ctx.recipes.load_and_validate(
-            recipe,
-            tool_ctx.project_dir,
-            suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
-            ingredient_overrides=ingredients,
-            temp_dir=tool_ctx.temp_dir,
-            backend_name=_effective_backend.name if _effective_backend else None,
-            effective_backend_map=effective_backend_map,
-        )
-    except ProcessStaleError as exc:
-        return DispatchResult(
-            DispatchRejected(
-                error_code=FleetErrorCode.FLEET_PROCESS_STALE,
-                message=str(exc),
-                effect_provenance=provenance.snapshot(),
-            ),
-            per_dispatch_state_path=None,
-        )
-    except Exception as exc:
-        logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
-        return DispatchResult(
-            DispatchRejected(
-                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
-                message=f"Recipe '{recipe}' could not be loaded: {exc}",
-                effect_provenance=provenance.snapshot(),
-            ),
-            per_dispatch_state_path=None,
-        )
+    validation_result = _load_and_validate_for_dispatch(
+        tool_ctx=tool_ctx,
+        recipe=recipe,
+        ingredients=ingredients,
+        backend_name=_effective_backend.name if _effective_backend else None,
+        effective_backend_map=effective_backend_map,
+        provenance=provenance,
+    )
+    if isinstance(validation_result, DispatchResult):
+        return validation_result
 
     if not validation_result.get("valid", False):
         structural_errors = validation_result.get("errors", [])
@@ -210,3 +192,44 @@ async def run_pre_launch_gating(
         recipe_obj=recipe_obj,
         dispatch_name=dispatch_name,
     )
+
+
+def _load_and_validate_for_dispatch(
+    *,
+    tool_ctx: ToolContext,
+    recipe: str,
+    ingredients: dict[str, str] | None,
+    backend_name: str | None,
+    effective_backend_map: dict[str, str] | None,
+    provenance: DispatchProvenanceTracker,
+) -> dict[str, Any] | DispatchResult:
+    recipes = cast(RecipeRepository, tool_ctx.recipes)
+    try:
+        return recipes.load_and_validate(
+            recipe,
+            tool_ctx.project_dir,
+            suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
+            ingredient_overrides=ingredients,
+            temp_dir=tool_ctx.temp_dir,
+            backend_name=backend_name,
+            effective_backend_map=effective_backend_map,
+        )
+    except ProcessStaleError as exc:
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_PROCESS_STALE,
+                message=str(exc),
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        )
+    except Exception as exc:  # noqa: BLE001 — see tests/server/test_tools_dispatch_validation.py::test_dispatch_rejects_when_load_and_validate_raises
+        logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
+                message=f"Recipe '{recipe}' could not be loaded: {exc}",
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        )

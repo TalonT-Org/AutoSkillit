@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir."""
+"""Tests for tools_kitchen package recipe packs, quota refresh, and project settings."""
 
 from __future__ import annotations
 

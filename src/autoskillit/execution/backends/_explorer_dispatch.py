@@ -111,6 +111,7 @@ class _NativeExplorationDispatchRenderer:
         plan: ExplorationRouterPlan,
         vectors: tuple[ExplorationVectorDef, ...],
         *,
+        include_provisioning_preamble: bool = False,
         launch_context_ref: str | None = None,
     ) -> ExplorationDispatchMaterialization:
         migrated = tuple(
@@ -161,7 +162,7 @@ class _NativeExplorationDispatchRenderer:
         context_ref = launch_context_ref or "runtime-bound"
         provisioning = (
             f"\n\n{self.conventions.provisioning_preamble}"
-            if self.conventions.provisioning_preamble
+            if include_provisioning_preamble and self.conventions.provisioning_preamble
             else ""
         )
         preamble = (

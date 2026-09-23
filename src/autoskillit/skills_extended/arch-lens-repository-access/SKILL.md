@@ -37,7 +37,6 @@ semantic_requirements:
 
 # Repository/Data Access Architecture Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Data-Centric
 **Primary Question:** "How is data accessed?"

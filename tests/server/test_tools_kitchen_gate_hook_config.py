@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: hook config lifecycle, overlay, and quota guard tool."""
+"""Tests for the tools_kitchen package: hook config lifecycle, overlay, and quota guard."""
 
 from __future__ import annotations
 

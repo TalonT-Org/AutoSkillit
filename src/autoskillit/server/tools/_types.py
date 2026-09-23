@@ -306,7 +306,8 @@ class _ToolFailureEnvelopeRequired(TypedDict):
 class ToolFailureEnvelope(_ToolFailureEnvelopeRequired, total=False):
     """Typed failure envelope with retriable discriminator for orchestrator routing.
 
-    Distinct from ``_kitchen_failure_envelope`` in tools_kitchen.py which returns
+    Distinct from ``_kitchen_failure_envelope`` in
+    ``tools_kitchen/_open_kitchen_errors.py``, which returns
     a raw JSON string with a ``kitchen`` field. This TypedDict provides a typed
     dict contract with a ``retriable`` discriminator for P5-A4 orchestrator routing.
     """

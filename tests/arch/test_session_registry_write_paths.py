@@ -33,12 +33,12 @@ _Destination = Literal["registry", "dynamic", "other"]
 _EXPECTED_REGISTRY_WRITES = (
     (
         "cli/session/_session_cook.py",
-        "cook",
+        "_prepare_resumed_cook_launch",
         "claim_launch_for_session",
     ),
     (
         "cli/session/_session_cook.py",
-        "cook._run_managed",
+        "_prepare_fresh_cook_launch",
         "write_registry_entry",
     ),
     (

@@ -14,6 +14,7 @@ from typing import cast
 import anyio
 
 from autoskillit.core import (
+    AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     ApiFailureOutcome,
     BackendAuthority,
@@ -32,6 +33,7 @@ from autoskillit.core import (
     ManagedSessionHome,
     NativeShellCaptureDecision,
     PluginArtifactAuthority,
+    PluginLaunchBinding,
     PluginLoadMode,
     ProviderBinding,
     ResolvedLaunchContract,
@@ -65,6 +67,36 @@ from autoskillit.execution.headless._managed._launch_adapter import (
 from autoskillit.execution.quota import admit_quota
 
 
+def _merge_food_truck_extras(
+    *,
+    env_extras: Mapping[str, str] | None,
+    requires_packs: Sequence[str],
+    idle_output_timeout: float | None,
+    fleet_idle_output_timeout: float,
+    run_skill_idle_output_timeout: float,
+) -> dict[str, str]:
+    """Return dispatch extras with the fleet timeout and pack contract applied."""
+    merged_extras = dict(env_extras) if env_extras else {}
+    if requires_packs:
+        if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
+            raise ValueError(
+                f"dispatch_food_truck: requires_packs and env_extras both specify "
+                f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
+            )
+        merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
+    if idle_output_timeout is not None:
+        merged_extras[AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR] = str(idle_output_timeout)
+    elif fleet_idle_output_timeout > 0:
+        merged_extras.setdefault(
+            AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(fleet_idle_output_timeout)
+        )
+    elif run_skill_idle_output_timeout > 0:
+        merged_extras.setdefault(
+            AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(run_skill_idle_output_timeout)
+        )
+    return merged_extras
+
+
 class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
     """Concrete HeadlessExecutor backed by the shared headless lifecycle."""
 
@@ -92,6 +124,87 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 f"(food_truck_capable=False); got {dispatch_backend.name!r}"
             )
         return backend_authority, dispatch_backend
+
+    def _managed_catalog_scope(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        capability_preparation: SkillProjectionPreparation | None,
+        projection_binding: PluginLaunchBinding | None,
+        managed_catalog_requested: bool,
+    ) -> AbstractContextManager[ManagedSessionHome | None]:
+        """Build the managed catalog scope without entering it."""
+        if not managed_catalog_requested:
+            return nullcontext(None)
+        preparation = cast(SkillProjectionPreparation, capability_preparation)
+        session_skill_manager = self._ctx.session_skill_manager
+        if session_skill_manager is None:
+            raise RuntimeError(
+                "food truck managed catalog dispatch requires a session skill manager"
+            )
+        if projection_binding is None:
+            raise RuntimeError(
+                "food truck managed catalog dispatch requires a consumed-artifact "
+                "plugin launch binding"
+            )
+        if preparation.catalog is None:
+            raise RuntimeError(
+                "food truck managed catalog dispatch requires an effective skill catalog"
+            )
+        projection_context = preparation.materialization_context(
+            backend=backend,
+            binding=projection_binding,
+        )
+        if projection_context.adaptation_context is not None:
+            projection_context = replace(
+                projection_context,  # type: ignore[type-var]
+                managed_codex_route="parent",
+            )
+        return session_skill_manager.managed_catalog(
+            uuid.uuid4().hex[:16],
+            cast(EffectiveSkillCatalogAuthority, preparation.catalog),
+            projection_context,
+        )
+
+    def _finalize_food_truck_result(
+        self,
+        *,
+        skill_result: SkillResult | CandidatePreSpawnRejection,
+        managed_lineage_observer: _ManagedLineageObserver | None,
+        order_id: str,
+    ) -> SkillResult:
+        """Project the logical outcome onto its managed terminal lineage state."""
+        if isinstance(skill_result, CandidatePreSpawnRejection):
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+            quota_blocked = skill_result.reason in {
+                "quota_exhausted",
+                "observed_quota_blocked",
+            }
+            return SkillResult(
+                success=False,
+                result=f"Food-truck quota admission rejected: {skill_result.reason}",
+                session_id="",
+                subtype="quota_admission_rejected",
+                is_error=True,
+                exit_code=1,
+                needs_retry=quota_blocked,
+                retry_reason=(RetryReason.RATE_LIMITED if quota_blocked else RetryReason.NONE),
+                stderr="",
+                order_id=order_id,
+                api_failure=ApiFailureOutcome(
+                    terminal_reason=skill_result.reason,
+                    error_code="quota_admission_rejected",
+                    rate_limit=skill_result.rate_limit,
+                ),
+            )
+        if managed_lineage_observer is not None and not skill_result.needs_retry:
+            managed_lineage_observer.close(
+                ManagedHeadlessSessionTerminalState.SUCCEEDED
+                if skill_result.success
+                else ManagedHeadlessSessionTerminalState.FAILED
+            )
+        return skill_result
 
     async def dispatch_food_truck(
         self,
@@ -141,29 +254,20 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         )
         backend_authority, dispatch_backend = self._resolve_food_truck_backend(backend_authority)
         cfg = self._ctx.config
+        fleet_cfg = cfg.fleet
+        merged_extras = _merge_food_truck_extras(
+            env_extras=env_extras,
+            requires_packs=requires_packs,
+            idle_output_timeout=idle_output_timeout,
+            fleet_idle_output_timeout=fleet_cfg.idle_output_timeout,
+            run_skill_idle_output_timeout=cfg.run_skill.idle_output_timeout,
+        )
         caller_key_path = "fleet.model"
         model_pin = resolve_model_pin(
             model, cfg, step_name=step_name, caller_key_path=caller_key_path
         )
         model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
-        fleet_cfg = cfg.fleet
-        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
-        if requires_packs:
-            if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
-                raise ValueError(
-                    f"dispatch_food_truck: requires_packs and env_extras both specify "
-                    f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
-                )
-            merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
         fleet_idle = fleet_cfg.idle_output_timeout
-        if idle_output_timeout is not None:
-            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
-        elif fleet_idle > 0:
-            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle))
-        else:
-            idle_cfg_val = cfg.run_skill.idle_output_timeout
-            if idle_cfg_val > 0:
-                merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
         if dispatch_backend is None or backend_authority is None:
             raise RuntimeError("dispatch_backend must be resolved before execution")
         authority_source = LaunchValueSource(
@@ -346,40 +450,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend=backend,
             load_mode=projection_load_mode,
         ) as projection_binding:
-            managed_catalog_scope: AbstractContextManager[ManagedSessionHome | None] = nullcontext(
-                None
+            managed_catalog_scope = self._managed_catalog_scope(
+                backend=backend,
+                capability_preparation=capability_preparation,
+                projection_binding=projection_binding,
+                managed_catalog_requested=managed_catalog_requested,
             )
-            if managed_catalog_requested:
-                capability_preparation = cast(SkillProjectionPreparation, capability_preparation)
-                session_skill_manager = self._ctx.session_skill_manager
-                if session_skill_manager is None:
-                    raise RuntimeError(
-                        "food truck managed catalog dispatch requires a session skill manager"
-                    )
-                if projection_binding is None:
-                    raise RuntimeError(
-                        "food truck managed catalog dispatch requires a consumed-artifact "
-                        "plugin launch binding"
-                    )
-                if capability_preparation.catalog is None:
-                    raise RuntimeError(
-                        "food truck managed catalog dispatch requires an effective skill catalog"
-                    )
-                projection_context = capability_preparation.materialization_context(
-                    backend=backend,
-                    binding=projection_binding,
-                )
-                if projection_context.adaptation_context is not None:
-                    # The materializer returns a dataclass behind the IL-1 authority protocol.
-                    projection_context = replace(
-                        projection_context,  # type: ignore[type-var]
-                        managed_codex_route="parent",
-                    )
-                managed_catalog_scope = session_skill_manager.managed_catalog(
-                    uuid.uuid4().hex[:16],
-                    cast(EffectiveSkillCatalogAuthority, capability_preparation.catalog),
-                    projection_context,
-                )
 
             with managed_catalog_scope as managed_home:
                 managed_skill_catalog: ValidatedAddDir | None = None
@@ -471,39 +547,11 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     if managed_lineage_observer is not None:
                         managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
                     raise
-                if isinstance(skill_result, CandidatePreSpawnRejection):
-                    if managed_lineage_observer is not None:
-                        managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
-                    quota_blocked = skill_result.reason in {
-                        "quota_exhausted",
-                        "observed_quota_blocked",
-                    }
-                    return SkillResult(
-                        success=False,
-                        result=f"Food-truck quota admission rejected: {skill_result.reason}",
-                        session_id="",
-                        subtype="quota_admission_rejected",
-                        is_error=True,
-                        exit_code=1,
-                        needs_retry=quota_blocked,
-                        retry_reason=(
-                            RetryReason.RATE_LIMITED if quota_blocked else RetryReason.NONE
-                        ),
-                        stderr="",
-                        order_id=order_id,
-                        api_failure=ApiFailureOutcome(
-                            terminal_reason=skill_result.reason,
-                            error_code="quota_admission_rejected",
-                            rate_limit=skill_result.rate_limit,
-                        ),
-                    )
-                if managed_lineage_observer is not None and not skill_result.needs_retry:
-                    managed_lineage_observer.close(
-                        ManagedHeadlessSessionTerminalState.SUCCEEDED
-                        if skill_result.success
-                        else ManagedHeadlessSessionTerminalState.FAILED
-                    )
-                return skill_result
+                return self._finalize_food_truck_result(
+                    skill_result=skill_result,
+                    managed_lineage_observer=managed_lineage_observer,
+                    order_id=order_id,
+                )
 
 
 __all__ = ["DefaultHeadlessExecutor"]

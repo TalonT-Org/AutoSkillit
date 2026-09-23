@@ -318,25 +318,12 @@ def _validate_managed_interactive_invocation(
     )
 
 
-def validate_codex_interactive_invocation(spec: CmdSpec) -> InteractiveInvocationValidation:
-    origin, origin_errors = _validated_interactive_origin(spec)
-    if origin_errors:
-        return InteractiveInvocationValidation(errors=tuple(origin_errors))
-    if origin is None:
-        raise RuntimeError(
-            "Codex interactive validation invariant violated: "
-            "_validated_interactive_origin returned no errors and no origin"
-        )
-    route = spec.skill_discovery_route
-    if route is None:
-        return InteractiveInvocationValidation(
-            errors=("Codex interactive validation requires a declared skill discovery route",)
-        )
-    managed_catalog = spec.managed_skill_catalog
-    if managed_catalog is not None and spec.projected_skill_entries:
-        return InteractiveInvocationValidation(
-            errors=("Codex interactive validation received mixed managed and projected catalogs",)
-        )
+def _validate_interactive_discovery_route(
+    spec: CmdSpec,
+    origin: CmdOrigin,
+    route: SkillDiscoveryRouteDef,
+    managed_catalog: ValidatedAddDir | None,
+) -> InteractiveInvocationValidation:
     if route is CODEX_PROJECTED_HOME_ROUTE:
         if managed_catalog is not None:
             return InteractiveInvocationValidation(
@@ -360,3 +347,30 @@ def validate_codex_interactive_invocation(spec: CmdSpec) -> InteractiveInvocatio
             errors=("Codex managed discovery route cannot use projected catalog evidence",)
         )
     return _validate_managed_interactive_invocation(spec, origin, route, managed_catalog)
+
+
+def validate_codex_interactive_invocation(spec: CmdSpec) -> InteractiveInvocationValidation:
+    origin, origin_errors = _validated_interactive_origin(spec)
+    if origin_errors:
+        return InteractiveInvocationValidation(errors=tuple(origin_errors))
+    if origin is None:
+        raise RuntimeError(
+            "Codex interactive validation invariant violated: "
+            "_validated_interactive_origin returned no errors and no origin"
+        )
+    route = spec.skill_discovery_route
+    if route is None:
+        return InteractiveInvocationValidation(
+            errors=("Codex interactive validation requires a declared skill discovery route",)
+        )
+    managed_catalog = spec.managed_skill_catalog
+    if managed_catalog is not None and spec.projected_skill_entries:
+        return InteractiveInvocationValidation(
+            errors=("Codex interactive validation received mixed managed and projected catalogs",)
+        )
+    return _validate_interactive_discovery_route(
+        spec,
+        origin,
+        route,
+        managed_catalog,
+    )

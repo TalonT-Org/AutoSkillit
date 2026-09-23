@@ -37,7 +37,6 @@ semantic_requirements:
 
 # C4 Container Architecture Lens
 
-> **Preflight:** Before acting on any `exploration-vector` directive below, call `enable_exploration` to establish read-only broker authority for this session; the vectors below assume broker access has already been granted.
 
 **Philosophical Mode:** Anatomical
 **Primary Question:** "How is it built?"

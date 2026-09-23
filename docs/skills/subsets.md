@@ -90,4 +90,4 @@ startup. As a result, `open_kitchen` must immediately re-call
 `ctx.disable_components(tags={subset})` for each configured disabled subset to restore
 the correct visibility state.
 
-See `server/tools_kitchen.py` for the implementation.
+See `server/tools/tools_kitchen/_open_kitchen/_orchestrator.py` for the implementation.

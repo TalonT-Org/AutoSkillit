@@ -1,4 +1,4 @@
-"""Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc."""
+"""Tests for the tools_kitchen package: gate toggle, review cleanup, and misc."""
 
 from __future__ import annotations
 

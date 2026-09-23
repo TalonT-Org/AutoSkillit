@@ -59,6 +59,9 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
 
     assert "COPY --chown=verifier:verifier . /workspace" in dockerfile
     assert "uv sync --locked --extra dev" in dockerfile
+    assert "FROM node:22-bookworm AS node" in dockerfile
+    assert "uv venv /opt/pre-commit" in dockerfile
+    assert "uv pip install --system" not in dockerfile
     assert "COPY .git" not in dockerfile
     assert re.findall(r"^USER (\S+)$", dockerfile, re.MULTILINE)[-1] == "verifier"
 

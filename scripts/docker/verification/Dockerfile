@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 FROM ghcr.io/astral-sh/uv:0.9.21 AS uv
+FROM node:22-bookworm AS node
 FROM rust:1.90-bookworm
 
 ARG CODEX_VERSION=0.147.0
@@ -11,19 +12,21 @@ ARG VERIFIER_UID=1000
 ARG VERIFIER_GID=1000
 
 COPY --from=uv /uv /uvx /usr/local/bin/
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         curl \
         git \
-        nodejs \
-        npm \
         python-is-python3 \
         python3 \
         python3-dev \
         python3-venv \
     && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && npm install --global --omit=dev \
         "@openai/codex@${CODEX_VERSION}" \
         "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
@@ -33,7 +36,9 @@ RUN apt-get update \
     && curl --fail --location --silent --show-error \
         "${task_release}/task_linux_${task_arch}.tar.gz" \
         | tar --extract --gzip --directory /usr/local/bin task \
-    && uv pip install --system "pre-commit==${PRE_COMMIT_VERSION}" \
+    && uv venv /opt/pre-commit \
+    && uv pip install --python /opt/pre-commit/bin/python "pre-commit==${PRE_COMMIT_VERSION}" \
+    && ln -s /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit \
     && test "$(codex --version 2>/dev/null)" = "codex-cli ${CODEX_VERSION}" \
     && claude --version 2>/dev/null | grep --quiet "^${CLAUDE_VERSION}"
 

@@ -28,6 +28,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
+    normalize_payload_cwd,
     parse_hook_command,
 )
 from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
@@ -208,16 +209,17 @@ def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], bool]:
     tool_name = data.get("tool_name")
     if not isinstance(tool_name, str):
         return [], False
-    parsed = parse_hook_command(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if tool_name in {"Write", "Edit"}:
         tool_input = data.get("tool_input")
         path = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
         if not isinstance(path, str) or not path:
             return [], False
-        return _resolve_targets([path], parsed.payload_cwd)
+        return _resolve_targets([path], payload_cwd)
     if tool_name == "apply_patch":
         command = extract_apply_patch_text(data) or ""
-        return _resolve_targets(extract_patch_paths(command), parsed.payload_cwd)
+        return _resolve_targets(extract_patch_paths(command), payload_cwd)
+    parsed = parse_hook_command(data)
     if parsed.tool_kind in {"bash", "run_cmd"}:
         return _bash_targets(parsed.command or "", parsed.execution_cwd)
     return [], False

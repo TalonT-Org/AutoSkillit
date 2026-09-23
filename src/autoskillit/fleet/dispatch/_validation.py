@@ -13,12 +13,13 @@ exists at this stage, so ``per_dispatch_state_path=None``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.core import (
     CodingAgentBackend,
     FleetErrorCode,
     ProcessStaleError,
+    RecipeRepository,
     get_logger,
 )
 from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
@@ -202,8 +203,7 @@ def _load_and_validate_for_dispatch(
     effective_backend_map: dict[str, str] | None,
     provenance: DispatchProvenanceTracker,
 ) -> dict[str, Any] | DispatchResult:
-    recipes = tool_ctx.recipes
-    assert recipes is not None
+    recipes = cast(RecipeRepository, tool_ctx.recipes)
     try:
         return recipes.load_and_validate(
             recipe,
@@ -223,7 +223,7 @@ def _load_and_validate_for_dispatch(
             ),
             per_dispatch_state_path=None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — see tests/server/test_tools_dispatch_validation.py::test_dispatch_rejects_when_load_and_validate_raises
         logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
         return DispatchResult(
             DispatchRejected(

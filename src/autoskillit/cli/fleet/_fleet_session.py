@@ -293,8 +293,11 @@ def _run_fleet_session_loop(
 
         if campaign_recipe is None:
             continue
-        assert state_path is not None
-        assert campaign_id is not None
+        if state_path is None or campaign_id is None:
+            raise RuntimeError(
+                "fleet resume invariant violated: state_path and campaign_id "
+                "must be set whenever campaign_recipe is set"
+            )
         if not _refresh_campaign_after_resume(
             state_path=state_path,
             campaign_recipe=campaign_recipe,

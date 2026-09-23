@@ -207,10 +207,12 @@ def _seed_projected_skill_binding(
         "session_id": session_id,
         "cwd": str(project),
     }
+    child_env = production_interpreter_env()
+    child_env.update(env)
     completed = subprocess.run(
         [sys.executable, "-B", str(plugin / "hooks" / "_dispatch.py"), "skill_load_post_hook"],
         cwd=project,
-        env=env,
+        env=child_env,
         input=json.dumps(payload),
         capture_output=True,
         text=True,

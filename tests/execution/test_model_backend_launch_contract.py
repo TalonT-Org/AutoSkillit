@@ -163,9 +163,28 @@ async def test_retired_codex_model_fails_during_real_command_preparation_before_
     tmp_path,
 ) -> None:
     """The real Codex command builder rejects retired targets before runner invocation."""
+    from autoskillit.execution.headless._headless_launch import _run_headless_attempt
+
+    kwargs, runner = _build_real_codex_attempt_kwargs_for_retired_model(model_id, tmp_path)
+
+    with pytest.raises(ValueError):
+        await _run_headless_attempt(kwargs.pop("build_spec"), runner=runner, **kwargs)
+
+    runner.assert_not_awaited()
+
+
+def _build_real_codex_attempt_kwargs_for_retired_model(
+    model_id: str,
+    tmp_path,
+) -> tuple[dict[str, object], AsyncMock]:
+    """Build the kwargs dict for one retired-Codex-model launch attempt.
+
+    A new required parameter on ``_run_headless_attempt`` will break this helper
+    at its single definition site, which is the desired locality for a contract
+    test that pins the function's full parameter surface.
+    """
     from autoskillit.core import PluginLoadMode
     from autoskillit.execution.backends import CodexBackend
-    from autoskillit.execution.headless._headless_launch import _run_headless_attempt
 
     backend = CodexBackend()
     resolver, preparation = _launch_inputs(backend, cwd=str(tmp_path))
@@ -174,36 +193,35 @@ async def test_retired_codex_model_fails_during_real_command_preparation_before_
     def build_spec(_binding, _extras, _managed_attempt_id=None):
         return backend.build_headless_cmd("test prompt", model=model_id)
 
-    with pytest.raises(ValueError):
-        await _run_headless_attempt(
-            build_spec,
-            runner=runner,
-            backend=backend,
-            launch_resolver=resolver,
-            launch_preparation=preparation,
-            expected_launch_contract=None,
-            plugin_authority=None,
-            plugin_load_mode=PluginLoadMode.NONE,
-            provider_extras=None,
-            timeout=60,
-            pty_override=None,
-            completion_marker="%%DONE%%",
-            stale_threshold=1,
-            completion_drain_timeout=0,
-            natural_exit_grace_seconds=0,
-            linux_tracing_config=None,
-            idle_output_timeout=None,
-            max_suppression_seconds=0,
-            child_deferral_ceiling=0,
-            on_spawn=None,
-            enable_deadline_extension=False,
-            max_extension_seconds=0,
-            marker_dir=None,
-            session_id=None,
-            on_session_id_resolved=None,
-            stream_parser=None,
-            backend_resume_session_id="",
-            lifecycle_observation_enabled=False,
-        )
-
-    runner.assert_not_awaited()
+    return (
+        {
+            "build_spec": build_spec,
+            "backend": backend,
+            "launch_resolver": resolver,
+            "launch_preparation": preparation,
+            "expected_launch_contract": None,
+            "plugin_authority": None,
+            "plugin_load_mode": PluginLoadMode.NONE,
+            "provider_extras": None,
+            "timeout": 60,
+            "pty_override": None,
+            "completion_marker": "%%DONE%%",
+            "stale_threshold": 1,
+            "completion_drain_timeout": 0,
+            "natural_exit_grace_seconds": 0,
+            "linux_tracing_config": None,
+            "idle_output_timeout": None,
+            "max_suppression_seconds": 0,
+            "child_deferral_ceiling": 0,
+            "on_spawn": None,
+            "enable_deadline_extension": False,
+            "max_extension_seconds": 0,
+            "marker_dir": None,
+            "session_id": None,
+            "on_session_id_resolved": None,
+            "stream_parser": None,
+            "backend_resume_session_id": "",
+            "lifecycle_observation_enabled": False,
+        },
+        runner,
+    )

@@ -63,13 +63,17 @@ def _json_rows(payload: bytes) -> list[dict[str, Any]]:
     assert len(payload) <= _MAX_CAPTURE_BYTES
     rows: list[dict[str, Any]] = []
     for line in payload.decode("utf-8", errors="replace").splitlines():
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
+        if not line.strip():
             continue
+        value = json.loads(line)
         if isinstance(value, dict):
             rows.append(value)
     return rows
+
+
+def test_json_rows_rejects_malformed_nonempty_stream_line() -> None:
+    with pytest.raises(json.JSONDecodeError):
+        _json_rows(b'{"type":"first"}\n\nmalformed\n{"type":"last"}\n')
 
 
 def _walk(value: object) -> list[object]:

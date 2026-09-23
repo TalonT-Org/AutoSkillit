@@ -60,7 +60,7 @@ def test_configuration_states_quota_thresholds() -> None:
 
 
 def test_doctor_check_count_is_59() -> None:
-    # Combined-tree canonical count: 48 numbered checks + 10 lettered sub-checks.
+    # The expected count tracks _run_check invocations in the combined tree.
     # Check 47 (S2-5): pytest-generation temp-root capacity and orphaned-generation count.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()

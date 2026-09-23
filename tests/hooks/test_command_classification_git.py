@@ -55,15 +55,16 @@ class TestExtractGitSubcommandAndFlags:
         result = extract_git_subcommand_and_flags(["git", "commit", "--amend"])
         _assert_git_invoc(result, subcommand="commit", flags=["--amend"])
 
-    def test_global_flag_with_value(self):
+    @pytest.mark.parametrize("flag,value", [("-C", "/path"), ("--super-prefix", "push")])
+    def test_global_flag_with_value(self, flag, value):
         result = extract_git_subcommand_and_flags(
-            ["git", "-C", "/path", "commit", "--amend", "--no-edit"]
+            ["git", flag, value, "commit", "--amend", "--no-edit"]
         )
         _assert_git_invoc(
             result,
             subcommand="commit",
             flags=["--amend", "--no-edit"],
-            global_flags=["-C"],
+            global_flags=[flag],
         )
 
     def test_push_force_with_lease(self):

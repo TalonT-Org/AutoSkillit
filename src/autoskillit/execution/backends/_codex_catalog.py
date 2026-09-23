@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core import atomic_write
 from autoskillit.execution.process._lifecycle.owned_group import (
     OwnedProcessGroup,
     spawn_owned_process,
@@ -157,11 +158,11 @@ def run_owned_bounded(
                 stream.close()
         if capture_dir is not None:
             capture_dir.mkdir(parents=True, exist_ok=True)
-            (capture_dir / "command.json").write_text(
-                json.dumps({"argv": list(command), "cwd": str(cwd)}), encoding="utf-8"
+            atomic_write(
+                capture_dir / "command.json", json.dumps({"argv": list(command), "cwd": str(cwd)})
             )
             for name, data in output.items():
-                (capture_dir / f"{name}.txt").write_bytes(data)
+                atomic_write(capture_dir / f"{name}.txt", bytes(data))
 
 
 def acquire_bundled_codex_catalog(

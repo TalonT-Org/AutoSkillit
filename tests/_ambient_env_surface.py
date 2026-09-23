@@ -2803,6 +2803,30 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "OTEL_EXPORTER_OTLP_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_LOGS_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_LOGS_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_METRICS_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_METRICS_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
+    "OTEL_EXPORTER_OTLP_TRACES_COMPRESSION": AmbientEnvDisposition(
+        var="OTEL_EXPORTER_OTLP_TRACES_COMPRESSION",
+        disposition="scrub",
+        owner="codex",
+        justification="Sink-injected gzip is unsupported by Codex; scrub ambient compression.",
+    ),
     "OTEL_LOGS_EXPORTER": AmbientEnvDisposition(
         var="OTEL_LOGS_EXPORTER",
         disposition="scrub",

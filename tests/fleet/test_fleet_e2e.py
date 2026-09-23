@@ -24,6 +24,8 @@ import anyio
 import psutil
 import pytest
 
+from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
 pytestmark = [
     pytest.mark.layer("fleet"),
     pytest.mark.medium,
@@ -44,6 +46,10 @@ import json
 import os
 import sys
 import time
+
+if "--version" in sys.argv:
+    print("__CLAUDE_VERSION__ (Claude Code)")
+    sys.exit(0)
 
 dispatch_id = os.environ.get("AUTOSKILLIT_DISPATCH_ID", "unknown")
 mode = os.environ.get("CLAUDE_SHIM_MODE", "success")
@@ -113,7 +119,10 @@ def _write_claude_shim(bin_dir: Path) -> Path:
     """Write a Python shim to bin_dir/claude and make it executable."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     shim_path = bin_dir / "claude"
-    shim_path.write_text(_SHIM_SCRIPT, encoding="utf-8")
+    shim_path.write_text(
+        _SHIM_SCRIPT.replace("__CLAUDE_VERSION__", CLAUDE_CODE_CAPABILITIES.min_version),
+        encoding="utf-8",
+    )
     shim_path.chmod(0o755)
     return shim_path
 

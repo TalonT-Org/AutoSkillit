@@ -261,7 +261,7 @@ cycle re-enters it, so a per-cycle reset is unnecessary — its sibling
 (see ``reset_ref_push_counter`` in remediation.yaml)."""
 
 
-def _resolve_outer_non_exit_target(recipe: Recipe, outer_name: str) -> str | None:
+def _find_outer_non_exit_target(recipe: Recipe, outer_name: str) -> str | None:
     non_exit_target = _first_non_max_exceeded_route(recipe.steps[outer_name])
     if non_exit_target is None or non_exit_target not in recipe.steps:
         return non_exit_target
@@ -338,7 +338,7 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         return findings
 
     for outer_name in audit_outer_guards:
-        non_exit_target = _resolve_outer_non_exit_target(recipe, outer_name)
+        non_exit_target = _find_outer_non_exit_target(recipe, outer_name)
         if non_exit_target is None or non_exit_target not in recipe.steps:
             continue
 

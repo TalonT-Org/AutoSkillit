@@ -773,8 +773,10 @@ def test_discovery_routes_and_contract_pin_verified_upstream_revision() -> None:
     assert managed_route.tracking_issue == 4717
     assert projected_route.catalog_relpath == "skills"
     assert projected_route.discovery_root_relpath == "skills"
-    assert contract.upstream_revision == "646f7c0a91b8e327d263335da68ae8ef212895ce"
-    assert contract.verified_binary == "codex-cli 0.153.4"
+    assert discovery.CODEX_CLI_MIN_VERSION == "0.156.1"
+    assert contract.extra_roots_min_version == "0.136.0"
+    assert contract.upstream_revision == "b412ff32c417f855c2b2d1581b77058eed87c84b"
+    assert contract.verified_binary == "codex-cli 0.156.1"
 
 
 def test_select_interactive_discovery_route(tmp_path: Path) -> None:

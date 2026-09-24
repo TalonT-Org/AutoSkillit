@@ -293,8 +293,9 @@ class TestCodexFixturesParseWithBackend:
 
 
 class TestCodexFixtureVersionTracking:
-    def test_min_version_matches_backend_capability(self) -> None:
-        assert CODEX_FIXTURE_MIN_VERSION == CodexBackend().capabilities.min_version
+    def test_fixture_version_preserves_historical_provenance(self) -> None:
+        assert CODEX_FIXTURE_MIN_VERSION == "0.136.0"
+        assert CodexBackend().capabilities.min_version == "0.156.1"
 
 
 class TestCodexCanaryEventTypes:

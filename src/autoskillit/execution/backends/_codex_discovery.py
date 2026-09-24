@@ -36,8 +36,8 @@ class CodexSkillDiscoveryContractDef:
     """Pinned upstream discovery behavior consumed by managed Codex launches."""
 
     prompt_probe: tuple[str, ...] = ("debug", "prompt-input")
-    upstream_revision: str = "646f7c0a91b8e327d263335da68ae8ef212895ce"
-    verified_binary: str = "codex-cli 0.153.4"
+    upstream_revision: str = "b412ff32c417f855c2b2d1581b77058eed87c84b"
+    verified_binary: str = "codex-cli 0.156.1"
     # First release carrying `skills/extraRoots/set`; product support starts
     # at CODEX_CLI_MIN_VERSION.
     extra_roots_min_version: str = "0.136.0"
@@ -55,7 +55,7 @@ CODEX_MANAGED_HOME_ROUTE = SkillDiscoveryRouteDef(
     tracking_issue=4717,
     catalog_relpath="add-dir/skills",
     discovery_root_relpath="skills",
-    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:95-100@{_UPSTREAM}",
+    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:96-100@{_UPSTREAM}",
 )
 CODEX_PROJECTED_HOME_ROUTE = SkillDiscoveryRouteDef(
     name="codex_projected_home_skills",
@@ -64,7 +64,7 @@ CODEX_PROJECTED_HOME_ROUTE = SkillDiscoveryRouteDef(
     tracking_issue=4717,
     catalog_relpath="skills",
     discovery_root_relpath="skills",
-    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:95-100@{_UPSTREAM}",
+    upstream_citation=f"codex-rs/ext/skills/src/host_roots.rs:96-100@{_UPSTREAM}",
 )
 CODEX_APP_SERVER_ROUTE = SkillDiscoveryRouteDef(
     name="codex_app_server_extra_roots",
@@ -74,7 +74,7 @@ CODEX_APP_SERVER_ROUTE = SkillDiscoveryRouteDef(
     catalog_relpath="add-dir/skills",
     discovery_root_relpath=None,
     upstream_citation=(
-        f"codex-rs/app-server/src/request_processors/catalog_processor.rs:556-561@{_UPSTREAM}"
+        f"codex-rs/app-server/src/request_processors/catalog_processor.rs:562-577@{_UPSTREAM}"
     ),
 )
 CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS = 30.0

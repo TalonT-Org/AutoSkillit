@@ -89,10 +89,11 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 146, 0), skip_reason=None),
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 156, 2), skip_reason=None),
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.WARNING
+        assert "0.156.2 is newer than verified pin 0.156.1" in result.message
         assert "CODEX_HISTORY_RETENTION_TOKEN_LIMIT" in result.message
 
     def test_codex_limits_verified_skips_for_a_backend_without_a_limits_pin(
@@ -134,7 +135,7 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 146, 0), skip_reason=None),
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 156, 2), skip_reason=None),
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.WARNING
@@ -150,7 +151,7 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 146, 0), skip_reason=None),
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 156, 2), skip_reason=None),
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert "later history only" not in result.message
@@ -165,12 +166,13 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 144, 1), skip_reason=None),
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 156, 1), skip_reason=None),
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.OK
+        assert "Codex CLI 0.156.1 at or below verified pin" == result.message
 
-    def test_codex_limits_verified_ok_between_min_and_pin(
+    def test_codex_limits_check_does_not_duplicate_below_floor_warning(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import autoskillit.cli.doctor._doctor_runtime as mod
@@ -180,10 +182,11 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 135, 0), skip_reason=None),
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 156, 0), skip_reason=None),
         )
-        result = mod._check_codex_limits_verified(backend=CodexBackend())
-        assert result.severity == Severity.OK
+        backend = CodexBackend()
+        assert mod._check_backend_version(backend=backend).severity == Severity.WARNING
+        assert mod._check_codex_limits_verified(backend=backend).severity == Severity.OK
 
     def test_codex_limits_verified_skips_when_codex_unavailable(
         self, monkeypatch: pytest.MonkeyPatch

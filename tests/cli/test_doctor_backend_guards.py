@@ -668,12 +668,11 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.129.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.156.0\n"),
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.WARNING
-        assert "0.129.0" in result.message
-        assert "below minimum" in result.message
+        assert result.message == "Codex CLI 0.156.0 is below minimum 0.156.1"
 
     def test_version_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -685,11 +684,11 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.136.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.156.1\n"),
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "0.136.0" in result.message
+        assert result.message == "Codex CLI 0.156.1"
 
     def test_version_above_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -701,11 +700,11 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.137.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.156.2\n"),
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "0.137.0" in result.message
+        assert result.message == "Codex CLI 0.156.2"
 
     def test_claude_uses_its_own_floor_and_display_name(
         self, monkeypatch: pytest.MonkeyPatch
@@ -719,15 +718,30 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("2.1.218 (Claude Code)\n"),
+            lambda *a, **kw: self._codex_result("2.1.279 (Claude Code)\n"),
         )
 
         result = _check_backend_version(backend=ClaudeCodeBackend())
 
         assert result.severity == Severity.WARNING
-        assert "Claude Code 2.1.218" in result.message
-        assert "2.1.219" in result.message
+        assert result.message == "Claude Code 2.1.279 is below minimum 2.1.280"
         assert "Codex CLI" not in result.message
+
+    def test_claude_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_backend_version
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("2.1.280 (Claude Code)\n"),
+        )
+        result = _check_backend_version(backend=ClaudeCodeBackend())
+        assert result.severity == Severity.OK
+        assert result.message == "Claude Code 2.1.280"
 
 
 class TestCheckCodexGraduation:
@@ -773,14 +787,14 @@ class TestCheckCodexGraduation:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.136.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.156.1\n"),
         )
         ts = datetime.now(UTC).isoformat()
         (tmp_path / "codex-probe-cache.json").write_text(
             json.dumps(
                 {
                     "schema_version": 1,
-                    "entries": {"0.136.0": {"passed": True, "probe_timestamp": ts}},
+                    "entries": {"0.156.1": {"passed": True, "probe_timestamp": ts}},
                 }
             )
         )

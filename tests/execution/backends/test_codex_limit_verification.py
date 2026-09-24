@@ -30,12 +30,13 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 def test_pin_is_derived_from_the_verification_registry() -> None:
     assert CODEX_LIMIT_VERIFICATION_REGISTRY
+    assert CODEX_LIMITS_LAST_VERIFIED_VERSION == (0, 156, 1)
     assert CODEX_LIMITS_LAST_VERIFIED_VERSION == min(
         entry.checked_at_cli_version for entry in CODEX_LIMIT_VERIFICATION_REGISTRY.values()
     )
     for entry in CODEX_LIMIT_VERIFICATION_REGISTRY.values():
-        assert len(entry.checked_at_cli_version) == 3
-        assert all(isinstance(v, int) for v in entry.checked_at_cli_version)
+        assert entry.checked_at_cli_version == (0, 156, 1)
+        assert entry.upstream_revision == "b412ff32c417f855c2b2d1581b77058eed87c84b"
 
 
 def test_native_mcp_registration_writes_no_runtime_tuning(tmp_path) -> None:

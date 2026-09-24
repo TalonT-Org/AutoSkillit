@@ -159,6 +159,29 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
     assert binding.closed
 
 
+def test_prepare_skill_projection_binds_launch_evidence_at_construction(tmp_path) -> None:
+    from autoskillit.workspace import prepare_skill_projection
+    from autoskillit.workspace.skills import DefaultSkillResolver
+    from tests.fakes import make_managed_codex_context
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    ctx = make_managed_codex_context("headless-preparation")
+    plugin_authority, preparation = prepare_skill_projection(
+        project_root=project_root,
+        cwd=project_root,
+        resolver=DefaultSkillResolver(),
+        visibility=None,
+        default_base_branch=None,
+        recipe_packs=None,
+        recipe_features=None,
+        adaptation_context=ctx,
+    )
+
+    assert preparation.adaptation_context is ctx
+    assert not hasattr(plugin_authority, "adaptation_context")
+
+
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(
     tmp_path, monkeypatch
 ) -> None:

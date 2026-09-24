@@ -1092,6 +1092,7 @@ from .types import LabelDef as LabelDef
 from .types import LaunchAdapter as LaunchAdapter
 from .types import LaunchAdapterResult as LaunchAdapterResult
 from .types import LaunchContractError as LaunchContractError
+from .types import LaunchEvidenceDeferral as LaunchEvidenceDeferral
 from .types import LaunchFallbackRoute as LaunchFallbackRoute
 from .types import LaunchPreparation as LaunchPreparation
 from .types import LaunchResolutionRequest as LaunchResolutionRequest
@@ -1412,6 +1413,7 @@ from .types import WorkspaceOutcomeRecord as WorkspaceOutcomeRecord
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
+from .types import adapt_session_invariant as adapt_session_invariant
 from .types import admit_anchor as admit_anchor
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import (
@@ -1490,6 +1492,7 @@ from .types import (
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
+from .types import refusal_awaits_launch_evidence as refusal_awaits_launch_evidence
 from .types import render_intake_digest as render_intake_digest
 from .types import render_target_skill_command as render_target_skill_command
 from .types import required_join_is_unsupported as required_join_is_unsupported

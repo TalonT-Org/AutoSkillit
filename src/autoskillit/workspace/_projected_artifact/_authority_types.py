@@ -28,6 +28,7 @@ class _ProjectedArtifactPlan:
     require_sources_within_root: bool
     context: SkillProjectionContext
     unavailable: tuple[SkillProjectionRefusal, ...]
+    deferred: tuple[SkillProjectionRefusal, ...]
     semantic_adaptations: Mapping[str, SkillSemanticAdaptationResult]
 
 

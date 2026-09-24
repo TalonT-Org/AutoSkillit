@@ -295,7 +295,6 @@ def prepare_catalog_skill_projection(
         cwd=cwd,
         base_branch=default_base_branch,
         catalog=catalog,
-        adaptation_context=adaptation_context,
     )
     preparation = SkillProjectionPreparation(
         cwd=cwd,
@@ -316,6 +315,7 @@ def prepare_skill_projection(
     default_base_branch: str | None,
     recipe_packs: frozenset[str] | None,
     recipe_features: frozenset[str] | None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> tuple[ProjectedPluginArtifactAuthority, SkillProjectionPreparation]:
     """Resolve visible orchestrator skills into a backend-neutral preparation."""
     catalog = resolver.list_effective(
@@ -330,4 +330,5 @@ def prepare_skill_projection(
         catalog=catalog,
         default_base_branch=_default_base_branch(default_base_branch),
         project_root=project_root,
+        adaptation_context=adaptation_context,
     )

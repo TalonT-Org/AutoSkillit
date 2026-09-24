@@ -263,6 +263,9 @@ class CompiledSessionSkillCatalogAuthority(Protocol):
     @property
     def unavailability_payload(self) -> SkillUnavailabilityPayload: ...
 
+    @property
+    def launch_evidence_digest(self) -> str: ...
+
 
 @runtime_checkable
 class EffectiveSkillInvocationAuthority(Protocol):

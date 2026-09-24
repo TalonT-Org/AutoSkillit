@@ -19,6 +19,7 @@ hence this test.
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 from pathlib import Path
 
@@ -127,6 +128,25 @@ class TestExclusionsCarryRationales:
             assert name in PROJECTION_CACHE_KEY_EXCLUSIONS, (
                 f"{name} is neither in the cache key nor in the documented exclusion list"
             )
+
+    def test_launch_evidence_is_explicitly_resolved(self) -> None:
+        """Launch evidence covers parent_session_id; keying on it makes the key per-launch."""
+        message = (
+            "launch-bound managed-join evidence would make the shared projection key "
+            "per-launch; the shared projection must accept no adaptation_context"
+        )
+        assert "adaptation_context" in PROJECTION_CACHE_KEY_EXCLUSIONS, message
+        assert "adaptation_context" not in {
+            field.name
+            for field in dataclasses.fields(
+                _patch__projected_artifact_authority.ProjectedPluginArtifactAuthority
+            )
+        }, message
+        for factory in (
+            _patch__projected_artifact_authority.project_default_plugin_authority,
+            _patch__projected_artifact_authority.project_direct_install_authority,
+        ):
+            assert "adaptation_context" not in inspect.signature(factory).parameters, message
 
 
 class TestAssetChangesForceReprojection:

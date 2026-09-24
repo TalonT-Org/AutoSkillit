@@ -166,8 +166,13 @@ preparation probe without issuing an attestation; failures report the concrete
 preparation reason, and a refused cook prints that reason once beside the
 resulting `required_join` exclusions.
 
-With the attestation, catalog compilation, projection binding, and generated
-skill documents carry the same adaptation context. Interactive Codex parents
+With the attestation, catalog compilation, the per-session projection binding,
+and generated skill documents carry one launch's adaptation context, and
+materialization rejects a compilation bound to different evidence. The shared
+plugin projection is session-invariant: it is evaluated through
+`adapt_session_invariant`, and skills whose admission depends on managed-join
+evidence are deferred to the attested generated home, never refused or rendered
+there. Interactive Codex parents
 use the `interactive-parent` route, with normal kitchen tool visibility and
 join/background guards; headless parents use the restricted `parent` route.
 `AUTOSKILLIT_MANAGED_JOIN_PARENT_ID` carries one parent identity into the MCP

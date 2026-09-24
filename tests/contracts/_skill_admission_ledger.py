@@ -204,7 +204,10 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
 }
 
 
-def _production_managed_codex_context() -> SemanticAdaptationContext:
+def _production_managed_codex_context(
+    *,
+    parent_session_id: str = "managed-admission-ledger",
+) -> SemanticAdaptationContext:
     """Issue the managed Codex admission context from production digests.
 
     Uses the production catalog projector for a realistic
@@ -227,7 +230,7 @@ def _production_managed_codex_context() -> SemanticAdaptationContext:
     ).issue(
         backend="codex",
         launch_context="direct",
-        parent_session_id="managed-admission-ledger",
+        parent_session_id=parent_session_id,
         direct_tool_mode=True,
         resolved_model=model,
         resolved_reasoning_effort=effort,

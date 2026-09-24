@@ -482,7 +482,7 @@ class TestCommandGroupingStructure:
         assert len(segment.subshell_path) == 3
         assert len(set(segment.subshell_path)) == 3  # all distinct
 
-    def test_mixed_subshell_and_brace_nesting_preserves_order(self) -> None:
+    def test_brace_groups_do_not_extend_subshell_path(self) -> None:
         subshell_in_brace = self._segments("{ (cp a b); }")[0]
 
         assert subshell_in_brace.tokens == ["cp", "a", "b"]

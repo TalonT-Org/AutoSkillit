@@ -26,7 +26,8 @@ def main() -> int:
     missing = []
     yaml_paths = _recipe_yaml_paths()
     if not yaml_paths:
-        print(f"No recipe YAML discovered under {RECIPES_DIR}", file=sys.stderr)
+        # Match the compile_recipes.py convention: "ERROR: <verb> <noun> ...".
+        print(f"ERROR: no recipe YAML under {RECIPES_DIR}", file=sys.stderr)
         return 1
     for yaml_path in yaml_paths:
         name = yaml_path.stem

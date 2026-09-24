@@ -391,9 +391,11 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
     (session_home / "config.toml").write_text(
         config_text.replace(str(catalog_path), str(session_home / "models_cache.json"))
     )
-    assert "managed Codex config has an unattested model catalog path" in (
-        backend.verify_managed_session_dir(session_home, attestation, route)
-    )
+    drifted_catalog_path = str(session_home / "models_cache.json")
+    assert (
+        "managed Codex config has the wrong resolved model catalog path "
+        f"(attested {str(catalog_path)!r}, found {drifted_catalog_path!r})"
+    ) in backend.verify_managed_session_dir(session_home, attestation, route)
 
 
 def test_managed_home_refuses_context_without_attested_catalog_snapshot(tmp_path) -> None:

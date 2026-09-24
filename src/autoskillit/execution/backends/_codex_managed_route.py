@@ -189,10 +189,13 @@ def _managed_codex_config_errors(
             f"(attested {attestation.resolved_reasoning_effort!r}, "
             f"found {config.get('model_reasoning_effort')!r})"
         )
-    if config.get("model_catalog_json") != str(
-        (session_dir / _MANAGED_CATALOG_FILENAME).resolve()
-    ):
-        errors.append("managed Codex config has an unattested model catalog path")
+    expected_catalog_path = str((session_dir / _MANAGED_CATALOG_FILENAME).resolve())
+    if config.get("model_catalog_json") != expected_catalog_path:
+        errors.append(
+            "managed Codex config has the wrong resolved model catalog path "
+            f"(attested {expected_catalog_path!r}, "
+            f"found {config.get('model_catalog_json')!r})"
+        )
     server = config.get("mcp_servers", {}).get("autoskillit")
     if not isinstance(server, dict):
         errors.append("managed Codex config has no autoskillit MCP server")

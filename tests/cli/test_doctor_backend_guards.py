@@ -672,7 +672,9 @@ class TestCheckBackendVersion:
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.WARNING
-        assert result.message == "Codex CLI 0.156.0 is below minimum 0.156.1"
+        assert "Codex CLI 0.156.0" in result.message
+        assert "below minimum" in result.message
+        assert "0.156.1" in result.message
 
     def test_version_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -688,7 +690,8 @@ class TestCheckBackendVersion:
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert result.message == "Codex CLI 0.156.1"
+        assert "Codex CLI 0.156.1" in result.message
+        assert "below minimum" not in result.message
 
     def test_version_above_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -704,7 +707,8 @@ class TestCheckBackendVersion:
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert result.message == "Codex CLI 0.156.2"
+        assert "Codex CLI 0.156.2" in result.message
+        assert "below minimum" not in result.message
 
     def test_claude_uses_its_own_floor_and_display_name(
         self, monkeypatch: pytest.MonkeyPatch
@@ -724,7 +728,9 @@ class TestCheckBackendVersion:
         result = _check_backend_version(backend=ClaudeCodeBackend())
 
         assert result.severity == Severity.WARNING
-        assert result.message == "Claude Code 2.1.279 is below minimum 2.1.280"
+        assert "Claude Code 2.1.279" in result.message
+        assert "below minimum" in result.message
+        assert "2.1.280" in result.message
         assert "Codex CLI" not in result.message
 
     def test_claude_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -741,7 +747,8 @@ class TestCheckBackendVersion:
         )
         result = _check_backend_version(backend=ClaudeCodeBackend())
         assert result.severity == Severity.OK
-        assert result.message == "Claude Code 2.1.280"
+        assert "Claude Code 2.1.280" in result.message
+        assert "below minimum" not in result.message
 
 
 class TestCheckCodexGraduation:

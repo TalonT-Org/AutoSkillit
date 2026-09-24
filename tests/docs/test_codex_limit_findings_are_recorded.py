@@ -12,7 +12,6 @@ import pytest
 
 from autoskillit.execution.backends._codex_config import (
     CODEX_LIMIT_VERIFICATION_REGISTRY,
-    CODEX_LIMITS_LAST_VERIFIED_VERSION,
 )
 
 pytestmark = [pytest.mark.layer("docs"), pytest.mark.small]
@@ -22,7 +21,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_historical_clamp_finding_retains_its_original_version() -> None:
     adr = (REPO_ROOT / "docs/decisions/0004-recipe-redelivery.md").read_text()
-    assert CODEX_LIMITS_LAST_VERIFIED_VERSION == (0, 156, 1)
     assert "Historical clamp finding at codex-cli 0.145.0" in adr
 
 

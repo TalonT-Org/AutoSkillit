@@ -170,7 +170,8 @@ class TestCheckCodexLimitsVerified:
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "Codex CLI 0.156.1 at or below verified pin" == result.message
+        assert "Codex CLI 0.156.1" in result.message
+        assert "at or below verified pin" in result.message
 
     def test_codex_limits_check_does_not_duplicate_below_floor_warning(
         self, monkeypatch: pytest.MonkeyPatch

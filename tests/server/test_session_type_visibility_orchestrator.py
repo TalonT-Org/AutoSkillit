@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import KITCHEN_GATED_TOOLS
+from tests.server._session_catalogs import assert_no_fleet_mutation_leak
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -16,7 +17,6 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 async def test_orchestrator_headless_enables_kitchen_tag(monkeypatch):
     from autoskillit.core import (
         EVIDENCE_READER_TOOLS,
-        FLEET_DISPATCH_TOOLS,
         FLEET_TOOLS,
         GATED_TOOLS,
     )
@@ -28,7 +28,7 @@ async def test_orchestrator_headless_enables_kitchen_tag(monkeypatch):
 
     tools = list(await mcp.list_tools())
     tool_names = {t.name for t in tools}
-    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - EVIDENCE_READER_TOOLS
     for name in kitchen_tools:
         assert name in tool_names, f"{name} should be visible for orchestrator+headless"
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
@@ -171,7 +171,6 @@ async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
     """ORCHESTRATOR+HEADLESS without FOOD_TRUCK_TOOL_TAGS falls back to full kitchen."""
     from autoskillit.core import (
         EVIDENCE_READER_TOOLS,
-        FLEET_DISPATCH_TOOLS,
         FLEET_TOOLS,
         GATED_TOOLS,
     )
@@ -185,7 +184,7 @@ async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
     tools = list(await mcp.list_tools())
     tool_names = {t.name for t in tools}
 
-    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - EVIDENCE_READER_TOOLS
     for name in kitchen_tools:
         assert name in tool_names
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
@@ -274,6 +273,7 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _misc, mcp
     from autoskillit.server.lifecycle import _lifespan
+    from autoskillit.server.lifecycle._lifespan import _session_boots
     from autoskillit.server.tools import tools_kitchen
 
     monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -283,10 +283,14 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
     ctx = build_ctx(backend=mock_backend)
     ctx.gate = DefaultGateState(enabled=False)
 
-    with patch.object(tools_kitchen, "_write_hook_config"):
-        with patch.object(_misc, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(_lifespan, "register_active_kitchen"):
-                await _lifespan._skill_auto_gate_boot(ctx)
+    with (
+        patch.object(tools_kitchen, "_write_hook_config"),
+        patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
+        patch.object(_session_boots, "_retain_kitchen_tracker_authority"),
+        patch.object(_session_boots, "register_active_kitchen"),
+        patch.object(_session_boots, "_activate_recipe_kitchen"),
+    ):
+        await _lifespan._skill_auto_gate_boot(ctx)
 
     assert ctx.gate.enabled is True, "gate must be enabled after _skill_auto_gate_boot pre-reveal"
 
@@ -295,6 +299,8 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
     assert KITCHEN_GATED_TOOLS.issubset(tool_names), (
         "All kitchen-tagged gated tools should be visible for non-notification backend"
     )
+    assert {"fetch_github_issue", "get_issue_title", "list_recipes", "load_recipe"} <= tool_names
+    assert_no_fleet_mutation_leak(tool_names)
 
 
 @pytest.mark.anyio
@@ -306,6 +312,7 @@ async def test_non_notification_backend_plan_review_pre_revealed(build_ctx, monk
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import _misc, mcp
     from autoskillit.server.lifecycle import _lifespan
+    from autoskillit.server.lifecycle._lifespan import _session_boots
     from autoskillit.server.tools import tools_kitchen
 
     monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -315,10 +322,14 @@ async def test_non_notification_backend_plan_review_pre_revealed(build_ctx, monk
     ctx = build_ctx(backend=mock_backend)
     ctx.gate = DefaultGateState(enabled=False)
 
-    with patch.object(tools_kitchen, "_write_hook_config"):
-        with patch.object(_misc, "_prime_quota_cache", new=AsyncMock()):
-            with patch.object(_lifespan, "register_active_kitchen"):
-                await _lifespan._food_truck_auto_gate_boot(ctx)
+    with (
+        patch.object(tools_kitchen, "_write_hook_config"),
+        patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
+        patch.object(_session_boots, "_retain_kitchen_tracker_authority"),
+        patch.object(_session_boots, "register_active_kitchen"),
+        patch.object(_session_boots, "_activate_recipe_kitchen"),
+    ):
+        await _lifespan._food_truck_auto_gate_boot(ctx)
 
     assert ctx.gate.enabled is True, (
         "gate must be enabled after _food_truck_auto_gate_boot pre-reveal"

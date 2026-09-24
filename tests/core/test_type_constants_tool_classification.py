@@ -20,6 +20,8 @@ def test_headless_tools_contains_expected_names() -> None:
         "write_standalone_audit_evidence",
         "write_audit_disposition_bundle",
         "delegate_evidence_reader",
+        "fetch_github_issue",
+        "get_issue_title",
     }
 
 

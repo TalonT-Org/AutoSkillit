@@ -603,8 +603,9 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
 EXPLORATION_TOOLS: frozenset[str] = frozenset(
     name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
 )
+# Kitchen-shared INSPECTION tools from FLEET_DISPATCH_TOOLS belong to the kitchen catalog.
 KITCHEN_GATED_TOOLS: frozenset[str] = (
-    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
+    GATED_TOOLS - FLEET_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

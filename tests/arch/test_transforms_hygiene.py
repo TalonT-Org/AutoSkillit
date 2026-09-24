@@ -472,8 +472,25 @@ def test_startup_disables_all_visibility_tags():
     )
 
 
+def _tag_partition_violation(tool_name: str, tags: set[str]) -> str | None:
+    if "kitchen" not in tags:
+        return None
+    if "fleet" in tags:
+        return "kitchen and fleet tags cannot be combined"
+    if "fleet-dispatch" in tags:
+        from autoskillit.core import ToolInitializationOperation, get_tool_def
+
+        tool_def = get_tool_def(tool_name)
+        if (
+            tool_def is None
+            or tool_def.initialization_operation is not ToolInitializationOperation.INSPECTION
+        ):
+            return "kitchen and fleet-dispatch require a registered inspection tool"
+    return None
+
+
 def test_tool_decorators_enforce_tag_partition():
-    """No @mcp.tool() decorator may carry both 'kitchen' and 'fleet'/'fleet-dispatch'."""
+    """Kitchen-shared fleet-dispatch tools must be registered inspection tools."""
     tools_dir = _SRC_ROOT / "server" / "tools"
     violations = []
 
@@ -486,15 +503,28 @@ def test_tool_decorators_enforce_tag_partition():
         if tags_value is None or not isinstance(tags_value, ast.Set):
             continue
         tag_set = set(_iter_literal_string_tag_values(tags_value))
-        has_kitchen = "kitchen" in tag_set
-        has_fleet_subset = bool({"fleet", "fleet-dispatch"} & tag_set)
-        if has_kitchen and has_fleet_subset:
-            violations.append(f"{path.name}:{node.lineno} {node.name} → {sorted(tag_set)}")
+        violation = _tag_partition_violation(node.name, tag_set)
+        if violation:
+            violations.append(
+                f"{path.name}:{node.lineno} {node.name} → {sorted(tag_set)}: {violation}"
+            )
 
-    assert not violations, (
-        "Tag partition violations (kitchen + fleet/fleet-dispatch on same tool):\n"
-        + "\n".join(f"  {v}" for v in violations)
-    )
+    assert not violations, "Tag partition violations:\n" + "\n".join(f"  {v}" for v in violations)
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "tags", "has_violation"),
+    [
+        ("dispatch_food_truck", {"kitchen", "fleet-dispatch"}, True),
+        ("get_pipeline_report", {"kitchen", "fleet"}, True),
+        ("fetch_github_issue", {"kitchen", "github", "fleet-dispatch"}, False),
+        ("not_a_registered_tool", {"kitchen", "fleet-dispatch"}, True),
+    ],
+)
+def test_tag_partition_predicate_rules(
+    tool_name: str, tags: set[str], has_violation: bool
+) -> None:
+    assert (_tag_partition_violation(tool_name, tags) is not None) is has_violation
 
 
 def test_tool_tags_are_literal_sets():
@@ -549,20 +579,4 @@ def test_fleet_tools_carry_required_subset_tag():
     assert not missing_fleet, f"FLEET_TOOLS missing 'fleet' tag: {sorted(missing_fleet)}"
     assert not missing_fd, (
         f"FLEET_DISPATCH_TOOLS missing 'fleet-dispatch' tag: {sorted(missing_fd)}"
-    )
-
-
-def test_fleet_tools_do_not_carry_kitchen_umbrella_tag():
-    """TOOL_SUBSET_TAGS entries for fleet/fleet-dispatch tools must not include 'kitchen'."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, TOOL_SUBSET_TAGS
-
-    violations = []
-    for tool in FLEET_TOOLS | FLEET_DISPATCH_TOOLS:
-        tags = TOOL_SUBSET_TAGS.get(tool, frozenset())
-        if "kitchen" in tags:
-            violations.append(f"{tool} → {sorted(tags)}")
-
-    assert not violations, (
-        "Fleet/fleet-dispatch tools with 'kitchen' in TOOL_SUBSET_TAGS:\n"
-        + "\n".join(f"  {v}" for v in violations)
     )

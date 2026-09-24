@@ -186,7 +186,7 @@ class TestToolRegistration:
     @pytest.mark.anyio
     async def test_kitchen_tools_have_autoskillit_and_kitchen_tags(self, kitchen_enabled):
         """Every non-fleet tool in GATED_TOOLS carries both 'autoskillit' and 'kitchen' tags."""
-        from autoskillit.core import EVIDENCE_READER_TOOLS, FLEET_DISPATCH_TOOLS, FLEET_TOOLS
+        from autoskillit.core import EVIDENCE_READER_TOOLS, FLEET_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -195,7 +195,7 @@ class TestToolRegistration:
         mcp.enable(tags={"headless"})
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
-        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EVIDENCE_READER_TOOLS
+        kitchen_tools = GATED_TOOLS - FLEET_TOOLS - EVIDENCE_READER_TOOLS
         for name in kitchen_tools:
             tool = all_tools.get(name)
             assert tool is not None, f"Gated tool '{name}' not registered on server"

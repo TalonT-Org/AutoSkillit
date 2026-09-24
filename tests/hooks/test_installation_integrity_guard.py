@@ -143,7 +143,9 @@ def test_blocks_process_substitution_install_tree_write(
 def test_blocks_grouped_install_tree_writes(tmp_path: Path, command_template: str) -> None:
     target = tmp_path / "lib/python3.13/site-packages/autoskillit/x.py"
     command = command_template.replace("{target}", str(target))
-    code, stdout = _run(_bash(command))
+    event = _bash(command)
+    event["cwd"] = str(tmp_path)
+    code, stdout = _run(event)
 
     assert code == 0
     # Grouping invariance keeps protected writes denied inside either shell group.

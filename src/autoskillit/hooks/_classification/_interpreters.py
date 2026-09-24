@@ -372,10 +372,11 @@ def _iter_shell_payload_segment_groups(
             if is_outer and include_outer:
                 yield []
             continue
-        segments = tokenize_command_segments(payload)
-        if not segments:
+        parsed = _tokenize_command_segments_with_redirects(payload)
+        if parsed is None:
             yield None
             return
+        segments = [segment.tokens for segment in parsed]
         if include_outer or not is_outer:
             yield segments
         if not _queue_nested_shell_payloads(
@@ -430,7 +431,12 @@ def _occurrence_owner_index(command: str, start: int, segment_count: int) -> int
     """
     if not segment_count:
         return None
-    preceding = _tokenize_command_segments_with_redirects(command[:start])
+    prefix = command[:start]
+    if prefix.endswith("$("):
+        prefix += ")"
+    elif prefix.endswith("`"):
+        prefix += "`"
+    preceding = _tokenize_command_segments_with_redirects(prefix) or []
     return min(max(len(preceding) - 1, 0), segment_count - 1)
 
 
@@ -489,7 +495,7 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     payload, and every `$(...)`/backtick substitution -- each independently
     mapped to the segment that owns it.
     """
-    segments = _tokenize_command_segments_with_redirects(command)
+    segments = _tokenize_command_segments_with_redirects(command) or []
     payloads: list[EvaluatedPayload] = []
 
     for index, segment in enumerate(segments):
@@ -562,7 +568,7 @@ def _iter_evaluated_segments(
     project the same iteration without one being a wrapper around the other.
     """
     outer = _tokenize_command_segments_with_redirects(command)
-    if not outer and command.strip():
+    if outer is None:
         return None
     shell_segments = tokenize_shell_payload_segments(
         command, include_process_substitutions=include_process_substitutions
@@ -608,7 +614,10 @@ def all_evaluated_segments_with_provenance(
     )
     if pairs is None:
         return None
-    return [EvaluatedSegment(tokens, provenance) for tokens, provenance in pairs]
+    return [
+        EvaluatedSegment(tokens, provenance, provenance.subshell_path if provenance else ())
+        for tokens, provenance in pairs
+    ]
 
 
 def all_evaluated_segments(
@@ -644,7 +653,7 @@ def live_command_text(command: str) -> str:
     payload text, so a scanner matching against `base` alone sees the same
     content a second, appended copy would have added.
     """
-    segments = _tokenize_command_segments_with_redirects(command)
+    segments = _tokenize_command_segments_with_redirects(command) or []
     payloads = evaluated_payloads(command)
 
     blanked = list(command)

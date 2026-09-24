@@ -2392,7 +2392,8 @@ class TestAnalyzeGitHubMutations:
             ),
             (
                 "gh api --method PATCH /repos/o/r/issues/23 > >(tee /tmp/out)",
-                GitHubMutationStatus.UNRESOLVED,
+                # The process substitution is one word, so it does not obscure the mutation.
+                GitHubMutationStatus.SINGLE_RESOLVED,
             ),
         ],
         ids=["issue-targets", "api-routes", "curl-urls", "process-substitution"],

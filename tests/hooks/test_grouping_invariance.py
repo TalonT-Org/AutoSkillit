@@ -65,7 +65,6 @@ def test_write_guard_decision_is_invariant_under_grouping(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
     monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
 

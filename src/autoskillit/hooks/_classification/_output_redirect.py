@@ -16,7 +16,6 @@ _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
 _FD_DUPLICATION_RE = re.compile(r"^\d*>&\d+$")
-_TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
 
@@ -84,16 +83,6 @@ class OutputRedirectPartition:
     """True when at least one redirect target could not be resolved to a concrete path."""
 
 
-def _subshell_depth_after_token(token: str, depth: int) -> tuple[int, bool]:
-    opens_subshell = token == "(" or (token.startswith("(") and len(token) > 1)
-    closes_subshell = token == ")" or (token.endswith(")") and len(token) > 1)
-    if opens_subshell:
-        depth += 1
-    if closes_subshell and depth > 0:
-        depth -= 1
-    return depth, opens_subshell or closes_subshell
-
-
 def _partition_output_redirect_indices(
     tokens: Sequence[str],
     *,
@@ -111,19 +100,8 @@ def _partition_output_redirect_indices(
     targets: list[str] = []
     file_redirect_count = 0
     unresolved = False
-    depth = 0
     i = 0
     while i < len(tokens):
-        token = tokens[i]
-        depth, is_subshell_token = _subshell_depth_after_token(token, depth)
-        if is_subshell_token:
-            segments.append(i)
-            i += 1
-            continue
-        if depth > 0:
-            segments.append(i)
-            i += 1
-            continue
         redirect = _consume_output_redirect(tokens, syntax, i)
         if redirect is None:
             segments.append(i)
@@ -133,8 +111,6 @@ def _partition_output_redirect_indices(
         file_redirect_count += file_redirect_delta
 
         if target is not None:
-            while target and target[-1] in _TRAILING_SHELL_CLOSERS:
-                target = target[:-1]
             resolved = resolve_write_target(target, cwd)
             if resolved is not None:
                 targets.append(resolved)

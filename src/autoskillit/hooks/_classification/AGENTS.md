@@ -11,6 +11,8 @@ block B bootstrap so hook scripts can keep importing via
 - `_tokenizer.py` — `shlex`-backed tokenization plus `ArgvToken` / `_CommandSegment`
   data classes. Sole producer of those token types; consumed by every other
   module in this folder and by the facade's TYPE_CHECKING block.
+- `_shell_structure.py` — quote-aware substitution masking and grouping syntax
+  used only by `_tokenizer.py` before lexing.
 - `_interpreters.py` — interpreter and nested-shell payload classification
   (`all_evaluated_segments_with_provenance`, `live_command_text`,
   `EvaluatedSegment`, `StdinLiteral`, `strip_heredoc_bodies`).

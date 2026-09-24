@@ -454,23 +454,15 @@ def _command_position_candidate_spans(segment: Sequence[str]) -> tuple[tuple[int
     """Return verb-aligned candidate spans in *segment*'s original index domain.
 
     Each span is ``(start, end)`` with an exclusive ``end``. The direct command
-    candidate starts at the same index as :func:`_verb_start_index`. An inline
-    function (``name() { ...``) or group (``{ ...``) also exposes its body as a
-    second candidate without re-tokenizing or changing indices, so callers can
-    keep a parallel token-provenance array aligned with the original segment.
+    candidate starts at the same index as :func:`_verb_start_index`. Group
+    bodies are separate tokenizer segments, so callers retain aligned token
+    provenance without deriving a second candidate here.
     """
     start = _verb_start_index(list(segment))
     if start is None:
         return ()
 
-    end = len(segment)
-    spans: list[tuple[int, int]] = [(start, end)]
-    verb = segment[start]
-    if verb == "{" and start + 1 < end:
-        spans.append((start + 1, end))
-    elif verb.endswith("()") and start + 2 < end and segment[start + 1] == "{":
-        spans.append((start + 2, end))
-    return tuple(spans)
+    return ((start, len(segment)),)
 
 
 def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
@@ -624,7 +616,6 @@ if TYPE_CHECKING:
         _REDIRECT_OP_ONLY_RE,
         _REDIRECT_TOKEN_RE,
         _SHELL_VAR_RE,
-        _TRAILING_SHELL_CLOSERS,
         OutputRedirectPartition,
         _partition_output_redirect_indices,
         _partition_output_redirects,
@@ -683,7 +674,6 @@ else:
     _REDIRECT_OP_ONLY_RE = _output_redirect._REDIRECT_OP_ONLY_RE
     _REDIRECT_TOKEN_RE = _output_redirect._REDIRECT_TOKEN_RE
     _SHELL_VAR_RE = _output_redirect._SHELL_VAR_RE
-    _TRAILING_SHELL_CLOSERS = _output_redirect._TRAILING_SHELL_CLOSERS
     _partition_output_redirect_indices = _output_redirect._partition_output_redirect_indices
     _partition_output_redirects = _output_redirect._partition_output_redirects
     _select_executable_argv_tokens = _output_redirect._select_executable_argv_tokens

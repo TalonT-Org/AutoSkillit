@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -31,14 +32,15 @@ if _GUARDS_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _GIT_GLOBAL_FLAG_SPEC,
+    StdinConsumer,
     _consume_str_flag,
+    _extract_interpreter_segment_specs,
     command_verb_and_args,
-    extract_interpreter_command_payloads,
+    evaluated_payloads,
     extract_interpreter_write_paths,
-    extract_redirect_targets,
     live_command_text,
+    scan_write_targets,
     tokenize_command_segments,
-    tokenize_shell_payload_segments,
 )
 from _git_command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _classify_git_segment,
@@ -196,11 +198,27 @@ def _deny_checked_out_ref(
     raise SystemExit(0)
 
 
-def _raw_write_targets(text: str, segments: list[list[str]]) -> tuple[list[str], bool]:
-    targets: list[str] = []
-    ambiguous = False
-    for segment in segments:
-        targets.extend(extract_redirect_targets(segment))
+def _raw_write_targets(
+    text: str,
+    initial_cwd: str,
+    outer_segments: list[list[str]],
+    outer_cwds: list[str],
+    additional_segments: list[list[str]],
+    additional_owners: list[int | None],
+    interpreter_cwd: str,
+) -> tuple[list[tuple[str, str]], bool]:
+    scan = scan_write_targets(text, initial_cwd)
+    targets = [(target, initial_cwd) for target in scan.targets]
+    ambiguous = scan.unresolved
+    segments_with_cwds = list(zip(outer_segments, outer_cwds))
+    segments_with_cwds.extend(
+        (
+            segment,
+            outer_cwds[owner] if owner is not None and 0 <= owner < len(outer_cwds) else "",
+        )
+        for segment, owner in zip(additional_segments, additional_owners)
+    )
+    for segment, segment_cwd in segments_with_cwds:
         verb, args = command_verb_and_args(segment)
         verb = os.path.basename(verb)
         if verb not in _RAW_WRITE_VERBS:
@@ -215,29 +233,51 @@ def _raw_write_targets(text: str, segments: list[list[str]]) -> tuple[list[str],
             if _DYNAMIC_SHELL_TOKEN_RE.search(candidate):
                 ambiguous = True
             elif candidate:
-                targets.append(candidate)
+                targets.append((candidate, segment_cwd))
     interpreter_paths = extract_interpreter_write_paths(text)
     if interpreter_paths == [] and "open(" in text:
         ambiguous = True
     elif interpreter_paths:
-        targets.extend(interpreter_paths)
+        targets.extend((path, interpreter_cwd) for path in interpreter_paths)
     return (targets, ambiguous)
 
 
 def _raw_target_mutations(
-    text: str, segments: list[list[str]], context: dict[str, object]
+    text: str,
+    *,
+    initial_cwd: str,
+    outer_segments: list[list[str]],
+    outer_cwds: list[str],
+    additional_segments: list[list[str]],
+    additional_owners: list[int | None],
+    interpreter_cwd: str,
+    context: dict[str, object] | None,
 ) -> list[tuple[str, str, bool]]:
-    targets, ambiguous = _raw_write_targets(text, segments)
+    targets, ambiguous = _raw_write_targets(
+        text,
+        initial_cwd,
+        outer_segments,
+        outer_cwds,
+        additional_segments,
+        additional_owners,
+        interpreter_cwd,
+    )
     if ambiguous:
         return [("", "<unresolved>", True)]
+    resolved_targets: list[Path] = []
+    for raw_target, target_cwd in targets:
+        target = Path(raw_target)
+        if not target.is_absolute():
+            if not target_cwd:
+                return [("", "<unresolved>", True)]
+            target = Path(target_cwd) / target
+        resolved_targets.append(target.resolve())
+    if context is None:
+        return []
     common = Path(str(context["common_git_dir"])).resolve()
     worktree_git = Path(str(context["worktree_git_dir"])).resolve()
     result: list[tuple[str, str, bool]] = []
-    for raw_target in targets:
-        target = Path(raw_target)
-        if not target.is_absolute():
-            target = Path(str(context["execution_cwd"])) / target
-        target = target.resolve()
+    for target in resolved_targets:
         mutation = _classify_raw_write_target(target, common, worktree_git)
         if mutation is not None:
             result.append(mutation)
@@ -293,19 +333,46 @@ def _git_segment_cwd(segment: list[str], cwd: str) -> str:
     return str(current.resolve())
 
 
-def _preflight_segments(command: str) -> tuple[list[list[str]], list[list[str]], bool]:
+def _preflight_segments(
+    command: str,
+) -> tuple[list[list[str]], list[list[str]], list[int | None], bool]:
     outer_segments = tokenize_command_segments(command)
-    nested_segments = tokenize_shell_payload_segments(command)
-    interpreter_payloads, interpreter_unresolved = extract_interpreter_command_payloads(command)
     additional_segments: list[list[str]] = []
-    if nested_segments:
-        additional_segments.extend(nested_segments)
-    for payload in interpreter_payloads:
-        if isinstance(payload, list):
-            additional_segments.append(payload)
-        else:
-            additional_segments.extend(tokenize_command_segments(payload))
-    return outer_segments, additional_segments, interpreter_unresolved
+    additional_owners: list[int | None] = []
+    interpreter_unresolved = False
+    payloads = evaluated_payloads(command)
+    shell_queue = deque(
+        (payload.text, payload.consumer_index)
+        for payload in payloads
+        if payload.kind == StdinConsumer.SHELL
+    )
+    seen_shell: set[tuple[str, int | None]] = set()
+    while shell_queue:
+        text, owner = shell_queue.popleft()
+        if (text, owner) in seen_shell:
+            continue
+        seen_shell.add((text, owner))
+        segments = tokenize_command_segments(text)
+        additional_segments.extend(segments)
+        additional_owners.extend([owner] * len(segments))
+        shell_queue.extend(
+            (nested.text, owner)
+            for nested in evaluated_payloads(text)
+            if nested.kind == StdinConsumer.SHELL
+        )
+    for payload in payloads:
+        if payload.kind == StdinConsumer.PYTHON:
+            specs, unresolved = _extract_interpreter_segment_specs(["python3", "-c", payload.text])
+            interpreter_unresolved = interpreter_unresolved or unresolved
+            segments = []
+            for spec in specs:
+                if isinstance(spec.payload, list):
+                    segments.append(spec.payload)
+                else:
+                    segments.extend(tokenize_command_segments(spec.payload))
+            additional_segments.extend(segments)
+            additional_owners.extend([payload.consumer_index] * len(segments))
+    return outer_segments, additional_segments, additional_owners, interpreter_unresolved
 
 
 def _is_structural_mutation(
@@ -331,6 +398,8 @@ def _advance_shell_cwd(current_cwd: str, verb: str, args: list[str]) -> tuple[st
         target_args = [arg for arg in args if arg not in ("-P", "--")]
         if len(target_args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(target_args[0]):
             candidate = Path(target_args[0])
+            if not current_cwd and not candidate.is_absolute():
+                return "", True
             return (
                 str(
                     (
@@ -343,6 +412,8 @@ def _advance_shell_cwd(current_cwd: str, verb: str, args: list[str]) -> tuple[st
             return "", True
     elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(args[0]):
         candidate = Path(args[0])
+        if not current_cwd and not candidate.is_absolute():
+            return "", True
         return (
             str(
                 (candidate if candidate.is_absolute() else Path(current_cwd) / candidate).resolve()
@@ -368,10 +439,22 @@ def _deny_for_mutations(
             )
 
 
+def _deny_outer_git_mutations(data: dict[str, object], segment: list[str], cwd: str) -> None:
+    if not cwd:
+        # A preceding cwd change could not be resolved; this segment cannot
+        # be routed to a repository with confidence.
+        return
+    context = _repository_context(_git_segment_cwd(segment, cwd))
+    if context is not None:
+        _deny_for_mutations(data, context, _classify_git_segment(segment, context))
+
+
 def _preflight_checked_out_ref_mutation(
     data: dict[str, object], command: str, execution_cwd: str
 ) -> None:
-    outer_segments, additional_segments, interpreter_unresolved = _preflight_segments(command)
+    outer_segments, additional_segments, additional_owners, interpreter_unresolved = (
+        _preflight_segments(command)
+    )
     # The live-text projection (rectify #4941 Part A): a heredoc body whose
     # consumer executes it is blanked at its source position and appended
     # once; an inert heredoc body is blanked and never appended. A herestring
@@ -392,35 +475,47 @@ def _preflight_checked_out_ref_mutation(
                 threatened_refs=[],
             )
         return
+    initial_context = _repository_context(execution_cwd)
     current_cwd = execution_cwd
+    outer_cwds: list[str] = []
     for segment in outer_segments:
         verb, args = command_verb_and_args(segment)
         current_cwd, skip_segment = _advance_shell_cwd(current_cwd, verb, args)
+        outer_cwds.append(current_cwd)
         if skip_segment:
             continue
-        if not current_cwd:
-            # cwd resolution failed earlier in this command — refuse to
-            # classify subsequent git segments rather than silently routing
-            # them against the wrong repo.
-            continue
-        segment_context = _repository_context(_git_segment_cwd(segment, current_cwd))
-        if segment_context is None:
-            continue
-        _deny_for_mutations(data, segment_context, _classify_git_segment(segment, segment_context))
+        _deny_outer_git_mutations(data, segment, current_cwd)
 
-    context = _repository_context(current_cwd)
-    if context is None:
-        return
+    context = _repository_context(current_cwd) if current_cwd else None
     mutations: list[tuple[str, str, bool]] = []
-    for segment in additional_segments:
-        mutations.extend(_classify_git_segment(segment, context))
+    if context is not None:
+        for segment in additional_segments:
+            mutations.extend(_classify_git_segment(segment, context))
+    raw_context = context or initial_context
     mutations.extend(
-        _raw_target_mutations(live_text, [*outer_segments, *additional_segments], context)
+        _raw_target_mutations(
+            live_text,
+            initial_cwd=execution_cwd,
+            outer_segments=outer_segments,
+            outer_cwds=outer_cwds,
+            additional_segments=additional_segments,
+            additional_owners=additional_owners,
+            interpreter_cwd=current_cwd,
+            context=raw_context,
+        )
     )
     if interpreter_unresolved and structural_mutation:
         mutations.append(("", "<unresolved>", True))
-
-    _deny_for_mutations(data, context, mutations)
+    if raw_context is None:
+        if any(ambiguous for _, _, ambiguous in mutations):
+            _deny_checked_out_ref(
+                data=data,
+                context=None,
+                attempted_value="<unresolved>",
+                threatened_refs=[],
+            )
+        return
+    _deny_for_mutations(data, raw_context, mutations)
 
 
 def _parse_hook_event() -> tuple[dict[str, object], Any] | None:

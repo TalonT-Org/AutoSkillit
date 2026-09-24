@@ -43,6 +43,8 @@ def _consume_output_redirect(
     token = tokens[index]
     if not syntax[index]:
         return None
+    if token.startswith((">(", "<(")):
+        return None
     if _FD_DUPLICATION_RE.fullmatch(token):
         return (index + 1, None, 0)
     if _REDIRECT_OP_ONLY_RE.fullmatch(token):
@@ -54,7 +56,10 @@ def _consume_output_redirect(
                 or _FD_DUPLICATION_RE.fullmatch(tokens[next_index])
             )
         ):
-            return (next_index + 1, tokens[next_index], 1)
+            target = tokens[next_index]
+            if target.startswith((">(", "<(")):
+                return (next_index + 1, None, 0)
+            return (next_index + 1, target, 1)
         return (next_index, None, 1)
     match = _REDIRECT_TOKEN_RE.fullmatch(token)
     if match is None:
@@ -179,15 +184,6 @@ def _select_executable_argv_tokens(
         tokens, cwd=cwd, redirect_syntax=redirect_syntax
     )
     return [argv_tokens[i] for i in partition.segments]
-
-
-def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
-    """Extract resolved redirect target paths from already-tokenized input.
-
-    Returns resolved paths including pseudo-devices — caller filters.
-    Relative paths are resolved against cwd when provided.
-    """
-    return _partition_output_redirects(tokens, cwd=cwd)[1]
 
 
 def extract_redirect_targets_with_status(

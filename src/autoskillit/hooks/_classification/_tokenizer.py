@@ -10,7 +10,7 @@ from typing import cast
 
 # Operators that terminate a shlex token and split command segments.
 # Parentheses are tracked by the lexer as fused tokens (`(cmd` or `cmd)`)
-# and handled separately in extract_redirect_targets.
+# and handled separately by output-redirect partitioning.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 # Single-character shell operators that shlex.shlex(punctuation_chars=True)
 # leaves sitting inside the previous token's source range. Used as the

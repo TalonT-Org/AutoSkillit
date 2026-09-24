@@ -22,18 +22,11 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _GIT_GLOBAL_FLAG_SPEC,
-    WRITE_VERBS,
-    _FlagArity,
-    all_evaluated_segments,
-    command_verb,
+    UNRESOLVED_WRITE_TARGET_REMEDIATION,
+    WriteTargetScan,
     extract_interpreter_write_paths,
     extract_patch_paths,
-    extract_redirect_targets,
-    extract_write_verb_targets,
-    is_gh_command,
-    resolve_write_target,
-    updated_execution_cwd,
+    scan_write_targets,
 )
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
@@ -56,16 +49,6 @@ from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
-_PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
-    {
-        "/dev/null",
-        "/dev/zero",
-        "/dev/stdout",
-        "/dev/stderr",
-        "/dev/stdin",
-    }
-)
-
 # Per-process set of prefix values that already produced a realpath-failure warning;
 # pytest-xdist workers get isolated copies via the import boundary.
 _WARNED_PREFIXES: set[str] = set()
@@ -79,77 +62,6 @@ _EMPTY_BOUNDARY_HINT_BY_ACTIVATION: dict[str, str] = {
     "skill_binding": ("every write_paths entry in session_binding failed realpath normalization"),
 }
 
-# Every value-taking git global flag, derived at import time from
-# _GIT_GLOBAL_FLAG_SPEC in _command_classification.py. Hook scripts already
-# import from that module via sys.path (same as git_ops_guard.py in this
-# same package) so there is no separate "manual mirror" -- the spec table
-# is the single source of truth and any future addition automatically
-# extends this frozenset. A flag missing from this set is misread by the
-# loop below as a 1-token boolean skip, so its value gets mistaken for
-# the git subcommand -- e.g. `git --namespace refs/foo checkout -- file`
-# previously stopped the loop at `refs/foo`, never reaching `checkout`.
-_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
-    flag for flag, arity in _GIT_GLOBAL_FLAG_SPEC.items() if arity == _FlagArity.VALUE
-)
-
-
-def _resolve_real_targets(operands: list[str], cwd: str) -> list[str]:
-    targets: list[str] = []
-    for operand in operands:
-        resolved = resolve_write_target(operand, cwd)
-        if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
-            targets.append(resolved)
-    return targets
-
-
-def _git_subcommand_index(segment: list[str]) -> int:
-    idx = 1
-    while idx < len(segment):
-        tok = segment[idx]
-        if tok in _GIT_FLAG_WITH_VALUE:
-            idx += 2
-            if idx >= len(segment):
-                break
-        elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
-            idx += 1
-        else:
-            break
-    return idx
-
-
-def _extract_git_write_targets(segment: list[str], cwd: str) -> list[str] | None:
-    idx = _git_subcommand_index(segment)
-    if idx >= len(segment):
-        return None
-    subcmd = segment[idx]
-    if subcmd == "checkout" and "--" in segment[idx + 1 :]:
-        double_dash = segment.index("--", idx + 1)
-        return _resolve_real_targets(segment[double_dash + 1 :], cwd)
-    if subcmd == "reset" and "--hard" in segment[idx + 1 :]:
-        return []
-    return None
-
-
-_UNRESOLVED_TARGET: list[str] = []
-"""Sentinel returned by ``_extract_segment_targets`` when a write verb's
-target contains an unresolvable operand (e.g. shell variable). Distinct
-from a None return (non-write) and a real ``[]`` (write with no path)."""
-
-
-def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
-    """Return None for non-writes, [] for writes without real paths, or target paths."""
-    if is_gh_command(segment):
-        return None
-    verb = command_verb(segment)
-    if verb == "git" and len(segment) >= 2:
-        return _extract_git_write_targets(segment, cwd)
-    if verb in WRITE_VERBS:
-        targets, unresolved_target = extract_write_verb_targets(verb, segment, cwd)
-        if unresolved_target:
-            return _UNRESOLVED_TARGET
-        return [target for target in targets if target not in _PSEUDO_DEVICE_PATHS]
-    return None
-
 
 def _effective_execution_cwd(execution_cwd: str) -> str:
     if execution_cwd:
@@ -160,75 +72,23 @@ def _effective_execution_cwd(execution_cwd: str) -> str:
     return cwd
 
 
-def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[str] | None:
-    """Return absolute target paths from a bash command, None if no write, or
-    ``_UNRESOLVED_TARGET`` if a write verb's target could not be statically
-    resolved (fail-closed: callers must deny).
-
-    ``execution_cwd`` (the run_cmd tool's own cwd argument, or Bash's session
-    cwd) is preferred for resolving relative targets when non-empty; falls
-    back to the ``AUTOSKILLIT_CWD`` env var otherwise.
-
-    Reads *command* through `all_evaluated_segments` (rectify #4941 Part B):
-    outer segments, every recursively tokenized SHELL payload (a heredoc,
-    herestring, pipe, or `bash -c`/`eval` body), and every literal-argv or
-    executing-string Python subprocess spec are all classified and scanned
-    for redirects independently, per evaluated segment, rather than
-    flattening the whole command into one private token stream -- so
-    `bash <<'EOF'\nrm -rf src/\nEOF` and `bash -c 'echo x > /outside/f'` are
-    seen the same way a direct invocation is. `None` (unparseable) returns
-    `None`, the guard's documented authority-failure result -- no private
-    raw-command fallback.
-
-    Returns an empty list when a write command is detected but no path can be reliably
-    extracted — callers treat this as fail-open (ambiguous = allow).
-    """
-    segments = all_evaluated_segments(command)
-    if segments is None:
-        return None
-
-    cwd = _effective_execution_cwd(execution_cwd)
-
-    all_targets: list[str] = []
-    found_any_write = False
-
-    for segment in segments:
-        if command_verb(segment) == "cd":
-            cwd = updated_execution_cwd(segment, cwd)
-            continue
-        result = _extract_segment_targets(segment, cwd)
-        if result is _UNRESOLVED_TARGET:
-            return _UNRESOLVED_TARGET
-        if result is not None:
-            found_any_write = True
-            all_targets.extend(result)
-
-        redirect_paths = extract_redirect_targets(segment, cwd)
-        for path in redirect_paths:
-            found_any_write = True
-            if path not in _PSEUDO_DEVICE_PATHS:
-                all_targets.append(path)
-
-    if not found_any_write:
-        return None
-
-    return list(dict.fromkeys(all_targets))
+def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> WriteTargetScan:
+    """Scan Bash writes using the tool's execution cwd when available."""
+    return scan_write_targets(command, _effective_execution_cwd(execution_cwd))
 
 
 def _bash_validation_error(
     command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
-    targets = _extract_bash_write_targets(command, execution_cwd)
-    if targets is _UNRESOLVED_TARGET:
-        # Fail-closed: a write verb whose target contains an unresolvable
-        # operand could be a shell-local indirection into a protected path.
+    scan = _extract_bash_write_targets(command, execution_cwd)
+    if scan.unresolved:
         return (
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-            "(unresolved write target)."
+            "(unresolved write target). " + UNRESOLVED_WRITE_TARGET_REMEDIATION
         )
-    if not targets:
+    if not scan.parseable or not scan.targets:
         return None
-    return _paths_validation_error(targets, norm_prefixes, display_prefix)
+    return _paths_validation_error(list(scan.targets), norm_prefixes, display_prefix)
 
 
 def _extract_paths_from_patch(command: str) -> list[str]:

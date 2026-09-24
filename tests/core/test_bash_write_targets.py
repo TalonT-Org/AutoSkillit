@@ -166,6 +166,21 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("git checkout branch -- /path/file.txt", "/workspace"),
     ("git --namespace refs/foo checkout -- /clone/src/main.py", "/workspace"),
     ("git reset --hard HEAD", "/workspace"),
+    ("sudo git checkout -- ../outside/evil.txt", "/workspace"),
+    ("sudo -u root git checkout -- /path/file.txt", "/workspace"),
+    ("FOO=bar git checkout -- ../outside/evil.txt", "/workspace"),
+    ("env -C /tmp git checkout -- /path/file.txt", "/workspace"),
+    ("sudo --user=root rm /path/file.txt", "/workspace"),
+    ("nice -n 5 tee /path/out.txt", "/workspace"),
+    ("timeout 30 tee /path/out.txt", "/workspace"),
+    ("timeout 30 patch /path/file.txt p.diff", "/workspace"),
+    ("sudo nohup", "/workspace"),
+    ("env -- tee /path/out.txt", "/workspace"),
+    ("env --chdir=/tmp tee /path/out.txt", "/workspace"),
+    ("env --chdir /tmp tee /path/out.txt", "/workspace"),
+    ("env CACHE_DIR=/tmp tee /path/out.txt", "/workspace"),
+    ("sudo", "/workspace"),
+    ("CACHE_DIR=/tmp", "/workspace"),
     ("cat /a | grep foo > /b", "/workspace"),
     ("echo x > output.txt", "/workspace"),
     ("patch /path/file.txt < diff.patch", "/workspace"),
@@ -197,7 +212,6 @@ def test_parity_with_command_classification(
     command: str, cwd: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Core and hooks implementations must produce identical write targets."""
-    import shlex
     from pathlib import Path
 
     hooks_dir = str(
@@ -206,46 +220,14 @@ def test_parity_with_command_classification(
     monkeypatch.syspath_prepend(hooks_dir)
 
     from _command_classification import (  # type: ignore[import-not-found]
-        extract_redirect_targets as hooks_extract_redirect_targets,
-    )
-    from _command_classification import (
-        strip_heredoc_bodies as hooks_strip_heredoc_bodies,
-    )
-    from _command_classification import (
-        tokenize_command_segments as hooks_tokenize_command_segments,
-    )
-    from guards.write_guard import (  # type: ignore[import-not-found]
-        _PSEUDO_DEVICE_PATHS as HOOKS_PSEUDO_DEVICE_PATHS,
-    )
-    from guards.write_guard import (
-        _extract_segment_targets as hooks_extract_segment_targets,
+        scan_write_targets,
     )
 
     core_result = extract_bash_write_targets(command, cwd)
+    hooks_result = list(scan_write_targets(command, cwd).targets)
 
-    hooks_segments = hooks_tokenize_command_segments(command)
-    hooks_all: list[str] = []
-    for seg in hooks_segments:
-        seg_result = hooks_extract_segment_targets(seg, cwd)
-        if seg_result is not None:
-            hooks_all.extend(seg_result)
-    try:
-        flat_tokens = shlex.split(hooks_strip_heredoc_bodies(command))
-    except (ValueError, TypeError, AttributeError):
-        flat_tokens = []
-    redirect_paths = hooks_extract_redirect_targets(flat_tokens, cwd)
-    for path in redirect_paths:
-        if path not in HOOKS_PSEUDO_DEVICE_PATHS:
-            hooks_all.append(path)
-    seen: set[str] = set()
-    hooks_unique: list[str] = []
-    for t in hooks_all:
-        if t not in seen:
-            seen.add(t)
-            hooks_unique.append(t)
-
-    assert core_result == hooks_unique, (
-        f"Parity mismatch for {command!r}: core={core_result}, hooks={hooks_unique}"
+    assert core_result == hooks_result, (
+        f"Parity mismatch for {command!r}: core={core_result}, hooks={hooks_result}"
     )
 
 

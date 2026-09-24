@@ -30,9 +30,11 @@ block B bootstrap so hook scripts can keep importing via
 - `_output_redirect.py` — output-redirect partitioning (`OutputRedirectPartition`
   dataclass and the `_partition_output_redirect_indices` /
   `_partition_output_redirects` / `_select_executable_argv_tokens` /
-  `extract_redirect_targets` / `extract_redirect_targets_with_status` /
-  `resolve_write_target` projections). Sole producer of these symbols; the
-  facade re-exports them.
+  `extract_redirect_targets_with_status` / `resolve_write_target` projections).
+  Sole producer of these symbols; the facade re-exports them.
+
+`scan_write_targets` and `WriteTargetScan` live in
+`_runtime/_command_classification.py`.
 
 ## Bootstrap Conventions
 

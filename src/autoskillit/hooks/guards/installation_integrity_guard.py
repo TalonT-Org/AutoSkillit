@@ -16,15 +16,11 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    WRITE_VERBS,
-    all_evaluated_segments,
-    command_verb,
+    UNRESOLVED_WRITE_TARGET_REMEDIATION,
     extract_interpreter_write_paths,
     extract_patch_paths,
-    extract_redirect_targets_with_status,
-    extract_write_verb_targets,
     resolve_write_target,
-    updated_execution_cwd,
+    scan_write_targets,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
@@ -157,26 +153,9 @@ def _is_protected_target(path: str) -> bool:
 
 
 def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
-    segments = all_evaluated_segments(command)
-    if segments is None:
-        # Fail-closed: an unparseable shell command is an unresolved write target,
-        # matching the docstring's contract that shell-local indirection into an
-        # installation tree must not bypass the protection floor.
-        return [], True
-    targets: list[str] = []
-    unresolved_target = False
-    for segment in segments:
-        verb = command_verb(segment)
-        if verb == "cd":
-            cwd = updated_execution_cwd(segment, cwd)
-            continue
-        if verb in WRITE_VERBS:
-            found, unresolved = extract_write_verb_targets(verb, segment, cwd)
-            targets.extend(found)
-            unresolved_target = unresolved_target or unresolved
-        redirects, unresolved = extract_redirect_targets_with_status(segment, cwd)
-        targets.extend(redirects)
-        unresolved_target = unresolved_target or unresolved
+    scan = scan_write_targets(command, cwd)
+    targets = list(scan.targets)
+    unresolved_target = scan.unresolved or not scan.parseable
     interpreter_paths = extract_interpreter_write_paths(command)
     # ``extract_interpreter_write_paths``: None=non-write, []=interpreter write
     # detected but not all targets are static literals (fail-closed below),
@@ -236,7 +215,10 @@ def main() -> None:
     targets, unresolved_target = _collect_write_targets(data)
 
     if unresolved_target:
-        _deny("unresolved-write-target", "Write target could not be resolved safely.")
+        _deny(
+            "unresolved-write-target",
+            "Write target could not be resolved safely. " + UNRESOLVED_WRITE_TARGET_REMEDIATION,
+        )
     if any(_is_protected_target(path) for path in targets):
         _deny(
             "protected-installation-target",

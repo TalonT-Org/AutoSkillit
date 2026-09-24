@@ -110,6 +110,7 @@ Each direct Python file has one responsibility:
 - `_type_session_shape.py` — Typed env specs for session launch boundaries.
 - `_type_skill_contract.py` — Backend-neutral skill source identity contracts.
 - `_type_skill_semantics.py` — Backend-neutral semantic requirements declared by portable skills.
+- `_type_session_invariant_admission.py` — Session-invariant admission classifier (single source of truth for the support / unsupported / launch-deferred verdict pattern).
 - `_type_subprocess.py` — Subprocess execution types and contracts.
 - `_type_token.py` — Canonical token usage type.
 - `_type_truth.py` — Closed truth-value dialect for values supplied to declared recipe guards.

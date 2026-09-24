@@ -13,8 +13,8 @@ import pytest
 import autoskillit.server as server
 from autoskillit.core import (
     JoinSpec,
+    SessionInvariantAdaptationRefusal,
     SkillExecutionRole,
-    SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
     SkillSource,
@@ -335,9 +335,9 @@ async def test_backend_absolute_semantic_refusal_rejects_candidate_before_issuan
     issuance = MagicMock(return_value=None)
     monkeypatch.setattr(f"{_PREPARE}.acquire_managed_join_evidence", issuance)
     monkeypatch.setattr(
-        "autoskillit.server.tools._preflight.adapt_session_invariant",
-        lambda _plan, _backend: SkillSemanticAdaptationResult(
-            unsupported_operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+        "autoskillit.server.tools._preflight.classify_session_invariant",
+        lambda _plan, _backend: SessionInvariantAdaptationRefusal(
+            operation=SkillSemanticOperation.GIT_METADATA_WRITE,
             diagnostic="absolute refusal",
         ),
     )

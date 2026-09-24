@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, Any, assert_never
 from autoskillit.core import (
     CodingAgentBackend,
     LaunchEvidenceDeferral,
+    SessionInvariantAdaptationRefusal,
     Severity,
     SkillSemanticAdaptationResult,
-    adapt_session_invariant,
+    classify_session_invariant,
     get_logger,
     resolve_temp_dir,
 )
@@ -290,28 +291,26 @@ def _check_target_step_semantics(
     if skill_info.semantic_plan is None:
         return []
 
-    match adapt_session_invariant(skill_info.semantic_plan, backend):
-        case LaunchEvidenceDeferral() as deferral:
+    match classify_session_invariant(skill_info.semantic_plan, backend):
+        case LaunchEvidenceDeferral(operation=op):
             return [
                 DoctorResult(
                     Severity.INFO,
                     "standing_backend_pins_feasibility",
                     f"{config_path}: {dotted_key} pins backend {backend_name!r} "
-                    f"for step {target_step.name!r}; its {deferral.operation.value} "
+                    f"for step {target_step.name!r}; its {op.value} "
                     "requirement is admitted only through the managed-join route "
                     "issued at launch. The codex_managed_preparation check reports "
                     "that route's readiness.",
                 )
             ]
-        case SkillSemanticAdaptationResult() as adaptation if (
-            adaptation.unsupported_operation is not None
-        ):
+        case SessionInvariantAdaptationRefusal(diagnostic=diag):
             return [
                 DoctorResult(
                     Severity.ERROR,
                     "standing_backend_pins_feasibility",
                     f"{config_path}: {dotted_key} pins backend {backend_name!r} "
-                    f"for step {target_step.name!r}, but {adaptation.diagnostic}. "
+                    f"for step {target_step.name!r}, but {diag}. "
                     "Remove or update this pin, or choose a backend that "
                     "supports the skill's semantic requirements.",
                 )

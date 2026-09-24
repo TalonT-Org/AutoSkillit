@@ -12,11 +12,12 @@ from autoskillit.core import (
     FinalizedRecipeStep,
     LaunchEvidenceDeferral,
     SemanticAdaptationContext,
+    SessionInvariantAdaptationRefusal,
     SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
-    adapt_session_invariant,
+    classify_session_invariant,
 )
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
@@ -75,11 +76,13 @@ def check_session_invariant_semantic_feasibility(
     """
     if plan is None:
         return None
-    match adapt_session_invariant(plan, backend):
+    match classify_session_invariant(plan, backend):
         case LaunchEvidenceDeferral():
             return None
-        case SkillSemanticAdaptationResult() as adaptation:
-            return adaptation.diagnostic if adaptation.unsupported_operation is not None else None
+        case SessionInvariantAdaptationRefusal(diagnostic=diag):
+            return diag
+        case SkillSemanticAdaptationResult():
+            return None
         case _ as unreachable:
             assert_never(unreachable)
 

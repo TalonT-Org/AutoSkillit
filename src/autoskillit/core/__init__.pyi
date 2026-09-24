@@ -1312,6 +1312,8 @@ from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
+from .types import SessionInvariantAdaptationRefusal as SessionInvariantAdaptationRefusal
+from .types import SessionInvariantVerdict as SessionInvariantVerdict
 from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionScope as SessionScope
@@ -1417,6 +1419,7 @@ from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import adapt_session_invariant as adapt_session_invariant
 from .types import admit_anchor as admit_anchor
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import classify_session_invariant as classify_session_invariant
 from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,
 )

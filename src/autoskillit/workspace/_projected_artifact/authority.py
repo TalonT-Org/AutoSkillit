@@ -33,15 +33,15 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
+    SessionInvariantAdaptationRefusal,
     SkillAuthority,
-    SkillContractError,
     SkillExecutionRole,
     SkillProjectionRefusal,
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceRef,
     _InstallLock,
-    adapt_session_invariant,
+    classify_session_invariant,
     get_logger,
     log_plugin_artifact_lifecycle,
     managed_home,
@@ -291,30 +291,14 @@ def _classify_projected_skills(
         plan = skill.semantic_plan
         if plan is None:
             continue
-        match adapt_session_invariant(plan, backend):
-            case LaunchEvidenceDeferral() as deferral:
+        match classify_session_invariant(plan, backend):
+            case LaunchEvidenceDeferral(operation=op, diagnostic=diag):
                 deferred.append(
-                    SkillProjectionRefusal(
-                        skill=skill.name,
-                        operation=deferral.operation,
-                        diagnostic=deferral.diagnostic,
-                    )
+                    SkillProjectionRefusal(skill=skill.name, operation=op, diagnostic=diag)
                 )
-            case SkillSemanticAdaptationResult() as adaptation if (
-                adaptation.unsupported_operation is not None
-            ):
-                if not adaptation.diagnostic:
-                    raise SkillContractError(
-                        f"backend {backend.name!r} returned "
-                        f"{adaptation.unsupported_operation.value} "
-                        "refusal without a diagnostic"
-                    )
+            case SessionInvariantAdaptationRefusal(operation=op, diagnostic=diag):
                 unavailable.append(
-                    SkillProjectionRefusal(
-                        skill=skill.name,
-                        operation=adaptation.unsupported_operation,
-                        diagnostic=adaptation.diagnostic,
-                    )
+                    SkillProjectionRefusal(skill=skill.name, operation=op, diagnostic=diag)
                 )
             case SkillSemanticAdaptationResult() as adaptation:
                 semantic_adaptations[skill.name] = adaptation

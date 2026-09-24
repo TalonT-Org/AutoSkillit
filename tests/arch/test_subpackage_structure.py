@@ -87,6 +87,7 @@ class TestCoreSubpackages:
             "_type_session_shape",
             "_type_skill_contract",
             "_type_skill_semantics",
+            "_type_session_invariant_admission",
             "_type_subprocess",
             "_type_token",
             "_type_truth",

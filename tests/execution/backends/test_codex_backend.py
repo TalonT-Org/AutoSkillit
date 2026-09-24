@@ -234,15 +234,9 @@ class TestCodexBackend:
         assert CodexBackend().capabilities.env_denylist_prefixes == CODEX_ENV_PREFIX_DENYLIST
 
     def test_capabilities_min_version(self) -> None:
-        from autoskillit.execution.backends._codex_discovery import (
-            CODEX_SKILL_DISCOVERY_CONTRACT,
-        )
+        from autoskillit.execution.backends._codex_discovery import CODEX_CLI_MIN_VERSION
 
-        assert CodexBackend().capabilities.min_version == "0.136.0"
-        assert (
-            CodexBackend().capabilities.min_version
-            == CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
-        )
+        assert CodexBackend().capabilities.min_version == CODEX_CLI_MIN_VERSION
 
     def test_capabilities_version_check_command(self) -> None:
         assert CodexBackend().capabilities.version_check_command == "codex --version"

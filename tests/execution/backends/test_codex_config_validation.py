@@ -494,9 +494,11 @@ def _prompt_input_for_catalog(catalog_dir: Path) -> bytes:
     ).encode()
 
 
-def test_real_interactive_validator_reaches_successful_native_probe(
+@pytest.mark.parametrize("version", ("0.156.0", "0.156.1"))
+def test_real_interactive_validator_checks_bound_version_before_native_discovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    version: str,
 ) -> None:
     from autoskillit.execution.backends import _codex_discovery as discovery
     from autoskillit.execution.backends import codex
@@ -525,7 +527,7 @@ def test_real_interactive_validator_reaches_successful_native_probe(
         if command[-3:] == ("mcp", "list", codex.CodexFlags.JSON):
             return probes._BoundedProbeResult(0, _VALID_INVENTORY_BYTES, b"")
         if command == (str(executable), "--version"):
-            return probes._BoundedProbeResult(0, b"codex-cli 0.153.4\n", b"")
+            return probes._BoundedProbeResult(0, f"codex-cli {version}\n".encode(), b"")
         if command[-2:] == discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe:
             return probes._BoundedProbeResult(
                 0,
@@ -538,10 +540,10 @@ def test_real_interactive_validator_reaches_successful_native_probe(
     monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    assert backend.validate_interactive_invocation(spec).errors == ()
+    errors = backend.validate_interactive_invocation(spec).errors
 
     probe_prefix = interactive_validation._interactive_probe_prefix(spec.origin)
-    assert calls == [
+    expected_calls = [
         {
             "command": (*probe_prefix, "mcp", "list", codex.CodexFlags.JSON),
             "env": spec.env,
@@ -556,6 +558,15 @@ def test_real_interactive_validator_reaches_successful_native_probe(
             "timeout_seconds": 30,
             "stream_limit_bytes": None,
         },
+    ]
+    if version == "0.156.0":
+        assert errors == ("Codex CLI 0.156.0 is below the supported minimum 0.156.1",)
+        assert calls == expected_calls
+        return
+
+    assert errors == ()
+    assert calls == [
+        *expected_calls,
         {
             "command": (*probe_prefix, *discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe),
             "env": spec.env,
@@ -592,7 +603,7 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     monkeypatch.setattr(
         interactive_validation,
         "probe_codex_version",
-        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
+        lambda **_kwargs: ("codex-cli 0.156.1", "0.156.1", []),
     )
 
     def attest(**kwargs: object) -> InteractiveInvocationValidation:
@@ -618,9 +629,11 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     assert str(executable) == spec.origin.binary
 
 
+@pytest.mark.parametrize("version", ("0.156.0", "0.156.1"))
 def test_projected_interactive_validator_accepts_canonical_home_without_managed_topology(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    version: str,
 ) -> None:
     from autoskillit.execution.backends import codex
 
@@ -638,7 +651,7 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
     def probe_version(**kwargs: object) -> tuple[str, str, list[str]]:
         events.append("version")
         version_call.update(kwargs)
-        return "codex-cli 0.153.4", "0.153.4", []
+        return f"codex-cli {version}", version, []
 
     def attest(**kwargs: object) -> InteractiveInvocationValidation:
         events.append("prompt-input")
@@ -648,14 +661,20 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
     monkeypatch.setattr(interactive_validation, "probe_codex_version", probe_version)
     monkeypatch.setattr(interactive_validation, "attest", attest)
 
-    assert backend.validate_interactive_invocation(spec).errors == ()
-    assert events == ["version", "prompt-input"]
+    errors = backend.validate_interactive_invocation(spec).errors
     assert version_call == {
         "executable": str(executable),
         "env": spec.env,
         "cwd": spec.cwd,
         "timeout_seconds": 30.0,
     }
+    if version == "0.156.0":
+        assert errors == ("Codex CLI 0.156.0 is below the supported minimum 0.156.1",)
+        assert events == ["version"]
+        return
+
+    assert errors == ()
+    assert events == ["version", "prompt-input"]
     assert discovery_call["probe_command"] == (
         *interactive_validation._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
@@ -668,7 +687,7 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
     )
     assert discovery_call["managed_root_scope"] == projected_home.parent
     assert discovery_call["expected_entries"] == spec.projected_skill_entries
-    assert discovery_call["version"] == "codex-cli 0.153.4"
+    assert discovery_call["version"] == "codex-cli 0.156.1"
     assert discovery_call["timeout_seconds"] == 30.0
 
 
@@ -773,7 +792,7 @@ def test_projected_interactive_validator_rejects_missing_catalog_before_prompt_p
     monkeypatch.setattr(
         interactive_validation,
         "probe_codex_version",
-        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
+        lambda **_kwargs: ("codex-cli 0.156.1", "0.156.1", []),
     )
 
     errors = backend.validate_interactive_invocation(spec).errors
@@ -802,7 +821,7 @@ def test_projected_interactive_validator_rejects_attestation_catalog_changes(
     monkeypatch.setattr(
         interactive_validation,
         "probe_codex_version",
-        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
+        lambda **_kwargs: ("codex-cli 0.156.1", "0.156.1", []),
     )
     prompt_root = catalog_dir
     if catalog_state == "misplaced":

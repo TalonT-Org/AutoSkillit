@@ -256,7 +256,12 @@ These routes are accepted deferrals in
 cadence. Tracking issue #4717 retains the migration obligation. Before launch,
 AutoSkillit runs the exact bound executable's `debug prompt-input` renderer
 against the immutable `CODEX_SKILL_DISCOVERY_CONTRACT` and rejects any foreign
-root inside the managed-home scope. The verified binary is `codex-cli 0.153.4`.
+root inside the managed-home scope. The verified binary is `codex-cli 0.156.1`;
+its bound `debug prompt-input` renderer was last observed listing the managed
+and projected probe skills and round-tripping an app-server registered root
+through `skills/extraRoots/set` before any model turn. Upstream
+`rust-v0.156.1` resolves to `b412ff32c417f855c2b2d1581b77058eed87c84b`; the
+rolling canary log retains the dated local probe run.
 
 Before an attempt is entered, `sessions` and `archived_sessions` are symlinks
 to private, empty inert directories within the generated home. Attempt entry
@@ -386,7 +391,8 @@ deletion. Retry either revalidates an intact view, resumes deletion of an author
 tombstone, or reports an already-recorded reconciliation. Canonical stores, the launch
 registry, and the derived index are never changed by this operation.
 
-Clean-empty lifecycle completion remains blocked for interactive Codex 0.147.0. Its
+The 0.147.0 investigation found clean-empty lifecycle completion blocked for
+interactive Codex. Its
 exec JSONL and app-server thread events occur only after explicit `thread/start`, so
 their absence is not a final negative proof for TUI `/quit`; OS SID and PTY identity
 prove process startup only. The attempt manifest therefore remains schema v1 with
@@ -428,11 +434,18 @@ version. It must prove that fresh and resumed writes remain on the staged
 inode (or follow an explicitly supported representation transition) and that
 a live Codex process retains the inherited lease after the parent closes its
 copy. Failure blocks the hard-link design for that version. Binary selection
-is gated only on `CodexBackend().capabilities.min_version` (0.136.0); the
+is gated only on `CodexBackend().capabilities.min_version` (0.156.1); the
 exact rollout/inode/lease wire-schema assertions are separately pinned to
-`codex-cli 0.147.0` and skip — reporting the limitation rather than passing
+`codex-cli 0.156.1` and skip — reporting the limitation rather than passing
 silently — when the selected binary clears the transport floor but is not
 that exact schema-verified build.
+
+The 0.156.1 startup probe (see canary log) ran a fresh turn and a resumed turn
+on the bound binary. Each produced one rollout; the fresh rollout kept its
+live inode, and the resumed rollout kept the staged hard-link inode. A
+competing nonblocking lock could not take either inherited lease while Codex
+was running. This is a new 0.156.1 observation; the earlier 0.147.0 schema
+observation remains historical.
 
 ### Exception rendering ownership
 

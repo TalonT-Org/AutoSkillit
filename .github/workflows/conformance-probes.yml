@@ -59,14 +59,14 @@ jobs:
           uv sync --locked --extra dev
 
       - name: Install pinned Codex CLI
-        run: npm install --global @openai/codex@0.147.0
+        run: npm install --global @openai/codex@0.156.1
 
       - name: Resolve Codex CLI version
         id: resolve-version
         run: |
           CLI_VERSION=$(codex --version 2>/dev/null || echo 'unknown')
-          if [ "$CLI_VERSION" != "codex-cli 0.147.0" ]; then
-            echo "::error::Expected codex-cli 0.147.0, got $CLI_VERSION"
+          if [ "$CLI_VERSION" != "codex-cli 0.156.1" ]; then
+            echo "::error::Expected codex-cli 0.156.1, got $CLI_VERSION"
             exit 1
           fi
           echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
@@ -88,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: codex-live-web-agent-gate-0.147.0
+          name: codex-live-web-agent-gate-0.156.1
           path: .autoskillit/temp/conformance/live-web-agent-gate/live-web-agent-gate.json
           if-no-files-found: error
           retention-days: 7
@@ -192,10 +192,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            claude-version: "2.1.219"
+            claude-version: "2.1.280"
             probe-tmpdir: /dev/shm/pytest-probes
           - os: macos-14
-            claude-version: "2.1.219"
+            claude-version: "2.1.280"
             probe-tmpdir: /tmp/pytest-probes
     env:
       CLAUDE_CODE_SMOKE_TEST: "1"

@@ -10,11 +10,18 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends._codex_config import CODEX_LIMIT_VERIFICATION_REGISTRY
+from autoskillit.execution.backends._codex_config import (
+    CODEX_LIMIT_VERIFICATION_REGISTRY,
+)
 
 pytestmark = [pytest.mark.layer("docs"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_historical_clamp_finding_retains_its_original_version() -> None:
+    adr = (REPO_ROOT / "docs/decisions/0004-recipe-redelivery.md").read_text()
+    assert "Historical clamp finding at codex-cli 0.145.0" in adr
 
 
 def test_neutralized_limits_are_disclosed_in_the_governing_adrs() -> None:

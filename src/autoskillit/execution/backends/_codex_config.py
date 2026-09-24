@@ -242,51 +242,51 @@ CODEX_LIMIT_VERIFICATION_REGISTRY: Mapping[str, CodexLimitVerificationDef] = Map
     {
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT": CodexLimitVerificationDef(
             governed_symbol="CODEX_HISTORY_RETENTION_TOKEN_LIMIT",
-            checked_at_cli_version=(0, 145, 0),
-            upstream_revision="25af12f7e61572b0bc18ddb1008be543b91519b0",
+            checked_at_cli_version=(0, 156, 1),
+            upstream_revision="b412ff32c417f855c2b2d1581b77058eed87c84b",
             upstream_sources=(
-                "codex-rs/models-manager/src/model_info.rs::with_config_overrides",
-                "codex-rs/utils/string/src/truncate.rs::APPROX_BYTES_PER_TOKEN",
-                "codex-rs/core/src/tools/mod.rs::format_exec_output_for_model",
-                "codex-rs/core/src/context_manager/history.rs::record_items",
+                "codex-rs/models-manager/src/model_info.rs:19-43::with_config_overrides",
+                "codex-rs/models-manager/models.json:174-188,346-360",
+                "codex-rs/utils/string/src/truncate.rs:4::APPROX_BYTES_PER_TOKEN",
+                "codex-rs/core/src/tools/mod.rs:98-109::format_exec_output_for_model",
+                "codex-rs/core/src/context_manager/history.rs:400-445::record_items",
             ),
             status="upstream_honored",
             codex_config_key="tool_output_token_limit",
             configured_value=CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             upstream_effective_value=CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             finding=(
-                "tool_output_token_limit is applied verbatim: with_config_overrides replaces "
-                "ModelInfo.truncation_policy with no clamp (unlike model_context_window, which "
-                "is min()-clamped to max_context_window). APPROX_BYTES_PER_TOKEN is still 4. "
-                "The gpt-5.6-sol catalog default is {mode: tokens, limit: 10000}, so this "
-                "override is the only thing keeping recipe payloads intact. The same "
-                "truncation_policy field governs BOTH the current-turn exec output sent to "
-                "the model and retained history -- the earlier '(later history only)' "
-                "qualifier was factually wrong and is removed."
+                "At rust-v0.156.1, with_config_overrides applies tool_output_token_limit "
+                "to ModelInfo.truncation_policy without a clamp. GPT-6 Sol and Luna both "
+                "have a 10000-token catalog default; APPROX_BYTES_PER_TOKEN remains 4. "
+                "The policy truncates current-turn exec output and retained history, "
+                "although history metadata can override its policy. This is a source "
+                "finding for the installed codex-cli 0.156.1, not a runtime measurement "
+                "of a model turn."
             ),
         ),
         "CODEX_RECIPE_DELIVERY_BUDGET": CodexLimitVerificationDef(
             governed_symbol="CODEX_RECIPE_DELIVERY_BUDGET",
-            checked_at_cli_version=(0, 145, 0),
-            upstream_revision="25af12f7e61572b0bc18ddb1008be543b91519b0",
+            checked_at_cli_version=(0, 156, 1),
+            upstream_revision="b412ff32c417f855c2b2d1581b77058eed87c84b",
             upstream_sources=(
                 "autoskillit: core/_delivery_bounds.py::resolve_recipe_delivery_decision",
                 "autoskillit: execution/backends/_codex_config.py"
                 "::SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY",
+                "autoskillit: server/recipe/_recipe_delivery/_finalize.py:291-320",
             ),
             status="locally_unreachable",
             codex_config_key=None,
             configured_value=None,
             upstream_effective_value=None,
             finding=(
-                "SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY is empty, so every caller reaches "
-                "resolve_recipe_delivery_decision with supported_evidence=None and the "
-                "ATTESTED_INLINE terminal branch is unreachable in the live call graph. The "
-                '// @exec: {"max_output_tokens": 56750} cell contract was emitted in 0 of '
-                "552 0.145.0 rollouts; zero AutoSkillit-launched Codex sessions have run "
-                "under 0.145.0. Positive verification requires the CODEX_SMOKE_TEST=1 live "
-                "probe suite; this pin does not certify upstream parser behavior for this "
-                "surface."
+                "At codex-cli 0.156.1, SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY remains "
+                "empty; the local delivery call graph supplies supported_evidence=None "
+                "to resolve_recipe_delivery_decision, so ATTESTED_INLINE is locally "
+                "unreachable. The recorded 0-of-552 cell-contract observation belongs "
+                "to 0.145.0 rollouts and is not a 0.156.1 runtime measurement. This pin "
+                "does not certify upstream parser behavior for that surface; positive "
+                "verification requires the CODEX_SMOKE_TEST=1 live probe suite."
             ),
         ),
     }

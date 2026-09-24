@@ -29,7 +29,7 @@ from typing import Any
 from packaging.version import InvalidVersion, Version
 
 from autoskillit.core import CodexAppServerPlan
-from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
+from autoskillit.execution.backends._codex_discovery import CODEX_CLI_MIN_VERSION
 
 #: JSON-RPC 2.0 "Method not found" — the fixed code for every unsupported
 #: server-to-client request this driver refuses (approval/elicitation/
@@ -306,7 +306,7 @@ class CodexAppServerDriver:
             self._fail(f"could not parse server version from userAgent {user_agent!r}")
             return ()
         self._observed_server_version = version
-        min_version = CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
+        min_version = CODEX_CLI_MIN_VERSION
         try:
             below_minimum = Version(version) < Version(min_version)
         except InvalidVersion:
@@ -338,7 +338,7 @@ class CodexAppServerDriver:
 
     def _accept_skills_list(self, result: Mapping[str, Any]) -> tuple[str, ...]:
         # Per-cwd entries are nested under "data" -- confirmed live against
-        # the installed codex-cli 0.153.4 app-server binary. There is no
+        # the installed codex-cli 0.156.1 app-server binary. There is no
         # "results" key on the wire; a response using that shape instead of
         # "data" is treated as carrying zero entries (see the "missing an
         # entry for cwd" failure this falls into below).
@@ -397,9 +397,8 @@ class CodexAppServerDriver:
     # -- diagnostics -----------------------------------------------------------
 
     def _fail(self, diagnostic: str) -> None:
-        contract = CODEX_SKILL_DISCOVERY_CONTRACT
         self.failure = (
-            f"{diagnostic} (contract.extra_roots_min_version="
-            f"{contract.extra_roots_min_version!r}, observed_binary_version="
+            f"{diagnostic} (supported_codex_min_version={CODEX_CLI_MIN_VERSION!r}, "
+            f"observed_binary_version="
             f"{self._observed_server_version!r})"
         )

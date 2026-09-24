@@ -12,7 +12,7 @@ from autoskillit.execution.backends._codex.app_server import (
     CodexAppServerDriver,
     _parse_user_agent_version,
 )
-from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
+from autoskillit.execution.backends._codex_discovery import CODEX_CLI_MIN_VERSION
 from tests.execution.backends._codex_fixtures import app_server_fixture
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -22,7 +22,7 @@ _SYNTHETIC_MODEL_ID = "gpt-synthetic"
 _SESSION_HOME = "/tmp/session"
 _CATALOG_ROOT = "/tmp/session/add-dir/skills"
 _CWD = "/tmp/session"
-_MIN_VERSION = CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
+_MIN_VERSION = CODEX_CLI_MIN_VERSION
 
 
 def _make_plan(**overrides: object) -> CodexAppServerPlan:
@@ -119,6 +119,7 @@ class TestInitializeHandshake:
         driver = CodexAppServerDriver(_make_plan())
         lines = driver.on_line(_response(1, result=_initialize_result()))
         assert driver.failure is None
+        assert driver._observed_server_version == "0.156.1"
         assert len(lines) == 2
         initialized = json.loads(lines[0])
         assert initialized == {"method": "initialized"}
@@ -136,7 +137,7 @@ class TestInitializeHandshake:
             _response(
                 1,
                 result=_initialize_result(
-                    user_agent=f"autoskillit-dry-walk/{_MIN_VERSION} (codex-cli 0.153.4)"
+                    user_agent=f"autoskillit-dry-walk/{_MIN_VERSION} (codex-cli {_MIN_VERSION})"
                 ),
             )
         )
@@ -150,13 +151,40 @@ class TestInitializeHandshake:
         assert _SESSION_HOME in driver.failure
         assert "/other/home" in driver.failure
 
-    def test_below_minimum_version_sets_failure(self) -> None:
-        driver = CodexAppServerDriver(_make_plan())
-        driver.on_line(
-            _response(1, result=_initialize_result(user_agent="autoskillit/0.100.0 (codex-cli)"))
+    @pytest.mark.parametrize("with_catalog", (True, False), ids=("catalog", "no-catalog"))
+    def test_below_minimum_version_stops_before_thread_start(self, with_catalog: bool) -> None:
+        plan = (
+            _make_plan()
+            if with_catalog
+            else _make_plan(
+                catalog_root="",
+                expected_skill_names=frozenset(),
+                expected_skill_entries=(),
+            )
         )
+        driver = CodexAppServerDriver(plan)
+        lines = driver.on_line(
+            _response(1, result=_initialize_result(user_agent="autoskillit/0.156.0 (codex-cli)"))
+        )
+        assert lines == ()
         assert driver.failure is not None
-        assert "0.100.0" in driver.failure
+        assert "supported_codex_min_version='0.156.1'" in driver.failure
+        assert "observed_binary_version='0.156.0'" in driver.failure
+        assert driver._observed_server_version == "0.156.0"
+
+    def test_no_catalog_at_minimum_version_starts_thread(self) -> None:
+        driver = CodexAppServerDriver(
+            _make_plan(
+                catalog_root="",
+                expected_skill_names=frozenset(),
+                expected_skill_entries=(),
+            )
+        )
+        lines = driver.on_line(_response(1, result=_initialize_result()))
+        assert driver.failure is None
+        assert driver._observed_server_version == "0.156.1"
+        methods = [json.loads(line)["method"] for line in lines]
+        assert methods == ["initialized", "thread/start"]
 
     def test_unparseable_user_agent_sets_failure(self) -> None:
         driver = CodexAppServerDriver(_make_plan())

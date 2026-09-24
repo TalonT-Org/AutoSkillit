@@ -30,6 +30,7 @@ from autoskillit.execution.backends._codex_catalog import (
     project_codex_catalog,
     run_owned_bounded,
 )
+from autoskillit.execution.backends._codex_discovery import CODEX_CLI_MIN_VERSION
 from autoskillit.execution.backends._codex_probes import _validate_codex_mcp_inventory
 from autoskillit.execution.backends._probe_cache import (
     ProbeResult,
@@ -104,7 +105,7 @@ from autoskillit.execution.evidence.reader._protocol import (
 )
 from autoskillit.execution.process._lifecycle.owned_group import spawn_owned_process
 
-_SUPPORTED_CODEX_CLI_VERSION = "codex-cli 0.147.0"
+_SUPPORTED_CODEX_CLI_VERSION = f"codex-cli {CODEX_CLI_MIN_VERSION}"
 _CODEX_STDIN_NOTICE = b"Reading additional input from stdin...\n"
 _MAX_STREAM_BYTES = 2_000_000
 _MAX_RESULT_BYTES = 256_000

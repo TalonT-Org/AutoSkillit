@@ -359,7 +359,7 @@ future use and have no current production consumer outside the exemption set.
 | `required_session_files` | Session directory contract enforcement (Codex: `frozenset({"config.toml"})`; Claude: `frozenset()`) |
 | `session_dir_symlinks` | Session directory layout (Codex: `frozenset({"sessions", "archived_sessions"})`; Claude: `frozenset()`) |
 | `patch_format` | Write-guard path extraction (Claude: `"unified_diff"`; Codex: `"codex_star_update"`) |
-| `min_version` | Version validation in doctor (Codex: `"0.136.0"`; Claude: `""`) |
+| `min_version` | Version validation in doctor (Codex: `"0.156.1"`; Claude: `"2.1.280"`) |
 | `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS = AUTOSKILLIT_PRIVATE_ENV_VARS - CODEX_MCP_ENV_SERVER_EXCLUDED_VARS`; Claude Code inherits the full environment and declares `frozenset()`). MCP registration forwards each listed variable present in the agent process; the Codex MCP server env and builder coverage architecture tests enforce the contract. |
 | `github_api_callable` | Future network-capability gate for outbound GitHub API writes |
 

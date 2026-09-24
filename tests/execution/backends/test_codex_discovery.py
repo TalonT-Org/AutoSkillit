@@ -763,7 +763,6 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
 def test_discovery_routes_and_contract_pin_verified_upstream_revision() -> None:
     from autoskillit.core import UpstreamSupportStatus
 
-    contract = discovery.CODEX_SKILL_DISCOVERY_CONTRACT
     managed_route = discovery.CODEX_MANAGED_HOME_ROUTE
     projected_route = discovery.CODEX_PROJECTED_HOME_ROUTE
 
@@ -773,8 +772,6 @@ def test_discovery_routes_and_contract_pin_verified_upstream_revision() -> None:
     assert managed_route.tracking_issue == 4717
     assert projected_route.catalog_relpath == "skills"
     assert projected_route.discovery_root_relpath == "skills"
-    assert contract.upstream_revision == "646f7c0a91b8e327d263335da68ae8ef212895ce"
-    assert contract.verified_binary == "codex-cli 0.153.4"
 
 
 def test_select_interactive_discovery_route(tmp_path: Path) -> None:

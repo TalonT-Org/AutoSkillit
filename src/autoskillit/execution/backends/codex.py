@@ -67,6 +67,7 @@ from autoskillit.execution.backends._codex_config import (
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_discovery import (
+    CODEX_CLI_MIN_VERSION,
     CODEX_MANAGED_HOME_ROUTE,
     CODEX_SKILL_DISCOVERY_CONTRACT,
 )
@@ -237,7 +238,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             applicable_guards=frozenset({"write_guard"}),  # run_cmd, not Write/Edit
             write_guard_tool_names=frozenset({"apply_patch", "Bash", "run_cmd"}),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
-            min_version="0.136.0",
+            min_version=CODEX_CLI_MIN_VERSION,
             version_check_command="codex --version",
             process_name="codex",
             process_name_aliases=frozenset({"codex", "node"}),

@@ -10,6 +10,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit import cli
 from autoskillit.core import atomic_write
 from autoskillit.execution.backends import ClaudeCodeBackend
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.cli._cook_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -26,7 +27,7 @@ def test_reload_reprobes_exact_executable_for_each_attempt(
         "#!/bin/sh\n"
         'if [ "${1-}" = "--version" ]; then\n'
         f"  printf 'probe\\n' >> '{probe_log}'\n"
-        "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+        f"  printf '%s\\n' '{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}'\n"
         "fi\n"
         "exit 0\n",
     )

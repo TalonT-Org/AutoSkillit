@@ -134,8 +134,8 @@ class TestVersionResolution:
         matrix = workflow["jobs"]["claude-probe"]["strategy"]["matrix"]["include"]
         rows = {(row["os"], row["claude-version"], row["probe-tmpdir"]) for row in matrix}
         assert rows == {
-            ("ubuntu-22.04", "2.1.219", "/dev/shm/pytest-probes"),
-            ("macos-14", "2.1.219", "/tmp/pytest-probes"),
+            ("ubuntu-22.04", "2.1.280", "/dev/shm/pytest-probes"),
+            ("macos-14", "2.1.280", "/tmp/pytest-probes"),
         }
 
     def test_claude_probe_installs_and_exports_exact_pinned_binary(self, workflow: dict) -> None:
@@ -160,8 +160,8 @@ class TestVersionResolution:
             if step.get("id") == "resolve-version"
         )
 
-        assert install["run"] == "npm install --global @openai/codex@0.147.0"
-        assert '"codex-cli 0.147.0"' in resolve["run"]
+        assert install["run"] == "npm install --global @openai/codex@0.156.1"
+        assert '"codex-cli 0.156.1"' in resolve["run"]
         assert install_index < resolve_index
 
 
@@ -191,7 +191,7 @@ class TestCacheGate:
         assert "task test-smoke-codex-web-agent-live-gate" in gate["run"]
         assert gate_index < upload_index < restore_index
         assert upload["if"] == "always()"
-        assert upload["with"]["name"] == "codex-live-web-agent-gate-0.147.0"
+        assert upload["with"]["name"] == "codex-live-web-agent-gate-0.156.1"
         assert upload["with"]["path"].endswith("/live-web-agent-gate.json")
         assert upload["with"]["if-no-files-found"] == "error"
         assert upload["with"]["retention-days"] == 7

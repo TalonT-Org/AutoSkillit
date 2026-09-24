@@ -288,7 +288,7 @@ def _launch_with_observation(
     monkeypatch.setattr(
         launcher,
         "_probe_cli_version",
-        lambda *args, **kwargs: "codex-cli 0.147.0",
+        lambda *args, **kwargs: "codex-cli 0.156.1",
     )
     monkeypatch.setattr(launcher, "_run_bounded", run_final)
     result = launch_evidence_reader(definition, invocation, **kwargs)

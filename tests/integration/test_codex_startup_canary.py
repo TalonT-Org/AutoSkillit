@@ -37,7 +37,7 @@ _CANARY_ENV = "AUTOSKILLIT_CODEX_STARTUP_CANARY"
 # Exact build this file's rollout/inode/lease-schema assertions are pinned to;
 # see _skip_unless_schema_pinned for why a compatible-but-different build skips
 # those assertions instead of silently passing.
-_SUPPORTED_VERSION = "codex-cli 0.147.0"
+_SUPPORTED_VERSION = "codex-cli 0.156.1"
 _OUTPUT_CAP = 64 * 1024
 _INSTALLED_CODEX_HOME = Path.home() / ".codex"
 

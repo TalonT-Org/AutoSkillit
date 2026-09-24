@@ -19,6 +19,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.backends.claude import _claude_host_attestation_env
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -118,7 +119,9 @@ def test_pre_launch_probes_bound_executable_with_bound_environment(
     def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         captured["cmd"] = cmd
         captured.update(kwargs)
-        return subprocess.CompletedProcess(cmd, 0, stdout="2.1.219 (Claude Code)\n", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=f"{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}\n", stderr=""
+        )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
@@ -136,7 +139,7 @@ def test_pre_launch_probes_bound_executable_with_bound_environment(
         (1, "", "failed"),
         (0, "", "empty"),
         (0, "Claude Code unknown", "unparseable"),
-        (0, "2.1.218 (Claude Code)", "requires Claude Code"),
+        (0, "2.1.279 (Claude Code)", "requires Claude Code 2.1.280 or newer"),
     ],
 )
 def test_pre_launch_fails_closed_for_unusable_capability_probe(

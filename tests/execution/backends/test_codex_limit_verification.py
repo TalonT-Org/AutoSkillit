@@ -30,6 +30,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 def test_pin_is_derived_from_the_verification_registry() -> None:
     assert CODEX_LIMIT_VERIFICATION_REGISTRY
+    assert len(CODEX_LIMITS_LAST_VERIFIED_VERSION) == 3
+    assert all(isinstance(v, int) for v in CODEX_LIMITS_LAST_VERIFIED_VERSION)
     assert CODEX_LIMITS_LAST_VERIFIED_VERSION == min(
         entry.checked_at_cli_version for entry in CODEX_LIMIT_VERIFICATION_REGISTRY.values()
     )

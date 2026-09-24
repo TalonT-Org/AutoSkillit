@@ -1067,6 +1067,8 @@ class TestRelativePathResolution:
         monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
         assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 class TestInterpreterRelativePathResolution:
@@ -1316,6 +1318,8 @@ class TestRedirectRelativePathResolution:
         monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets("echo foo > output.txt")
         assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 class TestGhCommandRedirectChecking:
@@ -1496,6 +1500,8 @@ class TestShellVariableWriteGuardIntegration:
         monkeypatch.delenv("UNKNOWN_DIR", raising=False)
         result = _extract_bash_write_targets('echo x > "$UNKNOWN_DIR/out.txt"')
         assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
     def test_redirect_with_inline_assignment_is_unresolved(self, monkeypatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
@@ -1509,6 +1515,8 @@ class TestShellVariableWriteGuardIntegration:
         )
         result = _extract_bash_write_targets(cmd)
         assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 try:

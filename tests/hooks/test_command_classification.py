@@ -1258,7 +1258,6 @@ class TestScanWriteTargets:
         )
 
         assert set(scan.targets) == {"/tmp/d/x.txt", str(tmp_path / "out.txt")}
-        assert len(scan.targets) == 2
         assert scan.unresolved is False
         assert scan.parseable is True
         assert scan.has_write is True

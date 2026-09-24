@@ -559,11 +559,10 @@ as a defense-in-depth measure against privilege escalation:
 | `write_guard.py` | A write-verb operand or redirect target cannot be resolved while a write-prefix policy applies | An unresolved target could escape the allowed prefix; the denial explains how to substitute a literal path. |
 | `installation_integrity_guard.py` | A detected write target cannot be resolved | An unresolved target could be a shell-local indirection into an installation tree; the denial explains how to substitute a literal path. |
 
-**Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
-(valid input, unrecognized value) = fail-closed. Before adding a fail-closed
-unresolved-target denial, keep unresolved status separate from an empty target
-set. An empty set can mean no write, while an unresolved target requires a denial
-where the guard enforces a write boundary.
+**Design principle:** Garbage-in (malformed hook input) = fail-open, except on Stop where a
+false release loses the active wave. Unknown-tier (valid input, unrecognized value) = fail-closed.
+Keep unresolved status separate from an empty target set: an empty set can mean no write,
+while an unresolved target requires a denial where the guard enforces a write boundary.
 
 All remaining guards (`fleet_dispatch_guard.py`, `quota_guard.py`,
 `mcp_health_advisor.py`, `branch_protection_guard.py`, etc.) fail-open in every

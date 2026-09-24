@@ -40,7 +40,9 @@ def _defines_or_exports_removed_api(node: ast.AST) -> bool:
         return any(
             (alias.asname or alias.name.rsplit(".", 1)[-1]) == _REMOVED_API for alias in node.names
         )
-    if not isinstance(node, (ast.Assign, ast.AnnAssign)) or node.value is None:
+    if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return False
+    if node.value is None:
         return False
     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
     return any(

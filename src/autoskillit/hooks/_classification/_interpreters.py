@@ -323,6 +323,11 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     ]
 
 
+def _tokenize_shell_segment_tokens(command: str) -> list[list[str]] | None:
+    parsed = _tokenize_command_segments_with_redirects(command)
+    return None if parsed is None else [segment.tokens for segment in parsed]
+
+
 def _iter_shell_payload_segment_groups(
     command: str,
     *,
@@ -333,6 +338,7 @@ def _iter_shell_payload_segment_groups(
     return _scan_shell_payload_segment_groups(
         command,
         extract_shell_payloads=extract_shell_command_payloads,
+        tokenize_segments=_tokenize_shell_segment_tokens,
         include_process_substitutions=include_process_substitutions,
         include_outer=include_outer,
     )

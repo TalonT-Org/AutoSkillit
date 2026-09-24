@@ -3,24 +3,14 @@
 Split out of `_interpreters.py` (rectify #4941 Part A) to keep that module's
 stdin-consumer/evaluated-payload machinery under the REQ-CNST-010 line cap.
 The occurrence scanners are pure character-by-character state machines. The
-shell-payload walker uses the tokenizer and receives interpreter payload
-extraction as a callback, keeping the interpreter dependency one-way.
+shell-payload walker receives payload extraction and tokenization callbacks
+from the interpreter, keeping this module independent of its callers.
 """
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from autoskillit.hooks._classification._tokenizer import (
-        _tokenize_command_segments_with_redirects,
-    )
-elif __package__:
-    from ._tokenizer import _tokenize_command_segments_with_redirects
-else:
-    from _tokenizer import _tokenize_command_segments_with_redirects
 
 
 def _quoted_span_end(command: str, start: int) -> int:
@@ -195,6 +185,7 @@ def _iter_shell_payload_segment_groups(
     command: str,
     *,
     extract_shell_payloads: Callable[[str], list[str]],
+    tokenize_segments: Callable[[str], list[list[str]] | None],
     include_process_substitutions: bool = False,
     include_outer: bool = True,
 ) -> Iterator[list[list[str]] | None]:
@@ -216,12 +207,12 @@ def _iter_shell_payload_segment_groups(
             if is_outer and include_outer:
                 yield []
             continue
-        parsed = _tokenize_command_segments_with_redirects(payload)
-        if parsed is None:
+        segments = tokenize_segments(payload)
+        if segments is None:
             yield None
             return
         if include_outer or not is_outer:
-            yield [segment.tokens for segment in parsed]
+            yield segments
         if not _queue_nested_shell_payloads(
             payload,
             queue,

@@ -28,6 +28,8 @@ from autoskillit.execution.backends._codex_probes import (
     _run_bounded_codex_probe,
 )
 
+CODEX_CLI_MIN_VERSION = "0.156.1"
+
 
 @dataclass(frozen=True, slots=True)
 class CodexSkillDiscoveryContractDef:
@@ -36,10 +38,8 @@ class CodexSkillDiscoveryContractDef:
     prompt_probe: tuple[str, ...] = ("debug", "prompt-input")
     upstream_revision: str = "646f7c0a91b8e327d263335da68ae8ef212895ce"
     verified_binary: str = "codex-cli 0.153.4"
-    # First release carrying `skills/extraRoots/set` — the app-server-driven
-    # managed skill-session transport's supported floor. Must equal
-    # CodexBackend.capabilities.min_version (tests/execution/backends/
-    # test_codex_backend.py enforces the equality).
+    # First release carrying `skills/extraRoots/set`; product support starts
+    # at CODEX_CLI_MIN_VERSION.
     extra_roots_min_version: str = "0.136.0"
 
 
@@ -562,6 +562,7 @@ def probe_codex_version(
 
 __all__ = [
     "CODEX_APP_SERVER_ROUTE",
+    "CODEX_CLI_MIN_VERSION",
     "CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS",
     "CODEX_MANAGED_HOME_ROUTE",
     "CODEX_PROJECTED_HOME_ROUTE",

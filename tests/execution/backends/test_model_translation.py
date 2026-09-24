@@ -35,12 +35,12 @@ class TestCodexTranslateModel:
     def test_rejects_claude_aliases(self) -> None:
         result = CodexBackend().translate_model("sonnet")
         assert result != "sonnet"
-        assert result == CODEX_MODEL_ALIASES["sonnet"]
+        assert result == "gpt-6-sol"
 
     def test_strips_context_suffix(self) -> None:
         result = CodexBackend().translate_model("opus[1m]")
         assert "[1m]" not in result
-        assert result == CODEX_MODEL_ALIASES["opus"]
+        assert result == "gpt-6-sol"
 
     @pytest.mark.parametrize("model_id", ["gpt-5.5", "gpt-6-luna", "gpt-6-sol"])
     def test_passthrough_native(self, model_id: str) -> None:
@@ -56,7 +56,7 @@ class TestCodexTranslateModel:
 
     @pytest.mark.parametrize(
         "model_id",
-        ["custom-model-xyz", "claude-opus-5"],
+        ["custom-model-xyz", "claude-opus-5-5"],
         ids=["unknown", "claude_native_on_codex"],
     )
     def test_unknown_passthrough(self, model_id: str) -> None:
@@ -64,7 +64,7 @@ class TestCodexTranslateModel:
         assert CodexBackend().translate_model(model_id) == model_id
 
     def test_haiku_alias(self) -> None:
-        assert CodexBackend().translate_model("haiku") == CODEX_MODEL_ALIASES["haiku"]
+        assert CodexBackend().translate_model("haiku") == "gpt-6-luna"
 
 
 class TestClaudeTranslateModel:
@@ -72,7 +72,7 @@ class TestClaudeTranslateModel:
         assert ClaudeCodeBackend().translate_model("sonnet") == CLAUDE_MODEL_ALIASES["sonnet"]
 
     def test_opus_alias(self) -> None:
-        assert ClaudeCodeBackend().translate_model("opus") == CLAUDE_MODEL_ALIASES["opus"]
+        assert ClaudeCodeBackend().translate_model("opus") == "claude-opus-5-5"
 
     def test_translates_opus_and_preserves_context_suffix(self) -> None:
         assert (

@@ -177,7 +177,7 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
                 (),
                 {
                     "returncode": 0,
-                    "stdout": "2.1.219 (Claude Code)",
+                    "stdout": "2.1.280 (Claude Code)",
                     "stderr": "",
                 },
             )()
@@ -1381,7 +1381,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1429,7 +1429,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1482,7 +1482,7 @@ def test_cross_validation_contract_all_flags_known(
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.219", "stderr": ""},
+                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1910,7 +1910,7 @@ if trace_path:
         trace.write(f"{Path.cwd()}\\n")
 
 if "--version" in sys.argv:
-    print("codex-cli 0.147.0")
+    print("codex-cli 0.156.1")
     raise SystemExit(0)
 
 if sys.argv[-2:] == ["debug", "prompt-input"]:

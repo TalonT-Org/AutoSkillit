@@ -31,7 +31,7 @@ def _write_shim(path: Path, probe_log: Path) -> None:
         'if [ "${1-}" = "--version" ]; then\n'
         '  if [ -n "${ANTHROPIC_API_KEY-}" ]; then exit 73; fi\n'
         f"  printf 'probe\\n' >> '{probe_log}'\n"
-        "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
         "fi\n"
         "exit 0\n",
     )

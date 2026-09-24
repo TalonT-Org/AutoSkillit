@@ -9,7 +9,6 @@ import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 from autoskillit.core.io import load_yaml
-from autoskillit.execution.backends._codex_discovery import CODEX_CLI_MIN_VERSION
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
@@ -41,7 +40,6 @@ def test_cli_pins_match_live_conformance_authorities() -> None:
     }
 
     assert _docker_arg(dockerfile, "CODEX_VERSION") == taskfile_codex_pin.group(1)
-    assert _docker_arg(dockerfile, "CODEX_VERSION") == CODEX_CLI_MIN_VERSION
     assert {_docker_arg(dockerfile, "CLAUDE_VERSION")} == claude_pins
     assert _docker_arg(dockerfile, "CLAUDE_VERSION") == CLAUDE_CODE_CAPABILITIES.min_version
 

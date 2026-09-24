@@ -117,7 +117,7 @@ def write_fake_agent_binary(shim_dir: Path, name: str = "claude") -> Path:
         """#!/bin/sh
 set -e
 if [ "${1-}" = "--version" ]; then
-  printf '%s\n' '2.1.220 (Claude Code)'
+  printf '%s\n' '2.1.280 (Claude Code)'
   exit 0
 fi
 marker="$AUTOSKILLIT_STATE_DIR/__AGENT_NAME__-launch-argv.txt"

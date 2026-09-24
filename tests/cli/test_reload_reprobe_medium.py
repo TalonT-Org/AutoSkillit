@@ -26,7 +26,7 @@ def test_reload_reprobes_exact_executable_for_each_attempt(
         "#!/bin/sh\n"
         'if [ "${1-}" = "--version" ]; then\n'
         f"  printf 'probe\\n' >> '{probe_log}'\n"
-        "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
         "fi\n"
         "exit 0\n",
     )

@@ -23,7 +23,7 @@ from autoskillit.execution.backends import claude as claude_module
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
-def _shim_binding(tmp_path: Path, version: str = "2.1.220") -> ExecutableLaunchBinding:
+def _shim_binding(tmp_path: Path, version: str = "2.1.280") -> ExecutableLaunchBinding:
     executable = tmp_path / "claude"
     atomic_write(
         executable,

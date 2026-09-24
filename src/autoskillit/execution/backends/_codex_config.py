@@ -285,7 +285,8 @@ CODEX_LIMIT_VERIFICATION_REGISTRY: Mapping[str, CodexLimitVerificationDef] = Map
                 "to resolve_recipe_delivery_decision, so ATTESTED_INLINE is locally "
                 "unreachable. The recorded 0-of-552 cell-contract observation belongs "
                 "to 0.145.0 rollouts and is not a 0.156.1 runtime measurement. This pin "
-                "does not certify upstream parser behavior for that surface."
+                "does not certify upstream parser behavior for that surface; positive "
+                "verification requires the CODEX_SMOKE_TEST=1 live probe suite."
             ),
         ),
     }

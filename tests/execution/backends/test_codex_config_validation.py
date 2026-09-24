@@ -630,7 +630,7 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
 
 
 @pytest.mark.parametrize("version", ("0.156.0", "0.156.1"))
-def test_projected_interactive_validator_checks_bound_version_before_discovery(
+def test_projected_interactive_validator_accepts_canonical_home_without_managed_topology(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     version: str,

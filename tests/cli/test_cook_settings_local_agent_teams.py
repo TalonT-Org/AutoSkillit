@@ -44,7 +44,7 @@ def _write_claude_shim(path: Path) -> None:
         path,
         "#!/bin/sh\n"
         'if [ "${1-}" = "--version" ]; then\n'
-        "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
         "fi\n"
         "exit 0\n",
     )

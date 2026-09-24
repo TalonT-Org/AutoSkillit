@@ -550,6 +550,8 @@ class TestEmptyCommandClassification:
     def test_comment_only_commands_are_empty_and_parse_successfully(self) -> None:
         assert all_evaluated_segments("# note") == []
         assert all_evaluated_segments("  # a\n# b\n") == []
+        assert all_evaluated_segments("# (unclosed group") == []
+        assert all_evaluated_segments("true; # { unclosed group") == [["true"]]
 
     def test_empty_and_parse_failure_regressions_remain_distinct(self) -> None:
         from autoskillit.hooks._runtime._command_classification import (
@@ -1518,6 +1520,29 @@ class TestScanWriteTargets:
 
 
 class TestExtractRedirectTargetsWithStatus:
+    # Plan Steps 2.3 and 2.5: real commands replace the unreachable split-fragment rows.
+    @pytest.mark.parametrize(
+        ("command", "expected_targets"),
+        [
+            pytest.param(
+                "(cmd > /tmp/err.log)",
+                {"/tmp/err.log"},
+                id="subshell-redirect",
+            ),
+            pytest.param(
+                "x=$(cmd 2>/tmp/err.log) && echo done > /tmp/out.txt",
+                {"/tmp/err.log", "/tmp/out.txt"},
+                id="substitution-and-outer-redirects",
+            ),
+        ],
+    )
+    def test_real_command_redirect_targets(self, command: str, expected_targets: set[str]) -> None:
+        scan = command_classification.scan_write_targets(command, "/tmp")
+
+        assert set(scan.targets) == expected_targets
+        assert scan.parseable is True
+        assert scan.unresolved is False
+
     @pytest.mark.parametrize(
         "tokens,expected",
         [

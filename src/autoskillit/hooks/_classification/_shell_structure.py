@@ -98,6 +98,7 @@ class _GroupingScan:
             self.command_position = False
             return True
         if char == "#" and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";|&("):
+            # Keep grouping markers out of comments; shlex still decides their tokenization.
             end = command.find("\n", i)
             self.index = len(command) if end < 0 else end
             self.rendered.append(command[i : self.index])

@@ -155,9 +155,8 @@ def test_app_main_is_single_traceback_owner_for_process_runner_failure(
         tmp_path,
         mode,
         """
-        import time
-
         from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.config import ProcessTetherConfig
         from autoskillit.core import CmdSpec
 
         class Trace:
@@ -179,9 +178,10 @@ def test_app_main_is_single_traceback_owner_for_process_runner_failure(
                 pass_fds=(),
                 on_spawn=lambda _pid, _pgid: None,
                 on_reaped=lambda _pid, _pgid: None,
+                on_teardown_unproven=lambda _pid, _pgid: None,
                 trace=Trace(),
                 observer=None,
-                not_after=time.time() + 60,
+                lifetime=ProcessTetherConfig(),
             )
         """,
     )

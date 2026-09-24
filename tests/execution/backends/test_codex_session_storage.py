@@ -1466,6 +1466,8 @@ def test_exit_attempt_without_reap_proof_raises(tmp_path: Path) -> None:
     home, _ = _generated_home(tmp_path)
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
+    relative = Path("2026/07/rollout-without-reap-proof.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-without-reap-proof")
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"],
         start_new_session=True,
@@ -1492,6 +1494,8 @@ def test_exit_attempt_with_unproven_teardown_retains_view_without_raising(
     home, _ = _generated_home(tmp_path)
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
+    relative = Path("2026/07/rollout-unproven-teardown.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-unproven-teardown")
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"],
         start_new_session=True,
@@ -1530,6 +1534,8 @@ def test_record_teardown_unproven_rejects_mismatched_identity(tmp_path: Path) ->
     home, _ = _generated_home(tmp_path)
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-mismatch.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-mismatch")
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"],
         start_new_session=True,
@@ -1555,6 +1561,8 @@ def test_record_teardown_unproven_rejects_after_reap(tmp_path: Path) -> None:
     home, _ = _generated_home(tmp_path)
     lease = _prepared_lease(store, home, tmp_path)
     handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-after-reap.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-after-reap")
     child = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"],
         start_new_session=True,

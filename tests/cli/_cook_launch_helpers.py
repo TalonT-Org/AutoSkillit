@@ -14,17 +14,42 @@ import autoskillit.cli.session._session_cook as _patch_session__session_cook
 import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+from autoskillit.cli.session._session_process import CookAttemptResult
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
     ManagedSessionHome,
     PluginLoadMode,
+    ProcessCleanupResult,
     SessionAttemptHandle,
     SkillProjectionContextAuthority,
     SkillUnavailabilityPayload,
+    TerminationReason,
     ValidatedAddDir,
 )
+
+
+def cook_attempt_result(
+    *,
+    returncode: int | None = 0,
+    termination: TerminationReason = TerminationReason.NATURAL_EXIT,
+) -> CookAttemptResult:
+    """Build a complete result for fake cook-attempt runners."""
+    pid = 101
+    return CookAttemptResult(
+        pid=pid,
+        pgid=pid,
+        returncode=returncode,
+        termination=termination,
+        elapsed_seconds=0.0,
+        cleanup=ProcessCleanupResult(
+            root_pid=pid,
+            process_identities=((pid, 0.0),),
+            terminated_pids=(pid,),
+            observation_complete=True,
+        ),
+    )
 
 
 class _RecordingProjectionBinding:
@@ -64,8 +89,7 @@ class RecordingLifecycle:
         self._projection_root = projection_root
         self._unavailability_payload = unavailability_payload
         self._results = iter(
-            SimpleNamespace(pid=100 + attempt, pgid=100 + attempt, returncode=returncode)
-            for attempt, returncode in enumerate(returncodes, start=1)
+            cook_attempt_result(returncode=returncode) for returncode in returncodes
         )
         self._record_trace_spawn = record_trace_spawn
         self.projection_bindings: list[_RecordingProjectionBinding] = []
@@ -121,10 +145,7 @@ class RecordingLifecycle:
         launch_id: str,
         attempt: int,
         current_resume_spec: object,
-        ceiling_seconds: float = 172800.0,
-        systemd_scope_enabled: bool = False,
     ) -> Iterator[SessionAttemptHandle]:
-        del ceiling_seconds, systemd_scope_enabled
         self.events.append(
             (
                 "attempt-enter",
@@ -143,6 +164,7 @@ class RecordingLifecycle:
                 _record_reaped=lambda pid, pgid: self.events.append(
                     ("reaped", attempt, pid, pgid)
                 ),
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         finally:
             self.events.append(("attempt-exit", attempt, current_resume_spec))
@@ -156,7 +178,7 @@ class RecordingLifecycle:
         on_reaped,
         trace: object | None = None,
         **_kwargs: object,
-    ) -> SimpleNamespace:  # type: ignore[no-untyped-def]
+    ) -> CookAttemptResult:  # type: ignore[no-untyped-def]
         attempt = sum(event[0] == "run" for event in self.events) + 1
         self.events.append(("run", attempt, spec, pass_fds))
         result = next(self._results)
@@ -271,9 +293,9 @@ def arrange_cook(
     )
     monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args, **kwargs: None)
 
-    def capture(spec: CmdSpec, **_kwargs: object) -> SimpleNamespace:
+    def capture(spec: CmdSpec, **_kwargs: object) -> CookAttemptResult:
         captured.append(spec)
-        return SimpleNamespace(pid=1, pgid=1, returncode=0)
+        return cook_attempt_result()
 
     monkeypatch.setattr(
         _patch_session__session_process,

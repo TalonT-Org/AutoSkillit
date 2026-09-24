@@ -190,6 +190,13 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "Operators may deliberately disable quota enforcement for a local session.",
     ),
     HookEnvVarDef(
+        "AUTOSKILLIT_SESSION_LIFETIME_NOTICE",
+        "autoskillit",
+        "autoskillit.cli.session._session_process:_attempt_child_env",
+        "autoskillit.cli.session._session_process:run_cook_attempt",
+        "run_cook_attempt delivers the one-attempt notice path to live session hooks.",
+    ),
+    HookEnvVarDef(
         "AUTOSKILLIT_SESSION_TYPE",
         "autoskillit",
         "autoskillit.cli.session._session_cook:_build_cook_attempt_env",

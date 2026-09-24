@@ -31,9 +31,9 @@ class _Clock:
 
 
 def _lifetime_module():
-    from autoskillit.cli.session import _session_lifetime
+    from autoskillit.cli.session import _session_process
 
-    return _session_lifetime
+    return _session_process
 
 
 def _policy(
@@ -435,25 +435,25 @@ def test_warnings_written_at_t_minus_30_and_5_minutes_once_each(
     clock = _Clock()
     wall = _Clock(60_000.0)
     notice_path = tmp_path / "notice.json"
-    original_atomic_write = lifetime_module.atomic_write
+    original_write_versioned_json = lifetime_module.write_versioned_json
     writes: list[Path] = []
 
-    def recording_atomic_write(
+    def recording_write_versioned_json(
         path: Path,
-        content: str | bytes,
+        payload: dict[str, Any],
+        schema_version: int,
         *,
         strict_durability: bool = False,
-        exclusive: bool = False,
     ) -> None:
         writes.append(path)
-        original_atomic_write(
+        original_write_versioned_json(
             path,
-            content,
+            payload,
+            schema_version,
             strict_durability=strict_durability,
-            exclusive=exclusive,
         )
 
-    monkeypatch.setattr(lifetime_module, "atomic_write", recording_atomic_write)
+    monkeypatch.setattr(lifetime_module, "write_versioned_json", recording_write_versioned_json)
     lifetime = _start_lifetime(
         _policy(soft=3600.0, extension=0.0),
         clock=clock,

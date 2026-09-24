@@ -127,8 +127,8 @@ class TestCoreSubpackages:
             + len(retirements)
             + len(skill_contract)
         ), "Duplicate symbols across split modules"
-        assert len(combined) == 173, (
-            f"Expected 173 symbols total, got {len(combined)} "
+        assert len(combined) == 174, (
+            f"Expected 174 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, durable_writers={len(durable_writers)}, "
             f"env={len(env)}, features={len(features)}, "
             f"registries={len(registries)}, retirements={len(retirements)}, "

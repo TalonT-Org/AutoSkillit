@@ -397,7 +397,7 @@ class OwnedProcessGroup:
         self._signal_group(signal.SIGTERM)
         members = self._wait_group_members(timeout)
         escalated = False
-        if members or self.observe_exit(include_stopped=False) is None:
+        if members:
             self._signal_group(signal.SIGKILL)
             members = self._wait_group_members(_FINAL_WAIT_SECONDS)
             escalated = True
@@ -408,6 +408,7 @@ class OwnedProcessGroup:
         returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
         if returncode is None:
             self._signal_direct_leader(signal.SIGKILL)
+            escalated = True
             returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS)
 
         surviving_identities = tuple(
@@ -423,6 +424,7 @@ class OwnedProcessGroup:
                         expected_create_time=create_time,
                         deadline=escalation_deadline,
                     )
+                    escalated |= cleanup.escalated
                 except Exception:
                     logger.warning(
                         "owned_group_survivor_escalation_failed", pid=pid, exc_info=True
@@ -453,6 +455,7 @@ class OwnedProcessGroup:
             observation_complete=(
                 self._snapshot.observation_complete and not members and returncode is not None
             ),
+            escalated=escalated,
         )
         if result.complete and self._tether_path is not None:
             # Best-effort — the sweep is the authoritative GC if this races or fails.

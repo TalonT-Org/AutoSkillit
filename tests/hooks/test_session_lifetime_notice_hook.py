@@ -19,10 +19,15 @@ SCRIPT = (
 NOTICE_ENV = "AUTOSKILLIT_SESSION_LIFETIME_NOTICE"
 
 
-def _run(event: object, *, env: dict[str, str] | None = None) -> tuple[int, str]:
+def _run(
+    event: object, *, env: dict[str, str] | None = None, headless: bool = False
+) -> tuple[int, str]:
     run_env = production_interpreter_env()
+    run_env.pop("AUTOSKILLIT_HEADLESS", None)
     run_env.pop(NOTICE_ENV, None)
     run_env.update(env or {})
+    if headless:
+        run_env["AUTOSKILLIT_HEADLESS"] = "1"
     result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         input=json.dumps(event),
@@ -32,6 +37,24 @@ def _run(event: object, *, env: dict[str, str] | None = None) -> tuple[int, str]
         check=False,
     )
     return result.returncode, result.stdout
+
+
+def test_headless_session_leaves_interactive_notice_untouched(tmp_path: Path) -> None:
+    notice_path = tmp_path / "notice.json"
+    notice_path.write_text(
+        json.dumps({"message": "This cook session is nearing its soft lifetime."}),
+        encoding="utf-8",
+    )
+
+    code, output = _run(
+        {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
+        env={NOTICE_ENV: str(notice_path)},
+        headless=True,
+    )
+
+    assert code == 0
+    assert output == ""
+    assert notice_path.exists()
 
 
 def test_post_tool_use_delivers_and_consumes_notice_once(tmp_path: Path) -> None:
@@ -49,7 +72,7 @@ def test_post_tool_use_delivers_and_consumes_notice_once(tmp_path: Path) -> None
     event = {"hook_event_name": "PostToolUse", "tool_name": "Bash"}
     env = {NOTICE_ENV: str(notice_path)}
 
-    code, output = _run(event, env=env)
+    code, output = _run(event, env=env, headless=False)
 
     assert code == 0
     result = json.loads(output)

@@ -699,6 +699,13 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "consume_reload_sentinel",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
+        "src/autoskillit/cli/session/_session_process.py",
+        "_remove_lifetime_notice",
+    ): (
+        "This removes only the exact notice file created for its cook attempt after child "
+        "cleanup; it does not scan or select a candidate set."
+    ),
+    (
         "src/autoskillit/core/runtime/kitchen_state.py",
         "sweep_stale_markers",
     ): _SEPARATE_LIFECYCLE_REASON,

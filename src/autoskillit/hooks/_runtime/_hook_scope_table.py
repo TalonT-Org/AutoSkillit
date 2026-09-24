@@ -54,6 +54,7 @@ HOOK_SCOPE_BY_SCRIPT: dict[str, str] = {
     "recipe_confirmed_post_hook.py": "any",
     "resume_gate_post_hook.py": "any",
     "review_gate_post_hook.py": "any",
+    "session_lifetime_notice_hook.py": "interactive_only",
     "session_start_hook.py": "interactive_only",
     "shell_capture_hook.py": "any",
     "skill_load_post_hook.py": "any",

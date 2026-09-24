@@ -451,6 +451,15 @@ def _build_hook_registry() -> list[HookDef]:
             enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
         ),
         HookDef(
+            matcher="",
+            event_type="Stop",
+            scripts=["session_lifetime_notice_hook.py"],
+            session_scope="interactive_only",
+            codex_status="not-applicable",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
+        ),
+        HookDef(
             matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
             scripts=[
                 "guards/fleet_dispatch_guard.py",
@@ -524,6 +533,15 @@ def _build_hook_registry() -> list[HookDef]:
             codex_status="not-applicable",
             mechanism="additionalContext",
             enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+        ),
+        HookDef(
+            event_type="PostToolUse",
+            matcher=r".+",
+            scripts=["session_lifetime_notice_hook.py"],
+            session_scope="interactive_only",
+            codex_status="works-as-is",
+            mechanism="additionalContext",
+            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
         ),
         HookDef(
             event_type="UserPromptExpansion",

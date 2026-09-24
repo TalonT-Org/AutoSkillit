@@ -959,7 +959,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/lifecycle/_lifespan/_session_boots.py:536": (
+    "server/lifecycle/_lifespan/_session_boots.py:537": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
@@ -999,7 +999,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:159": (
+    "cli/session/_session_launch.py:160": (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
@@ -1706,6 +1706,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "AutoSkillit-private session/orchestration variable in the"
             "AUTOSKILLIT_PRIVATE_ENV_VARS / _HEADLESS_EXCLUSIVE_VARS baseline; must not leak"
             "between sibling or nested sessions."
+        ),
+    ),
+    "AUTOSKILLIT_SESSION_LIFETIME_NOTICE": AmbientEnvDisposition(
+        var="AUTOSKILLIT_SESSION_LIFETIME_NOTICE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "AutoSkillit-private one-attempt notice path for live session hooks; scrub it from"
+            "sanitized subprocess environments so sibling sessions cannot inherit it."
         ),
     ),
     "AUTOSKILLIT_SESSION_TYPE": AmbientEnvDisposition(
@@ -3171,6 +3180,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "AutoSkillit-private session/orchestration variable in the"
             "AUTOSKILLIT_PRIVATE_ENV_VARS / _HEADLESS_EXCLUSIVE_VARS baseline; must not leak"
             "between sibling or nested sessions."
+        ),
+    ),
+    "SESSION_LIFETIME_NOTICE_ENV_VAR": AmbientEnvDisposition(
+        var="SESSION_LIFETIME_NOTICE_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an exported constant name, not an operating"
+            "system variable set in the process environment."
         ),
     ),
     "SESSION_TYPE_ENV_VAR": AmbientEnvDisposition(

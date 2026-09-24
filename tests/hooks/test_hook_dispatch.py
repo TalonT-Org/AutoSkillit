@@ -271,6 +271,7 @@ class TestGenerateHooksJsonFormat:
                     logical_name = parts[-1]
                     assert "/" in logical_name or logical_name in (
                         "session_start_hook",
+                        "session_lifetime_notice_hook",
                         "lint_after_edit_hook",
                         "token_summary_hook",
                         "quota_post_hook",

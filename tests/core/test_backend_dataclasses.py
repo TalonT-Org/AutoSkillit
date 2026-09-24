@@ -568,6 +568,7 @@ def test_cook_session_handle_contract_and_callback_delegation():
         pass_fds=(7, 11),
         _record_spawn=lambda pid, pgid: calls.append(("spawn", pid, pgid)),
         _record_reaped=lambda pid, pgid: calls.append(("reaped", pid, pgid)),
+        _record_teardown_unproven=lambda _pid, _pgid: None,
     )
 
     assert tuple(field.name for field in dataclasses.fields(SessionAttemptHandle)) == (
@@ -575,6 +576,7 @@ def test_cook_session_handle_contract_and_callback_delegation():
         "pass_fds",
         "_record_spawn",
         "_record_reaped",
+        "_record_teardown_unproven",
     )
     hints = typing.get_type_hints(SessionAttemptHandle)
     assert hints == {
@@ -582,6 +584,7 @@ def test_cook_session_handle_contract_and_callback_delegation():
         "pass_fds": tuple[int, ...],
         "_record_spawn": Callable[[int, int], None],
         "_record_reaped": Callable[[int, int], None],
+        "_record_teardown_unproven": Callable[[int, int], None],
     }
     assert not hasattr(handle, "__dict__")
     assert repr(handle) == "SessionAttemptHandle(view_id='launch-1-attempt-2', pass_fds=(7, 11))"
@@ -591,6 +594,7 @@ def test_cook_session_handle_contract_and_callback_delegation():
         pass_fds=handle.pass_fds,
         _record_spawn=lambda _pid, _pgid: None,
         _record_reaped=lambda _pid, _pgid: None,
+        _record_teardown_unproven=lambda _pid, _pgid: None,
     )
     assert equivalent == handle
 

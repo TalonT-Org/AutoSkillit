@@ -11,6 +11,7 @@ import pytest
 
 import autoskillit.cli.prompts as _patch_cli_prompts
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.fleet.campaign_state.state_records import ResumeDecision
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -136,8 +137,7 @@ def test_fleet_session_launcher_forwards_managed_join_parent_identity(
         workspace_temp_dir=None,
         force_inactive_agent_teams=False,
         mcp_tool_timeout_sec=1.0,
-        cook_ceiling_seconds=1.0,
-        systemd_scope_enabled=False,
+        process_tether=ProcessTetherConfig(),
         managed_join_parent_id="managed-join-id",
     ) as launch_session:
         launch_session(FreshLaunch(), {})

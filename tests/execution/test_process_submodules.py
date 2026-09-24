@@ -20,7 +20,9 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
     {
         "DEFAULT_TETHER_CEILING_SECONDS",
-        "INTERACTIVE_TETHER_CEILING_SECONDS",
+        "TETHER_LEASE_RENEW_SECONDS",
+        "TETHER_LEASE_SECONDS",
+        "TETHER_SWEEP_INTERVAL_SECONDS",
         "CaptureReadError",
         "CaptureSetupError",
         "CodexOrphanReapResult",
@@ -35,6 +37,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "TetherSweepOutcome",
         "TetherSweepReport",
         "_extract_stdout_session_id",
+        "_active_liveness_signals",
         "_resolve_session_id",
         "RaceAccumulator",
         "RaceSignals",
@@ -67,6 +70,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "read_temp_output",
         "reap_orphaned_codex_processes",
         "reap_orphaned_autoskillit_daemons",
+        "renew_tether",
         "resolve_termination",
         "run_managed_async",
         "run_managed_sync",

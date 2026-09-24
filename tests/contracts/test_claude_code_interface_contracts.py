@@ -235,14 +235,16 @@ class TestCookAddDirStructure:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import shutil
-        from types import SimpleNamespace
 
         from autoskillit.core import CmdSpec
+        from tests.cli._cook_launch_helpers import cook_attempt_result
 
+        monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: True)
         structure_errors: list[str] = []
         add_dir_seen: list[bool] = []
 
         def fake_run(spec: CmdSpec, **kwargs: object) -> object:
+            result = cook_attempt_result()
             for i, token in enumerate(spec.cmd):
                 if token == "--add-dir":
                     add_dir = Path(spec.cmd[i + 1])
@@ -268,10 +270,10 @@ class TestCookAddDirStructure:
                             "This is the CC-001 regression pattern."
                         )
 
-            kwargs["on_spawn"](1, 1)  # type: ignore[operator]
+            kwargs["on_spawn"](result.pid, result.pgid)  # type: ignore[operator]
             kwargs["trace"].record_spawn()  # type: ignore[union-attr]
-            kwargs["on_reaped"](1, 1)  # type: ignore[operator]
-            return SimpleNamespace(pid=1, pgid=1, returncode=0)
+            kwargs["on_reaped"](result.pid, result.pgid)  # type: ignore[operator]
+            return result
 
         from autoskillit.core import ExecutableLaunchBinding, PreLaunchReadiness
         from autoskillit.execution.backends import ClaudeCodeBackend

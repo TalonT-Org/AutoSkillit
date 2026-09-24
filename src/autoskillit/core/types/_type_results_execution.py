@@ -48,12 +48,16 @@ class SessionAttemptHandle:
     pass_fds: tuple[int, ...]
     _record_spawn: Callable[[int, int], None] = field(repr=False, compare=False)
     _record_reaped: Callable[[int, int], None] = field(repr=False, compare=False)
+    _record_teardown_unproven: Callable[[int, int], None] = field(repr=False, compare=False)
 
     def record_spawn(self, pid: int, pgid: int) -> None:
         self._record_spawn(pid, pgid)
 
     def record_reaped(self, pid: int, pgid: int) -> None:
         self._record_reaped(pid, pgid)
+
+    def record_teardown_unproven(self, pid: int, pgid: int) -> None:
+        self._record_teardown_unproven(pid, pgid)
 
 
 @dataclass(frozen=True, slots=True)

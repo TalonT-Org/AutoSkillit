@@ -116,7 +116,6 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
-        ceiling_seconds: float,
     ):
         context_requests.append(
             (
@@ -125,7 +124,6 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
                 launch_id,
                 attempt,
                 current_resume_spec,
-                ceiling_seconds,
             )
         )
         return nullcontext(
@@ -134,6 +132,7 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
                 pass_fds=(37,),
                 _record_spawn=lambda pid, pgid: lifecycle_events.append(("spawn", pid, pgid)),
                 _record_reaped=lambda pid, pgid: lifecycle_events.append(("reap", pid, pgid)),
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         )
 
@@ -159,7 +158,7 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
     assert captured_kwargs["env"]["CODEX_HOME"] == str(generated_home)
     assert captured_kwargs["env"]["CODEX_SQLITE_HOME"] == str(generated_home)
     assert len(context_requests) == 1
-    session_home, project_dir, launch_id, attempt, resume_spec, _ceiling = context_requests[0]
+    session_home, project_dir, launch_id, attempt, resume_spec = context_requests[0]
     assert (session_home, project_dir, attempt) == (generated_home, tmp_path.resolve(), 1)
     assert len(launch_id) == 16
     assert isinstance(resume_spec, NoResume)

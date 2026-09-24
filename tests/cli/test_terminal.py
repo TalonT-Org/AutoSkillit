@@ -10,7 +10,6 @@ import os
 import subprocess
 import sys
 import termios
-import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -466,6 +465,7 @@ class TestCookTerminalGuard:
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
         """The cook process owner restores terminal state when Popen is interrupted."""
         from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.config import ProcessTetherConfig
         from autoskillit.core import CmdSpec
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -492,9 +492,10 @@ class TestCookTerminalGuard:
                 pass_fds=(),
                 on_spawn=lambda _pid, _pgid: None,
                 on_reaped=lambda _pid, _pgid: None,
+                on_teardown_unproven=lambda _pid, _pgid: None,
                 trace=Mock(),
                 observer=None,
-                not_after=time.time() + 60,
+                lifetime=ProcessTetherConfig(),
             )
 
         assert tcsetattr_calls, (

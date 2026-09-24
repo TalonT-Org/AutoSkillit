@@ -81,7 +81,8 @@ class ProcessCleanupResult:
     ``observation_complete`` is true only when the requested bounded scope was
     fully examined without an unresolved observation or signal denial.
     ``identity_refused`` records failure to revalidate a caller-supplied root
-    identity before observation or signaling begins.
+    identity before observation or signaling begins. ``escalated`` records
+    whether cleanup sent any SIGKILL.
     """
 
     root_pid: int
@@ -91,6 +92,7 @@ class ProcessCleanupResult:
     access_denied_pids: tuple[int, ...] = ()
     observation_complete: bool = False
     identity_refused: bool = False
+    escalated: bool = False
 
     @property
     def complete(self) -> bool:
@@ -115,6 +117,7 @@ class ProcessCleanupResult:
             "access_denied_pids": list(self.access_denied_pids),
             "observation_complete": self.observation_complete,
             "identity_refused": self.identity_refused,
+            "escalated": self.escalated,
             "complete": self.complete,
         }
 

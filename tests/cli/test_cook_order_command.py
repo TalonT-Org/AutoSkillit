@@ -19,7 +19,9 @@ import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import ClaudeFlags, InteractiveInvocationValidation, PreLaunchReadiness
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
 from tests.cli.conftest import _SCRIPT_YAML
 
@@ -560,6 +562,7 @@ class TestCLIOrderCommand:
                 backend=backend,  # type: ignore[arg-type]
                 skill_compilation=kwargs["skill_compilation"],  # type: ignore[arg-type]
                 managed_home=managed_home,
+                process_tether=ProcessTetherConfig(),
                 retained_projection_binding=MagicMock(inherited_fds=()),
                 startup_trace=MagicMock(),
                 attempt=1,
@@ -645,6 +648,7 @@ class TestCLIOrderCommand:
                     pass_fds=(),
                     _record_spawn=lambda _pid, _pgid: None,
                     _record_reaped=lambda _pid, _pgid: None,
+                    _record_teardown_unproven=lambda _pid, _pgid: None,
                 )
             ),
         )
@@ -667,7 +671,7 @@ class TestCLIOrderCommand:
             captured["env"] = dict(spec.env)
             kwargs["on_spawn"](12345, 12345)
             kwargs["on_reaped"](12345, 12345)
-            return type("R", (), {"returncode": 0})()
+            return cook_attempt_result()
 
         monkeypatch.setattr(
             _patch_session__session_process,

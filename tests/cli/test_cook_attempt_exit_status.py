@@ -170,6 +170,7 @@ def test_run_interactive_session_exits_124_before_infra_exit_classification(
             pass_fds=(),
             record_spawn=lambda *_args: None,
             record_reaped=lambda *_args: None,
+            record_teardown_unproven=lambda *_args: None,
         )
 
     backend = SimpleNamespace(

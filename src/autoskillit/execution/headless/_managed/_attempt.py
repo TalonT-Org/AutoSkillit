@@ -80,7 +80,6 @@ def _generated_home_attempt(
     managed_attempt_id: str | None,
     attempt: int,
     resume_session_id: str,
-    ceiling_seconds: float,
 ) -> AbstractContextManager[SessionAttemptHandle | None]:
     if plugin_load_mode is not PluginLoadMode.GENERATED_HOME:
         return nullcontext(None)
@@ -93,7 +92,6 @@ def _generated_home_attempt(
         launch_id=(managed_attempt_id or uuid4().hex)[:16],
         attempt=attempt,
         current_resume_spec=NamedResume(resume_session_id) if resume_session_id else NoResume(),
-        ceiling_seconds=ceiling_seconds,
     )
 
 

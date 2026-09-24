@@ -354,14 +354,14 @@ def test_active_child_extended_until_hard_cap(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.cli.session import _session_lifetime
+    from autoskillit.cli.session import _session_process
 
     if _assert_unsupported_platform(tmp_path):
         return
-    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
-    monkeypatch.setattr(_session_lifetime, "_IDLE_WINDOW_SECONDS", 0.5)
+    monkeypatch.setattr(_session_process, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
+    monkeypatch.setattr(_session_process, "_IDLE_WINDOW_SECONDS", 0.5)
     monkeypatch.setattr(
-        _session_lifetime,
+        _session_process,
         "_default_activity",
         lambda *_args: {"api_connection"},
     )
@@ -385,13 +385,13 @@ def test_idle_child_ends_at_soft_ceiling(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.cli.session import _session_lifetime
+    from autoskillit.cli.session import _session_process
 
     if _assert_unsupported_platform(tmp_path):
         return
-    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
-    monkeypatch.setattr(_session_lifetime, "_IDLE_WINDOW_SECONDS", 0.5)
-    monkeypatch.setattr(_session_lifetime, "_default_activity", lambda *_args: set())
+    monkeypatch.setattr(_session_process, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
+    monkeypatch.setattr(_session_process, "_IDLE_WINDOW_SECONDS", 0.5)
+    monkeypatch.setattr(_session_process, "_default_activity", lambda *_args: set())
 
     result = run_cook_attempt(
         _spec(tmp_path, "import time; time.sleep(30)"),
@@ -521,14 +521,14 @@ def test_lifetime_decision_wins_dispatch_even_when_a_failure_accumulated(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.cli.session import _session_lifetime, _session_process
+    from autoskillit.cli.session import _session_process
     from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
     if _assert_unsupported_platform(tmp_path):
         return
-    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(_session_process, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.01)
     monkeypatch.setattr(
-        _session_lifetime,
+        _session_process,
         "_default_activity",
         lambda *_args: {"api_connection"},
     )
@@ -542,6 +542,9 @@ def test_lifetime_decision_wins_dispatch_even_when_a_failure_accumulated(
     class TerminalInput:
         def fileno(self) -> int:
             return 7
+
+        def isatty(self) -> bool:
+            return True
 
     monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
     monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
@@ -609,41 +612,30 @@ def test_poll_failures_do_not_escape_the_wait_loop(
 ) -> None:
     import structlog.testing
 
-    from autoskillit.cli.session import _session_lifetime, _session_process
+    from autoskillit.cli.session import _session_process
 
     if _assert_unsupported_platform(tmp_path):
         return
     monkeypatch.setattr(
-        _session_lifetime,
+        _session_process,
         "_default_activity",
         lambda *_args: (_ for _ in ()).throw(OSError("activity probe failed")),
     )
     monkeypatch.setattr(
-        _session_lifetime,
-        "atomic_write",
+        _session_process,
+        "write_versioned_json",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("notice write failed")),
     )
     clock_value = [0.0]
     actual_lifetime = _session_process.InteractiveLifetime
 
-    class AcceleratedLifetime:
+    class AcceleratedLifetime(actual_lifetime):
         def __init__(self, policy: ProcessTetherConfig) -> None:
-            self._lifetime = actual_lifetime(policy, clock=lambda: clock_value[0])
-
-        def start(self, **kwargs) -> None:
-            self._lifetime.start(**kwargs)
+            super().__init__(policy, clock=lambda: clock_value[0])
 
         def poll(self):
             clock_value[0] += 1000.0
-            return self._lifetime.poll()
-
-        @property
-        def decision(self):
-            return self._lifetime.decision
-
-        @property
-        def elapsed_seconds(self) -> float:
-            return self._lifetime.elapsed_seconds
+            return super().poll()
 
     monkeypatch.setattr(_session_process, "InteractiveLifetime", AcceleratedLifetime)
     policy = _lifetime(1.0, extension_seconds=3600.0)
@@ -669,7 +661,7 @@ def test_non_default_policy_reaches_tether_scope_and_child_environment(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.cli.session import _session_lifetime, _session_process
+    from autoskillit.cli.session import _session_process
 
     if _assert_unsupported_platform(tmp_path):
         return
@@ -717,7 +709,7 @@ def test_non_default_policy_reaches_tether_scope_and_child_environment(
     assert len(tether_records) == 1
     record = tether_records[0]
     assert record["origin"] == "cook"
-    margin = _session_lifetime.OWNER_PRECEDENCE_MARGIN_SECONDS
+    margin = _session_process.OWNER_PRECEDENCE_MARGIN_SECONDS
     recorded_lifetime = float(record["not_after"]) - int(record["spawned_at_ns"]) / 1e9
     expected_lifetime = policy.cook_ceiling_seconds + policy.cook_max_extension_seconds + margin
     assert recorded_lifetime == pytest.approx(expected_lifetime, abs=0.1)

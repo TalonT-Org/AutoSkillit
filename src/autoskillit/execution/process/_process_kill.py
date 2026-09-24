@@ -194,6 +194,7 @@ def kill_process_tree(
         survivor_pids=survivor_pids,
         access_denied_pids=tuple(sorted(denied)),
         observation_complete=complete,
+        escalated=bool(alive_after_term),
     )
 
 

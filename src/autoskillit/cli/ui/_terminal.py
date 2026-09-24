@@ -85,6 +85,17 @@ _KITTY_RESET = (
 )
 
 
+def terminal_last_activity(fd: int) -> float | None:
+    """Return the last kernel-recorded activity time for a TTY file descriptor."""
+    try:
+        if not os.isatty(fd):
+            return None
+        stat = os.fstat(fd)
+    except OSError:
+        return None
+    return max(stat.st_atime, stat.st_mtime)
+
+
 @contextlib.contextmanager
 def terminal_guard() -> Generator[None, None, None]:
     """Save and restore terminal state around an interactive subprocess.

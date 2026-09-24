@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -25,6 +24,7 @@ from autoskillit.core import (
     RestoreSession,
     ResumeWithBriefing,
     SkillContractError,
+    TerminationReason,
     executable_binding_matches_current_file,
     get_logger,
     plugin_launch_binding_scope,
@@ -35,6 +35,7 @@ from autoskillit.core import (
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
+    from autoskillit.config import ProcessTetherConfig
     from autoskillit.core import (
         CmdSpec,
         CodingAgentBackend,
@@ -344,8 +345,7 @@ def _run_interactive_session(
     attempt: int | None = None,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
-    cook_ceiling_seconds: float | None = None,
-    systemd_scope_enabled: bool | None = None,
+    process_tether: ProcessTetherConfig | None = None,
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -370,17 +370,8 @@ def _run_interactive_session(
             default_base_branch = configured_base_branch
         if mcp_tool_timeout_sec is None:
             mcp_tool_timeout_sec = config.run_skill.mcp_tool_timeout_sec
-        if cook_ceiling_seconds is None:
-            cook_ceiling_seconds = config.process_tether.cook_ceiling_seconds
-        if systemd_scope_enabled is None:
-            systemd_scope_enabled = config.process_tether.systemd_scope_enabled
-    if cook_ceiling_seconds is None:
-        # backend was pre-resolved by the caller without also supplying this —
-        # fall back to ProcessTetherConfig's own literal default rather than
-        # leaving run_cook_attempt's required not_after unresolvable.
-        cook_ceiling_seconds = 172800.0
-    if systemd_scope_enabled is None:
-        systemd_scope_enabled = False
+        if process_tether is None:
+            process_tether = config.process_tether
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.core import bind_session_owner
@@ -396,6 +387,8 @@ def _run_interactive_session(
         raise ValueError("managed home requires a retained projection binding")
     if managed and startup_trace is None:
         raise ValueError("managed home requires a launch-scoped startup trace")
+    if managed and process_tether is None:
+        raise ValueError("managed home requires process_tether configuration")
     if not managed and any(
         value is not None for value in (plugin_binding, retained_projection_binding, startup_trace)
     ):
@@ -423,6 +416,7 @@ def _run_interactive_session(
         assert attempt is not None
         assert retained_projection_binding is not None
         assert startup_trace is not None
+        assert process_tether is not None
         prepared = _finalize_interactive_launch(
             backend,
             exact_binding_probe_required=backend.capabilities.cook_exact_binding_probe_required,
@@ -440,7 +434,10 @@ def _run_interactive_session(
         spec = prepared.spec
         executable = prepared.executable
 
-        from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.cli.session._session_process import (
+            attempt_exit_status,
+            run_cook_attempt,
+        )
 
         with backend.session_attempt_context(
             session_home=managed_home.generated_home,
@@ -448,7 +445,6 @@ def _run_interactive_session(
             launch_id=managed_home.launch_id,
             attempt=attempt,
             current_resume_spec=current_resume_spec,
-            ceiling_seconds=cook_ceiling_seconds,
         ) as attempt_handle:
             startup_trace.record_attempt_anchor(
                 attempt=attempt,
@@ -485,11 +481,16 @@ def _run_interactive_session(
                 on_reaped=attempt_handle.record_reaped,
                 trace=startup_trace,
                 observer=None,
-                not_after=time.time() + cook_ceiling_seconds,
-                systemd_scope_enabled=systemd_scope_enabled,
+                lifetime=process_tether,
+                on_teardown_unproven=attempt_handle.record_teardown_unproven,
                 pre_spawn_check=prepared.pre_spawn_check,
             )
-        returncode = managed_result.returncode
+        if managed_result.termination in (
+            TerminationReason.IDLE_STALL,
+            TerminationReason.TIMED_OUT,
+        ):
+            sys.exit(attempt_exit_status(managed_result))
+        returncode = attempt_exit_status(managed_result)
     else:
         from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
         from autoskillit.cli.ui._terminal import terminal_guard
@@ -622,6 +623,7 @@ def _run_cook_session_loop(
     backend: CodingAgentBackend,
     skill_compilation: CompiledSessionSkillCatalog,
     default_base_branch: str,
+    process_tether: ProcessTetherConfig,
     managed_home: ManagedSessionHome | None = None,
     launch_binding: PluginLaunchBinding | None = None,
     retained_binding: PluginLaunchBinding | None = None,
@@ -655,6 +657,7 @@ def _run_cook_session_loop(
             attempt=attempt if managed_home is not None else None,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+            process_tether=process_tether,
         )
         if session_signal is None:
             return
@@ -685,6 +688,7 @@ def _launch_cook_session(
     launch_id: str,
     default_base_branch: str,
     workspace_temp_dir: str | None,
+    process_tether: ProcessTetherConfig,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
     adaptation_context: SemanticAdaptationContext | None = None,
@@ -711,6 +715,7 @@ def _launch_cook_session(
             backend=backend,
             skill_compilation=skill_compilation,
             default_base_branch=default_base_branch,
+            process_tether=process_tether,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
         )
@@ -808,6 +813,7 @@ def _launch_cook_session(
                     trace=trace,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     mcp_tool_timeout_sec=mcp_tool_timeout_sec,
+                    process_tether=process_tether,
                 )
             except BaseException:
                 trace.close(status="failed")

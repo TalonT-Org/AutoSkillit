@@ -24,6 +24,7 @@ from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _run_interactive_session,
 )
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     BackendConventions,
@@ -47,6 +48,7 @@ from autoskillit.core._plugin_ids import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
@@ -156,17 +158,15 @@ class _RecordingBackend:
         launch_id: str,
         attempt: int,
         current_resume_spec: object,
-        ceiling_seconds: float = 172800.0,
-        systemd_scope_enabled: bool = False,
     ):
-        del session_home, project_dir, current_resume_spec, ceiling_seconds
-        del systemd_scope_enabled
+        del session_home, project_dir, current_resume_spec
         return nullcontext(
             SessionAttemptHandle(
                 view_id=f"{launch_id}-{attempt}",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         )
 
@@ -234,7 +234,7 @@ def _install_cook_harness(
         if during_attempt is not None:
             during_attempt(generated_home)
         on_reaped(101, 101)  # type: ignore[operator]
-        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+        return cook_attempt_result()
 
     generated_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(project_dir)
@@ -494,6 +494,7 @@ def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
         launch=FreshLaunch(system_prompt="projection immutability integration"),
         project_dir=project_dir,
         required_env=frozenset(),
+        process_tether=ProcessTetherConfig(),
         backend=backend,
         skill_compilation=compilation,
         launch_id=launch_id,

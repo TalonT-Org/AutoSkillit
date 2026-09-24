@@ -24,7 +24,7 @@ import autoskillit.execution.process._process_tether as process_tether
 import autoskillit.workspace as _patch_workspace
 from autoskillit.config import AutomationConfig, ProcessTetherConfig
 from autoskillit.core import FreshLaunch, PluginLoadMode
-from tests.cli._cook_launch_helpers import arrange_cook
+from tests.cli._cook_launch_helpers import arrange_cook, cook_attempt_result
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -47,9 +47,9 @@ def test_cook_path_threads_process_tether_identity(
     arrange_cook(monkeypatch, tmp_path, config=AutomationConfig(process_tether=policy))
     captured: dict[str, object] = {}
 
-    def capture_attempt(_spec: object, **kwargs: object) -> SimpleNamespace:
+    def capture_attempt(_spec: object, **kwargs: object) -> object:
         captured.update(kwargs)
-        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+        return cook_attempt_result()
 
     monkeypatch.setattr(_patch_session_process, "run_cook_attempt", capture_attempt)
     monkeypatch.setattr(

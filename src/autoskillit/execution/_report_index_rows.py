@@ -19,6 +19,7 @@ from autoskillit.core import (
     SerializedTokenMeasure,
     TokenMeasure,
     extract_skill_name,
+    get_logger,
 )
 from autoskillit.execution.evidence._otlp_tokens import (
     CLAUDE_CODE_SCOPE_NAME,
@@ -30,7 +31,7 @@ from autoskillit.execution.evidence._otlp_tokens import (
     unique_float_attribute,
     unique_string_attribute,
 )
-from autoskillit.execution.evidence.report_walk import WalkItem
+from autoskillit.execution.evidence.report_walk import OTLP_WALK_KIND, SESSION_WALK_KIND, WalkItem
 from autoskillit.execution.session._turn_usage import classify_token_measure
 
 REPORT_INDEX_SCHEMA_VERSION: Final[int] = 1
@@ -40,6 +41,8 @@ TOOL_KIND: Final[str] = "tool"
 SUBAGENT_KIND: Final[str] = "subagent"
 UNKNOWN_SOURCE: Final[str] = "unknown"
 _STRUCTURED_MEASURE_SESSION_VERSION = 14
+
+logger = get_logger(__name__)
 
 
 class ReportRowBase(TypedDict):
@@ -280,15 +283,19 @@ def resolve_token_measure(
     try:
         return classify_token_measure(harness, provider, field, raw).to_dict()
     except ValueError:
+        logger.debug(
+            "report_index_token_measure_classification_failed",
+            extra={"harness": harness, "provider": provider, "field": field},
+        )
         return TokenMeasure.unknown().to_dict()
 
 
 def rows_for_walk_item(item: WalkItem) -> list[dict[str, Any]]:
     if item.record is None or item.source_id is None:
         return []
-    if item.kind == SESSION_KIND:
+    if item.kind == SESSION_WALK_KIND:
         return [_session_row(item.source_id, item.record)]
-    if item.kind == "otlp":
+    if item.kind == OTLP_WALK_KIND:
         return _otlp_rows(item.source_id, item.record)
     return []
 

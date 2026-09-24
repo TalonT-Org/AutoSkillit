@@ -21,7 +21,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO, TypeGuard
+from typing import Any, BinaryIO, TypeGuard, cast
 
 from autoskillit.core import (
     CANONICAL_ACCOUNTING_FIELDS,
@@ -31,19 +31,23 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.execution._report_index_rows import (
-    REPORT_INDEX_SCHEMA_VERSION as REPORT_INDEX_SCHEMA_VERSION,
-)
-from autoskillit.execution._report_index_rows import (
+    REPORT_INDEX_SCHEMA_VERSION,
     REQUEST_KIND,
     SESSION_KIND,
     SUBAGENT_KIND,
     TOOL_KIND,
     UNKNOWN_SOURCE,
+    ReportRequestRow,
+    ReportSessionRow,
+    ReportSubagentRow,
+    ReportToolRow,
     normalize_report_row,
     resolve_token_measure,
     rows_for_walk_item,
 )
 from autoskillit.execution.evidence.report_walk import (
+    SOURCE_ARCHIVE,
+    SOURCE_OTLP,
     SourceGapError,
     WalkItem,
     iter_report_walk,
@@ -59,9 +63,19 @@ _STATE_SCHEMA_VERSION = 1
 _LEASE_TIMEOUT_SECONDS = 2.0
 _COMMIT_BYTES = 1 << 20
 _RESET_KEYS = {
-    "otlp": ("otlp",),
-    "archive": ("archive", "projection", "projection_identity"),
+    SOURCE_OTLP: (SOURCE_OTLP,),
+    SOURCE_ARCHIVE: (SOURCE_ARCHIVE, "projection", "projection_identity"),
 }
+
+__all__ = [
+    "REPORT_INDEX_SCHEMA_VERSION",
+    "ReportIndex",
+    "ReportIndexUpdate",
+    "read_report_index",
+    "rebuild_report_index",
+    "report_index_dir",
+    "update_report_index",
+]
 
 logger = get_logger(__name__)
 
@@ -79,10 +93,10 @@ class ReportIndexUpdate:
 class ReportIndex:
     """Latest report facts, grouped by their persisted row kind."""
 
-    sessions: dict[str, dict[str, Any]]
-    requests: dict[str, dict[str, Any]]
-    tools: dict[str, dict[str, Any]]
-    subagents: dict[str, dict[str, Any]]
+    sessions: dict[str, ReportSessionRow]
+    requests: dict[str, ReportRequestRow]
+    tools: dict[str, ReportToolRow]
+    subagents: dict[str, ReportSubagentRow]
 
 
 def report_index_dir(log_root: Path) -> Path:
@@ -311,7 +325,13 @@ class _RowAppender:
 
     def reset_source(self, source: str) -> None:
         self.commit()
-        for key in _RESET_KEYS[source]:
+        keys = _RESET_KEYS.get(source)
+        if keys is None:
+            raise ValueError(
+                f"Unknown report-index reset source: {source!r}; "
+                f"expected one of {sorted(_RESET_KEYS)}"
+            )
+        for key in keys:
             if self.watermark is not None:
                 self.watermark.pop(key, None)
         self._dirty = True
@@ -382,10 +402,12 @@ class _SessionAttribution:
 
 def _resolve_session_measures(sessions: dict[str, dict[str, Any]]) -> None:
     for session in sessions.values():
+        harness, provider = (
+            _string_or(session, "harness", UNKNOWN_SOURCE),
+            _string_or(session, "provider", UNKNOWN_SOURCE),
+        )
         for field in CANONICAL_ACCOUNTING_FIELDS:
-            session[field] = resolve_token_measure(
-                session["harness"], session["provider"], field, session[field]
-            )
+            session[field] = resolve_token_measure(harness, provider, field, session[field])
 
 
 def _join_rows(rows: dict[str, dict[str, Any]], attribution: _SessionAttribution) -> None:
@@ -405,11 +427,19 @@ def _join_request_rows(
         _resolve_request_measures(row, session)
 
 
+def _string_or(row: dict[str, Any], key: str, fallback: str) -> str:
+    """Return ``row[key]`` only when it is a non-empty string, else ``fallback``."""
+    value = row.get(key)
+    return value if isinstance(value, str) and value else fallback
+
+
 def _resolve_request_measures(row: dict[str, Any], session: dict[str, Any] | None) -> None:
+    request_harness = _string_or(row, "harness", UNKNOWN_SOURCE)
     if session is None:
-        harness, provider = row["harness"], UNKNOWN_SOURCE
+        harness, provider = request_harness, UNKNOWN_SOURCE
     else:
-        harness, provider = session["harness"], session["provider"]
+        harness = _string_or(session, "harness", request_harness)
+        provider = _string_or(session, "provider", UNKNOWN_SOURCE)
     for field in CANONICAL_ACCOUNTING_FIELDS:
         row[field] = resolve_token_measure(harness, provider, field, row[field])
 
@@ -431,8 +461,8 @@ def read_report_index(index_dir: Path) -> ReportIndex:
     _join_rows(tools, attribution)
     _join_rows(subagents, attribution)
     return ReportIndex(
-        sessions=_sorted_rows(sessions),
-        requests=_sorted_rows(requests),
-        tools=_sorted_rows(tools),
-        subagents=_sorted_rows(subagents),
+        sessions=cast("dict[str, ReportSessionRow]", _sorted_rows(sessions)),
+        requests=cast("dict[str, ReportRequestRow]", _sorted_rows(requests)),
+        tools=cast("dict[str, ReportToolRow]", _sorted_rows(tools)),
+        subagents=cast("dict[str, ReportSubagentRow]", _sorted_rows(subagents)),
     )

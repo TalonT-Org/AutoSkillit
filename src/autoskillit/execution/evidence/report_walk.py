@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Final
 
 from autoskillit.core import ArtifactLease, get_logger, iter_merged_assistant_turns
 from autoskillit.execution.backends._codex_parse import _logical_rollout_reader
@@ -40,6 +40,20 @@ _OTLP_RECORD_ID_SCAN_BYTES = 160
 _ARCHIVE_BOUNDARY_CHANGED = "Session archive boundary changed"
 _PROJECTION_DELETED_NO_RECORDS = "Session archive disappeared"
 
+# Watermark keys identifying the sources the report walker tracks. Shared with
+# ``report_index.py`` so the gap source and the reset table agree on the same
+# vocabulary.
+SOURCE_OTLP: Final[str] = "otlp"
+SOURCE_ARCHIVE: Final[str] = "archive"
+_VALID_SOURCE_KEYS: Final[frozenset[str]] = frozenset({SOURCE_OTLP, SOURCE_ARCHIVE})
+
+# WalkItem ``kind`` values emitted by the report walker. Shared with consumers
+# (e.g. ``_report_index_rows.rows_for_walk_item``) so dispatch is by constant
+# instead of repeated string literals.
+OTLP_WALK_KIND: Final[str] = "otlp"
+SESSION_WALK_KIND: Final[str] = "session"
+CHECKPOINT_WALK_KIND: Final[str] = "checkpoint"
+
 
 class SourceGapError(RuntimeError):
     """A committed source boundary is no longer present in retained data.
@@ -49,10 +63,15 @@ class SourceGapError(RuntimeError):
 
     def __init__(self, source: str, message: str) -> None:
         super().__init__(message)
+        if source not in _VALID_SOURCE_KEYS:
+            raise ValueError(
+                f"Unknown SourceGapError source: {source!r}; expected one of "
+                f"{sorted(_VALID_SOURCE_KEYS)}"
+            )
         self.source = source
 
 
-_VALID_WALK_KINDS = frozenset({"otlp", "session", "checkpoint"})
+_VALID_WALK_KINDS = frozenset({OTLP_WALK_KIND, SESSION_WALK_KIND, CHECKPOINT_WALK_KIND})
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,13 +201,13 @@ def _otlp_resume_position(
     for index, (_, handle) in enumerate(handles):
         if _validate_otlp_boundary(handle, cursor):
             return index, cursor["end"]
-    raise SourceGapError("otlp", "Committed OTLP record is outside retained generations")
+    raise SourceGapError(SOURCE_OTLP, "Committed OTLP record is outside retained generations")
 
 
 def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
     with ExitStack() as stack:
         handles = _open_otlp_handles(root, stack)
-        start_index, start_offset = _otlp_resume_position(handles, state.get("otlp"))
+        start_index, start_offset = _otlp_resume_position(handles, state.get(SOURCE_OTLP))
         for index in range(start_index, len(handles)):
             name, handle = handles[index]
             handle.seek(start_offset if index == start_index else 0)
@@ -207,7 +226,7 @@ def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                     )
                     record = None
                 record_id = _record_id_prefix(line)
-                state["otlp"] = {
+                state[SOURCE_OTLP] = {
                     "generation": name,
                     "start": start,
                     "end": end,
@@ -222,7 +241,7 @@ def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                 # appended to between walks.
                 source_id = record_id or f"historical:{_digest(line)}"
                 yield WalkItem(
-                    "otlp",
+                    OTLP_WALK_KIND,
                     source_id,
                     _extract_otlp_session_id(record),
                     record,
@@ -299,36 +318,36 @@ def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
     # required; the file handle is closed promptly and identity is captured
     # once for the lifetime of the walk.
     path = root / "sessions-archive.jsonl"
-    cursor = state.get("archive", {})
+    cursor = state.get(SOURCE_ARCHIVE, {})
     offset = cursor.get("offset", 0)
     try:
         handle = path.open("rb")
     except FileNotFoundError:
         if offset:
-            raise SourceGapError("archive", _PROJECTION_DELETED_NO_RECORDS) from None
+            raise SourceGapError(SOURCE_ARCHIVE, _PROJECTION_DELETED_NO_RECORDS) from None
         return
     with handle:
         identity = _identity(handle)[:2]
         if offset:
             if identity != cursor.get("identity") or offset > _identity(handle)[2]:
-                raise SourceGapError("archive", "Session archive was replaced or truncated")
+                raise SourceGapError(SOURCE_ARCHIVE, "Session archive was replaced or truncated")
             handle.seek(offset - 1)
             if handle.read(1) != b"\n":
-                raise SourceGapError("archive", _ARCHIVE_BOUNDARY_CHANGED)
+                raise SourceGapError(SOURCE_ARCHIVE, _ARCHIVE_BOUNDARY_CHANGED)
             handle.seek(max(0, offset - 160))
             if _digest(handle.read(offset - handle.tell())) != cursor.get("boundary"):
-                raise SourceGapError("archive", _ARCHIVE_BOUNDARY_CHANGED)
+                raise SourceGapError(SOURCE_ARCHIVE, _ARCHIVE_BOUNDARY_CHANGED)
         for end, row in iter_tolerant_session_index_lines(path, offset=offset, complete_only=True):
             handle.seek(max(0, end - 160))
             boundary = _digest(handle.read(end - handle.tell()))
-            state["archive"] = {"identity": identity, "offset": end, "boundary": boundary}
+            state[SOURCE_ARCHIVE] = {"identity": identity, "offset": end, "boundary": boundary}
             if not row or not isinstance(row.get("dir_name"), str) or not row["dir_name"]:
                 continue
             session_id = row.get("session_id")
             if session_id is not None and not isinstance(session_id, str):
                 session_id = None
             yield WalkItem(
-                "session",
+                SESSION_WALK_KIND,
                 row["dir_name"],
                 session_id,
                 _session_record(row),
@@ -370,10 +389,10 @@ def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
         session_id = row.get("session_id")
         if session_id is not None and not isinstance(session_id, str):
             session_id = None
-        yield WalkItem("session", name, session_id, _session_record(row), _copy(state))
+        yield WalkItem(SESSION_WALK_KIND, name, session_id, _session_record(row), _copy(state))
     state["projection"] = current
     state["projection_identity"] = identity
-    yield WalkItem("checkpoint", None, None, None, _copy(state))
+    yield WalkItem(CHECKPOINT_WALK_KIND, None, None, None, _copy(state))
 
 
 def iter_report_walk(

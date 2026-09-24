@@ -40,7 +40,6 @@ TOOL_KIND: Final[str] = "tool"
 SUBAGENT_KIND: Final[str] = "subagent"
 UNKNOWN_SOURCE: Final[str] = "unknown"
 _STRUCTURED_MEASURE_SESSION_VERSION = 14
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 class ReportRowBase(TypedDict):
@@ -357,7 +356,7 @@ def _iso_to_ms(value: object) -> int | None:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return (parsed - _EPOCH) // timedelta(milliseconds=1)
+    return (parsed - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(milliseconds=1)
 
 
 def _skill_name(value: object) -> str | None:
@@ -431,7 +430,7 @@ def _request_fields(
         "agent_name": unique_string_attribute(attributes, "agent.name"),
         "query_source": unique_string_attribute(attributes, "query_source"),
         "model": unique_string_attribute(attributes, "model"),
-        "event_sequence": unique_count_attribute(attributes, "event_sequence"),
+        "event_sequence": unique_count_attribute(attributes, "event.sequence"),
         **claude_request_usage(attributes),
         "cost_usd": unique_float_attribute(attributes, "cost_usd"),
         "duration_ms": unique_count_attribute(attributes, "duration_ms"),
@@ -453,7 +452,7 @@ def _tool_fields(attributes: list[object], session_id: str, position_key: str) -
         "duration_ms": unique_count_attribute(attributes, "duration_ms"),
         "tool_input_size_bytes": unique_count_attribute(attributes, "tool_input_size_bytes"),
         "tool_result_size_bytes": unique_count_attribute(attributes, "tool_result_size_bytes"),
-        "event_sequence": unique_count_attribute(attributes, "event_sequence"),
+        "event_sequence": unique_count_attribute(attributes, "event.sequence"),
     }
 
 
@@ -468,7 +467,7 @@ def _subagent_fields(
         "model": unique_string_attribute(attributes, "model"),
         "final_model": unique_string_attribute(attributes, "final_model"),
         "model_swapped": unique_flag_attribute(attributes, "model_swapped"),
-        "event_sequence": unique_count_attribute(attributes, "event_sequence"),
+        "event_sequence": unique_count_attribute(attributes, "event.sequence"),
     }
 
 

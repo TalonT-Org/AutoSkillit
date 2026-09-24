@@ -10,18 +10,12 @@ from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TokenMeasure, get_logg
 from autoskillit.execution.session._turn_usage import classify_token_measure
 
 __all__ = [
-    "CLAUDE_CODE_SCOPE_NAME",
     "TokenObservation",
     "aggregate_token_observations",
-    "claude_request_usage",
     "has_attribute",
-    "iter_scoped_log_records",
     "project_token_observations",
     "record_attributes",
     "unique_bool_attribute",
-    "unique_count_attribute",
-    "unique_float_attribute",
-    "unique_flag_attribute",
     "unique_string_attribute",
 ]
 

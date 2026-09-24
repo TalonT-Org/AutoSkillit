@@ -700,6 +700,8 @@ def all_evaluated_segments(
     )
 
 
+# Value-taking git global flags, derived from _GIT_GLOBAL_FLAG_SPEC. A flag
+# missing from this set is misread below as a 1-token boolean skip.
 _GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
     flag for flag, arity in _GIT_GLOBAL_FLAG_SPEC.items() if arity == _FlagArity.VALUE
 )

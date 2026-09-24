@@ -202,7 +202,6 @@ def _raw_write_targets(
     text: str,
     initial_cwd: str,
     outer_segments: list[list[str]],
-    outer_cwds: list[str],
     additional_segments: list[list[str]],
     additional_owners: list[int | None],
     interpreter_cwd: str,
@@ -210,6 +209,7 @@ def _raw_write_targets(
     scan = scan_write_targets(text, initial_cwd)
     targets = [(target, initial_cwd) for target in scan.targets]
     ambiguous = scan.unresolved
+    outer_cwds = _compute_outer_cwds(outer_segments, initial_cwd)
     segments_with_cwds = list(zip(outer_segments, outer_cwds))
     segments_with_cwds.extend(
         (
@@ -247,7 +247,6 @@ def _raw_target_mutations(
     *,
     initial_cwd: str,
     outer_segments: list[list[str]],
-    outer_cwds: list[str],
     additional_segments: list[list[str]],
     additional_owners: list[int | None],
     interpreter_cwd: str,
@@ -257,7 +256,6 @@ def _raw_target_mutations(
         text,
         initial_cwd,
         outer_segments,
-        outer_cwds,
         additional_segments,
         additional_owners,
         interpreter_cwd,
@@ -423,6 +421,17 @@ def _advance_shell_cwd(current_cwd: str, verb: str, args: list[str]) -> tuple[st
     return current_cwd, False
 
 
+def _compute_outer_cwds(outer_segments: list[list[str]], initial_cwd: str) -> list[str]:
+    """Return the cwd in effect during each outer segment, walking cd/pushd."""
+    cwds: list[str] = []
+    current_cwd = initial_cwd
+    for segment in outer_segments:
+        verb, args = command_verb_and_args(segment)
+        current_cwd, _ = _advance_shell_cwd(current_cwd, verb, args)
+        cwds.append(current_cwd)
+    return cwds
+
+
 def _deny_for_mutations(
     data: dict[str, object], context: dict[str, object], mutations: list[tuple[str, str, bool]]
 ) -> None:
@@ -440,9 +449,21 @@ def _deny_for_mutations(
 
 
 def _deny_outer_git_mutations(data: dict[str, object], segment: list[str], cwd: str) -> None:
+    verb = os.path.basename(command_verb_and_args(segment)[0])
+    if verb not in {"git", "git-receive-pack", "git-upload-pack"}:
+        return
     if not cwd:
         # A preceding cwd change could not be resolved; this segment cannot
-        # be routed to a repository with confidence.
+        # be routed to a repository with confidence. Fall back to the
+        # unresolved-cwd escalation so a bare git mutation (no shell-write
+        # surface for scan_write_targets to catch) does not silently
+        # bypass the checked-out-ref preflight.
+        _deny_checked_out_ref(
+            data=data,
+            context=None,
+            attempted_value="<unresolved>",
+            threatened_refs=[],
+        )
         return
     context = _repository_context(_git_segment_cwd(segment, cwd))
     if context is not None:
@@ -477,14 +498,10 @@ def _preflight_checked_out_ref_mutation(
         return
     initial_context = _repository_context(execution_cwd)
     current_cwd = execution_cwd
-    outer_cwds: list[str] = []
-    for segment in outer_segments:
-        verb, args = command_verb_and_args(segment)
-        current_cwd, skip_segment = _advance_shell_cwd(current_cwd, verb, args)
-        outer_cwds.append(current_cwd)
-        if skip_segment:
-            continue
-        _deny_outer_git_mutations(data, segment, current_cwd)
+    outer_cwds = _compute_outer_cwds(outer_segments, current_cwd)
+    for segment, segment_cwd in zip(outer_segments, outer_cwds):
+        _deny_outer_git_mutations(data, segment, segment_cwd)
+    current_cwd = outer_cwds[-1] if outer_cwds else execution_cwd
 
     context = _repository_context(current_cwd) if current_cwd else None
     mutations: list[tuple[str, str, bool]] = []
@@ -497,7 +514,6 @@ def _preflight_checked_out_ref_mutation(
             live_text,
             initial_cwd=execution_cwd,
             outer_segments=outer_segments,
-            outer_cwds=outer_cwds,
             additional_segments=additional_segments,
             additional_owners=additional_owners,
             interpreter_cwd=current_cwd,

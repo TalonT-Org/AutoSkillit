@@ -6,11 +6,31 @@ import io
 import re
 import shlex
 from dataclasses import dataclass, replace
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._classification._shell_structure import (
+        _mark_grouping_delimiters,
+        _mask_substitutions,
+        _render_replacements,
+        _skip_shell_quote,
+    )
+elif __package__:
+    from ._shell_structure import (
+        _mark_grouping_delimiters,
+        _mask_substitutions,
+        _render_replacements,
+        _skip_shell_quote,
+    )
+else:
+    from _shell_structure import (
+        _mark_grouping_delimiters,
+        _mask_substitutions,
+        _render_replacements,
+        _skip_shell_quote,
+    )
 
 # Operators that terminate a shlex token and split command segments.
-# Parentheses are tracked by the lexer as fused tokens (`(cmd` or `cmd)`)
-# and handled separately by output-redirect partitioning.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 # Single-character shell operators that shlex.shlex(punctuation_chars=True)
 # leaves sitting inside the previous token's source range. Used as the
@@ -19,6 +39,11 @@ _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 # contain that operator in its raw_span.
 _SHELL_OPERATOR_CHARS: str = ";|&"
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
+
+
+def _is_case_terminator(token: str) -> bool:
+    """Match shell case-pattern terminators (``;;``, ``;;;``, ...)."""
+    return bool(token) and set(token) == {";"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,19 +116,6 @@ def _parse_heredoc_delimiter(
         parts.append(char)
         index += 1
     return ("".join(parts), index, quoted) if parts else None
-
-
-def _skip_shell_quote(command: str, start: int, line_end: int) -> int:
-    quote = command[start]
-    index = start + 1
-    while index < line_end:
-        if command[index] == quote:
-            return index + 1
-        if quote == '"' and command[index] == "\\" and index + 1 < line_end:
-            index += 2
-        else:
-            index += 1
-    return line_end
 
 
 def _skip_arithmetic(command: str, start: int, line_end: int) -> int:
@@ -271,17 +283,6 @@ def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
     return occurrences
 
 
-def _render_replacements(command: str, replacements: list[tuple[int, int, str]]) -> str:
-    rendered: list[str] = []
-    position = 0
-    for start, end, value in sorted(replacements):
-        rendered.append(command[position:start])
-        rendered.append(value)
-        position = end
-    rendered.append(command[position:])
-    return "".join(rendered)
-
-
 def strip_heredoc_bodies(command: str) -> str:
     """Strip heredoc body content, preserving the opening line and terminator.
 
@@ -385,6 +386,8 @@ class _CommandSegment:
     argv_tokens: list[ArgvToken]
     stdin_literals: tuple[StdinLiteral, ...] = ()
     piped_from_previous: bool = False
+    function_body: bool = False
+    subshell_path: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,6 +408,11 @@ class EvaluatedSegment:
             raise ValueError(
                 "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
             )
+
+    @property
+    def subshell_path(self) -> tuple[int, ...]:
+        """Subshell nesting path of the owning submitted segment (empty for payload segments)."""
+        return self.provenance.subshell_path if self.provenance is not None else ()
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
@@ -507,13 +515,31 @@ def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
     return ("".join(rendered), redirects)
 
 
-def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegment]:
-    """Tokenize commands while retaining which redirect-shaped tokens are syntax."""
+_LexedCommand = tuple[
+    list[str],
+    list[bool],
+    list[str],
+    list[StdinLiteral],
+    dict[str, str],
+    dict[str, str],
+    dict[str, tuple[str, int]],
+]
+
+
+def _lex_command(command: str) -> _LexedCommand | None:
     try:
         stripped, literals = _capture_heredocs(command)
-        marked, redirects = _mark_unquoted_output_redirects(
-            _normalize_newlines_for_tokenize(stripped)
+        masked = _mask_substitutions(stripped)
+        if masked is None:
+            return None
+        substitutions_marked, substitutions = masked
+        redirects_marked, redirects = _mark_unquoted_output_redirects(
+            _normalize_newlines_for_tokenize(substitutions_marked)
         )
+        grouped = _mark_grouping_delimiters(redirects_marked)
+        if grouped is None:
+            return None
+        marked, groups = grouped
         lexer = shlex.shlex(
             marked,
             posix=True,
@@ -551,7 +577,75 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
             fully_single_quoted.append(span == f"'{token}'")
             raw_spans.append(span)
     except (ValueError, TypeError):
-        return []
+        return None
+
+    return tokens, fully_single_quoted, raw_spans, literals, redirects, substitutions, groups
+
+
+def _herestring_at(
+    tokens: list[str], quoted: list[bool], raw_spans: list[str], index: int
+) -> tuple[StdinLiteral | None, int] | None:
+    """Match a herestring operator at *index*.
+
+    Returns ``None`` when the token at *index* is not a herestring. When it
+    is, returns ``(literal, next_index)``: ``literal`` is ``None`` if the
+    operator was the trailing ``<<<`` with no body, otherwise it is the
+    captured body. ``next_index`` is the index of the first token after the
+    herestring.
+    """
+    token = tokens[index]
+    if token == "<<<":
+        if index + 1 < len(tokens):
+            return (
+                StdinLiteral(tokens[index + 1], "herestring", not quoted[index + 1]),
+                index + 2,
+            )
+        return None, index + 1
+    if len(token) > 3 and token.startswith("<<<"):
+        body = token[3:]
+        value_raw_span = raw_spans[index][3:].rstrip()
+        return StdinLiteral(body, "herestring", value_raw_span != f"'{body}'"), index + 1
+    return None
+
+
+def _restore_substitutions(
+    token: str, raw_span: str, quoted: bool, substitutions: dict[str, str]
+) -> tuple[str, str, bool]:
+    for marker, original in substitutions.items():
+        raw_span = raw_span.replace(marker, original)
+        if marker in token:
+            token = token.replace(marker, original)
+            quoted = False
+    return token, raw_span, quoted
+
+
+def _advance_group_context(
+    kind: str,
+    group_id: int,
+    subshell_path: tuple[int, ...],
+    function_depth: int,
+    brace_functions: list[bool],
+) -> tuple[tuple[int, ...], int]:
+    if kind == "open_subshell":
+        subshell_path += (group_id,)
+    elif kind == "close_subshell":
+        assert subshell_path, "close_subshell emitted without matching open_subshell"
+        subshell_path = subshell_path[:-1]
+    elif kind in {"open_brace", "open_function"}:
+        brace_functions.append(kind == "open_function")
+        function_depth += kind == "open_function"
+    elif kind == "close_brace":
+        assert brace_functions, "close_brace emitted without matching open_brace/open_function"
+        function_depth -= brace_functions.pop()
+    return subshell_path, function_depth
+
+
+def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegment] | None:
+    """Tokenize commands while retaining which redirect-shaped tokens are syntax."""
+    lexed = _lex_command(command)
+    if lexed is None:
+        return None
+    tokens, fully_single_quoted, raw_spans, literals, redirects, substitutions, groups = lexed
 
     segments: list[_CommandSegment] = []
     current_tokens: list[str] = []
@@ -559,6 +653,41 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
     current_argv_tokens: list[ArgvToken] = []
     current_stdin_literals: list[StdinLiteral] = []
     piped_from_previous = False
+    subshell_path: tuple[int, ...] = ()
+    function_depth = 0
+    brace_functions: list[bool] = []
+
+    def flush() -> None:
+        nonlocal current_tokens, current_redirect_syntax, current_argv_tokens
+        nonlocal current_stdin_literals
+        if (
+            current_tokens
+            and not (
+                len(current_tokens) == 1
+                and current_tokens[0] in {"if", "while", "until", "then", "else", "elif", "do"}
+            )
+            and not (
+                len(current_tokens) == 1
+                and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*\(\)", current_tokens[0])
+            )
+            and not (len(current_tokens) == 2 and current_tokens[0] == "function")
+        ):
+            segments.append(
+                _CommandSegment(
+                    current_tokens,
+                    current_redirect_syntax,
+                    current_argv_tokens,
+                    _finalize_stdin_literals(current_stdin_literals),
+                    piped_from_previous,
+                    function_body=function_depth > 0,
+                    subshell_path=subshell_path,
+                )
+            )
+        current_tokens = []
+        current_redirect_syntax = []
+        current_argv_tokens = []
+        current_stdin_literals = []
+
     index = 0
     total = len(tokens)
     while index < total:
@@ -566,86 +695,49 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
         quoted = fully_single_quoted[index]
         raw_span = raw_spans[index]
 
+        group = groups.get(token)
+        if group is not None:
+            flush()
+            kind, group_id = group
+            subshell_path, function_depth = _advance_group_context(
+                kind, group_id, subshell_path, function_depth, brace_functions
+            )
+            piped_from_previous = False
+            index += 1
+            continue
+
         placeholder = _HEREDOC_PLACEHOLDER_RE.fullmatch(token)
         if placeholder is not None:
             current_stdin_literals.append(literals[int(placeholder.group(1))])
             index += 1
             continue
 
-        if token == "<<<":
-            # Standalone herestring operator: the next token is the value.
-            # `outer_expansion` mirrors ArgvToken.fully_single_quoted -- only
-            # a whole single-quoted word is inert to outer-shell expansion.
-            if index + 1 < total:
-                current_stdin_literals.append(
-                    StdinLiteral(
-                        text=tokens[index + 1],
-                        kind="herestring",
-                        outer_expansion=not fully_single_quoted[index + 1],
-                    )
-                )
-                index += 2
-            else:
-                index += 1
+        herestring = _herestring_at(tokens, fully_single_quoted, raw_spans, index)
+        if herestring is not None:
+            literal, index = herestring
+            if literal is not None:
+                current_stdin_literals.append(literal)
             continue
 
-        if len(token) > 3 and token.startswith("<<<"):
-            # Fused herestring (no space before the word, e.g. `<<<'text'`):
-            # shlex hands back one token whose text starts with `<<<`.
-            # Provenance is re-derived past the known prefix the same way
-            # `_argv_token_after_prefix` narrows a quoted suffix at the
-            # ArgvToken layer -- this module cannot import that helper
-            # (`_flags` sits above `_tokenizer` in the import order).
-            body = token[3:]
-            value_raw_span = raw_span[3:].rstrip()
-            current_stdin_literals.append(
-                StdinLiteral(
-                    text=body,
-                    kind="herestring",
-                    outer_expansion=value_raw_span != f"'{body}'",
-                )
-            )
-            index += 1
-            continue
-
-        if token in _SHELL_OPERATORS:
-            if current_tokens:
-                segments.append(
-                    _CommandSegment(
-                        current_tokens,
-                        current_redirect_syntax,
-                        current_argv_tokens,
-                        _finalize_stdin_literals(current_stdin_literals),
-                        piped_from_previous,
-                    )
-                )
+        if token in _SHELL_OPERATORS or _is_case_terminator(token):
+            flush()
             piped_from_previous = token == "|"
-            current_tokens = []
-            current_redirect_syntax = []
-            current_argv_tokens = []
-            current_stdin_literals = []
             index += 1
             continue
 
         redirect = redirects.get(token)
         restored = redirect if redirect is not None else token
+        restored, raw_span, quoted = _restore_substitutions(
+            restored, raw_span, quoted, substitutions
+        )
         current_tokens.append(restored)
         current_redirect_syntax.append(redirect is not None)
         current_argv_tokens.append(ArgvToken(restored, quoted, raw_span))
         index += 1
-    if current_tokens:
-        segments.append(
-            _CommandSegment(
-                current_tokens,
-                current_redirect_syntax,
-                current_argv_tokens,
-                _finalize_stdin_literals(current_stdin_literals),
-                piped_from_previous,
-            )
-        )
+    flush()
     return segments
 
 
 def tokenize_command_segments(command: str) -> list[list[str]]:
     """Split a shell command into segments of (verb, args...) token lists."""
-    return [segment.tokens for segment in _tokenize_command_segments_with_redirects(command)]
+    return [segment.tokens for segment in _tokenize_command_segments_with_redirects(command) or []]

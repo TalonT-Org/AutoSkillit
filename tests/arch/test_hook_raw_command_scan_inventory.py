@@ -258,11 +258,6 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
         ),
         (
             "hooks/_classification/_interpreters.py",
-            "_iter_shell_payload_segment_groups",
-            "tokenize_command_segments",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
             "tokenize_shell_payload_segments",
             "_iter_shell_payload_segment_groups",
         ),

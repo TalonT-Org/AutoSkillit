@@ -64,7 +64,7 @@ def _tokenize_with_redirects(command: str) -> list[Any]:
         _tokenize_command_segments_with_redirects,
     )
 
-    return _tokenize_command_segments_with_redirects(command)
+    return _tokenize_command_segments_with_redirects(command) or []
 
 
 def _normalize_executable_call(token: str) -> str:
@@ -302,14 +302,11 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
         for command_segment in tokenized_segments:
             raw_segment = command_segment.tokens
             is_loop_opener = raw_segment[:1] in (["for"], ["while"], ["until"])
-            is_inline_function = (
-                len(raw_segment) >= 2 and raw_segment[0].endswith("()") and raw_segment[1] == "{"
-            )
             segment_repeatable = (
                 inherited_repeatable
                 or repeatable_depth > 0
                 or raw_segment[:1] in (["while"], ["until"])
-                or is_inline_function
+                or command_segment.function_body
             )
             if is_loop_opener:
                 repeatable_depth += 1

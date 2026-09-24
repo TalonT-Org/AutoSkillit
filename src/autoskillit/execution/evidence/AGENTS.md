@@ -16,6 +16,13 @@ always-on signal collection about a running session — process-level anomalies,
   `execution.__all__`, not re-exported by this gateway). Imports
   `session_log.session_log.resolve_log_dir` to place `otlp.jsonl` under the log root.
 - **`_otlp_tokens.py`** — Bounded request-correlated token projection from native OTLP logs.
+  Shared helpers used by report indexing are `iter_scoped_log_records`,
+  `claude_request_usage`, `unique_count_attribute`, `unique_float_attribute`,
+  `unique_flag_attribute`, and
+  `CLAUDE_CODE_SCOPE_NAME`.
+- **`report_walk.py`** — Resumable walk over OTLP, session archive, and session projection
+  sources. `SourceGapError.source` names the stale cursor's source; the consumer is
+  `execution/report_index.py`.
 - **`reader/`** — private contracts and protocol validation for evidence readers, consumed
   by `execution/evidence_reader.py` (#4664). Outside this package's signal-collection
   criterion and outside #4967's scope.

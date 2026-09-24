@@ -504,6 +504,10 @@ See **[Hooks](../safety/hooks.md)** for the complete safety system: protected br
 
 Pipeline sessions are logged to `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Each session records token usage, timing, and process traces.
 
+The separate report index under `report-index/` is derived from `sessions.jsonl`, its
+archive, and `otlp.jsonl` by `execution/report_index.py`; it is distinct from the
+derived index stored in `sessions.jsonl`.
+
 `summary.json` is the committed completion witness and is published last among
 per-session artifacts. A shared exclusive-lease transaction upserts the session
 row, applies committed-directory retention, and atomically replaces the bounded

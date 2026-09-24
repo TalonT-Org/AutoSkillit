@@ -204,6 +204,15 @@ from autoskillit.execution.recording.recording import (
     ScenarioReplayError,
     build_replay_runner,
 )
+from autoskillit.execution.report_index import (
+    REPORT_INDEX_SCHEMA_VERSION,
+    ReportIndex,
+    ReportIndexUpdate,
+    read_report_index,
+    rebuild_report_index,
+    report_index_dir,
+    update_report_index,
+)
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from autoskillit.execution.runtime.db import (
     DefaultDatabaseReader,
@@ -474,6 +483,14 @@ __all__ = [
     "session_index_lock_path",
     "write_execution_candidate_manifest",
     "write_telemetry_clear_marker",
+    # report_index
+    "REPORT_INDEX_SCHEMA_VERSION",
+    "ReportIndex",
+    "ReportIndexUpdate",
+    "read_report_index",
+    "rebuild_report_index",
+    "report_index_dir",
+    "update_report_index",
     # pr_analysis
     "DOMAIN_PATHS",
     "extract_linked_issues",

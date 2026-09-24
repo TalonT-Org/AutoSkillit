@@ -17,3 +17,8 @@ raises.
 (never underscores). `recording/recording.py` and `recording/_recording_skills.py`
 activate only under `AUTOSKILLIT_RECORD_SESSION` or `REPLAY_SCENARIO_*`; production paths
 never activate them.
+
+`report_index.py` (storage, reader, and join) and `_report_index_rows.py` (schema and
+derivation) are execution-root consumers of `evidence/report_walk.py` and `session_log/`,
+re-exported through `execution/__init__.py`. They are outside `evidence/`, so this
+dependency does not cycle through `session_log`.

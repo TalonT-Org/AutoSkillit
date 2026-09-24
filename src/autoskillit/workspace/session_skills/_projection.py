@@ -161,7 +161,11 @@ def build_skill_projection_binding(
                 backend=backend.name,
             )
             if unsupported_operation is not None:
-                assert adaptation.diagnostic is not None
+                if not adaptation.diagnostic:
+                    raise SkillContractError(
+                        f"backend {backend.name!r} returned "
+                        f"{unsupported_operation.value} refusal without a diagnostic"
+                    )
                 unavailable.append(
                     SkillProjectionRefusal(
                         skill=skill.name,

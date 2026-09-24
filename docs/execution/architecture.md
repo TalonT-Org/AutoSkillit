@@ -164,10 +164,23 @@ scratch, validates and projects the configured model, and does not depend on a
 pre-existing source-home `models_cache.json`. `autoskillit doctor` runs the same
 preparation probe without issuing an attestation; failures report the concrete
 preparation reason, and a refused cook prints that reason once beside the
-resulting `required_join` exclusions.
+resulting `required_join` exclusions. Dispatch preflight and the doctor's
+standing-pin check run before any launch exists; they evaluate through
+`adapt_session_invariant` and defer managed-join-dependent refusals to the
+dispatch-time gate. `run_skill` evaluates semantic admission only after
+managed-join issuance, with the issued evidence, and fails closed with the
+backend diagnostic when issuance is refused.
 
-With the attestation, catalog compilation, projection binding, and generated
-skill documents carry the same adaptation context. Interactive Codex parents
+With the attestation, catalog compilation, the per-session projection binding,
+and generated skill documents carry one launch's adaptation context, and
+materialization rejects a compilation bound to different evidence. The shared
+plugin projection is session-invariant: it is evaluated through
+`adapt_session_invariant`, and skills whose admission depends on managed-join
+evidence are deferred to the attested generated home, never refused or rendered
+there. Production code passes launch evidence explicitly to every callable that
+declares `adaptation_context`. Literal `None` is confined to inventoried
+no-evidence sites, enforced by
+`tests/arch/test_admission_evidence_explicit_guard.py`. Interactive Codex parents
 use the `interactive-parent` route, with normal kitchen tool visibility and
 join/background guards; headless parents use the restricted `parent` route.
 `AUTOSKILLIT_MANAGED_JOIN_PARENT_ID` carries one parent identity into the MCP

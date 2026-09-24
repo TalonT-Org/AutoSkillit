@@ -23,11 +23,6 @@ _EXPECTED_CALLERS = Counter(
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
         (
-            _COMPILE,
-            "workspace/session_skills/_catalog.py",
-            "_compile_reachable_profile_skill_catalog",
-        ): 1,
-        (
             _ADAPT,
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "_resolve_launch_binding",
@@ -37,7 +32,7 @@ _EXPECTED_CALLERS = Counter(
             "workspace/session_skills/_materialization.py",
             "materialize_profile_skills",
         ): 1,
-        (_COMPILE, "workspace/session_skills/_materialization.py", "_materialize_session"): 3,
+        (_COMPILE, "workspace/session_skills/_materialization.py", "_materialize_session"): 2,
         (_COMPILE, "workspace/session_skills/_manager.py", "managed_catalog"): 1,
         (
             _COMPILE,
@@ -46,9 +41,8 @@ _EXPECTED_CALLERS = Counter(
         ): 1,
         (_COMPILE, "cli/fleet/_fleet_run.py", "_execute_fleet_run"): 1,
         (_COMPILE, "cli/fleet/_fleet_session.py", "_launch_fleet_session"): 1,
-        (_ADAPT, "cli/doctor/_doctor_config.py", "_check_target_step_semantics"): 1,
         (_ADAPT, "server/tools/_preflight.py", "check_skill_semantic_feasibility"): 1,
-        (_ADAPT, "workspace/_projected_artifact/authority.py", "_plan"): 1,
+        (_ADAPT, "core/types/_type_skill_semantics.py", "adapt_session_invariant"): 1,
         (
             _ADAPT,
             "workspace/_projected_artifact/_documents.py",
@@ -69,11 +63,11 @@ _EXPECTED_CALLERS = Counter(
 _COMPILATION_CONSUMERS = frozenset(
     {
         "CompiledSessionSkillCatalog",
-        "_compile_reachable_profile_skill_catalog",
         "_launch_cook_session",
         "append_skill_unavailability",
         "managed_session",
         "render_skill_unavailability",
+        "restrict_to_native_roles",
         "write_skill_unavailability_metadata",
     }
 )

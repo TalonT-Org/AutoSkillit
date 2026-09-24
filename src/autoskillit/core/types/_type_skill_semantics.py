@@ -8,12 +8,13 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, final
 
 from ._type_exceptions import ChildSpawnCardinalityError, SkillContractError
 
 if TYPE_CHECKING:
     from ._type_backend import BackendCapabilities
+    from ._type_protocols_backend import CodingAgentBackend
 
 __all__ = [
     "SKILL_MODEL_CLASS_REGISTRY",
@@ -25,6 +26,7 @@ __all__ = [
     "EvidenceSpec",
     "GitMetadataWriteSpec",
     "JoinSpec",
+    "LaunchEvidenceDeferral",
     "LogicalRoleSpec",
     "ManagedCodexRoute",
     "ManagedHomeProjection",
@@ -38,6 +40,9 @@ __all__ = [
     "SkillModelClassDef",
     "SkillSemanticOperation",
     "SkillSemanticPlan",
+    "adapt_session_invariant",
+    "launch_evidence_digest",
+    "refusal_awaits_launch_evidence",
     "required_join_is_unsupported",
 ]
 
@@ -501,6 +506,16 @@ class SkillSemanticPlan:
         ).hexdigest()
 
 
+def launch_evidence_digest(context: SemanticAdaptationContext | None) -> str:
+    """Return the launch evidence digest for *context*, or ``""`` when absent.
+
+    Centralizes the empty-string convention used by compilation/materialization
+    seam checks so a future change to ``SemanticAdaptationContext.digest`` only
+    needs to land here.
+    """
+    return context.digest if context is not None else ""
+
+
 def required_join_is_unsupported(
     plan: SkillSemanticPlan,
     capabilities: BackendCapabilities,
@@ -517,6 +532,53 @@ def required_join_is_unsupported(
             and adaptation_context.admits_managed_join_for(backend_name)
         )
     )
+
+
+def refusal_awaits_launch_evidence(
+    operation: SkillSemanticOperation,
+    capabilities: BackendCapabilities,
+) -> bool:
+    """Return whether managed-join launch evidence can lift a refusal of *operation*.
+
+    Must agree with ``required_join_is_unsupported``, the only admission gate that
+    reads launch evidence.
+    """
+    return (
+        operation is SkillSemanticOperation.REQUIRED_JOIN
+        and not capabilities.fixed_set_join_capable
+        and capabilities.managed_fixed_batch_route_capable
+    )
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class LaunchEvidenceDeferral:
+    """A refusal that launch-bound managed-join evidence can lift; never an admission verdict."""
+
+    operation: SkillSemanticOperation
+    diagnostic: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self.diagnostic, "diagnostic")
+
+
+def adapt_session_invariant(
+    plan: SkillSemanticPlan,
+    backend: CodingAgentBackend,
+) -> SkillSemanticAdaptationResult | LaunchEvidenceDeferral:
+    """Evaluate *plan* without launch evidence, deferring refusals that evidence can lift."""
+    adaptation = backend.adapt_skill_semantics(plan, None)
+    operation = adaptation.validate_refusal_for(plan, backend=backend.name)
+    if operation is None:
+        adaptation.validate_for(plan, backend=backend.name)
+        return adaptation
+    if refusal_awaits_launch_evidence(operation, backend.capabilities):
+        if not adaptation.diagnostic:
+            raise SkillContractError(
+                f"backend {backend.name!r} returned {operation.value} refusal without a diagnostic"
+            )
+        return LaunchEvidenceDeferral(operation=operation, diagnostic=adaptation.diagnostic)
+    return adaptation
 
 
 def _validate_supported_adaptation(result: SkillSemanticAdaptationResult) -> None:

@@ -7,11 +7,11 @@ import os
 import shutil
 import tempfile
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
+from typing import assert_never, cast
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
@@ -22,6 +22,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     DirectInstall,
     EffectiveSkillCatalogAuthority,
+    LaunchEvidenceDeferral,
     ManagedHome,
     PluginArtifactContentionError,
     PluginArtifactIdentity,
@@ -32,13 +33,15 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
-    SemanticAdaptationContext,
+    SessionInvariantAdaptationRefusal,
+    SkillAuthority,
     SkillExecutionRole,
     SkillProjectionRefusal,
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceRef,
     _InstallLock,
+    classify_session_invariant,
     get_logger,
     log_plugin_artifact_lifecycle,
     managed_home,
@@ -272,6 +275,57 @@ def _try_validate_published_plugin_artifact(
         ) from exc
 
 
+def _classify_projected_skills(
+    skills: Iterable[SkillAuthority],
+    backend: CodingAgentBackend,
+) -> tuple[
+    dict[str, SkillSemanticAdaptationResult],
+    tuple[SkillProjectionRefusal, ...],
+    tuple[SkillProjectionRefusal, ...],
+]:
+    """Partition skills into session-invariant adaptations, refusals, and launch deferrals."""
+    semantic_adaptations: dict[str, SkillSemanticAdaptationResult] = {}
+    unavailable: list[SkillProjectionRefusal] = []
+    deferred: list[SkillProjectionRefusal] = []
+    for skill in skills:
+        plan = skill.semantic_plan
+        if plan is None:
+            continue
+        match classify_session_invariant(plan, backend):
+            case LaunchEvidenceDeferral(operation=op, diagnostic=diag):
+                deferred.append(
+                    SkillProjectionRefusal(skill=skill.name, operation=op, diagnostic=diag)
+                )
+            case SessionInvariantAdaptationRefusal(operation=op, diagnostic=diag):
+                unavailable.append(
+                    SkillProjectionRefusal(skill=skill.name, operation=op, diagnostic=diag)
+                )
+            case SkillSemanticAdaptationResult() as adaptation:
+                semantic_adaptations[skill.name] = adaptation
+            case _ as unreachable:
+                assert_never(unreachable)
+    if deferred:
+        logger.debug(
+            "projected_plugin_skills_deferred_to_session",
+            backend=backend.name,
+            count=len(deferred),
+            skills=tuple(sorted(refusal.skill for refusal in deferred)),
+        )
+    if unavailable:
+        logger.warning(
+            "projected_plugin_skills_unavailable",
+            backend=backend.name,
+            count=len(unavailable),
+            operations=tuple(sorted({refusal.operation.value for refusal in unavailable})),
+            skills=tuple(sorted(refusal.skill for refusal in unavailable)),
+        )
+    return (
+        semantic_adaptations,
+        tuple(sorted(unavailable, key=lambda item: item.skill)),
+        tuple(sorted(deferred, key=lambda item: item.skill)),
+    )
+
+
 def _acquire_projection_reader(plan: _ProjectedArtifactPlan) -> ArtifactLease:
     try:
         return ArtifactLease.acquire_shared(
@@ -295,7 +349,6 @@ class ProjectedPluginArtifactAuthority:
     catalog: EffectiveSkillCatalogAuthority | None = None
     namespace_sources: Mapping[str, SkillSource] | None = None
     cwd: Path | None = None
-    adaptation_context: SemanticAdaptationContext | None = None
 
     def __post_init__(self) -> None:
         if type(self.projection_version) is not int or self.projection_version < 1:
@@ -368,40 +421,14 @@ class ProjectedPluginArtifactAuthority:
             raise PluginArtifactPublicationError(
                 f"direct plugin has no bundled skills: {source_root}"
             )
-        adaptation_digests: dict[str, str] = {}
-        semantic_adaptations: dict[str, SkillSemanticAdaptationResult] = {}
-        unavailable: list[SkillProjectionRefusal] = []
-        excluded_skill_names: set[str] = set()
-        for skill in catalog.skills:
-            plan = skill.semantic_plan
-            if plan is None:
-                continue
-            adaptation = backend.adapt_skill_semantics(plan, self.adaptation_context)
-            unsupported_operation = adaptation.validate_refusal_for(
-                plan,
-                backend=backend.name,
-            )
-            if unsupported_operation is not None:
-                assert adaptation.diagnostic is not None
-                excluded_skill_names.add(skill.name)
-                unavailable.append(
-                    SkillProjectionRefusal(
-                        skill=skill.name,
-                        operation=unsupported_operation,
-                        diagnostic=adaptation.diagnostic,
-                    )
-                )
-                logger.warning(
-                    "projected_plugin_skill_unavailable",
-                    skill=skill.name,
-                    backend=backend.name,
-                    operation=unsupported_operation.value,
-                    diagnostic=adaptation.diagnostic,
-                )
-                continue
-            adaptation.validate_for(plan, backend=backend.name)
-            adaptation_digests[skill.name] = adaptation.digest
-            semantic_adaptations[skill.name] = adaptation
+        semantic_adaptations, unavailable, deferred = _classify_projected_skills(
+            catalog.skills,
+            backend,
+        )
+        adaptation_digests = {
+            name: adaptation.digest for name, adaptation in semantic_adaptations.items()
+        }
+        excluded_skill_names = {refusal.skill for refusal in (*unavailable, *deferred)}
         if excluded_skill_names:
             catalog = EffectiveSkillCatalog(
                 skills=cast(
@@ -421,7 +448,7 @@ class ProjectedPluginArtifactAuthority:
             if not catalog.skills:
                 details = "; ".join(
                     f"{refusal.skill} ({refusal.operation.value}: {refusal.diagnostic})"
-                    for refusal in sorted(unavailable, key=lambda item: item.skill)
+                    for refusal in sorted((*unavailable, *deferred), key=lambda item: item.skill)
                 )
                 raise PluginArtifactPublicationError(
                     "direct plugin has no bundled skills supported by backend "
@@ -465,7 +492,6 @@ class ProjectedPluginArtifactAuthority:
             backend=backend,
             destination=destination,
             default_base_branch=_default_base_branch(self.base_branch),
-            adaptation_context=self.adaptation_context,
             projection_version=self.projection_version,
         )
         return _ProjectedArtifactPlan(
@@ -478,7 +504,8 @@ class ProjectedPluginArtifactAuthority:
             validation_catalog=source_infos if source_infos else catalog,
             require_sources_within_root=bool(source_infos),
             context=context,
-            unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
+            unavailable=unavailable,
+            deferred=deferred,
             semantic_adaptations=MappingProxyType(dict(semantic_adaptations)),
         )
 
@@ -702,7 +729,6 @@ def project_direct_install_authority(
     catalog: EffectiveSkillCatalogAuthority | None = None,
     namespace_sources: Mapping[str, SkillSource] | None = None,
     cwd: Path | None = None,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> ProjectedPluginArtifactAuthority:
     return ProjectedPluginArtifactAuthority(
         direct_install=direct_install,
@@ -712,7 +738,6 @@ def project_direct_install_authority(
         catalog=catalog,
         namespace_sources=namespace_sources,
         cwd=cwd,
-        adaptation_context=adaptation_context,
     )
 
 
@@ -724,7 +749,6 @@ def project_default_plugin_authority(
     catalog: EffectiveSkillCatalogAuthority | None = None,
     namespace_sources: Mapping[str, SkillSource] | None = None,
     cwd: Path | None = None,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> ProjectedPluginArtifactAuthority:
     return project_direct_install_authority(
         DirectInstall(plugin_dir=pkg_root()),
@@ -734,5 +758,4 @@ def project_default_plugin_authority(
         catalog=catalog,
         namespace_sources=namespace_sources,
         cwd=cwd,
-        adaptation_context=adaptation_context,
     )

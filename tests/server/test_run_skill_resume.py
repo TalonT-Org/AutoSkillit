@@ -1144,3 +1144,69 @@ async def test_fresh_dispatch_binds_only_final_backend_id_and_applies_retention_
         store.delete.assert_called_once_with("final-backend-session")
         with pytest.raises((FileNotFoundError, KeyError)):
             real_store.load("final-backend-session")
+
+
+@pytest.mark.anyio
+async def test_codex_resume_gate_receives_the_issued_managed_join_evidence(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.server.managed_join_prelaunch import ManagedJoinEvidence
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.contracts._skill_admission_ledger import _production_managed_codex_context
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    source_home = tmp_path / "source-codex-home"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n',
+        encoding="utf-8",
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
+    )
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="codex-resume-evidence",
+        cwd=tmp_path,
+    )
+    issued: list[object] = []
+
+    def issue(**kwargs: Any) -> ManagedJoinEvidence:
+        context = _production_managed_codex_context(parent_session_id=kwargs["parent_id"])
+        issued.append(context)
+        return ManagedJoinEvidence(context=context, parent_id=kwargs["parent_id"])
+
+    observed: list[object] = []
+    delegate = _patch_tools_tools_execution._check_backend_compat
+
+    def spy(*args: Any, **kwargs: Any) -> str | None:
+        observed.append(kwargs.get("adaptation_context"))
+        return delegate(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._run_skill_prepare.acquire_managed_join_evidence",
+        issue,
+    )
+    monkeypatch.setattr(_patch_tools_tools_execution, "_check_backend_compat", spy)
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
+
+    await run_skill("/implement", str(tmp_path), resume_session_id="codex-resume-evidence")
+
+    assert len(issued) == 1
+    assert observed == [issued[0]]
+    assert observed[0] is issued[0]

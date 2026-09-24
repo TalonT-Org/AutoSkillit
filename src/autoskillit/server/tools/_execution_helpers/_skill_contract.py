@@ -321,6 +321,7 @@ def rehydrate_skill_invocation(
         resolved_exploration_profile=contract.resolved_exploration_profile,
         active_exploration_applicabilities=contract.active_exploration_applicabilities,
         parent_sandbox_mode=contract.parent_sandbox_mode,
+        adaptation_context=None,
         projection_version=contract.projection_version,
     )
     return invocation, projection_context

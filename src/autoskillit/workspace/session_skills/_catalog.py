@@ -40,6 +40,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     SkillUnavailabilityRecord,
     get_logger,
+    launch_evidence_digest,
     load_bundled_agent_definitions,
     strict_walk,
     write_versioned_json,
@@ -85,6 +86,7 @@ class CompiledSessionSkillCatalog:
     catalog: EffectiveSkillCatalog
     unavailable: tuple[SkillUnavailableMetadata, ...]
     required_native_roles: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    launch_evidence_digest: str = ""
     unavailability_payload: SkillUnavailabilityPayload = field(init=False)
 
     def __post_init__(self) -> None:
@@ -100,6 +102,52 @@ class CompiledSessionSkillCatalog:
                 self.backend,
                 (item.to_payload() for item in self.unavailable),
             ),
+        )
+
+    def restrict_to_native_roles(
+        self,
+        finalized_native_roles: frozenset[str],
+    ) -> CompiledSessionSkillCatalog:
+        """Narrow this admission to skills whose native child-spawn targets were finalized."""
+        kept: list[SkillCatalogEntry] = []
+        dropped: list[SkillUnavailableMetadata] = []
+        for skill in self.catalog.skills:
+            missing_targets = sorted(
+                set(self.required_native_roles.get(skill.name, ())) - finalized_native_roles
+            )
+            if missing_targets:
+                dropped.append(
+                    SkillUnavailableMetadata(
+                        skill=skill.name,
+                        backend=self.backend,
+                        operation=SkillSemanticOperation.CHILD_SPAWN,
+                        diagnostic=(
+                            f"native child-spawn targets are unavailable: {missing_targets}"
+                        ),
+                    )
+                )
+                continue
+            kept.append(skill)
+        kept_names = {skill.name for skill in kept}
+        return CompiledSessionSkillCatalog(
+            backend=self.backend,
+            catalog=EffectiveSkillCatalog(
+                skills=tuple(kept),
+                execution_role=self.catalog.execution_role,
+                namespace_sources={
+                    name: source
+                    for name, source in self.catalog.namespace_sources.items()
+                    if name in kept_names
+                },
+                exclusions=self.catalog.exclusions,
+            ),
+            unavailable=tuple(sorted((*self.unavailable, *dropped), key=lambda item: item.skill)),
+            required_native_roles={
+                name: roles
+                for name, roles in self.required_native_roles.items()
+                if name in kept_names
+            },
+            launch_evidence_digest=self.launch_evidence_digest,
         )
 
 
@@ -233,6 +281,7 @@ def compile_session_skill_catalog(
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
         required_native_roles=required_native_roles,
+        launch_evidence_digest=launch_evidence_digest(adaptation_context),
     )
 
 
@@ -293,32 +342,6 @@ def _profile_skill_catalog(infos: tuple[SkillInfo, ...]) -> EffectiveSkillCatalo
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
         namespace_sources={info.name: info.source for info in infos},
-    )
-
-
-def _compile_reachable_profile_skill_catalog(
-    admission_compilation: CompiledSessionSkillCatalog,
-    backend: CodingAgentBackend,
-    finalized_native_roles: frozenset[str],
-) -> CompiledSessionSkillCatalog:
-    reachability_compilation = compile_session_skill_catalog(
-        admission_compilation.catalog,
-        backend,
-        finalized_native_roles=finalized_native_roles,
-    )
-    return CompiledSessionSkillCatalog(
-        backend=backend.name,
-        catalog=reachability_compilation.catalog,
-        unavailable=tuple(
-            sorted(
-                (
-                    *admission_compilation.unavailable,
-                    *reachability_compilation.unavailable,
-                ),
-                key=lambda item: item.skill,
-            )
-        ),
-        required_native_roles=reachability_compilation.required_native_roles,
     )
 
 
@@ -415,7 +438,6 @@ __all__ = [
     "SkillUnavailableMetadata",
     "_SKILL_UNAVAILABILITY_SCHEMA_VERSION",
     "_canonical_skill_unavailability_payload",
-    "_compile_reachable_profile_skill_catalog",
     "_copy_restored_skill_catalog",
     "_merge_skill_unavailability_payloads",
     "_profile_skill_catalog",

@@ -54,6 +54,7 @@ from autoskillit.server.tools._execution_helpers import (
     build_fresh_projection_context,
     resolve_skill_dispatch_metadata,
 )
+from autoskillit.server.tools._preflight import check_skill_semantic_feasibility
 from autoskillit.server.tools.tools_execution._candidate_policy import (
     candidate_authority,
     resolve_candidate_policy,
@@ -61,7 +62,7 @@ from autoskillit.server.tools.tools_execution._candidate_policy import (
 
 if TYPE_CHECKING:
     from autoskillit.config import ExecutionCandidateSpec
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import CodingAgentBackend, SemanticAdaptationContext
 from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
 logger = get_logger(__name__)
@@ -232,7 +233,16 @@ async def _prepare_dispatch_backend(
         if state._candidate_rejection_reason is not None:
             return None
 
-    _prepare_managed_parent_projection(state)
+    evidence = _prepare_managed_parent_projection(state)
+
+    if state._stored_contract is None:
+        state._candidate_rejection_reason = check_skill_semantic_feasibility(
+            getattr(getattr(state._effective_skill_contract, "root", None), "semantic_plan", None),
+            state._effective_backend_obj,
+            adaptation_context=evidence,
+        )
+        if state._candidate_rejection_reason is not None:
+            return None
 
     _bind_dispatch_projection(state)
 
@@ -253,6 +263,7 @@ async def _prepare_dispatch_backend(
                 if state._effective_skill_resolver is not None
                 else state._stored_contract_entry
             ),
+            adaptation_context=evidence,
         )
     ):
         return compat_error
@@ -308,43 +319,48 @@ def _apply_step_tuning_fallback(state: _RunSkillDispatchState) -> None:
                 )
 
 
-def _prepare_managed_parent_projection(state: _RunSkillDispatchState) -> None:
+def _prepare_managed_parent_projection(
+    state: _RunSkillDispatchState,
+) -> SemanticAdaptationContext | None:
+    """Issue managed-join evidence for this launch and return the evidence established."""
     backend = state._effective_backend_obj
-    if backend is not None and backend.capabilities.managed_fixed_batch_route_capable:
-        managed_join_parent_id = state._managed_join_parent_id
-        if not managed_join_parent_id:
-            stored_entry = state._stored_contract_entry
-            stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
-            managed_join_parent_id = (
-                stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
-            )
-        state._managed_join_parent_id = managed_join_parent_id
-
-        def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
-            logger.warning("managed_join_issuance_refused", reason=refusal.reason)
-
-        evidence = acquire_managed_join_evidence(
-            backend=backend,
-            configured_model=state.effective_model,
-            state_root=state.tool_ctx.project_dir,
-            parent_id=managed_join_parent_id,
-            launch_context="direct",
-            on_refusal=_log_refusal,
+    if backend is None or not backend.capabilities.managed_fixed_batch_route_capable:
+        return None
+    managed_join_parent_id = state._managed_join_parent_id
+    if not managed_join_parent_id:
+        stored_entry = state._stored_contract_entry
+        stored_lineage = stored_entry.managed_lineage_ref if stored_entry is not None else None
+        managed_join_parent_id = (
+            stored_lineage.launch_id if stored_lineage is not None else new_managed_launch_id()
         )
-        if evidence is None:
-            state._managed_join_parent_id = ""
-        else:
-            if state.projection_context is None:
-                raise SkillContractError("Managed execution lacks projection authority")
-            state.projection_context = replace(
-                state.projection_context,
-                adaptation_context=evidence.context,
-                managed_codex_route="parent",
-            )
-            state.provider_extras = {
-                **(state.provider_extras or {}),
-                MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
-            }
+    state._managed_join_parent_id = managed_join_parent_id
+
+    def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+        logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+    evidence = acquire_managed_join_evidence(
+        backend=backend,
+        configured_model=state.effective_model,
+        state_root=state.tool_ctx.project_dir,
+        parent_id=managed_join_parent_id,
+        launch_context="direct",
+        on_refusal=_log_refusal,
+    )
+    if evidence is None:
+        state._managed_join_parent_id = ""
+        return None
+    if state.projection_context is None:
+        raise SkillContractError("Managed execution lacks projection authority")
+    state.projection_context = replace(
+        state.projection_context,
+        adaptation_context=evidence.context,
+        managed_codex_route="parent",
+    )
+    state.provider_extras = {
+        **(state.provider_extras or {}),
+        MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id,
+    }
+    return evidence.context
 
 
 def _resolve_dispatch_backend_authority(
@@ -443,7 +459,11 @@ def _prepare_config_and_step_fallback(state: _RunSkillDispatchState, ordinal: in
     if ordinal and state._stored_contract_entry is None:
         if state.invocation is None:
             raise SkillContractError("Candidate selection lacks an invocation")
-        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+        state.projection_context = build_fresh_projection_context(
+            state.cwd,
+            state.invocation,
+            adaptation_context=None,
+        )
 
     if ordinal == 0:
         state.requested_step_provider = state.step_provider

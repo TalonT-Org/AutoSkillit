@@ -120,6 +120,7 @@ async def triage_staleness(
                         backend=backend,
                         conventions=backend.conventions,
                         gating=False,
+                        adaptation_context=None,
                     ),
                 ).content
             except ValueError:

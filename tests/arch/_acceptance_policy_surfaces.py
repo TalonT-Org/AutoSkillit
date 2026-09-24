@@ -195,6 +195,18 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
         issue=5051,
         approved_by="Trecek",
     ),
+    PolicyRelaxationApproval(
+        path="tests/arch/test_subpackage_isolation_file_counts.py",
+        symbol="FILE_COUNT_LIMITS",
+        key="core/types",
+        before="76",
+        after="77",
+        # Temporary 1-file bump to ship the cohesion-classifier extraction
+        # (PR #5172 review). Recipe ticket #5181 will decompose core/types/
+        # into subfolders and lower this cap.
+        issue=5181,
+        approved_by="Trecek",
+    ),
 )
 
 POLICY_AUTHORITY_PATHS = (

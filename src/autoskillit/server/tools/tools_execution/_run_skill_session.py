@@ -125,7 +125,11 @@ def _resolve_fresh_invocation(state: _RunSkillDispatchState) -> str | None:
             recipe_packs=state.tool_ctx.active_recipe_packs,
             recipe_features=state.tool_ctx.active_recipe_features,
         )
-        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+        state.projection_context = build_fresh_projection_context(
+            state.cwd,
+            state.invocation,
+            adaptation_context=None,
+        )
     except SkillContractError as exc:
         return SkillResult.crashed(
             exception=exc,

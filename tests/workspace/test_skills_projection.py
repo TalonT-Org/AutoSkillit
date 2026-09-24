@@ -411,6 +411,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
     monkeypatch,
 ) -> None:
     from autoskillit.core import (
+        BackendCapabilities,
         BackendConventions,
         DirectInstall,
         PluginArtifactContentionError,
@@ -497,6 +498,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
 
     backend = SimpleNamespace(
         name="codex",
+        capabilities=BackendCapabilities(),
         conventions=BackendConventions(),
         adapt_skill_semantics=adapt_semantics,
     )

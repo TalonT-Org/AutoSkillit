@@ -31,6 +31,7 @@ from autoskillit.execution.backends import managed_codex_route_for_launch_contex
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from autoskillit.core import SemanticAdaptationContext
     from autoskillit.fleet import ResumeDecision
     from autoskillit.recipe.schema import Recipe
 
@@ -59,7 +60,7 @@ def _fleet_session_launcher(
     mcp_tool_timeout_sec: float,
     cook_ceiling_seconds: float,
     systemd_scope_enabled: bool,
-    adaptation_context: Any | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
     managed_join_parent_id: str | None = None,
 ) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
     """Keep one leased wrapper home through a fleet session's retry loop."""

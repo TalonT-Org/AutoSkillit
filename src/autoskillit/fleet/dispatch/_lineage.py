@@ -14,7 +14,7 @@ carrying every value Phase C needs to spawn the executor.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -185,12 +185,8 @@ def prepare_launch(
             default_base_branch=tool_ctx.config.branching.default_base_branch,
             recipe_packs=tool_ctx.active_recipe_packs,
             recipe_features=tool_ctx.active_recipe_features,
+            adaptation_context=adaptation_context,
         )
-        if adaptation_context is not None:
-            capability_preparation = replace(
-                capability_preparation,
-                adaptation_context=adaptation_context,
-            )
     authoritative_cwd = (
         capability_preparation.cwd if capability_preparation is not None else tool_ctx.project_dir
     ).resolve()

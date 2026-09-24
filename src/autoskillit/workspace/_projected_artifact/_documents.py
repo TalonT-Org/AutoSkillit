@@ -357,7 +357,6 @@ def _direct_install_projection_context(
     backend: CodingAgentBackend,
     destination: Path,
     default_base_branch: str,
-    adaptation_context: SemanticAdaptationContext | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
 ) -> SkillProjectionContext:
     """Bind every byte-affecting input shared by a direct install and dispatch."""
@@ -373,7 +372,7 @@ def _direct_install_projection_context(
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
             "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
         },
-        adaptation_context=adaptation_context,
+        adaptation_context=None,
         projection_version=projection_version,
     )
 

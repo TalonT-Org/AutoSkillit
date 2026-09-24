@@ -1174,6 +1174,122 @@ def test_profile_materialization_applies_semantic_and_finalized_native_role_admi
     assert not (catalog_root / "profile-helper").exists()
 
 
+def test_profile_reachability_narrowing_keeps_attested_join_skills(tmp_path: Path) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillsDirectoryProvider,
+        materialize_profile_skills,
+    )
+    from tests.fakes import make_managed_codex_context
+
+    source_home = tmp_path / "source-codex-home"
+    source_skills = source_home / "skills"
+    _write_profile_skill(
+        source_skills,
+        "join-required",
+        frontmatter=("semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    context = replace(
+        SkillsDirectoryProvider().catalog_projection_context(
+            catalog,
+            tmp_path,
+            backend=backend,
+            durable_scripts_root=pkg_root(),
+        ),
+        adaptation_context=make_managed_codex_context("profile-reach"),
+    )
+
+    catalog_root = tmp_path / "generated-home" / "add-dir" / "skills"
+    catalog_root.mkdir(parents=True)
+    compilation = materialize_profile_skills(
+        catalog_root,
+        source_skills,
+        backend,
+        context,
+        finalized_native_roles=frozenset({"file_change"}),
+    )
+
+    assert [skill.name for skill in compilation.catalog.skills] == ["join-required"]
+    assert compilation.unavailable == ()
+
+
+def test_native_role_narrowing_equals_readmission_under_the_same_evidence() -> None:
+    from autoskillit.core import SkillVisibilitySpec
+    from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+    from tests.fakes import make_managed_codex_context
+
+    source_catalog = DefaultSkillResolver().list_effective(
+        None,
+        SkillExecutionRole.SESSION,
+        visibility=SkillVisibilitySpec(),
+        cook_session=True,
+    )
+    for backend, ctx in (
+        (ClaudeCodeBackend(), None),
+        (CodexBackend(), make_managed_codex_context("narrow")),
+        (CodexBackend(), None),
+    ):
+        full = compile_session_skill_catalog(source_catalog, backend, adaptation_context=ctx)
+        every_role = frozenset(
+            role for roles in full.required_native_roles.values() for role in roles
+        )
+        for roles in (frozenset(), frozenset({"file_change"}), every_role):
+            narrowed = full.restrict_to_native_roles(roles)
+            readmitted = compile_session_skill_catalog(
+                source_catalog,
+                backend,
+                finalized_native_roles=roles,
+                adaptation_context=ctx,
+            )
+            label = f"{backend.name}/{ctx is not None}/{sorted(roles)}"
+            assert [skill.name for skill in narrowed.catalog.skills] == [
+                skill.name for skill in readmitted.catalog.skills
+            ], label
+            assert narrowed.unavailable == readmitted.unavailable, label
+            assert dict(narrowed.required_native_roles) == dict(
+                readmitted.required_native_roles
+            ), label
+            assert narrowed.launch_evidence_digest == readmitted.launch_evidence_digest, label
+
+
+def test_materialization_rejects_a_compilation_bound_to_different_launch_evidence(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace import compile_session_skill_catalog
+    from tests.fakes import make_managed_codex_context
+    from tests.workspace._helpers import _catalog_context
+
+    backend = _make_codex_backend()
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(
+        manager, backend=backend, names=frozenset({"make-arch-diag"})
+    )
+    compilation = compile_session_skill_catalog(
+        catalog,
+        backend,
+        adaptation_context=make_managed_codex_context("seam-a"),
+    )
+    for mismatched in (make_managed_codex_context("seam-b"), None):
+        with pytest.raises(SkillContractError, match="different launch evidence"):
+            with manager.managed_session(
+                f"seam-{'none' if mismatched is None else 'b'}",
+                compilation,
+                replace(context, adaptation_context=mismatched),
+            ):
+                pass
+    with manager.managed_session(
+        "seam-match",
+        compilation,
+        replace(context, adaptation_context=make_managed_codex_context("seam-a")),
+    ) as home:
+        assert home is not None
+
+
 def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
     make_session_skill_manager,
     tmp_path: Path,

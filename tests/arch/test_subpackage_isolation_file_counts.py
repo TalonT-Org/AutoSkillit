@@ -136,7 +136,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/pipeline": 5,  # 4 files + __init__ + buffer
     "core/context_admission": 9,  # 8 files + __init__
     # _type_truth replaces the retired _type_tradition_manifest shard.
-    "core/types": 76,
+    "core/types": 77,
     "core/runtime": 11,
     "config": 20,
     "recipe": 12,  # 12 real files after excluding registered forwarding shims

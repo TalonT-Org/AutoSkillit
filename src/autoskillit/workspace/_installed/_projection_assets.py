@@ -189,5 +189,10 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
             "Same as `skills`: canonical skill trees are never copied verbatim into a "
             "projection (_CANONICAL_SKILL_DIRS), only projected from their contracts."
         ),
+        "adaptation_context": (
+            "Launch-bound managed-join evidence covers parent_session_id; the shared "
+            "projection accepts none and defers evidence-dependent skills to the attested "
+            "generated home, so it cannot affect projected bytes."
+        ),
     }
 )

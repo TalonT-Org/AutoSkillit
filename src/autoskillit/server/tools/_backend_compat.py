@@ -23,6 +23,7 @@ from autoskillit.core import (
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
+    check_session_invariant_semantic_feasibility,
     check_skill_semantic_feasibility,
 )
 from autoskillit.workspace import (
@@ -62,12 +63,13 @@ def _candidate_backend_rejection_reason(
     parent_sandbox_mode: str,
     write_spec: WriteBehaviorSpec | None,
     binary_available: bool,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str | None:
-    """Return the first reason a fresh execution candidate cannot launch.
+    """Return the first reason a fresh candidate cannot launch that no launch evidence can lift.
 
     Candidate selection evaluates the whole resolved closure against the exact
-    worker backend. Direct callers retain the historical root-only gate below.
+    worker backend: closure capabilities, a backend-absolute root semantic refusal,
+    sandbox, then binary. The caller evaluates evidence-dependent semantic admission
+    after managed-join issuance. Direct callers retain the root-only gate below.
     """
     closure = tuple(getattr(skill_info, "closure", ()))
     capabilities = set(getattr(skill_info, "capability_union", ()))
@@ -88,10 +90,9 @@ def _candidate_backend_rejection_reason(
             )
 
     root = getattr(skill_info, "root", None)
-    semantic_error = check_skill_semantic_feasibility(
+    semantic_error = check_session_invariant_semantic_feasibility(
         getattr(root, "semantic_plan", None),
         effective_backend_obj,
-        adaptation_context=adaptation_context,
     )
     if semantic_error:
         return semantic_error
@@ -190,48 +191,10 @@ def _check_backend_compat(
     return None
 
 
-def _resolve_and_check_backend_compat(
-    skill_command: str,
-    tool_ctx: ToolContext,
-) -> str | None:
-    """Resolve a direct skill invocation and run the fail-closed compatibility gate."""
-    resolved_command = skill_command
-    target_name = extract_skill_name(skill_command)
-    skill_invocation: object | None = None
-    if tool_ctx.skill_resolver is not None and target_name is not None:
-        try:
-            skill_invocation = tool_ctx.skill_resolver.resolve_invocation(
-                target_name,
-                tool_ctx.project_dir,
-                SkillExecutionRole.SESSION,
-                visibility=tool_ctx.config.skill_visibility_spec(),
-                recipe_packs=tool_ctx.active_recipe_packs,
-                recipe_features=tool_ctx.active_recipe_features,
-            )
-        except SkillContractError as exc:
-            return SkillResult.crashed(
-                exception=exc,
-                skill_command=resolved_command,
-                order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
-            ).to_json()
-
-    return _check_backend_compat(
-        skill_command=skill_command,
-        resolved_command=resolved_command,
-        effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
-        target_name=target_name,
-        skill_info=skill_invocation,
-        effective_backend_obj=tool_ctx.backend,
-        skill_resolver=tool_ctx.skill_resolver,
-    )
-
-
 def _prepare_direct_skill_dispatch(
     skill_command: str,
     cwd: str | Path,
     tool_ctx: ToolContext,
-    *,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> tuple[DirectSkillDispatch | None, str | None]:
     """Resolve policy once, then materialize its agent-safe projection."""
     target_name = extract_skill_name(skill_command)
@@ -283,7 +246,7 @@ def _prepare_direct_skill_dispatch(
         skill_info=invocation,
         effective_backend_obj=tool_ctx.backend,
         skill_resolver=tool_ctx.skill_resolver,
-        adaptation_context=adaptation_context,
+        adaptation_context=None,
     )
     if compatibility_error is not None:
         return None, compatibility_error
@@ -297,7 +260,7 @@ def _prepare_direct_skill_dispatch(
         conventions=backend.conventions if backend is not None else None,
         substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
         gating=False,
-        adaptation_context=adaptation_context,
+        adaptation_context=None,
     )
     session_id = f"direct-{uuid4().hex[:12]}"
     try:

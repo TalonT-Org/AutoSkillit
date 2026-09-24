@@ -93,7 +93,6 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "SkillUnavailableMetadata",
             "_SKILL_UNAVAILABILITY_SCHEMA_VERSION",
             "_canonical_skill_unavailability_payload",
-            "_compile_reachable_profile_skill_catalog",
             "_copy_restored_skill_catalog",
             "_merge_skill_unavailability_payloads",
             "_profile_skill_catalog",

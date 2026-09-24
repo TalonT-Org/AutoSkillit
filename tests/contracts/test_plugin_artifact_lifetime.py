@@ -212,6 +212,57 @@ def test_projected_plugin_plan_retains_mixed_refusal_details(
     )
 
 
+def test_backend_absolute_projection_refusals_emit_one_aggregated_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import SkillSemanticAdaptationResult, SkillSemanticOperation
+    from tests.fakes import adapt_test_skill_semantics
+
+    catalog, plans = _semantic_catalog(
+        tmp_path,
+        {
+            "portable": "  git_metadata_writes:\n  - purpose: create one commit\n",
+            "refused-a": "  join:\n    required: true\n",
+            "refused-b": "  join:\n    required: true\n",
+        },
+    )
+    refused_plans = (plans["refused-a"], plans["refused-b"])
+
+    def adapt(_backend, plan, adaptation_context=None):
+        if any(plan is refused for refused in refused_plans):
+            return SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+                diagnostic="fixed-set join is unavailable in the projected backend",
+            )
+        return adapt_test_skill_semantics(plan)
+
+    monkeypatch.setattr(ClaudeCodeBackend, "adapt_skill_semantics", adapt)
+    authority = project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=catalog,
+    )
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            plan = authority._plan(ClaudeCodeBackend())
+    finally:
+        _flush_structlog_proxy_caches()
+
+    aggregated = [
+        entry for entry in logs if entry.get("event") == "projected_plugin_skills_unavailable"
+    ]
+    assert len(aggregated) == 1
+    assert aggregated[0]["log_level"] == "warning"
+    assert aggregated[0]["count"] == len(plan.unavailable) == 2
+    assert tuple(aggregated[0]["skills"]) == ("refused-a", "refused-b")
+    assert not [
+        entry for entry in logs if entry.get("event") == "projected_plugin_skill_unavailable"
+    ]
+    assert plan.deferred == ()
+
+
 def test_projected_plugin_reuses_supported_adaptation_during_staging(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

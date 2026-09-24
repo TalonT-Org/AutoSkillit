@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
 
 from autoskillit.core import (
     CodingAgentBackend,
-    SemanticAdaptationContext,
+    LaunchEvidenceDeferral,
+    SessionInvariantAdaptationRefusal,
     Severity,
+    SkillSemanticAdaptationResult,
+    classify_session_invariant,
     get_logger,
     resolve_temp_dir,
 )
@@ -257,7 +260,6 @@ def _check_target_step_semantics(
     dotted_key: str,
     root: Path,
     resolver: SkillResolver,
-    adaptation_context: SemanticAdaptationContext | None,
 ) -> list[DoctorResult]:
     from autoskillit.workspace import render_skill_invalidities
 
@@ -289,27 +291,34 @@ def _check_target_step_semantics(
     if skill_info.semantic_plan is None:
         return []
 
-    adaptation = backend.adapt_skill_semantics(
-        skill_info.semantic_plan,
-        adaptation_context,
-    )
-    unsupported_operation = adaptation.validate_refusal_for(
-        skill_info.semantic_plan,
-        backend=backend_name,
-    )
-    if unsupported_operation is not None:
-        return [
-            DoctorResult(
-                Severity.ERROR,
-                "standing_backend_pins_feasibility",
-                f"{config_path}: {dotted_key} pins backend {backend_name!r} "
-                f"for step {target_step.name!r}, but {adaptation.diagnostic}. "
-                "Remove or update this pin, or choose a backend that "
-                "supports the skill's semantic requirements.",
-            )
-        ]
-    adaptation.validate_for(skill_info.semantic_plan, backend=backend_name)
-    return []
+    match classify_session_invariant(skill_info.semantic_plan, backend):
+        case LaunchEvidenceDeferral(operation=op):
+            return [
+                DoctorResult(
+                    Severity.INFO,
+                    "standing_backend_pins_feasibility",
+                    f"{config_path}: {dotted_key} pins backend {backend_name!r} "
+                    f"for step {target_step.name!r}; its {op.value} "
+                    "requirement is admitted only through the managed-join route "
+                    "issued at launch. The codex_managed_preparation check reports "
+                    "that route's readiness.",
+                )
+            ]
+        case SessionInvariantAdaptationRefusal(diagnostic=diag):
+            return [
+                DoctorResult(
+                    Severity.ERROR,
+                    "standing_backend_pins_feasibility",
+                    f"{config_path}: {dotted_key} pins backend {backend_name!r} "
+                    f"for step {target_step.name!r}, but {diag}. "
+                    "Remove or update this pin, or choose a backend that "
+                    "supports the skill's semantic requirements.",
+                )
+            ]
+        case SkillSemanticAdaptationResult():
+            return []
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _check_backend_pin_feasibility(
@@ -321,7 +330,6 @@ def _check_backend_pin_feasibility(
     *,
     root: Path,
     resolver: SkillResolver,
-    adaptation_context: SemanticAdaptationContext | None,
 ) -> list[DoctorResult]:
     from autoskillit.core import YAMLError, resolve_temp_dir
     from autoskillit.execution import get_backend
@@ -415,7 +423,6 @@ def _check_backend_pin_feasibility(
                 dotted_key=dotted_key,
                 root=root,
                 resolver=resolver,
-                adaptation_context=adaptation_context,
             )
         )
     return results
@@ -423,8 +430,6 @@ def _check_backend_pin_feasibility(
 
 def _check_standing_backend_pins_feasibility(
     project_dir: Path | None = None,
-    *,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> list[DoctorResult]:
     """Check that every standing agent_backend pin can adapt skill semantics.
 
@@ -476,7 +481,6 @@ def _check_standing_backend_pins_feasibility(
                     backend_name,
                     root=root,
                     resolver=resolver,
-                    adaptation_context=adaptation_context,
                 )
             )
 

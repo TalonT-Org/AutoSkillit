@@ -30,6 +30,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    launch_evidence_digest,
     managed_route_backend,
     managed_skill_relative_path,
     observe_path_mode,
@@ -37,7 +38,6 @@ from autoskillit.core import (
 from autoskillit.workspace.session_skills._catalog import (
     CompiledSessionSkillCatalog,
     _canonical_skill_unavailability_payload,
-    _compile_reachable_profile_skill_catalog,
     _copy_restored_skill_catalog,
     _merge_skill_unavailability_payloads,
     _profile_skill_catalog,
@@ -176,11 +176,7 @@ def materialize_profile_skills(
     )
     compilation = admission_compilation
     if finalized_native_roles is not None:
-        compilation = _compile_reachable_profile_skill_catalog(
-            admission_compilation,
-            backend,
-            finalized_native_roles,
-        )
+        compilation = admission_compilation.restrict_to_native_roles(finalized_native_roles)
     return _materialize_profile_skill_infos(
         catalog_dir,
         compilation,
@@ -221,6 +217,20 @@ def _admit_invocation_records(
         invocation_required_native_roles.update(_required_native_child_roles(plan, adaptation))
         admitted_records.append(record)
     return tuple(admitted_records), invocation_required_native_roles
+
+
+def _require_same_launch_evidence(
+    compilation: CompiledSessionSkillCatalogAuthority,
+    projection_context: SkillProjectionContextAuthority,
+) -> None:
+    adaptation_context = projection_context.adaptation_context
+    compiled_digest = str(compilation.launch_evidence_digest)
+    projection_digest = str(launch_evidence_digest(adaptation_context))
+    if compiled_digest != projection_digest:
+        raise SkillContractError(
+            "session compilation and materialization carry different launch evidence: "
+            f"compiled={compiled_digest!r} projection={projection_digest!r}"
+        )
 
 
 def _materialize_discovery_entry_point(
@@ -478,6 +488,7 @@ def _materialize_session(
     effective_catalog = projection_context.catalog
     invocation_required_native_roles: set[str] = set()
     if compilation is not None:
+        _require_same_launch_evidence(compilation, projection_context)
         effective_catalog = compilation.catalog
         records = tuple(effective_catalog.skills)
     elif backend is not None and effective_catalog is not None:
@@ -538,20 +549,16 @@ def _materialize_session(
 
     if finalized_native_roles is not None and effective_catalog is not None:
         assert backend is not None
-        if compilation is not None and not isinstance(compilation, CompiledSessionSkillCatalog):
+        if not isinstance(compilation, CompiledSessionSkillCatalog):
             raise SkillContractError(
                 "finalized native-role admission requires a concrete session compilation"
             )
-        reachability_compilation = compile_session_skill_catalog(
-            effective_catalog,
-            backend,
-            finalized_native_roles=finalized_native_roles,
-            adaptation_context=projection_context.adaptation_context,
-        )
+        restricted = compilation.restrict_to_native_roles(finalized_native_roles)
         reachability_pruning = tuple(
             unavailable
-            for unavailable in reachability_compilation.unavailable
+            for unavailable in restricted.unavailable
             if unavailable.operation is SkillSemanticOperation.CHILD_SPAWN
+            and unavailable not in compilation.unavailable
         )
         if reachability_pruning:
             logger.error(
@@ -561,18 +568,7 @@ def _materialize_session(
                 diagnostics=tuple(item.diagnostic for item in reachability_pruning),
                 count=len(reachability_pruning),
             )
-        prior_unavailable = compilation.unavailable if compilation is not None else ()
-        compilation = CompiledSessionSkillCatalog(
-            backend=backend.name,
-            catalog=reachability_compilation.catalog,
-            unavailable=tuple(
-                sorted(
-                    (*prior_unavailable, *reachability_compilation.unavailable),
-                    key=lambda item: item.skill,
-                )
-            ),
-            required_native_roles=reachability_compilation.required_native_roles,
-        )
+        compilation = restricted
         effective_catalog = compilation.catalog
         records = tuple(effective_catalog.skills)
 
@@ -592,10 +588,8 @@ def _materialize_session(
         if finalized_native_roles is None:
             profile_compilation = profile_admission_compilation
         else:
-            profile_compilation = _compile_reachable_profile_skill_catalog(
-                profile_admission_compilation,
-                backend,
-                finalized_native_roles,
+            profile_compilation = profile_admission_compilation.restrict_to_native_roles(
+                finalized_native_roles
             )
     unavailability_payload = (
         _merge_skill_unavailability_payloads(

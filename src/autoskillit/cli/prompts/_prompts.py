@@ -226,6 +226,7 @@ def _read_full_sous_chef(
             backend=backend,
             conventions=getattr(backend, "conventions", None),
             gating=False,
+            adaptation_context=None,
         ),
     ).content
     parsed = parse_frontmatter_content(projected)

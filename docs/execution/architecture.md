@@ -164,7 +164,12 @@ scratch, validates and projects the configured model, and does not depend on a
 pre-existing source-home `models_cache.json`. `autoskillit doctor` runs the same
 preparation probe without issuing an attestation; failures report the concrete
 preparation reason, and a refused cook prints that reason once beside the
-resulting `required_join` exclusions.
+resulting `required_join` exclusions. Dispatch preflight and the doctor's
+standing-pin check run before any launch exists; they evaluate through
+`adapt_session_invariant` and defer managed-join-dependent refusals to the
+dispatch-time gate. `run_skill` evaluates semantic admission only after
+managed-join issuance, with the issued evidence, and fails closed with the
+backend diagnostic when issuance is refused.
 
 With the attestation, catalog compilation, the per-session projection binding,
 and generated skill documents carry one launch's adaptation context, and

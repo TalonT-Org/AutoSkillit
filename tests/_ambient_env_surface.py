@@ -983,7 +983,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/tools/tools_execution/_run_skill_prepare.py:122": (
+    "server/tools/tools_execution/_run_skill_prepare.py:123": (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from the persisted launch contract, not a statically resolvable name."
     ),

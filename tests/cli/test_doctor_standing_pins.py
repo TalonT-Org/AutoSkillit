@@ -32,6 +32,7 @@ class TestStandingBackendPinsFeasibility:
             "UnsupportedBackend",
             (),
             {
+                "name": "codex",
                 "adapt_skill_semantics": lambda self, plan, adaptation_context=None: (
                     SkillSemanticAdaptationResult.unsupported(
                         backend="codex",
@@ -101,6 +102,7 @@ class TestStandingBackendPinsFeasibility:
             "MalformedBackend",
             (),
             {
+                "name": "codex",
                 "adapt_skill_semantics": lambda self, plan, adaptation_context=None: result,
                 "capabilities": BackendCapabilities(),
             },
@@ -219,6 +221,47 @@ class TestStandingBackendPinsFeasibility:
         result = results[0]
         assert result.check == "standing_backend_pins_feasibility"
         assert result.severity is Severity.OK
+
+    def test_codex_pin_on_join_required_step_reports_launch_route_info(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli.doctor._doctor_config import (
+            _check_standing_backend_pins_feasibility,
+        )
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        _write_config(
+            tmp_path / "home" / ".autoskillit" / "config.yaml",
+            "agent_backend:\n  recipe_overrides:\n    remediation:\n      assess: codex\n",
+        )
+        project_dir = tmp_path / "project"
+        override = project_dir / ".claude" / "skills" / "resolve-failures" / "SKILL.md"
+        override.parent.mkdir(parents=True)
+        override.write_text(
+            "---\n"
+            "name: resolve-failures\n"
+            "description: Project-local join-bearing contract.\n"
+            "semantic_version: 1\n"
+            "semantic_requirements:\n"
+            "  join:\n"
+            "    required: true\n"
+            "---\n"
+            "Resolve the supplied test failures.\n"
+        )
+
+        results = _check_standing_backend_pins_feasibility(project_dir=project_dir)
+
+        assert not [r for r in results if r.severity is Severity.ERROR], results
+        infos = [
+            r
+            for r in results
+            if r.severity is Severity.INFO and r.check == "standing_backend_pins_feasibility"
+        ]
+        assert len(infos) == 1, results
+        assert "'assess'" in infos[0].message
+        assert "'codex'" in infos[0].message
+        assert "codex_managed_preparation" in infos[0].message
 
     def test_unknown_backend_degrades_to_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

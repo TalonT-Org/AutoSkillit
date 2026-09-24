@@ -5,15 +5,18 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
 
 from autoskillit.core import (
     CodingAgentBackend,
     FinalizedRecipeStep,
+    LaunchEvidenceDeferral,
     SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
+    SkillSemanticAdaptationResult,
     SkillSemanticPlan,
+    adapt_session_invariant,
 )
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
@@ -43,7 +46,11 @@ def check_skill_semantic_feasibility(
     *,
     adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str | None:
-    """Return the selected backend's exact root-operation refusal diagnostic."""
+    """Return the selected backend's exact root-operation refusal diagnostic.
+
+    Launch-scoped: pass the evidence the launch holds; session-invariant surfaces use
+    ``check_session_invariant_semantic_feasibility``.
+    """
     if plan is None:
         return None
     adaptation = backend.adapt_skill_semantics(plan, adaptation_context)
@@ -55,6 +62,26 @@ def check_skill_semantic_feasibility(
         return adaptation.diagnostic
     adaptation.validate_for(plan, backend=backend.name)
     return None
+
+
+def check_session_invariant_semantic_feasibility(
+    plan: SkillSemanticPlan | None,
+    backend: CodingAgentBackend,
+) -> str | None:
+    """Return a root refusal diagnostic that no launch evidence can lift.
+
+    Session-invariant: a refusal that launch-bound managed-join evidence can lift is
+    deferred to the launch-scoped gate, which holds that evidence.
+    """
+    if plan is None:
+        return None
+    match adapt_session_invariant(plan, backend):
+        case LaunchEvidenceDeferral():
+            return None
+        case SkillSemanticAdaptationResult() as adaptation:
+            return adaptation.diagnostic if adaptation.unsupported_operation is not None else None
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _check_pinned_step_feasibility(
@@ -154,7 +181,7 @@ def _check_pinned_step_feasibility(
                     "skill": _skill_name,
                 }
             )
-        semantic_error = check_skill_semantic_feasibility(
+        semantic_error = check_session_invariant_semantic_feasibility(
             _skill_invocation.root.semantic_plan,
             _pinned_backend,
         )

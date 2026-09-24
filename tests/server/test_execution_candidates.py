@@ -11,7 +11,14 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.server as server
-from autoskillit.core import SkillExecutionRole, SkillSource
+from autoskillit.core import (
+    JoinSpec,
+    SkillExecutionRole,
+    SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
+    SkillSemanticPlan,
+    SkillSource,
+)
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
 
@@ -23,7 +30,13 @@ def _install_invocation(
     *,
     tmp_path: Path,
     capabilities: frozenset[str],
+    semantic_plan: SkillSemanticPlan | None = None,
 ) -> None:
+    semantic_frontmatter = (
+        "semantic_version: 1\nsemantic_requirements:\n  join:\n    required: true\n"
+        if semantic_plan is not None
+        else ""
+    )
     root = SkillInfo(
         name="candidate-probe",
         source=SkillSource.BUNDLED_EXTENDED,
@@ -32,8 +45,9 @@ def _install_invocation(
         canonical_content=(
             "---\nname: candidate-probe\ndescription: Candidate probe.\n"
             f"uses_capabilities: {sorted(capabilities)!r}\n"
-            "execution_role: session\n---\n# Candidate probe\n"
+            f"execution_role: session\n{semantic_frontmatter}---\n# Candidate probe\n"
         ),
+        semantic_plan=semantic_plan,
     )
     invocation = EffectiveSkillInvocation(
         root=root,
@@ -207,3 +221,128 @@ async def test_codex_parent_rejects_the_rerouted_claude_worker_before_it_starts(
     assert attempts[1]["parent_backend"] == "codex"
     assert attempts[1]["rejection_reason"] == "quota_exhausted"
     assert attempts[1]["rate_limit_resets_at_epoch"] == reset_epoch
+
+
+_PREPARE = "autoskillit.server.tools.tools_execution._run_skill_prepare"
+_CODEX_REQUIRED_JOIN_DIAGNOSTIC = (
+    "Codex exposes wait-any/mailbox-activity semantics rather than fixed-set fan-in."
+)
+
+
+def _configure_join_required_codex_root(
+    tool_ctx: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    binary_path: str | None,
+) -> None:
+    from autoskillit.config import AgentBackendConfig
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    tool_ctx.executor = InMemoryHeadlessExecutor()
+    tool_ctx.config.agent_backend = AgentBackendConfig(backend="codex")
+    _configure_candidate_backends(tool_ctx, monkeypatch)
+    _install_invocation(
+        tool_ctx,
+        tmp_path=tmp_path,
+        capabilities=frozenset(),
+        semantic_plan=SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True)),
+    )
+    monkeypatch.setattr(f"{_PREPARE}.shutil.which", lambda _binary: binary_path)
+    monkeypatch.setattr(server, "_ctx", tool_ctx)
+
+
+def _attempts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return list((payload.get("execution_selection") or {}).get("attempts") or [])
+
+
+@pytest.mark.anyio
+async def test_attested_join_required_codex_root_is_admitted_after_issuance(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.server.managed_join_prelaunch import ManagedJoinEvidence
+    from tests.contracts._skill_admission_ledger import _production_managed_codex_context
+
+    _configure_join_required_codex_root(
+        tool_ctx_kitchen_open, tmp_path, monkeypatch, binary_path="/usr/bin/codex"
+    )
+
+    def issue(**kwargs: Any) -> ManagedJoinEvidence:
+        return ManagedJoinEvidence(
+            context=_production_managed_codex_context(parent_session_id=kwargs["parent_id"]),
+            parent_id=kwargs["parent_id"],
+        )
+
+    monkeypatch.setattr(f"{_PREPARE}.acquire_managed_join_evidence", issue)
+
+    payload = json.loads(await run_skill("/autoskillit:candidate-probe", str(tmp_path)))
+
+    assert payload.get("candidate_exhausted") is not True
+    assert not [
+        attempt
+        for attempt in _attempts(payload)
+        if attempt.get("admission_status") == "incompatible"
+        and "join.required" in (attempt.get("rejection_reason") or "")
+    ]
+
+
+@pytest.mark.anyio
+async def test_refused_issuance_rejects_join_required_codex_root(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_join_required_codex_root(
+        tool_ctx_kitchen_open, tmp_path, monkeypatch, binary_path="/usr/bin/codex"
+    )
+    monkeypatch.setattr(f"{_PREPARE}.acquire_managed_join_evidence", lambda **_kwargs: None)
+
+    payload = json.loads(await run_skill("/autoskillit:candidate-probe", str(tmp_path)))
+
+    assert payload["candidate_exhausted"] is True
+    assert _CODEX_REQUIRED_JOIN_DIAGNOSTIC in _attempts(payload)[0]["rejection_reason"]
+
+
+@pytest.mark.anyio
+async def test_missing_binary_rejects_candidate_before_issuance(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_join_required_codex_root(
+        tool_ctx_kitchen_open, tmp_path, monkeypatch, binary_path=None
+    )
+    issuance = MagicMock(return_value=None)
+    monkeypatch.setattr(f"{_PREPARE}.acquire_managed_join_evidence", issuance)
+
+    payload = json.loads(await run_skill("/autoskillit:candidate-probe", str(tmp_path)))
+
+    issuance.assert_not_called()
+    assert "on PATH" in _attempts(payload)[0]["rejection_reason"]
+
+
+@pytest.mark.anyio
+async def test_backend_absolute_semantic_refusal_rejects_candidate_before_issuance(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_join_required_codex_root(
+        tool_ctx_kitchen_open, tmp_path, monkeypatch, binary_path="/usr/bin/codex"
+    )
+    issuance = MagicMock(return_value=None)
+    monkeypatch.setattr(f"{_PREPARE}.acquire_managed_join_evidence", issuance)
+    monkeypatch.setattr(
+        "autoskillit.server.tools._preflight.adapt_session_invariant",
+        lambda _plan, _backend: SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+            diagnostic="absolute refusal",
+        ),
+    )
+
+    payload = json.loads(await run_skill("/autoskillit:candidate-probe", str(tmp_path)))
+
+    issuance.assert_not_called()
+    assert _attempts(payload)[0]["rejection_reason"] == "absolute refusal"

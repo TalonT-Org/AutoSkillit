@@ -23,6 +23,7 @@ from autoskillit.core import (
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
+    check_session_invariant_semantic_feasibility,
     check_skill_semantic_feasibility,
 )
 from autoskillit.workspace import (
@@ -62,12 +63,13 @@ def _candidate_backend_rejection_reason(
     parent_sandbox_mode: str,
     write_spec: WriteBehaviorSpec | None,
     binary_available: bool,
-    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str | None:
-    """Return the first reason a fresh execution candidate cannot launch.
+    """Return the first reason a fresh candidate cannot launch that no launch evidence can lift.
 
     Candidate selection evaluates the whole resolved closure against the exact
-    worker backend. Direct callers retain the historical root-only gate below.
+    worker backend: closure capabilities, a backend-absolute root semantic refusal,
+    sandbox, then binary. The caller evaluates evidence-dependent semantic admission
+    after managed-join issuance. Direct callers retain the root-only gate below.
     """
     closure = tuple(getattr(skill_info, "closure", ()))
     capabilities = set(getattr(skill_info, "capability_union", ()))
@@ -88,10 +90,9 @@ def _candidate_backend_rejection_reason(
             )
 
     root = getattr(skill_info, "root", None)
-    semantic_error = check_skill_semantic_feasibility(
+    semantic_error = check_session_invariant_semantic_feasibility(
         getattr(root, "semantic_plan", None),
         effective_backend_obj,
-        adaptation_context=adaptation_context,
     )
     if semantic_error:
         return semantic_error

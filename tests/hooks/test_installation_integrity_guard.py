@@ -129,6 +129,45 @@ def test_blocks_process_substitution_install_tree_write(
     )
 
 
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "(cp /tmp/s {target})",
+        "{ cp /tmp/s {target}; }",
+        "(rm -rf {target})",
+        "(echo x > {target})",
+        "true && (tee {target} < /dev/null)",
+    ],
+    ids=["subshell-copy", "brace-copy", "subshell-remove", "subshell-redirect", "chained-tee"],
+)
+def test_blocks_grouped_install_tree_writes(tmp_path: Path, command_template: str) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/x.py"
+    command = command_template.replace("{target}", str(target))
+    code, stdout = _run(_bash(command))
+
+    assert code == 0
+    # Grouping invariance keeps protected writes denied inside either shell group.
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_allows_comment_only_command() -> None:
+    code, stdout = _run(_bash("# Run linting and tests"))
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_allows_grouped_read_only_command() -> None:
+    code, stdout = _run(_bash("(cd /tmp && ls)"))
+
+    assert code == 0
+    assert stdout == ""
+
+
 def test_unresolved_deny_message_names_literal_remediation() -> None:
     code, stdout = _run(_bash('F=x; echo > "$F"'))
 

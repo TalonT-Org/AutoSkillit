@@ -311,6 +311,258 @@ class TestTokenizeCommandSegments:
         assert len(result) == 2
 
 
+class TestBashWordBoundaries:
+    @pytest.mark.parametrize(
+        ("command", "expected_tokens", "expected_redirect_syntax"),
+        [
+            (
+                "cp /tmp/s $(echo a /root)/probe.txt",
+                ["cp", "/tmp/s", "$(echo a /root)/probe.txt"],
+                [False, False, False],
+            ),
+            (
+                "cp /tmp/s `echo a /root`/probe.txt",
+                ["cp", "/tmp/s", "`echo a /root`/probe.txt"],
+                [False, False, False],
+            ),
+            (
+                "echo x > $(a $(b c))/f",
+                ["echo", "x", ">", "$(a $(b c))/f"],
+                [False, False, True, False],
+            ),
+            (
+                "echo $((1 + 2)) > f.txt",
+                ["echo", "$((1 + 2))", ">", "f.txt"],
+                [False, False, True, False],
+            ),
+            (
+                "echo x > >(tee /tmp/p.txt)",
+                ["echo", "x", ">", ">(tee /tmp/p.txt)"],
+                [False, False, True, False],
+            ),
+            (
+                "diff <(sort a) <(sort b)",
+                ["diff", "<(sort a)", "<(sort b)"],
+                [False, False, False],
+            ),
+            (
+                "echo x > $(cat > f)/g",
+                ["echo", "x", ">", "$(cat > f)/g"],
+                [False, False, True, False],
+            ),
+            (
+                "echo x > $(pwd)",
+                ["echo", "x", ">", "$(pwd)"],
+                [False, False, True, False],
+            ),
+            (
+                "echo '$(x y)' > f.txt",
+                ["echo", "$(x y)", ">", "f.txt"],
+                [False, False, True, False],
+            ),
+        ],
+        ids=[
+            "command-substitution-word",
+            "backtick-word",
+            "nested-substitution-word",
+            "arithmetic-substitution-word",
+            "output-process-substitution-word",
+            "input-process-substitution-words",
+            "inner-redirect-is-not-outer",
+            "literal-command-substitution-target",
+            "single-quoted-substitution-is-literal",
+        ],
+    )
+    def test_substitutions_preserve_bash_word_boundaries(
+        self,
+        command: str,
+        expected_tokens: list[str],
+        expected_redirect_syntax: list[bool],
+    ) -> None:
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+
+        assert segments is not None
+        assert len(segments) == 1
+        assert segments[0].tokens == expected_tokens
+        assert segments[0].redirect_syntax == expected_redirect_syntax
+
+    def test_command_substitution_redirect_target_keeps_its_closer(self) -> None:
+        segments = command_classification._tokenize_command_segments_with_redirects(
+            "echo x > $(pwd)"
+        )
+
+        assert segments is not None
+        assert extract_redirect_targets_with_status(segments[0].tokens, "/work")[0] == [
+            "/work/$(pwd)"
+        ]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo $(echo x",
+            "echo $((1 + 2)",
+            "echo `echo x",
+            "diff <(echo x",
+            "echo > >(tee x",
+        ],
+        ids=["command", "arithmetic", "backtick", "process-input", "process-output"],
+    )
+    def test_unclosed_substitution_is_a_parse_failure(self, command: str) -> None:
+        assert command_classification._tokenize_command_segments_with_redirects(command) is None
+
+    def test_substitution_words_remain_evaluated_payloads(self) -> None:
+        payloads = evaluated_payloads("cp a $(echo b c)/d")
+        assert [(payload.origin, payload.text) for payload in payloads] == [
+            ("substitution", "echo b c")
+        ]
+
+        segments = all_evaluated_segments(
+            "echo x > >(tee /tmp/p.txt)", include_process_substitutions=True
+        )
+        assert segments is not None
+        assert ["tee", "/tmp/p.txt"] in segments
+
+
+class TestCommandGroupingStructure:
+    @staticmethod
+    def _segments(command: str):
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert segments is not None
+        return segments
+
+    def test_subshell_and_brace_groups_expose_the_command_verb(self) -> None:
+        subshell = self._segments("(cp a b)")[0]
+        assert subshell.tokens == ["cp", "a", "b"]
+        assert command_verb(subshell.tokens) == "cp"
+        assert len(subshell.subshell_path) == 1
+
+        brace_group = self._segments("{ cp a b; }")[0]
+        assert brace_group.tokens == ["cp", "a", "b"]
+        assert command_verb(brace_group.tokens) == "cp"
+        assert brace_group.subshell_path == ()
+
+    def test_commands_in_one_subshell_share_its_path(self) -> None:
+        segments = self._segments("(cd /tmp; echo x > rel.txt)")
+
+        assert [segment.tokens for segment in segments] == [
+            ["cd", "/tmp"],
+            ["echo", "x", ">", "rel.txt"],
+        ]
+        assert len(segments[0].subshell_path) == 1
+        assert segments[0].subshell_path == segments[1].subshell_path
+
+    def test_sibling_subshells_have_distinct_paths(self) -> None:
+        segments = self._segments("(cd a); (cd b)")
+
+        assert [segment.tokens for segment in segments] == [["cd", "a"], ["cd", "b"]]
+        assert len(segments[0].subshell_path) == len(segments[1].subshell_path) == 1
+        assert segments[0].subshell_path != segments[1].subshell_path
+
+    def test_chained_subshell_segments_keep_their_enclosing_path(self) -> None:
+        segments = self._segments("a && (b; c) || d")
+
+        assert [segment.tokens for segment in segments] == [["a"], ["b"], ["c"], ["d"]]
+        assert segments[0].subshell_path == segments[3].subshell_path == ()
+        assert len(segments[1].subshell_path) == len(segments[2].subshell_path) == 1
+        assert segments[1].subshell_path == segments[2].subshell_path
+
+    def test_nested_subshells_record_both_group_ids(self) -> None:
+        segment = self._segments("( (cp a b) )")[0]
+
+        assert segment.tokens == ["cp", "a", "b"]
+        assert command_verb(segment.tokens) == "cp"
+        assert len(segment.subshell_path) == 2
+        assert segment.subshell_path[0] != segment.subshell_path[1]
+
+    def test_function_body_is_a_normal_command_segment(self) -> None:
+        segments = self._segments("f() { cp a b; }")
+        body = next(segment for segment in segments if command_verb(segment.tokens) == "cp")
+
+        assert body.tokens == ["cp", "a", "b"]
+        assert body.subshell_path == ()
+
+    @pytest.mark.parametrize(
+        "command",
+        ["if (cp a b); then :; fi", "while (cp a b); do :; done"],
+        ids=["if-subshell", "while-subshell"],
+    )
+    def test_control_construct_subshell_keeps_its_path(self, command: str) -> None:
+        segments = self._segments(command)
+        body = next(segment for segment in segments if command_verb(segment.tokens) == "cp")
+
+        assert body.tokens == ["cp", "a", "b"]
+        assert len(body.subshell_path) == 1
+
+    def test_case_pattern_close_does_not_close_the_outer_subshell(self) -> None:
+        segments = self._segments("(case x in a) cp a b;; esac)")
+        body = next(segment for segment in segments if command_verb(segment.tokens) == "cp")
+
+        assert body.tokens == ["cp", "a", "b"]
+        assert len(body.subshell_path) == 1
+
+    @pytest.mark.parametrize(
+        ("command", "expected_path_length"),
+        [
+            ("(cat <<EOF > f.txt\nbody\nEOF\n)", 1),
+            ("{ cat <<'EOF' > f.txt\nbody\nEOF\n}", 0),
+        ],
+        ids=["subshell-heredoc", "brace-heredoc"],
+    )
+    def test_heredoc_body_does_not_hide_group_close(
+        self, command: str, expected_path_length: int
+    ) -> None:
+        segments = self._segments(command)
+        cat = next(segment for segment in segments if command_verb(segment.tokens) == "cat")
+
+        assert cat.tokens == ["cat", ">", "f.txt"]
+        assert len(cat.subshell_path) == expected_path_length
+
+    def test_grouped_gh_and_git_commands_are_classified_by_verb(self) -> None:
+        import autoskillit.hooks._runtime._command_classification as classification
+
+        gh = self._segments("(gh pr merge 1 --admin)")[0]
+        git = self._segments("(git push --force)")[0]
+
+        assert classification.is_gh_command(gh.tokens)
+        assert classification.is_git_command(git.tokens)
+
+    def test_non_groups_do_not_create_subshell_paths(self) -> None:
+        case_echo = next(
+            segment
+            for segment in self._segments('case "$x" in a) echo hi;; esac')
+            if command_verb(segment.tokens) == "echo"
+        )
+        arithmetic_cp = next(
+            segment
+            for segment in self._segments("(( i = 1 )) && cp a b")
+            if command_verb(segment.tokens) == "cp"
+        )
+        quoted_parens = self._segments('echo "(x)"')[0]
+        escaped_parens = self._segments(r"echo \(x\)")[0]
+
+        assert case_echo.subshell_path == ()
+        assert arithmetic_cp.subshell_path == ()
+        assert quoted_parens.tokens == escaped_parens.tokens == ["echo", "(x)"]
+        assert quoted_parens.subshell_path == escaped_parens.subshell_path == ()
+
+
+class TestEmptyCommandClassification:
+    def test_comment_only_commands_are_empty_and_parse_successfully(self) -> None:
+        assert all_evaluated_segments("# note") == []
+        assert all_evaluated_segments("  # a\n# b\n") == []
+
+    def test_empty_and_parse_failure_regressions_remain_distinct(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
+
+        assert all_evaluated_segments("echo 'unterminated") is None
+        assert all_evaluated_segments("true # c") == [["true"]]
+        assert tokenize_shell_payload_segments("# note") == []
+        assert tokenize_shell_payload_segments("true # c") == []
+        assert tokenize_command_segments("echo 'unterminated") == []
+
+
 class TestStdinLiteralBinding:
     """Binds every heredoc/herestring to the segment that consumes it.
 
@@ -555,16 +807,18 @@ class TestCommandPositionCandidateSpans:
             (["while", "gh", "pr", "view"], ((1, 4),)),
             (["until", "gh", "pr", "view"], ((1, 4),)),
             (["if", "gh", "pr", "view"], ((1, 4),)),
-            (["inspect()", "{", "gh", "pr", "view"], ((0, 5), (2, 5))),
-            (["{", "gh", "pr", "view"], ((0, 4), (1, 4))),
+            # Group bodies are independent tokenizer segments; candidate discovery
+            # sees only a segment's direct command, with no brace-body fallback.
+            (["inspect()", "{", "gh", "pr", "view"], ((0, 5),)),
+            (["{", "gh", "pr", "view"], ((0, 4),)),
         ],
         ids=[
             "direct",
             "while-control",
             "until-control",
             "if-control",
-            "function-body",
-            "group-body",
+            "no-function-body-fallback",
+            "no-brace-body-fallback",
         ],
     )
     def test_returns_spans_in_the_supplied_token_index_domain(
@@ -1269,25 +1523,12 @@ class TestExtractRedirectTargetsWithStatus:
         [
             (["echo", "data", ">", "/tmp/out.txt"], ["/tmp/out.txt"]),
             (["cmd", "2>/dev/null"], ["/dev/null"]),
-            (["2>/dev/null)"], []),
-            (["cmd", "2>/dev/null`"], ["/dev/null"]),
-            (["cmd", "2>/dev/null;"], ["/dev/null"]),
             (["cmd", ">>", "/tmp/log"], ["/tmp/log"]),
             (["cmd", ">", "relative.txt"], []),
             (["echo", "hello"], []),
             (["cmd", ">", "/tmp/a", "2>/tmp/b"], ["/tmp/a", "/tmp/b"]),
             (["cmd", "2>", "/tmp/err.log"], ["/tmp/err.log"]),
-            (["x=$(cmd", "2>/tmp/err.log)"], []),
-            (
-                ["x=$(cmd", "2>/tmp/err.log)", "&&", "echo", "done", ">", "/tmp/out.txt"],
-                ["/tmp/out.txt"],
-            ),
-            (["(", "cmd", ">", "/tmp/err.log", ")"], []),
-            (["(cmd", ">", "/tmp/err.log", ")"], []),
-            (["x=$(cmd", ">/tmp/err.log)"], []),
             (["cmd", ">", "/dev/null"], ["/dev/null"]),
-            (["cmd", "2>/dev/null&"], ["/dev/null"]),
-            (["cmd", "2>/tmp/out|"], ["/tmp/out"]),
             (["cmd", "2>&1"], []),
             (["cmd", ">", "&1"], []),
             (["cmd", "2>&1", ">", "/tmp/out"], ["/tmp/out"]),
@@ -1295,22 +1536,12 @@ class TestExtractRedirectTargetsWithStatus:
         ids=[
             "separate_redirect",
             "merged_fd_redirect",
-            "merged_with_trailing_paren_skipped",
-            "merged_trailing_backtick",
-            "merged_trailing_semicolon",
             "append_redirect",
             "non_absolute_path",
             "no_redirects",
             "multiple_redirects",
             "split_redirect",
-            "subshell_fused_skipped",
-            "subshell_with_top_level_redirect",
-            "standalone_paren_nesting",
-            "fused_paren_nesting",
-            "only_subshell_redirect_fused",
             "pseudo_device_returned",
-            "trailing_ampersand_stripped",
-            "trailing_pipe_stripped",
             "fd_dup_2_to_1_no_cwd",
             "fd_dup_split_ampersand_no_cwd",
             "fd_dup_with_real_redirect",

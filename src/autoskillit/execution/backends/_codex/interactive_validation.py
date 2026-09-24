@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from packaging.version import Version
+
 from autoskillit.core import (
     CODEX_HOME_ENV_VAR,
     PROVIDER_PROFILE_ENV_VAR,
@@ -17,6 +19,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import _format_toml_value
 from autoskillit.execution.backends._codex_discovery import (
+    CODEX_CLI_MIN_VERSION,
     CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     CODEX_MANAGED_HOME_ROUTE,
     CODEX_PROJECTED_HOME_ROUTE,
@@ -30,6 +33,12 @@ from autoskillit.execution.backends._codex_probes import (
 )
 
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
+
+
+def _unsupported_codex_version(version: str) -> str | None:
+    if Version(version) < Version(CODEX_CLI_MIN_VERSION):
+        return f"Codex CLI {version} is below the supported minimum {CODEX_CLI_MIN_VERSION}"
+    return None
 
 
 def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
@@ -70,7 +79,7 @@ def _run_interactive_native_probes(
     if errors:
         return InteractiveInvocationValidation(errors=tuple(errors))
 
-    raw_version, _, version_errors = probe_codex_version(
+    raw_version, normalized_version, version_errors = probe_codex_version(
         executable=origin.binary,
         env=spec.env,
         cwd=spec.cwd,
@@ -78,6 +87,8 @@ def _run_interactive_native_probes(
     )
     if version_errors:
         return InteractiveInvocationValidation(errors=tuple(version_errors))
+    if version_error := _unsupported_codex_version(normalized_version):
+        return InteractiveInvocationValidation(errors=(version_error,))
 
     discovery_validation = attest(
         probe_command=(
@@ -161,7 +172,7 @@ def _validate_projected_interactive_invocation(
         return InteractiveInvocationValidation(
             errors=("Codex projected interactive discovery route has no loader entry point",)
         )
-    raw_version, _, version_errors = probe_codex_version(
+    raw_version, normalized_version, version_errors = probe_codex_version(
         executable=origin.binary,
         env=spec.env,
         cwd=spec.cwd,
@@ -169,6 +180,8 @@ def _validate_projected_interactive_invocation(
     )
     if version_errors:
         return InteractiveInvocationValidation(errors=tuple(version_errors))
+    if version_error := _unsupported_codex_version(normalized_version):
+        return InteractiveInvocationValidation(errors=(version_error,))
     return attest(
         probe_command=(
             *_interactive_probe_prefix(origin),

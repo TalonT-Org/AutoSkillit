@@ -58,6 +58,7 @@ from autoskillit.workspace.session_skills._materialization import (
     _ExplorerBindingEnvFactory,
     _materialize_session,
     _restore_session,
+    managed_home_projection,
 )
 from autoskillit.workspace.session_skills._projection import SkillProjectionContext
 from autoskillit.workspace.session_skills._provider import SkillsDirectoryProvider
@@ -374,6 +375,9 @@ class DefaultSessionSkillManager:
                 skills_dir=initialized.skills_dir,
                 pass_fds=(lease_fd,),
                 unavailability_payload=initialized.unavailability_payload,
+                managed_projection=managed_home_projection(
+                    projection_context, projection_context.backend
+                ),
             )
         except BaseException as exc:
             logger.error("managed_session_body_failed", exc_info=True)

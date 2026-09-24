@@ -27,8 +27,9 @@ not `_session_skills`, deliberately: dozens of external call sites already impor
 `autoskillit.workspace` re-export), so the package boundary itself is the long-standing
 public contract, exactly like `workspace.skills` or `workspace.clone` — only the shards
 *inside* it are private. The canonical owners are `_catalog.py` (catalog compilation,
-finalized-role reachability, profile admission helpers, and the durable unavailability
-writer), `_provider.py` (`SkillsDirectoryProvider`, ephemeral-root discovery, closure
+finalized-role reachability, profile admission helpers, restored snapshot catalog
+copy/validation, and the durable unavailability writer), `_provider.py`
+(`SkillsDirectoryProvider`, ephemeral-root discovery, closure
 write-dir resolution), `_lifecycle.py` (lock path, `_SessionLease`, persistent-root
 resolution, stateless lease/removal primitives), `_materialization.py` (the
 ordering-sensitive `_materialize_session` transaction, single catalog merge, legacy

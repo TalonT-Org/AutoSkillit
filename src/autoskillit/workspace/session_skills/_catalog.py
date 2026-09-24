@@ -15,6 +15,9 @@ and relocatable unavailability metadata all remain intact.
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
 from collections.abc import Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
@@ -38,6 +41,7 @@ from autoskillit.core import (
     SkillUnavailabilityRecord,
     get_logger,
     load_bundled_agent_definitions,
+    strict_walk,
     write_versioned_json,
 )
 from autoskillit.workspace.skills import (
@@ -318,12 +322,101 @@ def _compile_reachable_profile_skill_catalog(
     )
 
 
+def _copy_restored_skill_catalog(
+    snapshot_dir: Path,
+    catalog_dir: Path,
+    *,
+    skills_subdir: Path,
+) -> None:
+    if snapshot_dir.is_symlink():
+        raise ValueError(f"restored skill snapshot root must not be a symlink: {snapshot_dir}")
+    if not snapshot_dir.is_dir():
+        raise ValueError(f"restored skill snapshot root must be a real directory: {snapshot_dir}")
+    _validate_restored_snapshot(snapshot_dir)
+    source_catalog = snapshot_dir / skills_subdir
+    if source_catalog.is_symlink() or not source_catalog.is_dir():
+        raise ValueError(
+            f"restored skill snapshot catalog must be a real directory: {source_catalog}"
+        )
+    _validate_restored_skill_catalog(source_catalog)
+    if os.path.lexists(catalog_dir):
+        raise RuntimeError(f"restored skill catalog path already exists: {catalog_dir}")
+    catalog_dir.parent.mkdir(parents=True, exist_ok=True)
+    catalog_dir.mkdir()
+    for entry in strict_walk(source_catalog):
+        relative_path = Path(entry.relative_path)
+        destination = catalog_dir / relative_path
+        if entry.kind == "l":
+            raise ValueError(
+                f"restored skill snapshot contains a symlink: {source_catalog / relative_path}"
+            )
+        if entry.kind == "d":
+            destination.mkdir()
+            continue
+        if entry.kind != "f":
+            raise ValueError(
+                "restored skill snapshot contains an invalid entry: "
+                f"{source_catalog / relative_path}"
+            )
+        _copy_restored_regular_file(entry.dir_fd, entry.name, destination)
+
+
+def _validate_restored_snapshot(snapshot_dir: Path) -> None:
+    for entry in strict_walk(snapshot_dir):
+        if entry.kind == "l":
+            raise ValueError(
+                f"restored skill snapshot contains a symlink: {snapshot_dir / entry.relative_path}"
+            )
+
+
+def _validate_restored_skill_catalog(source_catalog: Path) -> None:
+    skill_names: set[str] = set()
+    skill_documents: set[str] = set()
+    for entry in strict_walk(source_catalog):
+        relative_path = Path(entry.relative_path)
+        if entry.kind == "l":
+            raise ValueError(
+                f"restored skill snapshot contains a symlink: {source_catalog / relative_path}"
+            )
+        if len(relative_path.parts) == 1:
+            if entry.kind != "d" or relative_path.name.startswith("."):
+                raise ValueError(
+                    f"restored skill snapshot contains an invalid catalog entry: "
+                    f"{source_catalog / relative_path}"
+                )
+            skill_names.add(relative_path.name)
+        elif len(relative_path.parts) == 2 and relative_path.name == "SKILL.md":
+            if entry.kind == "f":
+                skill_documents.add(relative_path.parts[0])
+    if not skill_names or skill_documents != skill_names:
+        raise ValueError("restored skill snapshot entries must each contain a regular SKILL.md")
+
+
+def _copy_restored_regular_file(source_dir_fd: int, source_name: str, destination: Path) -> None:
+    source_fd = os.open(
+        source_name,
+        os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+        dir_fd=source_dir_fd,
+    )
+    try:
+        if not stat.S_ISREG(os.fstat(source_fd).st_mode):
+            raise ValueError(f"restored skill snapshot contains a non-regular file: {source_name}")
+        with os.fdopen(source_fd, "rb") as source:
+            source_fd = -1
+            with destination.open("xb") as target:
+                shutil.copyfileobj(source, target)
+    finally:
+        if source_fd != -1:
+            os.close(source_fd)
+
+
 __all__ = [
     "CompiledSessionSkillCatalog",
     "SkillUnavailableMetadata",
     "_SKILL_UNAVAILABILITY_SCHEMA_VERSION",
     "_canonical_skill_unavailability_payload",
     "_compile_reachable_profile_skill_catalog",
+    "_copy_restored_skill_catalog",
     "_merge_skill_unavailability_payloads",
     "_profile_skill_catalog",
     "_profile_skill_infos",

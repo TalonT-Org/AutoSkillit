@@ -102,6 +102,7 @@ class RecordingLifecycle:
         self.events.append(("managed-enter", launch_id, projection_context))
         try:
             yield ManagedSessionHome(
+                managed_projection=None,
                 launch_id=launch_id,
                 generated_home=self._generated_home,
                 skills_dir=ValidatedAddDir(str(self._skills_dir)),
@@ -237,6 +238,7 @@ def arrange_cook(
     @contextmanager
     def managed_session(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         yield ManagedSessionHome(
+            managed_projection=None,
             launch_id="launch",
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),

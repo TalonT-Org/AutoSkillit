@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -33,6 +33,7 @@ from autoskillit.core import (
     HookTrustPolicy,
     InteractiveInvocationValidation,
     LineDriver,
+    ManagedRouteHomeBackend,
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
@@ -95,10 +96,7 @@ from autoskillit.execution.backends._codex_managed_route import (
     verify_managed_session_dir as _verify_managed_session_dir,
 )
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
-from autoskillit.execution.backends._codex_prelaunch import (
-    _staged_error,
-    codex_prelaunch_transaction,
-)
+from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
 from autoskillit.execution.backends._codex_probes import (
     _validate_generated_codex_home,
     _validate_inert_rollout_paths,
@@ -569,6 +567,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
     ) -> PreLaunchReadiness:
+        del executable
         if session_dir is None:
             return PreLaunchReadiness(())
         try:
@@ -580,21 +579,9 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
                 runtime_spec=self.runtime_spec,
                 hook_config_format=self.capabilities.hook_config_format,
                 plugin_dir=plugin_dir,
-            ) as config_path:
-                errors: tuple[str, ...] = ()
-                if executable is not None:
-                    try:
-                        errors = tuple(
-                            _validate_generated_codex_home(
-                                generated_home,
-                                config_path=config_path,
-                                executable=executable,
-                            )
-                        )
-                    except Exception as exc:
-                        raise _staged_error("generated home validation", exc) from exc
+            ):
                 return PreLaunchReadiness(
-                    errors,
+                    (),
                     {
                         CODEX_HOME_ENV_VAR: str(generated_home),
                         _CODEX_SQLITE_HOME_ENV_VAR: str(generated_home),
@@ -603,6 +590,29 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         except Exception as exc:
             logger.error("codex_prelaunch_transaction_failed", exc_info=True)
             return PreLaunchReadiness((f"Codex pre-launch configuration failed: {exc}",))
+
+    def probe_launch_readiness(
+        self, *, session_dir: Path, executable: ExecutableLaunchBinding
+    ) -> PreLaunchReadiness:
+        generated_home = Path(session_dir).expanduser().resolve(strict=False)
+        try:
+            errors = tuple(
+                _validate_generated_codex_home(
+                    generated_home,
+                    config_path=generated_home / "config.toml",
+                    executable=executable,
+                )
+            )
+        except Exception as exc:
+            logger.error("codex_launch_readiness_probe_failed", exc_info=True)
+            return PreLaunchReadiness((f"Codex launch readiness probe failed: {exc}",))
+        return PreLaunchReadiness(
+            errors,
+            {
+                CODEX_HOME_ENV_VAR: str(generated_home),
+                _CODEX_SQLITE_HOME_ENV_VAR: str(generated_home),
+            },
+        )
 
     def recover_cook_history(self) -> None:
         CodexSessionStore(log_dir=default_log_dir()).recover()
@@ -636,3 +646,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         if spec.app_server_plan is None:
             return None
         return CodexAppServerDriver(spec.app_server_plan)
+
+
+if TYPE_CHECKING:
+    _MANAGED_ROUTE_CONFORMANCE: type[ManagedRouteHomeBackend] = CodexBackend

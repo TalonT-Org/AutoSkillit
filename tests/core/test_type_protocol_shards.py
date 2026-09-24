@@ -243,6 +243,8 @@ def test_backend_shard_all():
         "ExplorationDispatchMaterialization",
         "ExplorationDispatchRenderer",
         "CodingAgentBackend",
+        "ManagedRouteHomeBackend",
+        "managed_route_backend",
     }
 
 

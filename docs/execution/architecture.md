@@ -152,6 +152,10 @@ The authority persists the attestation under that ID. A fresh MCP server child
 loads it and verifies the generated `CODEX_HOME` model, effort, catalog digest,
 route guards, current route and hook digests, and recovery readiness before
 admitting a batch. An issuance refusal leaves join-required skills unavailable.
+A failed verification returns a typed refusal naming the failing check, such as
+`home_drift` with the drifted keys or `registry_digest_mismatch`.
+`run_fixed_batch` includes that reason in its error. Drift or epoch refusals
+tell the user to restart the session to re-attest.
 
 Interactive `cook` applies this route at runtime when the selected backend
 advertises managed fixed-batch support. Preparation invokes the bound Codex
@@ -184,6 +188,17 @@ size-bounded, contained snapshot from the already-generated home, verify it
 against the persisted digest and route, and restore that same snapshot to the
 context. Recovery never broadens authority by reprojection or by consulting a
 later source-home catalog.
+
+Materialization is the only writer of AutoSkillit-owned generated-home config.
+Launch preparation probes the materialized home read-only, then verifies it with
+the same check the MCP server uses and refuses to launch on drift. Projected
+catalogs never offer model migrations. A post-launch change persisted to an
+attested key, such as the model, effort, catalog path, AutoSkillit MCP tool
+allow-list, or route guards, invalidates the attestation until the session is
+restarted. This includes a `/model` choice saved as the default. A session-only
+model switch, such as an unsaved `/model` choice or an accepted rate-limit model
+nudge, changes the running model without writing `config.toml`, so verification
+cannot detect it.
 
 The ledger's active batch is parent-scoped. It records immutable assignment and
 attempt identities, then progresses through admission, running, and one

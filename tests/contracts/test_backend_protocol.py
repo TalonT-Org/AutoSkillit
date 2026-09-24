@@ -251,6 +251,7 @@ def test_backend_implementations_expose_cook_lifecycle_protocol_methods(backend_
         "validate_session_layout",
         "validate_interactive_invocation",
         "ensure_pre_launch",
+        "probe_launch_readiness",
         "recover_cook_history",
         "session_attempt_context",
     )

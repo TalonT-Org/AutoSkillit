@@ -787,6 +787,12 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             )
         return PreLaunchReadiness(errors=(), attested_env=_claude_host_attestation_env(installed))
 
+    def probe_launch_readiness(
+        self, *, session_dir: Path, executable: ExecutableLaunchBinding
+    ) -> PreLaunchReadiness:
+        del session_dir
+        return self.ensure_pre_launch(executable=executable)
+
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
         if not self.capabilities.inspector_capable:
             raise CapabilityNotSupportedError("inspector_capable", self.name)

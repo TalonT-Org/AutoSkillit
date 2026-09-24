@@ -19,6 +19,7 @@ _TESTS_ROOT = Path(__file__).resolve().parent.parent
 GUARDED_TRANSITION_SYMBOLS = frozenset(
     {
         "ensure_pre_launch",
+        "probe_launch_readiness",
         "resolve_executable_launch_binding",
         "executable_binding_matches_current_file",
     }
@@ -36,7 +37,9 @@ class MaskingExemption:
 GUARD_MASKING_EXEMPTIONS = (
     MaskingExemption(
         fixture="cli/conftest.py::_stub_interactive_prelaunch",
-        patched_symbols=frozenset({"ensure_pre_launch", "resolve_executable_launch_binding"}),
+        patched_symbols=frozenset(
+            {"ensure_pre_launch", "probe_launch_readiness", "resolve_executable_launch_binding"}
+        ),
         rationale="Legacy CLI tests isolate final command behavior below the real probe boundary.",
         real_path_tests=(
             "cli/test_interactive_cold_launch_medium.py::test_supported_cold_launch_spawns_with_probed_attestation",

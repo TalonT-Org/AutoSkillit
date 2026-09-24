@@ -173,7 +173,7 @@ TL = `telemetry`, FL = `fleet`
 | `configure_order` | AS | `server/tools/tools_config.py` |
 | `lock_ingredients` | AS | `server/tools/tools_kitchen/_lock_ingredients.py` |
 | `declare_join_batch` | AS, K | `server/tools/tools_kitchen/_declare_join_batch.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
-| `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. |
+| `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. Refusals name the failing verification check. |
 | `read_fixed_batch_result` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Reads bounded pages from an opaque managed-batch result only after reauthorizing the request, parent, source artifact/incarnation, batch, assignment, and digest. |
 
 ---

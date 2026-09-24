@@ -130,6 +130,12 @@ class _BackendLifecycleStub:
         del executable
         return PreLaunchReadiness((), {})
 
+    def probe_launch_readiness(
+        self, *, session_dir: Path, executable: object
+    ) -> PreLaunchReadiness:
+        del session_dir, executable
+        return PreLaunchReadiness((), {})
+
     def recover_cook_history(self) -> None:
         return None
 
@@ -1697,6 +1703,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
     generated_home = tmp_path / "generated"
     generated_home.mkdir()
     managed_home = ManagedSessionHome(
+        managed_projection=None,
         launch_id="launch-id",
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
@@ -1751,6 +1758,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
     generated_home = tmp_path / "generated"
     generated_home.mkdir()
     managed_home = ManagedSessionHome(
+        managed_projection=None,
         launch_id="launch-id",
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
@@ -1817,6 +1825,7 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
     generated_home = tmp_path / "generated"
     generated_home.mkdir()
     managed_home = ManagedSessionHome(
+        managed_projection=None,
         launch_id="launch-id",
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),
@@ -1986,7 +1995,12 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches
 ) -> None:
     """The finalized exact-bound command must retain the catalog for both launch forms."""
     from autoskillit.cli.session._session_launch import prepare_interactive_launch
-    from autoskillit.core import FreshLaunch, RestoreSession, ValidatedAddDir
+    from autoskillit.core import (
+        FreshLaunch,
+        ManagedSessionHome,
+        RestoreSession,
+        ValidatedAddDir,
+    )
     from autoskillit.execution.backends.codex import CodexBackend
 
     source_home = tmp_path / "source-codex"
@@ -2008,6 +2022,11 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches
         "ensure_pre_launch",
         lambda _self, **_kwargs: PreLaunchReadiness((), {}),
     )
+    monkeypatch.setattr(
+        CodexBackend,
+        "probe_launch_readiness",
+        lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+    )
     backend = CodexBackend(source_codex_home=source_home)
 
     launch = {
@@ -2022,7 +2041,14 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_launches
         plugin_binding=None,
         launch=launch,
         add_dirs=(catalog,),
-        generated_home=generated_home,
+        managed_home=ManagedSessionHome(
+            launch_id="catalog-launch",
+            generated_home=generated_home,
+            skills_dir=catalog,
+            pass_fds=(),
+            unavailability_payload={"backend": None, "unavailable": ()},
+            managed_projection=None,
+        ),
     )
 
     assert prepared.spec.managed_skill_catalog is catalog
@@ -2099,6 +2125,7 @@ def _prepare_codex_order_composition(
     captured: dict[str, object] = {
         "events": [],
         "pre_launch_dirs": [],
+        "probe_dirs": [],
         "process_calls": [],
         "projection_roots": [],
         "bindings": [],
@@ -2110,12 +2137,17 @@ def _prepare_codex_order_composition(
     original_ensure_pre_launch = CodexBackend.ensure_pre_launch
 
     def ensure_pre_launch(self, **kwargs):  # type: ignore[no-untyped-def]
-        session_dir = kwargs.get("session_dir")
-        if session_dir is not None:
-            cast(list[Path], captured["pre_launch_dirs"]).append(Path(session_dir))
+        cast(list[Path | None], captured["pre_launch_dirs"]).append(kwargs.get("session_dir"))
         return original_ensure_pre_launch(self, **kwargs)
 
     monkeypatch.setattr(CodexBackend, "ensure_pre_launch", ensure_pre_launch)
+    original_probe_launch_readiness = CodexBackend.probe_launch_readiness
+
+    def probe_launch_readiness(self, **kwargs):  # type: ignore[no-untyped-def]
+        cast(list[Path], captured["probe_dirs"]).append(Path(kwargs["session_dir"]))
+        return original_probe_launch_readiness(self, **kwargs)
+
+    monkeypatch.setattr(CodexBackend, "probe_launch_readiness", probe_launch_readiness)
     original_validate = CodexBackend.validate_interactive_invocation
 
     def validate_interactive_invocation(self, spec):  # type: ignore[no-untyped-def]
@@ -2209,7 +2241,8 @@ def test_codex_order_composition_produces_canonical_generated_home(
     generated_home = Path(spec.env["CODEX_HOME"])
     assert generated_home == generated_home.resolve()
     assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
-    assert captured["pre_launch_dirs"] == [generated_home, generated_home]
+    assert captured["pre_launch_dirs"] == [generated_home]
+    assert captured["probe_dirs"] == [generated_home]
 
     assert spec.origin is not None
     config_overrides = [
@@ -2433,6 +2466,9 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             return "true"
 
         def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
             return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]

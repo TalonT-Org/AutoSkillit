@@ -115,6 +115,7 @@ def _managed_home(tmp_path: Path) -> ManagedSessionHome:
     generated_home = tmp_path / "generated"
     generated_home.mkdir()
     return ManagedSessionHome(
+        managed_projection=None,
         launch_id="launch-id",
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(str(generated_home / "add-dir")),

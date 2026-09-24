@@ -33,6 +33,7 @@ from autoskillit.core import (
     ExplorationVectorApplicabilityId,
     ExplorationVectorDef,
     ExplorationVectorDisposition,
+    ManagedCodexRoute,
     ProfileActivation,
     RepositoryProfileId,
     SemanticAdaptationContext,
@@ -201,7 +202,7 @@ class SkillProjectionContext:
     )
     parent_sandbox_mode: str = "workspace-write"
     adaptation_context: SemanticAdaptationContext | None = None
-    managed_codex_route: str | None = None
+    managed_codex_route: ManagedCodexRoute | None = None
     provisioning_disposition: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
 

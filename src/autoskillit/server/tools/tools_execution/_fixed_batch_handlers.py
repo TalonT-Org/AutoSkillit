@@ -27,6 +27,7 @@ from autoskillit.core import (
     CandidatePreSpawnRejection,
     EffectiveSkillInvocationAuthority,
     ManagedJoinAttestation,
+    ManagedJoinVerificationRefusal,
     ManagedWorkerPermit,
     SemanticAdaptationContext,
     SkillContractError,
@@ -703,8 +704,11 @@ def _request_facts(
         backend=backend.name,
         parent_session_id=parent_id,
     )
-    if adaptation_context is None:
-        raise SkillContractError("run_fixed_batch requires a current server-issued attestation")
+    if isinstance(adaptation_context, ManagedJoinVerificationRefusal):
+        raise SkillContractError(
+            "run_fixed_batch requires a current server-issued attestation: "
+            f"{adaptation_context.render()}"
+        )
     attestation = adaptation_context.managed_join_attestation
     if attestation is None:
         raise SkillContractError("run_fixed_batch requires a current server-issued attestation")

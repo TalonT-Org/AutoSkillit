@@ -159,6 +159,7 @@ def test_cook_noninteractive_skips_confirmation(
     ):
         assert projection_context.catalog == compilation.catalog
         yield ManagedSessionHome(
+            managed_projection=None,
             launch_id=launch_id,
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),

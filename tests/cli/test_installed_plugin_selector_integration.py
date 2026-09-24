@@ -118,6 +118,12 @@ class _RecordingBackend:
         del session_dir, executable
         return PreLaunchReadiness((), {})
 
+    def probe_launch_readiness(
+        self, *, session_dir: Path, executable: object
+    ) -> PreLaunchReadiness:
+        del session_dir, executable
+        return PreLaunchReadiness((), {})
+
     def recover_cook_history(self) -> None:
         self.recover_count += 1
 
@@ -192,6 +198,7 @@ class _CookSessionManager:
         skills_dir.mkdir(parents=True, exist_ok=True)
         try:
             yield ManagedSessionHome(
+                managed_projection=None,
                 launch_id=launch_id,
                 generated_home=self._generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),

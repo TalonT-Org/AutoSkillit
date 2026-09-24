@@ -2,8 +2,10 @@
 
 IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations.
 
-`_codex_prelaunch.py` owns the sole composed prelaunch transaction: source-config
-synchronization, hook update, snapshot, and native validation.
+`_codex_prelaunch.py` owns the sole composed prelaunch transaction used by
+materialization: source-config synchronization, hook update, and snapshot.
+Launch-time readiness of a materialized home is `probe_launch_readiness`, which
+never writes.
 
 ## Adding a new backend
 

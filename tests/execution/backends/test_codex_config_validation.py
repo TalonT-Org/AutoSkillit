@@ -1024,7 +1024,7 @@ def test_generated_codex_home_validation_uses_the_bound_executable_environment_a
     }
 
 
-def test_ensure_pre_launch_forwards_the_bound_executable_to_generated_home_validation(
+def test_probe_launch_readiness_forwards_the_bound_executable_to_generated_home_validation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1062,7 +1062,11 @@ def test_ensure_pre_launch_forwards_the_bound_executable_to_generated_home_valid
     monkeypatch.setattr(codex, "_validate_generated_codex_home", validate_generated)
     backend = codex.CodexBackend(source_codex_home=source_home)
 
-    readiness = backend.ensure_pre_launch(session_dir=generated_home, executable=binding)
+    provisioning = backend.ensure_pre_launch(session_dir=generated_home)
+    assert provisioning.errors == ()
+    assert captured == {}
+
+    readiness = backend.probe_launch_readiness(session_dir=generated_home, executable=binding)
 
     assert readiness.errors == ()
     assert readiness.attested_env == {

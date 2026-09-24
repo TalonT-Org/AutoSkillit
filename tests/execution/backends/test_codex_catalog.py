@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tomllib
 from pathlib import Path
@@ -12,7 +13,7 @@ from autoskillit.execution.backends._codex_catalog import (
     project_codex_catalog,
     resolve_codex_catalog_effort,
 )
-from tests.execution.backends._codex_fixtures import installed_catalog
+from tests.execution.backends._codex_fixtures import installed_catalog, with_migration_offer
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium, pytest.mark.model_contract]
 
@@ -37,8 +38,17 @@ def test_managed_discovery_route_catalog_relpath_matches_codex_session_layout() 
     )
 
 
-def test_reader_projection_preserves_the_complete_installed_catalog() -> None:
+@pytest.mark.parametrize("migration_offers", [False, True])
+def test_reader_projection_preserves_installed_catalog_except_migration_offers(
+    migration_offers: bool,
+) -> None:
     installed = _installed_catalog()
+    if migration_offers:
+        installed = with_migration_offer(
+            with_migration_offer(installed, _READER_MODEL, f"{_READER_MODEL}-successor"),
+            "gpt-6-sol",
+            "gpt-6-sol-successor",
+        )
 
     projection = project_codex_catalog(
         _catalog_bytes(installed),
@@ -51,13 +61,55 @@ def test_reader_projection_preserves_the_complete_installed_catalog() -> None:
     expected_reader = expected["models"][1]
     expected_reader["tool_mode"] = "direct"
     expected_reader["apply_patch_tool_type"] = None
+    if migration_offers:
+        for entry in expected["models"]:
+            entry["upgrade"] = None
     assert projected == expected
-    assert projected["models"][0] == installed["models"][0]
+    if not migration_offers:
+        assert projected["models"][0] == installed["models"][0]
+        assert all("upgrade" not in entry for entry in projected["models"])
+    else:
+        assert all(entry["upgrade"] is None for entry in projected["models"])
     assert projected["models"][1]["tool_mode"] == "direct"
     assert projected["models"][1]["apply_patch_tool_type"] is None
     assert projection.bundled_sha256.startswith("sha256:")
     assert projection.projected_sha256.startswith("sha256:")
     assert projection.bundled_sha256 != projection.projected_sha256
+
+
+def test_managed_catalog_error_rejects_selected_model_migration_offer() -> None:
+    from autoskillit.execution.backends._codex_managed_route import _managed_codex_catalog_error
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    projection = project_codex_catalog(
+        _catalog_bytes(_installed_catalog()),
+        expected_model=_READER_MODEL,
+        expected_reasoning_effort=_READER_REASONING_EFFORT,
+    )
+    catalog = json.loads(projection.canonical_projected_bytes)
+    selected = next(entry for entry in catalog["models"] if entry["slug"] == _READER_MODEL)
+    selected["upgrade"] = {"model": f"{_READER_MODEL}-successor"}
+    catalog_bytes = _catalog_bytes(catalog)
+    context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model=_READER_MODEL,
+        resolved_reasoning_effort=_READER_REASONING_EFFORT,
+        codex_catalog_digest=hashlib.sha256(catalog_bytes).hexdigest(),
+        managed_codex_catalog=catalog_bytes,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+    attestation = context.managed_join_attestation
+    assert attestation is not None
+
+    assert _managed_codex_catalog_error(catalog_bytes, attestation=attestation) == (
+        "managed Codex catalog is invalid: ValueError: offers a model migration"
+    )
 
 
 def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
@@ -313,6 +365,29 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
     )
     assert backend.verify_managed_session_dir(session_home, attestation, route) == []
     config_text = (session_home / "config.toml").read_text()
+    drifted_model = "gpt-6-sol"
+    assert f'model = "{attestation.resolved_model}"' in config_text
+    (session_home / "config.toml").write_text(
+        config_text.replace(
+            f'model = "{attestation.resolved_model}"', f'model = "{drifted_model}"'
+        )
+    )
+    assert (
+        "managed Codex config has the wrong resolved model "
+        f"(attested {attestation.resolved_model!r}, found {drifted_model!r})"
+    ) in backend.verify_managed_session_dir(session_home, attestation, route)
+    drifted_effort = "high"
+    assert f'model_reasoning_effort = "{attestation.resolved_reasoning_effort}"' in config_text
+    (session_home / "config.toml").write_text(
+        config_text.replace(
+            f'model_reasoning_effort = "{attestation.resolved_reasoning_effort}"',
+            f'model_reasoning_effort = "{drifted_effort}"',
+        )
+    )
+    assert (
+        "managed Codex config has the wrong resolved reasoning effort "
+        f"(attested {attestation.resolved_reasoning_effort!r}, found {drifted_effort!r})"
+    ) in backend.verify_managed_session_dir(session_home, attestation, route)
     (session_home / "config.toml").write_text(
         config_text.replace(str(catalog_path), str(session_home / "models_cache.json"))
     )

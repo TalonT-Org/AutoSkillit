@@ -2074,7 +2074,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
 
         def record_recovered_context(**kwargs):
             recovered = find_verified_context(**kwargs)
-            if recovered is not None:
+            if isinstance(recovered, SemanticAdaptationContext):
                 recovered_contexts.append(recovered)
             return recovered
 

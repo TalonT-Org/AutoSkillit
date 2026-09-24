@@ -122,6 +122,23 @@ def test_all_backends_implement_ensure_pre_launch():
         )
 
 
+def test_coding_agent_backend_protocol_includes_probe_launch_readiness():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert callable(getattr(CodingAgentBackend, "probe_launch_readiness", None)), (
+        "CodingAgentBackend protocol must define probe_launch_readiness"
+    )
+
+
+def test_all_backends_implement_probe_launch_readiness():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert callable(getattr(cls, "probe_launch_readiness", None)), (
+            f"{name} backend must implement probe_launch_readiness"
+        )
+
+
 @pytest.mark.parametrize(
     "method_name",
     [

@@ -14,6 +14,7 @@ from typing import Literal
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
+    ManagedCodexRoute,
     atomic_write,
     get_logger,
     installed_plugin_artifact_root,
@@ -41,8 +42,6 @@ from autoskillit.hook_registry import (
 from autoskillit.hooks import MANAGED_PARENT_ALLOWED_TOOLS
 
 logger = get_logger(__name__)
-
-ManagedCodexRoute = Literal["parent", "leaf", "interactive-parent"]
 
 MANAGED_CODEX_ROUTE_NAMES: tuple[ManagedCodexRoute, ...] = ("parent", "leaf", "interactive-parent")
 """Canonical ordered tuple of all valid managed Codex routes."""

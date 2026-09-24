@@ -1106,6 +1106,7 @@ from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
+from .types import ManagedCodexRoute as ManagedCodexRoute
 from .types import ManagedFixedBatchSupervisor as ManagedFixedBatchSupervisor
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
@@ -1120,8 +1121,12 @@ from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
 from .types import ManagedHome as ManagedHome
+from .types import ManagedHomeProjection as ManagedHomeProjection
 from .types import ManagedJoinAttestation as ManagedJoinAttestation
 from .types import ManagedJoinAttestationAuthority as ManagedJoinAttestationAuthority
+from .types import ManagedJoinRefusalReason as ManagedJoinRefusalReason
+from .types import ManagedJoinVerificationRefusal as ManagedJoinVerificationRefusal
+from .types import ManagedRouteHomeBackend as ManagedRouteHomeBackend
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import ManagedWorkerCapacity as ManagedWorkerCapacity
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
@@ -1468,6 +1473,7 @@ from .types import (
 from .types import managed_home as managed_home
 from .types import managed_home_for as managed_home_for
 from .types import managed_join_parent_id as managed_join_parent_id
+from .types import managed_route_backend as managed_route_backend
 from .types import managed_skill_relative_path as managed_skill_relative_path
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id

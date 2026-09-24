@@ -20,6 +20,13 @@ from autoskillit.core import atomic_write
 
 AGENT_TEAMS_ENV_VAR = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
+# Pinned version output the fake `claude --version` shim emits. Floors must match
+# `CLAUDE_CODE_CAPABILITIES.min_version` in src/autoskillit/core/types/_type_backend.py.
+# Bumping the product floor requires bumping this constant and any inline shim
+# scripts that still embed the literal directly.
+PINNED_CLAUDE_SHIM_VERSION_OUTPUT = "2.1.280 (Claude Code)"
+PINNED_CLAUDE_SHIM_VERSION = "2.1.280"
+
 _CONFIG_YAML = """agent_backend:
   backend: claude-code
 workspace:
@@ -114,18 +121,19 @@ def write_fake_agent_binary(shim_dir: Path, name: str = "claude") -> Path:
     shim = shim_dir / name
     atomic_write(
         shim,
-        """#!/bin/sh
-set -e
-if [ "${1-}" = "--version" ]; then
-  printf '%s\n' '2.1.280 (Claude Code)'
-  exit 0
-fi
-marker="$AUTOSKILLIT_STATE_DIR/__AGENT_NAME__-launch-argv.txt"
-temporary="${marker}.tmp.$$"
-printf '%s\n' "$@" > "$temporary"
-mv "$temporary" "$marker"
-exit 0
-""".replace("__AGENT_NAME__", name),
+        (
+            "#!/bin/sh\n"
+            "set -e\n"
+            'if [ "${1-}" = "--version" ]; then\n'
+            f"  printf '%s\\n' '{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}'\n"
+            "  exit 0\n"
+            "fi\n"
+            'marker="$AUTOSKILLIT_STATE_DIR/__AGENT_NAME__-launch-argv.txt"\n'
+            'temporary="${marker}.tmp.$$"\n'
+            'printf \'%s\\n\' "$@" > "$temporary"\n'
+            'mv "$temporary" "$marker"\n'
+            "exit 0\n"
+        ).replace("__AGENT_NAME__", name),
     )
     shim.chmod(0o755)
     return shim

@@ -238,24 +238,8 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
             "extract_patch_paths",
             "str.splitlines",
         ),
-        # _classification/_interpreters.py -- the authority's own internal
-        # tokenizer and shell-payload use (_iter_evaluated_segments,
-        # all_evaluated_segments_with_provenance, and the grouped payload walk).
-        (
-            "hooks/_classification/_interpreters.py",
-            "_iter_evaluated_segments",
-            "tokenize_command_segments",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "_iter_evaluated_segments",
-            "tokenize_shell_payload_segments",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "_queue_nested_shell_payloads",
-            "extract_shell_command_payloads",
-        ),
+        # The grouped payload walk and interpreter invocation checks remain
+        # inside the shared command classification authority.
         (
             "hooks/_classification/_interpreters.py",
             "tokenize_shell_payload_segments",

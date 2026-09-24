@@ -74,11 +74,17 @@ def _normalize_executable_call(token: str) -> str:
 
 
 def _partition_output_redirects_call(
-    tokens: Sequence[str], *, cwd: str, redirect_syntax: Sequence[bool] | None = None
+    tokens: Sequence[str],
+    *,
+    cwd: str,
+    redirect_syntax: Sequence[bool],
+    argv_tokens: Sequence[Any] | None = None,
 ) -> tuple[list[str], list[str], int]:
     from _command_classification import _partition_output_redirects
 
-    return _partition_output_redirects(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
+    return _partition_output_redirects(
+        tokens, cwd=cwd, redirect_syntax=redirect_syntax, argv_tokens=argv_tokens
+    )
 
 
 def _extract_interpreter_segment_specs_call(
@@ -312,7 +318,10 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                 repeatable_depth += 1
             executable_tokens, redirect_targets, file_redirect_count = (
                 _partition_output_redirects_call(
-                    raw_segment, cwd=current_cwd, redirect_syntax=command_segment.redirect_syntax
+                    raw_segment,
+                    cwd=current_cwd,
+                    redirect_syntax=command_segment.redirect_syntax,
+                    argv_tokens=command_segment.argv_tokens,
                 )
             )
             executable_argv_tokens = _select_executable_argv_tokens(

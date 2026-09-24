@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-from collections import deque
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -14,11 +13,16 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
     from autoskillit.hooks._classification._python_program_analysis import (
         _InterpreterCommandSpec,
+        _python_c_program,
         _python_program_command_specs,
+        _python_program_evaluated_specs,
     )
     from autoskillit.hooks._classification._substitution_scanning import (
         _extract_process_substitution_occurrences,
         _iter_substitution_occurrences,
+    )
+    from autoskillit.hooks._classification._substitution_scanning import (
+        _iter_shell_payload_segment_groups as _scan_shell_payload_segment_groups,
     )
     from autoskillit.hooks._runtime._command_classification import (
         _INTERPRETER_RE,
@@ -62,10 +66,13 @@ else:
 
     _FlagArity = _flag_arity_classification._FlagArity
     _InterpreterCommandSpec = _python_program_analysis._InterpreterCommandSpec
+    _python_c_program = _python_program_analysis._python_c_program
     _python_program_command_specs = _python_program_analysis._python_program_command_specs
+    _python_program_evaluated_specs = _python_program_analysis._python_program_evaluated_specs
     _extract_process_substitution_occurrences = (
         _substitution_scanning._extract_process_substitution_occurrences
     )
+    _scan_shell_payload_segment_groups = _substitution_scanning._iter_shell_payload_segment_groups
     _iter_substitution_occurrences = _substitution_scanning._iter_substitution_occurrences
 
     # Flags that consume a following value when the shell/Python interpreter
@@ -316,77 +323,19 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     ]
 
 
-def _queue_nested_shell_payloads(
-    payload: str,
-    queue: deque[tuple[str, bool, bool]],
-    *,
-    preserve_occurrence: bool,
-    include_process_substitutions: bool,
-) -> bool:
-    queue.extend(
-        (nested, preserve_occurrence, True) for nested in extract_shell_command_payloads(payload)
-    )
-    if include_process_substitutions:
-        for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
-            payload
-        ):
-            if not balanced:
-                return False
-            queue.append((body, True, True))
-    return True
-
-
 def _iter_shell_payload_segment_groups(
     command: str,
     *,
     include_process_substitutions: bool = False,
     include_outer: bool = True,
 ) -> Iterator[list[list[str]] | None]:
-    """Yield tokenized segments for each evaluated shell payload in *command*.
-
-    The outer command is processed first (its nested payloads are extracted
-    from it), and distinct nested payloads are walked recursively in BFS
-    order. Process-substitution bodies are traversed only when
-    ``include_process_substitutions`` is true; the default preserves the
-    historic shell-command-substitution-only behavior.
-
-    When ``include_outer`` is true (default), the outer command's tokenized
-    segments are yielded first -- as ``[]`` for an empty/whitespace outer
-    so consumers can rely on "outer is always the first yield". When
-    false, the outer is processed only to drive nested-payload discovery
-    and is not yielded.
-
-    Yields ``None`` (and terminates) when any emitted payload cannot be
-    tokenized, so callers can fail-open uniformly.
-    """
-    seen: set[str] = set()
-    queue = deque([(command, False, False)])
-    while queue:
-        payload, preserve_occurrence, emit = queue.popleft()
-        is_outer = not emit
-        if emit and not preserve_occurrence and payload in seen:
-            continue
-        if emit and not preserve_occurrence:
-            seen.add(payload)
-        if not payload.strip():
-            if is_outer and include_outer:
-                yield []
-            continue
-        parsed = _tokenize_command_segments_with_redirects(payload)
-        if parsed is None:
-            yield None
-            return
-        segments = [segment.tokens for segment in parsed]
-        if include_outer or not is_outer:
-            yield segments
-        if not _queue_nested_shell_payloads(
-            payload,
-            queue,
-            preserve_occurrence=preserve_occurrence,
-            include_process_substitutions=include_process_substitutions,
-        ):
-            yield None
-            return
+    """Expose the shell-payload walk with interpreter payload extraction."""
+    return _scan_shell_payload_segment_groups(
+        command,
+        extract_shell_payloads=extract_shell_command_payloads,
+        include_process_substitutions=include_process_substitutions,
+        include_outer=include_outer,
+    )
 
 
 def tokenize_shell_payload_segments(
@@ -394,19 +343,10 @@ def tokenize_shell_payload_segments(
     *,
     include_process_substitutions: bool = False,
 ) -> list[list[str]] | None:
-    """Return tokenized segments for every evaluated shell payload in *command*.
+    """Return recursively tokenized shell payloads, excluding outer segments.
 
-    Walks every distinct extracted payload recursively; the outer command's
-    own segments are intentionally excluded -- callers wanting the outer
-    segments should use ``tokenize_command_segments(command)`` directly and
-    pair them with this result. Process-substitution bodies are traversed
-    only when ``include_process_substitutions`` is true; the default
-    preserves the historic shell-command-substitution-only behavior.
-
-    Returns ``None`` when the outer command or any non-empty evaluated
-    payload cannot be tokenized; callers interpret ``None`` as no deny
-    match (fail-open). Returns ``[]`` when the command has no evaluated
-    shell payload to traverse.
+    Process substitutions are optional. Returns None on tokenization failure
+    (fail-open) and [] when no shell payload executes.
     """
     result: list[list[str]] = []
     for segments in _iter_shell_payload_segment_groups(
@@ -471,20 +411,6 @@ def _upstream_pipe_text(segments: Sequence[_CommandSegment], index: int) -> str 
     return None
 
 
-def _python_c_program(tokens: Sequence[str]) -> str | None:
-    verb, args = command_verb_and_args(list(tokens))
-    executable = _normalize_executable(verb)
-    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
-        return None
-    try:
-        index = args.index("-c")
-    except ValueError:
-        return None
-    if index + 1 >= len(args):
-        return None
-    return args[index + 1]
-
-
 def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     """Return every text payload that will actually be evaluated, and by whom.
 
@@ -507,7 +433,7 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
                 EvaluatedPayload(" ".join(args), StdinConsumer.SHELL, index, "eval", None)
             )
         else:
-            program = _python_c_program(segment.tokens)
+            program = _python_c_program(_normalize_executable(verb), args)
             if program is not None:
                 payloads.append(
                     EvaluatedPayload(program, StdinConsumer.PYTHON, index, "python-c", None)
@@ -557,39 +483,94 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     return payloads
 
 
+class _EvaluatedSegmentWalk:
+    """Collect tokenized commands and the scope in which each executes."""
+
+    def __init__(self, include_process_substitutions: bool) -> None:
+        self.records: list[
+            tuple[_CommandSegment | list[str], bool, tuple[int, ...] | None, str | None]
+        ] = []
+        self.next_child_scope = -1
+        self.include_process_substitutions = include_process_substitutions
+
+    def child_scope(self, owner_scope: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if owner_scope is None:
+            return None
+        scope = (*owner_scope, self.next_child_scope)
+        self.next_child_scope -= 1
+        return scope
+
+    def emit_python(self, program: str, owner_scope: tuple[int, ...] | None) -> bool:
+        python_scope = self.child_scope(owner_scope)
+        for spec in _python_program_evaluated_specs(program):
+            scope = self.child_scope(python_scope)
+            if isinstance(spec.payload, list):
+                self.records.append((spec.payload, False, scope, spec.cwd))
+            elif not self.visit_shell(spec.payload, scope, cwd_override=spec.cwd):
+                return False
+        return True
+
+    def emit_payload(self, payload: EvaluatedPayload, owner_scope: tuple[int, ...] | None) -> bool:
+        if payload.kind == StdinConsumer.SHELL:
+            scope = owner_scope if payload.origin == "eval" else self.child_scope(owner_scope)
+            return self.visit_shell(payload.text, scope)
+        if payload.kind == StdinConsumer.PYTHON:
+            return self.emit_python(payload.text, owner_scope)
+        return True
+
+    def owned_payloads(
+        self, text: str, segment_count: int
+    ) -> dict[int | None, list[EvaluatedPayload]] | None:
+        payloads: dict[int | None, list[EvaluatedPayload]] = {}
+        for payload in evaluated_payloads(text):
+            payloads.setdefault(payload.consumer_index, []).append(payload)
+        if self.include_process_substitutions:
+            for _kind, start, _end, body, balanced in _extract_process_substitution_occurrences(
+                text
+            ):
+                if not balanced:
+                    return None
+                owner = _occurrence_owner_index(text, start, segment_count)
+                payloads.setdefault(owner, []).append(
+                    EvaluatedPayload(
+                        body, StdinConsumer.SHELL, owner, "process-substitution", None
+                    )
+                )
+        return payloads
+
+    def visit_shell(
+        self,
+        text: str,
+        base_scope: tuple[int, ...] | None,
+        *,
+        submitted: bool = False,
+        cwd_override: str | None = None,
+    ) -> bool:
+        parsed = _tokenize_command_segments_with_redirects(text)
+        if parsed is None:
+            return False
+        payloads = self.owned_payloads(text, len(parsed))
+        if payloads is None:
+            return False
+        for index, segment in enumerate(parsed):
+            scope = None if base_scope is None else (*base_scope, *segment.subshell_path)
+            self.records.append((segment, submitted, scope, cwd_override))
+            for payload in payloads.pop(index, []):
+                if not self.emit_payload(payload, scope):
+                    return False
+        for remaining in payloads.values():
+            for payload in remaining:
+                if not self.emit_payload(payload, None):
+                    return False
+        return True
+
+
 def _iter_evaluated_segments(
     command: str, *, include_process_substitutions: bool
-) -> list[tuple[list[str], _CommandSegment | None]] | None:
-    """Yield (tokens, provenance) pairs for every segment that will execute.
-
-    Returns ``None`` when the outer command or any evaluated shell payload
-    cannot be tokenized (fail-open). The pair shape lets both
-    ``all_evaluated_segments_with_provenance`` and ``all_evaluated_segments``
-    project the same iteration without one being a wrapper around the other.
-    """
-    outer = _tokenize_command_segments_with_redirects(command)
-    if outer is None:
-        return None
-    shell_segments = tokenize_shell_payload_segments(
-        command, include_process_substitutions=include_process_substitutions
-    )
-    if shell_segments is None:
-        return None
-
-    pairs: list[tuple[list[str], _CommandSegment | None]] = [
-        (segment.tokens, segment) for segment in outer
-    ]
-    pairs.extend((tokens, None) for tokens in shell_segments)
-    for payload in evaluated_payloads(command):
-        if payload.kind != StdinConsumer.PYTHON:
-            continue
-        specs, _has_unresolved = _python_program_command_specs(payload.text)
-        for spec in specs:
-            if isinstance(spec.payload, list):
-                pairs.append((spec.payload, None))
-            elif spec.invokes_shell:
-                pairs.extend((tokens, None) for tokens in tokenize_command_segments(spec.payload))
-    return pairs
+) -> list[tuple[_CommandSegment | list[str], bool, tuple[int, ...] | None, str | None]] | None:
+    """Return tokens, submitted provenance, scope, and cwd at consumer order."""
+    walk = _EvaluatedSegmentWalk(include_process_substitutions)
+    return walk.records if walk.visit_shell(command, (), submitted=True) else None
 
 
 def all_evaluated_segments_with_provenance(
@@ -604,29 +585,49 @@ def all_evaluated_segments_with_provenance(
     string `subprocess.run("...")` spec (no shell) is excluded -- it never
     reaches an argv-splitting shell. Returns `None` when the outer command
     or any evaluated shell payload cannot be tokenized (fail-open).
-    ``include_process_substitutions`` is threaded through to
-    `tokenize_shell_payload_segments` for callers (e.g.
-    `planner_gh_discovery_guard.py`) that must also see `<(...)`/`>(...)`
-    bodies; the default preserves the historic shell-substitution-only reach.
+    ``include_process_substitutions`` also traverses `<(...)`/`>(...)` bodies
+    for callers such as `planner_gh_discovery_guard.py`; the default preserves
+    the historic shell-substitution-only reach.
     """
-    pairs = _iter_evaluated_segments(
+    records = _iter_evaluated_segments(
         command, include_process_substitutions=include_process_substitutions
     )
-    if pairs is None:
+    if records is None:
         return None
-    return [EvaluatedSegment(tokens, provenance) for tokens, provenance in pairs]
+    segments: list[EvaluatedSegment] = []
+    for item, submitted, scope, cwd_override in records:
+        if isinstance(item, _CommandSegment):
+            segments.append(
+                EvaluatedSegment(
+                    item.tokens,
+                    item if submitted else None,
+                    item.redirect_syntax,
+                    item.argv_tokens,
+                    scope,
+                    cwd_override=cwd_override,
+                )
+            )
+        else:
+            segments.append(
+                EvaluatedSegment(
+                    item, None, [False] * len(item), None, scope, cwd_override=cwd_override
+                )
+            )
+    return segments
 
 
 def all_evaluated_segments(
     command: str, *, include_process_substitutions: bool = False
 ) -> list[list[str]] | None:
     """Return every segment that will actually execute, across every consumer."""
-    pairs = _iter_evaluated_segments(
+    records = _iter_evaluated_segments(
         command, include_process_substitutions=include_process_substitutions
     )
-    if pairs is None:
+    if records is None:
         return None
-    return [tokens for tokens, _ in pairs]
+    return [
+        item.tokens if isinstance(item, _CommandSegment) else item for item, _, _, _ in records
+    ]
 
 
 def live_command_text(command: str) -> str:

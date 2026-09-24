@@ -392,27 +392,33 @@ class _CommandSegment:
 
 @dataclass(frozen=True, slots=True)
 class EvaluatedSegment:
-    """An evaluated argv segment and its submitted-command provenance.
+    """An evaluated argv segment with token and process-scope provenance.
 
     ``provenance`` is absent for commands recovered from evaluated payloads,
-    whose tokens have no source span in the submitted command text.
+    whose tokens have no source span in the submitted command text. ``argv_tokens``
+    is absent only for literal Python subprocess argv, which was not shell-lexed.
+    ``subshell_path`` is None when the payload's owning segment is unknown.
+    ``cwd_override`` is a Python subprocess's explicitly configured initial cwd.
     """
 
     tokens: list[str]
     provenance: _CommandSegment | None
+    redirect_syntax: list[bool]
+    argv_tokens: list[ArgvToken] | None
+    subshell_path: tuple[int, ...] | None
+    cwd_override: str | None = None
 
     def __post_init__(self) -> None:
         if not self.tokens:
             raise ValueError("EvaluatedSegment requires a non-empty token list")
+        if len(self.redirect_syntax) != len(self.tokens):
+            raise ValueError("EvaluatedSegment redirect_syntax must align with tokens")
+        if self.argv_tokens is not None and len(self.argv_tokens) != len(self.tokens):
+            raise ValueError("EvaluatedSegment argv_tokens must align with tokens")
         if self.provenance is not None and self.provenance.tokens != self.tokens:
             raise ValueError(
                 "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
             )
-
-    @property
-    def subshell_path(self) -> tuple[int, ...]:
-        """Subshell nesting path of the owning submitted segment (empty for payload segments)."""
-        return self.provenance.subshell_path if self.provenance is not None else ()
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:

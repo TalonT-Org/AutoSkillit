@@ -1,85 +1,60 @@
 """Lock in EvaluatedSegment construction invariants from PR #5071 resolve-review.
 
-The sole sanctioned projection in ``_interpreters._iter_evaluated_segments``
+The sole sanctioned projection in ``all_evaluated_segments_with_provenance``
 already guarantees non-empty tokens, aligned token metadata, and
 tokens/provenance parity. These tests pin those invariants at construction.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from autoskillit.hooks._classification._interpreters import (
     all_evaluated_segments_with_provenance,
 )
-from autoskillit.hooks._classification._tokenizer import (
-    ArgvToken,
-    EvaluatedSegment,
-    _CommandSegment,
-)
+from autoskillit.hooks._classification._tokenizer import EvaluatedSegment
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+
+def _submitted_segment() -> EvaluatedSegment:
+    segments = all_evaluated_segments_with_provenance("git status")
+    assert segments is not None
+    return segments[0]
 
 
 def test_evaluated_segment_rejects_empty_token_list() -> None:
     """Empty tokens would let a malformed segment reach downstream consumers."""
     with pytest.raises(ValueError, match="non-empty token list"):
-        EvaluatedSegment([], None, [], None, ())
+        replace(_submitted_segment(), tokens=[], redirect_syntax=[], argv_tokens=[])
 
 
 @pytest.mark.parametrize("field", ["redirect_syntax", "argv_tokens"])
 def test_evaluated_segment_rejects_misaligned_metadata(field: str) -> None:
     """Every shell metadata entry must refer to one token in the segment."""
-    redirects = [False, False]
-    argv = [
-        ArgvToken("git", False, "git"),
-        ArgvToken("status", False, "status"),
-    ]
+    segment = _submitted_segment()
     if field == "redirect_syntax":
-        redirects.pop()
+        changes = {"redirect_syntax": [False]}
     else:
-        argv.pop()
+        assert segment.argv_tokens is not None
+        changes = {"argv_tokens": segment.argv_tokens[:1]}
     with pytest.raises(ValueError, match=f"{field} must align with tokens"):
-        EvaluatedSegment(["git", "status"], None, redirects, argv, ())
+        replace(segment, **changes)
 
 
 def test_evaluated_segment_rejects_tokens_provenance_mismatch() -> None:
     """When provenance is set, tokens must equal provenance.tokens."""
-    provenance = _CommandSegment(
-        tokens=["git", "status"],
-        redirect_syntax=[False, False],
-        argv_tokens=[
-            ArgvToken(text="git", fully_single_quoted=False, raw_span="git"),
-            ArgvToken(text="status", fully_single_quoted=False, raw_span="status"),
-        ],
-    )
     with pytest.raises(ValueError, match="must match provenance.tokens"):
-        EvaluatedSegment(
-            ["git", "show"],
-            provenance,
-            provenance.redirect_syntax,
-            provenance.argv_tokens,
-            provenance.subshell_path,
-        )
+        replace(_submitted_segment(), tokens=["git", "show"])
 
 
 def test_evaluated_segment_accepts_matching_provenance() -> None:
     """The happy path: tokens equal provenance.tokens."""
-    provenance = _CommandSegment(
-        tokens=["git", "status"],
-        redirect_syntax=[False, False],
-        argv_tokens=[
-            ArgvToken(text="git", fully_single_quoted=False, raw_span="git"),
-            ArgvToken(text="status", fully_single_quoted=False, raw_span="status"),
-        ],
-    )
-    segment = EvaluatedSegment(
-        ["git", "status"],
-        provenance,
-        provenance.redirect_syntax,
-        provenance.argv_tokens,
-        provenance.subshell_path,
-    )
+    segment = _submitted_segment()
+    provenance = segment.provenance
+    assert provenance is not None
     assert segment.tokens == provenance.tokens
     assert segment.redirect_syntax == provenance.redirect_syntax
     assert segment.argv_tokens == provenance.argv_tokens
@@ -88,7 +63,13 @@ def test_evaluated_segment_accepts_matching_provenance() -> None:
 
 def test_evaluated_segment_accepts_provenance_none() -> None:
     """Literal Python argv has no submitted source or shell-lexed argv metadata."""
-    segment = EvaluatedSegment(["echo", "hello"], None, [False, False], None, (-1,))
+    segments = all_evaluated_segments_with_provenance(
+        'python -c \'import subprocess; subprocess.run(["echo", "hello"])\''
+    )
+    assert segments is not None
+    segment = segments[1]
+    assert segment.provenance is None
+    assert segment.argv_tokens is None
     assert segment.cwd_override is None
 
 

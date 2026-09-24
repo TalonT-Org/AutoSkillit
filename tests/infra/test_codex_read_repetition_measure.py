@@ -260,10 +260,43 @@ _CLASSIFICATION_CASES = [
 ]
 
 
+def _classification_case_ids() -> list[str]:
+    """Build descriptive pytest parametrize IDs for _CLASSIFICATION_CASES.
+
+    A single failing case shows up as ``sed-redirect`` or ``rg-pipe`` rather
+    than ``case-19`` — the offending shell shape is right there in the
+    failure report, no need to scroll back to the parametrization site.
+    """
+    ids: list[str] = []
+    seen: dict[str, int] = {}
+    for cmd, bounded, target in _CLASSIFICATION_CASES:
+        verb = cmd.lstrip(" {").split()[0] if cmd.lstrip() else "empty"
+        has_redirect = ">" in cmd
+        has_pipe = "|" in cmd
+        shape_bits = [verb]
+        if has_pipe:
+            shape_bits.append("pipe")
+        if has_redirect:
+            shape_bits.append("redirect")
+        if target is None and bounded:
+            shape_bits.append("unresolved-target")
+        if not bounded:
+            shape_bits.append("unbounded")
+        base = "-".join(shape_bits)
+        # Disambiguate colliding IDs (e.g. two distinct sed-redirect cases).
+        if base in seen:
+            seen[base] += 1
+            ids.append(f"{base}-{seen[base]}")
+        else:
+            seen[base] = 1
+            ids.append(base)
+    return ids
+
+
 @pytest.mark.parametrize(
     ("cmd", "bounded", "target"),
     _CLASSIFICATION_CASES,
-    ids=[f"case-{index}" for index in range(1, len(_CLASSIFICATION_CASES) + 1)],
+    ids=_classification_case_ids(),
 )
 def test_classify_command(cmd: str, bounded: bool, target: str | None) -> None:
     result = measurer.classify_command(cmd)
@@ -273,6 +306,12 @@ def test_classify_command(cmd: str, bounded: bool, target: str | None) -> None:
 
 
 def _value_flag_commands() -> list[str]:
+    # Multi-value flags where the "value" is itself a search pattern or path that
+    # rg already consumes positionally — skipping them here avoids re-testing the
+    # "next token is a pattern" branch (covered by the rg-pipe-alternation cases
+    # in _CLASSIFICATION_CASES). Without this carve-out the loop would test
+    # `rg -n -e pat 7 pat a.py`, which fails for reasons unrelated to value-flag
+    # consumption.
     omitted_rg_flags = {"-e", "--regexp", "-f", "--file"}
     rg_flags = [
         flag
@@ -297,9 +336,19 @@ def test_every_value_flag_consumes_its_value() -> None:
 
 def test_no_resolved_target_is_purely_numeric() -> None:
     commands = [case[0] for case in _CLASSIFICATION_CASES] + _value_flag_commands()
-    targets = [getattr(measurer.classify_command(command), "target", None) for command in commands]
+    classifications = [measurer.classify_command(command) for command in commands]
+    bounded_reads = [c for c in classifications if isinstance(c, measurer.BoundedRead)]
 
-    assert all(not target.isdigit() for target in targets if target is not None)
+    # Lock the type contract: classify_command must return BoundedRead for any
+    # classification outcome. getattr(..., "target", None) would silently coerce
+    # AttributeError to None if the field is ever renamed or removed, hiding a
+    # structural regression behind a vacuous truthy check.
+    assert all(isinstance(c, measurer.BoundedRead) for c in bounded_reads), (
+        f"non-BoundedRead classification outcome: {bounded_reads!r}"
+    )
+    assert all(
+        not target.isdigit() for target in (c.target for c in bounded_reads) if target is not None
+    )
 
 
 def test_custom_tool_call_extracts_every_literal_exec_call(tmp_path: Path) -> None:

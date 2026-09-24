@@ -41,7 +41,7 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 #: name-based, so this keeps the registry honest about which definition a
 #: name refers to).
 POLICY_FUNCTIONS: tuple[tuple[str, str], ...] = (
-    ("_interactive_invocation_environment_policy", "execution/backends/claude.py"),
+    ("_interactive_invocation_environment_policy", "execution/backends/_claude/environment.py"),
     ("admit_hook_session_scope", "hooks/_runtime/_hook_settings.py"),
     ("admit_tool_session_scope", "server/lifecycle/_session_scope.py"),
 )
@@ -241,6 +241,12 @@ def check() -> list[str]:
     for func_name, defining_module in POLICY_FUNCTIONS:
         sites = find_call_sites(func_name, defining_module)
         allowed = 2 if func_name in BACKEND_SPECIFIC_EXEMPT_FUNCTIONS else 1
+        if not sites:
+            violations.append(
+                f"{func_name} (registered in {defining_module}) has 0 call sites "
+                f"(expected {allowed}); check the registered defining module"
+            )
+            continue
         if len(sites) <= allowed:
             continue
         if (
@@ -259,7 +265,7 @@ def check() -> list[str]:
 def main() -> int:
     violations = check()
     if violations:
-        print("Duplicate policy-function call sites found:\n")
+        print("Single-enforcement-point violations found:\n")
         for v in violations:
             print(f"  {v}")
         print(

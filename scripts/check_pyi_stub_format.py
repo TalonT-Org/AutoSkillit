@@ -57,7 +57,10 @@ def _guess_name(node: ast.stmt) -> str:
 
 def check() -> list[str]:
     violations = []
-    for path in sorted(SRC_ROOT.rglob("__init__.pyi")):
+    paths = sorted(SRC_ROOT.rglob("__init__.pyi"))
+    if not paths:
+        return [f"{SRC_ROOT}: no __init__.pyi stubs discovered"]
+    for path in paths:
         violations.extend(check_file(path))
     return violations
 

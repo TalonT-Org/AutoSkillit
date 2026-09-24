@@ -111,7 +111,10 @@ def check_file(pyi_path: Path) -> list[str]:
 
 def check() -> list[str]:
     violations: list[str] = []
-    for path in sorted(SRC_ROOT.rglob("__init__.pyi")):
+    paths = sorted(SRC_ROOT.rglob("__init__.pyi"))
+    if not paths:
+        return [f"{SRC_ROOT}: no __init__.pyi stubs discovered"]
+    for path in paths:
         violations.extend(check_file(path))
     return violations
 

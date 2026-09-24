@@ -1490,6 +1490,7 @@ from .types import (
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
+from .types import parse_intake_discipline_versions as parse_intake_discipline_versions
 from .types import render_intake_digest as render_intake_digest
 from .types import render_target_skill_command as render_target_skill_command
 from .types import required_join_is_unsupported as required_join_is_unsupported

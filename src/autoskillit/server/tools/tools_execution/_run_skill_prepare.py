@@ -76,6 +76,12 @@ class _ExplorerLaunchLease:
     backend: CodingAgentBackend | None
 
 
+def _server_get_config():
+    from autoskillit.server import _get_config  # circular-break: server composition root
+
+    return _get_config()
+
+
 def _record_explorer_launch_lease(
     state: _RunSkillDispatchState,
     *,
@@ -433,8 +439,6 @@ def _resolve_dispatch_backend_authority(
 
 
 def _prepare_config_and_step_fallback(state: _RunSkillDispatchState, ordinal: int) -> str:
-    from autoskillit.server import _get_config  # circular-break
-
     state._candidate_rejection_reason = None
     if ordinal and state._stored_contract_entry is None:
         if state.invocation is None:
@@ -449,7 +453,7 @@ def _prepare_config_and_step_fallback(state: _RunSkillDispatchState, ordinal: in
     state.profile_name_out = ""
     state.effective_model = state.model
 
-    state._cfg = _get_config()
+    state._cfg = _server_get_config()
     state._in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
     state._inspector_model = (
         os.environ.get(FLEET_INSPECTOR_MODEL_ENV_VAR) or state._cfg.fleet.inspector_model
@@ -562,8 +566,6 @@ def _bind_dispatch_projection(state: _RunSkillDispatchState) -> None:
 
 
 def _check_dispatch_preconditions(state: _RunSkillDispatchState) -> str | None:
-    from autoskillit.server import _get_config  # circular-break
-
     # Auto-enrich order_id from the fleet dispatcher's env variable when the
     # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
     # by fleet/_api.py into every L2 food truck session environment and inherited by all
@@ -583,7 +585,7 @@ def _check_dispatch_preconditions(state: _RunSkillDispatchState) -> str | None:
         ) is not None:
             return input_error
 
-    if _get_config().safety.require_dry_walkthrough and state._installed_execution is None:
+    if _server_get_config().safety.require_dry_walkthrough and state._installed_execution is None:
         if (gate_error := _check_dry_walkthrough(state.skill_command, state.cwd)) is not None:
             return gate_error
 

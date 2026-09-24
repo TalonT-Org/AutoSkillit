@@ -40,6 +40,7 @@ _KNOWN_EVIDENCE_ANCHORS = frozenset(
         "SkillProjectionPreparation",
         "build_fresh_projection_context",
         "catalog_projection_context",
+        "configure_managed_session_dir",
     }
 )
 

@@ -16,7 +16,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

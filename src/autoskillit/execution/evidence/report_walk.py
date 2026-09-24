@@ -45,7 +45,7 @@ _PROJECTION_DELETED_NO_RECORDS = "Session archive disappeared"
 # vocabulary.
 SOURCE_OTLP: Final[str] = "otlp"
 SOURCE_ARCHIVE: Final[str] = "archive"
-_VALID_SOURCE_KEYS: Final[frozenset[str]] = frozenset({SOURCE_OTLP, SOURCE_ARCHIVE})
+VALID_SOURCE_KEYS: Final[frozenset[str]] = frozenset({SOURCE_OTLP, SOURCE_ARCHIVE})
 
 # WalkItem ``kind`` values emitted by the report walker. Shared with consumers
 # (e.g. ``_report_index_rows.rows_for_walk_item``) so dispatch is by constant
@@ -63,10 +63,10 @@ class SourceGapError(RuntimeError):
 
     def __init__(self, source: str, message: str) -> None:
         super().__init__(message)
-        if source not in _VALID_SOURCE_KEYS:
+        if source not in VALID_SOURCE_KEYS:
             raise ValueError(
                 f"Unknown SourceGapError source: {source!r}; expected one of "
-                f"{sorted(_VALID_SOURCE_KEYS)}"
+                f"{sorted(VALID_SOURCE_KEYS)}"
             )
         self.source = source
 

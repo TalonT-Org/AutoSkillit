@@ -32,7 +32,7 @@ from autoskillit.execution.evidence.otlp_tokens import (
     unique_string_attribute,
 )
 from autoskillit.execution.evidence.report_walk import OTLP_WALK_KIND, SESSION_WALK_KIND, WalkItem
-from autoskillit.execution.session._turn_usage import classify_token_measure
+from autoskillit.execution.session.turn_usage import classify_token_measure
 
 REPORT_INDEX_SCHEMA_VERSION: Final[int] = 1
 SESSION_KIND: Final[str] = "session"

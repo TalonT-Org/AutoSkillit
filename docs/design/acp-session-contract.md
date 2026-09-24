@@ -534,7 +534,7 @@ human-facing ratios remain inside one source pair.
 | §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
-| §4.9 Token evidence | `TokenMeasure`, source-pair classifier, OTLP sink | `src/autoskillit/core/types/_type_token.py`, `src/autoskillit/execution/session/_turn_usage.py`, `src/autoskillit/execution/evidence/otlp_sink.py` |
+| §4.9 Token evidence | `TokenMeasure`, source-pair classifier, OTLP sink | `src/autoskillit/core/types/_type_token.py`, `src/autoskillit/execution/session/turn_usage.py`, `src/autoskillit/execution/evidence/otlp_sink.py` |
 | §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |

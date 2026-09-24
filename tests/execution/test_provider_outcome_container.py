@@ -31,7 +31,7 @@ class TestProviderOutcomeConstruction:
         assert outcome.fallback_activated is False
 
     def test_none_used_sentinel_cannot_identify_a_token_observation(self):
-        from autoskillit.execution.session._turn_usage import classify_token_measure
+        from autoskillit.execution.session.turn_usage import classify_token_measure
 
         with pytest.raises(ValueError, match="backend and provider_used"):
             classify_token_measure(

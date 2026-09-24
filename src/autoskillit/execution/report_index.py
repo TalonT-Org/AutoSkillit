@@ -46,8 +46,10 @@ from autoskillit.execution._report_index_rows import (
     rows_for_walk_item,
 )
 from autoskillit.execution.evidence.report_walk import (
+    CHECKPOINT_WALK_KIND,
     SOURCE_ARCHIVE,
     SOURCE_OTLP,
+    VALID_SOURCE_KEYS,
     SourceGapError,
     WalkItem,
     iter_report_walk,
@@ -306,7 +308,7 @@ class _RowAppender:
         self.watermark = item.watermark
         self.items_walked += 1
         self._dirty = True
-        if item.kind == "checkpoint" or len(self._pending) >= _COMMIT_BYTES:
+        if item.kind == CHECKPOINT_WALK_KIND or len(self._pending) >= _COMMIT_BYTES:
             self.commit()
 
     def commit(self) -> None:
@@ -325,13 +327,12 @@ class _RowAppender:
 
     def reset_source(self, source: str) -> None:
         self.commit()
-        keys = _RESET_KEYS.get(source)
-        if keys is None:
+        if source not in VALID_SOURCE_KEYS:
             raise ValueError(
                 f"Unknown report-index reset source: {source!r}; "
-                f"expected one of {sorted(_RESET_KEYS)}"
+                f"expected one of {sorted(VALID_SOURCE_KEYS)}"
             )
-        for key in keys:
+        for key in _RESET_KEYS[source]:
             if self.watermark is not None:
                 self.watermark.pop(key, None)
         self._dirty = True

@@ -8,7 +8,7 @@ import autoskillit.execution.backends._claude_parse as _patch_backends__claude_p
 from autoskillit.core import BackendEventKind, ClaudeEventData, ResultParser, SessionEvent
 from autoskillit.execution.backends import ClaudeResultParser
 from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

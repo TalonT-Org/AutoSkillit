@@ -464,155 +464,21 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         Path(state.cwd), state.tool_ctx.config.workspace.temp_dir
     )
     if state._dynamic_recipe_call:
-        if (terminal := _admit_step_guard(state)) is not None:
-            return terminal
-        if state._claims_recipe_execution:
-            return _recipe_execution_deny(
-                "recipe_execution_dynamic_attestation",
-                "a dynamic recipe skill step cannot claim a concrete invocation template",
-            )
-        if not state.resume_session_id:
-            try:
-                state.child_skill_command = build_standalone_child_prompt(
-                    state.skill_command,
-                    state.cwd,
-                    state.skill_inputs,
-                    audit_output_mode=state._audit_output_mode,
-                )
-            except RecipeExecutionAdmissionError as exc:
-                return _recipe_execution_deny(exc.code, str(exc))
-    elif state._installed_execution is not None:
-        if not state.recipe_execution_id or not state.invocation_template_digest:
-            return _recipe_execution_deny(
-                "recipe_execution_attestation_missing",
-                RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
-            )
-        if not state.step_name:
-            return _recipe_execution_deny(
-                "recipe_execution_step_missing",
-                "an attested recipe invocation requires its exact step_name",
-            )
-        _run_skill_tool_def = _te_pkg.get_tool_def("run_skill")
-        if _run_skill_tool_def is None:
-            raise RuntimeError("run_skill must be a registered ToolDef")
-        _actual_mcp_kwargs = _build_actual_mcp_kwargs(
-            _run_skill_tool_def,
-            {
-                "skill_command": state.skill_command,
-                "cwd": state.cwd,
-                "model": state.model,
-                "step_name": state.step_name,
-                "recipe_execution_id": state.recipe_execution_id,
-                "invocation_template_digest": state.invocation_template_digest,
-                "step_provider": state.step_provider,
-                "order_id": state.order_id,
-                "stale_threshold": state.stale_threshold,
-                "idle_output_timeout": state.idle_output_timeout,
-                "output_dir": state.output_dir,
-                "resume_session_id": state.resume_session_id,
-                "closure_authority_path": state.closure_authority_path,
-                "closure_authority_hash": state.closure_authority_hash,
-                "closure_plan_paths": state.closure_plan_paths,
-                "closure_base_sha": state.closure_base_sha,
-                "closure_diff_sha": state.closure_diff_sha,
-                "closure_target_sha": state.closure_target_sha,
-                "step_guard_value": state.step_guard_value,
-                "retry_after_audit_attempt_id": state.retry_after_audit_attempt_id,
-                "native_shell_capture_mode": state.native_shell_capture_mode,
-            },
-        )
-        try:
-            state._bound_recipe_inputs, state._invocation_template = (
-                bind_attested_runtime_invocation(
-                    state._installed_execution,
-                    execution_id=state.recipe_execution_id,
-                    step_name=state.step_name,
-                    template_digest=state.invocation_template_digest,
-                    skill_command=state.skill_command,
-                    skill_inputs=state.skill_inputs,
-                    actual_mcp_kwargs=_actual_mcp_kwargs,
-                )
-            )
-        except RecipeExecutionAdmissionError as exc:
-            return _recipe_execution_deny(exc.code, str(exc))
-        if state.tool_ctx.config.safety.require_dry_walkthrough:
-            bound_plan_path = dict(state._bound_recipe_inputs).get("plan_path")
-            if (
-                gate_error := _check_dry_walkthrough_plan(
-                    state.skill_command.split()[0],
-                    state.cwd,
-                    bound_plan_path if isinstance(bound_plan_path, str) else None,
-                    config=state.tool_ctx.config,
-                )
-            ) is not None:
-                return gate_error
-        try:
-            resolved_preflights = resolve_attested_input_preflight(
-                state.tool_ctx,
-                state._installed_execution,
-                skill_command=state.skill_command,
-                execution_id=state.recipe_execution_id,
-                step_name=state.step_name,
-                template=state._invocation_template,
-                bound_inputs=state._bound_recipe_inputs,
-                allowed_root=state._clone_allowed_root,
-            )
-            state._preflight_result = resolved_preflights.audit
-            state._plan_set_preflight = resolved_preflights.plan_set
-        except RecipeExecutionAdmissionError as exc:
-            return _recipe_execution_deny(exc.code, str(exc))
-        _runtime_digest = compute_runtime_binding_digest(
-            execution_id=state.recipe_execution_id,
-            step_name=state.step_name,
-            template_digest=state.invocation_template_digest,
-            bound_inputs=state._bound_recipe_inputs,
-            actual_mcp_kwargs=_actual_mcp_kwargs,
-            preflight=state._preflight_result,
-            plan_set_preflight=state._plan_set_preflight,
-            retry_after_audit_attempt_id=state.retry_after_audit_attempt_id or None,
-        )
-        try:
-            state._installed_execution = record_runtime_binding_digest(
-                state.tool_ctx,
-                execution_id=state.recipe_execution_id,
-                step_name=state.step_name,
-                digest=_runtime_digest,
-            )
-        except RecipeExecutionAdmissionError as exc:
-            return _recipe_execution_deny(exc.code, str(exc))
-        if (terminal := _admit_step_guard(state)) is not None:
-            return terminal
-        if state._audit_publication is not None:
-            try:
-                _prepare_audit_reservation(state, _runtime_digest, _actual_mcp_kwargs)
-                if (terminal := _handle_audit_reservation_decision(state)) is not None:
-                    return terminal
-            except (
-                AuditCycleVerificationError,
-                OSError,
-                RecipeExecutionAdmissionError,
-                ValueError,
-            ) as exc:
-                code = (
-                    exc.code
-                    if isinstance(exc, RecipeExecutionAdmissionError)
-                    else "audit_reservation_failed"
-                )
-                return _recipe_execution_deny(code, str(exc))
-        else:
-            state.child_skill_command = build_bound_child_prompt(
-                state.skill_command,
-                state._bound_recipe_inputs,
-                state._preflight_result,
-                plan_set_preflight=state._plan_set_preflight,
-                audit_output_mode=state._audit_output_mode,
-            )
-    elif state._claims_recipe_execution:
+        return _admit_dynamic_recipe_invocation(state)
+    if state._installed_execution is not None:
+        return _admit_attested_recipe_invocation(state)
+    return _admit_standalone_invocation(state)
+
+
+def _admit_dynamic_recipe_invocation(state: _RunSkillDispatchState) -> str | None:
+    if (terminal := _admit_step_guard(state)) is not None:
+        return terminal
+    if state._claims_recipe_execution:
         return _recipe_execution_deny(
-            "recipe_execution_inactive",
-            RECIPE_EXECUTION_INACTIVE_MESSAGE,
+            "recipe_execution_dynamic_attestation",
+            "a dynamic recipe skill step cannot claim a concrete invocation template",
         )
-    elif not state.resume_session_id:
+    if not state.resume_session_id:
         try:
             state.child_skill_command = build_standalone_child_prompt(
                 state.skill_command,
@@ -621,8 +487,160 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 audit_output_mode=state._audit_output_mode,
             )
         except RecipeExecutionAdmissionError as exc:
-            return _recipe_execution_deny(
-                exc.code,
-                str(exc),
+            return _recipe_execution_deny(exc.code, str(exc))
+    return None
+
+
+def _admit_attested_recipe_invocation(state: _RunSkillDispatchState) -> str | None:
+    assert state._installed_execution is not None
+    if not state.recipe_execution_id or not state.invocation_template_digest:
+        return _recipe_execution_deny(
+            "recipe_execution_attestation_missing",
+            RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
+        )
+    if not state.step_name:
+        return _recipe_execution_deny(
+            "recipe_execution_step_missing",
+            "an attested recipe invocation requires its exact step_name",
+        )
+    _run_skill_tool_def = _te_pkg.get_tool_def("run_skill")
+    if _run_skill_tool_def is None:
+        raise RuntimeError("run_skill must be a registered ToolDef")
+    _actual_mcp_kwargs = _build_actual_mcp_kwargs(
+        _run_skill_tool_def,
+        {
+            "skill_command": state.skill_command,
+            "cwd": state.cwd,
+            "model": state.model,
+            "step_name": state.step_name,
+            "recipe_execution_id": state.recipe_execution_id,
+            "invocation_template_digest": state.invocation_template_digest,
+            "step_provider": state.step_provider,
+            "order_id": state.order_id,
+            "stale_threshold": state.stale_threshold,
+            "idle_output_timeout": state.idle_output_timeout,
+            "output_dir": state.output_dir,
+            "resume_session_id": state.resume_session_id,
+            "closure_authority_path": state.closure_authority_path,
+            "closure_authority_hash": state.closure_authority_hash,
+            "closure_plan_paths": state.closure_plan_paths,
+            "closure_base_sha": state.closure_base_sha,
+            "closure_diff_sha": state.closure_diff_sha,
+            "closure_target_sha": state.closure_target_sha,
+            "step_guard_value": state.step_guard_value,
+            "retry_after_audit_attempt_id": state.retry_after_audit_attempt_id,
+            "native_shell_capture_mode": state.native_shell_capture_mode,
+        },
+    )
+    try:
+        state._bound_recipe_inputs, state._invocation_template = bind_attested_runtime_invocation(
+            state._installed_execution,
+            execution_id=state.recipe_execution_id,
+            step_name=state.step_name,
+            template_digest=state.invocation_template_digest,
+            skill_command=state.skill_command,
+            skill_inputs=state.skill_inputs,
+            actual_mcp_kwargs=_actual_mcp_kwargs,
+        )
+    except RecipeExecutionAdmissionError as exc:
+        return _recipe_execution_deny(exc.code, str(exc))
+    if state.tool_ctx.config.safety.require_dry_walkthrough:
+        bound_plan_path = dict(state._bound_recipe_inputs).get("plan_path")
+        if (
+            gate_error := _check_dry_walkthrough_plan(
+                state.skill_command.split()[0],
+                state.cwd,
+                bound_plan_path if isinstance(bound_plan_path, str) else None,
+                config=state.tool_ctx.config,
             )
+        ) is not None:
+            return gate_error
+    try:
+        resolved_preflights = resolve_attested_input_preflight(
+            state.tool_ctx,
+            state._installed_execution,
+            skill_command=state.skill_command,
+            execution_id=state.recipe_execution_id,
+            step_name=state.step_name,
+            template=state._invocation_template,
+            bound_inputs=state._bound_recipe_inputs,
+            allowed_root=state._clone_allowed_root,
+        )
+        state._preflight_result = resolved_preflights.audit
+        state._plan_set_preflight = resolved_preflights.plan_set
+    except RecipeExecutionAdmissionError as exc:
+        return _recipe_execution_deny(exc.code, str(exc))
+    return _finish_attested_recipe_invocation(state, _actual_mcp_kwargs)
+
+
+def _finish_attested_recipe_invocation(
+    state: _RunSkillDispatchState, actual_mcp_kwargs: dict[str, BoundScalar]
+) -> str | None:
+    assert state.recipe_execution_id is not None
+    assert state.invocation_template_digest is not None
+    _runtime_digest = compute_runtime_binding_digest(
+        execution_id=state.recipe_execution_id,
+        step_name=state.step_name,
+        template_digest=state.invocation_template_digest,
+        bound_inputs=state._bound_recipe_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=state._preflight_result,
+        plan_set_preflight=state._plan_set_preflight,
+        retry_after_audit_attempt_id=state.retry_after_audit_attempt_id or None,
+    )
+    try:
+        state._installed_execution = record_runtime_binding_digest(
+            state.tool_ctx,
+            execution_id=state.recipe_execution_id,
+            step_name=state.step_name,
+            digest=_runtime_digest,
+        )
+    except RecipeExecutionAdmissionError as exc:
+        return _recipe_execution_deny(exc.code, str(exc))
+    if (terminal := _admit_step_guard(state)) is not None:
+        return terminal
+    if state._audit_publication is not None:
+        try:
+            _prepare_audit_reservation(state, _runtime_digest, actual_mcp_kwargs)
+            if (terminal := _handle_audit_reservation_decision(state)) is not None:
+                return terminal
+        except (
+            AuditCycleVerificationError,
+            OSError,
+            RecipeExecutionAdmissionError,
+            ValueError,
+        ) as exc:
+            code = (
+                exc.code
+                if isinstance(exc, RecipeExecutionAdmissionError)
+                else "audit_reservation_failed"
+            )
+            return _recipe_execution_deny(code, str(exc))
+    else:
+        state.child_skill_command = build_bound_child_prompt(
+            state.skill_command,
+            state._bound_recipe_inputs,
+            state._preflight_result,
+            plan_set_preflight=state._plan_set_preflight,
+            audit_output_mode=state._audit_output_mode,
+        )
+    return None
+
+
+def _admit_standalone_invocation(state: _RunSkillDispatchState) -> str | None:
+    if state._claims_recipe_execution:
+        return _recipe_execution_deny(
+            "recipe_execution_inactive",
+            RECIPE_EXECUTION_INACTIVE_MESSAGE,
+        )
+    if not state.resume_session_id:
+        try:
+            state.child_skill_command = build_standalone_child_prompt(
+                state.skill_command,
+                state.cwd,
+                state.skill_inputs,
+                audit_output_mode=state._audit_output_mode,
+            )
+        except RecipeExecutionAdmissionError as exc:
+            return _recipe_execution_deny(exc.code, str(exc))
     return None

@@ -94,6 +94,7 @@ if TYPE_CHECKING:
         BackendConventions,
         CodingAgentBackend,
         HeadlessExecutor,
+        ManagedFixedBatchSupervisor,
         SubprocessRunner,
         ValidatedAddDir,
     )
@@ -707,6 +708,40 @@ def _request_facts(
     attestation = adaptation_context.managed_join_attestation
     if attestation is None:
         raise SkillContractError("run_fixed_batch requires a current server-issued attestation")
+    binding, selected_source, binding_path = _admit_managed_parent_binding(
+        skill_name=skill_name,
+        tool_ctx=tool_ctx,
+        parent_id=parent_id,
+        backend=backend,
+        attestation=attestation,
+        service=service,
+    )
+    return _ManagedRequestFacts(
+        launch=ManagedLaunchBinding(
+            request_session_id=request_session_id,
+            managed_parent_id=binding.managed_parent_id,
+            parent_session_id=attestation.parent_session_id,
+            caller_key="pending",
+            attestation_epoch=attestation.activation_epoch,
+            recovery_ready=service.recovery_ready,
+            selected_source=selected_source,
+        ),
+        binding=binding,
+        selected_source=selected_source,
+        channel_dir=binding_path.parent,
+        adaptation_context=adaptation_context,
+    )
+
+
+def _admit_managed_parent_binding(
+    *,
+    skill_name: str,
+    tool_ctx: ToolContext,
+    parent_id: str,
+    backend: CodingAgentBackend,
+    attestation: ManagedJoinAttestation,
+    service: ManagedFixedBatchSupervisor,
+) -> tuple[SessionBinding, LoadedSkillEntry, Path]:
     normalized_skill_name = normalize_skill_name(skill_name)
     binding_path = resolve_binding_path(str(tool_ctx.project_dir), parent_id)
     _write_managed_parent_binding(
@@ -747,21 +782,7 @@ def _request_facts(
         binding_session_id=parent_id,
         attestation=attestation,
     )
-    return _ManagedRequestFacts(
-        launch=ManagedLaunchBinding(
-            request_session_id=request_session_id,
-            managed_parent_id=binding.managed_parent_id,
-            parent_session_id=attestation.parent_session_id,
-            caller_key="pending",
-            attestation_epoch=attestation.activation_epoch,
-            recovery_ready=service.recovery_ready,
-            selected_source=selected_source,
-        ),
-        binding=binding,
-        selected_source=selected_source,
-        channel_dir=binding_path.parent,
-        adaptation_context=adaptation_context,
-    )
+    return binding, selected_source, binding_path
 
 
 def _bind_managed_parent_route(

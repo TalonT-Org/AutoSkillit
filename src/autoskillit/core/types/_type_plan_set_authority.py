@@ -396,6 +396,13 @@ class PlanSetAuthority:
     authority_digest: str
 
     def __post_init__(self) -> None:
+        self._validate_identity()
+        self._validate_revision_and_issue()
+        self._validate_collections()
+        if self.authority_digest != self.compute_digest():
+            raise ValueError("PlanSetAuthority.authority_digest does not match event content")
+
+    def _validate_identity(self) -> None:
         if self.schema_version != PLAN_SET_SCHEMA_VERSION:
             raise ValueError(f"PlanSetAuthority.schema_version must be {PLAN_SET_SCHEMA_VERSION}")
         for name in ("plan_set_authority_id", "generated_at", "authority_digest"):
@@ -410,6 +417,8 @@ class PlanSetAuthority:
             self.inventory_mode, InventoryMode
         ):
             raise ValueError("PlanSetAuthority state or inventory mode is invalid")
+
+    def _validate_revision_and_issue(self) -> None:
         if isinstance(self.revision, bool) or self.revision < 1:
             raise ValueError("PlanSetAuthority.revision must be positive")
         if self.revision > 1 and not self.parent_authority_digest:
@@ -418,6 +427,8 @@ class PlanSetAuthority:
             _nonempty("PlanSetAuthority.parent_authority_digest", self.parent_authority_digest)
         if self.issue is not None and not isinstance(self.issue, IssueSnapshotRef):
             raise ValueError("PlanSetAuthority.issue is invalid")
+
+    def _validate_collections(self) -> None:
         for name, item_type in (
             ("requirements", RequirementDef),
             ("parts", PlanPartRef),
@@ -435,8 +446,6 @@ class PlanSetAuthority:
             raise ValueError("PlanSetAuthority.parts must have consecutive ordinals")
         if len({Path(part.locator).resolve() for part in self.parts}) != len(self.parts):
             raise ValueError("PlanSetAuthority.parts contain duplicate locators")
-        if self.authority_digest != self.compute_digest():
-            raise ValueError("PlanSetAuthority.authority_digest does not match event content")
 
     @classmethod
     def create(

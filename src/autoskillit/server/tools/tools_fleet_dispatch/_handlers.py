@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from autoskillit.core import (
     FinalizedRecipeStep,
     FleetErrorCode,
     NativeShellCaptureMode,
+    SemanticAdaptationContext,
     SessionCheckpoint,
     fleet_error,
     get_logger,
@@ -29,6 +31,7 @@ from autoskillit.fleet import (
     DispatchAggregatePhase,
     DispatchCompleted,
     DispatchEffectName,
+    DispatchProvenanceTracker,
     DispatchRecord,
     DispatchRejected,
     DispatchResult,
@@ -135,6 +138,332 @@ def _load_preflight_projection(
     return effective_backend_map, finalized_projection
 
 
+def _resolve_dispatch_backend(
+    tool_ctx: ToolContext, backend: str | None
+) -> tuple[CodingAgentBackend | None, str | None]:
+    if backend is None:
+        return None, None
+    try:
+        return resolve_backend_override(backend, launch_resolver=tool_ctx.launch_resolver), None
+    except ValueError as exc:
+        return None, fleet_error(FleetErrorCode.FLEET_INVALID_BACKEND, str(exc))
+
+
+def _resolve_campaign_precondition(
+    provenance: DispatchProvenanceTracker,
+    dispatch_name: str | None,
+) -> tuple[str | None, bool, str | None]:
+    provenance.start(DispatchEffectName.CAMPAIGN_PATH_CAPTURE, retry_relevant=False)
+    campaign_path = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
+    provenance.confirm(
+        DispatchEffectName.CAMPAIGN_PATH_CAPTURE,
+        receipt="campaign path environment captured",
+        retry_relevant=False,
+        identities={"campaign_state_path": campaign_path or ""},
+    )
+    continue_on_failure = (
+        os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false").lower() == "true"
+    )
+    if campaign_path and not continue_on_failure:
+        campaign_sp = Path(campaign_path)
+        if dispatch_name:
+            preflight = prepare_resume(campaign_sp, dispatch_name, continue_on_failure=False)
+            if preflight is not None and preflight.halt:
+                return (
+                    campaign_path,
+                    continue_on_failure,
+                    fleet_error(
+                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                        preflight.halted_reason
+                        or "Campaign halted: a prior dispatch failed and "
+                        "continue_on_failure is false. No further dispatches permitted.",
+                    ),
+                )
+        if has_blocking_dispatch(campaign_sp):
+            return (
+                campaign_path,
+                continue_on_failure,
+                fleet_error(
+                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    "Campaign halted: a prior dispatch failed and "
+                    "continue_on_failure is false. No further dispatches permitted.",
+                ),
+            )
+    return campaign_path, continue_on_failure, None
+
+
+def _resolve_prior_or_skipped_dispatch(
+    tool_ctx: ToolContext,
+    provenance: DispatchProvenanceTracker,
+    campaign_path: str | None,
+    effective_name: str,
+    skip_when: str | None,
+    ingredients: dict[str, str] | None,
+) -> str | None:
+    if campaign_path:
+        prior_record = find_completed_dispatch(Path(campaign_path), effective_name)
+        if prior_record is not None:
+            identities: dict[str, object] = {
+                "dispatch_id": prior_record.dispatch_id,
+                "dispatched_session_id": prior_record.dispatched_session_id,
+            }
+            provenance.confirm(
+                DispatchEffectName.PRIOR_DISPATCH_BINDING,
+                receipt="campaign state reported prior success",
+                retry_relevant=False,
+                identities=identities,
+            )
+            provenance.confirm(
+                DispatchEffectName.COMMIT,
+                receipt="reused committed campaign dispatch",
+                identities=identities,
+            )
+            return DispatchCompleted(
+                success=True,
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id=prior_record.dispatch_id,
+                dispatched_session_id=prior_record.dispatched_session_id,
+                reason="prior dispatch already succeeded",
+                effect_provenance=provenance.snapshot(),
+            ).to_envelope()
+
+    if skip_when:
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
+        error_code, error_message, skip_condition_true = evaluate_skip_when(
+            skip_when, captures, ingredients
+        )
+        if error_code is not None:
+            return fleet_error(error_code, error_message or "")
+        if skip_condition_true:
+            if campaign_path:
+                provenance.start(
+                    DispatchEffectName.CAMPAIGN_STATE_WRITE,
+                    identities={"campaign_state_path": campaign_path},
+                )
+                upsert_dispatch_record_by_name(
+                    Path(campaign_path),
+                    DispatchRecord(
+                        name=effective_name,
+                        status=DispatchStatus.SKIPPED,
+                        reason="skip_when condition evaluated to true",
+                        effect_provenance=provenance.snapshot().to_dict(),
+                    ),
+                )
+                _confirm_campaign_state_write(provenance, campaign_path, effective_name)
+            return DispatchCompleted(
+                success=False,
+                dispatch_status=DispatchStatus.SKIPPED,
+                dispatch_id="",
+                dispatched_session_id="",
+                reason=FleetErrorCode.FLEET_DISPATCH_SKIPPED,
+                effect_provenance=provenance.snapshot(),
+            ).to_envelope()
+    return None
+
+
+def _prepare_managed_join(
+    tool_ctx: ToolContext,
+    backend: CodingAgentBackend,
+    effective_name: str,
+    resume_session_id: str | None,
+    prior_dispatch_id: str | None,
+) -> tuple[str | None, SemanticAdaptationContext | None]:
+    if not backend.capabilities.managed_fixed_batch_route_capable:
+        return None, None
+    parent_id: str | None = None
+    if resume_session_id and prior_dispatch_id:
+        parent_id = resume_managed_join_parent_id(
+            tool_ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json",
+            effective_name,
+        )
+    if parent_id is None and not resume_session_id:
+        parent_id = new_managed_launch_id()
+    if parent_id is None:
+        return None, None
+
+    def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
+        logger.warning("managed_join_issuance_refused", reason=refusal.reason)
+
+    evidence = acquire_managed_join_evidence(
+        backend=backend,
+        configured_model=(
+            tool_ctx.config.model.model_override or tool_ctx.config.model.default_model
+        ),
+        state_root=tool_ctx.project_dir,
+        parent_id=parent_id,
+        launch_context="direct",
+        on_refusal=_log_refusal,
+    )
+    if evidence is None:
+        return None, None
+    return parent_id, evidence.context
+
+
+def _prepare_dispatch(
+    tool_ctx: ToolContext,
+    recipe: str,
+    ingredients: dict[str, str] | None,
+    override_backend: CodingAgentBackend | None,
+    effective_name: str,
+    resume_session_id: str | None,
+    prior_dispatch_id: str | None,
+) -> (
+    tuple[
+        dict[str, str] | None,
+        CodingAgentBackend,
+        str | None,
+        SemanticAdaptationContext | None,
+    ]
+    | str
+):
+    effective_backend_map, projection = _load_preflight_projection(
+        tool_ctx, recipe, ingredients, override_backend or tool_ctx.backend
+    )
+    effective_backend = override_backend or tool_ctx.backend
+    if effective_backend is not None and projection is not None:
+        preflight_error = _check_dispatch_feasibility(
+            post_prune_step_names=list(projection.ordered_step_names),
+            active_recipe_steps=_finalized_recipe_steps(projection),
+            backend=effective_backend,
+            config_providers=tool_ctx.config.providers,
+            recipe_name=recipe,
+            config_backend=tool_ctx.config.agent_backend,
+            skill_resolver=tool_ctx.skill_resolver,
+            project_root=tool_ctx.project_dir,
+            temp_dir=tool_ctx.temp_dir,
+        )
+        if preflight_error is not None:
+            return preflight_error
+    if effective_backend is None:
+        return fleet_error(
+            FleetErrorCode.FLEET_INVALID_BACKEND,
+            "Fleet dispatch requires a configured backend.",
+        )
+    managed_join_parent_id, adaptation_context = _prepare_managed_join(
+        tool_ctx,
+        effective_backend,
+        effective_name,
+        resume_session_id,
+        prior_dispatch_id,
+    )
+    return effective_backend_map, effective_backend, managed_join_parent_id, adaptation_context
+
+
+def _finish_dispatch(
+    result: DispatchResult,
+    provenance: DispatchProvenanceTracker,
+    tool_ctx: ToolContext,
+    campaign_path: str | None,
+    effective_name: str,
+    continue_on_failure: bool,
+    dispatch_name: str | None,
+) -> str:
+    if campaign_path and isinstance(result, DispatchResult):
+        provenance.start(
+            DispatchEffectName.CAMPAIGN_STATE_WRITE,
+            identities={"campaign_state_path": campaign_path},
+        )
+        campaign_write_confirmed = _write_dispatch_to_campaign_state(
+            campaign_path,
+            effective_name,
+            result.outcome,
+            result.per_dispatch_state_path,
+        )
+        if campaign_write_confirmed:
+            _confirm_campaign_state_write(provenance, campaign_path, effective_name)
+        else:
+            provenance.mark_ambiguous(
+                DispatchEffectName.CAMPAIGN_STATE_WRITE,
+                evidence="campaign state writer failed",
+                identities={"campaign_state_path": campaign_path},
+            )
+
+    outcome = (
+        replace(result.outcome, effect_provenance=provenance.snapshot())
+        if isinstance(result.outcome, (DispatchCompleted, DispatchRejected))
+        else result.outcome
+    )
+    if campaign_path and isinstance(outcome, DispatchCompleted):
+        if (
+            not continue_on_failure
+            and outcome.dispatch_status == DispatchStatus.FAILURE
+            and outcome.reason not in _INFRASTRUCTURE_FAILURE_REASONS
+            and not dispatch_name
+        ):
+            return fleet_error(
+                FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                "Campaign halted: a prior dispatch failed and "
+                "continue_on_failure is false. No further dispatches permitted.",
+            )
+        if outcome.dispatch_status != DispatchStatus.SUCCESS and (
+            continue_on_failure or dispatch_name
+        ):
+            logger.warning(
+                "dispatch_non_success_allowed_past_halt_gate",
+                dispatch_name=effective_name,
+                dispatch_status=outcome.dispatch_status,
+                reason=outcome.reason,
+                continue_on_failure=continue_on_failure,
+                has_dispatch_name=bool(dispatch_name),
+            )
+
+    if isinstance(outcome, DispatchCompleted) and outcome.dispatch_id:
+        diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
+        hr = _read_health_report(diag_log_dir, outcome.dispatch_id)
+        if hr is not None:
+            outcome = replace(outcome, health_report=hr)
+    return outcome.to_envelope()
+
+
+async def _run_dispatch_with_timeout(
+    tool_ctx: ToolContext,
+    ctx: Context,
+    provenance: DispatchProvenanceTracker,
+    dispatch_call: Callable[[], Awaitable[DispatchResult]],
+) -> DispatchResult | str:
+    tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
+    if (
+        not isinstance(tool_timeout_sec, (int, float))
+        or isinstance(tool_timeout_sec, bool)
+        or not math.isfinite(tool_timeout_sec)
+        or tool_timeout_sec <= 0
+    ):
+        return fleet_error(
+            FleetErrorCode.FLEET_INVALID_BACKEND,
+            f"run_skill.mcp_tool_timeout_sec must be a positive number of "
+            f"seconds, got {tool_timeout_sec!r}.",
+        )
+    cancel_scope: anyio.CancelScope | None = None
+    try:
+        with anyio.fail_after(tool_timeout_sec) as cancel_scope:
+            async with tools_fleet_dispatch.progress_heartbeat(ctx):
+                return await dispatch_call()
+    except TimeoutError:
+        if cancel_scope is None or not cancel_scope.cancel_called:
+            raise
+        provenance.request_cancel()
+        logger.error("dispatch_food_truck_mcp_tool_timeout", timeout_sec=tool_timeout_sec)
+        timeout_message = f"MCP tool timeout ({tool_timeout_sec}s) exceeded during dispatch"
+        snapshot = provenance.snapshot()
+        identities = _dispatch_effect_identities(snapshot)
+        if snapshot.aggregate_phase == DispatchAggregatePhase.NOT_STARTED:
+            return DispatchRejected(
+                error_code=FleetErrorCode.FLEET_L3_TIMEOUT,
+                message=timeout_message,
+                effect_provenance=snapshot,
+            ).to_envelope()
+        return DispatchCompleted(
+            success=False,
+            dispatch_status=DispatchStatus.INTERRUPTED,
+            dispatch_id=identities.get("dispatch_id", ""),
+            dispatched_session_id=identities.get("dispatched_session_id", ""),
+            reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+            diagnostic_message=timeout_message,
+            effect_provenance=snapshot,
+        ).to_envelope()
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
@@ -217,18 +546,9 @@ async def dispatch_food_truck(
         if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
             caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
 
-        dispatch_backend: CodingAgentBackend | None = None
-        if backend is not None:
-            try:
-                dispatch_backend = resolve_backend_override(
-                    backend,
-                    launch_resolver=tool_ctx.launch_resolver,
-                )
-            except ValueError as exc:
-                return fleet_error(
-                    FleetErrorCode.FLEET_INVALID_BACKEND,
-                    str(exc),
-                )
+        dispatch_backend, backend_error = _resolve_dispatch_backend(tool_ctx, backend)
+        if backend_error is not None:
+            return backend_error
 
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
@@ -243,43 +563,11 @@ async def dispatch_food_truck(
                 "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
             )
 
-        provenance.start(
-            DispatchEffectName.CAMPAIGN_PATH_CAPTURE,
-            retry_relevant=False,
+        campaign_state_path_str, continue_on_failure, campaign_error = (
+            _resolve_campaign_precondition(provenance, dispatch_name)
         )
-        campaign_state_path_str = os.environ.get("AUTOSKILLIT_CAMPAIGN_STATE_PATH")
-        provenance.confirm(
-            DispatchEffectName.CAMPAIGN_PATH_CAPTURE,
-            receipt="campaign path environment captured",
-            retry_relevant=False,
-            identities={"campaign_state_path": campaign_state_path_str or ""},
-        )
-        continue_on_failure = (
-            os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false").lower() == "true"
-        )
-        if campaign_state_path_str and not continue_on_failure:
-            campaign_sp = Path(campaign_state_path_str)
-            if dispatch_name:
-                # L1 — Funnel the campaign precondition gate through the
-                # single chokepoint.
-                preflight = prepare_resume(campaign_sp, dispatch_name, continue_on_failure=False)
-                if preflight is not None and preflight.halt:
-                    return fleet_error(
-                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                        preflight.halted_reason
-                        or "Campaign halted: a prior dispatch failed and "
-                        "continue_on_failure is false. "
-                        "No further dispatches permitted.",
-                    )
-            # Probe the global blocking-dispatch set after preparing a named
-            # resume so a different blocking dispatch still prevents execution.
-            if has_blocking_dispatch(campaign_sp):
-                return fleet_error(
-                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                    "Campaign halted: a prior dispatch failed and "
-                    "continue_on_failure is false. "
-                    "No further dispatches permitted.",
-                )
+        if campaign_error is not None:
+            return campaign_error
 
         from autoskillit.server._misc import (  # circular-break
             _refresh_quota_cache,
@@ -289,7 +577,6 @@ async def dispatch_food_truck(
         parsed_checkpoint = (
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
-        _override_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
         provenance.start(
             DispatchEffectName.CALLER_IDENTITY,
             retry_relevant=False,
@@ -305,279 +592,85 @@ async def dispatch_food_truck(
         )
         effective_name = dispatch_name or recipe
 
-        if campaign_state_path_str:
-            prior_record = find_completed_dispatch(Path(campaign_state_path_str), effective_name)
-            if prior_record is not None:
-                provenance.confirm(
-                    DispatchEffectName.PRIOR_DISPATCH_BINDING,
-                    receipt="campaign state reported prior success",
-                    retry_relevant=False,
-                    identities={
-                        "dispatch_id": prior_record.dispatch_id,
-                        "dispatched_session_id": prior_record.dispatched_session_id,
-                    },
-                )
-                provenance.confirm(
-                    DispatchEffectName.COMMIT,
-                    receipt="reused committed campaign dispatch",
-                    identities={
-                        "dispatch_id": prior_record.dispatch_id,
-                        "dispatched_session_id": prior_record.dispatched_session_id,
-                    },
-                )
-                return DispatchCompleted(
-                    success=True,
-                    dispatch_status=DispatchStatus.SUCCESS,
-                    dispatch_id=prior_record.dispatch_id,
-                    dispatched_session_id=prior_record.dispatched_session_id,
-                    reason="prior dispatch already succeeded",
-                    effect_provenance=provenance.snapshot(),
-                ).to_envelope()
+        prior_or_skip = _resolve_prior_or_skipped_dispatch(
+            tool_ctx,
+            provenance,
+            campaign_state_path_str,
+            effective_name,
+            skip_when,
+            ingredients,
+        )
+        if prior_or_skip is not None:
+            return prior_or_skip
 
-        if skip_when:
-            dispatches_dir = tool_ctx.temp_dir / "dispatches"
-            accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)
-            error_code, error_message, skip_condition_true = evaluate_skip_when(
-                skip_when, accumulated_captures, ingredients
-            )
-            if error_code is not None:
-                return fleet_error(error_code, error_message or "")
-
-            if skip_condition_true:
-                if campaign_state_path_str:
-                    provenance.start(
-                        DispatchEffectName.CAMPAIGN_STATE_WRITE,
-                        identities={"campaign_state_path": campaign_state_path_str},
-                    )
-                    upsert_dispatch_record_by_name(
-                        Path(campaign_state_path_str),
-                        DispatchRecord(
-                            name=effective_name,
-                            status=DispatchStatus.SKIPPED,
-                            reason="skip_when condition evaluated to true",
-                            effect_provenance=provenance.snapshot().to_dict(),
-                        ),
-                    )
-                    _confirm_campaign_state_write(
-                        provenance,
-                        campaign_state_path_str,
-                        effective_name,
-                    )
-                return DispatchCompleted(
-                    success=False,
-                    dispatch_status=DispatchStatus.SKIPPED,
-                    dispatch_id="",
-                    dispatched_session_id="",
-                    reason=FleetErrorCode.FLEET_DISPATCH_SKIPPED,
-                    effect_provenance=provenance.snapshot(),
-                ).to_envelope()
-
-        # Dispatch-feasibility preflight: verify the backend can enforce
-        # all fix-required hooks for the recipe's run_skill steps before
-        # handing execution to the fleet facade.
-        _effective_backend_map, _fleet_finalized_projection = _load_preflight_projection(
+        prepared = _prepare_dispatch(
             tool_ctx,
             recipe,
             ingredients,
-            _override_backend,
+            dispatch_backend,
+            effective_name,
+            resume_session_id,
+            prior_dispatch_id,
         )
-
-        if _override_backend is not None and _fleet_finalized_projection is not None:
-            _preflight_err = _check_dispatch_feasibility(
-                post_prune_step_names=list(_fleet_finalized_projection.ordered_step_names),
-                active_recipe_steps=_finalized_recipe_steps(_fleet_finalized_projection),
-                backend=_override_backend,
-                config_providers=tool_ctx.config.providers,
-                recipe_name=recipe,
-                config_backend=tool_ctx.config.agent_backend,
-                skill_resolver=tool_ctx.skill_resolver,
-                project_root=tool_ctx.project_dir,
-                temp_dir=tool_ctx.temp_dir,
-            )
-            if _preflight_err is not None:
-                return _preflight_err
-
-        effective_dispatch_backend = _override_backend or tool_ctx.backend
-        if effective_dispatch_backend is None:
-            return fleet_error(
-                FleetErrorCode.FLEET_INVALID_BACKEND,
-                "Fleet dispatch requires a configured backend.",
-            )
-        managed_join_parent_id: str | None = None
-        adaptation_context = None
-        if effective_dispatch_backend.capabilities.managed_fixed_batch_route_capable:
-            if resume_session_id and prior_dispatch_id:
-                managed_join_parent_id = resume_managed_join_parent_id(
-                    tool_ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json",
-                    effective_name,
-                )
-            if managed_join_parent_id is None and not resume_session_id:
-                managed_join_parent_id = new_managed_launch_id()
-            if managed_join_parent_id is not None:
-
-                def _log_refusal(refusal: ManagedJoinIssuanceRefusal) -> None:
-                    logger.warning("managed_join_issuance_refused", reason=refusal.reason)
-
-                evidence = acquire_managed_join_evidence(
-                    backend=effective_dispatch_backend,
-                    configured_model=(
-                        tool_ctx.config.model.model_override or tool_ctx.config.model.default_model
+        if isinstance(prepared, str):
+            return prepared
+        (
+            _effective_backend_map,
+            effective_dispatch_backend,
+            managed_join_parent_id,
+            adaptation_context,
+        ) = prepared
+        result = await _run_dispatch_with_timeout(
+            tool_ctx,
+            ctx,
+            provenance,
+            lambda: tools_fleet_dispatch.execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe=recipe,
+                task=task,
+                ingredients=ingredients,
+                dispatch_name=dispatch_name,
+                timeout_sec=timeout_sec,
+                prompt_builder=_get_food_truck_prompt_builder(
+                    effective_dispatch_backend,
+                    has_unguarded_filesystem_access=(
+                        effective_dispatch_backend.capabilities.has_unguarded_filesystem_access
                     ),
-                    state_root=tool_ctx.project_dir,
-                    parent_id=managed_join_parent_id,
-                    launch_context="direct",
-                    on_refusal=_log_refusal,
-                )
-                if evidence is not None:
-                    adaptation_context = evidence.context
-                else:
-                    managed_join_parent_id = None
-        cancel_scope: anyio.CancelScope | None = None
-        try:
-            tool_timeout_sec = tool_ctx.config.run_skill.mcp_tool_timeout_sec
-            if (
-                not isinstance(tool_timeout_sec, (int, float))
-                or isinstance(tool_timeout_sec, bool)
-                or not math.isfinite(tool_timeout_sec)
-                or tool_timeout_sec <= 0
-            ):
-                return fleet_error(
-                    FleetErrorCode.FLEET_INVALID_BACKEND,
-                    f"run_skill.mcp_tool_timeout_sec must be a positive number of "
-                    f"seconds, got {tool_timeout_sec!r}.",
-                )
-            with anyio.fail_after(tool_timeout_sec) as cancel_scope:
-                async with tools_fleet_dispatch.progress_heartbeat(ctx):
-                    result = await tools_fleet_dispatch.execute_dispatch(
-                        tool_ctx=tool_ctx,
-                        recipe=recipe,
-                        task=task,
-                        ingredients=ingredients,
-                        dispatch_name=dispatch_name,
-                        timeout_sec=timeout_sec,
-                        prompt_builder=_get_food_truck_prompt_builder(
-                            effective_dispatch_backend,
-                            has_unguarded_filesystem_access=(
-                                effective_dispatch_backend.capabilities.has_unguarded_filesystem_access
-                            ),
-                            projected_sous_chef=_project_food_truck_sous_chef(
-                                tool_ctx,
-                                effective_dispatch_backend,
-                                adaptation_context=adaptation_context,
-                            ),
-                        ),
-                        quota_refresher=_refresh_quota_cache,
-                        cache_invalidator=invalidate_cache,
-                        capture=capture,
-                        resume_session_id=resume_session_id,
-                        resume_checkpoint=parsed_checkpoint,
-                        idle_output_timeout=idle_output_timeout,
-                        caller_session_id=caller_session_id,
-                        prior_dispatch_id=prior_dispatch_id,
-                        resume_message=resume_message,
-                        caller_instructions=caller_instructions,
-                        dispatch_backend=dispatch_backend,
-                        effective_backend_map=_effective_backend_map,
-                        provenance=provenance,
-                        native_shell_capture_mode=native_shell_capture_mode,
-                        managed_join_parent_id=managed_join_parent_id,
+                    projected_sous_chef=_project_food_truck_sous_chef(
+                        tool_ctx,
+                        effective_dispatch_backend,
                         adaptation_context=adaptation_context,
-                    )
-        except TimeoutError:
-            if cancel_scope is None or not cancel_scope.cancel_called:
-                raise
-            provenance.request_cancel()
-            logger.error(
-                "dispatch_food_truck_mcp_tool_timeout",
-                timeout_sec=tool_ctx.config.run_skill.mcp_tool_timeout_sec,
-            )
-            timeout_message = (
-                f"MCP tool timeout ({tool_ctx.config.run_skill.mcp_tool_timeout_sec}s) "
-                "exceeded during dispatch"
-            )
-            snapshot = provenance.snapshot()
-            identities = _dispatch_effect_identities(snapshot)
-            if snapshot.aggregate_phase == DispatchAggregatePhase.NOT_STARTED:
-                return DispatchRejected(
-                    error_code=FleetErrorCode.FLEET_L3_TIMEOUT,
-                    message=timeout_message,
-                    effect_provenance=snapshot,
-                ).to_envelope()
-            return DispatchCompleted(
-                success=False,
-                dispatch_status=DispatchStatus.INTERRUPTED,
-                dispatch_id=identities.get("dispatch_id", ""),
-                dispatched_session_id=identities.get("dispatched_session_id", ""),
-                reason=FleetErrorCode.FLEET_L3_TIMEOUT,
-                diagnostic_message=timeout_message,
-                effect_provenance=snapshot,
-            ).to_envelope()
-
-        if campaign_state_path_str and isinstance(result, DispatchResult):
-            provenance.start(
-                DispatchEffectName.CAMPAIGN_STATE_WRITE,
-                identities={"campaign_state_path": campaign_state_path_str},
-            )
-            campaign_write_confirmed = _write_dispatch_to_campaign_state(
-                campaign_state_path_str,
-                effective_name,
-                result.outcome,
-                result.per_dispatch_state_path,
-            )
-            if campaign_write_confirmed:
-                _confirm_campaign_state_write(
-                    provenance,
-                    campaign_state_path_str,
-                    effective_name,
-                )
-            else:
-                provenance.mark_ambiguous(
-                    DispatchEffectName.CAMPAIGN_STATE_WRITE,
-                    evidence="campaign state writer failed",
-                    identities={"campaign_state_path": campaign_state_path_str},
-                )
-
-        outcome = (
-            replace(result.outcome, effect_provenance=provenance.snapshot())
-            if isinstance(result.outcome, (DispatchCompleted, DispatchRejected))
-            else result.outcome
+                    ),
+                ),
+                quota_refresher=_refresh_quota_cache,
+                cache_invalidator=invalidate_cache,
+                capture=capture,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=parsed_checkpoint,
+                idle_output_timeout=idle_output_timeout,
+                caller_session_id=caller_session_id,
+                prior_dispatch_id=prior_dispatch_id,
+                resume_message=resume_message,
+                caller_instructions=caller_instructions,
+                dispatch_backend=dispatch_backend,
+                effective_backend_map=_effective_backend_map,
+                provenance=provenance,
+                native_shell_capture_mode=native_shell_capture_mode,
+                managed_join_parent_id=managed_join_parent_id,
+                adaptation_context=adaptation_context,
+            ),
         )
-
-        if campaign_state_path_str and isinstance(outcome, DispatchCompleted):
-            # Logic failures halt the campaign unless a named retry or its policy allows
-            # progression. Infrastructure failures remain retriable at L3.
-            if (
-                not continue_on_failure
-                and outcome.dispatch_status == DispatchStatus.FAILURE
-                and outcome.reason not in _INFRASTRUCTURE_FAILURE_REASONS
-                and not dispatch_name
-            ):
-                return fleet_error(
-                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                    "Campaign halted: a prior dispatch failed and "
-                    "continue_on_failure is false. "
-                    "No further dispatches permitted.",
-                )
-
-            if outcome.dispatch_status != DispatchStatus.SUCCESS and (
-                continue_on_failure or dispatch_name
-            ):
-                logger.warning(
-                    "dispatch_non_success_allowed_past_halt_gate",
-                    dispatch_name=effective_name,
-                    dispatch_status=outcome.dispatch_status,
-                    reason=outcome.reason,
-                    continue_on_failure=continue_on_failure,
-                    has_dispatch_name=bool(dispatch_name),
-                )
-
-        if isinstance(outcome, DispatchCompleted) and outcome.dispatch_id:
-            diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
-            hr = _read_health_report(diag_log_dir, outcome.dispatch_id)
-            if hr is not None:
-                outcome = replace(outcome, health_report=hr)
-
-        return outcome.to_envelope()
+        if isinstance(result, str):
+            return result
+        return _finish_dispatch(
+            result,
+            provenance,
+            tool_ctx,
+            campaign_state_path_str,
+            effective_name,
+            continue_on_failure,
+            dispatch_name,
+        )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
         return fleet_error(

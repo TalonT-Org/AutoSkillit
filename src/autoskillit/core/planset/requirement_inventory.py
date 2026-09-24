@@ -101,6 +101,90 @@ def _label_match(line: str) -> tuple[str, str] | None:
     return None
 
 
+def _append_ordered_requirement(
+    requirements: list[RequirementDef],
+    seen: set[str],
+    *,
+    label: str,
+    text: str,
+    raw: str,
+    source_line: int,
+) -> None:
+    inline_children = tuple(_INLINE_CHILD.finditer(text))
+    if inline_children:
+        preamble = text[: inline_children[0].start()].strip()
+        continuation = " ".join(
+            candidate.strip() for candidate in raw.splitlines()[1:] if candidate.strip()
+        )
+        _append_requirement(
+            requirements,
+            seen,
+            label=label,
+            kind=RequirementKind.CONTAINER,
+            parent_label=None,
+            text=preamble,
+            source_line=source_line,
+            raw=raw,
+        )
+        for child_index, child in enumerate(inline_children):
+            end = (
+                inline_children[child_index + 1].start()
+                if child_index + 1 < len(inline_children)
+                else len(text)
+            )
+            child_label = child.group(1).lower()
+            child_text = text[child.end() : end]
+            if child_index == len(inline_children) - 1 and continuation:
+                child_text = f"{child_text} {continuation}"
+            _append_requirement(
+                requirements,
+                seen,
+                label=child_label,
+                kind=RequirementKind.ITEM,
+                parent_label=label,
+                text=child_text,
+                source_line=source_line,
+                raw=raw,
+            )
+    else:
+        _append_requirement(
+            requirements,
+            seen,
+            label=label,
+            kind=RequirementKind.ITEM,
+            parent_label=None,
+            text=text,
+            source_line=source_line,
+            raw=raw,
+        )
+
+
+def _record_scoped_marker(
+    line: str,
+    source_line: int,
+    checkbox_index: int,
+    requirements: list[RequirementDef],
+    seen: set[str],
+    unparsed: list[int],
+) -> int:
+    checkbox = _CHECKBOX.match(line)
+    if checkbox:
+        checkbox_index += 1
+        _append_requirement(
+            requirements,
+            seen,
+            label=f"cb-{checkbox_index}",
+            kind=RequirementKind.ITEM,
+            parent_label=None,
+            text=checkbox.group(1),
+            source_line=source_line,
+            raw=line,
+        )
+    elif _BULLET.match(line) or _MALFORMED_LABEL.search(line):
+        unparsed.append(source_line)
+    return checkbox_index
+
+
 def extract_requirement_inventory(
     issue_markdown: str,
     *,
@@ -175,73 +259,17 @@ def extract_requirement_inventory(
         ordered = _ORDERED.match(line)
         if ordered:
             label, text = ordered.groups()
-            marker, raw, next_index = _span(lines, index)
-            inline_children = tuple(_INLINE_CHILD.finditer(text))
-            if inline_children:
-                preamble = text[: inline_children[0].start()].strip()
-                continuation = " ".join(
-                    candidate.strip() for candidate in raw.splitlines()[1:] if candidate.strip()
-                )
-                _append_requirement(
-                    requirements,
-                    seen,
-                    label=label,
-                    kind=RequirementKind.CONTAINER,
-                    parent_label=None,
-                    text=preamble,
-                    source_line=index + 1,
-                    raw=raw,
-                )
-                for child_index, child in enumerate(inline_children):
-                    end = (
-                        inline_children[child_index + 1].start()
-                        if child_index + 1 < len(inline_children)
-                        else len(text)
-                    )
-                    child_label = child.group(1).lower()
-                    child_text = text[child.end() : end]
-                    if child_index == len(inline_children) - 1 and continuation:
-                        child_text = f"{child_text} {continuation}"
-                    _append_requirement(
-                        requirements,
-                        seen,
-                        label=child_label,
-                        kind=RequirementKind.ITEM,
-                        parent_label=label,
-                        text=child_text,
-                        source_line=index + 1,
-                        raw=raw,
-                    )
-            else:
-                _append_requirement(
-                    requirements,
-                    seen,
-                    label=label,
-                    kind=RequirementKind.ITEM,
-                    parent_label=None,
-                    text=text,
-                    source_line=index + 1,
-                    raw=raw,
-                )
+            _, raw, next_index = _span(lines, index)
+            _append_ordered_requirement(
+                requirements, seen, label=label, text=text, raw=raw, source_line=index + 1
+            )
             parent_label = label
             index = next_index
             continue
 
-        checkbox = _CHECKBOX.match(line)
-        if checkbox:
-            checkbox_index += 1
-            _append_requirement(
-                requirements,
-                seen,
-                label=f"cb-{checkbox_index}",
-                kind=RequirementKind.ITEM,
-                parent_label=None,
-                text=checkbox.group(1),
-                source_line=index + 1,
-                raw=line,
-            )
-        elif _BULLET.match(line) or _MALFORMED_LABEL.search(line):
-            unparsed.append(index + 1)
+        checkbox_index = _record_scoped_marker(
+            line, index + 1, checkbox_index, requirements, seen, unparsed
+        )
         index += 1
 
     return InventoryExtraction(

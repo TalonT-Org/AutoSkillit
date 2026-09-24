@@ -220,10 +220,22 @@ class TestPrepareResumeIsUniversal:
     def test_prepare_resume_is_called_by_dispatch_food_truck_mcp(self) -> None:
         try:
             from autoskillit.server.tools import tools_fleet_dispatch
+            from autoskillit.server.tools.tools_fleet_dispatch._handlers import (
+                _resolve_campaign_precondition,
+            )
         except ImportError:
             pytest.skip("server.tools not importable in this environment")
         self._assert_function_calls_prepare_resume(
-            tools_fleet_dispatch.dispatch_food_truck, "dispatch_food_truck"
+            _resolve_campaign_precondition, "_resolve_campaign_precondition"
+        )
+        import ast as _ast
+
+        dispatch_tree = _ast.parse(inspect.getsource(tools_fleet_dispatch.dispatch_food_truck))
+        assert any(
+            isinstance(node, _ast.Call)
+            and isinstance(node.func, _ast.Name)
+            and node.func.id == "_resolve_campaign_precondition"
+            for node in _ast.walk(dispatch_tree)
         )
 
     def test_prepare_resume_is_called_by_resume_campaign_from_state(self) -> None:

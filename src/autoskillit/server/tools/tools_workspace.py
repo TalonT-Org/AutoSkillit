@@ -58,6 +58,78 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+async def _run_commit_transaction(
+    tool_ctx: ToolContext,
+    resolved: str,
+    paths: list[str],
+    message: str,
+    self_revert_base: str | None,
+) -> tuple[dict[str, object], CommitFailureClass | None]:
+    rc, stdout, stderr = await _run_subprocess(
+        ["git", "-C", resolved, "add", "--"] + paths,
+        cwd=resolved,
+        timeout=30,
+    )
+    if rc != 0:
+        return {
+            "success": False,
+            "error": "git add failed: "
+            + _combined_process_output(stderr, stdout, f"git add exited with status {rc}"),
+        }, CommitFailureClass.GIT_ADD_FAILED
+
+    if (
+        hook_error := await _run_pre_commit_transaction(
+            resolved,
+            paths,
+            workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
+        )
+    ) is not None:
+        return hook_error, _parse_hook_failure_class(hook_error.pop("failure_class", None))
+
+    rc, stdout, stderr = await _run_subprocess(
+        ["git", "-C", resolved, "commit", "-m", message],
+        cwd=resolved,
+        timeout=30,
+    )
+    if rc != 0:
+        return {
+            "success": False,
+            "error": "git commit failed: "
+            + _combined_process_output(stderr, stdout, f"git commit exited with status {rc}"),
+        }, CommitFailureClass.GIT_COMMIT_FAILED
+
+    rc, stdout, stderr = await _run_subprocess(
+        ["git", "-C", resolved, "rev-parse", "HEAD"],
+        cwd=resolved,
+        timeout=10,
+    )
+    commit_sha = stdout.strip()
+    if rc != 0 or not commit_sha:
+        return {
+            "success": False,
+            "error": "git rev-parse HEAD failed: "
+            + _combined_process_output(stderr, stdout, f"git rev-parse exited with status {rc}"),
+        }, CommitFailureClass.UNHANDLED
+
+    response: dict[str, object] = {"success": True, "commit_sha": commit_sha}
+    if self_revert_base is not None:
+        if tool_ctx.runner is None:
+            return {
+                "success": False,
+                "error": "scan_self_reverts requires a runner context",
+            }, CommitFailureClass.UNHANDLED
+        response.update(
+            await scan_self_reverts(
+                detect_self_reverts,
+                tool_ctx.runner,
+                resolved,
+                self_revert_base,
+                commit_sha,
+            )
+        )
+    return response, None
+
+
 def _bounded_test_stream(text: str, spec: SpillSpec, artifact_path: str | None) -> str:
     if len(text) <= spec.inline_max_chars:
         return text
@@ -374,105 +446,10 @@ async def commit_files(
             _start = time.monotonic()
 
             try:
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", resolved, "add", "--"] + paths,
-                    cwd=resolved,
-                    timeout=30,
+                response, failure_class = await _run_commit_transaction(
+                    tool_ctx, resolved, paths, message, self_revert_base
                 )
-                if rc != 0:
-                    return _finish(
-                        {
-                            "success": False,
-                            "error": (
-                                "git add failed: "
-                                + _combined_process_output(
-                                    stderr,
-                                    stdout,
-                                    f"git add exited with status {rc}",
-                                )
-                            ),
-                        },
-                        failure_class=CommitFailureClass.GIT_ADD_FAILED,
-                    )
-
-                if (
-                    hook_error := await _run_pre_commit_transaction(
-                        resolved,
-                        paths,
-                        workspace_temp_dir=tool_ctx.config.workspace.temp_dir,
-                    )
-                ) is not None:
-                    # ``_parse_hook_failure_class`` handles missing/unknown values by
-                    # returning UNHANDLED, so use a default to keep the missing-key
-                    # case routed through the helper's defensive contract.
-                    hook_failure_class = _parse_hook_failure_class(
-                        hook_error.pop("failure_class", None)
-                    )
-                    return _finish(hook_error, failure_class=hook_failure_class)
-
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", resolved, "commit", "-m", message],
-                    cwd=resolved,
-                    timeout=30,
-                )
-                if rc != 0:
-                    return _finish(
-                        {
-                            "success": False,
-                            "error": (
-                                "git commit failed: "
-                                + _combined_process_output(
-                                    stderr,
-                                    stdout,
-                                    f"git commit exited with status {rc}",
-                                )
-                            ),
-                        },
-                        failure_class=CommitFailureClass.GIT_COMMIT_FAILED,
-                    )
-
-                rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", resolved, "rev-parse", "HEAD"],
-                    cwd=resolved,
-                    timeout=10,
-                )
-                commit_sha = stdout.strip()
-                if rc != 0 or not commit_sha:
-                    return _finish(
-                        {
-                            "success": False,
-                            "error": (
-                                "git rev-parse HEAD failed: "
-                                + _combined_process_output(
-                                    stderr,
-                                    stdout,
-                                    f"git rev-parse exited with status {rc}",
-                                )
-                            ),
-                        },
-                        failure_class=CommitFailureClass.UNHANDLED,
-                    )
-
-                response: dict[str, object] = {"success": True, "commit_sha": commit_sha}
-                if self_revert_base is not None:
-                    if tool_ctx.runner is None:
-                        return _finish(
-                            {
-                                "success": False,
-                                "error": "scan_self_reverts requires a runner context",
-                            },
-                            failure_class=CommitFailureClass.UNHANDLED,
-                        )
-                    response.update(
-                        await scan_self_reverts(
-                            detect_self_reverts,
-                            tool_ctx.runner,
-                            resolved,
-                            self_revert_base,
-                            commit_sha,
-                        )
-                    )
-                return _finish(response)
+                return _finish(response, failure_class=failure_class)
             except Exception as exc:
                 logger.error("commit_files unhandled exception", exc_info=True)
                 return _finish(

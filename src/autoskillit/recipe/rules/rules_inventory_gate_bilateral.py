@@ -39,16 +39,7 @@ def _no_go_routes(step: RecipeStep) -> tuple[str, ...]:
     )
 
 
-def _no_go_route_findings(
-    ctx: ValidationContext,
-    audit_step_name: str,
-    no_go_start: str,
-    audit_steps: list[str],
-    make_plan_steps: set[str],
-    reported: set[tuple[str, str]],
-) -> list[RuleFinding]:
-    """Validate one audit NO GO route's producer, dominance, and successor bindings."""
-    findings: list[RuleFinding] = []
+def _resolve_no_go_start(ctx: ValidationContext, no_go_start: str) -> str:
     gate_step = ctx.recipe.steps.get(no_go_start)
     if gate_step is not None and gate_step.with_args.get("callable") == (
         "autoskillit.smoke_utils.check_audit_remediation_outcome"
@@ -67,8 +58,19 @@ def _no_go_route_findings(
             no_go_routes = _no_go_routes(merge_step)
             if len(set(no_go_routes)) == 1:
                 no_go_start = no_go_routes[0]
+    return no_go_start
+
+
+def _planner_producer_findings(
+    ctx: ValidationContext,
+    audit_step_name: str,
+    no_go_start: str,
+    make_plan_steps: set[str],
+    reported: set[tuple[str, str]],
+) -> tuple[set[str], list[str], list[RuleFinding]]:
     reachable = bfs_reachable(ctx.step_graph, no_go_start) | {no_go_start}
     reachable_planners = sorted(make_plan_steps & reachable)
+    findings: list[RuleFinding] = []
     if not reachable_planners:
         key = (audit_step_name, "producer")
         if key not in reported:
@@ -83,7 +85,7 @@ def _no_go_route_findings(
                     ),
                 )
             )
-        return findings
+        return reachable, reachable_planners, findings
     for planner_name in reachable_planners:
         missing_planner = [
             name for name in ("audit_cycle_path",) if not _has_bound_input(ctx, planner_name, name)
@@ -103,6 +105,24 @@ def _no_go_route_findings(
                     ),
                 )
             )
+    return reachable, reachable_planners, findings
+
+
+def _no_go_route_findings(
+    ctx: ValidationContext,
+    audit_step_name: str,
+    no_go_start: str,
+    audit_steps: list[str],
+    make_plan_steps: set[str],
+    reported: set[tuple[str, str]],
+) -> list[RuleFinding]:
+    """Validate one audit NO GO route's producer, dominance, and successor bindings."""
+    no_go_start = _resolve_no_go_start(ctx, no_go_start)
+    reachable, reachable_planners, findings = _planner_producer_findings(
+        ctx, audit_step_name, no_go_start, make_plan_steps, reported
+    )
+    if not reachable_planners:
+        return findings
     for dry_name in sorted(
         name
         for name in reachable

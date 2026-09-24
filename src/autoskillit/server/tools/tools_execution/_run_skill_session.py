@@ -343,6 +343,82 @@ async def _prepare_owned_dispatch_session(
     if (terminal := _restore_or_replay_snapshot(state)) is not None:
         return terminal
 
+    if (terminal := _materialize_fresh_session(state)) is not None:
+        return terminal
+
+    if (terminal := _restore_explorer_binding(state)) is not None:
+        return terminal
+
+    if (terminal := _extend_closure_write_scope(state)) is not None:
+        return terminal
+
+    _prepare_owned_session_contract(state)
+
+    if (terminal := _prepare_owned_write_scope(state)) is not None:
+        return terminal
+
+    state._sn_token = _current_step_name.set(_canonical_step_name(state.step_name))
+    state._oid_token = _current_order_id.set(state.effective_order_id)
+
+    state._marker_dir = (
+        state.tool_ctx.backend.session_locator().project_log_dir(str(state.tool_ctx.project_dir))
+        if state.tool_ctx.backend is not None
+        else None
+    )
+    if (terminal := _resolve_caller_session(state)) is not None:
+        return terminal
+
+    # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
+    state.provider_extras = propagate_session_deadline(
+        state._invocation_deadline_epoch,
+        state.provider_extras,
+    )
+    return None
+
+
+def _restore_explorer_binding(state: _RunSkillDispatchState) -> str | None:
+    assert state.skill_add_dirs is not None
+    assert state.resolved_command is not None
+    if state._stored_contract_entry is not None and state._explorer_parent_identity is not None:
+        restored_add_dir = state.skill_add_dirs[0]
+        restored_session_home = Path(restored_add_dir.session_home)
+        if not restored_session_home.is_dir():
+            return SkillResult.crashed(
+                exception=RuntimeError(
+                    f"Restored session home {str(restored_session_home)!r} does not exist."
+                ),
+                skill_command=state.resolved_command,
+                session_id=state.resume_session_id,
+                order_id=state.effective_order_id,
+            ).to_json()
+        if state.projection_context is None:
+            raise SkillContractError("Projection context was not prepared")
+        _explorer_binding_env = _te_pkg._issue_explorer_binding_env(
+            state.tool_ctx,
+            session_id=state.resume_session_id,
+            projection_context=state.projection_context,
+            identity=state._explorer_parent_identity,
+            authority_home=restored_session_home,
+        )
+        if _explorer_binding_env is not None:
+            assert state.resume_session_id is not None
+            bound_backend = _te_pkg._record_explorer_launch_lease(
+                state,
+                bound_session_id=state.resume_session_id,
+                session_home=restored_session_home,
+                operation="resume",
+            )
+            bound_backend.refresh_explorer_binding_env(
+                restored_session_home,
+                _explorer_binding_env,
+            )
+
+    return None
+
+
+def _materialize_fresh_session(state: _RunSkillDispatchState) -> str | None:
+    assert state.skill_add_dirs is not None
+    assert state.resolved_command is not None
     if (
         state._stored_contract_entry is None
         and not state.replay_snapshot_used
@@ -385,68 +461,52 @@ async def _prepare_owned_dispatch_session(
             ).to_json()
         state.skill_add_dirs.append(session_root)
 
-    if state._stored_contract_entry is not None and state._explorer_parent_identity is not None:
-        restored_add_dir = state.skill_add_dirs[0]
-        restored_session_home = Path(restored_add_dir.session_home)
-        if not restored_session_home.is_dir():
-            return SkillResult.crashed(
-                exception=RuntimeError(
-                    f"Restored session home {str(restored_session_home)!r} does not exist."
-                ),
-                skill_command=state.resolved_command,
-                session_id=state.resume_session_id,
-                order_id=state.effective_order_id,
-            ).to_json()
-        if state.projection_context is None:
-            raise SkillContractError("Projection context was not prepared")
-        _explorer_binding_env = _te_pkg._issue_explorer_binding_env(
-            state.tool_ctx,
-            session_id=state.resume_session_id,
-            projection_context=state.projection_context,
-            identity=state._explorer_parent_identity,
-            authority_home=restored_session_home,
+    return None
+
+
+def _prepare_owned_write_scope(state: _RunSkillDispatchState) -> str | None:
+    state.allowed_write_prefix = ""
+    state.allowed_write_prefixes = ()
+    if state.write_watch_dirs:
+        state.allowed_write_prefix, state.allowed_write_prefixes = _compute_write_prefixes(
+            state.write_watch_dirs, state.cwd, state.skill_command
         )
-        if _explorer_binding_env is not None:
-            assert state.resume_session_id is not None
-            bound_backend = _te_pkg._record_explorer_launch_lease(
-                state,
-                bound_session_id=state.resume_session_id,
-                session_home=restored_session_home,
-                operation="resume",
+    elif state.is_read_only:
+        state._skill_temp_name = state.target_name or ""
+        if state._skill_temp_name:
+            state.allowed_write_prefix = os.path.join(
+                state.cwd, ".autoskillit", "temp", state._skill_temp_name, ""
             )
-            bound_backend.refresh_explorer_binding_env(
-                restored_session_home,
-                _explorer_binding_env,
+        else:
+            logger.warning(
+                "read_only_skill_no_target_name",
+                skill_command=state.skill_command[:SKILL_COMMAND_DISPLAY_MAX],
+            )
+    # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
+    # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
+    # a session — otherwise the session locks itself out and burns N turns.
+    if (
+        state.allowed_write_prefixes
+        and state.target_name
+        and state.target_name in WORKTREE_SKILLS
+        and state.cwd
+    ):
+        if not _scope_covers_cwd(state.allowed_write_prefixes, state.cwd):
+            return gate_error_result(
+                f"Write scope does not cover target worktree: "
+                f"cwd={state.cwd!r} not under any allowed prefix "
+                f"{state.allowed_write_prefixes!r}. "
+                f"Likely missing output_dir or malformed dispatch."
             )
 
-    # Both fresh and rehydrated invocations extend scope from their
-    # validated closure, independent of whether a snapshot was replayed.
-    if state.invocation is not None:
-        state.write_watch_dirs.extend(
-            _te_pkg.resolve_closure_write_dirs(
-                state.invocation.closure,
-                state.cwd,
-                state.write_watch_dirs,
-            )
-        )
-        root_boundary = state.invocation.root.write_paths
-        if state.output_dir and root_boundary is not None:
-            declared_dirs = _te_pkg.resolve_closure_write_dirs((state.invocation.root,), state.cwd)
-            # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
-            # before this branch runs, and the only intervening mutation is `extend`,
-            # so [0] is safe here. Reaching this branch implies state.output_dir is
-            # truthy, which guarantees at least one entry.
-            requested = destination_location(state.write_watch_dirs[0])
-            if not any(requested.is_relative_to(directory) for directory in declared_dirs):
-                return json.dumps(
-                    ToolFailureEnvelope(
-                        success=False,
-                        error="run_skill output_dir is outside the skill's declared write_paths",
-                        stage="validate_args:run_skill",
-                        retriable=False,
-                    )
-                )
+    return None
 
+
+def _prepare_owned_session_contract(state: _RunSkillDispatchState) -> None:
+    assert state.skill_add_dirs is not None
+    assert state.resolved_command is not None
+    assert state.expected_output_patterns is not None
+    assert state._contract_store is not None
     # _run_skill_dispatch.py's `if state.invocation is None or state.projection_context
     # is None: raise` guard (run before _admit_recipe_execution) already guarantees
     # this is bound on every path that reaches here.
@@ -510,54 +570,36 @@ async def _prepare_owned_dispatch_session(
             snapshot=state._session_snapshot,
             managed_lineage_ref=state._managed_lineage_ref,
         )
-    state.allowed_write_prefix = ""
-    state.allowed_write_prefixes = ()
-    if state.write_watch_dirs:
-        state.allowed_write_prefix, state.allowed_write_prefixes = _compute_write_prefixes(
-            state.write_watch_dirs, state.cwd, state.skill_command
+
+
+def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
+    assert state.write_watch_dirs is not None
+    # Both fresh and rehydrated invocations extend scope from their
+    # validated closure, independent of whether a snapshot was replayed.
+    if state.invocation is not None:
+        state.write_watch_dirs.extend(
+            _te_pkg.resolve_closure_write_dirs(
+                state.invocation.closure,
+                state.cwd,
+                state.write_watch_dirs,
+            )
         )
-    elif state.is_read_only:
-        state._skill_temp_name = state.target_name or ""
-        if state._skill_temp_name:
-            state.allowed_write_prefix = os.path.join(
-                state.cwd, ".autoskillit", "temp", state._skill_temp_name, ""
-            )
-        else:
-            logger.warning(
-                "read_only_skill_no_target_name",
-                skill_command=state.skill_command[:SKILL_COMMAND_DISPLAY_MAX],
-            )
-    # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
-    # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
-    # a session — otherwise the session locks itself out and burns N turns.
-    if (
-        state.allowed_write_prefixes
-        and state.target_name
-        and state.target_name in WORKTREE_SKILLS
-        and state.cwd
-    ):
-        if not _scope_covers_cwd(state.allowed_write_prefixes, state.cwd):
-            return gate_error_result(
-                f"Write scope does not cover target worktree: "
-                f"cwd={state.cwd!r} not under any allowed prefix "
-                f"{state.allowed_write_prefixes!r}. "
-                f"Likely missing output_dir or malformed dispatch."
-            )
+        root_boundary = state.invocation.root.write_paths
+        if state.output_dir and root_boundary is not None:
+            declared_dirs = _te_pkg.resolve_closure_write_dirs((state.invocation.root,), state.cwd)
+            # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
+            # before this branch runs, and the only intervening mutation is `extend`,
+            # so [0] is safe here. Reaching this branch implies state.output_dir is
+            # truthy, which guarantees at least one entry.
+            requested = destination_location(state.write_watch_dirs[0])
+            if not any(requested.is_relative_to(directory) for directory in declared_dirs):
+                return json.dumps(
+                    ToolFailureEnvelope(
+                        success=False,
+                        error="run_skill output_dir is outside the skill's declared write_paths",
+                        stage="validate_args:run_skill",
+                        retriable=False,
+                    )
+                )
 
-    state._sn_token = _current_step_name.set(_canonical_step_name(state.step_name))
-    state._oid_token = _current_order_id.set(state.effective_order_id)
-
-    state._marker_dir = (
-        state.tool_ctx.backend.session_locator().project_log_dir(str(state.tool_ctx.project_dir))
-        if state.tool_ctx.backend is not None
-        else None
-    )
-    if (terminal := _resolve_caller_session(state)) is not None:
-        return terminal
-
-    # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
-    state.provider_extras = propagate_session_deadline(
-        state._invocation_deadline_epoch,
-        state.provider_extras,
-    )
     return None

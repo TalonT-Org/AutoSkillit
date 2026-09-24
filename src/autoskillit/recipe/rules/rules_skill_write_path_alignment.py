@@ -20,6 +20,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
 )
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 from autoskillit.workspace import parse_frontmatter_content
 
 logger = get_logger(__name__)
@@ -96,6 +97,31 @@ def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -
     return f"recipe output_dir {output_dir!r} is outside the skill's declared write_paths"
 
 
+def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str, str, Path] | None:
+    if step.tool != "run_skill":
+        return None
+    output_dir = (step.with_args or {}).get("output_dir", "") or ""
+    if not output_dir:
+        return None
+    # Whole-worktree and work_dir destinations do not narrow the skill's write scope.
+    if output_dir in (".", "${{ context.work_dir }}") or output_dir.strip("/") == "":
+        return None
+    skill_cmd = (step.with_args or {}).get("skill_command", "") or ""
+    if not skill_cmd:
+        return None
+    skill_name = resolve_skill_name(skill_cmd)
+    if skill_name is None:
+        return None
+    skill_md_path = _resolve_skill_md(
+        skill_name,
+        project_root=ctx.project_dir,
+        resolver=ctx.skill_resolver,
+    )
+    if skill_md_path is None:
+        return None
+    return output_dir, skill_name, skill_md_path
+
+
 @semantic_rule(
     name="skill-write-path-recipe-alignment",
     description=(
@@ -109,31 +135,10 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "run_skill":
+        eligible = _eligible_skill_path(ctx, step)
+        if eligible is None:
             continue
-
-        output_dir = (step.with_args or {}).get("output_dir", "") or ""
-        if not output_dir:
-            continue
-
-        # Skip steps where the output_dir is the whole worktree or work_dir only
-        if output_dir in (".", "${{ context.work_dir }}") or output_dir.strip("/") == "":
-            continue
-        skill_cmd = (step.with_args or {}).get("skill_command", "") or ""
-        if not skill_cmd:
-            continue
-
-        skill_name = resolve_skill_name(skill_cmd)
-        if skill_name is None:
-            continue
-
-        skill_md_path = _resolve_skill_md(
-            skill_name,
-            project_root=ctx.project_dir,
-            resolver=ctx.skill_resolver,
-        )
-        if skill_md_path is None:
-            continue
+        output_dir, skill_name, skill_md_path = eligible
 
         try:
             content = skill_md_path.read_text(encoding="utf-8")

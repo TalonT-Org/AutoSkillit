@@ -548,6 +548,92 @@ def bind_attested_runtime_invocation(
     return bound_inputs, template
 
 
+def _build_preflight_input_error(message: str) -> RecipeExecutionAdmissionError:
+    return RecipeExecutionAdmissionError("recipe_execution_preflight_input", message)
+
+
+def _resolve_audit_preflight(
+    installed: InstalledRecipeExecution,
+    bound_input_map: Mapping[str, BoundScalar],
+    execution_id: str,
+    step_name: str,
+    template: InvocationTemplate,
+    allowed_root: Path | None,
+) -> VerifiedInputPreflightResult:
+    plan_path = bound_input_map.get("plan_path")
+    audit_cycle_path = bound_input_map.get("audit_cycle_path")
+    plan_disposition_path = bound_input_map.get("plan_disposition_path")
+    if not isinstance(plan_path, str):
+        raise _build_preflight_input_error("audit-cycle preflight needs a bound string plan_path")
+    if audit_cycle_path is not None and not isinstance(audit_cycle_path, str):
+        raise _build_preflight_input_error("audit_cycle_path must be a string when present")
+    if plan_disposition_path is not None and not isinstance(plan_disposition_path, str):
+        raise _build_preflight_input_error("plan_disposition_path must be a string when present")
+    audit = installed.input_preflight_resolver.resolve(
+        VerifiedInputPreflightRequest(
+            execution_generation=execution_id,
+            step_name=step_name,
+            skill_name=template.invocation.skill_name or "",
+            plan_path=plan_path,
+            audit_cycle_path=audit_cycle_path or None,
+            plan_disposition_path=plan_disposition_path or None,
+        ),
+        allowed_root=allowed_root,
+    )
+    if audit.decision.status is AdmissionStatus.REJECT:
+        raise RecipeExecutionAdmissionError(
+            f"input_preflight_{audit.decision.reason.value}",
+            audit.decision.details[0]
+            if audit.decision.details
+            else "verified input preflight rejected the invocation",
+        )
+    return audit
+
+
+def _resolve_plan_set_preflight(
+    tool_ctx: ToolContext,
+    installed: InstalledRecipeExecution,
+    bound_input_map: Mapping[str, BoundScalar],
+    execution_id: str,
+    step_name: str,
+    template: InvocationTemplate,
+    allowed_root: Path | None,
+) -> PlanSetPreflightEvidence | None:
+    authority_path = bound_input_map.get("plan_set_authority_path")
+    if authority_path in (None, ""):
+        return None
+    plan_path = bound_input_map.get("plan_path")
+    if not isinstance(authority_path, str) or not isinstance(plan_path, str):
+        raise _build_preflight_input_error(
+            "plan-set preflight requires bound string plan_path and authority path",
+        )
+    if allowed_root is None:
+        raise _build_preflight_input_error("plan-set preflight requires an allowed root")
+    if installed.plan_set_preflight_resolver is None:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_preflight_unavailable",
+            "plan-set preflight resolver is unavailable",
+        )
+    verification = installed.plan_set_preflight_resolver.resolve(
+        PlanSetPreflightRequest(
+            execution_generation=execution_id,
+            expected_kitchen_id=tool_ctx.kitchen_id,
+            step_name=step_name,
+            skill_name=template.invocation.skill_name or "",
+            plan_path=plan_path,
+            plan_set_authority_path=authority_path,
+        ),
+        allowed_root=allowed_root,
+    )
+    if not verification.accepted:
+        reason = verification.reason.value if verification.reason else "rejected"
+        raise RecipeExecutionAdmissionError(
+            f"input_preflight_plan_set_{reason}",
+            "; ".join(verification.detail),
+        )
+    return verification.evidence
+
+
 def resolve_attested_input_preflight(
     tool_ctx: ToolContext,
     installed: InstalledRecipeExecution,
@@ -560,94 +646,29 @@ def resolve_attested_input_preflight(
     allowed_root: Path | None = None,
 ) -> ResolvedInputPreflights:
     """Resolve a compiled invocation's optional input preflight or fail closed."""
-    contract = (
-        tool_ctx.skill_contract_resolver(skill_command)
-        if tool_ctx.skill_contract_resolver is not None
-        else None
-    )
-    preflight_names = getattr(contract, "input_preflight", ()) if contract is not None else ()
+    resolver = tool_ctx.skill_contract_resolver
+    contract = resolver(skill_command) if resolver is not None else None
+    preflight_names = getattr(contract, "input_preflight", ())
     if not preflight_names:
         return ResolvedInputPreflights()
     bound_input_map = dict(bound_inputs)
-    plan_path = bound_input_map.get("plan_path")
     audit: VerifiedInputPreflightResult | None = None
     plan_set: PlanSetPreflightEvidence | None = None
     for preflight_name in preflight_names:
         if preflight_name == PreflightKind.AUDIT_CYCLE_INVENTORY.value:
-            audit_cycle_path = bound_input_map.get("audit_cycle_path")
-            plan_disposition_path = bound_input_map.get("plan_disposition_path")
-            if not isinstance(plan_path, str):
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_input",
-                    "audit-cycle preflight requires a bound string plan_path",
-                )
-            if audit_cycle_path is not None and not isinstance(audit_cycle_path, str):
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_input",
-                    "audit_cycle_path must be a string when present",
-                )
-            if plan_disposition_path is not None and not isinstance(plan_disposition_path, str):
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_input",
-                    "plan_disposition_path must be a string when present",
-                )
-            audit = installed.input_preflight_resolver.resolve(
-                VerifiedInputPreflightRequest(
-                    execution_generation=execution_id,
-                    step_name=step_name,
-                    skill_name=template.invocation.skill_name or "",
-                    plan_path=plan_path,
-                    audit_cycle_path=audit_cycle_path or None,
-                    plan_disposition_path=plan_disposition_path or None,
-                ),
-                allowed_root=allowed_root,
+            audit = _resolve_audit_preflight(
+                installed, bound_input_map, execution_id, step_name, template, allowed_root
             )
-            if audit.decision.status is AdmissionStatus.REJECT:
-                detail = (
-                    audit.decision.details[0]
-                    if audit.decision.details
-                    else "verified input preflight rejected the invocation"
-                )
-                raise RecipeExecutionAdmissionError(
-                    f"input_preflight_{audit.decision.reason.value}", detail
-                )
         elif preflight_name == PreflightKind.PLAN_SET_COVERAGE.value:
-            authority_path = bound_input_map.get("plan_set_authority_path")
-            if authority_path in (None, ""):
-                continue
-            if not isinstance(authority_path, str) or not isinstance(plan_path, str):
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_input",
-                    "plan-set preflight requires bound string plan_path and authority path",
-                )
-            if allowed_root is None:
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_input",
-                    "plan-set preflight requires an allowed root",
-                )
-            if installed.plan_set_preflight_resolver is None:
-                raise RecipeExecutionAdmissionError(
-                    "recipe_execution_preflight_unavailable",
-                    "plan-set preflight resolver is unavailable",
-                )
-            verification = installed.plan_set_preflight_resolver.resolve(
-                PlanSetPreflightRequest(
-                    execution_generation=execution_id,
-                    expected_kitchen_id=tool_ctx.kitchen_id,
-                    step_name=step_name,
-                    skill_name=template.invocation.skill_name or "",
-                    plan_path=plan_path,
-                    plan_set_authority_path=authority_path,
-                ),
-                allowed_root=allowed_root,
+            plan_set = _resolve_plan_set_preflight(
+                tool_ctx,
+                installed,
+                bound_input_map,
+                execution_id,
+                step_name,
+                template,
+                allowed_root,
             )
-            if not verification.accepted:
-                reason = verification.reason.value if verification.reason else "rejected"
-                raise RecipeExecutionAdmissionError(
-                    f"input_preflight_plan_set_{reason}",
-                    "; ".join(verification.detail),
-                )
-            plan_set = verification.evidence
         else:
             raise RecipeExecutionAdmissionError(
                 "recipe_execution_preflight_unknown",

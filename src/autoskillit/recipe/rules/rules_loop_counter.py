@@ -261,6 +261,39 @@ cycle re-enters it, so a per-cycle reset is unnecessary — its sibling
 (see ``reset_ref_push_counter`` in remediation.yaml)."""
 
 
+def _find_outer_non_exit_target(recipe: Recipe, outer_name: str) -> str | None:
+    non_exit_target = _first_non_max_exceeded_route(recipe.steps[outer_name])
+    if non_exit_target is None or non_exit_target not in recipe.steps:
+        return non_exit_target
+    if non_exit_target == "merge_audit_cycle_path":
+        merge_step = recipe.steps[non_exit_target]
+        if merge_step.on_result is not None:
+            no_go_routes = {
+                condition.route
+                for condition in merge_step.on_result.conditions
+                if condition.when is not None and "NO GO" in condition.when
+            }
+            if len(no_go_routes) == 1:
+                non_exit_target = no_go_routes.pop()
+    return non_exit_target
+
+
+def _inner_guard_on_outer_cycle(
+    inner_name: str,
+    inner_counter: str,
+    audit_outer_guards: set[str],
+    forward_reachable: set[str],
+    cycle_candidates: set[str],
+) -> bool:
+    return (
+        inner_name not in audit_outer_guards
+        and "audit_integrity" not in inner_counter
+        and inner_counter not in _WRAPPER_LOOP_EXEMPT_COUNTERS
+        and inner_name in forward_reachable
+        and inner_name in cycle_candidates
+    )
+
+
 @semantic_rule(
     name="loop-counter-not-reset-on-outer-cycle",
     description=(
@@ -305,39 +338,22 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         return findings
 
     for outer_name in audit_outer_guards:
-        non_exit_target = _first_non_max_exceeded_route(recipe.steps[outer_name])
+        non_exit_target = _find_outer_non_exit_target(recipe, outer_name)
         if non_exit_target is None or non_exit_target not in recipe.steps:
             continue
-
-        if non_exit_target == "merge_audit_cycle_path":
-            merge_step = recipe.steps[non_exit_target]
-            if merge_step.on_result is not None:
-                no_go_routes = {
-                    condition.route
-                    for condition in merge_step.on_result.conditions
-                    if condition.when is not None and "NO GO" in condition.when
-                }
-                if len(no_go_routes) == 1:
-                    non_exit_target = no_go_routes.pop()
 
         forward_reachable = bfs_reachable(graph, non_exit_target)
         forward_reachable.add(non_exit_target)
         cycle_candidates = bfs_reachable(ctx.predecessors, outer_name)
 
         for inner_name, inner_counter in guard_steps.items():
-            if inner_name in audit_outer_guards:
-                continue
-
-            if "audit_integrity" in inner_counter:
-                continue
-
-            if inner_counter in _WRAPPER_LOOP_EXEMPT_COUNTERS:
-                continue
-
-            if inner_name not in forward_reachable:
-                continue
-
-            if inner_name not in cycle_candidates:
+            if not _inner_guard_on_outer_cycle(
+                inner_name,
+                inner_counter,
+                audit_outer_guards,
+                forward_reachable,
+                cycle_candidates,
+            ):
                 continue
 
             has_reset = _has_dominating_counter_reset(

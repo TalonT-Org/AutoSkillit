@@ -1093,6 +1093,7 @@ from .types import LaunchAdapter as LaunchAdapter
 from .types import LaunchAdapterResult as LaunchAdapterResult
 from .types import LaunchContractError as LaunchContractError
 from .types import LaunchEvidenceDeferral as LaunchEvidenceDeferral
+from .types import launch_evidence_digest as launch_evidence_digest
 from .types import LaunchFallbackRoute as LaunchFallbackRoute
 from .types import LaunchPreparation as LaunchPreparation
 from .types import LaunchResolutionRequest as LaunchResolutionRequest

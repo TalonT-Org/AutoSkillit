@@ -40,6 +40,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     SkillUnavailabilityRecord,
     get_logger,
+    launch_evidence_digest,
     load_bundled_agent_definitions,
     strict_walk,
     write_versioned_json,
@@ -280,9 +281,7 @@ def compile_session_skill_catalog(
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
         required_native_roles=required_native_roles,
-        launch_evidence_digest=(
-            adaptation_context.digest if adaptation_context is not None else ""
-        ),
+        launch_evidence_digest=launch_evidence_digest(adaptation_context),
     )
 
 

@@ -41,6 +41,7 @@ __all__ = [
     "SkillSemanticOperation",
     "SkillSemanticPlan",
     "adapt_session_invariant",
+    "launch_evidence_digest",
     "refusal_awaits_launch_evidence",
     "required_join_is_unsupported",
 ]
@@ -503,6 +504,16 @@ class SkillSemanticPlan:
                 separators=(",", ":"),
             ).encode()
         ).hexdigest()
+
+
+def launch_evidence_digest(context: SemanticAdaptationContext | None) -> str:
+    """Return the launch evidence digest for *context*, or ``""`` when absent.
+
+    Centralizes the empty-string convention used by compilation/materialization
+    seam checks so a future change to ``SemanticAdaptationContext.digest`` only
+    needs to land here.
+    """
+    return context.digest if context is not None else ""
 
 
 def required_join_is_unsupported(

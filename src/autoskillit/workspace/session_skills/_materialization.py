@@ -30,6 +30,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    launch_evidence_digest,
     managed_route_backend,
     managed_skill_relative_path,
     observe_path_mode,
@@ -224,7 +225,7 @@ def _require_same_launch_evidence(
 ) -> None:
     adaptation_context = projection_context.adaptation_context
     compiled_digest = str(compilation.launch_evidence_digest)
-    projection_digest = str(adaptation_context.digest if adaptation_context is not None else "")
+    projection_digest = str(launch_evidence_digest(adaptation_context))
     if compiled_digest != projection_digest:
         raise SkillContractError(
             "session compilation and materialization carry different launch evidence: "

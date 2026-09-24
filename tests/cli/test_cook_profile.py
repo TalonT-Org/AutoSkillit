@@ -24,6 +24,7 @@ from autoskillit.core import (
     HookTrustPolicy,
     InteractiveInvocationValidation,
     ManagedSessionHome,
+    PreLaunchReadiness,
     RepositoryProfileId,
     RestoreSession,
     SessionAttemptHandle,
@@ -77,6 +78,9 @@ def _make_mock_backend_class(
 
         def binary_name(self) -> str:
             return "claude"
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             return None
@@ -145,6 +149,7 @@ def _run_cook(
     ):
         assert projection_context.catalog == compilation.catalog
         yield ManagedSessionHome(
+            managed_projection=None,
             launch_id=launch_id,
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -440,6 +445,7 @@ def _run_finalized_profile_cook(
         assert isinstance(compilation, CompiledSessionSkillCatalog)
         captured["compilation"] = compilation
         yield ManagedSessionHome(
+            managed_projection=None,
             launch_id=launch_id,
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -473,6 +479,9 @@ def _run_finalized_profile_cook(
 
         def binary_name(self) -> str:
             return "codex"
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             return None

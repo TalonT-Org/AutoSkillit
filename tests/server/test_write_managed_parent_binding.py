@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from autoskillit.execution.backends import CodexBackend
 from tests.server._managed_join_fixtures import isolated_state_dir, sample_attestation_only
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-class _StubBackend:
-    """Minimal ``CodingAgentBackend`` stub that projects a managed catalog."""
-
-    def __init__(self, manifest_name: str = ".autoskillit-projection.json") -> None:
-        self.name = "codex-stub"
-        self._manifest_name = manifest_name
+class _StubBackend(CodexBackend):
+    """Managed backend with a small projection manifest fixture."""
 
     def projected_manifest_path(self, generated_home: Path) -> Path:
         catalog_dir = generated_home / "catalog"
@@ -29,6 +27,14 @@ class _NoProjectionBackend:
     """Backend that exposes no ``projected_manifest_path`` callable."""
 
     name = "codex-no-projection"
+    capabilities = SimpleNamespace(managed_fixed_batch_route_capable=True)
+
+
+class _NoManagedRouteBackend:
+    """Backend whose declared capability flags a non-managed fixed-batch route."""
+
+    name = "codex-no-managed-route"
+    capabilities = SimpleNamespace(managed_fixed_batch_route_capable=False)
 
 
 def _seed_projection(home: Path, skill_name: str) -> None:
@@ -198,7 +204,7 @@ def test_write_managed_parent_binding_rejects_backend_without_projection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.core import CODEX_HOME_ENV_VAR, SkillContractError
+    from autoskillit.core import CODEX_HOME_ENV_VAR
     from autoskillit.hooks._session_binding import resolve_binding_path
     from autoskillit.server._managed_join_attestation import (
         _write_managed_parent_binding,
@@ -208,12 +214,31 @@ def test_write_managed_parent_binding_rejects_backend_without_projection(
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(project_root / "home"))
     binding_path = resolve_binding_path(str(project_root), "parent-1")
 
-    with pytest.raises(SkillContractError, match="cannot locate its projection"):
+    with pytest.raises(TypeError, match="does not implement ManagedRouteHomeBackend"):
         _write_managed_parent_binding(
             binding_path=binding_path,
             binding_session_id="parent-1",
             normalized_skill_name="my-skill",
             backend=_NoProjectionBackend(),
+            attestation=sample_attestation_only("parent-1"),
+        )
+
+
+def test_write_managed_parent_binding_rejects_backend_without_managed_route(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillContractError
+    from autoskillit.hooks._session_binding import resolve_binding_path
+    from autoskillit.server._managed_join_attestation import _write_managed_parent_binding
+
+    project_root = isolated_state_dir(tmp_path)
+    binding_path = resolve_binding_path(str(project_root), "parent-1")
+    with pytest.raises(SkillContractError, match="cannot locate its projection"):
+        _write_managed_parent_binding(
+            binding_path=binding_path,
+            binding_session_id="parent-1",
+            normalized_skill_name="my-skill",
+            backend=_NoManagedRouteBackend(),
             attestation=sample_attestation_only("parent-1"),
         )
 

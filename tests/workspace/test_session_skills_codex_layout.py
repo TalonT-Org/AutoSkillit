@@ -13,11 +13,15 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     ClaudeDirectoryConventions,
     ExplorationVectorApplicabilityId,
+    ManagedCodexRoute,
+    ManagedHomeProjection,
     ManagedSessionHome,
     PreLaunchReadiness,
     RepositoryProfileId,
+    SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
+    SkillSource,
     ValidatedAddDir,
     load_bundled_agent_definitions,
     pkg_root,
@@ -57,6 +61,69 @@ def _prepare_codex_profile_source(tmp_path: Path) -> Path:
         'cli_auth_credentials_store = "keyring"\n', encoding="utf-8"
     )
     return source_home
+
+
+def _managed_codex_materialization_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    launch_context: str,
+    route: ManagedCodexRoute,
+):
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillInfo,
+        SkillsDirectoryProvider,
+    )
+    from tests.execution.backends._codex_fixtures import (
+        installed_catalog,
+        managed_source_home,
+        use_bundled_catalog,
+        with_migration_offer,
+    )
+
+    selected = CODEX_MODEL_ALIASES["haiku"]
+    source_home, raw = managed_source_home(
+        tmp_path,
+        catalog=with_migration_offer(installed_catalog(), selected, f"{selected}-successor"),
+    )
+    use_bundled_catalog(monkeypatch, raw)
+    project = tmp_path / "project"
+    project.mkdir()
+    backend = CodexBackend(source_codex_home=source_home)
+    adaptation_context = prepare_managed_join_context(
+        backend=backend,
+        configured_model="haiku",
+        state_root=project,
+        parent_id="launch1",
+        launch_context=launch_context,
+    )
+    assert isinstance(adaptation_context, SemanticAdaptationContext)
+    skill_path = _write_profile_skill(project / "skills", "managed-test-skill")
+    catalog = EffectiveSkillCatalog(
+        (
+            SkillCatalogEntry.from_skill_info(
+                SkillInfo(
+                    name="managed-test-skill",
+                    source=SkillSource.PROJECT_LOCAL,
+                    path=skill_path,
+                )
+            ),
+        ),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    projection_context = SkillsDirectoryProvider().catalog_projection_context(
+        catalog,
+        project,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+        adaptation_context=adaptation_context,
+        managed_codex_route=route,
+    )
+    return backend, adaptation_context, catalog, projection_context
 
 
 def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
@@ -214,6 +281,87 @@ def test_managed_materialization_forwards_complete_catalog_context(
         adaptation_context=adaptation_context,
         route=route,
     )
+
+
+@pytest.mark.parametrize(
+    ("entry_point", "launch_context", "route"),
+    (
+        ("managed_session", "interactive", "interactive-parent"),
+        ("restore_snapshot_session", "direct", "parent"),
+    ),
+)
+def test_every_materialization_entry_point_projects_managed_route(
+    make_session_skill_manager,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entry_point: str,
+    launch_context: str,
+    route: ManagedCodexRoute,
+) -> None:
+    from autoskillit.workspace import compile_session_skill_catalog
+
+    backend, adaptation_context, catalog, projection_context = (
+        _managed_codex_materialization_context(
+            tmp_path,
+            monkeypatch,
+            launch_context=launch_context,
+            route=route,
+        )
+    )
+    attestation = adaptation_context.managed_join_attestation
+    assert attestation is not None
+    manager = make_session_skill_manager()
+    if entry_point == "managed_session":
+        compilation = compile_session_skill_catalog(
+            catalog, backend, adaptation_context=adaptation_context
+        )
+        with manager.managed_session("launch1", compilation, projection_context) as managed:
+            assert (
+                backend.verify_managed_session_dir(managed.generated_home, attestation, route)
+                == []
+            )
+    else:
+        snapshot = tmp_path / "snapshot"
+        _write_profile_skill(snapshot / "skills", "resumed-skill")
+        add_dir = manager.restore_snapshot_session("restored", snapshot, projection_context)
+        try:
+            assert (
+                backend.verify_managed_session_dir(Path(add_dir.session_home), attestation, route)
+                == []
+            )
+        finally:
+            manager.cleanup_session("restored")
+
+
+def test_managed_session_home_carries_projection(
+    make_session_skill_manager,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.workspace import compile_session_skill_catalog
+
+    backend, adaptation_context, catalog, context = _managed_codex_materialization_context(
+        tmp_path,
+        monkeypatch,
+        launch_context="interactive",
+        route="interactive-parent",
+    )
+    attestation = adaptation_context.managed_join_attestation
+    assert attestation is not None
+    manager = make_session_skill_manager()
+    compilation = compile_session_skill_catalog(
+        catalog, backend, adaptation_context=adaptation_context
+    )
+    with manager.managed_session("managed", compilation, context) as managed:
+        assert managed.managed_projection == ManagedHomeProjection(
+            attestation=attestation, route="interactive-parent"
+        )
+
+    unmanaged_context = replace(context, adaptation_context=None, managed_codex_route=None)
+    with manager.managed_session(
+        "unmanaged", compile_session_skill_catalog(catalog, backend), unmanaged_context
+    ) as managed:
+        assert managed.managed_projection is None
 
 
 def test_materialization_forwards_only_server_explorer_binding_env(

@@ -22,7 +22,7 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
-from autoskillit.core import InteractiveInvocationValidation
+from autoskillit.core import InteractiveInvocationValidation, PreLaunchReadiness
 from tests.cli._cook_launch_helpers import RecordingLifecycle
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
@@ -150,6 +150,9 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
         def binary_name(self) -> str:
             return "claude"
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             events.append(("recover",))
@@ -326,6 +329,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
         assert projection_context.catalog == compilation.catalog
         try:
             yield ManagedSessionHome(
+                managed_projection=None,
                 launch_id=launch_id,
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -354,6 +358,9 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
 
         def binary_name(self) -> str:
             return "claude"
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             return None

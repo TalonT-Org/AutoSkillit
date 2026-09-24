@@ -4,29 +4,26 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.execution.backends._codex_fixtures import installed_catalog
+from autoskillit.core import ManagedJoinRefusalReason
+from tests.execution.backends._codex_fixtures import (
+    installed_catalog,
+    managed_source_home,
+    use_bundled_catalog,
+)
+
+if TYPE_CHECKING:
+    from autoskillit.core import SemanticAdaptationContext
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import (
+        DefaultManagedJoinAttestationAuthority,
+        ManagedJoinRecordStore,
+    )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.model_contract]
-
-
-def _source_home(tmp_path: Path, *, include_sol: bool = True) -> tuple[Path, bytes]:
-    source_home = tmp_path / "source"
-    source_home.mkdir(parents=True)
-    catalog = installed_catalog()
-    if not include_sol:
-        models = catalog["models"]
-        assert isinstance(models, list)
-        catalog["models"] = [
-            model
-            for model in models
-            if isinstance(model, dict) and model.get("slug") != "gpt-6-sol"
-        ]
-    raw_catalog = json.dumps(catalog, sort_keys=True).encode("utf-8")
-    (source_home / "models_cache.json").write_bytes(raw_catalog)
-    return source_home, raw_catalog
 
 
 @pytest.mark.parametrize(
@@ -43,8 +40,8 @@ def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
-    source_home, raw_catalog = _source_home(tmp_path)
-    _use_bundled_catalog(monkeypatch, raw_catalog)
+    source_home, raw_catalog = managed_source_home(tmp_path)
+    use_bundled_catalog(monkeypatch, raw_catalog)
     context = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
         configured_model=configured_model,
@@ -74,7 +71,7 @@ def test_prelaunch_issuance_refuses_retired_native_models_before_attestation(
         prepare_managed_join_context,
     )
 
-    source_home, _ = _source_home(tmp_path)
+    source_home, _ = managed_source_home(tmp_path)
     state_root = tmp_path / "state"
     refusal = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
@@ -86,17 +83,6 @@ def test_prelaunch_issuance_refuses_retired_native_models_before_attestation(
 
     assert isinstance(refusal, ManagedJoinIssuanceRefusal)
     assert not (state_root / ".autoskillit").exists()
-
-
-def _use_bundled_catalog(monkeypatch: pytest.MonkeyPatch, raw_catalog: bytes) -> None:
-    from autoskillit.execution.backends import _codex_managed_route
-
-    monkeypatch.setattr(_codex_managed_route.shutil, "which", lambda _binary: "/usr/bin/codex")
-    monkeypatch.setattr(
-        _codex_managed_route,
-        "acquire_bundled_codex_catalog",
-        lambda *args, **kwargs: raw_catalog,
-    )
 
 
 def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
@@ -116,10 +102,10 @@ def test_prelaunch_issuance_produces_verifiable_context_from_production_digests(
     from autoskillit.hooks._session_binding import resolve_channel_dir
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
-    source_home, raw_catalog = _source_home(tmp_path)
+    source_home, raw_catalog = managed_source_home(tmp_path)
     state_root = tmp_path / "state"
     backend = CodexBackend(source_codex_home=source_home)
-    _use_bundled_catalog(monkeypatch, raw_catalog)
+    use_bundled_catalog(monkeypatch, raw_catalog)
     (source_home / "models_cache.json").write_text("source cache is not issuance authority")
 
     context = prepare_managed_join_context(
@@ -166,7 +152,7 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(
     )
 
     state_root = tmp_path / "state"
-    source_home, _ = _source_home(tmp_path / "no-default")
+    source_home, _ = managed_source_home(tmp_path / "no-default")
     missing_default_catalog = installed_catalog()
     models = missing_default_catalog["models"]
     assert isinstance(models, list)
@@ -174,7 +160,7 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(
     assert isinstance(sol, dict)
     sol.pop("default_reasoning_level")
     raw_catalog = json.dumps(missing_default_catalog).encode("utf-8")
-    _use_bundled_catalog(monkeypatch, raw_catalog)
+    use_bundled_catalog(monkeypatch, raw_catalog)
     missing_default = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=source_home),
         configured_model="gpt-6-sol",
@@ -185,8 +171,8 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(
     assert isinstance(missing_default, ManagedJoinIssuanceRefusal)
     assert "gpt-6-sol" in missing_default.reason
 
-    absent_home, absent_catalog = _source_home(tmp_path / "absent", include_sol=False)
-    _use_bundled_catalog(monkeypatch, absent_catalog)
+    absent_home, absent_catalog = managed_source_home(tmp_path / "absent", include_sol=False)
+    use_bundled_catalog(monkeypatch, absent_catalog)
     absent_model = prepare_managed_join_context(
         backend=CodexBackend(source_codex_home=absent_home),
         configured_model="gpt-6-sol",
@@ -227,7 +213,7 @@ def test_prelaunch_issuance_refuses_malformed_catalog(
     (source_home / "models_cache.json").write_text(
         json.dumps({"version": "missing-models-list"}), encoding="utf-8"
     )
-    _use_bundled_catalog(monkeypatch, b'{"version":"missing-models-list"}')
+    use_bundled_catalog(monkeypatch, b'{"version":"missing-models-list"}')
 
     # ``gpt-6-luna`` is a valid Codex model id but is not in the
     # CODEX_EFFORT_MAPPING shortcut table, so ``resolve_managed_parent_identity``
@@ -312,21 +298,17 @@ def test_authority_atomically_caches_complete_catalog_context() -> None:
     )
 
 
-def test_server_authority_loads_and_revalidates_prelaunch_record(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _prepared_managed_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[CodexBackend, ManagedJoinRecordStore, Path, SemanticAdaptationContext]:
     from autoskillit.core import CODEX_HOME_ENV_VAR, SemanticAdaptationContext
     from autoskillit.execution.backends import CodexBackend
-    from autoskillit.server._managed_join_attestation import (
-        DefaultManagedJoinAttestationAuthority,
-        ManagedJoinRecordStore,
-    )
+    from autoskillit.server._managed_join_attestation import ManagedJoinRecordStore
     from autoskillit.server.managed_join_prelaunch import prepare_managed_join_context
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
-    source_home, raw_catalog = _source_home(tmp_path)
-    _use_bundled_catalog(monkeypatch, raw_catalog)
+    source_home, raw_catalog = managed_source_home(tmp_path)
+    use_bundled_catalog(monkeypatch, raw_catalog)
     state_root = tmp_path / "state"
     backend = CodexBackend(source_codex_home=source_home)
     context = prepare_managed_join_context(
@@ -337,22 +319,47 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         launch_context="interactive",
     )
     assert isinstance(context, SemanticAdaptationContext)
-    attestation = context.managed_join_attestation
-    assert attestation is not None
     home = tmp_path / "home"
     home.mkdir()
     (home / "config.toml").write_text(
         '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n', encoding="utf-8"
     )
     backend.configure_managed_session_dir(
-        home,
-        adaptation_context=context,
-        route="interactive-parent",
+        home, adaptation_context=context, route="interactive-parent"
     )
     (source_home / "models_cache.json").unlink()
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
-    record_store = ManagedJoinRecordStore(state_root)
+    return backend, ManagedJoinRecordStore(state_root), home, context
 
+
+def _issue_context(
+    authority: DefaultManagedJoinAttestationAuthority,
+    *,
+    model: str = "gpt-6-luna",
+    direct_tool_mode: bool = True,
+) -> SemanticAdaptationContext:
+    return authority.issue(
+        backend="codex",
+        launch_context="interactive",
+        parent_session_id="abc123",
+        direct_tool_mode=direct_tool_mode,
+        resolved_model=model,
+        resolved_reasoning_effort="medium",
+        codex_catalog_digest="a" * 64,
+        fixed_batch_tool_registry_digest="b" * 64,
+        hook_registry_digest="c" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+
+
+def test_server_authority_loads_and_revalidates_prelaunch_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import SemanticAdaptationContext
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    backend, record_store, _, context = _prepared_managed_home(tmp_path, monkeypatch)
     original_reader = type(backend).read_managed_session_catalog
     catalog_reads = 0
 
@@ -362,127 +369,234 @@ def test_server_authority_loads_and_revalidates_prelaunch_record(
         return original_reader(self, generated_home)
 
     monkeypatch.setattr(type(backend), "read_managed_session_catalog", count_catalog_read)
+    authority = DefaultManagedJoinAttestationAuthority(record_store=record_store, backend=backend)
 
-    authority = DefaultManagedJoinAttestationAuthority(
-        record_store=record_store,
-        backend=backend,
-    )
     loaded = authority.find_verified_context(backend="codex", parent_session_id="abc123")
-    assert loaded is not None
+    assert isinstance(loaded, SemanticAdaptationContext)
     assert loaded.managed_join_attestation == context.managed_join_attestation
     assert loaded.managed_codex_catalog == context.managed_codex_catalog
-    assert authority.verify(loaded, backend="codex", parent_session_id="abc123") == loaded
+    assert authority.verify(loaded, backend="codex", parent_session_id="abc123") is loaded
     assert catalog_reads == 1
     assert authority.find_verified_context(backend="codex", parent_session_id="abc123") is loaded
-    assert catalog_reads == 1
-    monkeypatch.setattr(type(backend), "read_managed_session_catalog", original_reader)
+    assert catalog_reads == 2
 
-    record_path = record_store.path_for("abc123")
-    original_record = record_path.read_text(encoding="utf-8")
 
-    edited = json.loads(original_record)
-    edited["attestation"]["resolved_model"] = "other-model"
-    record_path.write_text(json.dumps(edited), encoding="utf-8")
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        record_path.write_text(original_record, encoding="utf-8")
+def test_cached_context_refuses_later_home_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import ManagedJoinVerificationRefusal, SemanticAdaptationContext
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 
-    monkeypatch.delenv(CODEX_HOME_ENV_VAR)
-    assert (
-        DefaultManagedJoinAttestationAuthority(
-            record_store=record_store, backend=backend
-        ).find_verified_context(backend="codex", parent_session_id="abc123")
-        is None
-    )
-    monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))
-
-    catalog_path = home / "autoskillit-models.json"
-    original_catalog = catalog_path.read_bytes()
-    catalog_path.unlink()
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        catalog_path.write_bytes(original_catalog)
-
-    catalog_path.write_bytes(b'{"models":["tampered"]}')
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        catalog_path.write_bytes(original_catalog)
-
-    replacement = tmp_path / "replacement-models-cache.json"
-    replacement.write_bytes(original_catalog)
-    catalog_path.unlink()
-    catalog_path.symlink_to(replacement)
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        catalog_path.unlink()
-        catalog_path.write_bytes(original_catalog)
-
-    from autoskillit.execution.backends._codex_catalog import CODEX_CATALOG_LIMIT
-
-    catalog_path.write_bytes(b" " * (CODEX_CATALOG_LIMIT + 1))
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        catalog_path.write_bytes(original_catalog)
+    backend, record_store, home, _ = _prepared_managed_home(tmp_path, monkeypatch)
+    authority = DefaultManagedJoinAttestationAuthority(record_store=record_store, backend=backend)
+    first = authority.find_verified_context(backend="codex", parent_session_id="abc123")
+    assert isinstance(first, SemanticAdaptationContext)
 
     config_path = home / "config.toml"
-    original_config = config_path.read_text(encoding="utf-8")
     config_path.write_text(
-        original_config.replace("join_stop_guard", "removed_join_stop_guard"),
+        config_path.read_text(encoding="utf-8").replace(
+            "join_stop_guard", "removed_join_stop_guard"
+        ),
         encoding="utf-8",
     )
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        config_path.write_text(original_config, encoding="utf-8")
+    second = authority.find_verified_context(backend="codex", parent_session_id="abc123")
+    assert isinstance(second, ManagedJoinVerificationRefusal)
+    assert second.reason is ManagedJoinRefusalReason.HOME_DRIFT
+    assert "missing guards: join_stop_guard" in "; ".join(second.detail)
 
-    edited = json.loads(original_record)
-    edited["attestation"]["hook_registry_digest"] = "0" * 64
-    record_path.write_text(json.dumps(edited), encoding="utf-8")
-    try:
-        assert (
-            DefaultManagedJoinAttestationAuthority(
-                record_store=record_store, backend=backend
-            ).find_verified_context(backend="codex", parent_session_id="abc123")
-            is None
-        )
-    finally:
-        record_path.write_text(original_record, encoding="utf-8")
 
-    blocked = DefaultManagedJoinAttestationAuthority(record_store=record_store, backend=backend)
-    blocked.set_recovery_gate(lambda: False)
-    assert blocked.find_verified_context(backend="codex", parent_session_id="abc123") is None
+_RELOAD_CASES = (
+    ("model_changed", ManagedJoinRefusalReason.HOME_DRIFT, "wrong resolved model (attested"),
+    ("home_unset", ManagedJoinRefusalReason.HOME_UNAVAILABLE, "CODEX_HOME is unset"),
+    ("catalog_missing", ManagedJoinRefusalReason.HOME_UNREADABLE, "catalog is unreadable"),
+    ("catalog_tampered", ManagedJoinRefusalReason.HOME_DRIFT, "managed Codex catalog is invalid"),
+    ("catalog_symlinked", ManagedJoinRefusalReason.HOME_UNREADABLE, "catalog is unreadable"),
+    ("catalog_oversized", ManagedJoinRefusalReason.HOME_UNREADABLE, "catalog is unreadable"),
+    ("guard_removed", ManagedJoinRefusalReason.HOME_DRIFT, "missing guards: join_stop_guard"),
+    (
+        "hook_digest_changed",
+        ManagedJoinRefusalReason.REGISTRY_DIGEST_MISMATCH,
+        "hook_registry_digest",
+    ),
+    ("recovery_blocked", ManagedJoinRefusalReason.RECOVERY_BLOCKED, ""),
+)
+
+
+@pytest.mark.parametrize(("tamper", "expected_reason", "expected_detail"), _RELOAD_CASES)
+def test_reload_refusal_names_failing_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tamper: str,
+    expected_reason: ManagedJoinRefusalReason,
+    expected_detail: str,
+) -> None:
+    from autoskillit.core import CODEX_HOME_ENV_VAR, ManagedJoinVerificationRefusal
+    from autoskillit.execution.backends._codex_catalog import CODEX_CATALOG_LIMIT
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    backend, record_store, home, _ = _prepared_managed_home(tmp_path, monkeypatch)
+    record_path = record_store.path_for("abc123")
+    catalog_path = home / "autoskillit-models.json"
+    if tamper in {"model_changed", "hook_digest_changed"}:
+        document = json.loads(record_path.read_text(encoding="utf-8"))
+        field = "resolved_model" if tamper == "model_changed" else "hook_registry_digest"
+        document["attestation"][field] = "other-model" if tamper == "model_changed" else "0" * 64
+        record_path.write_text(json.dumps(document), encoding="utf-8")
+    elif tamper == "home_unset":
+        monkeypatch.delenv(CODEX_HOME_ENV_VAR)
+    elif tamper == "catalog_missing":
+        catalog_path.unlink()
+    elif tamper == "catalog_tampered":
+        catalog_path.write_bytes(b'{"models":["tampered"]}')
+    elif tamper == "catalog_symlinked":
+        replacement = tmp_path / "replacement-models-cache.json"
+        replacement.write_bytes(catalog_path.read_bytes())
+        catalog_path.unlink()
+        catalog_path.symlink_to(replacement)
+    elif tamper == "catalog_oversized":
+        catalog_path.write_bytes(b" " * (CODEX_CATALOG_LIMIT + 1))
+    elif tamper == "guard_removed":
+        config_path = home / "config.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                "join_stop_guard", "removed_join_stop_guard"
+            ),
+            encoding="utf-8",
+        )
+    else:
+        assert tamper == "recovery_blocked"
+
+    authority = DefaultManagedJoinAttestationAuthority(record_store=record_store, backend=backend)
+    if tamper == "recovery_blocked":
+        authority.set_recovery_gate(lambda: False)
+    result = authority.find_verified_context(backend="codex", parent_session_id="abc123")
+    assert isinstance(result, ManagedJoinVerificationRefusal)
+    assert result.reason is expected_reason
+    if expected_detail:
+        assert expected_detail in "; ".join(result.detail)
+    else:
+        assert result.detail == ()
+
+
+_VERIFY_CASES = (
+    ("none", ManagedJoinRefusalReason.NO_CONTEXT),
+    ("no_attestation", ManagedJoinRefusalReason.NO_ATTESTATION),
+    ("other_authority", ManagedJoinRefusalReason.NOT_ISSUED),
+    ("backend_mismatch", ManagedJoinRefusalReason.BACKEND_MISMATCH),
+    ("parent_mismatch", ManagedJoinRefusalReason.PARENT_MISMATCH),
+    ("stale_epoch", ManagedJoinRefusalReason.STALE_EPOCH),
+    ("mode_not_admitted", ManagedJoinRefusalReason.MODE_NOT_ADMITTED),
+    ("recovery_blocked", ManagedJoinRefusalReason.RECOVERY_BLOCKED),
+)
+
+
+@pytest.mark.parametrize(("scenario", "expected_reason"), _VERIFY_CASES)
+def test_verify_refusal_names_failing_check(
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    expected_reason: ManagedJoinRefusalReason,
+) -> None:
+    from autoskillit.core import ManagedJoinVerificationRefusal, SemanticAdaptationContext
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    authority = DefaultManagedJoinAttestationAuthority()
+    context = _issue_context(authority)
+    backend, parent_id = "codex", "abc123"
+    if scenario == "none":
+        candidate = None
+    elif scenario == "no_attestation":
+        candidate = SemanticAdaptationContext()
+    elif scenario == "other_authority":
+        candidate = _issue_context(DefaultManagedJoinAttestationAuthority(), model="other-model")
+    elif scenario == "mode_not_admitted":
+        candidate = _issue_context(authority, direct_tool_mode=False)
+    else:
+        candidate = context
+    if scenario == "backend_mismatch":
+        backend = "claude"
+    elif scenario == "parent_mismatch":
+        parent_id = "otherparent"
+    elif scenario == "stale_epoch":
+        monkeypatch.setattr(authority, "_activation_epoch", authority.activation_epoch + 1)
+    elif scenario == "recovery_blocked":
+        authority.set_recovery_gate(lambda: False)
+
+    result = authority.verify(candidate, backend=backend, parent_session_id=parent_id)
+    assert isinstance(result, ManagedJoinVerificationRefusal)
+    assert result.reason is expected_reason
+
+
+_STRUCTURAL_CASES = (
+    ("ambiguous", ManagedJoinRefusalReason.AMBIGUOUS_CONTEXT, ""),
+    ("store_unavailable", ManagedJoinRefusalReason.RECORD_STORE_UNAVAILABLE, ""),
+    ("record_unavailable", ManagedJoinRefusalReason.RECORD_UNAVAILABLE, ""),
+    ("route_mismatch", ManagedJoinRefusalReason.ROUTE_MISMATCH, "record route"),
+    (
+        "tool_digest_changed",
+        ManagedJoinRefusalReason.REGISTRY_DIGEST_MISMATCH,
+        "fixed_batch_tool_registry_digest",
+    ),
+    ("backend_not_managed", ManagedJoinRefusalReason.BACKEND_NOT_MANAGED, ""),
+)
+
+
+@pytest.mark.parametrize(("scenario", "expected_reason", "expected_detail"), _STRUCTURAL_CASES)
+def test_find_verified_context_structural_refusals(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    expected_reason: ManagedJoinRefusalReason,
+    expected_detail: str,
+) -> None:
+    from types import SimpleNamespace
+    from typing import cast
+
+    from autoskillit.core import ManagedJoinVerificationRefusal
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    backend, record_store, _, context = _prepared_managed_home(tmp_path, monkeypatch)
+    parent_id = "abc123"
+    if scenario == "ambiguous":
+        authority = DefaultManagedJoinAttestationAuthority(
+            record_store=record_store, backend=backend
+        )
+        _issue_context(authority, model="first-model")
+        _issue_context(authority, model="second-model")
+    elif scenario == "store_unavailable":
+        authority = DefaultManagedJoinAttestationAuthority(backend=backend)
+    else:
+        if scenario == "record_unavailable":
+            parent_id = "otherparent"
+        elif scenario == "route_mismatch":
+            record_store.write(context, route="leaf")
+        elif scenario == "tool_digest_changed":
+            record_path = record_store.path_for(parent_id)
+            document = json.loads(record_path.read_text(encoding="utf-8"))
+            document["attestation"]["fixed_batch_tool_registry_digest"] = "0" * 64
+            record_path.write_text(json.dumps(document), encoding="utf-8")
+        elif scenario == "backend_not_managed":
+            backend = cast(
+                "CodexBackend",
+                SimpleNamespace(
+                    name="codex",
+                    capabilities=SimpleNamespace(managed_fixed_batch_route_capable=False),
+                ),
+            )
+        authority = DefaultManagedJoinAttestationAuthority(
+            record_store=record_store, backend=backend
+        )
+
+    result = authority.find_verified_context(backend="codex", parent_session_id=parent_id)
+    assert isinstance(result, ManagedJoinVerificationRefusal)
+    assert result.reason is expected_reason
+    if expected_detail:
+        assert expected_detail in "; ".join(result.detail)
+    else:
+        assert result.detail == ()
+
+
+def test_every_refusal_reason_is_exercised() -> None:
+    expected = {case[1] for case in _RELOAD_CASES}
+    expected.update(case[1] for case in _VERIFY_CASES)
+    expected.update(case[1] for case in _STRUCTURAL_CASES)
+    assert expected == set(ManagedJoinRefusalReason)

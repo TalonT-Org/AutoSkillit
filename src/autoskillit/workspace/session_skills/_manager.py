@@ -30,6 +30,7 @@ from autoskillit.core import (
     CompiledSessionSkillCatalogAuthority,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
+    ManagedHomeProjection,
     ManagedSessionHome,
     ObservedEntry,
     SkillAuthority,
@@ -105,6 +106,7 @@ class _InitializedSession:
     skills_subdir: Path
     lease: _SessionLease | None
     unavailability_payload: SkillUnavailabilityPayload
+    managed_projection: ManagedHomeProjection | None = None
 
 
 class DefaultSessionSkillManager:
@@ -374,6 +376,7 @@ class DefaultSessionSkillManager:
                 skills_dir=initialized.skills_dir,
                 pass_fds=(lease_fd,),
                 unavailability_payload=initialized.unavailability_payload,
+                managed_projection=initialized.managed_projection,
             )
         except BaseException as exc:
             logger.error("managed_session_body_failed", exc_info=True)
@@ -479,14 +482,16 @@ class DefaultSessionSkillManager:
             if persistent:
                 _remove_and_verify(generated_home)
 
-            skills_dir, finalized_records, unavailability_payload = _materialize_session(
-                generated_home,
-                records,
-                projection_context,
-                skills_subdir=skills_subdir,
-                compilation=compilation,
-                explorer_binding_env=explorer_binding_env,
-                explorer_binding_env_factory=explorer_binding_env_factory,
+            skills_dir, finalized_records, unavailability_payload, managed_projection = (
+                _materialize_session(
+                    generated_home,
+                    records,
+                    projection_context,
+                    skills_subdir=skills_subdir,
+                    compilation=compilation,
+                    explorer_binding_env=explorer_binding_env,
+                    explorer_binding_env_factory=explorer_binding_env_factory,
+                )
             )
             initialized = _InitializedSession(
                 generated_home=generated_home,
@@ -494,6 +499,7 @@ class DefaultSessionSkillManager:
                 skills_subdir=owned_skills_subdir,
                 lease=lease,
                 unavailability_payload=unavailability_payload,
+                managed_projection=managed_projection,
             )
             self._session_roots[session_id] = effective_root
             self._session_skills_subdirs[session_id] = owned_skills_subdir

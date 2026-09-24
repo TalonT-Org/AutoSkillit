@@ -37,6 +37,8 @@ from ._type_results import PreLaunchReadiness, ValidatedAddDir
 from ._type_results_execution import SessionAttemptHandle
 from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import (
+    ManagedCodexRoute,
+    ManagedJoinAttestation,
     SemanticAdaptationContext,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
@@ -53,6 +55,8 @@ __all__ = [
     "ExplorationDispatchMaterialization",
     "ExplorationDispatchRenderer",
     "CodingAgentBackend",
+    "ManagedRouteHomeBackend",
+    "managed_route_backend",
 ]
 
 
@@ -353,7 +357,10 @@ class CodingAgentBackend(Protocol):
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
     ) -> PreLaunchReadiness:
-        """Return backend-specific launch-readiness errors.
+        """Provision a session home and return backend-specific readiness errors.
+
+        This method may provision ``session_dir``. It is never used against a
+        materialized home at launch time.
 
         ``executable`` carries the shared exact launch binding. Backends whose
         readiness policy seals or probes that binding validate it here; backends
@@ -362,6 +369,20 @@ class CodingAgentBackend(Protocol):
         ``plugin_dir`` carries the session's validated generation path so that
         Codex hooks can be resolved from the exact artifact tree rather than
         performing an independent resolution.
+        """
+        ...
+
+    def probe_launch_readiness(
+        self,
+        *,
+        session_dir: Path,
+        executable: ExecutableLaunchBinding,
+    ) -> PreLaunchReadiness:
+        """Return the attested environment needed to launch against this home.
+
+        AutoSkillit code here must not create, modify, or delete anything under
+        ``session_dir``. A backend-native readiness subprocess may create that
+        backend's own runtime state.
         """
         ...
 
@@ -417,3 +438,42 @@ class CodingAgentBackend(Protocol):
         session_dir: Path,
         roles: frozenset[str],
     ) -> None: ...
+
+
+@runtime_checkable
+class ManagedRouteHomeBackend(Protocol):
+    """Backend operations for a projected managed-route home."""
+
+    def configure_managed_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        adaptation_context: SemanticAdaptationContext,
+        route: ManagedCodexRoute,
+    ) -> None: ...
+
+    def verify_managed_session_dir(
+        self,
+        generated_home: Path,
+        attestation: ManagedJoinAttestation,
+        route: ManagedCodexRoute,
+        *,
+        managed_codex_catalog: bytes | None = None,
+    ) -> list[str]: ...
+
+    def read_managed_session_catalog(self, generated_home: Path) -> bytes: ...
+
+    def projected_manifest_path(self, generated_home: Path) -> Path: ...
+
+
+def managed_route_backend(backend: CodingAgentBackend) -> ManagedRouteHomeBackend | None:
+    """Return a capable managed-route backend, checking its declared contract."""
+
+    if not backend.capabilities.managed_fixed_batch_route_capable:
+        return None
+    if not isinstance(backend, ManagedRouteHomeBackend):
+        raise TypeError(
+            f"{backend.name} advertises managed fixed-batch routes but does not implement "
+            "ManagedRouteHomeBackend"
+        )
+    return backend

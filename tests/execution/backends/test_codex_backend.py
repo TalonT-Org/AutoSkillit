@@ -37,6 +37,7 @@ from autoskillit.core import (
     CodexAgentProjectionDef,
     CodingAgentBackend,
     EnvPolicy,
+    ExecutableLaunchBinding,
     ExecutionIdentity,
     FreshLaunch,
     OutputFormat,
@@ -2270,7 +2271,7 @@ class TestCodexDiscardDispositions:
 
 
 class TestCodexBackendEnsurePreLaunchStageTagging:
-    """Pre-launch errors identify the failed destination-provisioning stage."""
+    """Provisioning and launch probes identify their failing stage."""
 
     _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
         "[mcp_servers.autoskillit]\n"
@@ -2327,7 +2328,7 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         assert "destination snapshot" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_generated_home_validation_failure_is_tagged(
+    def test_launch_readiness_probe_failure_is_tagged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
@@ -2335,13 +2336,12 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
             "_validate_generated_codex_home",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(
+        readiness = CodexBackend().probe_launch_readiness(
             session_dir=self.session_dir,
-            executable=object(),
+            executable=cast(ExecutableLaunchBinding, object()),
         )
-        assert len(readiness.errors) == 1
-        assert "generated home validation" in readiness.errors[0]
-        assert "boom" in readiness.errors[0]
+        assert readiness.errors == ("Codex launch readiness probe failed: boom",)
+        assert readiness.attested_env == {}
 
 
 class TestCodexBackendSetupSessionDir:

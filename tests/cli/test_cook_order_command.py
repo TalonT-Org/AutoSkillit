@@ -534,6 +534,7 @@ class TestCLIOrderCommand:
         skills_dir = generated_home / "skills"
         skills_dir.mkdir(parents=True)
         managed_home = ManagedSessionHome(
+            managed_projection=None,
             launch_id="launch-id",
             generated_home=generated_home,
             skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -625,6 +626,11 @@ class TestCLIOrderCommand:
             return PreLaunchReadiness((), {})
 
         monkeypatch.setattr(CodexBackend, "ensure_pre_launch", fake_pre_launch)
+        monkeypatch.setattr(
+            CodexBackend,
+            "probe_launch_readiness",
+            lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+        )
         monkeypatch.setattr(
             CodexBackend,
             "validate_interactive_invocation",

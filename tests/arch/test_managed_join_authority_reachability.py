@@ -23,7 +23,7 @@ _EXPECTED_CALLERS = Counter(
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "_request_facts",
         ): 1,
-        ("verify", "server/_managed_join_attestation.py", "find_verified_context"): 1,
+        ("verify", "server/_managed_join_attestation.py", "find_verified_context"): 2,
         ("verify", "server/_managed_join_attestation.py", "_recover_verified_context"): 1,
     }
 )
@@ -101,3 +101,50 @@ def test_managed_join_authority_protocol_methods_have_production_callers() -> No
 
 def test_tool_context_receives_the_default_managed_join_authority() -> None:
     assert _factory_wires_default_authority()
+
+
+def test_attestation_authority_verifiers_never_return_none() -> None:
+    implementation_path = _SRC_ROOT / "server" / "_managed_join_attestation.py"
+    implementation_tree = ast.parse(
+        implementation_path.read_text(encoding="utf-8"), filename=str(implementation_path)
+    )
+    authority = next(
+        node
+        for node in implementation_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "DefaultManagedJoinAttestationAuthority"
+    )
+    protocol_tree = ast.parse(
+        _PROTOCOL_PATH.read_text(encoding="utf-8"), filename=str(_PROTOCOL_PATH)
+    )
+    protocol = next(
+        node
+        for node in protocol_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "ManagedJoinAttestationAuthority"
+    )
+    for method_name in ("verify", "find_verified_context"):
+        implementation = next(
+            node
+            for node in authority.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == method_name
+        )
+        assert not any(
+            isinstance(node, ast.Return)
+            and (
+                node.value is None
+                or isinstance(node.value, ast.Constant)
+                and node.value.value is None
+            )
+            for node in ast.walk(implementation)
+        ), f"{method_name} silently returns None"
+        declaration = next(
+            node
+            for node in protocol.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == method_name
+        )
+        assert declaration.returns is not None
+        assert any(
+            isinstance(node, ast.Name) and node.id == "ManagedJoinVerificationRefusal"
+            for node in ast.walk(declaration.returns)
+        ), f"{method_name} must declare a reason-carrying refusal"

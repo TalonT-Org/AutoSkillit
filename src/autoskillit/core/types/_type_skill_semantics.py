@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ._type_exceptions import ChildSpawnCardinalityError, SkillContractError
 
@@ -26,7 +26,11 @@ __all__ = [
     "GitMetadataWriteSpec",
     "JoinSpec",
     "LogicalRoleSpec",
+    "ManagedCodexRoute",
+    "ManagedHomeProjection",
     "ManagedJoinAttestation",
+    "ManagedJoinRefusalReason",
+    "ManagedJoinVerificationRefusal",
     "MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION",
     "SemanticAdaptationContext",
     "SiblingSkillSpec",
@@ -63,6 +67,8 @@ SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high"})
 
 SKILL_SEMANTIC_SCHEMA_VERSION = 1
 MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION = 1
+
+ManagedCodexRoute = Literal["parent", "leaf", "interactive-parent"]
 
 
 class SkillSemanticOperation(StrEnum):
@@ -217,6 +223,55 @@ class ManagedJoinAttestation:
             and self.skill_load_applies
             and self.guards_apply
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedHomeProjection:
+    """Managed-route facts a materialized generated home was projected with."""
+
+    attestation: ManagedJoinAttestation
+    route: ManagedCodexRoute
+
+
+class ManagedJoinRefusalReason(StrEnum):
+    NO_CONTEXT = "no_context"
+    NOT_ISSUED = "not_issued"
+    NO_ATTESTATION = "no_attestation"
+    BACKEND_MISMATCH = "backend_mismatch"
+    PARENT_MISMATCH = "parent_mismatch"
+    STALE_EPOCH = "stale_epoch"
+    MODE_NOT_ADMITTED = "mode_not_admitted"
+    RECOVERY_BLOCKED = "recovery_blocked"
+    AMBIGUOUS_CONTEXT = "ambiguous_context"
+    RECORD_STORE_UNAVAILABLE = "record_store_unavailable"
+    RECORD_UNAVAILABLE = "record_unavailable"
+    ROUTE_MISMATCH = "route_mismatch"
+    REGISTRY_DIGEST_MISMATCH = "registry_digest_mismatch"
+    BACKEND_NOT_MANAGED = "backend_not_managed"
+    HOME_UNAVAILABLE = "home_unavailable"
+    HOME_UNREADABLE = "home_unreadable"
+    HOME_DRIFT = "home_drift"
+
+
+_REATTEST_REASONS = frozenset(
+    {ManagedJoinRefusalReason.HOME_DRIFT, ManagedJoinRefusalReason.STALE_EPOCH}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedJoinVerificationRefusal:
+    reason: ManagedJoinRefusalReason
+    detail: tuple[str, ...] = ()
+
+    def render(self) -> str:
+        text = (
+            self.reason.value
+            if not self.detail
+            else f"{self.reason.value}: {'; '.join(self.detail)}"
+        )
+        if self.reason in _REATTEST_REASONS:
+            text += "; restart the AutoSkillit session to re-attest"
+        return text
 
 
 @dataclass(frozen=True, slots=True)

@@ -111,7 +111,6 @@ class TestExplicitOverrideProviderPrecedence:
         import json
 
         from autoskillit.config._config_dataclasses import AgentBackendConfig
-        from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
         from autoskillit.server.lifecycle import _guards
         from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import run_skill
@@ -130,11 +129,12 @@ class TestExplicitOverrideProviderPrecedence:
         )
 
         concrete_backend = CodexBackend()
-        fake_backend = MagicMock(spec=CodingAgentBackend)
+        fake_backend = MagicMock(spec=CodexBackend)
         fake_backend.name = "codex"
         fake_backend.capabilities = concrete_backend.capabilities
         fake_backend.conventions = concrete_backend.conventions
         fake_backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
+        fake_backend.probe_launch_readiness.return_value = PreLaunchReadiness((), {})
         fake_backend.validate_session_layout.return_value = []
         fake_backend.session_locator.return_value.project_log_dir.return_value = None
         tool_ctx_kitchen_open.backend = fake_backend

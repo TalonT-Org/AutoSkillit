@@ -14,6 +14,7 @@ from autoskillit.core import (
     CODEX_EFFORT_MAPPING,
     CODEX_VALID_MODEL_IDS,
     ContainmentError,
+    ManagedCodexRoute,
     ManagedJoinAttestation,
     SemanticAdaptationContext,
     atomic_write,
@@ -31,7 +32,6 @@ from autoskillit.execution.backends._codex_catalog import (
 )
 from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 from autoskillit.execution.backends._codex_hooks import (
-    ManagedCodexRoute,
     managed_codex_guard_set,
     managed_codex_mcp_tools,
     sync_managed_codex_hooks_to_config,
@@ -153,6 +153,8 @@ def _managed_codex_catalog_error(
         model = selected[0]
         if model.get("tool_mode") != "direct" or model.get("apply_patch_tool_type") is not None:
             raise ValueError("selected model is not direct-mode projected")
+        if model.get("upgrade") is not None:
+            raise ValueError("offers a model migration")
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return f"managed Codex catalog is invalid: {type(exc).__name__}: {exc}"
 
@@ -177,13 +179,23 @@ def _managed_codex_config_errors(
     except (OSError, tomllib.TOMLDecodeError) as exc:
         return [f"managed Codex config is unreadable: {type(exc).__name__}: {exc}"]
     if config.get("model") != attestation.resolved_model:
-        errors.append("managed Codex config has the wrong resolved model")
+        errors.append(
+            "managed Codex config has the wrong resolved model "
+            f"(attested {attestation.resolved_model!r}, found {config.get('model')!r})"
+        )
     if config.get("model_reasoning_effort") != attestation.resolved_reasoning_effort:
-        errors.append("managed Codex config has the wrong resolved reasoning effort")
-    if config.get("model_catalog_json") != str(
-        (session_dir / _MANAGED_CATALOG_FILENAME).resolve()
-    ):
-        errors.append("managed Codex config has an unattested model catalog path")
+        errors.append(
+            "managed Codex config has the wrong resolved reasoning effort "
+            f"(attested {attestation.resolved_reasoning_effort!r}, "
+            f"found {config.get('model_reasoning_effort')!r})"
+        )
+    expected_catalog_path = str((session_dir / _MANAGED_CATALOG_FILENAME).resolve())
+    if config.get("model_catalog_json") != expected_catalog_path:
+        errors.append(
+            "managed Codex config has the wrong resolved model catalog path "
+            f"(attested {expected_catalog_path!r}, "
+            f"found {config.get('model_catalog_json')!r})"
+        )
     server = config.get("mcp_servers", {}).get("autoskillit")
     if not isinstance(server, dict):
         errors.append("managed Codex config has no autoskillit MCP server")

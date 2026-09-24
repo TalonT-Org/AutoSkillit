@@ -15,6 +15,7 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
+    ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
     FreshLaunch,
@@ -418,6 +419,14 @@ class _Backend:
     def list_plugins(self) -> list[dict[str, Any]]: ...
 
     def ensure_pre_launch(self, *, session_dir: Path | None = None) -> PreLaunchReadiness:
+        return PreLaunchReadiness((), {})
+
+    def probe_launch_readiness(
+        self,
+        *,
+        session_dir: Path,
+        executable: ExecutableLaunchBinding,
+    ) -> PreLaunchReadiness:
         return PreLaunchReadiness((), {})
 
     def recover_cook_history(self) -> None:

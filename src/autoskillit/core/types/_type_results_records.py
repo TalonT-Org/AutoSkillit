@@ -10,6 +10,7 @@ from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
 from ._type_enums import RetryReason
 from ._type_execution_identity import ChildExecutionIdentityDict, ChildOutcomeDict
 from ._type_results_execution import SubagentModelOutcomeDict
+from ._type_skill_semantics import ManagedHomeProjection
 from ._type_token import SerializedTokenMeasure
 
 __all__ = [
@@ -547,6 +548,7 @@ class ManagedSessionHome:
     skills_dir: ValidatedAddDir
     pass_fds: tuple[int, ...]
     unavailability_payload: SkillUnavailabilityPayload
+    managed_projection: ManagedHomeProjection | None
 
 
 @dataclass(frozen=True, slots=True)

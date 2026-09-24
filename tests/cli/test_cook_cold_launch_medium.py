@@ -116,7 +116,7 @@ def test_cook_rejects_executable_drift_before_spawn(
     assert captured == []
 
 
-def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
+def test_codex_cook_resolves_and_runs_exact_binding_probe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -126,16 +126,16 @@ def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
     monkeypatch.setenv("PATH", str(tmp_path))
     captured = arrange_cook(monkeypatch, tmp_path)
     backend = CodexBackend()
-    prelaunch_bindings: list[object] = []
+    probe_bindings: list[object] = []
 
-    def ensure_pre_launch(_self, **kwargs):  # type: ignore[no-untyped-def]
-        prelaunch_bindings.append(kwargs.get("executable"))
+    def probe_launch_readiness(_self, **kwargs):  # type: ignore[no-untyped-def]
+        probe_bindings.append(kwargs.get("executable"))
         return PreLaunchReadiness((), {})
 
     monkeypatch.setattr(
         CodexBackend,
-        "ensure_pre_launch",
-        ensure_pre_launch,
+        "probe_launch_readiness",
+        probe_launch_readiness,
     )
     monkeypatch.setattr(
         CodexBackend,
@@ -164,5 +164,5 @@ def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
 
     assert len(captured) == 1
     assert captured[0].cmd[0] == str(codex)
-    assert len(prelaunch_bindings) == 1
-    assert prelaunch_bindings[0] is not None
+    assert len(probe_bindings) == 1
+    assert probe_bindings[0] is not None

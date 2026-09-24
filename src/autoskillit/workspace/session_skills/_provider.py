@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    ManagedCodexRoute,
     RepositoryProfileId,
     SemanticAdaptationContext,
     SkillExecutionRole,
@@ -199,7 +200,7 @@ class SkillsDirectoryProvider:
         durable_scripts_root: Path,
         resolved_exploration_profile: RepositoryProfileId | None = None,
         adaptation_context: SemanticAdaptationContext | None = None,
-        managed_codex_route: str | None = None,
+        managed_codex_route: ManagedCodexRoute | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog.
 

@@ -18,7 +18,10 @@ from typing import Any, Protocol, runtime_checkable
 from .._managed_worker_capacity import ManagedWorkerPermit
 from ._type_audit_admission import AuditIdentityReservation, AuditMaterializationResult
 from ._type_plan_set_authority import PlanSetBindRequest, PlanSetBindResult
-from ._type_skill_semantics import SemanticAdaptationContext
+from ._type_skill_semantics import (
+    ManagedJoinVerificationRefusal,
+    SemanticAdaptationContext,
+)
 
 __all__ = [
     "GateState",
@@ -38,7 +41,10 @@ __all__ = [
 
 
 class ManagedJoinAttestationAuthority(Protocol):
-    """Server-owned issuer and verifier for managed-join adaptation evidence."""
+    """Server-owned issuer and verifier for managed-join adaptation evidence.
+
+    Verification never returns None; a refusal names the failing check.
+    """
 
     @property
     def activation_epoch(self) -> int: ...
@@ -66,14 +72,14 @@ class ManagedJoinAttestationAuthority(Protocol):
         *,
         backend: str,
         parent_session_id: str,
-    ) -> SemanticAdaptationContext | None: ...
+    ) -> SemanticAdaptationContext | ManagedJoinVerificationRefusal: ...
 
     def find_verified_context(
         self,
         *,
         backend: str,
         parent_session_id: str,
-    ) -> SemanticAdaptationContext | None: ...
+    ) -> SemanticAdaptationContext | ManagedJoinVerificationRefusal: ...
 
 
 @runtime_checkable

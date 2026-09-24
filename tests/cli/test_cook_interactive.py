@@ -130,6 +130,9 @@ class _Backend:
     def binary_name(self) -> str:
         return "claude"
 
+    def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+        return PreLaunchReadiness((), {})
+
     def recover_cook_history(self) -> None:
         self.recover_count += 1
 
@@ -212,6 +215,7 @@ def _install_harness(
         assert projection_context.catalog == compilation.catalog
         try:
             yield ManagedSessionHome(
+                managed_projection=None,
                 launch_id=launch_id,
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -341,6 +345,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
             return self._command_backend.adapt_skill_semantics(plan, adaptation_context)
 
         def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
             return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
@@ -495,28 +502,9 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     )
     monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
 
-    original_ensure_pre_launch = CodexBackend.ensure_pre_launch
-
-    def ensure_pre_launch(  # type: ignore[no-untyped-def]
-        self,
-        *,
-        session_dir=None,
-        executable=None,
-        plugin_dir=None,
-    ):
-        if session_dir is None or executable is not None:
-            return PreLaunchReadiness((), {})
-        return original_ensure_pre_launch(
-            self,
-            session_dir=session_dir,
-            executable=executable,
-            plugin_dir=plugin_dir,
-        )
-
     monkeypatch.setattr(
-        CodexBackend,
-        "ensure_pre_launch",
-        ensure_pre_launch,
+        "autoskillit.execution.backends._codex_probes._validate_mcp_probe",
+        lambda *_args, **_kwargs: [],
     )
     monkeypatch.setattr(
         CodexBackend,
@@ -977,6 +965,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         events.append(("managed-enter", launch_id))
         try:
             yield ManagedSessionHome(
+                managed_projection=None,
                 launch_id=launch_id,
                 generated_home=generated_home,
                 skills_dir=ValidatedAddDir(str(skills_dir)),
@@ -1009,6 +998,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
 
         def binary_name(self) -> str:
             return "claude"
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def recover_cook_history(self) -> None:
             events.append(("recover",))

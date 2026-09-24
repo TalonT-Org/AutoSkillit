@@ -396,8 +396,7 @@ def _execute_cook_attempt(
             plugin_binding=projection_binding if load_mode.consumes_artifact else None,
             launch=launch,
             add_dirs=[managed_home.skills_dir],
-            generated_home=managed_home.generated_home,
-            home_prepared=True,
+            managed_home=managed_home,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
         )

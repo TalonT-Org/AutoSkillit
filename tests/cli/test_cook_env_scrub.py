@@ -158,6 +158,7 @@ def _capture_cook_spec(
     skills_dir = generated_home / ".claude" / "skills"
     skills_dir.mkdir(parents=True)
     managed_home = ManagedSessionHome(
+        managed_projection=None,
         launch_id="0123456789abcdef",
         generated_home=generated_home,
         skills_dir=ValidatedAddDir(path=str(skills_dir)),

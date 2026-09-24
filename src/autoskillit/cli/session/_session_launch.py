@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, assert_never, overload
 
+from autoskillit.cli.session._session_backend import verify_launch_home
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
@@ -149,8 +150,7 @@ def prepare_interactive_launch(
     launch: InteractiveLaunch,
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
-    generated_home: Path | None = None,
-    home_prepared: bool = False,
+    managed_home: ManagedSessionHome | None = None,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -171,14 +171,16 @@ def prepare_interactive_launch(
         explicit_path_env=explicit_path_env,
     )
     merged_extras = dict(extra_env or {})
-    if not home_prepared or backend.capabilities.cook_exact_binding_probe_required:
-        readiness = backend.ensure_pre_launch(
-            session_dir=generated_home,
-            executable=provisional,
+    if managed_home is not None:
+        readiness = backend.probe_launch_readiness(
+            session_dir=managed_home.generated_home, executable=provisional
         )
-        if readiness.errors:
-            raise ValueError("\n".join(readiness.errors))
-        merged_extras.update(readiness.attested_env)
+    else:
+        readiness = backend.ensure_pre_launch(executable=provisional)
+    if readiness.errors:
+        raise ValueError("\n".join(readiness.errors))
+    merged_extras.update(readiness.attested_env)
+    generated_home = managed_home.generated_home if managed_home is not None else None
     env_spec = backend.build_interactive_cmd(
         launch=launch,
         env_extras=merged_extras,
@@ -214,6 +216,7 @@ def prepare_interactive_launch(
         project_root=project_dir,
         mcp_tool_timeout_sec=mcp_tool_timeout_sec,
     )
+    verify_launch_home(backend, managed_home)
     return PreparedInteractiveLaunch(spec=spec, executable=final)
 
 
@@ -228,8 +231,7 @@ def _finalize_interactive_launch(
     launch: InteractiveLaunch,
     tools: Sequence[str] = (),
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
-    generated_home: Path | None = None,
-    home_prepared: bool = False,
+    managed_home: ManagedSessionHome | None = None,
     force_inactive_agent_teams: bool = False,
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
@@ -246,8 +248,7 @@ def _finalize_interactive_launch(
                 plugin_binding=plugin_binding,
                 launch=launch,
                 add_dirs=add_dirs,
-                generated_home=generated_home,
-                home_prepared=home_prepared,
+                managed_home=managed_home,
                 tools=tools,
                 force_inactive_agent_teams=force_inactive_agent_teams,
                 mcp_tool_timeout_sec=mcp_tool_timeout_sec,
@@ -263,7 +264,7 @@ def _finalize_interactive_launch(
             required_env=required_env,
             plugin_binding=plugin_binding,
             add_dirs=add_dirs,
-            generated_home=generated_home,
+            generated_home=managed_home.generated_home if managed_home else None,
             tools=tools,
             force_inactive_agent_teams=force_inactive_agent_teams,
             project_root=project_dir,
@@ -286,12 +287,16 @@ def _finalize_interactive_launch(
             required_env=required_env,
             plugin_binding=plugin_binding,
             add_dirs=add_dirs,
-            generated_home=generated_home,
+            generated_home=managed_home.generated_home if managed_home else None,
             tools=tools,
             force_inactive_agent_teams=force_inactive_agent_teams,
             project_root=project_dir,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
         )
+        try:
+            verify_launch_home(backend, managed_home)
+        except ValueError as exc:
+            _exit_launch_preparation_error(exc)
     spec = replace(built_spec, cwd=str(project_dir))
     variadic_flags, value_bearing_flags = backend.interactive_ordering_flags()
     assert_interactive_ordering(
@@ -427,8 +432,7 @@ def _run_interactive_session(
             plugin_binding=plugin_binding,
             launch=launch,
             add_dirs=[managed_home.skills_dir],
-            generated_home=managed_home.generated_home,
-            home_prepared=True,
+            managed_home=managed_home,
             tools=tools_arg,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,

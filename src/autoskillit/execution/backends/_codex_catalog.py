@@ -315,7 +315,8 @@ def project_codex_catalog(
     The bundled catalog must expose the known ``code_mode_only``/``freeform``
     surface for exactly one requested model and advertise the requested effort.
     The projection changes only that model's tool mode and built-in apply-patch
-    type, preserving every other catalog byte semantically through canonical JSON.
+    type, and clears every model-migration offer so the pinned model cannot be
+    migrated by the Codex TUI. Other catalog values are preserved.
     """
     if not expected_model or not expected_reasoning_effort:
         raise ValueError("Codex catalog projection requires a model and reasoning effort")
@@ -342,6 +343,9 @@ def project_codex_catalog(
     canonical_bundled = _canonical_json_bytes(parsed)
     model["tool_mode"] = _DIRECT_TOOL_MODE
     model["apply_patch_tool_type"] = _DISABLED_APPLY_PATCH_TOOL_TYPE
+    for entry in models:
+        if "upgrade" in entry:
+            entry["upgrade"] = None
     canonical_projected = _canonical_json_bytes(parsed)
     return CodexCatalogProjection(
         canonical_projected_bytes=canonical_projected,

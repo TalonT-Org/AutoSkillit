@@ -15,14 +15,20 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from autoskillit.core import (
     CODEX_HOME_ENV_VAR,
     MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
     CodingAgentBackend,
+    ManagedCodexRoute,
     ManagedJoinAttestation,
+    ManagedJoinRefusalReason,
+    ManagedJoinVerificationRefusal,
     SemanticAdaptationContext,
     SkillContractError,
+    get_logger,
+    managed_route_backend,
     read_versioned_json,
     write_versioned_json,
 )
@@ -46,6 +52,13 @@ from autoskillit.hooks._session_binding import (
     resolve_channel_dir,
     write_binding,
 )
+
+logger = get_logger(__name__)
+
+
+def _refuse(reason: ManagedJoinRefusalReason, *detail: str) -> ManagedJoinVerificationRefusal:
+    logger.warning("managed_join_verification_refused", reason=reason.value, detail=detail)
+    return ManagedJoinVerificationRefusal(reason, detail)
 
 
 class ManagedJoinRecordStore:
@@ -91,7 +104,9 @@ class ManagedJoinRecordStore:
                 MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
             )
 
-    def load(self, parent_session_id: str) -> tuple[ManagedJoinAttestation, str] | None:
+    def load(
+        self, parent_session_id: str
+    ) -> tuple[ManagedJoinAttestation, ManagedCodexRoute] | None:
         record_path = self.path_for(parent_session_id)
         try:
             document = read_versioned_json(
@@ -109,22 +124,7 @@ class ManagedJoinRecordStore:
             return None
         if attestation.parent_session_id != parent_session_id:
             return None
-        return attestation, document["route"]
-
-
-def _is_valid_recovered_record(
-    attestation: ManagedJoinAttestation, route: str, backend: str
-) -> bool:
-    try:
-        expected_route = managed_codex_route_for_launch_context(attestation.launch_context)
-    except ValueError:
-        return False
-    return (
-        attestation.backend == backend
-        and route == expected_route
-        and attestation.hook_registry_digest == HOOK_REGISTRY_HASH
-        and attestation.fixed_batch_tool_registry_digest == managed_codex_route_digest()
-    )
+        return attestation, cast(ManagedCodexRoute, document["route"])
 
 
 def _write_managed_parent_binding(
@@ -136,14 +136,14 @@ def _write_managed_parent_binding(
     attestation: ManagedJoinAttestation,
 ) -> None:
     """Write the live-home source binding for one attested managed parent."""
-    projected_manifest_path = getattr(backend, "projected_manifest_path", None)
-    if not callable(projected_manifest_path):
+    managed = managed_route_backend(backend)
+    if managed is None:
         raise SkillContractError("run_fixed_batch managed backend cannot locate its projection")
     home_text = os.environ.get(CODEX_HOME_ENV_VAR)
     if not home_text:
         raise SkillContractError("run_fixed_batch managed binding requires CODEX_HOME to be set")
     try:
-        manifest = read_manifest(projected_manifest_path(Path(home_text)))
+        manifest = read_manifest(managed.projected_manifest_path(Path(home_text)))
         entry = loaded_skill_from_manifest(
             manifest,
             normalized_skill_name,
@@ -275,31 +275,88 @@ class DefaultManagedJoinAttestationAuthority:
         *,
         backend: str,
         parent_session_id: str,
-    ) -> SemanticAdaptationContext | None:
+    ) -> SemanticAdaptationContext | ManagedJoinVerificationRefusal:
         if context is None:
-            return None
+            return _refuse(ManagedJoinRefusalReason.NO_CONTEXT)
         with self._lock:
             issued = self._issued.get(context.digest)
             attestation = context.managed_join_attestation
-            if (
-                (self._recovery_gate is not None and not self._recovery_gate())
-                or issued != context
-                or attestation is None
-                or attestation.backend != backend
-                or attestation.parent_session_id != parent_session_id
-                or attestation.activation_epoch != self._activation_epoch
-                or not attestation.admits_backend(backend)
-            ):
-                return None
+            if self._recovery_gate is not None and not self._recovery_gate():
+                return _refuse(ManagedJoinRefusalReason.RECOVERY_BLOCKED)
+            if attestation is None:
+                return _refuse(ManagedJoinRefusalReason.NO_ATTESTATION)
+            if issued != context:
+                return _refuse(ManagedJoinRefusalReason.NOT_ISSUED)
+            if attestation.backend != backend:
+                return _refuse(
+                    ManagedJoinRefusalReason.BACKEND_MISMATCH,
+                    f"attested {attestation.backend!r}, requested {backend!r}",
+                )
+            if attestation.parent_session_id != parent_session_id:
+                return _refuse(ManagedJoinRefusalReason.PARENT_MISMATCH)
+            if attestation.activation_epoch != self._activation_epoch:
+                return _refuse(
+                    ManagedJoinRefusalReason.STALE_EPOCH,
+                    f"attested epoch {attestation.activation_epoch}, "
+                    f"current {self._activation_epoch}",
+                )
+            if not attestation.admits_backend(backend):
+                return _refuse(ManagedJoinRefusalReason.MODE_NOT_ADMITTED)
             return issued
+
+    def _verified_live_catalog(
+        self, attestation: ManagedJoinAttestation, route: ManagedCodexRoute
+    ) -> bytes | ManagedJoinVerificationRefusal:
+        if attestation.hook_registry_digest != HOOK_REGISTRY_HASH:
+            return _refuse(
+                ManagedJoinRefusalReason.REGISTRY_DIGEST_MISMATCH, "hook_registry_digest"
+            )
+        if attestation.fixed_batch_tool_registry_digest != managed_codex_route_digest():
+            return _refuse(
+                ManagedJoinRefusalReason.REGISTRY_DIGEST_MISMATCH,
+                "fixed_batch_tool_registry_digest",
+            )
+        home_text = os.environ.get(CODEX_HOME_ENV_VAR)
+        if not home_text:
+            return _refuse(ManagedJoinRefusalReason.HOME_UNAVAILABLE, "CODEX_HOME is unset")
+        home = Path(home_text)
+        try:
+            if not home.is_dir():
+                return _refuse(
+                    ManagedJoinRefusalReason.HOME_UNAVAILABLE, "CODEX_HOME is not a directory"
+                )
+            if home != home.resolve():
+                return _refuse(
+                    ManagedJoinRefusalReason.HOME_UNAVAILABLE,
+                    "CODEX_HOME does not resolve to itself",
+                )
+        except (OSError, ValueError) as exc:
+            return _refuse(ManagedJoinRefusalReason.HOME_UNAVAILABLE, str(exc))
+        assert self._backend is not None
+        managed = managed_route_backend(self._backend)
+        if managed is None:
+            return _refuse(ManagedJoinRefusalReason.BACKEND_NOT_MANAGED)
+        try:
+            catalog = managed.read_managed_session_catalog(home)
+            errors = managed.verify_managed_session_dir(
+                home,
+                attestation,
+                route,
+                managed_codex_catalog=catalog,
+            )
+        except (OSError, ValueError) as exc:
+            return _refuse(ManagedJoinRefusalReason.HOME_UNREADABLE, str(exc))
+        if errors:
+            return _refuse(ManagedJoinRefusalReason.HOME_DRIFT, *errors)
+        return catalog
 
     def find_verified_context(
         self,
         *,
         backend: str,
         parent_session_id: str,
-    ) -> SemanticAdaptationContext | None:
-        """Find a live context, reloading and validating its issued record if needed."""
+    ) -> SemanticAdaptationContext | ManagedJoinVerificationRefusal:
+        """Find an issued context and revalidate its live home on every lookup."""
         with self._lock:
             matches = [
                 context
@@ -308,55 +365,68 @@ class DefaultManagedJoinAttestationAuthority:
                 and context.managed_join_attestation.backend == backend
                 and context.managed_join_attestation.parent_session_id == parent_session_id
             ]
-        if len(matches) == 1:
-            return self.verify(matches[0], backend=backend, parent_session_id=parent_session_id)
-        if matches:
-            return None
-        return self._recover_verified_context(backend=backend, parent_session_id=parent_session_id)
+        if len(matches) > 1:
+            return _refuse(ManagedJoinRefusalReason.AMBIGUOUS_CONTEXT)
+        if self._record_store is None or self._backend is None:
+            return _refuse(ManagedJoinRefusalReason.RECORD_STORE_UNAVAILABLE)
+        if self._backend.name != backend:
+            return _refuse(
+                ManagedJoinRefusalReason.BACKEND_MISMATCH,
+                f"configured {self._backend.name!r}, requested {backend!r}",
+            )
+        if not matches:
+            return self._recover_verified_context(
+                backend=backend, parent_session_id=parent_session_id
+            )
+        verified = self.verify(matches[0], backend=backend, parent_session_id=parent_session_id)
+        if isinstance(verified, ManagedJoinVerificationRefusal):
+            return verified
+        attestation = verified.managed_join_attestation
+        assert attestation is not None
+        try:
+            route = managed_codex_route_for_launch_context(attestation.launch_context)
+        except ValueError as exc:
+            return _refuse(ManagedJoinRefusalReason.ROUTE_MISMATCH, str(exc))
+        catalog = self._verified_live_catalog(attestation, route)
+        if isinstance(catalog, ManagedJoinVerificationRefusal):
+            return catalog
+        # The recovery gate and epoch can change while the home is checked.
+        return self.verify(verified, backend=backend, parent_session_id=parent_session_id)
 
     def _recover_verified_context(
         self,
         *,
         backend: str,
         parent_session_id: str,
-    ) -> SemanticAdaptationContext | None:
-        if self._record_store is None or self._backend is None or self._backend.name != backend:
-            return None
-
+    ) -> SemanticAdaptationContext | ManagedJoinVerificationRefusal:
+        assert self._record_store is not None
         loaded = self._record_store.load(parent_session_id)
         if loaded is None:
-            return None
+            return _refuse(ManagedJoinRefusalReason.RECORD_UNAVAILABLE)
         attestation, route = loaded
-        if not _is_valid_recovered_record(attestation, route, backend):
-            return None
-        home_text = os.environ.get(CODEX_HOME_ENV_VAR)
-        if not home_text:
-            return None
-        home = Path(home_text)
-        if not home.is_dir() or home != home.resolve():
-            return None
-        verifier = getattr(self._backend, "verify_managed_session_dir", None)
-        catalog_reader = getattr(self._backend, "read_managed_session_catalog", None)
-        if not callable(verifier) or not callable(catalog_reader):
-            return None
         try:
-            managed_codex_catalog = catalog_reader(home)
-            errors = verifier(
-                home,
-                attestation,
-                route,
-                managed_codex_catalog=managed_codex_catalog,
+            expected_route = managed_codex_route_for_launch_context(attestation.launch_context)
+        except ValueError as exc:
+            return _refuse(ManagedJoinRefusalReason.ROUTE_MISMATCH, str(exc))
+        if attestation.backend != backend:
+            return _refuse(
+                ManagedJoinRefusalReason.BACKEND_MISMATCH,
+                f"attested {attestation.backend!r}, requested {backend!r}",
             )
-        except (OSError, ValueError):
-            return None
-        if errors:
-            return None
+        if route != expected_route:
+            return _refuse(
+                ManagedJoinRefusalReason.ROUTE_MISMATCH,
+                f"record route {route!r}, expected {expected_route!r}",
+            )
+        catalog = self._verified_live_catalog(attestation, route)
+        if isinstance(catalog, ManagedJoinVerificationRefusal):
+            return catalog
         with self._lock:
             if self._recovery_gate is not None and not self._recovery_gate():
-                return None
+                return _refuse(ManagedJoinRefusalReason.RECOVERY_BLOCKED)
             context = SemanticAdaptationContext(
                 managed_join_attestation=attestation,
-                managed_codex_catalog=managed_codex_catalog,
+                managed_codex_catalog=catalog,
             )
             self._issued[context.digest] = context
         return self.verify(context, backend=backend, parent_session_id=parent_session_id)

@@ -19,6 +19,7 @@ from autoskillit.core import (
     AgentDef,
     CompiledSessionSkillCatalogAuthority,
     EffectiveSkillCatalogAuthority,
+    ManagedHomeProjection,
     SkillAuthority,
     SkillContractError,
     SkillDiscoveryRouteDef,
@@ -29,14 +30,15 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    managed_route_backend,
     managed_skill_relative_path,
     observe_path_mode,
-    strict_walk,
 )
 from autoskillit.workspace.session_skills._catalog import (
     CompiledSessionSkillCatalog,
     _canonical_skill_unavailability_payload,
     _compile_reachable_profile_skill_catalog,
+    _copy_restored_skill_catalog,
     _merge_skill_unavailability_payloads,
     _profile_skill_catalog,
     _profile_skill_infos,
@@ -254,21 +256,60 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
     return tuple(entries)
 
 
+def managed_home_projection(
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend | None,
+) -> ManagedHomeProjection | None:
+    """Build the managed-home projection for a verified managed-route backend.
+
+    The caller must verify ``backend`` is a managed-route backend via
+    ``managed_route_backend`` first; this function only inspects the
+    projection context to derive the attestation/route facts.
+    """
+    if backend is None:
+        return None
+    adaptation_context = projection_context.adaptation_context
+    if adaptation_context is None:
+        return None
+    attestation = adaptation_context.managed_join_attestation
+    if attestation is None:
+        raise SkillContractError("managed projection requires a managed-join attestation")
+    return ManagedHomeProjection(
+        attestation=attestation,
+        route=projection_context.managed_codex_route or "parent",
+    )
+
+
 def _configure_managed_session_route(
     generated_home: Path,
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend,
-) -> None:
+) -> ManagedHomeProjection | None:
+    managed = managed_route_backend(backend)
+    if managed is None:
+        return None
+    projection = managed_home_projection(projection_context, backend)
+    if projection is None:
+        return None
     adaptation_context = projection_context.adaptation_context
-    if backend.capabilities.managed_fixed_batch_route_capable and adaptation_context is not None:
-        configure_managed_home = getattr(backend, "configure_managed_session_dir", None)
-        if not callable(configure_managed_home):
-            raise SkillContractError("managed-route backend cannot configure a generated home")
-        configure_managed_home(
-            generated_home,
-            adaptation_context=adaptation_context,
-            route=projection_context.managed_codex_route or "parent",
-        )
+    assert adaptation_context is not None
+    managed.configure_managed_session_dir(
+        generated_home,
+        adaptation_context=adaptation_context,
+        route=projection.route,
+    )
+    return projection
+
+
+def _configure_generated_home(
+    generated_home: Path,
+    projection_context: SkillProjectionContextAuthority,
+    backend: CodingAgentBackend,
+    setup_kwargs: _SessionSetupKwargs,
+) -> tuple[frozenset[str] | None, ManagedHomeProjection | None]:
+    roles = backend.setup_session_dir(generated_home, **setup_kwargs)
+    projection = _configure_managed_session_route(generated_home, projection_context, backend)
+    return roles, projection
 
 
 def _add_session_agent_defs(
@@ -314,7 +355,7 @@ def _setup_generated_session(
     invocation_required_native_roles: set[str],
     explorer_binding_env: _ExplorerBindingEnv | None,
     explorer_binding_env_factory: _ExplorerBindingEnvFactory | None,
-) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None]:
+) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None, ManagedHomeProjection | None]:
     if backend is not None and backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch(session_dir=generated_home)
         if readiness.errors:
@@ -322,7 +363,7 @@ def _setup_generated_session(
     if explorer_binding_env_factory is not None:
         explorer_binding_env = explorer_binding_env_factory(generated_home)
     if backend is None:
-        return None, explorer_binding_env
+        return None, explorer_binding_env, None
     setup_kwargs: _SessionSetupKwargs = {
         "parent_sandbox_mode": projection_context.parent_sandbox_mode,
         "execution_role": execution_role,
@@ -337,9 +378,10 @@ def _setup_generated_session(
         invocation_required_native_roles,
         explorer_binding_env,
     )
-    finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
-    _configure_managed_session_route(generated_home, projection_context, backend)
-    return finalized_native_roles, explorer_binding_env
+    finalized_native_roles, managed_projection = _configure_generated_home(
+        generated_home, projection_context, backend, setup_kwargs
+    )
+    return finalized_native_roles, explorer_binding_env, managed_projection
 
 
 def _publish_session_skill_tree(
@@ -422,7 +464,12 @@ def _materialize_session(
     compilation: CompiledSessionSkillCatalogAuthority | None = None,
     explorer_binding_env: _ExplorerBindingEnv | None = None,
     explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
-) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...], SkillUnavailabilityPayload]:
+) -> tuple[
+    ValidatedAddDir,
+    tuple[SkillAuthority, ...],
+    SkillUnavailabilityPayload,
+    ManagedHomeProjection | None,
+]:
     backend = projection_context.backend
     backend_name = backend.name if backend is not None else None
     add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
@@ -468,7 +515,7 @@ def _materialize_session(
             adaptation_context=projection_context.adaptation_context,
         )
 
-    finalized_native_roles, explorer_binding_env = _setup_generated_session(
+    finalized_native_roles, explorer_binding_env, managed_projection = _setup_generated_session(
         generated_home,
         projection_context,
         backend,
@@ -577,7 +624,7 @@ def _materialize_session(
         profile_compilation,
         explorer_binding_env,
     )
-    return skills_dir, records, unavailability_payload
+    return skills_dir, records, unavailability_payload, managed_projection
 
 
 def _restore_session(
@@ -598,10 +645,14 @@ def _restore_session(
         if readiness.errors:
             raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
     if backend is not None:
-        backend.setup_session_dir(
+        _, _ = _configure_generated_home(
             generated_home,
-            parent_sandbox_mode=projection_context.parent_sandbox_mode,
-            execution_role=SkillExecutionRole.SESSION,
+            projection_context,
+            backend,
+            {
+                "parent_sandbox_mode": projection_context.parent_sandbox_mode,
+                "execution_role": SkillExecutionRole.SESSION,
+            },
         )
         route = backend.conventions.managed_skill_discovery
         if route is not None:
@@ -621,94 +672,6 @@ def _restore_session(
         session_home=str(generated_home),
         skill_entries=skill_entries,
     )
-
-
-def _copy_restored_skill_catalog(
-    snapshot_dir: Path,
-    catalog_dir: Path,
-    *,
-    skills_subdir: Path,
-) -> None:
-    if snapshot_dir.is_symlink():
-        raise ValueError(f"restored skill snapshot root must not be a symlink: {snapshot_dir}")
-    if not snapshot_dir.is_dir():
-        raise ValueError(f"restored skill snapshot root must be a real directory: {snapshot_dir}")
-    _validate_restored_snapshot(snapshot_dir)
-    source_catalog = snapshot_dir / skills_subdir
-    if source_catalog.is_symlink() or not source_catalog.is_dir():
-        raise ValueError(
-            f"restored skill snapshot catalog must be a real directory: {source_catalog}"
-        )
-    _validate_restored_skill_catalog(source_catalog)
-    if os.path.lexists(catalog_dir):
-        raise RuntimeError(f"restored skill catalog path already exists: {catalog_dir}")
-    catalog_dir.parent.mkdir(parents=True, exist_ok=True)
-    catalog_dir.mkdir()
-    for entry in strict_walk(source_catalog):
-        relative_path = Path(entry.relative_path)
-        destination = catalog_dir / relative_path
-        if entry.kind == "l":
-            raise ValueError(
-                f"restored skill snapshot contains a symlink: {source_catalog / relative_path}"
-            )
-        if entry.kind == "d":
-            destination.mkdir()
-            continue
-        if entry.kind != "f":
-            raise ValueError(
-                "restored skill snapshot contains an invalid entry: "
-                f"{source_catalog / relative_path}"
-            )
-        _copy_restored_regular_file(entry.dir_fd, entry.name, destination)
-
-
-def _validate_restored_snapshot(snapshot_dir: Path) -> None:
-    for entry in strict_walk(snapshot_dir):
-        if entry.kind == "l":
-            raise ValueError(
-                f"restored skill snapshot contains a symlink: {snapshot_dir / entry.relative_path}"
-            )
-
-
-def _validate_restored_skill_catalog(source_catalog: Path) -> None:
-    skill_names: set[str] = set()
-    skill_documents: set[str] = set()
-    for entry in strict_walk(source_catalog):
-        relative_path = Path(entry.relative_path)
-        if entry.kind == "l":
-            raise ValueError(
-                f"restored skill snapshot contains a symlink: {source_catalog / relative_path}"
-            )
-        if len(relative_path.parts) == 1:
-            if entry.kind != "d" or relative_path.name.startswith("."):
-                raise ValueError(
-                    f"restored skill snapshot contains an invalid catalog entry: "
-                    f"{source_catalog / relative_path}"
-                )
-            skill_names.add(relative_path.name)
-        elif len(relative_path.parts) == 2 and relative_path.name == "SKILL.md":
-            if entry.kind == "f":
-                skill_documents.add(relative_path.parts[0])
-    if not skill_names or skill_documents != skill_names:
-        raise ValueError("restored skill snapshot entries must each contain a regular SKILL.md")
-
-
-def _copy_restored_regular_file(source_dir_fd: int, source_name: str, destination: Path) -> None:
-    source_fd = os.open(
-        source_name,
-        os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-        dir_fd=source_dir_fd,
-    )
-    try:
-        if not stat.S_ISREG(os.fstat(source_fd).st_mode):
-            raise ValueError(f"restored skill snapshot contains a non-regular file: {source_name}")
-        with os.fdopen(source_fd, "rb") as source:
-            source_fd = -1
-            with destination.open("xb") as target:
-                shutil.copyfileobj(source, target)
-    finally:
-        if source_fd != -1:
-            os.close(source_fd)
 
 
 def _create_inert_rollout_paths(
@@ -740,5 +703,6 @@ __all__ = [
     "_materialize_profile_skill_infos",
     "_materialize_session",
     "_restore_session",
+    "managed_home_projection",
     "materialize_profile_skills",
 ]

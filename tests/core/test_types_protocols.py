@@ -22,6 +22,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) -> None:
     import autoskillit.core as core
     from autoskillit.core import (
+        ManagedHomeProjection,
         ManagedSessionHome,
     )
     from autoskillit.core.types._type_results import __all__ as results_all
@@ -37,6 +38,7 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) ->
         skills_dir=skills_dir,
         pass_fds=(3, 5),
         unavailability_payload=unavailability_payload,
+        managed_projection=None,
     )
 
     assert tuple(field.name for field in dataclasses.fields(ManagedSessionHome)) == (
@@ -45,6 +47,7 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) ->
         "skills_dir",
         "pass_fds",
         "unavailability_payload",
+        "managed_projection",
     )
     assert get_type_hints(ManagedSessionHome) == {
         "launch_id": str,
@@ -52,6 +55,7 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) ->
         "skills_dir": ValidatedAddDir,
         "pass_fds": tuple[int, ...],
         "unavailability_payload": SkillUnavailabilityPayload,
+        "managed_projection": ManagedHomeProjection | None,
     }
     assert handle.unavailability_payload is unavailability_payload
     assert set(handle.unavailability_payload) == {"backend", "unavailable"}
@@ -63,6 +67,32 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) ->
     assert "SkillUnavailabilityPayload" in core.__all__  # type: ignore[attr-defined]
     with pytest.raises(FrozenInstanceError):
         handle.launch_id = "other"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("reason", "detail", "expected"),
+    [
+        ("no_context", (), "no_context"),
+        (
+            "home_drift",
+            ("model", "route"),
+            "home_drift: model; route; restart the AutoSkillit session to re-attest",
+        ),
+        (
+            "stale_epoch",
+            (),
+            "stale_epoch; restart the AutoSkillit session to re-attest",
+        ),
+    ],
+)
+def test_managed_join_refusal_renders_reason_and_recovery(
+    reason: str, detail: tuple[str, ...], expected: str
+) -> None:
+    from autoskillit.core import ManagedJoinRefusalReason, ManagedJoinVerificationRefusal
+
+    refusal = ManagedJoinVerificationRefusal(ManagedJoinRefusalReason(reason), detail)
+
+    assert refusal.render() == expected
 
 
 def test_github_fetcher_protocol_has_label_methods() -> None:

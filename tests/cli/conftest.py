@@ -142,6 +142,12 @@ def _stub_interactive_prelaunch(
         "ensure_pre_launch",
         lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
+    for backend_type in (ClaudeCodeBackend, CodexBackend):
+        monkeypatch.setattr(
+            backend_type,
+            "probe_launch_readiness",
+            lambda _self, *, session_dir, executable: PreLaunchReadiness((), {}),
+        )
 
 
 _SCRIPT_YAML = """\

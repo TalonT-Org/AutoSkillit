@@ -4,7 +4,8 @@ import dataclasses
 import inspect
 import json
 from pathlib import Path
-from typing import Literal
+from types import SimpleNamespace
+from typing import Literal, cast
 
 import pytest
 
@@ -19,10 +20,12 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
+    ManagedRouteHomeBackend,
     ResultParser,
     SessionLocator,
     SkillSessionConfig,
     StreamParser,
+    managed_route_backend,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
 from autoskillit.execution.backends.codex import CodexBackend
@@ -110,6 +113,19 @@ def make_backend(backend_name: str) -> CodingAgentBackend:
     return get_backend(backend_name)
 
 
+def test_managed_route_capability_refuses_incomplete_backend() -> None:
+    fake = cast(
+        CodingAgentBackend,
+        SimpleNamespace(
+            name="fake",
+            capabilities=SimpleNamespace(managed_fixed_batch_route_capable=True),
+        ),
+    )
+
+    with pytest.raises(TypeError, match="advertises managed fixed-batch routes"):
+        managed_route_backend(fake)
+
+
 @pytest.mark.parametrize("backend_name", list(BACKEND_REGISTRY))
 class TestCodingAgentBackendConformance(BackendContractBase):
     @pytest.fixture(autouse=True)
@@ -130,6 +146,11 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_isinstance_coding_agent_backend(self) -> None:
         assert isinstance(self.backend, CodingAgentBackend)
+
+    def test_managed_route_capability_matches_protocol(self) -> None:
+        capable = self.backend.capabilities.managed_fixed_batch_route_capable
+        assert capable == isinstance(self.backend, ManagedRouteHomeBackend)
+        assert managed_route_backend(self.backend) is (self.backend if capable else None)
 
     def test_name_is_non_empty_string(self) -> None:
         """BackendCapabilities.process_name — backend name from identity field."""

@@ -21,7 +21,7 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
 )
-from autoskillit.execution.evidence._otlp_tokens import (
+from autoskillit.execution.evidence.otlp_tokens import (
     CLAUDE_CODE_SCOPE_NAME,
     claude_request_usage,
     iter_scoped_log_records,

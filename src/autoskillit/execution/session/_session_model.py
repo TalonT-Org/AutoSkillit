@@ -42,7 +42,7 @@ _API_TOKEN_FIELDS = (
 )
 # Routes the canonical accounting field set through the shared constant
 # so this module cannot drift from pipeline/tokens.py, _fleet_display.py,
-# and _otlp_tokens.py.
+# and otlp_tokens.py.
 _CANONICAL_TOKEN_FIELDS = CANONICAL_ACCOUNTING_FIELDS
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {

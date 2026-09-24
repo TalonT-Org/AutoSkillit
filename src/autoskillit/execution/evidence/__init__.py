@@ -4,15 +4,6 @@ Re-exports anomaly_detection and linux_tracing. otlp_sink is deliberately not re
 it imports session_log, and session_log.session_log imports anomaly_detection from here.
 """
 
-from autoskillit.execution.evidence._otlp_tokens import (
-    TokenObservation,
-    aggregate_token_observations,
-    has_attribute,
-    project_token_observations,
-    record_attributes,
-    unique_bool_attribute,
-    unique_string_attribute,
-)
 from autoskillit.execution.evidence.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -25,6 +16,15 @@ from autoskillit.execution.evidence.linux_tracing import (
     read_boot_id,
     read_starttime_ticks,
     start_linux_tracing,
+)
+from autoskillit.execution.evidence.otlp_tokens import (
+    TokenObservation,
+    aggregate_token_observations,
+    has_attribute,
+    project_token_observations,
+    record_attributes,
+    unique_bool_attribute,
+    unique_string_attribute,
 )
 
 __all__ = [

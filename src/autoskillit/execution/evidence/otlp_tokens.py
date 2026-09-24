@@ -10,6 +10,8 @@ from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, TokenMeasure, get_logg
 from autoskillit.execution.session._turn_usage import classify_token_measure
 
 __all__ = [
+    "CLAUDE_CODE_SCOPE_NAME",
+    "CODEX_SCOPE_NAME",
     "TokenObservation",
     "aggregate_token_observations",
     "has_attribute",
@@ -23,9 +25,12 @@ TokenObservation = tuple[str, str, dict[str, int | None]]
 
 _MAX_TOKEN_OBSERVATIONS_PER_PAYLOAD = 128
 
-# Scope name emitted by Claude Code's native OTLP logs. Defined once here so
-# the iterator filter and the overflow-debug log agree on the literal.
+# Scope names emitted by native OTLP logs. Defined once here so the iterator
+# filter, the model-observation dispatch, and the overflow-debug log agree on
+# the literals. ``CLAUDE_CODE_SCOPE_NAME`` was promoted to public when the
+# report-index row projection started consuming the same iterator.
 CLAUDE_CODE_SCOPE_NAME = "com.anthropic.claude_code.events"
+CODEX_SCOPE_NAME = "codex_otel.log_only"
 
 logger = get_logger(__name__)
 

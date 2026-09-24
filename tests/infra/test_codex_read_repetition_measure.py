@@ -1,18 +1,17 @@
-"""Tests for scripts/measure_codex_read_repetition.py (#4351).
-
-Exercises the extractor, bounded-read classifier, and cohort aggregator against a
-synthetic rollout corpus so the measurement tool is covered code, not an unwired
-artifact.
-"""
+"""Tests for scripts/measure_codex_read_repetition.py (#4351)."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import date
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+import zstandard
+
+from autoskillit.core import CODEX_INTAKE_DISCIPLINE_VERSION, render_intake_digest
 
 pytestmark = pytest.mark.small
 
@@ -30,7 +29,7 @@ def _load_measurer() -> ModuleType:
 measurer = _load_measurer()
 
 
-def _exec_record(cmd: str) -> dict:
+def _exec(cmd: str) -> dict:
     return {
         "type": "response_item",
         "payload": {
@@ -41,168 +40,326 @@ def _exec_record(cmd: str) -> dict:
     }
 
 
-def _custom_tool_call_record(raw_input: str) -> dict:
+def _exec_js(js: str) -> dict:
     return {
         "type": "response_item",
-        "payload": {"type": "custom_tool_call", "name": "exec", "input": raw_input},
+        "payload": {"type": "custom_tool_call", "name": "exec", "input": js},
     }
 
 
-def _cohort_marker_record(text: str) -> dict:
-    return {"type": "response_item", "payload": {"type": "message", "content": text}}
+def _developer(text: str) -> dict:
+    return {
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "developer",
+            "content": [{"type": "input_text", "text": text}],
+        },
+    }
 
 
-def _write_rollout(tmp_path: Path, name: str, records: list[dict]) -> Path:
-    path = tmp_path / name
-    with path.open("w", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec) + "\n")
+def _tool_output(text: str) -> dict:
+    return {
+        "type": "response_item",
+        "payload": {"type": "custom_tool_call_output", "output": text},
+    }
+
+
+def _native_path(root: Path, day: date, thread: str, suffix: str = ".jsonl") -> Path:
+    # CodexSessionStore promotion preserves Codex's native YYYY/MM/DD rollout layout.
+    return (
+        root
+        / day.strftime("%Y")
+        / day.strftime("%m")
+        / day.strftime("%d")
+        / f"rollout-{day.isoformat()}T10-00-00-{thread}{suffix}"
+    )
+
+
+def _write_records(path: Path, records: list[dict]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    contents = "".join(json.dumps(record) + "\n" for record in records).encode("utf-8")
+    if path.suffix == ".zst":
+        path.write_bytes(zstandard.ZstdCompressor().compress(contents))
+    else:
+        path.write_bytes(contents)
     return path
 
 
-def test_classifier_counts_only_leading_bounded_reads() -> None:
-    assert measurer.is_bounded_read("sed -n '1,10p' /some/path")
-    assert not measurer.is_bounded_read("gh pr view 123 | head -c 18000")
+def test_discovery_is_depth_agnostic_and_includes_zst(tmp_path: Path) -> None:
+    root = tmp_path / "codex-sessions"
+    depth_1 = root / "2026" / "rollout-depth-one.jsonl"
+    depth_2 = root / "2026" / "07" / "rollout-depth-two.jsonl"
+    depth_3 = _native_path(root, date(2026, 7, 15), "depth-three")
+    depth_4 = root / "2026" / "07" / "15" / "nested" / "rollout-depth-four.jsonl"
+    compressed = _native_path(root, date(2026, 7, 16), "compressed", suffix=".jsonl.zst")
+    rollouts = [depth_1, depth_2, depth_3, depth_4, compressed]
+    for path in rollouts[:-1]:
+        _write_records(path, [])
+    _write_records(compressed, [_exec("sed -n '1,5p' a.py")])
+    (root / "run-skill-in-progress-x.marker").write_text("incomplete", encoding="utf-8")
+
+    assert measurer._find_rollouts(root, None, None) == sorted(rollouts)
+    assert measurer.read_rollout(compressed).commands == ["sed -n '1,5p' a.py"]
+
+
+@pytest.mark.parametrize("root_state", ["missing", "empty"])
+def test_main_reports_no_data_for_missing_or_empty_root(
+    root_state: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "codex-sessions"
+    if root_state == "empty":
+        root.mkdir()
+    out = tmp_path / "report.json"
+
+    assert measurer.main(["--log-root", str(root), "--out", str(out)]) == 1
+    captured = capsys.readouterr()
+    assert "CODEX_READ_REPETITION=NO_DATA" in captured.err
+    assert "=PASS" not in captured.out
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["outcome"] == "NO_DATA"
+    assert report["rollouts_scanned"] == 0
+
+
+def test_main_reports_no_data_when_nothing_is_a_bounded_read(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "codex-sessions"
+    rollout = _native_path(root, date(2026, 7, 15), "no-bounded-read")
+    _write_records(rollout, [_exec("gh pr view 1 | head -c 100")])
+    out = tmp_path / "report.json"
+
+    assert measurer.main(["--log-root", str(root), "--out", str(out)]) == 1
+    captured = capsys.readouterr()
+    assert "CODEX_READ_REPETITION=NO_DATA" in captured.err
+    assert "=PASS" not in captured.out
+
+
+def test_main_scans_every_rollout_in_the_native_tree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "codex-sessions"
+    rollouts = [
+        _native_path(root, date(2026, 7, 15), "session-one"),
+        _native_path(root, date(2026, 7, 15), "session-two"),
+        _native_path(root, date(2026, 7, 16), "session-three"),
+    ]
+    for path in rollouts:
+        _write_records(path, [_exec("sed -n '1,5p' a.py")])
+    out = tmp_path / "report.json"
+
+    assert measurer.main(["--log-root", str(root), "--out", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "CODEX_READ_REPETITION=PASS rollouts=3 " in captured.out
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["rollouts_scanned"] == len(list(root.rglob("rollout-*")))
+
+
+def test_date_filter_uses_filename_day_precision(tmp_path: Path) -> None:
+    root = tmp_path / "codex-sessions"
+    days = [
+        date(2026, 6, 15),
+        date(2026, 7, 1),
+        date(2026, 7, 15),
+        date(2026, 7, 31),
+        date(2026, 8, 5),
+    ]
+    rollouts = [_write_records(_native_path(root, day, day.isoformat()), []) for day in days]
+    june, july_01, july_15, july_31, august = rollouts
+
+    assert measurer._find_rollouts(root, "2026-07", "2026-07") == [
+        july_01,
+        july_15,
+        july_31,
+    ]
+    assert measurer._find_rollouts(root, "2026-07-18", None) == [july_31, august]
+    assert measurer._find_rollouts(root, None, "2026-07-18") == [
+        june,
+        july_01,
+        july_15,
+    ]
+    assert measurer._find_rollouts(root, "2026-07-15", "2026-07-15") == [july_15]
+
+
+@pytest.mark.parametrize(
+    "version", (1, 2, CODEX_INTAKE_DISCIPLINE_VERSION, CODEX_INTAKE_DISCIPLINE_VERSION + 1)
+)
+def test_cohort_is_the_rendered_policy_version(version: int, tmp_path: Path) -> None:
+    path = _native_path(tmp_path, date(2026, 7, 15), f"policy-v{version}")
+    _write_records(
+        path,
+        [_developer(render_intake_digest(version=version)), _exec("sed -n '1,5p' a.py")],
+    )
+
+    assert measurer.measure_rollout(path)["cohort"] == f"v{version}"
+
+
+def test_cohort_is_scoped_to_injected_messages(tmp_path: Path) -> None:
+    current_version = CODEX_INTAKE_DISCIPLINE_VERSION
+    with_output = _native_path(tmp_path, date(2026, 7, 15), "tool-output")
+    _write_records(
+        with_output,
+        [
+            _developer(render_intake_digest()),
+            _tool_output(render_intake_digest(version=1)),
+            _exec("sed -n '1,5p' a.py"),
+        ],
+    )
+    output_only = _native_path(tmp_path, date(2026, 7, 15), "output-only")
+    _write_records(output_only, [_tool_output(render_intake_digest(version=1))])
+    mixed = _native_path(tmp_path, date(2026, 7, 15), "mixed")
+    _write_records(
+        mixed,
+        [
+            _developer(render_intake_digest(version=2)),
+            _developer(render_intake_digest(version=3)),
+        ],
+    )
+
+    assert measurer.measure_rollout(with_output)["cohort"] == f"v{current_version}"
+    assert measurer.measure_rollout(output_only)["cohort"] == "none"
+    assert measurer.measure_rollout(mixed)["cohort"] == "mixed"
+
+
+_CLASSIFICATION_CASES = [
+    ("sed -n '1,10p' /a/b.py", True, "/a/b.py"),
+    ("sed -n 1,10p a.py > out.txt", True, "a.py"),
+    ("{ sed -n '1,20p' a.py; } 2>&1 | head -c 100", True, "a.py"),
+    ("sed -n -e '1,5p' a.py", True, "a.py"),
+    ("sed -n '1,5p' \"$f\"", True, None),
+    ("head -n 50 src/x.py", True, "src/x.py"),
+    ("tail -c 2000 log.txt 2>/dev/null", True, "log.txt"),
+    ("nl -ba src/x.py | sed -n '1,40p'", True, "src/x.py"),
+    ("rg -n 'foo|bar' src/autoskillit/file.py", True, "src/autoskillit/file.py"),
+    (
+        'rg -n "foo|bar|baz" src/autoskillit/file.py',
+        True,
+        "src/autoskillit/file.py",
+    ),
+    (
+        "rg -n 'foo|bar' src/autoskillit/file.py | head -c 18000",
+        True,
+        "src/autoskillit/file.py",
+    ),
+    ("rg -n -M 500 'a|b' src/x.py 2>&1 | head -c 5000", True, "src/x.py"),
+    ("rg -n -M 500 'pat' \"$file\"", True, None),
+    ("rg -M 500 -n pat a.py", True, "a.py"),
+    ("rg -n -M500 pat a.py", True, "a.py"),
+    ("rg -n --max-columns=500 pat a.py", True, "a.py"),
+    ("rg -n -C 3 -g '*.py' pat a.py", True, "a.py"),
+    ("rg -n -A 3 -B 2 pat a.py", True, "a.py"),
+    ("rg -nuu pat a.py", True, "a.py"),
+    ("rg -n -e foo -e bar a.py", True, "a.py"),
+    ("rg -n pat", True, None),
+    ("rg -n pat a.py b.py", True, None),
+    ("rg -n --no-such-flag pat a.py", True, None),
+    ("gh pr view 123 | head -c 18000", False, None),
+    ("head -c 100", False, None),
+    ("set -o pipefail; rg -n x a.py", False, None),
+    ("rg -n 'unbalanced", False, None),
+]
+
+
+@pytest.mark.parametrize(
+    ("cmd", "bounded", "target"),
+    _CLASSIFICATION_CASES,
+    ids=[f"case-{index}" for index in range(1, len(_CLASSIFICATION_CASES) + 1)],
+)
+def test_classify_command(cmd: str, bounded: bool, target: str | None) -> None:
+    result = measurer.classify_command(cmd)
+    assert (result is not None) is bounded
+    if bounded:
+        assert result == measurer.BoundedRead(target)
+
+
+def _value_flag_commands() -> list[str]:
+    omitted_rg_flags = {"-e", "--regexp", "-f", "--file"}
+    rg_flags = [
+        flag
+        for flag, arity in measurer._READ_VERBS["rg"].items()
+        if arity == measurer._FlagArity.VALUE and flag not in omitted_rg_flags
+    ]
+    head_flags = [
+        flag
+        for flag, arity in measurer._READ_VERBS["head"].items()
+        if arity == measurer._FlagArity.VALUE
+    ]
+    return [
+        *(f"rg -n {flag} 7 pat a.py" for flag in rg_flags),
+        *(f"head -n 5 {flag} 7 a.py" for flag in head_flags),
+    ]
+
+
+def test_every_value_flag_consumes_its_value() -> None:
+    for command in _value_flag_commands():
+        assert measurer.classify_command(command) == measurer.BoundedRead("a.py"), command
+
+
+def test_no_resolved_target_is_purely_numeric() -> None:
+    commands = [case[0] for case in _CLASSIFICATION_CASES] + _value_flag_commands()
+    targets = [getattr(measurer.classify_command(command), "target", None) for command in commands]
+
+    assert all(not target.isdigit() for target in targets if target is not None)
+
+
+def test_custom_tool_call_extracts_every_literal_exec_call(tmp_path: Path) -> None:
+    path = _native_path(tmp_path, date(2026, 7, 15), "custom-tool-call")
+    js = r"""tools.exec_command({cmd:"sed -n '1,5p' a.py"});
+tools.exec_command({"cmd":"sed -n '6,9p' \"/x y/b.py\"","workdir":"/w"});
+for (const c of cmds) await tools.exec_command({cmd:c});"""
+    _write_records(path, [_exec_js(js), _exec_js("text(ALL_TOOLS.slice(0,2))")])
+
+    records = measurer.read_rollout(path)
+    assert records.commands == ["sed -n '1,5p' a.py", "sed -n '6,9p' \"/x y/b.py\""]
+    assert records.unclassified == 2
+    assert ("/x y/b.py", 1) in measurer.measure_rollout(path)["worst_paths"]
+    assert measurer.aggregate_report([path])["unclassified_record_count"] == 2
+
+
+def test_unparseable_lines_are_skipped_not_fatal(tmp_path: Path) -> None:
+    path = _native_path(tmp_path, date(2026, 7, 15), "corrupt-line")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "{not valid json\n" + json.dumps(_exec("sed -n '1,5p' a.py")) + "\n",
+        encoding="utf-8",
+    )
+
+    records = measurer.read_rollout(path)
+    assert records.commands == ["sed -n '1,5p' a.py"]
+    assert records.unclassified == 0
+
+
+def test_unreadable_rollout_is_counted_not_misfiled(tmp_path: Path) -> None:
+    unreadable = tmp_path / "rollout-x.jsonl"
+    unreadable.mkdir()
+
+    report = measurer.aggregate_report([unreadable])
+
+    assert report["unreadable_rollout_count"] == 1
+    assert report["cohorts"] == {}
 
 
 def test_repeat_reads_are_counted_per_session_not_per_corpus(tmp_path: Path) -> None:
-    same_session = _write_rollout(
-        tmp_path,
-        "rollout-a.jsonl",
+    same_session = _native_path(tmp_path, date(2026, 7, 15), "same-session")
+    _write_records(
+        same_session,
         [
-            _exec_record("sed -n '1,10p' /a/b.py"),
-            _exec_record("sed -n '11,20p' /a/b.py"),
+            _exec("sed -n '1,10p' /a/b.py"),
+            _exec("sed -n '11,20p' /a/b.py"),
         ],
     )
     row = measurer.measure_rollout(same_session)
     assert row["bounded_reads"] == 2
     assert row["repeat_reads"] == 1
 
-    rollout_1 = _write_rollout(
-        tmp_path, "rollout-b.jsonl", [_exec_record("sed -n '1,10p' /a/b.py")]
+    rollout_1 = _write_records(
+        _native_path(tmp_path, date(2026, 7, 16), "rollout-one"),
+        [_exec("sed -n '1,10p' /a/b.py")],
     )
-    rollout_2 = _write_rollout(
-        tmp_path, "rollout-c.jsonl", [_exec_record("sed -n '1,10p' /a/b.py")]
+    rollout_2 = _write_records(
+        _native_path(tmp_path, date(2026, 7, 17), "rollout-two"),
+        [_exec("sed -n '1,10p' /a/b.py")],
     )
     report = measurer.aggregate_report([rollout_1, rollout_2])
     assert report["cohorts"]["none"]["bounded_read_count"] == 2
     assert report["cohorts"]["none"]["repeat_count"] == 0
-
-
-def test_policy_version_cohort_split(tmp_path: Path) -> None:
-    v1 = _write_rollout(
-        tmp_path,
-        "rollout-v1.jsonl",
-        [
-            _cohort_marker_record("Context Intake Discipline v1:\n- Never read end-to-end."),
-            _exec_record("sed -n '1,10p' /a.py"),
-            _exec_record("sed -n '11,20p' /a.py"),
-        ],
-    )
-    v2 = _write_rollout(
-        tmp_path,
-        "rollout-v2.jsonl",
-        [
-            _cohort_marker_record("Context Intake Discipline v2:\n- Read completely."),
-            _exec_record("sed -n '1,10p' /b.py"),
-        ],
-    )
-    report = measurer.aggregate_report([v1, v2])
-    assert report["cohorts"]["v1"]["bounded_read_count"] == 2
-    assert report["cohorts"]["v1"]["repeat_count"] == 1
-    assert report["cohorts"]["v1"]["repeat_read_rate"] == pytest.approx(0.5)
-    assert report["cohorts"]["v2"]["bounded_read_count"] == 1
-    assert report["cohorts"]["v2"]["repeat_count"] == 0
-    assert report["cohorts"]["v2"]["repeat_read_rate"] == pytest.approx(0.0)
-
-
-def test_unparseable_records_are_skipped_not_fatal(tmp_path: Path) -> None:
-    path = tmp_path / "rollout-corrupt.jsonl"
-    path.write_text(
-        "{not valid json\n" + json.dumps(_exec_record("sed -n '1,10p' /a.py")) + "\n",
-        encoding="utf-8",
-    )
-    commands, unclassified = measurer.classify_rollout_records(path)
-    assert len(commands) == 1
-    assert unclassified == 0
-
-
-def test_unclassified_exec_shapes_are_counted_and_reported(tmp_path: Path) -> None:
-    records = [_custom_tool_call_record("this does not match the exec_command JS template")]
-    path = _write_rollout(tmp_path, "rollout-unclassified.jsonl", records)
-    commands, unclassified = measurer.classify_rollout_records(path)
-    assert commands == []
-    assert unclassified == 1
-
-
-def test_find_rollouts_matches_the_real_two_level_yyyy_mm_layout(tmp_path: Path) -> None:
-    # _codex_session_storage.py lays out rollouts as <root>/YYYY/MM/rollout-*.jsonl --
-    # never a third YYYY/MM/DD level.
-    rollout = tmp_path / "2026" / "07" / "rollout-a.jsonl"
-    rollout.parent.mkdir(parents=True)
-    rollout.write_text("{}")
-    found = measurer._find_rollouts(tmp_path, None, None)
-    assert found == [rollout]
-
-
-def _write_dated_rollout(tmp_path: Path, year: str, month: str, day: str, thread: str) -> Path:
-    directory = tmp_path / year / month
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"rollout-{year}-{month}-{day}T10-00-00-{thread}.jsonl"
-    path.write_text("{}")
-    return path
-
-
-def test_find_rollouts_date_filter_actually_filters(tmp_path: Path) -> None:
-    june = _write_dated_rollout(tmp_path, "2026", "06", "15", "thread-june")
-    july_01 = _write_dated_rollout(tmp_path, "2026", "07", "01", "thread-july-01")
-    july_15 = _write_dated_rollout(tmp_path, "2026", "07", "15", "thread-july-15")
-    july_31 = _write_dated_rollout(tmp_path, "2026", "07", "31", "thread-july-31")
-    august = _write_dated_rollout(tmp_path, "2026", "08", "05", "thread-august")
-
-    # Month-precision bounds still work at day-precision resolution: every day
-    # inside the bounded month is included.
-    found = measurer._find_rollouts(tmp_path, "2026-07", "2026-07")
-    assert found == [july_01, july_15, july_31]
-
-    # Day-precision --since must not silently drop the whole target month. Before
-    # the fix, the extracted date key was month precision ("2026-07"), which
-    # string-sorts before any day-precision --since ("2026-07" < "2026-07-18"),
-    # so every rollout in the target month was incorrectly dropped.
-    found = measurer._find_rollouts(tmp_path, "2026-07-18", None)
-    assert found == [july_31, august]
-
-    # Day-precision --until must not symmetrically over-include the whole target
-    # month ("2026-07" > "2026-07-18" was False, so all of July was kept).
-    found = measurer._find_rollouts(tmp_path, None, "2026-07-18")
-    assert found == [june, july_01, july_15]
-
-    # --since/--until are documented as inclusive: the exact boundary date itself
-    # must be kept, not excluded.
-    found = measurer._find_rollouts(tmp_path, "2026-07-15", "2026-07-15")
-    assert found == [july_15]
-
-
-def test_extract_target_path_survives_pipe_alternation_in_rg_pattern() -> None:
-    # AGENTS.md documents `|` alternation as this repo's ripgrep idiom -- the
-    # extractor must not truncate at a `|` that is inside the quoted pattern.
-    assert (
-        measurer.extract_target_path("rg -n 'foo|bar' src/autoskillit/file.py")
-        == "src/autoskillit/file.py"
-    )
-    assert (
-        measurer.extract_target_path('rg -n "foo|bar|baz" src/autoskillit/file.py')
-        == "src/autoskillit/file.py"
-    )
-    assert (
-        measurer.extract_target_path("rg -n 'foo|bar' src/autoskillit/file.py | head -c 18000")
-        == "src/autoskillit/file.py"
-    )
-
-
-def test_classify_policy_cohort_survives_an_unreadable_file(tmp_path: Path) -> None:
-    # A directory named like a rollout file can never be read_text'd -- this must
-    # not abort a batch run over many rollouts.
-    unreadable = tmp_path / "rollout-unreadable.jsonl"
-    unreadable.mkdir()
-    assert measurer.classify_policy_cohort(unreadable) == "none"

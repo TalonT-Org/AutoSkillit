@@ -16,6 +16,7 @@ from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_VERSION,
     CODEX_INTAKE_RULES,
     RETIRED_INTAKE_RULE_IDS,
+    parse_intake_discipline_versions,
     render_intake_digest,
 )
 from autoskillit.execution.backends._claude_prompt import CODEX_CO_INJECTED_POLICIES
@@ -220,6 +221,20 @@ def test_digest_header_carries_the_version() -> None:
     assert CODEX_INTAKE_DISCIPLINE_DIGEST.startswith(
         f"Context Intake Discipline v{CODEX_INTAKE_DISCIPLINE_VERSION}:"
     )
+
+
+@pytest.mark.parametrize("version", (1, 2, 3, CODEX_INTAKE_DISCIPLINE_VERSION, 10))
+def test_intake_header_round_trips_through_its_parser(version: int) -> None:
+    assert parse_intake_discipline_versions(render_intake_digest(version=version)) == frozenset(
+        {version}
+    )
+
+
+def test_shipped_digest_parses_to_the_current_version() -> None:
+    assert parse_intake_discipline_versions(CODEX_INTAKE_DISCIPLINE_DIGEST) == frozenset(
+        {CODEX_INTAKE_DISCIPLINE_VERSION}
+    )
+    assert parse_intake_discipline_versions("no header") == frozenset()
 
 
 def test_every_rule_subject_is_declared_for_the_intake_digest() -> None:

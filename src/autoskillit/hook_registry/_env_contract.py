@@ -225,6 +225,14 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "The shared backend builder selects tools governed by write-scope policy.",
     ),
     HookEnvVarDef(
+        "CDPATH",
+        "operator",
+        None,
+        None,
+        "The invoking shell environment may alter relative cd resolution; the write scan "
+        "treats it as an external directory-search input.",
+    ),
+    HookEnvVarDef(
         "DBUS_SESSION_BUS_ADDRESS",
         "operator",
         None,

@@ -1851,6 +1851,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "CDPATH": AmbientEnvDisposition(
+        var="CDPATH",
+        disposition="scrub",
+        owner="posix",
+        justification=(
+            "Host shell directory-search settings must not change cwd resolution in isolated"
+            " tests; individual cd-path cases set the value explicitly."
+        ),
+    ),
     "CHANGES_REQUESTED": AmbientEnvDisposition(
         var="CHANGES_REQUESTED",
         disposition="scrub",

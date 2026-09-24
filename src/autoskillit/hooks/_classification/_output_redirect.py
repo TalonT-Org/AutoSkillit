@@ -66,6 +66,7 @@ def _unsafe_shell_literal(char: str, quote: str) -> bool:
 
 def _expand_shell_target(path: str, source: str) -> str | None:
     """Expand only shell syntax whose spelling is proven by the source span."""
+    source = source.strip()
     tilde = _shell_tilde_prefix(source)
     if tilde is None:
         return None
@@ -150,7 +151,7 @@ def _consume_output_redirect(
         ):
             target = tokens[next_index]
             if _FD_TARGET_RE.fullmatch(target) and (
-                argv_tokens is None or argv_tokens[next_index].raw_span.lstrip() == target
+                argv_tokens is None or argv_tokens[next_index].raw_span.strip() == target
             ):
                 return (next_index + 1, None, 0)
             if target.startswith((">(", "<(")):
@@ -210,7 +211,7 @@ def _partition_output_redirect_indices(
         if target is not None:
             shell_source = None
             if argv_tokens is not None:
-                shell_source = argv_tokens[i - 1].raw_span.lstrip()
+                shell_source = argv_tokens[i - 1].raw_span.strip()
                 if i == redirect_index + 1:
                     operator = tokens[redirect_index][: -len(target)]
                     shell_source = (

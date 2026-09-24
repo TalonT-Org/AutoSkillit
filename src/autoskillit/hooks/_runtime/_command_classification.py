@@ -199,7 +199,7 @@ def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | 
     """Keep a shell token's raw spelling; Python argv has no shell expansion."""
     if argv_tokens is None:
         return None
-    return argv_tokens[index].raw_span if index < len(argv_tokens) else ""
+    return argv_tokens[index].raw_span.strip() if index < len(argv_tokens) else ""
 
 
 def _non_option_indices(segment: list[str]) -> list[int]:

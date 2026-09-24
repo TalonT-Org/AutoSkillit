@@ -260,7 +260,13 @@ def managed_home_projection(
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend | None,
 ) -> ManagedHomeProjection | None:
-    if backend is None or managed_route_backend(backend) is None:
+    """Build the managed-home projection for a verified managed-route backend.
+
+    The caller must verify ``backend`` is a managed-route backend via
+    ``managed_route_backend`` first; this function only inspects the
+    projection context to derive the attestation/route facts.
+    """
+    if backend is None:
         return None
     adaptation_context = projection_context.adaptation_context
     if adaptation_context is None:
@@ -278,12 +284,13 @@ def _configure_managed_session_route(
     generated_home: Path,
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend,
-) -> None:
+) -> ManagedHomeProjection | None:
+    managed = managed_route_backend(backend)
+    if managed is None:
+        return None
     projection = managed_home_projection(projection_context, backend)
     if projection is None:
-        return
-    managed = managed_route_backend(backend)
-    assert managed is not None
+        return None
     adaptation_context = projection_context.adaptation_context
     assert adaptation_context is not None
     managed.configure_managed_session_dir(
@@ -291,6 +298,7 @@ def _configure_managed_session_route(
         adaptation_context=adaptation_context,
         route=projection.route,
     )
+    return projection
 
 
 def _configure_generated_home(
@@ -298,10 +306,10 @@ def _configure_generated_home(
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend,
     setup_kwargs: _SessionSetupKwargs,
-) -> frozenset[str] | None:
+) -> tuple[frozenset[str] | None, ManagedHomeProjection | None]:
     roles = backend.setup_session_dir(generated_home, **setup_kwargs)
-    _configure_managed_session_route(generated_home, projection_context, backend)
-    return roles
+    projection = _configure_managed_session_route(generated_home, projection_context, backend)
+    return roles, projection
 
 
 def _add_session_agent_defs(
@@ -347,7 +355,7 @@ def _setup_generated_session(
     invocation_required_native_roles: set[str],
     explorer_binding_env: _ExplorerBindingEnv | None,
     explorer_binding_env_factory: _ExplorerBindingEnvFactory | None,
-) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None]:
+) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None, ManagedHomeProjection | None]:
     if backend is not None and backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch(session_dir=generated_home)
         if readiness.errors:
@@ -355,7 +363,7 @@ def _setup_generated_session(
     if explorer_binding_env_factory is not None:
         explorer_binding_env = explorer_binding_env_factory(generated_home)
     if backend is None:
-        return None, explorer_binding_env
+        return None, explorer_binding_env, None
     setup_kwargs: _SessionSetupKwargs = {
         "parent_sandbox_mode": projection_context.parent_sandbox_mode,
         "execution_role": execution_role,
@@ -370,10 +378,10 @@ def _setup_generated_session(
         invocation_required_native_roles,
         explorer_binding_env,
     )
-    finalized_native_roles = _configure_generated_home(
+    finalized_native_roles, managed_projection = _configure_generated_home(
         generated_home, projection_context, backend, setup_kwargs
     )
-    return finalized_native_roles, explorer_binding_env
+    return finalized_native_roles, explorer_binding_env, managed_projection
 
 
 def _publish_session_skill_tree(
@@ -456,7 +464,12 @@ def _materialize_session(
     compilation: CompiledSessionSkillCatalogAuthority | None = None,
     explorer_binding_env: _ExplorerBindingEnv | None = None,
     explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
-) -> tuple[ValidatedAddDir, tuple[SkillAuthority, ...], SkillUnavailabilityPayload]:
+) -> tuple[
+    ValidatedAddDir,
+    tuple[SkillAuthority, ...],
+    SkillUnavailabilityPayload,
+    ManagedHomeProjection | None,
+]:
     backend = projection_context.backend
     backend_name = backend.name if backend is not None else None
     add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
@@ -502,7 +515,7 @@ def _materialize_session(
             adaptation_context=projection_context.adaptation_context,
         )
 
-    finalized_native_roles, explorer_binding_env = _setup_generated_session(
+    finalized_native_roles, explorer_binding_env, managed_projection = _setup_generated_session(
         generated_home,
         projection_context,
         backend,
@@ -611,7 +624,7 @@ def _materialize_session(
         profile_compilation,
         explorer_binding_env,
     )
-    return skills_dir, records, unavailability_payload
+    return skills_dir, records, unavailability_payload, managed_projection
 
 
 def _restore_session(
@@ -632,7 +645,7 @@ def _restore_session(
         if readiness.errors:
             raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
     if backend is not None:
-        _configure_generated_home(
+        _, _ = _configure_generated_home(
             generated_home,
             projection_context,
             backend,

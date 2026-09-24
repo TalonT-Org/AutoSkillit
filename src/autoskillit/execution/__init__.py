@@ -64,15 +64,6 @@ from autoskillit.execution.child_outcomes import (
     normalize_backend_name,
     reconcile_child_outcome_snapshots,
 )
-from autoskillit.execution.evidence._otlp_tokens import (
-    TokenObservation,
-    aggregate_token_observations,
-    has_attribute,
-    project_token_observations,
-    record_attributes,
-    unique_bool_attribute,
-    unique_string_attribute,
-)
 from autoskillit.execution.evidence.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -85,6 +76,15 @@ from autoskillit.execution.evidence.linux_tracing import (
     read_boot_id,
     read_starttime_ticks,
     start_linux_tracing,
+)
+from autoskillit.execution.evidence.otlp_tokens import (
+    TokenObservation,
+    aggregate_token_observations,
+    has_attribute,
+    project_token_observations,
+    record_attributes,
+    unique_bool_attribute,
+    unique_string_attribute,
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderConformanceEvidence,
@@ -203,6 +203,15 @@ from autoskillit.execution.recording.recording import (
     ReplayingSubprocessRunner,
     ScenarioReplayError,
     build_replay_runner,
+)
+from autoskillit.execution.report_index import (
+    REPORT_INDEX_SCHEMA_VERSION,
+    ReportIndex,
+    ReportIndexUpdate,
+    read_report_index,
+    rebuild_report_index,
+    report_index_dir,
+    update_report_index,
 )
 from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from autoskillit.execution.runtime.db import (
@@ -400,7 +409,7 @@ __all__ = [
     "read_boot_id",
     "read_starttime_ticks",
     "start_linux_tracing",
-    # _otlp_tokens
+    # otlp_tokens
     "TokenObservation",
     "aggregate_token_observations",
     "has_attribute",
@@ -474,6 +483,14 @@ __all__ = [
     "session_index_lock_path",
     "write_execution_candidate_manifest",
     "write_telemetry_clear_marker",
+    # report_index
+    "REPORT_INDEX_SCHEMA_VERSION",
+    "ReportIndex",
+    "ReportIndexUpdate",
+    "read_report_index",
+    "rebuild_report_index",
+    "report_index_dir",
+    "update_report_index",
     # pr_analysis
     "DOMAIN_PATHS",
     "extract_linked_issues",

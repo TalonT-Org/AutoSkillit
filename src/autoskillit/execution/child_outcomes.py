@@ -224,7 +224,7 @@ def _child_id_from_subagent_transcript_path(transcript_path: Path) -> str:
 def _extract_claude_child_metadata(records: list[dict[str, Any]]) -> dict[str, str]:
     """Extract role/model/attribution from one subagent transcript's records.
 
-    Mirrors ``execution/session/_turn_usage.py:merge_turn_usage``'s dedup
+    Mirrors ``execution/session/turn_usage.py:merge_turn_usage``'s dedup
     pattern; later records for the same message id win. No explicit
     ``message.id`` bookkeeping is needed for that: only the latest
     non-empty ``attribution_skill``/``effective_model`` is ever kept, so

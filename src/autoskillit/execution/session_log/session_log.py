@@ -51,16 +51,16 @@ from autoskillit.execution.evidence.anomaly_detection import (
     detect_outcome_anomalies,
     ndjson_drift_anomaly,
 )
-from autoskillit.execution.session._turn_usage import (
+from autoskillit.execution.session.turn_usage import (
     first_parent_message_timestamps as _message_timestamps,
 )
-from autoskillit.execution.session._turn_usage import (
+from autoskillit.execution.session.turn_usage import (
     primary_model_identifier as _primary_model_identifier,
 )
-from autoskillit.execution.session._turn_usage import (
+from autoskillit.execution.session.turn_usage import (
     resolve_session_label as _resolve_session_label,
 )
-from autoskillit.execution.session._turn_usage import (
+from autoskillit.execution.session.turn_usage import (
     write_turn_usage_sidecar,
 )
 from autoskillit.execution.session_log._session_log_retention import (

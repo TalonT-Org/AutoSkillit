@@ -6,7 +6,7 @@ Verifies that symbols moved to _headless_evidence are importable.
 import pytest
 
 from autoskillit.core import RetryReason, SkillResult
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

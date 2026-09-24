@@ -1343,7 +1343,7 @@ def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.execution.session._turn_usage as turn_usage_module
+    import autoskillit.execution.session.turn_usage as turn_usage_module
 
     original_dumps = turn_usage_module.fast_dumps
     serialized_rows = 0

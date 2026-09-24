@@ -50,6 +50,14 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("execution/report_index.py", "_update", "(index_dir / _ROWS_FILE).unlink"): (
+        1,
+        "Rebuild removes derived rows while holding the report-index writer lease.",
+    ),
+    ("execution/report_index.py", "_update", "(index_dir / _STATE_FILE).unlink"): (
+        1,
+        "Rebuild removes the derived watermark while holding the report-index writer lease.",
+    ),
     (
         "server/tools/tools_kitchen/_close_kitchen.py",
         "_restore_baseline_config",

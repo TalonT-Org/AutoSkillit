@@ -20,26 +20,17 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
 )
-from autoskillit.execution.evidence._otlp_tokens import (
-    TokenObservation as _TokenObservation,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    aggregate_token_observations as _aggregate_token_observations,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    has_attribute as _has_attribute,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    project_token_observations as _token_observations,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    record_attributes as _record_attributes,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    unique_bool_attribute as _unique_bool_attribute,
-)
-from autoskillit.execution.evidence._otlp_tokens import (
-    unique_string_attribute as _unique_string_attribute,
+from autoskillit.execution.evidence.otlp_tokens import (
+    CLAUDE_CODE_SCOPE_NAME,
+    CODEX_SCOPE_NAME,
+    TokenObservation,
+    aggregate_token_observations,
+    has_attribute,
+    iter_scoped_log_records,
+    project_token_observations,
+    record_attributes,
+    unique_bool_attribute,
+    unique_string_attribute,
 )
 from autoskillit.execution.session_log.session_log import resolve_log_dir
 
@@ -166,22 +157,22 @@ def _claude_model_observation(
     event_name: str | None, attributes: list[object]
 ) -> _ModelObservation | None:
     if event_name == "api_request":
-        session_id = _unique_string_attribute(attributes, "session.id")
-        model = _unique_string_attribute(attributes, "model")
-        query_source = _unique_string_attribute(attributes, "query_source")
+        session_id = unique_string_attribute(attributes, "session.id")
+        model = unique_string_attribute(attributes, "model")
+        query_source = unique_string_attribute(attributes, "query_source")
         if (
             session_id
             and model
             and query_source == "sdk"
-            and not _has_attribute(attributes, "agent.name")
+            and not has_attribute(attributes, "agent.name")
         ):
             return session_id, model, None
     elif event_name == "subagent_completed":
-        session_id = _unique_string_attribute(attributes, "session.id")
-        child_key = _unique_string_attribute(attributes, "agent_type")
-        model = _unique_string_attribute(attributes, "model")
-        final_model = _unique_string_attribute(attributes, "final_model")
-        model_swapped = _unique_bool_attribute(attributes, "model_swapped")
+        session_id = unique_string_attribute(attributes, "session.id")
+        child_key = unique_string_attribute(attributes, "agent_type")
+        model = unique_string_attribute(attributes, "model")
+        final_model = unique_string_attribute(attributes, "final_model")
+        model_swapped = unique_bool_attribute(attributes, "model_swapped")
         if session_id and child_key and model and final_model and model_swapped is not None:
             return (
                 session_id,
@@ -201,9 +192,9 @@ def _codex_model_observation(
 ) -> _ModelObservation | None:
     if event_name != "codex.conversation_starts":
         return None
-    session_id = _unique_string_attribute(attributes, "conversation.id")
-    model = _unique_string_attribute(attributes, "model")
-    originator = _unique_string_attribute(attributes, "originator")
+    session_id = unique_string_attribute(attributes, "conversation.id")
+    model = unique_string_attribute(attributes, "model")
+    originator = unique_string_attribute(attributes, "originator")
     if session_id and model and originator == "codex_exec":
         return session_id, model, None
     return None
@@ -212,38 +203,19 @@ def _codex_model_observation(
 def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation, ...]:
     if signal != "logs" or not isinstance(payload, dict):
         return ()
-    resource_logs = payload.get("resourceLogs")
-    if not isinstance(resource_logs, list):
-        return ()
-
     observations: list[_ModelObservation] = []
-    for resource_log in resource_logs:
-        if not isinstance(resource_log, dict):
+    scopes = (CLAUDE_CODE_SCOPE_NAME, CODEX_SCOPE_NAME)
+    for scope_name, record in iter_scoped_log_records(payload, scopes):
+        attributes = record_attributes(record)
+        if attributes is None:
             continue
-        scope_logs = resource_log.get("scopeLogs")
-        if not isinstance(scope_logs, list):
-            continue
-        for scope_log in scope_logs:
-            if not isinstance(scope_log, dict):
-                continue
-            scope = scope_log.get("scope")
-            scope_name = scope.get("name") if isinstance(scope, dict) else None
-            records = scope_log.get("logRecords")
-            if not isinstance(scope_name, str) or not isinstance(records, list):
-                continue
-            for record in records:
-                attributes = _record_attributes(record)
-                if attributes is None:
-                    continue
-                event_name = _unique_string_attribute(attributes, "event.name")
-                if scope_name == "com.anthropic.claude_code.events":
-                    observation = _claude_model_observation(event_name, attributes)
-                elif scope_name == "codex_otel.log_only":
-                    observation = _codex_model_observation(event_name, attributes)
-                else:
-                    continue
-                if observation is not None:
-                    observations.append(observation)
+        event_name = unique_string_attribute(attributes, "event.name")
+        if scope_name == CLAUDE_CODE_SCOPE_NAME:
+            observation = _claude_model_observation(event_name, attributes)
+        else:
+            observation = _codex_model_observation(event_name, attributes)
+        if observation is not None:
+            observations.append(observation)
     return tuple(observations)
 
 
@@ -388,7 +360,7 @@ class _OtlpHandler(BaseHTTPRequestHandler):
             + b"\n"
         )
         observations = _model_observations(signal, sanitized_payload)
-        token_observations = _token_observations(signal, sanitized_payload)
+        token_observations = project_token_observations(signal, sanitized_payload)
         enqueue_status = sink._enqueue(line, observations, token_observations)
         if enqueue_status == "queue_full":
             self._send_status(503, "OTLP receiver queue is full")
@@ -567,9 +539,7 @@ class LocalOtlpSink:
             if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
                 outcomes.append((ordinal, outcome))
 
-    def _retain_token_observations(
-        self, token_observations: tuple[_TokenObservation, ...]
-    ) -> None:
+    def _retain_token_observations(self, token_observations: tuple[TokenObservation, ...]) -> None:
         for session_id, request_id, usage in token_observations:
             requests = self._token_evidence.get(session_id)
             if requests is None:
@@ -590,7 +560,7 @@ class LocalOtlpSink:
         self,
         line: bytes,
         observations: tuple[_ModelObservation, ...] = (),
-        token_observations: tuple[_TokenObservation, ...] = (),
+        token_observations: tuple[TokenObservation, ...] = (),
     ) -> str:
         with self._condition:
             self._counters["received"] += 1
@@ -637,7 +607,7 @@ class LocalOtlpSink:
             if not requests or any(value is None for value in requests.values()):
                 return None
             snapshot = tuple(value for value in requests.values() if value is not None)
-        return _aggregate_token_observations(snapshot, backend, provider_used)
+        return aggregate_token_observations(snapshot, backend, provider_used)
 
     def model_evidence_for(
         self,

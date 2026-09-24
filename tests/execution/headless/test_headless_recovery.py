@@ -26,7 +26,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.core.types._type_results import WriteEvidence
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 from tests.execution.conftest import _launch_inputs, _mock_backend
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 

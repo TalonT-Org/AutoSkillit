@@ -23,7 +23,7 @@ from autoskillit.core import (
     is_parent_assistant_record,
 )
 from autoskillit.execution.session._provider_parse import _parse_provider_records
-from autoskillit.execution.session._turn_usage import (
+from autoskillit.execution.session.turn_usage import (
     build_turn_token_entry,
     classify_token_measure,
     first_nonempty_string,
@@ -42,7 +42,7 @@ _API_TOKEN_FIELDS = (
 )
 # Routes the canonical accounting field set through the shared constant
 # so this module cannot drift from pipeline/tokens.py, _fleet_display.py,
-# and _otlp_tokens.py.
+# and otlp_tokens.py.
 _CANONICAL_TOKEN_FIELDS = CANONICAL_ACCOUNTING_FIELDS
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {

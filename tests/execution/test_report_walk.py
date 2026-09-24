@@ -301,8 +301,9 @@ def test_lost_otlp_generation_reports_gap_on_resume(tmp_path: Path) -> None:
     )
     active.write_bytes(_json_line(_otlp("latest-id")))
 
-    with pytest.raises(SourceGapError):
+    with pytest.raises(SourceGapError) as excinfo:
         list(iter_report_walk(root, committed))
+    assert excinfo.value.source == "otlp"
 
 
 def test_changed_idless_resume_reports_gap_when_fingerprint_diverges(
@@ -317,8 +318,29 @@ def test_changed_idless_resume_reports_gap_when_fingerprint_diverges(
     idless_walker.close()
     idless_active.write_bytes(b'{"signal":"logs","payload":{"changed":true}}\n')
 
-    with pytest.raises(SourceGapError):
+    with pytest.raises(SourceGapError) as excinfo:
         list(iter_report_walk(idless_root, idless_watermark))
+    assert excinfo.value.source == "otlp"
+
+
+def test_replaced_archive_reports_archive_gap(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    archive = root / "sessions-archive.jsonl"
+    _write_jsonl(
+        archive,
+        [_session("archived-1", "sid-1"), _session("archived-2", "sid-2")],
+    )
+    first_pass = list(iter_report_walk(root))
+    watermark = first_pass[-1].watermark
+
+    original = archive.read_bytes()
+    replacement = original.replace(b'"sid-1"', b'"sid-x"')
+    assert len(replacement) == len(original)
+    archive.write_bytes(replacement)
+
+    with pytest.raises(SourceGapError) as excinfo:
+        list(iter_report_walk(root, watermark))
+    assert excinfo.value.source == "archive"
 
 
 def test_archive_streams_complete_lines_and_skips_incomplete_ones(

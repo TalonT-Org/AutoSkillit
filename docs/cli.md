@@ -125,6 +125,19 @@ modified by this command.
 
 ---
 
+## autoskillit sessions index
+
+    autoskillit sessions index [--update] [--rebuild]
+
+Reports the derived report-index counts without writing by default. `--update`
+incrementally walks retained session and OTLP sources and appends changed facts.
+`--rebuild` deletes the report-index rows and state, then re-derives facts from
+sources still retained on disk. If both flags are passed, `--rebuild` takes
+precedence. The command exits with status 1 when another operation holds a
+required report-index or source lease.
+
+---
+
 ## autoskillit codex-orphans
 
     autoskillit codex-orphans [--reap] [--output-json]

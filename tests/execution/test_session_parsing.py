@@ -1354,13 +1354,13 @@ class TestSubagentExclusion:
 def test_source_pair_classifies_token_presence(
     backend: str, provider: str, field: str, value: int | None, expected: str
 ) -> None:
-    from autoskillit.execution.session._turn_usage import classify_token_measure
+    from autoskillit.execution.session.turn_usage import classify_token_measure
 
     assert classify_token_measure(backend, provider, field, value).state.value == expected
 
 
 def test_context_window_is_capacity_metadata_not_a_token_measure() -> None:
-    from autoskillit.execution.session._turn_usage import (
+    from autoskillit.execution.session.turn_usage import (
         classify_token_measure,
         valid_context_window,
     )
@@ -1372,7 +1372,7 @@ def test_context_window_is_capacity_metadata_not_a_token_measure() -> None:
 
 
 def test_same_message_id_from_different_source_pairs_remains_two_rows() -> None:
-    from autoskillit.execution.session._turn_usage import (
+    from autoskillit.execution.session.turn_usage import (
         build_turn_token_entry,
         merge_turn_usage,
     )

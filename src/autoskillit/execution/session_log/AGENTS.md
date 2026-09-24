@@ -22,7 +22,7 @@ Inter-peer coupling (absolute imports): `session_log.py` → `_session_log_reten
 
 Cross-package edges:
 
-- `session_log.py` → `evidence.anomaly_detection`, `session._session_model`, `session._turn_usage`
+- `session_log.py` → `evidence.anomaly_detection`, `session._session_model`, `session.turn_usage`
 - `_session_log_recovery.py` → `evidence.linux_tracing`; lazily imports `execution.child_outcomes`
   inside `recover_crashed_sessions` because `child_outcomes` imports `resolve_log_dir` from here
   at module level

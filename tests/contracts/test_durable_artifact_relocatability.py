@@ -141,6 +141,47 @@ class TestNonMachineLocalWritersAreRelocatable:
         write_generated_hooks_json(tmp_path)
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
+    def test_report_index_writer_is_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.execution import update_report_index
+
+        writer = "autoskillit.execution.report_index:_RowAppender.commit"
+        entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]
+        assert len(entries) == 1
+        assert callable(_resolve(entries[0].writer))
+        assert entries[0].machine_local is False
+        assert entries[0].detection is None
+
+        log_root = tmp_path / "logs"
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "requestId": "turn-1",
+                    "message": {"content": [{"type": "tool_use", "name": "Read"}]},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        session = {
+            "dir_name": "session-1",
+            "session_id": "sid-1",
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "timestamp": "2020-01-01T00:00:00Z",
+            "cwd": str(tmp_path),
+            "claude_code_log": str(transcript),
+        }
+        log_root.mkdir(parents=True, exist_ok=True)
+        (log_root / "sessions.jsonl").write_text(json.dumps(session) + "\n", encoding="utf-8")
+        index_dir = tmp_path / "report-index"
+
+        update_report_index(log_root, index_dir)
+
+        _assert_relocatable((index_dir / "rows.jsonl").read_text(encoding="utf-8"))
+        _assert_relocatable((index_dir / "state.json").read_text(encoding="utf-8"))
+
     def test_skill_unavailability_metadata_output_is_relocatable(
         self,
         tmp_path: Path,

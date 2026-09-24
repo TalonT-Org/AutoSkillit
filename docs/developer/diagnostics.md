@@ -28,6 +28,10 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 ├── sessions-archive.jsonl            # Append-only rows evicted from the retained index
 ├── otlp.jsonl                        # Current scrubbed vendor-native OTLP capture
 ├── otlp.jsonl.1                      # Single rotated generation
+├── report-index/                     # Report index (derived report fact rows; see below)
+│   ├── rows.jsonl                    # Append-only report facts
+│   ├── state.json                    # Committed walk watermark and row byte offset
+│   └── index.lock                    # Writer lease
 ├── child-outcomes/
 │   └── {backend}/
 │       └── {parent_session_id}.json  # Durable per-parent child-terminal-reason snapshot
@@ -241,6 +245,79 @@ Consumers must preserve raw accounting and stop metadata. Do not add
 cache-read tokens to input tokens, add reasoning tokens to output tokens, or
 treat `finish_reasons=["length"]` as proof of context exhaustion.
 `sessions.jsonl` is only the retained session projection.
+
+## Report index
+
+`autoskillit sessions index` reads the derived report index under
+`<log_root>/report-index/`. The index is rebuilt from `sessions.jsonl`,
+`sessions-archive.jsonl`, and retained Claude Code records in `otlp.jsonl` and
+its rotated `otlp.jsonl.1` generation.
+It stores report facts separately from the retained `sessions.jsonl`
+projection.
+
+Every v1 row carries `schema_version`, `kind`, `key`, `session_id`, and
+`time_ms`. `time_ms` is epoch milliseconds: session rows use the source
+session timestamp; OTLP rows use `timeUnixNano`, falling back to
+`observedTimeUnixNano`. Rows are append-only upserts keyed by `(kind, key)`;
+when a key is written again, readers keep its last row.
+
+| Kind | Key | Additional v1 fields |
+|---|---|---|
+| `session` | The session directory name (`dir_name`) | `harness`, `provider`, `model`, `skill`, `recipe`, `step`, `level`, `kitchen_id`, `order_id`, `dispatch_id`, `campaign_id`, `caller_session_id`, `parent_session_id`, `success`, `subtype`, `adjudication_reason`, `adjudication_subtype`, `duration_seconds`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `assistant_turn_count`, `tool_counts` |
+| `request` | `{session_id}:{request_id}` | `harness`, `request_id`, `agent_name`, `query_source`, `model`, `event_sequence`, the four token fields, `cost_usd`, `duration_ms` |
+| `tool` | `{session_id}:{tool_use_id}`, or `{source_id}#{ordinal}` when there is no tool-use ID | `harness`, `agent_name`, `tool_name`, `tool_use_id`, `error_type`, `success`, `duration_ms`, `tool_input_size_bytes`, `tool_result_size_bytes`, `event_sequence` |
+| `subagent` | `{source_id}#{ordinal}` | `harness`, `agent_type`, `model`, `final_model`, `model_swapped`, `event_sequence` |
+
+Session token fields are serialized structured measures. Request rows persist
+raw token-counter observations as `int | None`; the reader resolves them to
+structured measures. Session `provider` is persisted verbatim from
+`provider_used`; token availability lookup casefolds the provider only for the
+`(harness, provider)` pair comparison. Request token measures are resolved
+using the attributed session's pair. If no session attempt can be attributed,
+the request uses its harness with provider `unknown`. Missing or malformed
+measures remain `unavailable` or `unknown` according to that pair; they are
+never treated as zero. Session rows do not copy `cwd`, transcript paths, or
+turn IDs.
+
+The reader tolerates older or partial rows. Blank, malformed, non-object,
+unknown-kind, and empty-key rows are skipped; unknown fields are ignored, and
+missing or wrongly typed fields are treated as absent. Invalid entries in a
+tool-count map are dropped. The reader adds `session_key` to event rows in
+memory; it is not persisted.
+
+Events join to session attempts by `session_id` and `time_ms`. With a timestamp,
+an event is attributed to the attempt running at that time: if it predates all
+attempts, the earliest attempt is used; otherwise the latest attempt that began
+by that time is used. Equal starts are resolved by the lexicographically greater
+session key, which gives a deterministic attempt order. An event without a time
+is attributed only when its session ID has exactly one attempt; otherwise
+`session_key` is `null`.
+
+The writer holds an exclusive lease for the report index. Each commit appends
+and fsyncs `rows.jsonl` before atomically replacing the versioned `state.json`
+with the committed walk watermark and byte offset. On the next open, bytes past
+that offset are truncated. If state is missing or invalid, recovery preserves
+complete row lines, drops an incomplete final line, and walks sources from the
+beginning; last-row-wins upserts repair rows re-derived by that walk.
+
+An incremental walk whose archive or OTLP cursor is no longer retained resets
+that source cursor and re-walks the retained data. An archive reset also resets
+the session-index projection cursor because that projection is derived from the
+archive; walking both again preserves the same upsert order as a rebuild. The
+walk holds the OTLP sink's shared lease while reading OTLP records. An update
+or rebuild can contend on either the index lease or a required source lease.
+
+Rebuilding reads only the sources still retained on disk. Rows from OTLP data
+that has rotated out survive through incremental updates, but a rebuild cannot
+re-derive those older facts. A rebuild equals an incremental index when source
+changes are limited to those tracked by the walk: appended OTLP, OTLP rotation,
+and changed, added, or evicted session rows. This assumes transcripts have not
+changed since their session row was walked. `--rebuild` refreshes
+transcript-derived counts.
+
+Codex OTLP token events are not projected: they do not carry a stable request
+identity for deduplication. Codex token measures enter the report index through
+the session rows.
 
 ## Child Terminal Reasons
 

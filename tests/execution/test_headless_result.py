@@ -41,7 +41,7 @@ from autoskillit.execution.headless._headless_evidence import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 from tests.execution.conftest import (
     CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
     _make_tool_use_line,

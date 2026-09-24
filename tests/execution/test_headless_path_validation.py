@@ -32,7 +32,7 @@ from autoskillit.execution.headless._headless_path_tokens import (
 )
 from autoskillit.execution.headless._headless_result import _EVIDENCE_RECOVERABLE_SUBTYPES
 from autoskillit.execution.session import ClaudeSessionResult
-from autoskillit.execution.session._turn_usage import build_turn_token_entry
+from autoskillit.execution.session.turn_usage import build_turn_token_entry
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.conftest import _make_result
 from tests.execution.conftest import _make_tool_use_line, _mock_backend, _success_session_json

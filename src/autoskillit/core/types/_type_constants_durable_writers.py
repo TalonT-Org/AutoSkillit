@@ -343,6 +343,16 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
             "autoskillit.pipeline.workspace_outcomes._ledger:find_stale_workspace_outcome_shards"
         ),
     ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.execution.report_index:_RowAppender.commit",
+        artifact=(
+            "report-index/rows.jsonl and state.json under default_log_dir() — append-only "
+            "derived report fact rows and their committed walk watermark, written via "
+            "update_report_index()/rebuild_report_index()"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
 )
 
 _validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)

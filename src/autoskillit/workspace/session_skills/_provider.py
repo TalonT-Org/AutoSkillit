@@ -188,6 +188,7 @@ class SkillsDirectoryProvider:
             gating=gating,
             backend=backend,
             durable_scripts_root=durable_scripts_root,
+            adaptation_context=None,
         )
 
     def catalog_projection_context(

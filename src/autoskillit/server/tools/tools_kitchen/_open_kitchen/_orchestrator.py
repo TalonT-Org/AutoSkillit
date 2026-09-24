@@ -102,7 +102,7 @@ def _build_anonymous_open_response(
         "and let the downstream skill handle diagnosis."
     )
     try:
-        text += _tk_pkg.project_orchestrator_guidance(ctx)
+        text += _tk_pkg.project_orchestrator_guidance(ctx, adaptation_context=None)
     except Exception as exc:
         logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="project_sous_chef")

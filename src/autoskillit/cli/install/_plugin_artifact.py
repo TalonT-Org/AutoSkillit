@@ -276,7 +276,11 @@ class InstalledPluginArtifactAuthority:
                     source_root,
                     staging_root,
                     catalog,
-                    SkillProjectionContext(cwd=source_root, catalog=catalog),
+                    SkillProjectionContext(
+                        cwd=source_root,
+                        catalog=catalog,
+                        adaptation_context=None,
+                    ),
                     # Self-heal republish for marketplace registration — same
                     # prefix reasoning as cli/install/_marketplace.py:install().
                     mcp_tool_prefix=MARKETPLACE_PREFIX,

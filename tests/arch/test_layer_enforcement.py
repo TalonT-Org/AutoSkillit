@@ -674,7 +674,6 @@ def test_direct_executor_callers_check_backend_compat() -> None:
     compat_calls = {
         "_check_backend_compat",
         "_prepare_direct_skill_dispatch",
-        "_resolve_and_check_backend_compat",
     }
 
     violations: list[str] = []

@@ -177,7 +177,10 @@ materialization rejects a compilation bound to different evidence. The shared
 plugin projection is session-invariant: it is evaluated through
 `adapt_session_invariant`, and skills whose admission depends on managed-join
 evidence are deferred to the attested generated home, never refused or rendered
-there. Interactive Codex parents
+there. Production code passes launch evidence explicitly to every callable that
+declares `adaptation_context`. Literal `None` is confined to inventoried
+no-evidence sites, enforced by
+`tests/arch/test_admission_evidence_explicit_guard.py`. Interactive Codex parents
 use the `interactive-parent` route, with normal kitchen tool visibility and
 join/background guards; headless parents use the restricted `parent` route.
 `AUTOSKILLIT_MANAGED_JOIN_PARENT_ID` carries one parent identity into the MCP

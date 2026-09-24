@@ -132,6 +132,7 @@ def _ensure_marketplace(
         SkillProjectionContext(
             cwd=projection_cwd,
             catalog=catalog,
+            adaptation_context=None,
         ),
         # Marketplace registration — Claude Code resolves these tools under the
         # marketplace prefix; never detect_autoskillit_mcp_prefix(), which answers

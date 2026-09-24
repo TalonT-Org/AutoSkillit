@@ -459,7 +459,11 @@ def _prepare_config_and_step_fallback(state: _RunSkillDispatchState, ordinal: in
     if ordinal and state._stored_contract_entry is None:
         if state.invocation is None:
             raise SkillContractError("Candidate selection lacks an invocation")
-        state.projection_context = build_fresh_projection_context(state.cwd, state.invocation)
+        state.projection_context = build_fresh_projection_context(
+            state.cwd,
+            state.invocation,
+            adaptation_context=None,
+        )
 
     if ordinal == 0:
         state.requested_step_provider = state.step_provider

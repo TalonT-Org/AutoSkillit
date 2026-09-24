@@ -112,7 +112,9 @@ class ManagedJoinRecordStore:
         return attestation, document["route"]
 
 
-def _valid_recovered_record(attestation: ManagedJoinAttestation, route: str, backend: str) -> bool:
+def _is_valid_recovered_record(
+    attestation: ManagedJoinAttestation, route: str, backend: str
+) -> bool:
     try:
         expected_route = managed_codex_route_for_launch_context(attestation.launch_context)
     except ValueError:
@@ -325,7 +327,7 @@ class DefaultManagedJoinAttestationAuthority:
         if loaded is None:
             return None
         attestation, route = loaded
-        if not _valid_recovered_record(attestation, route, backend):
+        if not _is_valid_recovered_record(attestation, route, backend):
             return None
         home_text = os.environ.get(CODEX_HOME_ENV_VAR)
         if not home_text:

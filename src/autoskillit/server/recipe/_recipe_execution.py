@@ -548,7 +548,7 @@ def bind_attested_runtime_invocation(
     return bound_inputs, template
 
 
-def _preflight_input_error(message: str) -> RecipeExecutionAdmissionError:
+def _build_preflight_input_error(message: str) -> RecipeExecutionAdmissionError:
     return RecipeExecutionAdmissionError("recipe_execution_preflight_input", message)
 
 
@@ -564,11 +564,11 @@ def _resolve_audit_preflight(
     audit_cycle_path = bound_input_map.get("audit_cycle_path")
     plan_disposition_path = bound_input_map.get("plan_disposition_path")
     if not isinstance(plan_path, str):
-        raise _preflight_input_error("audit-cycle preflight requires a bound string plan_path")
+        raise _build_preflight_input_error("audit-cycle preflight needs a bound string plan_path")
     if audit_cycle_path is not None and not isinstance(audit_cycle_path, str):
-        raise _preflight_input_error("audit_cycle_path must be a string when present")
+        raise _build_preflight_input_error("audit_cycle_path must be a string when present")
     if plan_disposition_path is not None and not isinstance(plan_disposition_path, str):
-        raise _preflight_input_error("plan_disposition_path must be a string when present")
+        raise _build_preflight_input_error("plan_disposition_path must be a string when present")
     audit = installed.input_preflight_resolver.resolve(
         VerifiedInputPreflightRequest(
             execution_generation=execution_id,
@@ -604,11 +604,11 @@ def _resolve_plan_set_preflight(
         return None
     plan_path = bound_input_map.get("plan_path")
     if not isinstance(authority_path, str) or not isinstance(plan_path, str):
-        raise _preflight_input_error(
+        raise _build_preflight_input_error(
             "plan-set preflight requires bound string plan_path and authority path",
         )
     if allowed_root is None:
-        raise _preflight_input_error("plan-set preflight requires an allowed root")
+        raise _build_preflight_input_error("plan-set preflight requires an allowed root")
     if installed.plan_set_preflight_resolver is None:
         raise RecipeExecutionAdmissionError(
             "recipe_execution_preflight_unavailable",

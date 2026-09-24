@@ -189,12 +189,12 @@ def test_commit_outcome_authority_records_once() -> None:
     assert _ledger_record_calls(helpers[0]) == 1
 
 
-def test_commit_transaction_returns_flow_through_entry_finish() -> None:
+def test_run_commit_transaction_returns_flow_through_entry_finish() -> None:
     tree = ast.parse(TOOLS_PATH.read_text(encoding="utf-8"))
     transaction = next(
         node
         for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_commit_transaction"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_run_commit_transaction"
     )
     returns = _returns_in(transaction.body)
     assert len(returns) == 6
@@ -210,7 +210,7 @@ def test_commit_transaction_returns_flow_through_entry_finish() -> None:
         and isinstance(node.body[0].value, ast.Await)
         and isinstance(node.body[0].value.value, ast.Call)
         and isinstance(node.body[0].value.value.func, ast.Name)
-        and node.body[0].value.value.func.id == "_commit_transaction"
+        and node.body[0].value.value.func.id == "_run_commit_transaction"
     ]
     assert len(transaction_paths) == 1
     assignment, terminal = transaction_paths[0].body[:2]

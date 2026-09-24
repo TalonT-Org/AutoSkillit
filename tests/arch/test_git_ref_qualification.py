@@ -184,7 +184,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/tools/_self_revert.py", "validate_self_revert_base", 39, "merge-base", "BARE"),
     (
         "server/tools/tools_workspace.py",
-        "_commit_transaction",
+        "_run_commit_transaction",
         68,
         "<unresolved>",
         "UNRESOLVABLE",

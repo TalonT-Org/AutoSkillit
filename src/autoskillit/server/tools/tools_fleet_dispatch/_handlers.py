@@ -149,7 +149,7 @@ def _resolve_dispatch_backend(
         return None, fleet_error(FleetErrorCode.FLEET_INVALID_BACKEND, str(exc))
 
 
-def _campaign_precondition(
+def _resolve_campaign_precondition(
     provenance: DispatchProvenanceTracker,
     dispatch_name: str | None,
 ) -> tuple[str | None, bool, str | None]:
@@ -192,7 +192,7 @@ def _campaign_precondition(
     return campaign_path, continue_on_failure, None
 
 
-def _prior_or_skipped_dispatch(
+def _resolve_prior_or_skipped_dispatch(
     tool_ctx: ToolContext,
     provenance: DispatchProvenanceTracker,
     campaign_path: str | None,
@@ -563,8 +563,8 @@ async def dispatch_food_truck(
                 "Fleet feature is disabled. Set features.experimental_enabled: true to enable.",
             )
 
-        campaign_state_path_str, continue_on_failure, campaign_error = _campaign_precondition(
-            provenance, dispatch_name
+        campaign_state_path_str, continue_on_failure, campaign_error = (
+            _resolve_campaign_precondition(provenance, dispatch_name)
         )
         if campaign_error is not None:
             return campaign_error
@@ -592,7 +592,7 @@ async def dispatch_food_truck(
         )
         effective_name = dispatch_name or recipe
 
-        prior_or_skip = _prior_or_skipped_dispatch(
+        prior_or_skip = _resolve_prior_or_skipped_dispatch(
             tool_ctx,
             provenance,
             campaign_state_path_str,

@@ -69,7 +69,7 @@ def _read_reject_reason(exc: Exception, *, part: bool = False) -> PlanSetRejectR
     )
 
 
-def _identity_failures(
+def _collect_identity_failures(
     authority: PlanSetAuthority,
     expected_execution_generation: str | None,
     expected_kitchen_id: str | None,
@@ -101,7 +101,7 @@ def _identity_failures(
     return failures
 
 
-def _issue_snapshot_failure(
+def _check_issue_snapshot(
     authority: PlanSetAuthority, allowed_root: str | Path
 ) -> tuple[PlanSetRejectReason, str] | None:
     if authority.issue is None:
@@ -122,7 +122,7 @@ def _issue_snapshot_failure(
     return None
 
 
-def _bound_artifact_failures(
+def _collect_bound_artifact_failures(
     authority: PlanSetAuthority,
     allowed_root: str | Path,
     current_plan_path: str | Path | None,
@@ -162,7 +162,7 @@ def _bound_artifact_failures(
             )
         if wanted is not None and path == wanted:
             part_key = part.part_key
-    issue_failure = _issue_snapshot_failure(authority, allowed_root)
+    issue_failure = _check_issue_snapshot(authority, allowed_root)
     if issue_failure is not None:
         failures.append(issue_failure)
     if wanted is not None and part_key is None:
@@ -217,14 +217,14 @@ def verify_plan_set_authority(
         return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, [str(exc)])
     if details:
         return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details)
-    failures = _identity_failures(
+    failures = _collect_identity_failures(
         authority,
         expected_execution_generation,
         expected_kitchen_id,
         expected_binding_mode,
         require_sealed,
     )
-    part_key, artifact_failures = _bound_artifact_failures(
+    part_key, artifact_failures = _collect_bound_artifact_failures(
         authority, allowed_root, current_plan_path, allow_part_drift
     )
     failures.extend(artifact_failures)

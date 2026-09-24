@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-async def _commit_transaction(
+async def _run_commit_transaction(
     tool_ctx: ToolContext,
     resolved: str,
     paths: list[str],
@@ -446,7 +446,7 @@ async def commit_files(
             _start = time.monotonic()
 
             try:
-                response, failure_class = await _commit_transaction(
+                response, failure_class = await _run_commit_transaction(
                     tool_ctx, resolved, paths, message, self_revert_base
                 )
                 return _finish(response, failure_class=failure_class)

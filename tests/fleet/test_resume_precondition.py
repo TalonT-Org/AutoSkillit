@@ -221,12 +221,12 @@ class TestPrepareResumeIsUniversal:
         try:
             from autoskillit.server.tools import tools_fleet_dispatch
             from autoskillit.server.tools.tools_fleet_dispatch._handlers import (
-                _campaign_precondition,
+                _resolve_campaign_precondition,
             )
         except ImportError:
             pytest.skip("server.tools not importable in this environment")
         self._assert_function_calls_prepare_resume(
-            _campaign_precondition, "_campaign_precondition"
+            _resolve_campaign_precondition, "_resolve_campaign_precondition"
         )
         import ast as _ast
 
@@ -234,7 +234,7 @@ class TestPrepareResumeIsUniversal:
         assert any(
             isinstance(node, _ast.Call)
             and isinstance(node.func, _ast.Name)
-            and node.func.id == "_campaign_precondition"
+            and node.func.id == "_resolve_campaign_precondition"
             for node in _ast.walk(dispatch_tree)
         )
 

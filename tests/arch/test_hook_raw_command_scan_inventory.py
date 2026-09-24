@@ -271,20 +271,13 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
             "interpreter_invokes",
             "tokenize_command_segments",
         ),
-        # git_ops_guard.py's preflight outer-segment/nested-payload tokenization,
-        # unchanged since Part A (its structural_mutation/_raw_target_mutations
-        # inputs were migrated to live_command_text; these two calls are the
-        # sanctioned tokenizer entry points feeding the per-segment cd/git
-        # classification loop and the additional_segments builder).
+        # git_ops_guard.py tokenizes outer and nested payload segments for its
+        # per-segment cd/git classification. evaluated_payloads supplies each
+        # nested payload's consumer index so its owner is preserved.
         (
             "hooks/guards/git_ops_guard.py",
             "_preflight_segments",
             "tokenize_command_segments",
-        ),
-        (
-            "hooks/guards/git_ops_guard.py",
-            "_preflight_segments",
-            "tokenize_shell_payload_segments",
         ),
         # compose_pr_body_guard.py -- per-evaluated-payload segmentation
         # (Part B 2.10): `all_evaluated_segments` flattens every payload's

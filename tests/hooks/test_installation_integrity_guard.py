@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.hooks._runtime import UNRESOLVED_WRITE_TARGET_REMEDIATION
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
@@ -66,6 +67,77 @@ def test_blocks_install_tree_bash_writes(tmp_path: Path, command_template: str) 
 
     assert code == 0
     assert _decision(stdout) == "deny"
+
+
+def test_blocks_git_checkout_restore_into_install_tree(tmp_path: Path) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/x.py"
+    code, stdout = _run(_bash(f"git checkout main -- {target}"))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "sudo git checkout -- {target}",
+        "FOO=bar git checkout -- {target}",
+        "timeout 30 patch {target} /tmp/p.diff",
+    ],
+)
+def test_blocks_prefixed_install_tree_writes(tmp_path: Path, command_template: str) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/x.py"
+    code, stdout = _run(_bash(command_template.format(target=target)))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_allows_wrapped_write_outside_install_tree(tmp_path: Path) -> None:
+    code, stdout = _run(_bash(f"timeout 30 tee {tmp_path / 'outside.txt'}"))
+
+    assert code == 0
+    assert stdout == ""
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "echo x > >(tee {target})",
+        "sed --in-place=bak 's/a/b/' {target}",
+    ],
+)
+def test_blocks_process_substitution_install_tree_write(
+    tmp_path: Path, command_template: str
+) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/x.py"
+    code, stdout = _run(_bash(command_template.format(target=target)))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_unresolved_deny_message_names_literal_remediation() -> None:
+    code, stdout = _run(_bash('F=x; echo > "$F"'))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        UNRESOLVED_WRITE_TARGET_REMEDIATION
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
 
 
 @pytest.mark.parametrize("tool_name", ["Write", "Edit"])

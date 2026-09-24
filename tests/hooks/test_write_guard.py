@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.hook_registry import PROTECTION_WAIVERS
+from autoskillit.hooks._runtime import UNRESOLVED_WRITE_TARGET_REMEDIATION
 from autoskillit.hooks.guards import write_guard
 from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
@@ -512,6 +513,29 @@ class TestWriteGuardBashBypass:
         _assert_installation_floor_denies(tmp_path)
 
 
+@pytest.mark.parametrize("command", ['echo x > "$F"', 'cp a "$F"'])
+def test_denies_unresolved_bash_write_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, command: str
+) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(tmp_path / "allowed"))
+
+    result = _run_hook(_build_bash_event(command))
+
+    output = json.loads(result)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert UNRESOLVED_WRITE_TARGET_REMEDIATION in output["permissionDecisionReason"]
+
+
+def test_allows_literal_redirect_inside_prefix(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(tmp_path / "allowed"))
+
+    result = _run_hook(_build_bash_event(f"echo x > {tmp_path / 'allowed/f.txt'}"))
+
+    assert result == ""
+
+
 _ECHO_REDIRECT_INNER = "echo x > /outside/redirect-target.txt"
 
 # These inert shapes carry their OWN real write target on the opening line
@@ -604,86 +628,85 @@ class TestWriteGuardStdinLiteralConsumerAllow:
 
 
 class TestExtractBashWriteTargets:
-    """Unit tests for _extract_bash_write_targets -- the two-phase detect+extract logic."""
+    """Unit tests for the write target scan returned by _extract_bash_write_targets."""
 
     def test_stderr_redirect_to_dev_null_not_blocked(self):
         """2>/dev/null should not produce a blocking target."""
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("gh auth status 2>/dev/null")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_stderr_redirect_with_space_not_blocked(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("gh auth status 2> /dev/null")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_stdout_to_dev_null_not_blocked(self):
         """>/dev/null is stdout redirect to a pseudo-device -- not a real file write."""
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("echo foo > /dev/null")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_combined_redirect_not_blocked(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("cmd > /dev/null 2>&1")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_fd3_redirect_to_dev_null_not_blocked(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("cmd 3>/dev/null")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_tee_dev_null_not_blocked(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("cmd | tee /dev/null")
-        assert result is None or result == []
+        assert not result.targets
 
     def test_fd_redirect_to_real_path_detected(self):
         """2>/tmp/steal.log is a real file write -- must be detected and blocked."""
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("exec 2>/tmp/steal.log")
-        assert result == ["/tmp/steal.log"]
+        assert list(result.targets) == ["/tmp/steal.log"]
 
     def test_fd_redirect_to_real_path_with_space_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("cmd 2> /tmp/output.log")
-        assert result == ["/tmp/output.log"]
+        assert list(result.targets) == ["/tmp/output.log"]
 
     def test_real_file_write_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("echo secret > /tmp/leak.txt")
-        assert result == ["/tmp/leak.txt"]
+        assert list(result.targets) == ["/tmp/leak.txt"]
 
     def test_sed_inplace_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("sed -i 's/x/y/' /clone/src/main.py")
-        assert result == ["/clone/src/main.py"]
+        assert list(result.targets) == ["/clone/src/main.py"]
 
     def test_non_write_command_returns_none(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("grep foo /clone/src/main.py")
-        assert result is None
+        assert not result.has_write
 
-    def test_three_way_return_contract(self):
-        """Verify the None / [] / [paths] contract."""
+    def test_scan_status_distinguishes_nonwrite_filtered_and_real_target(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
-        assert _extract_bash_write_targets("ls -la") is None
+        assert not _extract_bash_write_targets("ls -la").has_write
         result_filtered = _extract_bash_write_targets("echo x > /dev/null")
-        assert result_filtered == []
+        assert result_filtered.has_write and not result_filtered.targets
         result_real = _extract_bash_write_targets("echo x > /tmp/out.txt")
-        assert result_real == ["/tmp/out.txt"]
+        assert list(result_real.targets) == ["/tmp/out.txt"]
 
     @pytest.mark.parametrize(
         "command",
@@ -700,7 +723,7 @@ class TestExtractBashWriteTargets:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets(command)
-        assert result is None or result == [], f"Should not detect writes in: {command}"
+        assert not result.targets, f"Should not detect real file targets in: {command}"
 
     @pytest.mark.parametrize(
         "command,expected_targets",
@@ -729,10 +752,10 @@ class TestExtractBashWriteTargets:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets(command)
-        assert result is not None
+        assert result.has_write
         for expected in expected_targets:
-            assert expected in result, f"Expected {expected} in result {result}"
-        for path in result:
+            assert expected in result.targets, f"Expected {expected} in result {result}"
+        for path in result.targets:
             assert not path.endswith(")"), f"Path should not end with ')': {path}"
             assert not path.endswith("`"), f"Path should not end with backtick: {path}"
             assert not path.endswith("}"), f"Path should not end with '}}': {path}"
@@ -1019,8 +1042,7 @@ class TestRelativePathResolution:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
-        assert result is not None
-        assert "/workspace/tests/foo.py" in result
+        assert "/workspace/tests/foo.py" in result.targets
 
     def test_relative_rm_path_resolved_against_cwd(self, monkeypatch: pytest.MonkeyPatch):
         """rm with relative path should be resolved against AUTOSKILLIT_CWD."""
@@ -1028,8 +1050,7 @@ class TestRelativePathResolution:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("rm tests/foo.py")
-        assert result is not None
-        assert "/workspace/tests/foo.py" in result
+        assert "/workspace/tests/foo.py" in result.targets
 
     def test_relative_path_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
         """Relative path within the allowed prefix should resolve and be allowed."""
@@ -1037,17 +1058,17 @@ class TestRelativePathResolution:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 's/x/y/' .autoskillit/temp/skill/output.txt")
-        assert result is not None
-        assert "/workspace/.autoskillit/temp/skill/output.txt" in result
+        assert "/workspace/.autoskillit/temp/skill/output.txt" in result.targets
 
-    def test_no_cwd_env_skips_relative_resolution(self, monkeypatch: pytest.MonkeyPatch):
-        """Without AUTOSKILLIT_CWD, relative paths are not resolved (fail-open)."""
+    def test_no_cwd_env_makes_relative_target_unresolved(self, monkeypatch: pytest.MonkeyPatch):
+        """Without AUTOSKILLIT_CWD, a relative write target is unresolved."""
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
-        assert result is not None
-        assert result == []
+        assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 class TestInterpreterRelativePathResolution:
@@ -1192,7 +1213,7 @@ class TestWriteGuardGhCommands:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("gh api --method patch /repos/Owner/Repo/pulls/123")
-        assert result is None or result == []
+        assert not result.has_write
 
 
 class TestExtractBashWriteTargetsNewFamilies:
@@ -1215,7 +1236,7 @@ class TestExtractBashWriteTargetsNewFamilies:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets(cmd)
-        assert result == expected_targets
+        assert list(result.targets) == expected_targets
 
     @pytest.mark.parametrize(
         "cmd",
@@ -1231,27 +1252,25 @@ class TestExtractBashWriteTargetsNewFamilies:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets(cmd)
-        assert result is None or result == []
+        assert not result.has_write
 
     def test_git_checkout_dash_dash_extracted(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("git checkout -- /clone/src/main.py")
-        assert result is not None
-        assert "/clone/src/main.py" in result
+        assert "/clone/src/main.py" in result.targets
 
     def test_git_reset_hard_allowed_no_path(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("git reset --hard HEAD")
-        assert result is None or result == []
+        assert result.has_write and result.targets == ()
 
     def test_git_with_flag_prefix_checkout_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("git -C /repo checkout -- /clone/src/main.py")
-        assert result is not None
-        assert "/clone/src/main.py" in result
+        assert "/clone/src/main.py" in result.targets
 
     def test_git_namespace_flag_before_checkout_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
@@ -1259,14 +1278,13 @@ class TestExtractBashWriteTargetsNewFamilies:
         result = _extract_bash_write_targets(
             "git --namespace refs/foo checkout -- /clone/src/main.py"
         )
-        assert result is not None
-        assert "/clone/src/main.py" in result
+        assert "/clone/src/main.py" in result.targets
 
     def test_git_with_flag_prefix_reset_hard_detected(self):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("git -C /repo reset --hard")
-        assert result is not None
+        assert result.has_write and result.targets == ()
 
 
 class TestRedirectRelativePathResolution:
@@ -1277,8 +1295,7 @@ class TestRedirectRelativePathResolution:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("echo foo > output.txt")
-        assert result is not None
-        assert "/workspace/output.txt" in result
+        assert "/workspace/output.txt" in result.targets
 
     def test_relative_redirect_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
@@ -1295,12 +1312,14 @@ class TestRedirectRelativePathResolution:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_no_cwd_relative_redirect_fails_open(self, monkeypatch: pytest.MonkeyPatch):
+    def test_no_cwd_relative_redirect_is_unresolved(self, monkeypatch: pytest.MonkeyPatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets("echo foo > output.txt")
-        assert result is None
+        assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 class TestGhCommandRedirectChecking:
@@ -1326,8 +1345,7 @@ class TestGhCommandRedirectChecking:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("gh pr diff 123 > output.txt")
-        assert result is not None
-        assert "/workspace/output.txt" in result
+        assert "/workspace/output.txt" in result.targets
 
     def test_gh_with_redirect_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
@@ -1367,7 +1385,7 @@ class TestWriteGuardFdRedirectImmunity:
         else:
             monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets(redirect_form)
-        assert result is None or result == [], (
+        assert not result.targets, (
             f"fd-redirect '{redirect_form}' with CWD='{cwd}' produced spurious targets: {result}"
         )
 
@@ -1380,14 +1398,14 @@ class TestWriteGuardVerbFdRedirect:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("tee 2>&1")
-        assert result == []
+        assert result.has_write and result.targets == ()
 
     def test_sed_with_only_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 2>&1")
-        assert result == []
+        assert result.has_write and result.targets == ()
 
     def test_sed_with_sub_pattern_and_fd_redirect_treats_pattern_as_target(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1396,7 +1414,7 @@ class TestWriteGuardVerbFdRedirect:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 's/x/y/' 2>&1")
-        assert result is not None and len(result) > 0, (
+        assert result.targets, (
             "sed substitution pattern is indistinguishable from a filename — "
             "conservative guard should treat it as a write target"
         )
@@ -1408,8 +1426,7 @@ class TestWriteGuardVerbFdRedirect:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 's/x/y/' /outside/file.py 2>&1")
-        assert result is not None
-        assert "/outside/file.py" in result
+        assert "/outside/file.py" in result.targets
 
     def test_mv_with_real_path_and_fd_redirect_detects_real_path(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1418,8 +1435,7 @@ class TestWriteGuardVerbFdRedirect:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("mv /src /dst 2>&1")
-        assert result is not None
-        assert "/dst" in result
+        assert "/dst" in result.targets
 
 
 class TestWriteGuardCrossProductMatrix:
@@ -1459,10 +1475,9 @@ class TestWriteGuardCrossProductMatrix:
         cmd = cmd_template.format(path=path_type)
         result = _extract_bash_write_targets(cmd)
         if expected_resolved is None:
-            assert result is None or result == [], f"Expected fail-open for: {cmd}, got: {result}"
+            assert result.unresolved, f"Expected unresolved target for: {cmd}, got: {result}"
         else:
-            assert result is not None, f"Expected write detection for: {cmd}"
-            assert expected_resolved in result, (
+            assert expected_resolved in result.targets, (
                 f"Expected {expected_resolved} in {result} for: {cmd}"
             )
 
@@ -1475,19 +1490,20 @@ class TestShellVariableWriteGuardIntegration:
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
         monkeypatch.setenv("MY_DIR", "/workspace/.autoskillit/temp/review-pr")
         result = _extract_bash_write_targets('echo x > "$MY_DIR/out.txt"')
-        assert result is not None
-        assert "/workspace/.autoskillit/temp/review-pr/out.txt" in result
+        assert "/workspace/.autoskillit/temp/review-pr/out.txt" in result.targets
 
-    def test_redirect_with_unknown_var_failopen(self, monkeypatch):
+    def test_redirect_with_unknown_var_is_unresolved(self, monkeypatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
         monkeypatch.delenv("UNKNOWN_DIR", raising=False)
         result = _extract_bash_write_targets('echo x > "$UNKNOWN_DIR/out.txt"')
-        assert result is None or result == []
+        assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
-    def test_redirect_with_inline_assignment_failopen(self, monkeypatch):
+    def test_redirect_with_inline_assignment_is_unresolved(self, monkeypatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
@@ -1498,7 +1514,9 @@ class TestShellVariableWriteGuardIntegration:
             ' && echo x > "$REVIEW_OUTPUT_DIR/out.txt"'
         )
         result = _extract_bash_write_targets(cmd)
-        assert result is None or result == []
+        assert result.unresolved
+        assert result.has_write
+        assert result.targets == ()
 
 
 try:

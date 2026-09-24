@@ -182,11 +182,22 @@ _WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
 WRITE_VERBS: frozenset[str] = frozenset(
     {"sed", "tee", "mv", "cp", "patch", "install", "rm", "unlink"}
 )
+_PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
+    {"/dev/null", "/dev/zero", "/dev/stdout", "/dev/stderr", "/dev/stdin"}
+)
+UNRESOLVED_WRITE_TARGET_REMEDIATION = (
+    "Write targets must be literal paths: substitute variable, command-substitution, "
+    "backtick and tilde values into the command text (e.g. run `date +%Y-%m-%d_%H%M%S` "
+    "once and paste the printed value) instead of writing through them."
+)
 
 
-# Flag constants and shell-substitution regexes moved to _flags.py; output-redirect
-# partition machinery moved to _output_redirect.py. All re-exported below through
-# the existing block B bootstrap.
+@dataclass(frozen=True, slots=True)
+class WriteTargetScan:
+    targets: tuple[str, ...]
+    unresolved: bool
+    parseable: bool
+    has_write: bool
 
 
 class SearchPattern(Protocol):
@@ -231,7 +242,7 @@ def non_flag_operands(args: list[str]) -> list[str]:
 
 def _write_verb_operands(verb: str, segment: list[str], operands: list[str]) -> list[str]:
     if verb == "sed":
-        has_inplace = any(token.startswith("-i") or token == "--in-place" for token in segment[1:])
+        has_inplace = any(token.startswith(("-i", "--in-place")) for token in segment[1:])
         if not has_inplace:
             return []
         return operands[-1:]
@@ -314,6 +325,29 @@ def _consume_env(start: int, segment: list[str]) -> int:
             continue
         break
     return i
+
+
+def _env_chdir_value(start: int, segment: list[str]) -> str | None:
+    """Return the last chdir option in one env prefix, if present."""
+    end = _consume_env(start, segment)
+    chdir: str | None = None
+    i = start
+    while i < end:
+        token = segment[i]
+        if token in {"-C", "--chdir"} and i + 1 < end:
+            chdir = segment[i + 1]
+            i += 2
+        elif token.startswith("--chdir="):
+            chdir = token.partition("=")[2]
+            i += 1
+        elif token.startswith("-C") and token != "-C":
+            chdir = token[2:]
+            i += 1
+        elif token in _ENV_VALUE_FLAGS and i + 1 < end:
+            i += 2
+        else:
+            i += 1
+    return chdir
 
 
 def _consume_wrapper_options(start: int, segment: list[str]) -> int:
@@ -598,9 +632,6 @@ if TYPE_CHECKING:
         extract_redirect_targets_with_status,
         resolve_write_target,
     )
-    from autoskillit.hooks._classification._output_redirect import (
-        extract_redirect_targets as _extract_redirect_targets_impl,
-    )
 else:
     if __package__:
         from .._classification import _flags, _interpreters, _output_redirect
@@ -656,7 +687,6 @@ else:
     _partition_output_redirect_indices = _output_redirect._partition_output_redirect_indices
     _partition_output_redirects = _output_redirect._partition_output_redirects
     _select_executable_argv_tokens = _output_redirect._select_executable_argv_tokens
-    _extract_redirect_targets_impl = _output_redirect.extract_redirect_targets
     extract_redirect_targets_with_status = _output_redirect.extract_redirect_targets_with_status
     resolve_write_target = _output_redirect.resolve_write_target
 
@@ -670,6 +700,131 @@ def all_evaluated_segments(
     )
 
 
+# Value-taking git global flags, derived from _GIT_GLOBAL_FLAG_SPEC. A flag
+# missing from this set is misread below as a 1-token boolean skip.
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
+    flag for flag, arity in _GIT_GLOBAL_FLAG_SPEC.items() if arity == _FlagArity.VALUE
+)
+
+
+def _git_subcommand_index(argv: list[str], cwd: str) -> tuple[int, str, bool]:
+    """Find git's subcommand, applying global cwd and repository-layout flags."""
+    i = 1
+    layout_unknown = False
+    while i < len(argv) and argv[i].startswith("-"):
+        token = argv[i]
+        flag = _spec_key_for_token(token, _GIT_GLOBAL_FLAG_SPEC)
+        if flag not in _GIT_GLOBAL_FLAG_SPEC:
+            return len(argv), cwd, layout_unknown
+        value: str | None = None
+        if flag in _GIT_FLAG_WITH_VALUE:
+            if token == flag:
+                if i + 1 >= len(argv):
+                    return len(argv), cwd, layout_unknown
+                value = argv[i + 1]
+                i += 2
+            else:
+                value = token[len(flag) :]
+                if token.startswith("--"):
+                    value = value.removeprefix("=")
+                i += 1
+        else:
+            i += 1
+        if flag == "-C":
+            cwd = resolve_write_target(value or "", cwd) or ""
+        elif flag in {"--work-tree", "--git-dir"}:
+            layout_unknown = True
+    return i, cwd, layout_unknown
+
+
+def _wrapped_verb_cwd(segment: list[str], start: int, cwd: str) -> str:
+    """Resolve env chdir options for the executable without moving shell redirects."""
+    for index, token in enumerate(segment[:start]):
+        if token == "env":
+            chdir = _env_chdir_value(index + 1, segment)
+            if chdir is not None:
+                cwd = resolve_write_target(chdir, cwd) or ""
+    return cwd
+
+
+def _git_write_targets(
+    argv: list[str], cwd: str, prefix: list[str]
+) -> tuple[list[str], bool, bool]:
+    """Return git restoration targets, unresolved status, and write detection."""
+    subcommand_index, git_cwd, layout_unknown = _git_subcommand_index(argv, cwd)
+    if subcommand_index >= len(argv):
+        return [], False, False
+    subcommand = argv[subcommand_index]
+    options = argv[subcommand_index + 1 :]
+    if subcommand == "reset" and "--hard" in options:
+        return [], False, True
+    if subcommand != "checkout" or "--" not in options:
+        return [], False, False
+
+    layout_unknown |= any(
+        _is_posix_assignment(token) and token.partition("=")[0] in {"GIT_WORK_TREE", "GIT_DIR"}
+        for token in prefix
+    )
+    targets: list[str] = []
+    unresolved = False
+    for pathspec in options[options.index("--") + 1 :]:
+        target = resolve_write_target(pathspec, "" if layout_unknown else git_cwd)
+        if target is None:
+            unresolved = True
+        else:
+            targets.append(target)
+    return targets, unresolved, True
+
+
+def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
+    """Classify literal write targets and unresolved writes in evaluated shell commands."""
+    segments = all_evaluated_segments(command, include_process_substitutions=True)
+    if segments is None:
+        return WriteTargetScan((), False, False, False)
+
+    targets: list[str] = []
+    unresolved = False
+    has_write = False
+    shell_cwd = cwd
+    for segment in segments:
+        redirect_targets, redirect_unresolved = extract_redirect_targets_with_status(
+            segment, shell_cwd
+        )
+        unresolved |= redirect_unresolved
+        has_write |= bool(redirect_targets or redirect_unresolved)
+
+        start = _verb_start_index(segment)
+        if start is not None:
+            argv = segment[start:]
+            verb = argv[0]
+            if verb == "cd":
+                shell_cwd = updated_execution_cwd(argv, shell_cwd)
+            elif not is_gh_command(segment):
+                verb_cwd = _wrapped_verb_cwd(segment, start, shell_cwd)
+                if verb in WRITE_VERBS:
+                    verb_targets, verb_unresolved = extract_write_verb_targets(
+                        verb, argv, verb_cwd
+                    )
+                    targets.extend(verb_targets)
+                    unresolved |= verb_unresolved
+                    has_write = True
+                elif verb == "git" or verb.endswith("/git"):
+                    git_targets, git_unresolved, git_has_write = _git_write_targets(
+                        argv, verb_cwd, segment[:start]
+                    )
+                    targets.extend(git_targets)
+                    unresolved |= git_unresolved
+                    has_write |= git_has_write
+        targets.extend(redirect_targets)
+
+    return WriteTargetScan(
+        tuple(dict.fromkeys(path for path in targets if path not in _PSEUDO_DEVICE_PATHS)),
+        unresolved,
+        True,
+        has_write,
+    )
+
+
 def live_command_text(command: str) -> str:
     """Return an occurrence-aware live-text projection of *command*."""
     return _live_command_text_impl(command)
@@ -678,8 +833,3 @@ def live_command_text(command: str) -> str:
 def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
     """Return True when a PYTHON-consumer payload resolves to invoking *target*."""
     return _interpreter_invokes_impl(command, target=target)
-
-
-def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
-    """Extract resolved redirect target paths from already-tokenized input."""
-    return _extract_redirect_targets_impl(tokens, cwd=cwd)

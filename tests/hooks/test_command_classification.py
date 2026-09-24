@@ -30,7 +30,7 @@ from autoskillit.hooks._runtime._command_classification import (
     evaluated_payloads,
     extract_git_subcommand_and_flags,
     extract_interpreter_write_paths,
-    extract_redirect_targets,
+    extract_redirect_targets_with_status,
     has_interpreter_write,
     interpreter_invokes,
     is_allowed_protected_path_metadata_command,
@@ -1192,7 +1192,78 @@ class TestExtractInterpreterWritePathsMulti:
         assert extract_interpreter_write_paths(cmd) == ["/clone/temp/out.bin"]
 
 
-class TestExtractRedirectTargets:
+class TestScanWriteTargets:
+    @pytest.mark.parametrize(
+        ("command", "targets", "unresolved", "parseable", "has_write"),
+        [
+            ("echo hi", (), False, True, False),
+            ("echo x > out.txt", ("{cwd}/out.txt",), False, True, True),
+            ("cp a out.txt", ("{cwd}/out.txt",), False, True, True),
+            ("echo x > /dev/null", (), False, True, True),
+            ("echo x > >(tee /tmp/p.txt)", ("/tmp/p.txt",), False, True, True),
+            ("sed --in-place=bak 's/a/b/' /tmp/f", ("/tmp/f",), False, True, True),
+            ("git checkout main -- src/x.py", ("{cwd}/src/x.py",), False, True, True),
+            ("git reset --hard", (), False, True, True),
+            ("gh issue edit 1 --body-file b.md", (), False, True, False),
+            ("cd sub && echo x > out.txt", ("{cwd}/sub/out.txt",), False, True, True),
+            ('echo x > "$ASK_UNSET_RWT"', (), True, True, True),
+            ('cp a "$ASK_UNSET_RWT"', (), True, True, True),
+            ("echo 'unterminated", (), False, False, False),
+            ('cd "$ASK_UNSET_RWT" && echo x > rel.txt', (), True, True, True),
+            (
+                'cd "$ASK_UNSET_RWT" && echo x > /tmp/abs.txt',
+                ("/tmp/abs.txt",),
+                False,
+                True,
+                True,
+            ),
+            ("timeout 30 tee /tmp/o.txt", ("/tmp/o.txt",), False, True, True),
+            ("nice -n 5 tee /tmp/o.txt", ("/tmp/o.txt",), False, True, True),
+            ("env CACHE_DIR=/tmp tee /tmp/o.txt", ("/tmp/o.txt",), False, True, True),
+            ("sudo --user=root rm /tmp/f", ("/tmp/f",), False, True, True),
+            ("timeout 30 patch /tmp/f p.diff", ("/tmp/f",), False, True, True),
+            ("sudo git checkout -- /tmp/f", ("/tmp/f",), False, True, True),
+            ("FOO=bar git checkout -- ../out/f", ("{cwd}/../out/f",), False, True, True),
+            ("git -C /tmp/d checkout -- rel.py", ("/tmp/d/rel.py",), False, True, True),
+            ("git -C /tmp/d -C sub checkout -- rel.py", ("/tmp/d/sub/rel.py",), False, True, True),
+            ("git --work-tree=/tmp/w checkout -- rel.py", (), True, True, True),
+            ("env --chdir /tmp/d tee rel.txt", ("/tmp/d/rel.txt",), False, True, True),
+        ],
+    )
+    def test_scan_contract(
+        self,
+        command: str,
+        targets: tuple[str, ...],
+        unresolved: bool,
+        parseable: bool,
+        has_write: bool,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("ASK_UNSET_RWT", raising=False)
+        cwd = str(tmp_path)
+        expected = command_classification.WriteTargetScan(
+            targets=tuple(target.format(cwd=cwd) for target in targets),
+            unresolved=unresolved,
+            parseable=parseable,
+            has_write=has_write,
+        )
+
+        assert command_classification.scan_write_targets(command, cwd) == expected
+
+    def test_env_chdir_applies_to_verb_but_not_shell_redirect(self, tmp_path: Path) -> None:
+        cwd = str(tmp_path)
+        scan = command_classification.scan_write_targets(
+            "env --chdir /tmp/d tee x.txt > out.txt", cwd
+        )
+
+        assert set(scan.targets) == {"/tmp/d/x.txt", str(tmp_path / "out.txt")}
+        assert scan.unresolved is False
+        assert scan.parseable is True
+        assert scan.has_write is True
+
+
+class TestExtractRedirectTargetsWithStatus:
     @pytest.mark.parametrize(
         "tokens,expected",
         [
@@ -1245,8 +1316,8 @@ class TestExtractRedirectTargets:
             "fd_dup_with_real_redirect",
         ],
     )
-    def test_extract_redirect_targets(self, tokens, expected):
-        assert extract_redirect_targets(tokens) == expected
+    def test_extract_redirect_targets_with_status(self, tokens, expected):
+        assert extract_redirect_targets_with_status(tokens)[0] == expected
 
 
 class TestResolveWriteTarget:
@@ -1364,9 +1435,7 @@ class TestExtractRedirectTargetsCwd:
         ],
     )
     def test_extract_redirect_targets_with_cwd(self, tokens, cwd, expected):
-        from autoskillit.hooks._runtime._command_classification import extract_redirect_targets
-
-        assert extract_redirect_targets(tokens, cwd) == expected
+        assert extract_redirect_targets_with_status(tokens, cwd)[0] == expected
 
 
 class TestOutputRedirectPartition:
@@ -1468,10 +1537,6 @@ class TestOutputRedirectPartition:
         )
 
     def test_extract_redirect_targets_with_status_uses_dataclass(self) -> None:
-        from autoskillit.hooks._runtime._command_classification import (
-            extract_redirect_targets_with_status,
-        )
-
         # Resolved-target branch: `>/tmp/out` resolves cleanly.
         assert extract_redirect_targets_with_status(["cmd", ">/tmp/out"], cwd="/work") == (
             ["/tmp/out"],

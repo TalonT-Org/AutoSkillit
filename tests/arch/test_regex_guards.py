@@ -139,11 +139,11 @@ def test_redirect_patterns_exclude_fd_redirects():
 
 
 def test_write_guard_has_safe_path_filtering():
-    """write_guard must filter pseudo-device paths from extracted targets."""
-    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
-    assert "/dev/null" in source, "write_guard.py must contain a safe-path set including /dev/null"
-    assert "_PSEUDO_DEVICE_PATHS" in source, (
-        "write_guard.py must define _PSEUDO_DEVICE_PATHS constant"
+    """The shared write-target scan must filter pseudo-device paths."""
+    source = (SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py").read_text()
+    assert "/dev/null" in source, "the shared scan must exclude /dev/null"
+    assert "path not in _PSEUDO_DEVICE_PATHS" in source, (
+        "scan_write_targets must filter pseudo-device targets"
     )
 
 
@@ -235,10 +235,10 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
     """Step 9 (#4733) regression: after decomposing the git-command
     classification primitives into _git_command_classification, the
     orchestrator (git_ops_guard.py) MUST continue to use the flag-spec
-    engine (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) and the segment
-    tokenizers (tokenize_command_segments, tokenize_shell_payload_segments,
-    command_verb_and_args, extract_interpreter_command_payloads,
-    extract_interpreter_write_paths, extract_redirect_targets) from
+    engine (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC), command tokenizer,
+    evaluated payloads with consumer provenance, and write-target scan
+    (tokenize_command_segments, command_verb_and_args, evaluated_payloads,
+    StdinConsumer, extract_interpreter_write_paths, scan_write_targets) from
     _command_classification - the same shared primitives that
     test_command_classifying_guards_use_shared_primitive enforces for
     write_guard.py, pr_create_guard.py, etc. The new sibling must NOT
@@ -257,19 +257,19 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
             elif node.module == "_git_command_classification":
                 imports_from_git_command_classification.extend(a.name for a in node.names)
 
-    # The orchestrator must keep using the flag-spec engine + segment tokenizers
+    # The orchestrator must keep using the flag-spec engine and shared parsing
     # from _command_classification. The minimal set is the engine pair
-    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the segment tokenizers
+    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the primitives
     # actually consumed by the orchestrator's handlers.
     required_command_classification = {
         "_consume_str_flag",
         "_GIT_GLOBAL_FLAG_SPEC",
         "tokenize_command_segments",
-        "tokenize_shell_payload_segments",
         "command_verb_and_args",
-        "extract_interpreter_command_payloads",
+        "evaluated_payloads",
+        "StdinConsumer",
         "extract_interpreter_write_paths",
-        "extract_redirect_targets",
+        "scan_write_targets",
     }
     missing = required_command_classification - set(imports_from_command_classification)
     assert not missing, (
@@ -288,11 +288,11 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
         "_GIT_GLOBAL_FLAG_SPEC",
         "_consume_str_flag",
         "command_verb_and_args",
-        "extract_interpreter_command_payloads",
+        "evaluated_payloads",
+        "StdinConsumer",
         "extract_interpreter_write_paths",
-        "extract_redirect_targets",
+        "scan_write_targets",
         "tokenize_command_segments",
-        "tokenize_shell_payload_segments",
     }
     leaked = forbidden & set(imports_from_git_command_classification)
     assert not leaked, (
@@ -332,11 +332,14 @@ def test_guard_handles_bypass_family(guard_file: str, bypass_family: str) -> Non
 
 
 def test_write_guard_uses_tokenization() -> None:
-    """write_guard.py must use the structural tokenization layer from _command_classification."""
-    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
-    assert "tokenize_command_segments" in source or "is_gh_command" in source, (
-        "write_guard.py must import and use the structural tokenization layer from "
-        "_command_classification (tokenize_command_segments or is_gh_command)"
+    """write_guard must use the shared scan's evaluated command segments."""
+    guard_source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
+    scan_source = (SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py").read_text()
+    assert "scan_write_targets(" in guard_source, (
+        "write_guard.py must call the shared write-target scan"
+    )
+    assert "all_evaluated_segments(" in scan_source, (
+        "the shared write-target scan must use structural command parsing"
     )
 
 
@@ -347,7 +350,7 @@ def test_command_classification_exports_tokenization() -> None:
         "tokenize_command_segments",
         "command_verb",
         "is_gh_command",
-        "extract_redirect_targets",
+        "scan_write_targets",
         "strip_heredoc_bodies",
         "all_evaluated_segments",
         "live_command_text",

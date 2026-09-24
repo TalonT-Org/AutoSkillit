@@ -1020,6 +1020,88 @@ class TestCheckedOutRefAmbiguity:
         assert _is_denied(out)
 
 
+class TestCheckedOutRefWriteTargets:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'echo x > "$GIT_TARGET"',
+            'cd "$UNSET_DIR" && echo y > rel.txt',
+            "cd - && dd if=/dev/zero of=rel.bin",
+        ],
+    )
+    def test_unresolved_write_targets_fail_closed(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        command: str,
+    ) -> None:
+        monkeypatch.delenv("GIT_TARGET", raising=False)
+        monkeypatch.delenv("UNSET_DIR", raising=False)
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "dd if=/dev/zero of=rel.bin && cd -",
+            "bash -c 'dd if=/dev/zero of=rel.bin' && cd -",
+        ],
+    )
+    def test_write_before_unknown_cwd_is_allowed(
+        self, linked_repo: dict[str, Path | str], command: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "cd - && git log",
+            "cd - && git status",
+            "cd - && git diff",
+            "cd - && git show HEAD",
+        ],
+    )
+    def test_read_only_git_after_failed_cd_is_allowed(
+        self, linked_repo: dict[str, Path | str], command: str
+    ) -> None:
+        """Read-only git verbs must not be denied just because a preceding
+        cd failed (cwd resolves to empty). _deny_outer_git_mutations only
+        escalates when the subcommand is a known ref-mutating one.
+        """
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "cd - && git push origin develop",
+            "cd - && git reset --hard",
+            "cd - && git checkout .",
+        ],
+    )
+    def test_mutation_git_after_failed_cd_is_denied(
+        self, linked_repo: dict[str, Path | str], command: str
+    ) -> None:
+        """Mutation git verbs after a failed cd must escalate to deny —
+        the segment cannot be routed to a repository with confidence, and
+        a bare git mutation has no shell-write surface for
+        scan_write_targets to catch.
+        """
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+
 class TestCheckedOutRefAllows:
     @pytest.mark.parametrize(
         "command_template",

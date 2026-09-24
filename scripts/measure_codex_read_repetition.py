@@ -37,8 +37,6 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, BinaryIO, NamedTuple
 
-import zstandard
-
 from autoskillit.core import (
     CODEX_SESSIONS_SUBDIR,
     default_log_dir,
@@ -73,7 +71,7 @@ _READ_VERBS: dict[str, Mapping[str, _FlagArity]] = {
         **dict.fromkeys(
             "-n -l -S -i -o -F -U -c -u -H -N -w -v --line-number --files --hidden "
             "--no-ignore --fixed-strings --pcre2 --no-filename --no-heading --ignore-case "
-            "--smart-case".split(),
+            "--smart-case --files-with-matches".split(),
             _FlagArity.BOOLEAN,
         ),
     },
@@ -97,6 +95,7 @@ class RolloutRecords(NamedTuple):
     commands: list[str]
     policy_versions: frozenset[int]
     unclassified: int
+    malformed_lines: int
 
 
 class BoundedRead(NamedTuple):
@@ -109,13 +108,23 @@ class _FlagScan(NamedTuple):
     unknown: bool
 
 
-def _response_item_payloads(handle: BinaryIO) -> Iterator[dict[str, Any]]:
+def _response_item_payloads(handle: BinaryIO, drop_counter: list[int]) -> Iterator[dict[str, Any]]:
+    """Stream response-item payloads, counting JSONL-parse drops on *drop_counter*.
+
+    Previously this function silently continued past UnicodeDecodeError /
+    json.JSONDecodeError, so corpus corruption produced no observable signal.
+    The drop count is now exposed via RolloutRecords.malformed_lines so operators
+    can detect a corpus-corruption spike. ``drop_counter`` is a single-element
+    list used as a mutable cell — generator-local mutation propagates to the
+    caller without changing the iterator's return type.
+    """
     for raw in handle:
         if not raw.strip():
             continue
         try:
             record = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError):
+            drop_counter[0] += 1
             continue
         if not isinstance(record, dict) or record.get("type") != "response_item":
             continue
@@ -137,20 +146,52 @@ def _message_text(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _extract_function_call_cmd(raw_args: Any) -> str | None:
-    if not raw_args:
-        return None
+def _extract_function_call_cmd_with_diagnostic(
+    raw_args: Any,
+) -> _FunctionCallExtraction:
+    """Extract a command string from function-call arguments, distinguishing
+    the absent-cmd case from a corrupted-JSON-arguments case.
+
+    Returns _FunctionCallExtraction.cmd=None for both cases, but sets
+    ``malformed_args=True`` only when the arguments failed to parse as JSON —
+    so aggregation can surface corrupted rollouts separately from legitimately
+    missing cmd fields.
+    """
+    if not raw_args or not isinstance(raw_args, str):
+        return _FunctionCallExtraction(cmd=None, malformed_args=False)
     try:
         parsed = json.loads(raw_args)
-    except (json.JSONDecodeError, TypeError):
-        return None
+    except json.JSONDecodeError:
+        return _FunctionCallExtraction(cmd=None, malformed_args=True)
     cmd = parsed.get("cmd") if isinstance(parsed, dict) else None
-    return cmd if isinstance(cmd, str) else None
+    return _FunctionCallExtraction(
+        cmd=cmd if isinstance(cmd, str) else None,
+        malformed_args=False,
+    )
+
+
+class _FunctionCallExtraction(NamedTuple):
+    """Distinct outcomes of extracting a cmd from function-call arguments."""
+
+    cmd: str | None
+    malformed_args: bool
 
 
 def _exec_call_commands(js: str) -> tuple[list[str], int]:
+    """Extract ``tools.exec_command({...})`` literal calls from a JS template string.
+
+    Returns ``(commands, unresolved)`` where ``unresolved`` counts the number
+    of exec-shaped records we could not turn into a command. Note the
+    asymmetry: when *no* exec-shaped record is found, we still return 1,
+    representing the input record as a whole being unresolvable. When one
+    or more records are found, the count reflects the unparseable subset.
+    Operators reading the report should treat ``unresolved`` as
+    'records we could not extract a cmd from' rather than 'commands
+    we could not parse' — the latter would require a different counting rule.
+    """
     calls = list(_EXEC_CALL_PAT.finditer(js))
     if not calls:
+        # No exec-shaped record at all: the input record itself is unresolvable.
         return [], 1
     commands: list[str] = []
     unresolved = 0
@@ -176,15 +217,18 @@ def read_rollout(path: Path) -> RolloutRecords:
     commands: list[str] = []
     policy_versions: set[int] = set()
     unclassified = 0
+    malformed_lines_cell: list[int] = [0]
     with _logical_rollout_reader(path) as handle:
-        for payload in _response_item_payloads(handle):
+        for payload in _response_item_payloads(handle, malformed_lines_cell):
             payload_type = payload.get("type")
             if payload_type == "message" and payload.get("role") != "assistant":
                 policy_versions.update(parse_intake_discipline_versions(_message_text(payload)))
             elif payload_type == "function_call" and payload.get("name") == "exec_command":
-                cmd = _extract_function_call_cmd(payload.get("arguments"))
-                if cmd:
-                    commands.append(cmd)
+                extracted = _extract_function_call_cmd_with_diagnostic(payload.get("arguments"))
+                if extracted.cmd:
+                    commands.append(extracted.cmd)
+                elif extracted.malformed_args:
+                    unclassified += 1
                 else:
                     unclassified += 1
             elif payload_type == "custom_tool_call" and payload.get("name") == "exec":
@@ -192,10 +236,15 @@ def read_rollout(path: Path) -> RolloutRecords:
                 if not isinstance(raw_input, str):
                     unclassified += 1
                 else:
-                    extracted, unresolved = _exec_call_commands(raw_input)
-                    commands.extend(extracted)
-                    unclassified += unresolved
-    return RolloutRecords(commands, frozenset(policy_versions), unclassified)
+                    js_commands, js_unresolved = _exec_call_commands(raw_input)
+                    commands.extend(js_commands)
+                    unclassified += js_unresolved
+    return RolloutRecords(
+        commands,
+        frozenset(policy_versions),
+        unclassified,
+        malformed_lines_cell[0],
+    )
 
 
 def _is_boolean_cluster(token: str, spec: Mapping[str, _FlagArity]) -> bool:
@@ -208,6 +257,9 @@ def _is_boolean_cluster(token: str, spec: Mapping[str, _FlagArity]) -> bool:
 
 
 def _leading_argv(segments: list[_CommandSegment]) -> list[str]:
+    # cwd="" is the documented sentinel meaning "do not anchor redirect targets
+    # against any path" — see resolve_write_target's ``if cwd:`` short-circuit.
+    # Required because _partition_output_redirects' cwd parameter has no default.
     argv = _partition_output_redirects(
         segments[0].tokens,
         cwd="",
@@ -277,7 +329,12 @@ def _bounded_files(
         case "rg":
             if "-n" not in flags and "--line-number" not in flags:
                 return None
-            pattern_flags = ("-e", "-f", "--regexp", "--file", "--files")
+            # Flags whose next token is a search pattern to be skipped from
+            # positionals (so it is not misidentified as the file target).
+            # Includes both --files and --files-with-matches: each makes rg
+            # print file names instead of pattern output, so any following
+            # positional is a path, not a pattern.
+            pattern_flags = ("-e", "-f", "--regexp", "--file", "--files", "--files-with-matches")
             return positionals if any(flag in flags for flag in pattern_flags) else positionals[1:]
         case _:
             return None
@@ -305,8 +362,19 @@ def classify_command(cmd: str) -> BoundedRead | None:
 def measure_rollout(rollout_path: Path) -> dict[str, Any]:
     try:
         records = read_rollout(rollout_path)
-    except (OSError, RuntimeError, zstandard.ZstdError):
-        return {"session": rollout_path.name, "unreadable": True}
+    except Exception as exc:  # noqa: BLE001 - operator-safety net: never abort a batch
+        # Preserve error type/message so operators investigating unreadable rollouts
+        # can distinguish 'truncated file' from 'permission denied' from 'zstd
+        # decompression failed'. Previously a narrow (OSError, RuntimeError,
+        # ZstdError) tuple swallowed these into a single unreadable=True boolean,
+        # while every other exception type (e.g., ValueError on a corrupt header)
+        # propagated and aborted the entire batch run.
+        return {
+            "session": rollout_path.name,
+            "unreadable": True,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        }
     if len(records.policy_versions) == 1:
         cohort = f"v{next(iter(records.policy_versions))}"
     elif records.policy_versions:
@@ -345,10 +413,18 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
     worst_overall: list[tuple[str, str, int]] = []
     total_unclassified = 0
     unreadable_rollout_count = 0
+    unreadable_errors: list[dict[str, str]] = []
     for path in rollout_paths:
         row = measure_rollout(path)
         if row.get("unreadable"):
             unreadable_rollout_count += 1
+            unreadable_errors.append(
+                {
+                    "session": row["session"],
+                    "error_type": row.get("error_type", "Unknown"),
+                    "error_message": row.get("error_message", ""),
+                }
+            )
             continue
         agg = cohorts.setdefault(
             row["cohort"],
@@ -378,6 +454,7 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
         "worst_offenders": worst_overall[:20],
         "unclassified_record_count": total_unclassified,
         "unreadable_rollout_count": unreadable_rollout_count,
+        "unreadable_errors": unreadable_errors,
     }
 
 

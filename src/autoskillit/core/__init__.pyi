@@ -1093,7 +1093,6 @@ from .types import LaunchAdapter as LaunchAdapter
 from .types import LaunchAdapterResult as LaunchAdapterResult
 from .types import LaunchContractError as LaunchContractError
 from .types import LaunchEvidenceDeferral as LaunchEvidenceDeferral
-from .types import launch_evidence_digest as launch_evidence_digest
 from .types import LaunchFallbackRoute as LaunchFallbackRoute
 from .types import LaunchPreparation as LaunchPreparation
 from .types import LaunchResolutionRequest as LaunchResolutionRequest
@@ -1419,11 +1418,11 @@ from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import adapt_session_invariant as adapt_session_invariant
 from .types import admit_anchor as admit_anchor
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
-from .types import classify_session_invariant as classify_session_invariant
 from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,
 )
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
+from .types import classify_session_invariant as classify_session_invariant
 from .types import client_serialized_char_len as client_serialized_char_len
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_audit_reference_identity as compute_audit_reference_identity
@@ -1473,6 +1472,7 @@ from .types import (
 )
 from .types import is_valid_github_review_operation_key as is_valid_github_review_operation_key
 from .types import is_valid_github_review_repository as is_valid_github_review_repository
+from .types import launch_evidence_digest as launch_evidence_digest
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )

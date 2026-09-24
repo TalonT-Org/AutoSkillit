@@ -34,8 +34,15 @@ def test_process_cleanup_result_serializes_survivor_evidence() -> None:
         "access_denied_pids": [102],
         "observation_complete": True,
         "identity_refused": True,
+        "escalated": False,
         "complete": False,
     }
+
+
+def test_process_cleanup_result_serializes_escalation() -> None:
+    result = ProcessCleanupResult(root_pid=101, escalated=True)
+
+    assert result.to_dict()["escalated"] is True
 
 
 @pytest.mark.parametrize(

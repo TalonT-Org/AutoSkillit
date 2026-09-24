@@ -11,26 +11,33 @@ guardian.
 from __future__ import annotations
 
 import json
+import math
 import os
 import signal
 import subprocess
 import sys
 import time
 from contextlib import suppress
+from pathlib import Path
 
 import psutil
 import pytest
+import structlog.testing
 
 import autoskillit.execution.evidence.linux_tracing as _patch_execution_linux_tracing
 import autoskillit.execution.process._lifecycle.owned_group as _patch_process_owned_group
+import autoskillit.execution.process._process_kill as _patch_process__process_kill
 import autoskillit.execution.process._process_tether as _patch_process__process_tether
 from autoskillit.config._config_dataclasses import ProcessTetherConfig
 from autoskillit.core import read_boot_id, read_starttime_ticks
 from autoskillit.execution import (
     DEFAULT_TETHER_CEILING_SECONDS,
-    INTERACTIVE_TETHER_CEILING_SECONDS,
+    TETHER_LEASE_RENEW_SECONDS,
+    TETHER_LEASE_SECONDS,
+    TETHER_SWEEP_INTERVAL_SECONDS,
     TetherSpec,
     probe_systemd_scope_available,
+    renew_tether,
     spawn_owned_process,
     sweep_orphaned_tethers,
     wrap_systemd_scope,
@@ -79,7 +86,7 @@ def _write_synthetic_tether(
     pidns_inode: int | None = None,
     workload_pid: int | None = None,
     workload_starttime_ticks: int | None = None,
-) -> object:
+) -> Path:
     """Build and durably write one tether record with sensible real-identity defaults."""
     record = TetherRecord(
         child_pid=child_pid,
@@ -179,6 +186,97 @@ class TestSpawnFailsClosedOnUnwritableTetherDir:
         _wait_for_death(captured["pid"])
 
 
+class TestRenewTether:
+    def test_renew_rewrites_only_not_after(self, tmp_path) -> None:
+        child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
+        try:
+            path = _write_synthetic_tether(tmp_path, child_pid=child.pid)
+            before = json.loads(path.read_text())
+
+            assert renew_tether(path, time.time() + 3600.0) is True
+
+            after = json.loads(path.read_text())
+            assert after["not_after"] > before["not_after"]
+            assert {key: value for key, value in after.items() if key != "not_after"} == {
+                key: value for key, value in before.items() if key != "not_after"
+            }
+        finally:
+            with suppress(Exception):
+                child.kill()
+                child.wait(timeout=2)
+
+    @pytest.mark.parametrize("unreadable", [False, True], ids=["missing", "malformed"])
+    def test_renew_missing_or_unreadable_record_returns_false(
+        self, tmp_path, unreadable: bool
+    ) -> None:
+        path = tmp_path / "unreadable.json"
+        if unreadable:
+            path.write_text("not json")
+
+        assert renew_tether(path, time.time() + 3600.0) is False
+
+    @pytest.mark.parametrize("not_after", [math.nan, math.inf])
+    def test_renew_nonfinite_deadline_returns_false_without_write(
+        self, tmp_path, not_after: float
+    ) -> None:
+        child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
+        try:
+            path = _write_synthetic_tether(tmp_path, child_pid=child.pid)
+            before = path.read_bytes()
+
+            assert renew_tether(path, not_after) is False
+            assert path.read_bytes() == before
+        finally:
+            with suppress(Exception):
+                child.kill()
+                child.wait(timeout=2)
+
+    def test_renew_write_oserror_returns_false(self, tmp_path, monkeypatch) -> None:
+        child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
+        try:
+            path = _write_synthetic_tether(tmp_path, child_pid=child.pid)
+
+            def fail_write(*_args, **_kwargs) -> None:
+                raise OSError("simulated write failure")
+
+            monkeypatch.setattr(_patch_process__process_tether, "write_versioned_json", fail_write)
+
+            assert renew_tether(path, time.time() + 3600.0) is False
+        finally:
+            with suppress(Exception):
+                child.kill()
+                child.wait(timeout=2)
+
+    def test_renew_off_linux_does_not_touch_filesystem(self, tmp_path, monkeypatch) -> None:
+        path = tmp_path / "missing" / "tether.json"
+        monkeypatch.setattr(_patch_process__process_tether.sys, "platform", "darwin")
+
+        assert renew_tether(path, time.time() + 3600.0) is True
+        assert not path.parent.exists()
+
+
+def test_owner_renewed_cook_record_survives_sweep_past_initial_ceiling(tmp_path) -> None:
+    child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
+    try:
+        path = _write_synthetic_tether(
+            tmp_path,
+            child_pid=child.pid,
+            origin="cook",
+            not_after=time.time() + 0.1,
+        )
+        assert renew_tether(path, time.time() + 3600.0) is True
+        time.sleep(0.15)
+
+        report = sweep_orphaned_tethers(tmp_path, min_age_seconds=0.0)
+
+        assert psutil.pid_exists(child.pid)
+        assert any(outcome.outcome == "kept" for outcome in report.outcomes)
+    finally:
+        with suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
 class TestSweepReapsChildOfDeadSpawner:
     def test_sweep_reaps_child_of_dead_spawner(self, tmp_path) -> None:
         """The two-hop spawner-death test — the direct regression test for Incident A."""
@@ -232,13 +330,15 @@ class TestSweepReapsChildOfDeadSpawner:
 
 
 class TestSweepReapsExpiredCeilingWithLiveSpawner:
-    def test_sweep_reaps_expired_ceiling_with_live_spawner(self, tmp_path) -> None:
+    @pytest.mark.parametrize("origin", ["test", "cook"])
+    def test_sweep_reaps_expired_ceiling_with_live_spawner(self, tmp_path, origin: str) -> None:
         child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
         try:
             _write_synthetic_tether(
                 tmp_path,
                 child_pid=child.pid,
                 not_after=time.time() - 10.0,
+                origin=origin,
             )
             report = sweep_orphaned_tethers(tmp_path, min_age_seconds=0.0)
             _wait_for_death(child.pid)
@@ -248,6 +348,44 @@ class TestSweepReapsExpiredCeilingWithLiveSpawner:
             with suppress(Exception):
                 child.kill()
                 child.wait(timeout=2)
+
+
+def test_sweep_logs_decision_before_kill(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    child = subprocess.Popen(_sleeper_cmd(), start_new_session=True)
+    snapshots: list[list[dict]] = []
+    original_kill = _patch_process__process_kill.kill_process_tree
+    try:
+        _write_synthetic_tether(
+            tmp_path,
+            child_pid=child.pid,
+            origin="cook",
+            not_after=time.time() - 10.0,
+        )
+
+        with structlog.testing.capture_logs() as logs:
+
+            def capture_before_kill(*args, **kwargs):
+                snapshots.append(list(logs))
+                return original_kill(*args, **kwargs)
+
+            monkeypatch.setattr(
+                _patch_process__process_kill, "kill_process_tree", capture_before_kill
+            )
+            report = sweep_orphaned_tethers(tmp_path, min_age_seconds=0.0)
+
+        decision = next(
+            entry for entry in snapshots[0] if entry.get("event") == "tether_sweep_reap_decision"
+        )
+        assert decision["origin"] == "cook"
+        assert decision["reason"] == "reaped_ceiling"
+        assert decision["spawner_alive"] is True
+        assert decision["overdue_seconds"] >= 10.0
+        assert any(entry.get("event") == "tether_sweep_reaped" for entry in logs)
+        assert any(outcome.outcome == "reaped_ceiling" for outcome in report.outcomes)
+    finally:
+        with suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
 
 
 class TestSweepLeavesLiveSpawnerWithinCeiling:
@@ -496,7 +634,12 @@ class TestConfigParityAndCoherence:
     def test_config_defaults_equal_module_constants(self) -> None:
         cfg = ProcessTetherConfig()
         assert cfg.orphan_ceiling_seconds == DEFAULT_TETHER_CEILING_SECONDS
-        assert cfg.cook_ceiling_seconds == INTERACTIVE_TETHER_CEILING_SECONDS
+
+    def test_lease_cadence_derives_from_sweep_interval(self) -> None:
+        assert TETHER_LEASE_SECONDS == 4 * TETHER_SWEEP_INTERVAL_SECONDS
+        assert TETHER_LEASE_SECONDS - TETHER_LEASE_RENEW_SECONDS >= (
+            2 * TETHER_SWEEP_INTERVAL_SECONDS
+        )
 
     def test_coherence_gate_warns_when_ceiling_undercuts_max_session_duration(self) -> None:
         import structlog.testing

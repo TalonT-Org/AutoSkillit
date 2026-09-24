@@ -16,7 +16,8 @@ import pytest
 
 from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.cli.session.pty._observer import PtyObserver
-from autoskillit.core import CmdSpec, ValidatedAddDir
+from autoskillit.config import ProcessTetherConfig
+from autoskillit.core import CmdSpec, TerminationReason, ValidatedAddDir
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -64,6 +65,17 @@ def _spec(tmp_path: Path, code: str, *, env: dict[str, str] | None = None) -> Cm
     )
 
 
+def _lifetime(
+    ceiling_seconds: float = 60.0,
+    *,
+    extension_seconds: float = 0.0,
+) -> ProcessTetherConfig:
+    return ProcessTetherConfig(
+        cook_ceiling_seconds=ceiling_seconds,
+        cook_max_extension_seconds=extension_seconds,
+    )
+
+
 def _wait_until_gone(pid: int, timeout: float = 3.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -91,9 +103,10 @@ def _assert_unsupported_platform(tmp_path: Path) -> bool:
             pass_fds=(),
             on_spawn=lambda _pid, _pgid: None,
             on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
     return True
 
@@ -128,9 +141,10 @@ def test_direct_attempt_owns_new_group_and_reaps_before_callback(
         pass_fds=(),
         on_spawn=on_spawn,
         on_reaped=on_reaped,
+        on_teardown_unproven=lambda _pid, _pgid: None,
         trace=Mock(),
         observer=None,
-        not_after=time.time() + 60,
+        lifetime=_lifetime(),
     )
 
     assert popen_kwargs["cwd"] == str(tmp_path.resolve())
@@ -160,9 +174,10 @@ def test_pass_fds_are_inherited_and_callback_identity_is_stable(tmp_path: Path) 
             pass_fds=(write_fd,),
             on_spawn=lambda pid, pgid: events.append(("spawn", pid, pgid)),
             on_reaped=lambda pid, pgid: events.append(("reaped", pid, pgid)),
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
     finally:
         os.close(write_fd)
@@ -196,9 +211,10 @@ def test_grandchild_cannot_outlive_group_empty_reaped_proof(tmp_path: Path) -> N
             on_reaped=lambda _pid, _pgid: reaped_observations.append(
                 _wait_until_gone(int(grandchild_path.read_text()), timeout=1.0)
             ),
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
         grandchild_pid = int(grandchild_path.read_text())
         assert result.returncode == 0
@@ -225,9 +241,10 @@ def test_spawn_failure_has_no_callbacks(monkeypatch: pytest.MonkeyPatch, tmp_pat
             pass_fds=(),
             on_spawn=lambda _pid, _pgid: events.append("spawn"),
             on_reaped=lambda _pid, _pgid: events.append("reaped"),
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
 
     assert events == []
@@ -248,9 +265,10 @@ def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> No
             pass_fds=(),
             on_spawn=fail_after_spawn,
             on_reaped=lambda pid, pgid: identity.append((pid, pgid)),
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
 
     assert len(identity) == 2
@@ -280,9 +298,10 @@ def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
             pass_fds=(write_fd,),
             on_spawn=lambda _pid, _pgid: None,
             on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=PtyObserver(readiness_probe=None),
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
     finally:
         os.close(write_fd)
@@ -294,49 +313,419 @@ def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
     assert result.returncode == 0
 
 
-def test_cook_attempt_enforces_ceiling_in_both_wait_branches(tmp_path: Path) -> None:
-    """A live spawner terminates its child at not_after in both wait branches.
+@pytest.mark.parametrize("observer_kind", ("direct", "pty"))
+def test_lifetime_end_is_typed_and_logged_in_both_wait_branches(
+    tmp_path: Path,
+    observer_kind: str,
+) -> None:
+    import structlog.testing
 
-    Closes the "kill leg never exercised" gap: the non-PTY branch's
-    _wait_for_owned_exit poll loop and the PTY branch's observer.relay
-    cancelled-callback both merely stop *waiting* at the ceiling — the
-    actual kill happens in run_cook_attempt's unconditional finally-block
-    settle(). This proves both branches reach that settle() promptly
-    against a child that never exits on its own.
-    """
     if _assert_unsupported_platform(tmp_path):
         return
-    ceiling_seconds = 1.5
-    sleeper_code = "import time; time.sleep(30)"
+    observer = PtyObserver(readiness_probe=None) if observer_kind == "pty" else None
+    lifetime = _lifetime(1.0)
 
-    start = time.monotonic()
+    with structlog.testing.capture_logs() as logs:
+        result = run_cook_attempt(
+            _spec(tmp_path, "import time; time.sleep(30)"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=observer,
+            lifetime=lifetime,
+        )
+
+    assert result.termination is TerminationReason.TIMED_OUT
+    assert result.elapsed_seconds >= 1.0
+    assert result.returncode == -signal.SIGTERM
+    assert result.cleanup.escalated is False
+    expired = [event for event in logs if event["event"] == "cook_lifetime_expired"]
+    assert len(expired) == 1
+    terminated = [event for event in logs if event["event"] == "cook_attempt_terminated"]
+    assert len(terminated) == 1
+    assert terminated[0]["escalated"] is False
+    assert terminated[0]["complete"] is True
+    assert terminated[0]["returncode"] == -signal.SIGTERM
+
+
+def test_active_child_extended_until_hard_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_lifetime
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
+    monkeypatch.setattr(_session_lifetime, "_IDLE_WINDOW_SECONDS", 0.5)
+    monkeypatch.setattr(
+        _session_lifetime,
+        "_default_activity",
+        lambda *_args: {"api_connection"},
+    )
+
     result = run_cook_attempt(
-        _spec(tmp_path, sleeper_code),
+        _spec(tmp_path, "import time; time.sleep(30)"),
         pass_fds=(),
         on_spawn=lambda _pid, _pgid: None,
         on_reaped=lambda _pid, _pgid: None,
+        on_teardown_unproven=lambda _pid, _pgid: None,
         trace=Mock(),
         observer=None,
-        not_after=time.time() + ceiling_seconds,
+        lifetime=_lifetime(1.0, extension_seconds=2.0),
     )
-    elapsed = time.monotonic() - start
-    assert _wait_until_gone(result.pid)
-    # The ceiling must actually bind — well under the child's own 30s sleep.
-    assert elapsed < 15.0
 
-    start = time.monotonic()
+    assert result.termination is TerminationReason.TIMED_OUT
+    assert 3.0 <= result.elapsed_seconds < 8.0
+
+
+def test_idle_child_ends_at_soft_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_lifetime
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
+    monkeypatch.setattr(_session_lifetime, "_IDLE_WINDOW_SECONDS", 0.5)
+    monkeypatch.setattr(_session_lifetime, "_default_activity", lambda *_args: set())
+
     result = run_cook_attempt(
-        _spec(tmp_path, sleeper_code),
+        _spec(tmp_path, "import time; time.sleep(30)"),
         pass_fds=(),
         on_spawn=lambda _pid, _pgid: None,
         on_reaped=lambda _pid, _pgid: None,
+        on_teardown_unproven=lambda _pid, _pgid: None,
         trace=Mock(),
-        observer=PtyObserver(readiness_probe=None),
-        not_after=time.time() + ceiling_seconds,
+        observer=None,
+        lifetime=_lifetime(1.0, extension_seconds=2.0),
     )
-    elapsed = time.monotonic() - start
-    assert _wait_until_gone(result.pid)
-    assert elapsed < 15.0
+
+    assert result.termination is TerminationReason.IDLE_STALL
+    assert 1.0 <= result.elapsed_seconds < 6.0
+
+
+def test_lifetime_end_escalates_sigterm_ignoring_child(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_process
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    monkeypatch.setattr(_session_process, "INTERACTIVE_TERMINATION_GRACE_SECONDS", 0.5)
+    code = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"
+
+    result = run_cook_attempt(
+        _spec(tmp_path, code),
+        pass_fds=(),
+        on_spawn=lambda _pid, _pgid: None,
+        on_reaped=lambda _pid, _pgid: None,
+        on_teardown_unproven=lambda _pid, _pgid: None,
+        trace=Mock(),
+        observer=None,
+        lifetime=_lifetime(1.0),
+    )
+
+    assert result.returncode == -signal.SIGKILL
+    assert result.cleanup.escalated is True
+    assert 1.0 <= result.elapsed_seconds < 6.0
+
+
+def test_lifetime_end_with_unproven_teardown_degrades_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    import structlog.testing
+
+    from autoskillit.cli.session import _session_process
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    original_cleanup = OwnedProcessGroup.cleanup
+
+    def cleanup_without_proof(self, *args, **kwargs):
+        _returncode, evidence = original_cleanup(self, *args, **kwargs)
+        return None, replace(evidence, observation_complete=False)
+
+    monkeypatch.setattr(OwnedProcessGroup, "cleanup", cleanup_without_proof)
+    monkeypatch.setattr(_session_process, "INTERACTIVE_TERMINATION_GRACE_SECONDS", 0.1)
+    reaped: list[tuple[int, int]] = []
+    unproven: list[tuple[int, int]] = []
+
+    with structlog.testing.capture_logs() as logs:
+        result = run_cook_attempt(
+            _spec(tmp_path, "import time; time.sleep(30)"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda pid, pgid: reaped.append((pid, pgid)),
+            on_teardown_unproven=lambda pid, pgid: unproven.append((pid, pgid)),
+            trace=Mock(),
+            observer=None,
+            lifetime=_lifetime(0.2),
+        )
+
+    assert result.returncode is None
+    assert result.cleanup.observation_complete is False
+    assert reaped == []
+    assert len(unproven) == 1
+    assert any(event["event"] == "cook_lifetime_teardown_unproven" for event in logs)
+
+
+def test_ordinary_exit_unproven_teardown_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from autoskillit.execution.process._lifecycle.owned_group import (
+        OwnedProcessCleanupError,
+        OwnedProcessGroup,
+    )
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    original_cleanup = OwnedProcessGroup.cleanup
+
+    def cleanup_without_proof(self, *args, **kwargs):
+        _returncode, evidence = original_cleanup(self, *args, **kwargs)
+        return None, replace(evidence, observation_complete=False)
+
+    monkeypatch.setattr(OwnedProcessGroup, "cleanup", cleanup_without_proof)
+    reaped: list[tuple[int, int]] = []
+    unproven: list[tuple[int, int]] = []
+
+    with pytest.raises(OwnedProcessCleanupError):
+        run_cook_attempt(
+            _spec(tmp_path, "pass"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda pid, pgid: reaped.append((pid, pgid)),
+            on_teardown_unproven=lambda pid, pgid: unproven.append((pid, pgid)),
+            trace=Mock(),
+            observer=None,
+            lifetime=_lifetime(),
+        )
+
+    assert reaped == []
+    assert unproven == []
+
+
+def test_lifetime_decision_wins_dispatch_even_when_a_failure_accumulated(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_lifetime, _session_process
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    monkeypatch.setattr(_session_lifetime, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(
+        _session_lifetime,
+        "_default_activity",
+        lambda *_args: {"api_connection"},
+    )
+    grace_seconds = 0.5
+    monkeypatch.setattr(
+        _session_process,
+        "INTERACTIVE_TERMINATION_GRACE_SECONDS",
+        grace_seconds,
+    )
+
+    class TerminalInput:
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(_session_process.sys, "stdin", TerminalInput())
+    monkeypatch.setattr(_session_process.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(_session_process.os, "tcgetpgrp", lambda _fd: 100)
+    foreground_calls: list[tuple[int, int]] = []
+
+    def restore_fails(fd: int, pgid: int) -> None:
+        foreground_calls.append((fd, pgid))
+        if len(foreground_calls) == 2:
+            raise OSError("foreground restore failed")
+
+    monkeypatch.setattr(_session_process, "_safe_tcsetpgrp", restore_fails)
+    original_settle_evidence = OwnedProcessGroup.settle_evidence
+    settle_calls: list[tuple[float, bool]] = []
+
+    def record_settle(self, timeout=2.0, *, escalate=False):
+        settle_calls.append((timeout, escalate))
+        return original_settle_evidence(self, timeout, escalate=escalate)
+
+    monkeypatch.setattr(OwnedProcessGroup, "settle_evidence", record_settle)
+    callbacks: list[str] = []
+
+    with pytest.raises(OSError, match="foreground restore failed"):
+        run_cook_attempt(
+            _spec(tmp_path, "import time; time.sleep(30)"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: callbacks.append("reaped"),
+            on_teardown_unproven=lambda _pid, _pgid: callbacks.append("unproven"),
+            trace=Mock(),
+            observer=None,
+            lifetime=_lifetime(0.2),
+        )
+
+    assert len(foreground_calls) == 2
+    assert callbacks in (["reaped"], ["unproven"])
+    assert settle_calls == [(grace_seconds, True)]
+
+
+def test_natural_exit_is_typed(tmp_path: Path) -> None:
+    import structlog.testing
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    with structlog.testing.capture_logs() as logs:
+        result = run_cook_attempt(
+            _spec(tmp_path, "raise SystemExit(3)"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=None,
+            lifetime=_lifetime(60.0),
+        )
+
+    assert result.termination is TerminationReason.NATURAL_EXIT
+    assert result.returncode == 3
+    assert not any(event["event"].startswith("cook_lifetime_") for event in logs)
+
+
+def test_poll_failures_do_not_escape_the_wait_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import structlog.testing
+
+    from autoskillit.cli.session import _session_lifetime, _session_process
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    monkeypatch.setattr(
+        _session_lifetime,
+        "_default_activity",
+        lambda *_args: (_ for _ in ()).throw(OSError("activity probe failed")),
+    )
+    monkeypatch.setattr(
+        _session_lifetime,
+        "atomic_write",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("notice write failed")),
+    )
+    clock_value = [0.0]
+    actual_lifetime = _session_process.InteractiveLifetime
+
+    class AcceleratedLifetime:
+        def __init__(self, policy: ProcessTetherConfig) -> None:
+            self._lifetime = actual_lifetime(policy, clock=lambda: clock_value[0])
+
+        def start(self, **kwargs) -> None:
+            self._lifetime.start(**kwargs)
+
+        def poll(self):
+            clock_value[0] += 1000.0
+            return self._lifetime.poll()
+
+        @property
+        def decision(self):
+            return self._lifetime.decision
+
+        @property
+        def elapsed_seconds(self) -> float:
+            return self._lifetime.elapsed_seconds
+
+    monkeypatch.setattr(_session_process, "InteractiveLifetime", AcceleratedLifetime)
+    policy = _lifetime(1.0, extension_seconds=3600.0)
+
+    with structlog.testing.capture_logs() as logs:
+        result = run_cook_attempt(
+            _spec(tmp_path, "import time; time.sleep(30)"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=None,
+            lifetime=policy,
+        )
+
+    assert result.termination is TerminationReason.TIMED_OUT
+    assert any(event["event"] == "cook_lifetime_probe_failed" for event in logs)
+    assert any(event["event"] == "cook_lifetime_warning_write_failed" for event in logs)
+
+
+def test_non_default_policy_reaches_tether_scope_and_child_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session import _session_lifetime, _session_process
+
+    if _assert_unsupported_platform(tmp_path):
+        return
+    if sys.platform != "linux":
+        pytest.skip("process tether records are written only on Linux")
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
+    scope_kwargs: dict[str, object] = {}
+
+    def record_scope(argv, **kwargs):
+        scope_kwargs.update(kwargs)
+        return argv
+
+    monkeypatch.setattr(_session_process, "wrap_systemd_scope", record_scope)
+    policy = ProcessTetherConfig(
+        cook_ceiling_seconds=1.5,
+        cook_max_extension_seconds=0.0,
+        systemd_scope_enabled=True,
+    )
+    notice_path_file = tmp_path / "notice-path.txt"
+    child_code = (
+        "import os,pathlib; "
+        f"pathlib.Path({str(notice_path_file)!r}).write_text("
+        "os.environ['AUTOSKILLIT_SESSION_LIFETIME_NOTICE'])"
+    )
+    tether_records: list[dict[str, object]] = []
+    tether_dir = tmp_path / "logs" / "process-tethers"
+
+    def record_spawn(pid: int, pgid: int) -> None:
+        paths = tuple(tether_dir.glob(f"{pid}-*.json"))
+        assert len(paths) == 1
+        tether_records.append(json.loads(paths[0].read_text(encoding="utf-8")))
+
+    result = run_cook_attempt(
+        _spec(tmp_path, child_code),
+        pass_fds=(),
+        on_spawn=record_spawn,
+        on_reaped=lambda _pid, _pgid: None,
+        on_teardown_unproven=lambda _pid, _pgid: None,
+        trace=Mock(),
+        observer=None,
+        lifetime=policy,
+    )
+
+    assert result.termination is TerminationReason.NATURAL_EXIT
+    assert len(tether_records) == 1
+    record = tether_records[0]
+    assert record["origin"] == "cook"
+    margin = _session_lifetime.OWNER_PRECEDENCE_MARGIN_SECONDS
+    recorded_lifetime = float(record["not_after"]) - int(record["spawned_at_ns"]) / 1e9
+    expected_lifetime = policy.cook_ceiling_seconds + policy.cook_max_extension_seconds + margin
+    assert recorded_lifetime == pytest.approx(expected_lifetime, abs=0.1)
+    assert scope_kwargs["enabled"] is True
+    assert scope_kwargs["ceiling_seconds"] == pytest.approx(expected_lifetime)
+    notice_path = Path(notice_path_file.read_text(encoding="utf-8"))
+    assert notice_path.is_relative_to(tmp_path / ".autoskillit" / "temp" / "session_lifetime")
+    assert not notice_path.exists()
 
 
 def test_successful_popen_records_spawn_without_post_spawn_pgid_lookup() -> None:
@@ -509,9 +898,10 @@ def test_managed_pre_spawn_check_rejects_before_process_or_callbacks(
             pass_fds=(),
             on_spawn=callbacks.spawn,
             on_reaped=callbacks.reaped,
+            on_teardown_unproven=callbacks.teardown_unproven,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
             pre_spawn_check=lambda: (_ for _ in ()).throw(RuntimeError("catalog changed")),
         )
 
@@ -562,9 +952,10 @@ def test_pty_pre_spawn_check_closes_descriptors_without_spawning(
                 pass_fds=(),
                 on_spawn=callbacks.spawn,
                 on_reaped=callbacks.reaped,
+                on_teardown_unproven=callbacks.teardown_unproven,
                 trace=Mock(),
                 observer=observer,
-                not_after=time.time() + 60,
+                lifetime=_lifetime(),
                 pre_spawn_check=lambda: (_ for _ in ()).throw(RuntimeError("catalog changed")),
             )
         assert len(opened) == 2
@@ -603,9 +994,10 @@ def test_pre_spawn_check_is_only_required_for_managed_codex(
         pass_fds=(),
         on_spawn=lambda _pid, _pgid: None,
         on_reaped=lambda _pid, _pgid: None,
+        on_teardown_unproven=lambda _pid, _pgid: None,
         trace=Mock(),
         observer=None,
-        not_after=time.time() + 60,
+        lifetime=_lifetime(),
     )
 
     assert result.returncode == 0
@@ -634,9 +1026,10 @@ def test_managed_launch_requires_a_retained_pre_spawn_check(
             pass_fds=(),
             on_spawn=lambda _pid, _pgid: None,
             on_reaped=lambda _pid, _pgid: None,
+            on_teardown_unproven=lambda _pid, _pgid: None,
             trace=Mock(),
             observer=None,
-            not_after=time.time() + 60,
+            lifetime=_lifetime(),
         )
 
     spawn.assert_not_called()
@@ -661,6 +1054,7 @@ import time
 from types import SimpleNamespace
 
 from autoskillit.cli.session._session_process import run_cook_attempt
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import CmdSpec
 
 control_fd = int(os.environ["CONTROL_FD"])
@@ -700,9 +1094,13 @@ try:
         pass_fds=(control_fd,),
         on_spawn=on_spawn,
         on_reaped=on_reaped,
+        on_teardown_unproven=lambda _pid, _pgid: None,
         trace=SimpleNamespace(record_spawn=lambda: None),
         observer=None,
-        not_after=time.time() + 3,
+        lifetime=ProcessTetherConfig(
+            cook_ceiling_seconds=3.0,
+            cook_max_extension_seconds=0.0,
+        ),
     )
     report(
         {

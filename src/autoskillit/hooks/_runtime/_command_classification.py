@@ -202,20 +202,31 @@ def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | 
     return argv_tokens[index].raw_span.strip() if index < len(argv_tokens) else ""
 
 
-def _non_option_indices(segment: list[str]) -> list[int]:
+def _non_option_indices(segment: list[str], argv_tokens: Sequence[ArgvToken] | None) -> list[int]:
     separator = next(
         (index for index, token in enumerate(segment[1:], start=1) if token == "--"),
         len(segment),
     )
+    input_redirects = {
+        index
+        for index in range(1, len(segment) - 1)
+        if argv_tokens is not None
+        and segment[index] == "<"
+        and argv_tokens[index].raw_span.strip() == "<"
+    }
     return [
         index
         for index in range(1, len(segment))
-        if (index < separator and not segment[index].startswith("-")) or index > separator
+        if index not in input_redirects
+        and index - 1 not in input_redirects
+        and ((index < separator and not segment[index].startswith("-")) or index > separator)
     ]
 
 
-def _write_verb_operand_indices(verb: str, segment: list[str]) -> list[int]:
-    operands = _non_option_indices(segment)
+def _write_verb_operand_indices(
+    verb: str, segment: list[str], argv_tokens: Sequence[ArgvToken] | None
+) -> list[int]:
+    operands = _non_option_indices(segment, argv_tokens)
     if verb == "sed":
         has_inplace = any(token.startswith(("-i", "--in-place")) for token in segment[1:])
         if not has_inplace:
@@ -244,7 +255,7 @@ def extract_write_verb_targets(
     argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> tuple[list[str], bool]:
     """Return write-verb targets and whether a write target could not resolve."""
-    operands = _write_verb_operand_indices(verb, segment)
+    operands = _write_verb_operand_indices(verb, segment, argv_tokens)
     targets: list[str] = []
     unresolved_target = False
     for index in operands:

@@ -291,7 +291,6 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
             redirect_syntax=record.redirect_syntax,
             argv_tokens=record.argv_tokens,
         )
-        targets.extend(partition.targets)
         unresolved |= partition.unresolved
         has_write |= bool(partition.file_redirect_count)
 
@@ -305,6 +304,7 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
             executable, executable_tokens, state, record.subshell_path
         )
         targets.extend(verb_targets)
+        targets.extend(partition.targets)
         unresolved |= verb_unresolved
         has_write |= verb_has_write
         if record.subshell_path is not None:

@@ -223,11 +223,12 @@ def _require_same_launch_evidence(
     projection_context: SkillProjectionContextAuthority,
 ) -> None:
     adaptation_context = projection_context.adaptation_context
-    if compilation.launch_evidence_digest != (
-        adaptation_context.digest if adaptation_context is not None else ""
-    ):
+    compiled_digest = str(compilation.launch_evidence_digest)
+    projection_digest = str(adaptation_context.digest if adaptation_context is not None else "")
+    if compiled_digest != projection_digest:
         raise SkillContractError(
-            "session compilation and materialization carry different launch evidence"
+            "session compilation and materialization carry different launch evidence: "
+            f"compiled={compiled_digest!r} projection={projection_digest!r}"
         )
 
 

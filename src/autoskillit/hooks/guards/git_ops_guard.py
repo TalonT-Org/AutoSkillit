@@ -50,6 +50,7 @@ from _git_command_classification import (  # type: ignore[import-not-found]  # n
     _parse_worktree_owners,
     _resolve_attempted_sha,
     _resolve_git_common_dir,
+    extract_git_subcommand_and_flags,
 )
 from _github_mutation_analysis import (  # type: ignore[import-not-found]  # noqa: E402
     _DYNAMIC_SHELL_TOKEN_RE,
@@ -83,6 +84,15 @@ _DESTRUCTIVE_OP_EXEMPT_TIERS: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset(
     {"cp", "mv", "install", "tee", "truncate", "rm", "unlink", "sed", "dd"}
+)
+
+# Git subcommands that can mutate checked-out refs (the same set
+# _classify_git_segment recognises). Used by _deny_outer_git_mutations
+# to escalate only when the unresolved-cwd segment is actually a
+# mutation — read-only commands (log, status, diff, show, ...) must
+# not be denied just because a preceding cd failed.
+_GIT_MUTATION_SUBCOMMANDS: frozenset[str] = frozenset(
+    {"update-ref", "branch", "checkout", "switch", "reset", "fetch", "push", "symbolic-ref"}
 )
 
 
@@ -454,16 +464,23 @@ def _deny_outer_git_mutations(data: dict[str, object], segment: list[str], cwd: 
         return
     if not cwd:
         # A preceding cwd change could not be resolved; this segment cannot
-        # be routed to a repository with confidence. Fall back to the
-        # unresolved-cwd escalation so a bare git mutation (no shell-write
-        # surface for scan_write_targets to catch) does not silently
-        # bypass the checked-out-ref preflight.
-        _deny_checked_out_ref(
-            data=data,
-            context=None,
-            attempted_value="<unresolved>",
-            threatened_refs=[],
-        )
+        # be routed to a repository with confidence. Escalate to deny only
+        # when the subcommand is a known ref-mutating one — read-only
+        # commands (log, status, diff, show, ...) must not be denied just
+        # because a preceding cd failed. An unparseable subcommand
+        # (parsed is None or "<unresolved>") also escalates, matching the
+        # `_classify_git_segment` fail-closed posture.
+        parsed = extract_git_subcommand_and_flags(segment)
+        subcommand = parsed.subcommand if parsed is not None else None
+        if subcommand is None or subcommand == "<unresolved>":
+            subcommand = None  # ambiguous — escalate below
+        if subcommand is None or subcommand in _GIT_MUTATION_SUBCOMMANDS:
+            _deny_checked_out_ref(
+                data=data,
+                context=None,
+                attempted_value="<unresolved>",
+                threatened_refs=[],
+            )
         return
     context = _repository_context(_git_segment_cwd(segment, cwd))
     if context is not None:

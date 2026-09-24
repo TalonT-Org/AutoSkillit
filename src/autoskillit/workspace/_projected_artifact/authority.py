@@ -34,6 +34,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SkillAuthority,
+    SkillContractError,
     SkillExecutionRole,
     SkillProjectionRefusal,
     SkillSemanticAdaptationResult,
@@ -302,7 +303,12 @@ def _classify_projected_skills(
             case SkillSemanticAdaptationResult() as adaptation if (
                 adaptation.unsupported_operation is not None
             ):
-                assert adaptation.diagnostic is not None
+                if not adaptation.diagnostic:
+                    raise SkillContractError(
+                        f"backend {backend.name!r} returned "
+                        f"{adaptation.unsupported_operation.value} "
+                        "refusal without a diagnostic"
+                    )
                 unavailable.append(
                     SkillProjectionRefusal(
                         skill=skill.name,

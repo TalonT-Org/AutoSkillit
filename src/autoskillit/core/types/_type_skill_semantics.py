@@ -562,7 +562,10 @@ def adapt_session_invariant(
         adaptation.validate_for(plan, backend=backend.name)
         return adaptation
     if refusal_awaits_launch_evidence(operation, backend.capabilities):
-        assert adaptation.diagnostic is not None
+        if not adaptation.diagnostic:
+            raise SkillContractError(
+                f"backend {backend.name!r} returned {operation.value} refusal without a diagnostic"
+            )
         return LaunchEvidenceDeferral(operation=operation, diagnostic=adaptation.diagnostic)
     return adaptation
 

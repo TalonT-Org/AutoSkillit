@@ -17,46 +17,11 @@ from autoskillit.execution._report_index_rows import (
     rows_for_walk_item,
 )
 from autoskillit.execution.evidence.report_walk import WalkItem
+from tests.execution._report_index_fixtures import otlp_log_record as _log
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures"
-
-
-def _attrs(**values: object) -> list[dict[str, Any]]:
-    attributes = []
-    for key, value in values.items():
-        if isinstance(value, bool):
-            encoded = {"boolValue": value}
-        elif isinstance(value, str):
-            encoded = {"stringValue": value}
-        elif isinstance(value, int):
-            encoded = {"intValue": value}
-        elif isinstance(value, float):
-            encoded = {"doubleValue": value}
-        else:
-            raise TypeError(f"Unsupported test attribute value: {type(value).__name__}")
-        attributes.append({"key": key, "value": encoded})
-    return attributes
-
-
-def _log(
-    event: str,
-    session_id: str | None,
-    *,
-    time_ns: int | None = None,
-    observed_ns: int | None = None,
-    **attrs: object,
-) -> dict[str, Any]:
-    attributes = {"event.name": event, **attrs}
-    if session_id is not None:
-        attributes["session.id"] = session_id
-    record: dict[str, Any] = {"attributes": _attrs(**attributes)}
-    if time_ns is not None:
-        record["timeUnixNano"] = str(time_ns)
-    if observed_ns is not None:
-        record["observedTimeUnixNano"] = str(observed_ns)
-    return record
 
 
 def _otlp_item(source_id: str, *records: dict[str, Any], signal: str = "logs") -> WalkItem:
@@ -382,6 +347,11 @@ def test_normalize_report_row_tolerates_older_and_newer_rows() -> None:
 
 
 def test_native_claude_capture_projects_one_request_row() -> None:
+    # The fixture file ``claude_native_token_evidence_v2_1_257.json`` is a
+    # captured native OTLP log payload from a real Claude Code session
+    # (recorded upstream in #5098). The versioned suffix encodes the
+    # Claude Code release it was sampled from; bump the file (and update the
+    # expected values below) when a release changes the emission shape.
     payload = json.loads(
         (_FIXTURE_DIR / "claude_native_token_evidence_v2_1_257.json").read_text(encoding="utf-8")
     )["payload"]

@@ -45,8 +45,10 @@ def test_sessions_index_reports_without_creating_rows(
 
     sessions_index()
 
-    assert "sessions=0" in capsys.readouterr().out
-    assert not (log_root / "report-index" / "rows.jsonl").exists()
+    out = capsys.readouterr().out
+    index_dir = log_root / "report-index"
+    assert out == (f"report index v1 at {index_dir}: sessions=0 requests=0 tools=0 subagents=0\n")
+    assert not (index_dir / "rows.jsonl").exists()
 
 
 def test_sessions_index_updates_and_rebuilds(
@@ -61,12 +63,19 @@ def test_sessions_index_updates_and_rebuilds(
     _configure_log_root(monkeypatch, log_root)
 
     sessions_index(update=True)
-    updated = capsys.readouterr().out
-    assert "wrote 1 rows" in updated
-    assert "sessions=1" in updated
+    index_dir = log_root / "report-index"
+    assert capsys.readouterr().out == (
+        "report index: walked 2 items, wrote 1 rows\n"
+        f"report index v1 at {index_dir}: "
+        "sessions=1 requests=0 tools=0 subagents=0\n"
+    )
 
     sessions_index(rebuild=True)
-    assert "sessions=1" in capsys.readouterr().out
+    assert capsys.readouterr().out == (
+        "report index: walked 2 items, wrote 1 rows\n"
+        f"report index v1 at {index_dir}: "
+        "sessions=1 requests=0 tools=0 subagents=0\n"
+    )
 
 
 def test_sessions_index_reports_lease_contention_without_summary(

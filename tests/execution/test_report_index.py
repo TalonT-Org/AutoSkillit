@@ -16,10 +16,18 @@ from autoskillit.execution import (
     report_index,
     update_report_index,
 )
+from autoskillit.execution.evidence.report_walk import WalkItem
+from tests.execution._report_index_fixtures import (
+    CLAUDE_SCOPE,
+    basic_session_row,
+)
+from tests.execution._report_index_fixtures import (
+    otlp_log_record as _log,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
-_CLAUDE_SCOPE = "com.anthropic.claude_code.events"
+_CLAUDE_SCOPE = CLAUDE_SCOPE
 _T0_NS = 1_577_836_800_000_000_000
 
 
@@ -30,38 +38,6 @@ def _json_line(value: object) -> bytes:
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"".join(_json_line(row) for row in rows))
-
-
-def _session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
-    return {"dir_name": dir_name, "session_id": session_id, **fields}
-
-
-def _log(
-    event: str,
-    session_id: str,
-    *,
-    time_ns: int | None = None,
-    **attrs: str | int | float | bool,
-) -> dict[str, Any]:
-    values: list[tuple[str, str | int | float | bool]] = [
-        ("session.id", session_id),
-        ("event.name", event),
-        *attrs.items(),
-    ]
-    record: dict[str, Any] = {"attributes": []}
-    for key, value in values:
-        if isinstance(value, bool):
-            encoded = {"boolValue": value}
-        elif isinstance(value, int):
-            encoded = {"intValue": value}
-        elif isinstance(value, float):
-            encoded = {"doubleValue": value}
-        else:
-            encoded = {"stringValue": value}
-        record["attributes"].append({"key": key, "value": encoded})
-    if time_ns is not None:
-        record["timeUnixNano"] = str(time_ns)
-    return record
 
 
 def _otlp_line(record_id: str, *records: dict[str, Any]) -> bytes:
@@ -85,14 +61,12 @@ def _otlp_line(record_id: str, *records: dict[str, Any]) -> bytes:
     )
 
 
+def _session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
+    return {"dir_name": dir_name, "session_id": session_id, **fields}
+
+
 def _basic_session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
-    session = {
-        "backend": "claude-code",
-        "provider_used": "anthropic",
-        "timestamp": "2020-01-01T00:00:00Z",
-        **fields,
-    }
-    return _session(dir_name, session_id, **session)
+    return basic_session_row(dir_name, session_id, **fields)
 
 
 def test_update_then_read_joins_events_to_sessions(tmp_path: Path) -> None:
@@ -340,15 +314,24 @@ def test_interrupted_update_resumes_to_the_same_index(
     )
     index_dir = tmp_path / "interrupted"
     original_walk = report_index.iter_report_walk
-    monkeypatch.setattr(report_index, "_COMMIT_BYTES", 0)
 
-    def fail_after_three(root_path: Path, watermark: dict[str, Any] | None = None):
+    def interrupt_after_three(root_path: Path, watermark: dict[str, Any] | None = None) -> Any:
+        # Inject a checkpoint WalkItem just before the failure so the row
+        # appender commits the partial state through its normal
+        # ``kind == "checkpoint"`` branch, avoiding any monkeypatch of the
+        # private ``_COMMIT_BYTES`` knob. The checkpoint's watermark reflects
+        # only the items already yielded, not the next item that the original
+        # walker would have produced, so resume replays work the same way as
+        # the eager ``_COMMIT_BYTES = 0`` path it replaces.
+        committed_watermark: dict[str, Any] = dict(watermark or {})
         for count, item in enumerate(original_walk(root_path, watermark)):
             if count == 3:
+                yield WalkItem("checkpoint", None, None, None, committed_watermark)
                 raise RuntimeError("interrupted report walk")
             yield item
+            committed_watermark = dict(item.watermark)
 
-    monkeypatch.setattr(report_index, "iter_report_walk", fail_after_three)
+    monkeypatch.setattr(report_index, "iter_report_walk", interrupt_after_three)
     with pytest.raises(RuntimeError, match="interrupted report walk"):
         update_report_index(root, index_dir)
     assert (index_dir / "state.json").is_file()

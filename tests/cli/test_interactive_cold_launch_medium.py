@@ -19,6 +19,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION
 from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -74,7 +75,7 @@ def cold_launch(
     return shim, captured
 
 
-@pytest.mark.parametrize("version", ["2.1.280"])
+@pytest.mark.parametrize("version", [PINNED_CLAUDE_SHIM_VERSION])
 def test_supported_cold_launch_spawns_with_probed_attestation(
     cold_launch: tuple[Path, dict[str, object]],
     tmp_path: Path,
@@ -124,7 +125,7 @@ def test_executable_identity_drift_exits_without_spawn(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     shim, captured = cold_launch
-    _write_claude_shim(shim, "2.1.280")
+    _write_claude_shim(shim, PINNED_CLAUDE_SHIM_VERSION)
     backend = ClaudeCodeBackend()
     real_ensure_pre_launch = ClaudeCodeBackend.ensure_pre_launch
 
@@ -158,7 +159,7 @@ def test_unmanaged_launch_rejects_executable_drift_before_spawn(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     shim, captured = cold_launch
-    _write_claude_shim(shim, "2.1.280")
+    _write_claude_shim(shim, PINNED_CLAUDE_SHIM_VERSION)
     monkeypatch.setattr(
         _patch_session__session_launch,
         "executable_binding_matches_current_file",

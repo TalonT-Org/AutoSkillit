@@ -43,6 +43,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     atomic_write,
 )
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.cli._interactive_process import interactive_launch_metadata
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
@@ -227,7 +228,7 @@ def _install_harness(
         claude_shim,
         "#!/bin/sh\n"
         'if [ "${1-}" = "--version" ]; then\n'
-        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
+        f"  printf '%s\\n' '{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}'\n"
         "fi\n"
         "exit 0\n",
     )

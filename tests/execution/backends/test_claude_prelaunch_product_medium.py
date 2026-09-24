@@ -19,11 +19,14 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.backends import claude as claude_module
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
-def _shim_binding(tmp_path: Path, version: str = "2.1.280") -> ExecutableLaunchBinding:
+def _shim_binding(
+    tmp_path: Path, version: str = PINNED_CLAUDE_SHIM_VERSION
+) -> ExecutableLaunchBinding:
     executable = tmp_path / "claude"
     atomic_write(
         executable,

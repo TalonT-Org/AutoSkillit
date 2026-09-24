@@ -19,6 +19,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.cli._cook_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -31,7 +32,7 @@ def _write_shim(path: Path, probe_log: Path) -> None:
         'if [ "${1-}" = "--version" ]; then\n'
         '  if [ -n "${ANTHROPIC_API_KEY-}" ]; then exit 73; fi\n'
         f"  printf 'probe\\n' >> '{probe_log}'\n"
-        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
+        f"  printf '%s\\n' '{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}'\n"
         "fi\n"
         "exit 0\n",
     )

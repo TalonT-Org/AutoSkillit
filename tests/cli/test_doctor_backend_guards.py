@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import CODEX_MODEL_ALIASES
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -743,7 +744,7 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("2.1.280 (Claude Code)\n"),
+            lambda *a, **kw: self._codex_result(f"{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}\n"),
         )
         result = _check_backend_version(backend=ClaudeCodeBackend())
         assert result.severity == Severity.OK

@@ -32,6 +32,7 @@ from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import atomic_write
 from autoskillit.execution.backends import ClaudeCodeBackend
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.cli._cook_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -44,7 +45,7 @@ def _write_claude_shim(path: Path) -> None:
         path,
         "#!/bin/sh\n"
         'if [ "${1-}" = "--version" ]; then\n'
-        "  printf '%s\\n' '2.1.280 (Claude Code)'\n"
+        f"  printf '%s\\n' '{PINNED_CLAUDE_SHIM_VERSION_OUTPUT}'\n"
         "fi\n"
         "exit 0\n",
     )

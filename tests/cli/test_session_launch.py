@@ -43,6 +43,10 @@ from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
 )
+from tests._realistic_project import (
+    PINNED_CLAUDE_SHIM_VERSION,
+    PINNED_CLAUDE_SHIM_VERSION_OUTPUT,
+)
 from tests.cli._cook_launch_helpers import RecordingLifecycle
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fixtures.plugin_artifact_state import (
@@ -177,7 +181,7 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
                 (),
                 {
                     "returncode": 0,
-                    "stdout": "2.1.280 (Claude Code)",
+                    "stdout": PINNED_CLAUDE_SHIM_VERSION_OUTPUT,
                     "stderr": "",
                 },
             )()
@@ -1381,7 +1385,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
+                {"returncode": 0, "stdout": PINNED_CLAUDE_SHIM_VERSION, "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1429,7 +1433,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
+                {"returncode": 0, "stdout": PINNED_CLAUDE_SHIM_VERSION, "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
@@ -1482,7 +1486,7 @@ def test_cross_validation_contract_all_flags_known(
             return type(
                 "Result",
                 (),
-                {"returncode": 0, "stdout": "2.1.280", "stderr": ""},
+                {"returncode": 0, "stdout": PINNED_CLAUDE_SHIM_VERSION, "stderr": ""},
             )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()

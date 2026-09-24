@@ -31,6 +31,8 @@ class _NoProjectionBackend:
 
 
 class _NoManagedRouteBackend:
+    """Backend whose declared capability flags a non-managed fixed-batch route."""
+
     name = "codex-no-managed-route"
     capabilities = SimpleNamespace(managed_fixed_batch_route_capable=False)
 

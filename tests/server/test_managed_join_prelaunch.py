@@ -472,7 +472,10 @@ def test_reload_refusal_names_failing_check(
     result = authority.find_verified_context(backend="codex", parent_session_id="abc123")
     assert isinstance(result, ManagedJoinVerificationRefusal)
     assert result.reason is expected_reason
-    assert expected_detail in "; ".join(result.detail)
+    if expected_detail:
+        assert expected_detail in "; ".join(result.detail)
+    else:
+        assert result.detail == ()
 
 
 _VERIFY_CASES = (
@@ -586,7 +589,10 @@ def test_find_verified_context_structural_refusals(
     result = authority.find_verified_context(backend="codex", parent_session_id=parent_id)
     assert isinstance(result, ManagedJoinVerificationRefusal)
     assert result.reason is expected_reason
-    assert expected_detail in "; ".join(result.detail)
+    if expected_detail:
+        assert expected_detail in "; ".join(result.detail)
+    else:
+        assert result.detail == ()
 
 
 def test_every_refusal_reason_is_exercised() -> None:

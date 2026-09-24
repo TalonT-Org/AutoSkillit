@@ -157,8 +157,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "check_pr_mergeable",
         "set_commit_status",
         "analyze_tool_sequences",
-        "fetch_github_issue",
-        "get_issue_title",
         "get_ci_status",
         "get_pipeline_report",
         "get_quota_events",
@@ -191,6 +189,8 @@ GATED_TOOLS: frozenset[str] = frozenset(
 HEADLESS_TOOLS: frozenset[str] = frozenset(
     {
         "delegate_evidence_reader",
+        "fetch_github_issue",
+        "get_issue_title",
         "test_check",
         "unlock_agent_pack",
         "commit_files",

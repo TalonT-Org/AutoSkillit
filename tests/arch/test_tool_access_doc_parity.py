@@ -62,7 +62,9 @@ def _documented_access() -> tuple[dict[str, str], list[tuple[str, str, tuple[str
 
 def _decorated_tools() -> dict[str, tuple[set[str], str]]:
     decorated: dict[str, tuple[set[str], str]] = {}
-    for path in _tool_module_paths(SRC_ROOT / "server" / "tools"):
+    tools_dir = SRC_ROOT / "server" / "tools"
+    paths = [*_tool_module_paths(tools_dir), tools_dir / "_recipe_section_handler.py"]
+    for path in paths:
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

@@ -256,13 +256,12 @@ These routes are accepted deferrals in
 cadence. Tracking issue #4717 retains the migration obligation. Before launch,
 AutoSkillit runs the exact bound executable's `debug prompt-input` renderer
 against the immutable `CODEX_SKILL_DISCOVERY_CONTRACT` and rejects any foreign
-root inside the managed-home scope. The verified binary is `codex-cli 0.156.1`.
-Its bound `debug prompt-input` renderer found the managed and projected probe
-skills on 2026-09-23. The same installed binary listed an app-server registered
-root after `skills/extraRoots/set` and removed it after clearing the roots,
-before any model turn. The binary resolved to
-`/home/talon/.npm-global/bin/codex`; upstream `rust-v0.156.1` resolves to
-`b412ff32c417f855c2b2d1581b77058eed87c84b`.
+root inside the managed-home scope. The verified binary is `codex-cli 0.156.1`;
+its bound `debug prompt-input` renderer was last observed listing the managed
+and projected probe skills and round-tripping an app-server registered root
+through `skills/extraRoots/set` before any model turn. Upstream
+`rust-v0.156.1` resolves to `b412ff32c417f855c2b2d1581b77058eed87c84b`; the
+rolling canary log retains the dated local probe run.
 
 Before an attempt is entered, `sessions` and `archived_sessions` are symlinks
 to private, empty inert directories within the generated home. Attempt entry
@@ -441,12 +440,12 @@ exact rollout/inode/lease wire-schema assertions are separately pinned to
 silently — when the selected binary clears the transport floor but is not
 that exact schema-verified build.
 
-The 2026-09-23 local `codex-cli 0.156.1` startup probe used the resolved
-`/home/talon/.npm-global/bin/codex` binary for a fresh turn and a resumed turn.
-Each produced one rollout; the fresh rollout kept its live inode, and the
-resumed rollout kept the staged hard-link inode. A competing nonblocking lock
-could not take either inherited lease while Codex was running. This is a new
-0.156.1 observation; the earlier 0.147.0 schema observation remains historical.
+The 0.156.1 startup probe (see canary log) ran a fresh turn and a resumed turn
+on the bound binary. Each produced one rollout; the fresh rollout kept its
+live inode, and the resumed rollout kept the staged hard-link inode. A
+competing nonblocking lock could not take either inherited lease while Codex
+was running. This is a new 0.156.1 observation; the earlier 0.147.0 schema
+observation remains historical.
 
 ### Exception rendering ownership
 

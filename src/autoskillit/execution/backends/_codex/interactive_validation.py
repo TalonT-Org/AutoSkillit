@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from autoskillit.core import (
     CODEX_HOME_ENV_VAR,
@@ -36,7 +36,14 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 
 def _unsupported_codex_version(version: str) -> str | None:
-    if Version(version) < Version(CODEX_CLI_MIN_VERSION):
+    try:
+        below_minimum = Version(version) < Version(CODEX_CLI_MIN_VERSION)
+    except InvalidVersion:
+        return (
+            f"Codex CLI version {version!r} is unparseable; "
+            f"supported minimum is {CODEX_CLI_MIN_VERSION}"
+        )
+    if below_minimum:
         return f"Codex CLI {version} is below the supported minimum {CODEX_CLI_MIN_VERSION}"
     return None
 

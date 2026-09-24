@@ -352,9 +352,15 @@ def test_native_claude_capture_projects_one_request_row() -> None:
     # (recorded upstream in #5098). The versioned suffix encodes the
     # Claude Code release it was sampled from; bump the file (and update the
     # expected values below) when a release changes the emission shape.
-    payload = json.loads(
-        (_FIXTURE_DIR / "claude_native_token_evidence_v2_1_257.json").read_text(encoding="utf-8")
-    )["payload"]
+    fixture_path = _FIXTURE_DIR / "claude_native_token_evidence_v2_1_257.json"
+    if not fixture_path.is_file():
+        pytest.fail(
+            f"Missing native OTLP fixture {fixture_path}. The fixture is recorded "
+            'upstream in PR #5098 ("feat: preserve provider token availability '
+            'across reports"); re-record from a real Claude Code session when '
+            "the file is gone or when bumping the versioned suffix."
+        )
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))["payload"]
     source_id = "rec-native"
     item = WalkItem(
         "otlp",

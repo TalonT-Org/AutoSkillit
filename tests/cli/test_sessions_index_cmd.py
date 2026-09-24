@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import ArtifactLease
+from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -47,7 +48,10 @@ def test_sessions_index_reports_without_creating_rows(
 
     out = capsys.readouterr().out
     index_dir = log_root / "report-index"
-    assert out == (f"report index v1 at {index_dir}: sessions=0 requests=0 tools=0 subagents=0\n")
+    assert out == (
+        f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
+        "sessions=0 requests=0 tools=0 subagents=0\n"
+    )
     assert not (index_dir / "rows.jsonl").exists()
 
 
@@ -66,14 +70,14 @@ def test_sessions_index_updates_and_rebuilds(
     index_dir = log_root / "report-index"
     assert capsys.readouterr().out == (
         "report index: walked 2 items, wrote 1 rows\n"
-        f"report index v1 at {index_dir}: "
+        f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
         "sessions=1 requests=0 tools=0 subagents=0\n"
     )
 
     sessions_index(rebuild=True)
     assert capsys.readouterr().out == (
         "report index: walked 2 items, wrote 1 rows\n"
-        f"report index v1 at {index_dir}: "
+        f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
         "sessions=1 requests=0 tools=0 subagents=0\n"
     )
 

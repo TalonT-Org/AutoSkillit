@@ -474,6 +474,25 @@ class TestCommandGroupingStructure:
         assert len(segment.subshell_path) == 2
         assert segment.subshell_path[0] != segment.subshell_path[1]
 
+    def test_three_level_nested_subshells_record_all_group_ids(self) -> None:
+        segment = self._segments("( ( (cp a b) ) )")[0]
+
+        assert segment.tokens == ["cp", "a", "b"]
+        assert command_verb(segment.tokens) == "cp"
+        assert len(segment.subshell_path) == 3
+        assert len(set(segment.subshell_path)) == 3  # all distinct
+
+    def test_mixed_subshell_and_brace_nesting_preserves_order(self) -> None:
+        subshell_in_brace = self._segments("{ (cp a b); }")[0]
+
+        assert subshell_in_brace.tokens == ["cp", "a", "b"]
+        # The brace is the outer group; the subshell is the inner one.
+        assert len(subshell_in_brace.subshell_path) == 1
+
+        brace_in_subshell = self._segments("( { cp a b; } )")[0]
+        assert brace_in_subshell.tokens == ["cp", "a", "b"]
+        assert len(brace_in_subshell.subshell_path) == 1
+
     def test_function_body_is_a_normal_command_segment(self) -> None:
         segments = self._segments("f() { cp a b; }")
         body = next(segment for segment in segments if command_verb(segment.tokens) == "cp")
@@ -518,13 +537,11 @@ class TestCommandGroupingStructure:
         assert len(cat.subshell_path) == expected_path_length
 
     def test_grouped_gh_and_git_commands_are_classified_by_verb(self) -> None:
-        import autoskillit.hooks._runtime._command_classification as classification
-
         gh = self._segments("(gh pr merge 1 --admin)")[0]
         git = self._segments("(git push --force)")[0]
 
-        assert classification.is_gh_command(gh.tokens)
-        assert classification.is_git_command(git.tokens)
+        assert command_classification.is_gh_command(gh.tokens)
+        assert command_classification.is_git_command(git.tokens)
 
     def test_non_groups_do_not_create_subshell_paths(self) -> None:
         case_echo = next(
@@ -1520,7 +1537,6 @@ class TestScanWriteTargets:
 
 
 class TestExtractRedirectTargetsWithStatus:
-    # Plan Steps 2.3 and 2.5: real commands replace the unreachable split-fragment rows.
     @pytest.mark.parametrize(
         ("command", "expected_targets"),
         [

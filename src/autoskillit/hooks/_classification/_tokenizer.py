@@ -41,6 +41,11 @@ _SHELL_OPERATOR_CHARS: str = ";|&"
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
 
 
+def _is_case_terminator(token: str) -> bool:
+    """Match shell case-pattern terminators (``;;``, ``;;;``, ...)."""
+    return bool(token) and set(token) == {";"}
+
+
 @dataclass(frozen=True, slots=True)
 class _HeredocOpener:
     operator_span: tuple[int, int]
@@ -395,7 +400,6 @@ class EvaluatedSegment:
 
     tokens: list[str]
     provenance: _CommandSegment | None
-    subshell_path: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.tokens:
@@ -404,8 +408,11 @@ class EvaluatedSegment:
             raise ValueError(
                 "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
             )
-        if self.provenance is None and self.subshell_path:
-            raise ValueError("Payload segments have no outer subshell path")
+
+    @property
+    def subshell_path(self) -> tuple[int, ...]:
+        """Subshell nesting path of the owning submitted segment (empty for payload segments)."""
+        return self.provenance.subshell_path if self.provenance is not None else ()
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
@@ -578,6 +585,14 @@ def _lex_command(command: str) -> _LexedCommand | None:
 def _herestring_at(
     tokens: list[str], quoted: list[bool], raw_spans: list[str], index: int
 ) -> tuple[StdinLiteral | None, int] | None:
+    """Match a herestring operator at *index*.
+
+    Returns ``None`` when the token at *index* is not a herestring. When it
+    is, returns ``(literal, next_index)``: ``literal`` is ``None`` if the
+    operator was the trailing ``<<<`` with no body, otherwise it is the
+    captured body. ``next_index`` is the index of the first token after the
+    herestring.
+    """
     token = tokens[index]
     if token == "<<<":
         if index + 1 < len(tokens):
@@ -614,11 +629,13 @@ def _advance_group_context(
     if kind == "open_subshell":
         subshell_path += (group_id,)
     elif kind == "close_subshell":
+        assert subshell_path, "close_subshell emitted without matching open_subshell"
         subshell_path = subshell_path[:-1]
     elif kind in {"open_brace", "open_function"}:
         brace_functions.append(kind == "open_function")
         function_depth += kind == "open_function"
     elif kind == "close_brace":
+        assert brace_functions, "close_brace emitted without matching open_brace/open_function"
         function_depth -= brace_functions.pop()
     return subshell_path, function_depth
 
@@ -702,7 +719,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
                 current_stdin_literals.append(literal)
             continue
 
-        if token in _SHELL_OPERATORS or (token and set(token) == {";"}):
+        if token in _SHELL_OPERATORS or _is_case_terminator(token):
             flush()
             piped_from_previous = token == "|"
             index += 1

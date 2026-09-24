@@ -614,10 +614,7 @@ def all_evaluated_segments_with_provenance(
     )
     if pairs is None:
         return None
-    return [
-        EvaluatedSegment(tokens, provenance, provenance.subshell_path if provenance else ())
-        for tokens, provenance in pairs
-    ]
+    return [EvaluatedSegment(tokens, provenance) for tokens, provenance in pairs]
 
 
 def all_evaluated_segments(

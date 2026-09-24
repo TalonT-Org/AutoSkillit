@@ -178,7 +178,7 @@ def _process_occurrence_owner_index(payload: str, start: int, segment_count: int
     if not segment_count:
         return None
     preceding = _tokenize_with_redirects(payload[:start])
-    return min(max(len(preceding or []) - 1, 0), segment_count - 1)
+    return min(max(len(preceding) - 1, 0), segment_count - 1)
 
 
 def _none_github_analysis() -> GitHubMutationAnalysis:
@@ -283,7 +283,7 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                     "mutation-bearing process substitution could not be parsed",
                 )
             )
-        tokenized_segments = _tokenize_with_redirects(payload) or []
+        tokenized_segments = _tokenize_with_redirects(payload)
         segments = [segment.tokens for segment in tokenized_segments]
         if not tokenized_segments and payload.strip():
             if _POSSIBLE_GITHUB_EXEC_RE.search(live_payload_text):

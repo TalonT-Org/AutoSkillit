@@ -79,9 +79,9 @@ class _GroupingScan:
         self.groups: dict[str, tuple[str, int]] = {}
         self.stack: list[tuple[str, int]] = []
         self.case_modes: list[str] = []
-        self.command_position = True
+        self.command_position: bool = True
         self.previous_words: list[str] = []
-        self.index = 0
+        self.index: int = 0
 
     def _consume_trivia(self) -> bool:
         command = self.command

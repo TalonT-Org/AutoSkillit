@@ -21,6 +21,9 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.evidence._otlp_tokens import (
+    CLAUDE_CODE_SCOPE_NAME as _CLAUDE_CODE_SCOPE_NAME,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
     TokenObservation as _TokenObservation,
 )
 from autoskillit.execution.evidence._otlp_tokens import (
@@ -28,6 +31,9 @@ from autoskillit.execution.evidence._otlp_tokens import (
 )
 from autoskillit.execution.evidence._otlp_tokens import (
     has_attribute as _has_attribute,
+)
+from autoskillit.execution.evidence._otlp_tokens import (
+    iter_scoped_log_records as _iter_scoped_log_records,
 )
 from autoskillit.execution.evidence._otlp_tokens import (
     project_token_observations as _token_observations,
@@ -57,6 +63,7 @@ _HANDLER_DRAIN_SECONDS = 1.0
 _THREAD_JOIN_SECONDS = 2.0
 _WRITER_POLL_SECONDS = 0.05
 _SENTINEL = object()
+_CODEX_SCOPE_NAME = "codex_otel.log_only"
 
 _ModelObservation = tuple[str, str, SubagentModelOutcomeDict | None]
 
@@ -212,38 +219,19 @@ def _codex_model_observation(
 def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation, ...]:
     if signal != "logs" or not isinstance(payload, dict):
         return ()
-    resource_logs = payload.get("resourceLogs")
-    if not isinstance(resource_logs, list):
-        return ()
-
     observations: list[_ModelObservation] = []
-    for resource_log in resource_logs:
-        if not isinstance(resource_log, dict):
+    scopes = (_CLAUDE_CODE_SCOPE_NAME, _CODEX_SCOPE_NAME)
+    for scope_name, record in _iter_scoped_log_records(payload, scopes):
+        attributes = _record_attributes(record)
+        if attributes is None:
             continue
-        scope_logs = resource_log.get("scopeLogs")
-        if not isinstance(scope_logs, list):
-            continue
-        for scope_log in scope_logs:
-            if not isinstance(scope_log, dict):
-                continue
-            scope = scope_log.get("scope")
-            scope_name = scope.get("name") if isinstance(scope, dict) else None
-            records = scope_log.get("logRecords")
-            if not isinstance(scope_name, str) or not isinstance(records, list):
-                continue
-            for record in records:
-                attributes = _record_attributes(record)
-                if attributes is None:
-                    continue
-                event_name = _unique_string_attribute(attributes, "event.name")
-                if scope_name == "com.anthropic.claude_code.events":
-                    observation = _claude_model_observation(event_name, attributes)
-                elif scope_name == "codex_otel.log_only":
-                    observation = _codex_model_observation(event_name, attributes)
-                else:
-                    continue
-                if observation is not None:
-                    observations.append(observation)
+        event_name = _unique_string_attribute(attributes, "event.name")
+        if scope_name == _CLAUDE_CODE_SCOPE_NAME:
+            observation = _claude_model_observation(event_name, attributes)
+        else:
+            observation = _codex_model_observation(event_name, attributes)
+        if observation is not None:
+            observations.append(observation)
     return tuple(observations)
 
 

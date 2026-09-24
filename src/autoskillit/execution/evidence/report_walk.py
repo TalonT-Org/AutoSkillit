@@ -42,7 +42,14 @@ _PROJECTION_DELETED_NO_RECORDS = "Session archive disappeared"
 
 
 class SourceGapError(RuntimeError):
-    """A committed source boundary is no longer present in retained data."""
+    """A committed source boundary is no longer present in retained data.
+
+    ``source`` is the watermark key whose cursor is stale.
+    """
+
+    def __init__(self, source: str, message: str) -> None:
+        super().__init__(message)
+        self.source = source
 
 
 _VALID_WALK_KINDS = frozenset({"otlp", "session", "checkpoint"})
@@ -175,7 +182,7 @@ def _otlp_resume_position(
     for index, (_, handle) in enumerate(handles):
         if _validate_otlp_boundary(handle, cursor):
             return index, cursor["end"]
-    raise SourceGapError("Committed OTLP record is outside retained generations")
+    raise SourceGapError("otlp", "Committed OTLP record is outside retained generations")
 
 
 def _walk_otlp(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
@@ -298,19 +305,19 @@ def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
         handle = path.open("rb")
     except FileNotFoundError:
         if offset:
-            raise SourceGapError(_PROJECTION_DELETED_NO_RECORDS) from None
+            raise SourceGapError("archive", _PROJECTION_DELETED_NO_RECORDS) from None
         return
     with handle:
         identity = _identity(handle)[:2]
         if offset:
             if identity != cursor.get("identity") or offset > _identity(handle)[2]:
-                raise SourceGapError("Session archive was replaced or truncated")
+                raise SourceGapError("archive", "Session archive was replaced or truncated")
             handle.seek(offset - 1)
             if handle.read(1) != b"\n":
-                raise SourceGapError(_ARCHIVE_BOUNDARY_CHANGED)
+                raise SourceGapError("archive", _ARCHIVE_BOUNDARY_CHANGED)
             handle.seek(max(0, offset - 160))
             if _digest(handle.read(offset - handle.tell())) != cursor.get("boundary"):
-                raise SourceGapError(_ARCHIVE_BOUNDARY_CHANGED)
+                raise SourceGapError("archive", _ARCHIVE_BOUNDARY_CHANGED)
         for end, row in iter_tolerant_session_index_lines(path, offset=offset, complete_only=True):
             handle.seek(max(0, end - 160))
             boundary = _digest(handle.read(end - handle.tell()))

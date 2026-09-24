@@ -15,6 +15,7 @@ import autoskillit.hooks._runtime._github_mutation_analysis as github_mutation_a
 from autoskillit.hooks._classification._interpreters import (
     all_evaluated_segments_with_provenance,
 )
+from autoskillit.hooks._classification._tokenizer import ArgvToken
 from autoskillit.hooks._runtime._command_classification import (
     _GIT_GLOBAL_FLAG_SPEC,
     _PYTHON_INVOCATION_FLAG_SPEC,
@@ -245,6 +246,7 @@ class TestTokenizeCommandSegments:
             segment.tokens,
             cwd="/work",
             redirect_syntax=segment.redirect_syntax,
+            argv_tokens=segment.argv_tokens,
         ) == (expected_tokens, expected_targets, expected_count)
 
     def test_bare_newline_separates_segments(self):
@@ -386,15 +388,19 @@ class TestBashWordBoundaries:
         assert segments[0].tokens == expected_tokens
         assert segments[0].redirect_syntax == expected_redirect_syntax
 
-    def test_command_substitution_redirect_target_keeps_its_closer(self) -> None:
+    def test_command_substitution_redirect_target_is_unresolved(self) -> None:
         segments = command_classification._tokenize_command_segments_with_redirects(
             "echo x > $(pwd)"
         )
 
         assert segments is not None
-        assert extract_redirect_targets_with_status(segments[0].tokens, "/work")[0] == [
-            "/work/$(pwd)"
-        ]
+        segment = segments[0]
+        assert extract_redirect_targets_with_status(
+            segment.tokens,
+            "/work",
+            redirect_syntax=segment.redirect_syntax,
+            argv_tokens=segment.argv_tokens,
+        ) == ([], True)
 
     @pytest.mark.parametrize(
         "command",
@@ -1535,6 +1541,171 @@ class TestScanWriteTargets:
         assert scan.parseable is True
         assert scan.has_write is True
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "printf '%s' '>/tmp/out'",
+            'printf "%s" "2>/tmp/out"',
+            r"printf %s 2\>/tmp/out",
+        ],
+        ids=["single-quoted", "double-quoted", "escaped"],
+    )
+    def test_quoted_redirect_glyph_is_not_a_write(self, command: str) -> None:
+        assert command_classification.scan_write_targets(command, "/work") == (
+            command_classification.WriteTargetScan(
+                targets=(), unresolved=False, parseable=True, has_write=False
+            )
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "targets", "unresolved"),
+        [
+            pytest.param(
+                "echo x > '$ASK_WRITE_TARGET_DIR/out'",
+                ("/work/$ASK_WRITE_TARGET_DIR/out",),
+                False,
+                id="single-quoted-redirect-variable",
+            ),
+            pytest.param(
+                'echo x > "$ASK_WRITE_TARGET_DIR/out"',
+                ("/resolved/dir/out",),
+                False,
+                id="double-quoted-redirect-variable",
+            ),
+            pytest.param(
+                r"echo x > \$ASK_WRITE_TARGET_DIR/out",
+                ("/work/$ASK_WRITE_TARGET_DIR/out",),
+                False,
+                id="escaped-redirect-variable",
+            ),
+            pytest.param(
+                "echo x > '$[1+2]/out'",
+                ("/work/$[1+2]/out",),
+                False,
+                id="single-quoted-legacy-arithmetic",
+            ),
+            pytest.param("echo x > $[1+2]/out", (), True, id="active-legacy-arithmetic"),
+            pytest.param(
+                "cp a '$(pwd)/out'",
+                ("/work/$(pwd)/out",),
+                False,
+                id="single-quoted-copy-target",
+            ),
+            pytest.param('cp a "$(pwd)/out"', (), True, id="active-copy-target"),
+            pytest.param("echo x > '~/out'", ("/work/~/out",), False, id="quoted-tilde"),
+            pytest.param("echo x > ~/out", ("/home/write-target/out",), False, id="active-tilde"),
+        ],
+    )
+    def test_shell_source_reaches_write_target_scan(
+        self,
+        command: str,
+        targets: tuple[str, ...],
+        unresolved: bool,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("ASK_WRITE_TARGET_DIR", "/resolved/dir")
+        monkeypatch.setenv("HOME", "/home/write-target")
+
+        assert command_classification.scan_write_targets(command, "/work") == (
+            command_classification.WriteTargetScan(
+                targets=targets, unresolved=unresolved, parseable=True, has_write=True
+            )
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "targets", "unresolved"),
+        [
+            pytest.param(
+                "echo x > before; cd /tmp/d; echo x > after",
+                ("/work/before", "/tmp/d/after"),
+                False,
+                id="cd-applies-in-source-order",
+            ),
+            pytest.param(
+                "pushd /tmp/d; echo x > inside; popd; echo x > after",
+                ("/tmp/d/inside",),
+                True,
+                id="popd-leaves-cwd-unresolved",
+            ),
+            pytest.param(
+                "cd /tmp/d; (cd /tmp/e; echo x > inside); echo x > after",
+                ("/tmp/e/inside", "/tmp/d/after"),
+                False,
+                id="subshell-cwd-is-isolated",
+            ),
+            pytest.param(
+                "eval 'cd /tmp/d; echo x > inside'; echo x > after",
+                ("/tmp/d/inside", "/tmp/d/after"),
+                False,
+                id="eval-updates-owner-cwd-before-next-command",
+            ),
+            pytest.param(
+                "bash -c 'cd /tmp/d; echo x > inside'; echo x > after",
+                ("/tmp/d/inside", "/work/after"),
+                False,
+                id="child-shell-payload-does-not-update-owner-cwd",
+            ),
+        ],
+    )
+    def test_cwd_and_payload_order(
+        self, command: str, targets: tuple[str, ...], unresolved: bool
+    ) -> None:
+        assert command_classification.scan_write_targets(command, "/work") == (
+            command_classification.WriteTargetScan(
+                targets=targets, unresolved=unresolved, parseable=True, has_write=True
+            )
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "targets", "unresolved"),
+        [
+            pytest.param(
+                "git -C '/tmp/d' checkout -- 'report$2026.txt'",
+                ("/tmp/d/report$2026.txt",),
+                False,
+                id="single-quoted-c-and-pathspec",
+            ),
+            pytest.param(
+                'git -C "$ASK_WRITE_TARGET_DIR" checkout -- "rel.py"',
+                ("/resolved/dir/rel.py",),
+                False,
+                id="double-quoted-c-expands",
+            ),
+            pytest.param(
+                "git -C '$(pwd)' checkout -- rel.py",
+                ("/work/$(pwd)/rel.py",),
+                False,
+                id="single-quoted-c-command-spelling",
+            ),
+            pytest.param(
+                'git -C "$(pwd)" checkout -- rel.py',
+                (),
+                True,
+                id="active-c-command-substitution",
+            ),
+            pytest.param(
+                'git -C /tmp/d checkout -- "report$2026.txt"',
+                (),
+                True,
+                id="active-pathspec-positional-expansion",
+            ),
+        ],
+    )
+    def test_git_c_and_pathspec_source_quoting(
+        self,
+        command: str,
+        targets: tuple[str, ...],
+        unresolved: bool,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("ASK_WRITE_TARGET_DIR", "/resolved/dir")
+
+        assert command_classification.scan_write_targets(command, "/work") == (
+            command_classification.WriteTargetScan(
+                targets=targets, unresolved=unresolved, parseable=True, has_write=True
+            )
+        )
+
 
 class TestExtractRedirectTargetsWithStatus:
     @pytest.mark.parametrize(
@@ -1589,7 +1760,10 @@ class TestExtractRedirectTargetsWithStatus:
         ],
     )
     def test_extract_redirect_targets_with_status(self, tokens, expected):
-        assert extract_redirect_targets_with_status(tokens)[0] == expected
+        assert (
+            extract_redirect_targets_with_status(tokens, redirect_syntax=[True] * len(tokens))[0]
+            == expected
+        )
 
 
 class TestResolveWriteTarget:
@@ -1653,7 +1827,7 @@ class TestResolveWriteTarget:
                 "/workspace",
                 None,
             ),
-            ({}, "report$2026.txt", "/workspace", "/workspace/report$2026.txt"),
+            ({}, "report$2026.txt", "/workspace", None),
         ],
     )
     def test_resolve_write_target_shell_vars(self, env_setup, path, cwd, expected, monkeypatch):
@@ -1663,7 +1837,92 @@ class TestResolveWriteTarget:
             monkeypatch.delenv(var, raising=False)
         for var, val in env_setup.items():
             monkeypatch.setenv(var, val)
-        assert resolve_write_target(path, cwd) == expected
+        assert resolve_write_target(path, cwd, shell_source=path) == expected
+
+    @pytest.mark.parametrize(
+        "path",
+        ["report$2026.txt", "$(pwd)/out.txt", "$[1+2].txt", "${NAME:-fallback}.txt"],
+    )
+    def test_literal_api_path_preserves_expansion_spelling(self, path: str) -> None:
+        from autoskillit.hooks._runtime._command_classification import resolve_write_target
+
+        assert resolve_write_target(path, "/workspace") == f"/workspace/{path}"
+
+    @pytest.mark.parametrize(
+        ("path", "shell_source", "expected"),
+        [
+            pytest.param("out.txt", "out.txt", "/work/out.txt", id="plain-literal"),
+            pytest.param("out/*.md", "out/*.md", "/work/out/*.md", id="glob-literal"),
+            pytest.param("out/{a,b}.md", "out/{a,b}.md", "/work/out/{a,b}.md", id="brace-literal"),
+            pytest.param(
+                "$ASK_WRITE_TARGET_DIR/out",
+                "$ASK_WRITE_TARGET_DIR/out",
+                "/resolved/dir/out",
+                id="set-parameter",
+            ),
+            pytest.param(
+                "${ASK_WRITE_TARGET_DIR}/out",
+                "${ASK_WRITE_TARGET_DIR}/out",
+                "/resolved/dir/out",
+                id="set-braced-parameter",
+            ),
+            pytest.param("$ASK_UNSET_RWT/out", "$ASK_UNSET_RWT/out", None, id="unset-parameter"),
+            pytest.param(
+                "${ASK_UNSET_RWT:-fallback}/out",
+                "${ASK_UNSET_RWT:-fallback}/out",
+                None,
+                id="parameter-operator",
+            ),
+            pytest.param("out$1", "out$1", None, id="positional-parameter"),
+            pytest.param("out$?", "out$?", None, id="special-parameter"),
+            pytest.param("$(pwd)/out", "$(pwd)/out", None, id="command-substitution"),
+            pytest.param("`pwd`/out", "`pwd`/out", None, id="backtick-substitution"),
+            pytest.param("$((1+2))/out", "$((1+2))/out", None, id="arithmetic-expansion"),
+            pytest.param("$[1+2]/out", "$[1+2]/out", None, id="legacy-arithmetic-expansion"),
+            pytest.param(
+                "$(pwd)/out", "'$(pwd)/out'", "/work/$(pwd)/out", id="single-quoted-command"
+            ),
+            pytest.param("$(pwd)/out", r"\$(pwd)/out", "/work/$(pwd)/out", id="escaped-command"),
+            pytest.param(
+                "$ASK_WRITE_TARGET_DIR/out",
+                "'$ASK_WRITE_TARGET_DIR/out'",
+                "/work/$ASK_WRITE_TARGET_DIR/out",
+                id="single-quoted-parameter",
+            ),
+            pytest.param(
+                "$ASK_WRITE_TARGET_DIR/out",
+                '"$ASK_WRITE_TARGET_DIR/out"',
+                "/resolved/dir/out",
+                id="double-quoted-parameter",
+            ),
+            pytest.param("~/out", "~/out", "/home/write-target/out", id="unquoted-tilde"),
+            pytest.param("~/out", "'~/out'", "/work/~/out", id="single-quoted-tilde"),
+            pytest.param("~/out", '"~/out"', "/work/~/out", id="double-quoted-tilde"),
+            pytest.param("~/out", r"\~/out", "/work/~/out", id="escaped-tilde"),
+            pytest.param(
+                "~ASK_NO_SUCH_USER_123/out",
+                "~ASK_NO_SUCH_USER_123/out",
+                None,
+                id="unknown-tilde-user",
+            ),
+            pytest.param("~+/out", "~+/out", None, id="tilde-plus"),
+            pytest.param("~-/out", "~-/out", None, id="tilde-minus"),
+        ],
+    )
+    def test_shell_source_resolution_classes(
+        self,
+        path: str,
+        shell_source: str,
+        expected: str | None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.hooks._runtime._command_classification import resolve_write_target
+
+        monkeypatch.setenv("HOME", "/home/write-target")
+        monkeypatch.setenv("ASK_WRITE_TARGET_DIR", "/resolved/dir")
+        monkeypatch.delenv("ASK_UNSET_RWT", raising=False)
+
+        assert resolve_write_target(path, "/work", shell_source=shell_source) == expected
 
 
 class TestExtractRedirectTargetsCwd:
@@ -1707,7 +1966,12 @@ class TestExtractRedirectTargetsCwd:
         ],
     )
     def test_extract_redirect_targets_with_cwd(self, tokens, cwd, expected):
-        assert extract_redirect_targets_with_status(tokens, cwd)[0] == expected
+        assert (
+            extract_redirect_targets_with_status(
+                tokens, cwd, redirect_syntax=[True] * len(tokens)
+            )[0]
+            == expected
+        )
 
 
 class TestOutputRedirectPartition:
@@ -1716,7 +1980,10 @@ class TestOutputRedirectPartition:
             _partition_output_redirect_indices,
         )
 
-        result = _partition_output_redirect_indices(["cmd", ">/tmp/out"], cwd="/work")
+        tokens = ["cmd", ">/tmp/out"]
+        result = _partition_output_redirect_indices(
+            tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        )
 
         assert isinstance(result, OutputRedirectPartition)
         # Attribute access by field name (the dataclass's contract).
@@ -1735,10 +2002,17 @@ class TestOutputRedirectPartition:
             _partition_output_redirect_indices,
         )
 
-        # `>$OUT` cannot be resolved: `resolve_write_target("$OUT", "/work")` returns
-        # None after `os.path.expandvars` finds the env var unset, so the partition
-        # exposes this as `unresolved=True` and `targets=[]`.
-        result = _partition_output_redirect_indices(["cmd", ">$OUT"], cwd="/work")
+        # An unresolved shell variable keeps the redirect target unresolved.
+        tokens = ["cmd", ">$OUT"]
+        argv_tokens = [
+            ArgvToken(text=token, fully_single_quoted=False, raw_span=token) for token in tokens
+        ]
+        result = _partition_output_redirect_indices(
+            tokens,
+            cwd="/work",
+            redirect_syntax=[True] * len(tokens),
+            argv_tokens=argv_tokens,
+        )
 
         assert result.unresolved is True
         assert result.targets == []
@@ -1753,7 +2027,10 @@ class TestOutputRedirectPartition:
         # matches `>`, the inner guard finds no next token, so `_consume_output_redirect`
         # returns `(next_index, None, 1)` — the caller flips `unresolved_target = True`
         # via the `elif file_redirect_delta:` branch.
-        result = _partition_output_redirect_indices(["cmd", ">"], cwd="/work")
+        tokens = ["cmd", ">"]
+        result = _partition_output_redirect_indices(
+            tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        )
 
         assert result.unresolved is True
         assert result.targets == []
@@ -1767,7 +2044,10 @@ class TestOutputRedirectPartition:
         # The public return shape is still a 3-tuple
         # `(executable_tokens, targets, file_redirect_count)` — the dataclass
         # migration is invisible to existing callers.
-        result = _partition_output_redirects(["cmd", ">/tmp/out"], cwd="/work")
+        tokens = ["cmd", ">/tmp/out"]
+        result = _partition_output_redirects(
+            tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        )
 
         assert isinstance(result, tuple)
         assert len(result) == 3
@@ -1777,14 +2057,15 @@ class TestOutputRedirectPartition:
         assert file_redirect_count == 1
 
     def test_select_executable_argv_tokens_uses_dataclass(self) -> None:
-        from autoskillit.hooks._classification._tokenizer import ArgvToken
         from autoskillit.hooks._runtime._command_classification import (
             _select_executable_argv_tokens,
         )
 
         tokens = ["cmd", ">/tmp/out"]
         argv_tokens = [ArgvToken(text=t, fully_single_quoted=False, raw_span=t) for t in tokens]
-        result = _select_executable_argv_tokens(tokens, argv_tokens, cwd="/work")
+        result = _select_executable_argv_tokens(
+            tokens, argv_tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        )
 
         # The redirect target is dropped from the projected argv even though
         # `_select_executable_argv_tokens` only consumes `partition.segments`.
@@ -1810,13 +2091,25 @@ class TestOutputRedirectPartition:
 
     def test_extract_redirect_targets_with_status_uses_dataclass(self) -> None:
         # Resolved-target branch: `>/tmp/out` resolves cleanly.
-        assert extract_redirect_targets_with_status(["cmd", ">/tmp/out"], cwd="/work") == (
+        tokens = ["cmd", ">/tmp/out"]
+        assert extract_redirect_targets_with_status(
+            tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        ) == (
             ["/tmp/out"],
             False,
         )
         # Unresolved-target branch: `>$OUT` cannot resolve; empty targets,
         # `unresolved=True` propagates through the shim.
-        assert extract_redirect_targets_with_status(["cmd", ">$OUT"], cwd="/work") == (
+        tokens = ["cmd", ">$OUT"]
+        argv_tokens = [
+            ArgvToken(text=token, fully_single_quoted=False, raw_span=token) for token in tokens
+        ]
+        assert extract_redirect_targets_with_status(
+            tokens,
+            cwd="/work",
+            redirect_syntax=[True] * len(tokens),
+            argv_tokens=argv_tokens,
+        ) == (
             [],
             True,
         )
@@ -1826,7 +2119,7 @@ class TestOutputRedirectPartition:
             _partition_output_redirect_indices,
         )
 
-        result = _partition_output_redirect_indices([], cwd="/work")
+        result = _partition_output_redirect_indices([], cwd="/work", redirect_syntax=[])
 
         assert result == OutputRedirectPartition(
             segments=[], targets=[], file_redirect_count=0, unresolved=False
@@ -4046,8 +4339,8 @@ class TestSiblingWrappersDelegate:
 
         tokens = ["gh", "pr", "view", ">", "/tmp/out"]
         assert _partition_output_redirects_call(
-            tokens, cwd="/work"
-        ) == _partition_output_redirects(tokens, cwd="/work")
+            tokens, cwd="/work", redirect_syntax=[True] * len(tokens)
+        ) == _partition_output_redirects(tokens, cwd="/work", redirect_syntax=[True] * len(tokens))
 
     @staticmethod
     def _spec_tuples(specs):

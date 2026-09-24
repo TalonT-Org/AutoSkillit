@@ -527,6 +527,37 @@ def test_denies_unresolved_bash_write_target(
     assert UNRESOLVED_WRITE_TARGET_REMEDIATION in output["permissionDecisionReason"]
 
 
+def test_denies_substituted_target_with_cwd_inside_prefix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed))
+    monkeypatch.setenv("AUTOSKILLIT_CWD", str(allowed))
+
+    result = _run_hook(_build_bash_event('cp a "$(echo /etc)/x"'))
+
+    output = json.loads(result)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert UNRESOLVED_WRITE_TARGET_REMEDIATION in output["permissionDecisionReason"]
+
+
+def test_denies_tilde_target_outside_prefix_with_cwd_inside_prefix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed))
+    monkeypatch.setenv("AUTOSKILLIT_CWD", str(allowed))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    result = _run_hook(_build_bash_event("echo x > ~/x"))
+
+    assert json.loads(result)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_allows_literal_redirect_inside_prefix(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(tmp_path / "allowed"))

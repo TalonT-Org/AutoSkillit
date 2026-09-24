@@ -1025,7 +1025,10 @@ class TestCheckedOutRefWriteTargets:
         "command",
         [
             'echo x > "$GIT_TARGET"',
+            'echo x > "$(printf /tmp/out)"',
+            "echo x > `printf /tmp/out`",
             'cd "$UNSET_DIR" && echo y > rel.txt',
+            'cd "$(printf /tmp)" && echo y > rel.txt',
             "cd - && dd if=/dev/zero of=rel.bin",
         ],
     )
@@ -1042,6 +1045,16 @@ class TestCheckedOutRefWriteTargets:
         out = _run_guard(command, kitchen_open=True, tmpdir=linked)
         assert _is_denied(out)
         assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+    def test_absolute_write_after_unknown_cwd_is_allowed(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(
+            f"cd - && echo x > {linked / 'outside.txt'}", kitchen_open=True, tmpdir=linked
+        )
+        assert out.strip() == ""
 
     @pytest.mark.parametrize(
         "command",

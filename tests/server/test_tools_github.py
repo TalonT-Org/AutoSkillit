@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.pipeline.gate import HEADLESS_TOOLS, DefaultGateState
+from autoskillit.core import HEADLESS_TOOLS
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_github import (
     fetch_github_issue,
     get_issue_title,
@@ -25,7 +26,12 @@ async def test_fetch_github_issue_works_with_gate_closed(tool_ctx) -> None:
     """The reader reaches GitHub while the kitchen gate is closed."""
     tool_ctx.gate = DefaultGateState(enabled=False)
     mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {"success": True, "issue_number": 42}
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "state": "open",
+        "body": "Issue body",
+    }
     tool_ctx.github_client = mock_client
 
     result = json.loads(await fetch_github_issue("owner/repo#42"))

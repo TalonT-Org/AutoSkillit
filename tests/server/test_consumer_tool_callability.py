@@ -68,9 +68,6 @@ EXEMPTIONS: dict[ExemptionKey, str] = {
     ("skill:resolve-failures", "run_cmd", CatalogContext.HEADLESS_SKILL_AUTO_GATE): (
         "resolve-failures/SKILL.md:165 says not via Bash or run_cmd"
     ),
-    ("skill:sous-chef", "reset_dispatch", CatalogContext.INTERACTIVE_ORCHESTRATOR): (
-        "sous-chef/SKILL.md:805-835 is the fleet L3 resume section"
-    ),
     ("skill:audit-impl", "run_python", CatalogContext.HEADLESS_SKILL): (
         "#5177: move the Step 3.4 probe to the parent-side floor check"
     ),

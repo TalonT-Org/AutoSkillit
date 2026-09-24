@@ -582,6 +582,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
     ),
+    "_type_session_invariant_admission": frozenset(
+        {"cli", "core", "recipe", "server", "workspace"}
+    ),
     "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),

@@ -225,7 +225,7 @@ def test_accepts_all_signals_and_redacts_nested_otlp_attributes(
     assert response == {}
     records = _wait_for_records(tmp_path / "otlp.jsonl", 1)
     assert len(records) == 1
-    assert set(records[0]) == {"signal", "payload"}
+    assert set(records[0]) == {"record_id", "signal", "payload"}
     assert records[0]["signal"] == signal
     serialized = json.dumps(records[0])
     assert records[0]["payload"]["session"]["id"] == "session-join-key"
@@ -934,6 +934,33 @@ def test_tiny_generation_cap_rotates_complete_jsonl_records(tmp_path: Path, monk
             assert [json.loads(line) for line in path.read_text().splitlines()]
     finally:
         sink.close()
+
+
+def test_accepted_records_get_distinct_ids_preserved_through_rotation(
+    local_sink: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+
+    monkeypatch.setattr(otlp_sink, "_MAX_GENERATION_BYTES", 128)
+    for _ in range(2):
+        status, _content_type, _response = _request(
+            local_sink,
+            "POST",
+            "/v1/logs",
+            b"{}",
+            {"Content-Type": "application/json"},
+        )
+        assert status == 200
+    local_sink.close()
+
+    active = tmp_path / "otlp.jsonl"
+    archive = tmp_path / "otlp.jsonl.1"
+    lines = [*archive.read_bytes().splitlines(), *active.read_bytes().splitlines()]
+    records = [json.loads(line) for line in lines]
+
+    assert len(records) == 2
+    assert len({record["record_id"] for record in records}) == 2
+    assert all(line.startswith(b'{"record_id":') for line in lines)
 
 
 def test_interrupted_tiny_generation_rotation_recovers_on_restart(

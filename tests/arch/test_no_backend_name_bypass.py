@@ -26,6 +26,10 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         # hyphenated form to the hook layer's underscored "claude_code" convention, and
         # collect_native_children_for_backend() routes to the matching collector by name.
         "execution/child_outcomes.py",
+        # Transcript format selection uses the persisted path's format label,
+        # not a provider capability available at runtime.
+        "_parent_assistant_turns.py",
+        "execution/evidence/report_walk.py",
     }
 )
 

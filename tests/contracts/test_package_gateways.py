@@ -476,6 +476,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
             "anomaly_detection",
             "linux_tracing",
             "otlp_sink",
+            "report_walk",
             "_token_measure",
             "_otlp_tokens",
         }

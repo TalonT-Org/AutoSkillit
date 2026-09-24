@@ -401,6 +401,35 @@ class TestParseRawCCJsonlExtendedThinking:
 
 
 class TestIterMergedAssistantTurns:
+    # Shared native-codex response-item fixtures used by both the default-backend
+    # rejection test and the codex-backend parse test below.
+    _CODEX_RESPONSE_ITEMS = (
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "First answer"}],
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Follow up"}],
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Second answer"}],
+            },
+        },
+    )
+
     def _make_record(
         self,
         *,
@@ -428,6 +457,18 @@ class TestIterMergedAssistantTurns:
     def _parse(self, *lines: str) -> list[AssistantTurn]:
         text = "\n".join(lines) + "\n"
         return list(iter_merged_assistant_turns(text))
+
+    def test_default_backend_rejects_native_codex_response_items(self) -> None:
+        text = "\n".join(json.dumps(record) for record in self._CODEX_RESPONSE_ITEMS) + "\n"
+
+        assert list(iter_merged_assistant_turns(text)) == []
+
+    def test_codex_backend_yields_assistant_turns_from_response_items(self) -> None:
+        text = "\n".join(json.dumps(record) for record in self._CODEX_RESPONSE_ITEMS) + "\n"
+
+        turns = list(iter_merged_assistant_turns(text, backend="codex"))
+
+        assert len(turns) == 2
 
     def test_single_record_yields_one_turn(self) -> None:
         line = self._make_record(rid="r1", ts="ts1", tools=["Bash"])

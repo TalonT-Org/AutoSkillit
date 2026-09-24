@@ -3,28 +3,56 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import default_log_dir
 
 
-def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
+def iter_tolerant_session_index_lines(
+    index_path: Path,
+    *,
+    offset: int = 0,
+    complete_only: bool = False,
+) -> Iterator[tuple[int, dict[str, Any] | None]]:
+    """Yield each JSONL line's ending byte offset and its decoded object, if any.
+
+    Malformed UTF-8, malformed JSON, blank lines, and non-object JSON values are
+    represented by a ``None`` row. The default mode includes an unterminated
+    final line at EOF for compatibility; ``complete_only`` omits it so an
+    append-only source can finish that line on a later pass.
+    """
+    if offset < 0:
+        raise ValueError("Session index offset must be nonnegative")
     if not index_path.is_file():
-        return []
+        return
+    with index_path.open("rb") as handle:
+        handle.seek(offset)
+        while raw_line := handle.readline():
+            end_offset = handle.tell()
+            if not raw_line.endswith(b"\n") and complete_only:
+                break
+            try:
+                line = raw_line.decode("utf-8")
+            except UnicodeDecodeError:
+                yield end_offset, None
+                continue
+            if not line.strip():
+                yield end_offset, None
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                yield end_offset, None
+                continue
+            yield end_offset, row if isinstance(row, dict) else None
+
+
+def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for raw_line in index_path.read_bytes().splitlines():
-        try:
-            line = raw_line.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
+    for _end_offset, row in iter_tolerant_session_index_lines(index_path):
+        if row is not None:
             rows.append(row)
     return rows
 

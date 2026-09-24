@@ -597,8 +597,8 @@ tasks:
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
-      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.147.0"
-        msg: "Codex CLI must be exactly codex-cli 0.147.0"
+      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.156.1"
+        msg: "Codex CLI must be exactly codex-cli 0.156.1"
       - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
         msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
     cmds:
@@ -632,7 +632,7 @@ tasks:
           echo "Live web-agent gate did not publish fresh evidence: $EVIDENCE"
           exit 1
         fi
-        $PYTHON_CMD -c 'import json, sys; from autoskillit.core import CODEX_MODEL_ALIASES; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-web-agent-codex-0.147.0","cli_version":"codex-cli 0.147.0","parent_web_search":"disabled","child_web_search":"live","child_model":CODEX_MODEL_ALIASES["haiku"],"child_reasoning_effort":"xhigh","child_sandbox_mode":"read-only","child_agents_enabled":False}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live web-agent evidence: {data!r}" if bad else 0)' "$EVIDENCE"
+        $PYTHON_CMD -c 'import json, sys; from autoskillit.core import CODEX_MODEL_ALIASES; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-web-agent-codex-0.156.1","cli_version":"codex-cli 0.156.1","parent_web_search":"disabled","child_web_search":"live","child_model":CODEX_MODEL_ALIASES["haiku"],"child_reasoning_effort":"xhigh","child_sandbox_mode":"read-only","child_agents_enabled":False}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live web-agent evidence: {data!r}" if bad else 0)' "$EVIDENCE"
 
   test-smoke-codex-managed-route-live-gate:
     desc: Run the authenticated interactive Codex managed-route gate
@@ -733,8 +733,8 @@ tasks:
     preconditions:
       - sh: command -v codex >/dev/null 2>&1
         msg: "Codex CLI must be installed"
-      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.154.0"
-        msg: "Native join gate requires codex-cli 0.154.0"
+      - sh: test "$(codex --version 2>/dev/null)" = "codex-cli 0.156.1"
+        msg: "Native join gate requires codex-cli 0.156.1"
       - sh: command -v claude >/dev/null 2>&1
         msg: "Claude Code CLI must be installed"
       - sh: test -n "$CODEX_API_KEY" || test -n "$OPENAI_API_KEY" || test -f "$HOME/.codex/auth.json"

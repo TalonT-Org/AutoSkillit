@@ -36,7 +36,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.tim
 _GATE_ENV = "AUTOSKILLIT_WEB_AGENT_LIVE_GATE"
 _ARTIFACT_DIR_ENV = "AUTOSKILLIT_WEB_AGENT_LIVE_GATE_ARTIFACT_DIR"
 _CODEX_AUTH_PATH = Path("~/.codex/auth.json").expanduser()
-_EXPECTED_CLI_VERSION = "codex-cli 0.147.0"
+_EXPECTED_CLI_VERSION = "codex-cli 0.156.1"
 _FORBIDDEN_TOOL_FRAGMENTS = (
     "apply_patch",
     "browser",
@@ -239,7 +239,7 @@ the web in the parent.
     artifact_dir.mkdir(parents=True, exist_ok=True)
     evidence = {
         "schema_version": 1,
-        "contract": "live-web-agent-codex-0.147.0",
+        "contract": "live-web-agent-codex-0.156.1",
         "generated_at": datetime.now(UTC).isoformat(),
         "cli_version": cli_version,
         "parent_id": identity.parent_id,

@@ -284,6 +284,7 @@ class TestTaskfile:
         preconditions = "\n".join(str(item) for item in task["preconditions"])
         assert "command -v codex" in preconditions
         assert "command -v claude" in preconditions
+        assert "codex-cli 0.156.1" in preconditions
         assert "CODEX_API_KEY" in preconditions
         assert "OPENAI_API_KEY" in preconditions
         assert ".codex/auth.json" in preconditions
@@ -321,7 +322,7 @@ class TestTaskfile:
 
         assert "tests/execution/backends/test_web_agent_live_gate.py" in commands
         assert "test_explorer_live_gate.py" not in commands
-        assert "codex-cli 0.147.0" in preconditions
+        assert "codex-cli 0.156.1" in preconditions
         assert task["env"]["AUTOSKILLIT_WEB_AGENT_LIVE_GATE"] == "1"
         assert 'rm -f "$EVIDENCE"' in commands
         assert "requires exactly one non-skipped test" in commands

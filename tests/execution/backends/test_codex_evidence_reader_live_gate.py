@@ -375,7 +375,7 @@ def test_live_codex_evidence_reader_gate(tmp_path: Path, monkeypatch: pytest.Mon
         assert payload["coverage_gaps"] == []
         child_ids.add(payload["child_identity"]["thread_id"])
         conformance = result["conformance"]
-        assert conformance["cli_version"] == "codex-cli 0.147.0"
+        assert conformance["cli_version"] == "codex-cli 0.156.1"
         assert conformance["auth_method"] == expected_auth_method
         for digest_name in (
             "auth_source_digest",

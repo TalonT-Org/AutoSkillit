@@ -102,7 +102,7 @@ model:
 
 Recipe steps can also specify a `model` field per-step in their YAML definition.
 
-The logical `opus` class resolves to the canonical `claude-opus-5` model ID by
+The logical `opus` class resolves to the canonical `claude-opus-5-5` model ID by
 default. Projects that route Claude through a provider whose deployment does
 not accept that raw ID (Amazon Bedrock, Microsoft Foundry, or a custom
 gateway) should supply the provider's own accepted deployment/model

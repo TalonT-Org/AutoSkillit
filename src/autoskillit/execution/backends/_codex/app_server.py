@@ -338,7 +338,7 @@ class CodexAppServerDriver:
 
     def _accept_skills_list(self, result: Mapping[str, Any]) -> tuple[str, ...]:
         # Per-cwd entries are nested under "data" -- confirmed live against
-        # the installed codex-cli 0.153.4 app-server binary. There is no
+        # the installed codex-cli 0.156.1 app-server binary. There is no
         # "results" key on the wire; a response using that shape instead of
         # "data" is treated as carrying zero entries (see the "missing an
         # entry for cwd" failure this falls into below).

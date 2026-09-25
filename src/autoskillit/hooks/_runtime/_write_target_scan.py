@@ -6,6 +6,7 @@ import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -45,6 +46,16 @@ class _ShellDirectoryState:
     cdpath_unknown: bool
 
 
+def _classification_module() -> ModuleType:
+    if __package__:
+        from . import _command_classification as packaged_classification
+
+        return packaged_classification
+    import _command_classification as standalone_classification
+
+    return standalone_classification
+
+
 def _ensure_scope_state(
     scopes: dict[tuple[int, ...], _ShellDirectoryState], path: tuple[int, ...]
 ) -> _ShellDirectoryState:
@@ -69,14 +80,7 @@ def _unwrapped_prefix(prefix: list[str]) -> bool:
 
 
 def _cdpath_setting(segment: list[str], start: int | None) -> tuple[bool, bool] | None:
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     prefix = segment if start is None else segment[:start]
     if not _unwrapped_prefix(prefix):
@@ -131,14 +135,7 @@ def _apply_directory_command(
     argv_tokens: Sequence[ArgvToken] | None,
     state: _ShellDirectoryState,
 ) -> None:
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     if verb == "popd":
         state.cwd = ""
@@ -212,14 +209,7 @@ def _record_state(
         tuple[int, ...], tuple[_ShellDirectoryState, _ShellDirectoryState | None]
     ],
 ) -> _ShellDirectoryState:
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     path = record.subshell_path
     _seed_child_scope(path, scopes, pending_children)
@@ -277,14 +267,7 @@ def _invoked_child_state(
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
 ) -> _ShellDirectoryState | None:
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     if path is None or verb_cwd == state.cwd:
         return None
@@ -301,14 +284,7 @@ def _scan_executable(
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
 ) -> tuple[list[str], bool, bool, _ShellDirectoryState | None]:
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     start = _classification._verb_start_index(executable)
     setting = _cdpath_setting(executable, start) if argv_tokens is not None else None
@@ -344,14 +320,7 @@ def _scan_executable(
 
 def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
     """Classify literal write targets and unresolved writes in evaluated shell commands."""
-    if __package__:
-        from . import _command_classification as packaged_classification
-
-        _classification = packaged_classification
-    else:
-        import _command_classification as standalone_classification
-
-        _classification = standalone_classification
+    _classification = _classification_module()
 
     records = _classification._all_evaluated_segments_with_provenance_impl(
         command, include_process_substitutions=True

@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-import pwd
 import re
 import shlex
 from pathlib import Path
@@ -120,7 +119,7 @@ _RESOLUTION_MATRIX: tuple[tuple[str, str, str | None], ...] = (
     ("digit_after_dollar", "report$2026.txt", None),
     ("ansi_c_quote", r"$'out\x2fx'", None),
     ("tilde_home", "~/x", "{home}/x"),
-    ("tilde_user", "~{user}/x", "{user_home}/x"),
+    ("tilde_user", "~probe/x", "{user_home}/x"),
     ("tilde_unknown_user", "~no_such_user_rwt9/x", None),
     ("tilde_pwd", "~+/x", None),
     ("tilde_oldpwd", "~-/x", None),
@@ -1971,18 +1970,25 @@ class TestWriteTargetResolutionMatrix:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        user = pwd.getpwuid(os.getuid())
+        user_home = tmp_path / "user-home"
         paths = {
             "{cwd}": str(tmp_path / "cwd"),
             "{env}": str(tmp_path / "env"),
             "{home}": str(tmp_path / "home"),
-            "{user_home}": user.pw_dir,
+            "{user_home}": str(user_home),
         }
         monkeypatch.setenv("HOME", paths["{home}"])
         monkeypatch.setenv("ASK_RWT_DIR", paths["{env}"])
         monkeypatch.setenv("ASK_RWT_REF", "ASK_RWT_DIR")
         monkeypatch.delenv("ASK_RWT_UNSET", raising=False)
-        raw_target = raw_target.replace("{user}", user.pw_name)
+        original_expanduser = os.path.expanduser
+
+        def _expanduser(path: str) -> str:
+            if path == "~probe":
+                return str(user_home)
+            return original_expanduser(path)
+
+        monkeypatch.setattr(os.path, "expanduser", _expanduser)
         if expected is not None:
             for marker, value in paths.items():
                 expected = expected.replace(marker, value)

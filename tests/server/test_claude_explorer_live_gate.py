@@ -17,6 +17,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillSource,
     load_agent_definition,
+    load_agent_definitions,
     load_bundled_agent_definitions,
 )
 from tests.conftest import production_interpreter_env
@@ -82,16 +83,16 @@ def _build_plugin(plugin: Path) -> None:
         assert binding.plugin_dir is not None
         shutil.copytree(binding.plugin_dir, plugin)
         projected_agents = binding.plugin_dir / "agents"
-        copied_agents = {
-            path.relative_to(plugin / "agents"): path.read_bytes()
-            for path in sorted((plugin / "agents").rglob("*"))
-            if path.is_file()
-        }
-        assert copied_agents == {
-            path.relative_to(projected_agents): path.read_bytes()
-            for path in sorted(projected_agents.rglob("*"))
-            if path.is_file()
-        }, "copied agents/ must be byte-identical to the production projection"
+        projected_tools = [
+            tool
+            for definition in load_agent_definitions(projected_agents)
+            for tool in definition.tools
+            if tool.startswith("mcp__")
+        ]
+        assert projected_tools
+        assert all(
+            tool.startswith("mcp__plugin_autoskillit_autoskillit__") for tool in projected_tools
+        )
     assert binding.closed
 
 

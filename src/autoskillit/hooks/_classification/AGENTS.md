@@ -35,11 +35,10 @@ block B bootstrap so hook scripts can keep importing via
   `_partition_output_redirects` / `_select_executable_argv_tokens` /
   `extract_redirect_targets_with_status` / `resolve_write_target` projections).
   Sole producer of these symbols; the facade re-exports them.
-- `_write_target_scan.py` — scope-aware write-target scanning across evaluated
-  commands, with cwd tracking for shell groups and child processes.
-
-`scan_write_targets` and `WriteTargetScan` are defined in `_write_target_scan.py`
-and re-exported by `_runtime/_command_classification.py`.
+`scan_write_targets` and `WriteTargetScan` are defined in
+`_runtime/_write_target_scan.py` and re-exported by
+`_runtime/_command_classification.py`. The scanner tracks mutable cwd and scope
+state across evaluated commands.
 
 ## Bootstrap Conventions
 

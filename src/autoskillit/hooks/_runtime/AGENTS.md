@@ -35,6 +35,10 @@ logic, with zero consumers outside this one file.
 
 **Inter-peer coupling** (bare-name imports within the move set):
 
+- `_write_target_scan.py` — scope-aware write-target scanning across evaluated
+  commands. It imports `_command_classification` inside scan operations, after the
+  facade has loaded, so the facade can re-export its result type without an import cycle.
+
 - `_git_command_classification.py` — Git operation classification used by
   `guards/git_ops_guard.py`; it shares the runtime command and mutation primitives.
 

@@ -140,7 +140,7 @@ def test_redirect_patterns_exclude_fd_redirects():
 
 def test_write_guard_has_safe_path_filtering():
     """The shared write-target scan must filter pseudo-device paths."""
-    source = (SRC_ROOT / "hooks" / "_classification" / "_write_target_scan.py").read_text()
+    source = (SRC_ROOT / "hooks" / "_runtime" / "_write_target_scan.py").read_text()
     assert "/dev/null" in source, "the shared scan must exclude /dev/null"
     assert "path not in _PSEUDO_DEVICE_PATHS" in source, (
         "scan_write_targets must filter pseudo-device targets"

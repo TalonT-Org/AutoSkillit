@@ -812,16 +812,16 @@ def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
 
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification import _write_target_scan
-    from autoskillit.hooks._classification._write_target_scan import (
+    from autoskillit.hooks._runtime import _write_target_scan
+    from autoskillit.hooks._runtime._write_target_scan import (
         UNRESOLVED_WRITE_TARGET_REMEDIATION,
         WriteTargetScan,
     )
 else:
     if __package__:
-        from .._classification import _write_target_scan
+        from . import _write_target_scan
     else:
-        from _classification import _write_target_scan
+        import _write_target_scan
 
     UNRESOLVED_WRITE_TARGET_REMEDIATION = _write_target_scan.UNRESOLVED_WRITE_TARGET_REMEDIATION
     WriteTargetScan = _write_target_scan.WriteTargetScan

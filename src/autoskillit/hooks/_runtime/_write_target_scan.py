@@ -69,6 +69,11 @@ def _shell_builtin_prefix(prefix: list[str]) -> bool:
 
 
 def _cdpath_mutated(segment: list[str], start: int | None) -> bool:
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     prefix = segment if start is None else segment[:start]
     if not _shell_builtin_prefix(prefix):
         return False
@@ -112,6 +117,11 @@ def _apply_directory_command(
     argv_tokens: Sequence[ArgvToken] | None,
     state: _ShellDirectoryState,
 ) -> None:
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     if verb == "popd":
         state.cwd = ""
         return
@@ -184,6 +194,11 @@ def _record_state(
         tuple[int, ...], tuple[_ShellDirectoryState, _ShellDirectoryState | None]
     ],
 ) -> _ShellDirectoryState:
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     path = record.subshell_path
     _seed_child_scope(path, scopes, pending_children)
     if path is None:
@@ -240,6 +255,11 @@ def _invoked_child_state(
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
 ) -> _ShellDirectoryState | None:
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     if path is None or verb_cwd == state.cwd:
         return None
     if _classification._is_shell_interpreter(verb) or re.fullmatch(
@@ -255,6 +275,11 @@ def _scan_executable(
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
 ) -> tuple[list[str], bool, bool, _ShellDirectoryState | None]:
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     start = _classification._verb_start_index(executable)
     if argv_tokens is not None and _cdpath_mutated(executable, start):
         state.cdpath_unknown = True
@@ -282,6 +307,11 @@ def _scan_executable(
 
 def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
     """Classify literal write targets and unresolved writes in evaluated shell commands."""
+    if __package__:
+        from . import _command_classification as _classification
+    else:
+        import _command_classification as _classification  # type: ignore[no-redef]
+
     records = _classification._all_evaluated_segments_with_provenance_impl(
         command, include_process_substitutions=True
     )
@@ -335,7 +365,3 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
 
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime import _command_classification as _classification
-elif __package__ == "autoskillit.hooks._classification":
-    from .._runtime import _command_classification as _classification
-else:
-    import _command_classification as _classification

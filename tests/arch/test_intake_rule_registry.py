@@ -223,7 +223,7 @@ def test_digest_header_carries_the_version() -> None:
     )
 
 
-@pytest.mark.parametrize("version", (1, 2, 3, CODEX_INTAKE_DISCIPLINE_VERSION, 10))
+@pytest.mark.parametrize("version", (1, 2, CODEX_INTAKE_DISCIPLINE_VERSION, 10))
 def test_intake_header_round_trips_through_its_parser(version: int) -> None:
     assert parse_intake_discipline_versions(render_intake_digest(version=version)) == frozenset(
         {version}

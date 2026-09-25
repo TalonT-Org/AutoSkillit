@@ -32,7 +32,7 @@ even when it does:
 
 ## Decision
 
-`InteractiveLifetime` in `autoskillit.cli.session._session_lifetime` owns the
+`InteractiveLifetime` in `autoskillit.cli.session._session_process` owns the
 live cook attempt's wall-clock hard cap. The tether sweep's `not_after` drives
 orphan cleanup when that owner is gone; it is not the live attempt's ceiling
 of record. `systemd_scope_enabled` adds a best-effort, fail-open kernel

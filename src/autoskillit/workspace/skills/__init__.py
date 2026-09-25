@@ -10,6 +10,7 @@ authority surface.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from pathlib import Path
 
 from autoskillit.core import (
@@ -71,6 +72,37 @@ def _admit_project_local_candidate(candidate: SkillInfo, bundled: SkillInfo | No
         candidate,
         invalidities=(*candidate.invalidities, *floor),
     )
+
+
+def _project_local_candidate(
+    normalized_root: Path,
+    search_dir: str,
+    precedence: int,
+    name: str,
+    bundled: Callable[[], SkillInfo | None],
+) -> SkillInfo | None:
+    """Build and admit the project-local candidate for ``name`` in one search dir.
+
+    The single admission seam shared by ``resolve_effective`` and
+    ``_list_effective_unfiltered``. ``bundled`` is consulted only when a
+    candidate path exists.
+    """
+    skill_path = _project_skill_path(normalized_root, normalized_root / search_dir, name)
+    if skill_path is None:
+        return None
+    candidate = _skill_info_from_frontmatter(
+        name,
+        SkillSource.PROJECT_LOCAL,
+        skill_path,
+        source_ref=SkillSourceRef(
+            origin=SkillSource.PROJECT_LOCAL,
+            logical_name=name,
+            skill_path=skill_path,
+            search_dir=search_dir,
+            precedence=precedence,
+        ),
+    )
+    return _admit_project_local_candidate(candidate, bundled())
 
 
 def _dir_mtime(path: Path) -> float:
@@ -173,32 +205,17 @@ class DefaultSkillResolver:
         first_invalid: SkillInfo | None = None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
-                skill_path = _project_skill_path(
-                    normalized_root,
-                    normalized_root / search_dir,
-                    name,
+                candidate = _project_local_candidate(
+                    normalized_root, search_dir, precedence, name, bundled_twin
                 )
-                if skill_path is None:
+                if candidate is None:
                     continue
-                candidate = _skill_info_from_frontmatter(
-                    name,
-                    SkillSource.PROJECT_LOCAL,
-                    skill_path,
-                    source_ref=SkillSourceRef(
-                        origin=SkillSource.PROJECT_LOCAL,
-                        logical_name=name,
-                        skill_path=skill_path,
-                        search_dir=search_dir,
-                        precedence=precedence,
-                    ),
-                )
-                candidate = _admit_project_local_candidate(candidate, bundled_twin())
                 if not candidate.invalidities:
                     return candidate
                 logger.warning(
                     "project_local_skill_rejected",
                     skill=name,
-                    path=str(skill_path),
+                    path=str(candidate.path),
                     reason=render_skill_invalidities(candidate.invalidities),
                     hints=invalidity_hints(candidate.invalidities),
                 )
@@ -275,31 +292,20 @@ class DefaultSkillResolver:
                 for entry in entries:
                     if entry.name in selected:
                         continue
-                    skill_path = _project_skill_path(
+                    candidate = _project_local_candidate(
                         normalized_root,
-                        search_root,
+                        search_dir,
+                        precedence,
                         entry.name,
+                        lambda: by_name.get(entry.name),
                     )
-                    if skill_path is None:
+                    if candidate is None:
                         continue
-                    candidate = _skill_info_from_frontmatter(
-                        entry.name,
-                        SkillSource.PROJECT_LOCAL,
-                        skill_path,
-                        source_ref=SkillSourceRef(
-                            origin=SkillSource.PROJECT_LOCAL,
-                            logical_name=entry.name,
-                            skill_path=skill_path,
-                            search_dir=search_dir,
-                            precedence=precedence,
-                        ),
-                    )
-                    candidate = _admit_project_local_candidate(candidate, by_name.get(entry.name))
                     if candidate.invalidities:
                         logger.warning(
                             "project_local_skill_rejected",
                             skill=entry.name,
-                            path=str(skill_path),
+                            path=str(candidate.path),
                             reason=render_skill_invalidities(candidate.invalidities),
                             hints=invalidity_hints(candidate.invalidities),
                         )
@@ -624,6 +630,7 @@ __all__ = [
     "_bind_exploration_vector_markers",
     "_load_exploration_sidecar",
     "_parse_exploration_sidecar",
+    "_project_local_candidate",
     "_project_skill_path",
     "_scan_directory",
     "bundled_skills_dir",

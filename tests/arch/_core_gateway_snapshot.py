@@ -1192,5 +1192,6 @@ CORE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "write_readiness_sentinel",
         "write_registry_entry",
         "write_versioned_json",
+        "parse_intake_discipline_versions",
     }
 )

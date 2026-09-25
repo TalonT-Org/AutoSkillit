@@ -5,6 +5,7 @@ Zero autoskillit imports.
 
 from __future__ import annotations
 
+import re
 from typing import Final, Literal, NamedTuple
 
 __all__ = [
@@ -16,8 +17,14 @@ __all__ = [
     "CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET",
     "CODEX_SCOPE_DISCIPLINE_DIGEST",
     "render_intake_digest",
+    "parse_intake_discipline_versions",
     "CODEX_INTAKE_DISCIPLINE_DIGEST",
 ]
+
+_INTAKE_HEADER_PREFIX: Final[str] = "Context Intake Discipline v"
+_INTAKE_HEADER_PAT: Final[re.Pattern[str]] = re.compile(
+    re.escape(_INTAKE_HEADER_PREFIX) + r"(\d+):"
+)
 
 CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 
@@ -141,9 +148,14 @@ def render_intake_digest(
     version: int = CODEX_INTAKE_DISCIPLINE_VERSION,
 ) -> str:
     """Render the injected wire text from the rule registry."""
-    return "\n".join(
-        (f"Context Intake Discipline v{version}:", *(f"- {rule.text}" for rule in rules))
-    )
+    return "\n".join((f"{_INTAKE_HEADER_PREFIX}{version}:", *(f"- {rule.text}" for rule in rules)))
+
+
+def parse_intake_discipline_versions(text: str) -> frozenset[int]:
+    """Inverse of render_intake_digest's header: every policy version whose header
+    appears in *text*.
+    """
+    return frozenset(int(version) for version in _INTAKE_HEADER_PAT.findall(text))
 
 
 CODEX_INTAKE_DISCIPLINE_DIGEST: Final[str] = render_intake_digest()

@@ -110,8 +110,20 @@ def check_file(pyi_path: Path) -> list[str]:
 
 
 def check() -> list[str]:
+    """Return all stub-symbol violations as structured strings.
+
+    Returns a list (not stderr/ERROR:) because tests consume the structured
+    return directly: tests/infra/test_check_pyi_stub_symbols.py calls
+    check_file() per-file, and tests/infra/test_script_gate_empty_universe.py
+    asserts on this list. Scripts without per-file tests (check_contract_freshness,
+    compile_recipes) print directly to stderr instead — see that test for the
+    parametrized contrast.
+    """
     violations: list[str] = []
-    for path in sorted(SRC_ROOT.rglob("__init__.pyi")):
+    paths = sorted(SRC_ROOT.rglob("__init__.pyi"))
+    if not paths:
+        return [f"{SRC_ROOT}: no __init__.pyi stubs discovered"]
+    for path in paths:
         violations.extend(check_file(path))
     return violations
 

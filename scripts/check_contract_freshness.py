@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from autoskillit.core.io import load_yaml
@@ -11,14 +12,30 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 
 
-def main() -> int:
-    stale = []
-    missing = []
+# This script prints to stderr (no `check()` returning a list) because it has
+# no per-file unit tests — only tests/infra/test_script_gate_empty_universe.py
+# drives main() end-to-end. Scripts with per-file unit tests expose a
+# list-returning check() instead; see scripts/check_pyi_stub_format.py for
+# the contrasted pattern. The same convention applies to compile_recipes.py.
+
+
+def _recipe_yaml_paths() -> list[Path]:
     # Collect all recipes that should have contract cards (top-level + campaigns/)
     yaml_paths = sorted(RECIPES_DIR.glob("*.yaml"))
     campaigns_dir = RECIPES_DIR / "campaigns"
     if campaigns_dir.is_dir():
         yaml_paths.extend(sorted(campaigns_dir.glob("*.yaml")))
+    return yaml_paths
+
+
+def main() -> int:
+    stale = []
+    missing = []
+    yaml_paths = _recipe_yaml_paths()
+    if not yaml_paths:
+        # Match the compile_recipes.py convention: "ERROR: <verb> <noun> ...".
+        print(f"ERROR: no recipe YAML under {RECIPES_DIR}", file=sys.stderr)
+        return 1
     for yaml_path in yaml_paths:
         name = yaml_path.stem
         card_path = RECIPES_DIR / "contracts" / f"{name}.yaml"

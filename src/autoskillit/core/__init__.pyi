@@ -1488,6 +1488,7 @@ from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_inc
 from .types import normalize_declared_truth as normalize_declared_truth
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
+from .types import parse_intake_discipline_versions as parse_intake_discipline_versions
 from .types import parse_outcome_expression as parse_outcome_expression
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (

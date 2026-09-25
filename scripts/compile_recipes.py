@@ -16,6 +16,14 @@ except ImportError:
 RECIPES_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "recipes"
 
 
+# Convention-setter for the recipe-pair empty-universe guard: prints `ERROR: ...`
+# to stderr from `main()` because this script has no per-file unit tests — only
+# tests/infra/test_script_gate_empty_universe.py drives main() end-to-end.
+# Scripts with per-file unit tests expose a list-returning check() instead;
+# see scripts/check_pyi_stub_format.py for the contrasted pattern. The same
+# convention is mirrored in scripts/check_contract_freshness.py.
+
+
 class CompileError(Exception):
     """Raised when a single recipe file fails to compile."""
 
@@ -64,8 +72,12 @@ def main() -> int:
     if not RECIPES_DIR.is_dir():
         print(f"ERROR: recipes dir not found: {RECIPES_DIR}", file=sys.stderr)
         return 1
+    yamls = sorted(RECIPES_DIR.rglob("*.yaml"))
+    if not yamls:
+        print(f"ERROR: no recipe YAML under {RECIPES_DIR}", file=sys.stderr)
+        return 1
     if check_only:
-        stale = [y for y in RECIPES_DIR.rglob("*.yaml") if not _is_current(y)]
+        stale = [y for y in yamls if not _is_current(y)]
         if stale:
             for y in sorted(stale):
                 print(f"STALE: {y}", file=sys.stderr)
@@ -73,7 +85,7 @@ def main() -> int:
         return 0
     count = 0
     errors = 0
-    for yaml_path in sorted(RECIPES_DIR.rglob("*.yaml")):
+    for yaml_path in yamls:
         try:
             _compile_one(yaml_path)
             count += 1

@@ -202,6 +202,17 @@ def test_backend_exemption_rejects_a_non_codex_or_non_marked_second_site(
     )
 
 
+def test_zero_call_sites_is_a_violation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_checker, "SRC_ROOT", tmp_path)
+    monkeypatch.setattr(_checker, "POLICY_FUNCTIONS", (("_policy", "policy_mod.py"),))
+    _write(tmp_path, "policy_mod.py", "def _policy(spec):\n    return []\n")
+
+    violations = _checker.check()
+
+    assert len(violations) == 1
+    assert "0 call sites" in violations[0]
+
+
 def test_real_codebase_has_single_enforcement_point() -> None:
     """Integration check: the actual production policy functions pass today."""
     violations = _checker.check()

@@ -1,14 +1,23 @@
 """Fleet session-type visibility tests.
 
-Asserts fleet + FLEET_DISPATCH tools are visible for fleet sessions and hidden
-for orchestrator / skill / food-truck / cook sessions. Co-locates the
-"fleet-hides" regression guards because they require the
+Asserts fleet + FLEET_DISPATCH tools are visible for fleet sessions and fleet
+mutation tools stay hidden for other session types. Co-locates the
+regression guards because they require the
 `@pytest.mark.feature("fleet")` marker that the conftest fixture does not gate.
 """
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
+
+from tests.server._session_catalogs import (
+    CatalogContext,
+    assert_no_fleet_mutation_leak,
+    build_session_catalog,
+)
+from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [
     pytest.mark.layer("server"),
@@ -45,6 +54,37 @@ async def test_fleet_dispatch_mode_enables_fleet_dispatch_tools(monkeypatch):
     )
     expected = FLEET_TOOLS | FLEET_DISPATCH_TOOLS | FREE_RANGE_TOOLS
     assert visible == expected
+
+
+@pytest.mark.anyio
+async def test_fleet_dispatch_close_kitchen_hides_readers_until_reopen(build_ctx, monkeypatch):
+    from autoskillit.core import FLEET_DISPATCH_TOOLS
+    from autoskillit.server import mcp
+    from autoskillit.server.tools import tools_kitchen
+
+    catalog = await build_session_catalog(
+        CatalogContext.FLEET_DISPATCH,
+        monkeypatch=monkeypatch,
+        build_ctx=build_ctx,
+    )
+    assert FLEET_DISPATCH_TOOLS <= catalog.tools
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = False
+    mock_ctx.reset_visibility = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        await tools_kitchen.close_kitchen(ctx=mock_ctx)
+        hidden = {tool.name for tool in await mcp.list_tools()}
+        assert FLEET_DISPATCH_TOOLS.isdisjoint(hidden)
+
+        with patch.object(
+            tools_kitchen, "_open_kitchen_handler", new=AsyncMock(return_value=None)
+        ):
+            await tools_kitchen.open_kitchen(ctx=mock_ctx)
+
+    visible_again = {tool.name for tool in await mcp.list_tools()}
+    assert FLEET_DISPATCH_TOOLS <= visible_again
 
 
 @pytest.mark.parametrize("mode_value", ["campaign", None])
@@ -150,106 +190,45 @@ async def test_fleet_tools_constant_matches_tagged_tools(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Regression guards — fleet tools must NOT be visible for non-fleet session types
+# Regression guards — fleet mutation tools stay hidden outside fleet sessions
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("session_type_value", "headless_value"),
+    [
+        ("orchestrator", "1"),
+        ("orchestrator", None),
+        ("skill", "1"),
+        ("skill", None),
+        (None, None),
+    ],
+    ids=[
+        "orchestrator_headless",
+        "orchestrator_interactive",
+        "skill_headless",
+        "skill_interactive",
+        "no_session_type",
+    ],
+)
 @pytest.mark.anyio
-async def test_orchestrator_headless_hides_fleet_tools(monkeypatch):
-    """Regression guard: fleet tools must NOT be visible in orchestrator+headless sessions."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+async def test_non_fleet_session_leaks_no_fleet_mutation_tools(
+    monkeypatch, session_type_value, headless_value
+):
+    """Non-fleet sessions (any shape) must not expose fleet mutation tools."""
+    from autoskillit.core import FLEET_MODE_ENV_VAR
     from autoskillit.server import _apply_session_type_visibility, mcp
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    if session_type_value is not None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", session_type_value)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+    if headless_value is not None:
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", headless_value)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
     _apply_session_type_visibility()
 
     visible = {t.name for t in await mcp.list_tools()}
-    assert visible.isdisjoint(FLEET_TOOLS), (
-        f"Fleet tools visible in orchestrator+headless: {visible & FLEET_TOOLS}"
-    )
-    assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-        f"Fleet-dispatch visible in orchestrator+headless: {visible & FLEET_DISPATCH_TOOLS}"
-    )
-
-
-@pytest.mark.anyio
-async def test_orchestrator_interactive_hides_fleet_tools(monkeypatch):
-    """Regression guard: fleet tools must NOT be visible in orchestrator+interactive
-    sessions"""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert visible.isdisjoint(FLEET_TOOLS), (
-        f"Fleet tools visible in orchestrator+interactive: {visible & FLEET_TOOLS}"
-    )
-    assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-        f"Fleet-dispatch visible in orchestrator+interactive: {visible & FLEET_DISPATCH_TOOLS}"
-    )
-
-
-@pytest.mark.anyio
-async def test_skill_headless_hides_fleet_tools(monkeypatch):
-    """Regression guard: fleet tools must NOT be visible in skill+headless sessions."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert visible.isdisjoint(FLEET_TOOLS), (
-        f"Fleet tools visible in skill+headless: {visible & FLEET_TOOLS}"
-    )
-    assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-        f"Fleet-dispatch tools visible in skill+headless: {visible & FLEET_DISPATCH_TOOLS}"
-    )
-
-
-@pytest.mark.anyio
-async def test_skill_interactive_hides_fleet_tools(monkeypatch):
-    """Regression guard: fleet tools must NOT be visible in skill+interactive sessions."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert visible.isdisjoint(FLEET_TOOLS), (
-        f"Fleet tools visible in skill+interactive: {visible & FLEET_TOOLS}"
-    )
-    assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-        f"Fleet-dispatch tools visible in skill+interactive: {visible & FLEET_DISPATCH_TOOLS}"
-    )
-
-
-@pytest.mark.anyio
-async def test_no_session_type_hides_fleet_tools(monkeypatch):
-    """Regression guard: fleet tools must NOT be visible when no session type is set."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert visible.isdisjoint(FLEET_TOOLS), (
-        f"Fleet tools visible with no session type: {visible & FLEET_TOOLS}"
-    )
-    assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
-        f"Fleet-dispatch tools visible with no session type: {visible & FLEET_DISPATCH_TOOLS}"
-    )
+    assert_no_fleet_mutation_leak(visible)

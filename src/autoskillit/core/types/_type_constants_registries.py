@@ -157,8 +157,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "check_pr_mergeable",
         "set_commit_status",
         "analyze_tool_sequences",
-        "fetch_github_issue",
-        "get_issue_title",
         "get_ci_status",
         "get_pipeline_report",
         "get_quota_events",
@@ -191,6 +189,8 @@ GATED_TOOLS: frozenset[str] = frozenset(
 HEADLESS_TOOLS: frozenset[str] = frozenset(
     {
         "delegate_evidence_reader",
+        "fetch_github_issue",
+        "get_issue_title",
         "test_check",
         "unlock_agent_pack",
         "commit_files",
@@ -603,8 +603,12 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
 EXPLORATION_TOOLS: frozenset[str] = frozenset(
     name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
 )
+# Kitchen-gated tools visible to a kitchen session. Includes any FLEET_DISPATCH_TOOLS that
+# are also GATED and registered as INSPECTION — those are kitchen-shared readers that must
+# stay addressable from cook catalogs without requiring fleet mode. FLEET_DISPATCH mutation
+# tools are kept out because `assert_no_fleet_mutation_leak` enforces it at session time.
 KITCHEN_GATED_TOOLS: frozenset[str] = (
-    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
+    GATED_TOOLS - FLEET_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

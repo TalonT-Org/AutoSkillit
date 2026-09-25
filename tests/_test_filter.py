@@ -1156,6 +1156,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_recipe_namespace_admission.py",
             "server/test_orchestrator_guidance_admission.py",
             "server/test_server_init_gate.py",
+            "server/test_consumer_tool_callability.py",
             "smoke_utils",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
@@ -1252,6 +1253,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_load_recipe.py",
             "server/test_recipe_flow_guard_records.py",
             "server/test_tools_recipe_pull.py",
+            "server/test_consumer_tool_callability.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",

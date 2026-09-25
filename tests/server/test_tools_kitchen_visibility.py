@@ -370,6 +370,9 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     assert KITCHEN_GATED_TOOLS.issubset(tools_after_reopen), (
         "kitchen tools should be visible after open_kitchen restores pre-revealed tags"
     )
+    assert {"fetch_github_issue", "get_issue_title", "list_recipes", "load_recipe"} <= (
+        tools_after_reopen
+    )
 
 
 @pytest.mark.anyio

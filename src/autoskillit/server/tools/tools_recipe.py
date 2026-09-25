@@ -141,7 +141,7 @@ async def _finalize_load_recipe_result(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
 )
 @session_scoped(SCOPE_ANY)
@@ -182,7 +182,7 @@ async def list_recipes() -> str:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("load_recipe"),
 )

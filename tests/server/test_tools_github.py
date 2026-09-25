@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
+from autoskillit.core import HEADLESS_TOOLS
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_github import (
     fetch_github_issue,
     get_issue_title,
@@ -21,12 +22,22 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_gate_closed(tool_ctx) -> None:
-    """Gate disabled → gate error JSON."""
+async def test_fetch_github_issue_works_with_gate_closed(tool_ctx) -> None:
+    """The reader reaches GitHub while the kitchen gate is closed."""
     tool_ctx.gate = DefaultGateState(enabled=False)
+    mock_client = AsyncMock()
+    mock_client.fetch_issue.return_value = {
+        "success": True,
+        "issue_number": 42,
+        "state": "open",
+        "body": "Issue body",
+    }
+    tool_ctx.github_client = mock_client
+
     result = json.loads(await fetch_github_issue("owner/repo#42"))
-    assert result["success"] is False
-    assert result["subtype"] == "gate_error"
+    assert result["success"] is True
+    assert result.get("subtype") != "gate_error"
+    mock_client.fetch_issue.assert_awaited_once_with("owner/repo#42", include_comments=True)
 
 
 @pytest.mark.anyio
@@ -124,9 +135,8 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     assert result["success"] is False
 
 
-def test_fetch_github_issue_in_gated_tools():
-    assert "fetch_github_issue" in GATED_TOOLS
-    assert "fetch_github_issue" not in UNGATED_TOOLS
+def test_fetch_github_issue_in_headless_tools():
+    assert "fetch_github_issue" in HEADLESS_TOOLS
 
 
 def test_fetch_github_issue_docstring_is_role_scoped() -> None:
@@ -156,12 +166,17 @@ def test_fetch_github_issue_docstring_is_role_scoped() -> None:
 
 
 @pytest.mark.anyio
-async def test_get_issue_title_gate_closed(tool_ctx) -> None:
-    """Gate disabled → gate error JSON."""
+async def test_get_issue_title_works_with_gate_closed(tool_ctx) -> None:
+    """The title reader reaches GitHub while the kitchen gate is closed."""
     tool_ctx.gate = DefaultGateState(enabled=False)
+    mock_client = AsyncMock()
+    mock_client.fetch_title.return_value = {"success": True, "number": 42, "title": "Test issue"}
+    tool_ctx.github_client = mock_client
+
     result = json.loads(await get_issue_title("owner/repo#42"))
-    assert result["success"] is False
-    assert result["subtype"] == "gate_error"
+    assert result["success"] is True
+    assert result.get("subtype") != "gate_error"
+    mock_client.fetch_title.assert_awaited_once_with("owner/repo#42")
 
 
 @pytest.mark.anyio
@@ -217,7 +232,5 @@ class TestGetIssueTitleTool:
         result = json.loads(await get_issue_title("owner/repo#404"))
         assert result["success"] is False
 
-    def test_get_issue_title_is_gated(self):
-        """'get_issue_title' in GATED_TOOLS."""
-        assert "get_issue_title" in GATED_TOOLS
-        assert "get_issue_title" not in UNGATED_TOOLS
+    def test_get_issue_title_is_headless(self):
+        assert "get_issue_title" in HEADLESS_TOOLS

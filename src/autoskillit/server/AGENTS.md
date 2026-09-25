@@ -52,7 +52,10 @@ Controls whether the tool succeeds when called (independent of visibility):
 
 ### The Anomalies
 
-1. **Fleet-dispatch tools are hidden at startup (via `ALL_VISIBILITY_TAGS` loop) and revealed only for FLEET+dispatch sessions.** Application-gate (`_require_enabled()`) provides defense-in-depth.
+1. **Fleet-dispatch tools are hidden at startup (via the `ALL_VISIBILITY_TAGS` loop)
+   and additionally revealed for FLEET+dispatch sessions.** INSPECTION tools may also
+   carry `kitchen`, as enforced by `test_tool_decorators_enforce_tag_partition`.
+   Application-gated members also call `_require_enabled()`.
 
 2. **`test_check` is tag-hidden but NOT application-gated.** It carries the `kitchen`, `kitchen-core`,
    `headless`, and `autoskillit` tags (hidden at startup), but does NOT call `_require_enabled()`. Headless skill sessions need
@@ -65,8 +68,8 @@ Controls whether the tool succeeds when called (independent of visibility):
 |----------|--------|-------------------|--------------------|--------------|
 | Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
 | Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
-| Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
-| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, typed audit artifact producers |
+| Fleet-dispatch tool | `kitchen`, `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `list_recipes`, `load_recipe` |
+| Headless-exempt | `headless` (usually `kitchen`; the GitHub variants also carry `github` + `fleet-dispatch`) | Yes | No | `test_check`, `commit_files`, `fetch_github_issue`, `get_issue_title`, typed audit artifact producers |
 | Exploration broker | `exploration` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `submit_exploration_query`, `get_exploration_page`, `resume_exploration_context` |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
 
@@ -89,7 +92,12 @@ The canonical tool sets are in `core/types/_type_constants_registries.py`:
 
 - `GATED_TOOLS` — all tools that call `_require_enabled()` (validated by arch test)
 - `UNGATED_TOOLS` = `FREE_RANGE_TOOLS` — tools with no gating at all
-- `HEADLESS_TOOLS` — the six kitchen-tagged, application-ungated worker tools: testing, commit, legacy audit-cycle, and the three typed audit artifact producers
+- `HEADLESS_TOOLS` — the source-of-truth set of application-ungated tools available to
+  headless skill sessions, including testing, commit, issue readers, and audit workers
 - `FLEET_TOOLS` — fleet-session-only tools
-- `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (hidden at startup, application-gated)
-- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review", "exploration"}`
+- `FLEET_DISPATCH_TOOLS` — tools additionally revealed in dispatch mode; only
+  INSPECTION members may also carry `kitchen`
+- `ALL_VISIBILITY_TAGS` — the source-of-truth set of conditional visibility tags disabled at startup
+- Tool tag and tier changes are checked against bundled skill and recipe consumers by
+  `tests/server/test_consumer_tool_callability.py`; each `EXEMPTIONS` entry needs a
+  cited PR, issue, or `path:line`

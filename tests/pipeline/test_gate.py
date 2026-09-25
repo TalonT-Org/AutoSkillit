@@ -40,8 +40,6 @@ def test_gated_tools_contains_expected_names():
         "toggle_auto_merge",
         "enqueue_pr",
         # formerly ungated — now kitchen-gated:
-        "fetch_github_issue",
-        "get_issue_title",
         "get_ci_status",
         "get_pipeline_report",
         "get_quota_events",
@@ -203,6 +201,7 @@ def test_tool_sets_keep_headless_tools_outside_the_application_gate():
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert "post_pr_review" in HEADLESS_TOOLS
+    assert {"fetch_github_issue", "get_issue_title"} <= HEADLESS_TOOLS
 
 
 def test_worker_tools_removed_from_core():

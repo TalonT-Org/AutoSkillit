@@ -194,10 +194,9 @@ _REGISTRY_EXEMPTIONS: dict[str, str] = {
         "no runtime production consumer needed"
     ),
     "FLEET_DISPATCH_TOOLS": (
-        "alias-derived: subset of GATED_TOOLS exposed as a separate constant "
-        "for session-type visibility dispatch; production consumers access "
-        "it via GATED_TOOLS membership (see test_canonical_constant_consumption.py "
-        "test_fleet_dispatch_tools_subset_of_gated_tools)"
+        "test-consumed: fleet-dispatch visibility tools belong to the gated or "
+        "headless tier, checked by test_fleet_dispatch_tools_belong_to_a_registered_tier; "
+        "runtime visibility is driven by decorator tags"
     ),
     "KITCHEN_GATED_TOOLS": (
         "test-consumed: centralized visibility expected set imported by "
@@ -304,12 +303,12 @@ def test_exemptions_reference_real_constants() -> None:
     )
 
 
-def test_fleet_dispatch_tools_subset_of_gated_tools() -> None:
-    """FLEET_DISPATCH_TOOLS must be a subset of GATED_TOOLS."""
-    from autoskillit.core import FLEET_DISPATCH_TOOLS
+def test_fleet_dispatch_tools_belong_to_a_registered_tier() -> None:
+    """Fleet-dispatch tools belong to the gated or headless tier."""
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, HEADLESS_TOOLS
     from autoskillit.pipeline import GATED_TOOLS
 
-    extra = FLEET_DISPATCH_TOOLS - GATED_TOOLS
+    extra = FLEET_DISPATCH_TOOLS - (GATED_TOOLS | HEADLESS_TOOLS)
     assert not extra, (
-        f"FLEET_DISPATCH_TOOLS must be a subset of GATED_TOOLS — extra: {sorted(extra)}"
+        f"FLEET_DISPATCH_TOOLS must belong to a registered tier — extra: {sorted(extra)}"
     )

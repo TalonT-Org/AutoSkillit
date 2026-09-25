@@ -43,7 +43,10 @@ _FINGERPRINT_START = "---bug-fingerprint---"
 _FINGERPRINT_END = "---/bug-fingerprint---"
 
 
-@mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "headless", "github", "fleet-dispatch"},
+    annotations={"readOnlyHint": True},
+)
 @session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("fetch_github_issue")
@@ -74,11 +77,7 @@ async def fetch_github_issue(
                    shorthand (owner/repo#42), or bare issue number when
                    github.default_repo is configured in .autoskillit/config.yaml.
         include_comments: Include the ## Comments section in content (default: true).
-
-    This tool requires the kitchen to be open (gated by open_kitchen).
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="fetch_github_issue", issue_url=issue_url):
         try:
@@ -124,7 +123,10 @@ async def fetch_github_issue(
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "github", "fleet-dispatch"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "headless", "github", "fleet-dispatch"},
+    annotations={"readOnlyHint": True},
+)
 @session_scoped(SCOPE_ANY)
 @_cancellation_shield()
 @track_response_size("get_issue_title")
@@ -144,8 +146,6 @@ async def get_issue_title(issue_url: str) -> str:
 
     Never raises.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_issue_title"):
         try:

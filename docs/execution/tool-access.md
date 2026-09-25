@@ -13,7 +13,7 @@ its own authority contract.
 │  Ordinarily visible — no application gate               │
 ├─────────────────────────────────────────────────────────┤
 │  HEADLESS-TAGGED                                        │
-│  test/check, commit, audit, and review worker tools     │
+│  test/check, commit, issue reader, audit, review tools  │
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Some also carry kitchen; `post_pr_review` is headless-only │
 ├─────────────────────────────────────────────────────────┤
@@ -26,8 +26,9 @@ its own authority contract.
 └─────────────────────────────────────────────────────────┘
 ```
 
-Fleet and fleet-dispatch tags further narrow their session-specific tools and are not an
-additional authority tier.
+Fleet and fleet-dispatch tags expose session-specific tools and do not define an
+additional authority tier. Only INSPECTION tools may carry both `kitchen` and
+`fleet-dispatch`.
 
 ## Session Mode Access Matrix
 
@@ -35,16 +36,16 @@ additional authority tier.
 |---|---|---|---|
 | `$ claude` (plugin, no kitchen) | ✓ | ✗ | ✗ |
 | `$ claude` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
-| `$ autoskillit cook` (before `/open-kitchen`) | ✓ | ✗ | ✗ |
-| `$ autoskillit cook` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
+| `$ autoskillit cook` | ✓ | ✓ (pre-revealed) | ✗ |
 | `$ autoskillit order` | ✓ | ✓ (pre-opened) | ✗ |
-| `run_skill` (headless) | ✓ | ✗ | ✓ |
+| `run_skill` (headless) | ✓ | ✗ | ✓ (includes GitHub issue readers) |
 | Evidence-reader child | ✗ | ✗ | ✗ (reader brokers only) |
 | L2 food truck | ✓ | ✓ (pre-opened) | ✗ |
 | L3 fleet | ✓ | fleet surface | ✗ |
 
 Note: Disabled subsets further restrict visibility within the Kitchen tier — their tools
-remain hidden even after `open_kitchen`.
+remain hidden even after `open_kitchen`. Disabling the `github` subset also hides the
+issue readers in headless skill sessions.
 
 The two authenticated evidence-reader broker tools belong to a separate private surface.
 They are not kitchen, free-range, or fleet tools. A complete reader startup identity reveals
@@ -96,16 +97,24 @@ offer.
 
 ## FastMCP Tag Glossary
 
-| Tag | Meaning |
-|-----|---------|
-| `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. |
-| `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
-| `evidence-reader` | Authenticated artifact brokers enabled only by a verified reader binding. |
-| `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
-| `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
-| `clone` | Functional category: Clone-based isolation tools. Can be disabled as a subset. |
-| `telemetry` | Functional category: Token, timing, and quota reporting tools. Can be disabled as a subset. |
+| Tag | Abbrev | Meaning |
+|-----|--------|---------|
+| `autoskillit` | AS | Identifies AutoSkillit tools; present on every tool. |
+| `kitchen` | K | Hidden at startup; revealed by kitchen opening or session pre-reveal. |
+| `headless` | HL | Revealed in headless skill sessions. Most members also carry `kitchen`; `post_pr_review` is headless-only. |
+| `kitchen-core` | KC | Core kitchen pack visible in admitted sessions. |
+| `fleet` | FL | Revealed to fleet sessions. |
+| `fleet-dispatch` | FD | Additionally revealed in fleet dispatch mode. |
+| `evidence-reader` | ER | Authenticated artifact brokers enabled only by a verified reader binding. |
+| `exploration` | EX | Capability-bound exploration brokers. |
+| `github` | GH | GitHub tools; can be disabled as a subset. |
+| `ci` | CI | CI and merge-queue tools; can be disabled as a subset. |
+| `clone` | CL | Clone operations; can be disabled as a subset. |
+| `telemetry` | TL | Token, timing, and quota tools; can be disabled as a subset. |
+
+Only INSPECTION tools may carry both `kitchen` and `fleet-dispatch`; their kitchen
+tag makes them available in ordinary opened kitchens, while `fleet-dispatch` also
+reveals them during dispatch.
 
 ## Enforcement Mechanism
 
@@ -120,7 +129,7 @@ Server startup sequence:
 
 3. If AUTOSKILLIT_HEADLESS=1:
    mcp.enable(tags={"headless"})
-   → reveals the eight HEADLESS_TOOLS entries
+   → reveals the HEADLESS_TOOLS entries
 
 4. If a complete evidence-reader identity is present at startup:
    mcp.enable(tags={"evidence-reader"}, components={"tool"}, only=True)
@@ -152,13 +161,8 @@ one occurs.
 
 ## Complete MCP Tool Access Control Map
 
-Registered tools with their access level, tags, source file, and functional category.
-
-**Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
-ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,
-TL = `telemetry`, FL = `fleet`
-
----
+Registered tools grouped by access tier. Source paths are relative to `src/autoskillit/`;
+tag abbreviations are defined in the glossary above.
 
 ### FREE RANGE
 
@@ -172,140 +176,136 @@ TL = `telemetry`, FL = `fleet`
 | `configure_fleet` | AS | `server/tools/tools_config.py` |
 | `configure_order` | AS | `server/tools/tools_config.py` |
 | `lock_ingredients` | AS | `server/tools/tools_kitchen/_lock_ingredients.py` |
-| `declare_join_batch` | AS, K | `server/tools/tools_kitchen/_declare_join_batch.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
-| `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. Refusals name the failing verification check. |
-| `read_fixed_batch_result` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Reads bounded pages from an opaque managed-batch result only after reauthorizing the request, parent, source artifact/incarnation, batch, assignment, and digest. |
-
----
+| `declare_join_batch` | AS | `server/tools/tools_kitchen/_declare_join_batch.py` |
 
 ### HEADLESS-TAGGED
 
-| Tool | Tags | Source File | Notes |
-|------|------|-------------|-------|
-| `test_check` | AS, K, HL | `server/tools_workspace.py` | Test runner |
-| `unlock_agent_pack` | AS, K, HL | `server/tools_agents.py` | Agent-pack access |
-| `commit_files` | AS, K, HL | `server/tools_git.py` | Server-side commit |
-| `write_audit_semantic_result` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed audit semantics |
-| `write_standalone_audit_evidence` | AS, K, HL | `server/tools_audit_artifacts.py` | Standalone evidence |
-| `write_audit_disposition_bundle` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed disposition bundle |
-| `post_pr_review` | AS, HL, GH | `server/tools_pr_ops.py` | PR review worker |
-| `delegate_evidence_reader` | AS, K, HL | `server/tools_evidence_reader.py` | Authenticated reader delegation |
-
----
+| Tool | Tags | Source File |
+|------|------|-------------|
+| `test_check` | AS, K, HL, KC | `server/tools/tools_workspace.py` |
+| `unlock_agent_pack` | AS, K, HL, KC | `server/tools/tools_agents.py` |
+| `commit_files` | AS, K, HL, KC | `server/tools/tools_workspace.py` |
+| `fetch_github_issue` | AS, K, HL, FD, GH | `server/tools/tools_github.py` |
+| `get_issue_title` | AS, K, HL, FD, GH | `server/tools/tools_github.py` |
+| `bind_plan_set` | AS, K, HL, KC | `server/tools/tools_plan_set.py` |
+| `write_audit_semantic_result` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
+| `write_standalone_audit_evidence` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
+| `write_audit_disposition_bundle` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
+| `post_pr_review` | AS, HL, GH | `server/tools/tools_pr_ops.py` |
+| `delegate_evidence_reader` | AS, K, HL, KC | `server/tools/tools_evidence_reader.py` |
 
 ### AUTHENTICATED EVIDENCE READER
 
-| Tool | Tags | Source File | Notes |
-|------|------|-------------|-------|
-| `read_authorized_artifact` | AS, ER | `server/tools_evidence_reader.py` | Bounded artifact read |
-| `get_authorized_artifact_page` | AS, ER | `server/tools_evidence_reader.py` | Authorized page retrieval |
+| Tool | Tags | Source File |
+|------|------|-------------|
+| `read_authorized_artifact` | AS, ER | `server/tools/tools_evidence_reader.py` |
+| `get_authorized_artifact_page` | AS, ER | `server/tools/tools_evidence_reader.py` |
 
----
+### EXPLORATION BROKERS
+
+| Tool | Tags | Source File |
+|------|------|-------------|
+| `submit_exploration_query` | AS, K, EX | `server/tools/tools_exploration.py` |
+| `get_exploration_page` | AS, K, EX | `server/tools/tools_exploration.py` |
+| `resume_exploration_context` | AS, K, EX | `server/tools/tools_exploration.py` |
 
 ### KITCHEN — Execution
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `run_cmd` | AS, K | `server/tools_execution/` |
-| `run_python` | AS, K | `server/tools_execution/` |
-| `run_skill` | AS, K | `server/tools_execution/` |
-| `recover_run_skill_result` | AS, K | `server/tools_pipeline_tracker.py` |
-| `complete_run_skill_result` | AS, K | `server/tools_pipeline_tracker.py` |
+| `run_cmd` | AS, K, KC | `server/tools/tools_execution/_run_cmd.py` |
+| `run_python` | AS, K, KC | `server/tools/tools_execution/_run_python.py` |
+| `run_skill` | AS, K, KC | `server/tools/tools_execution/_run_skill_dispatch.py` |
+| `run_fixed_batch` | AS, K, KC | `server/tools/tools_execution/_fixed_batch_handlers.py` |
+| `read_fixed_batch_result` | AS, K, KC | `server/tools/tools_execution/_fixed_batch_handlers.py` |
+| `recover_run_skill_result` | AS, K, KC | `server/tools/tools_pipeline_tracker/_handlers.py` |
+| `complete_run_skill_result` | AS, K, KC | `server/tools/tools_pipeline_tracker/_handlers.py` |
+| `record_pipeline_step` | AS, K, KC | `server/tools/tools_pipeline_tracker/_handlers.py` |
 
----
+`run_fixed_batch` supervises attested managed-Codex assignments. Its companion
+`read_fixed_batch_result` authorizes each bounded result page against the parent,
+batch, assignment, source artifact, and digest.
 
 ### KITCHEN — Git / Workspace
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `merge_worktree` | AS, K | `server/tools_git.py` |
-| `classify_fix` | AS, K | `server/tools_git.py` |
-| `create_unique_branch` | AS, K, GH | `server/tools_git.py` |
-| `create_and_publish_branch` | AS, K, GH | `server/tools_git.py` |
-| `check_pr_mergeable` | AS, K, GH | `server/tools_git.py` |
-| `reset_test_dir` | AS, K | `server/tools_workspace.py` |
-| `reset_workspace` | AS, K | `server/tools_workspace.py` |
-
----
+| `merge_worktree` | AS, K, KC | `server/tools/tools_git.py` |
+| `classify_fix` | AS, K, KC | `server/tools/tools_git.py` |
+| `create_unique_branch` | AS, K, GH | `server/tools/tools_git.py` |
+| `create_and_publish_branch` | AS, K, GH | `server/tools/tools_git.py` |
+| `check_pr_mergeable` | AS, K, GH | `server/tools/tools_git.py` |
+| `reset_test_dir` | AS, K, KC | `server/tools/tools_workspace.py` |
+| `reset_workspace` | AS, K, KC | `server/tools/tools_workspace.py` |
 
 ### KITCHEN — Clone Operations
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `clone_repo` | AS, K, CL | `server/tools_clone.py` |
-| `remove_clone` | AS, K, CL | `server/tools_clone.py` |
-| `push_to_remote` | AS, K, GH | `server/tools_clone.py` |
-| `register_clone_status` | AS, K, CL | `server/tools_clone.py` |
-| `batch_cleanup_clones` | AS, K, CL, FL | `server/tools_clone.py` |
-| `bootstrap_clone` | AS, K, CL | `server/tools_clone.py` |
-
----
+| `clone_repo` | AS, K, CL | `server/tools/tools_clone.py` |
+| `remove_clone` | AS, K, CL | `server/tools/tools_clone.py` |
+| `push_to_remote` | AS, K, GH | `server/tools/tools_clone.py` |
+| `register_clone_status` | AS, K, CL | `server/tools/tools_clone.py` |
+| `bootstrap_clone` | AS, K, CL | `server/tools/tools_clone.py` |
 
 ### KITCHEN — CI / Merge Queue
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `wait_for_ci` | AS, K, CI | `server/tools_ci.py` |
-| `get_ci_status` | AS, K, CI | `server/tools_ci.py` |
-| `wait_for_merge_queue` | AS, K, CI | `server/tools_ci.py` |
-| `check_repo_merge_state` | AS, K, CI | `server/tools_ci.py` |
-| `toggle_auto_merge` | AS, K, CI | `server/tools_ci.py` |
-| `enqueue_pr` | AS, K, CI | `server/tools_ci.py` |
-| `set_commit_status` | AS, K, GH | `server/tools_ci.py` |
-
----
+| `wait_for_ci` | AS, K, CI | `server/tools/tools_ci_watch.py` |
+| `get_ci_status` | AS, K, CI | `server/tools/tools_ci_watch.py` |
+| `wait_for_merge_queue` | AS, K, CI | `server/tools/tools_ci_merge_queue.py` |
+| `check_repo_merge_state` | AS, K, CI | `server/tools/tools_ci.py` |
+| `toggle_auto_merge` | AS, K, CI | `server/tools/tools_ci_merge_queue.py` |
+| `enqueue_pr` | AS, K, CI | `server/tools/tools_ci_merge_queue.py` |
+| `set_commit_status` | AS, K, GH | `server/tools/tools_ci.py` |
 
 ### KITCHEN — GitHub Integrations
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `fetch_github_issue` | AS, K, GH | `server/tools_github.py` |
-| `get_issue_title` | AS, K, GH | `server/tools_github.py` |
-| `report_bug` | AS, K, GH | `server/tools_github.py` |
-| `prepare_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
-| `claim_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
-| `release_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
-| `claim_and_resolve_issue` | AS, K, GH | `server/tools_issue_composite.py` |
-| `get_pr_reviews` | AS, K, GH | `server/tools_pr_ops.py` |
-| `bulk_close_issues` | AS, K, GH | `server/tools_pr_ops.py` |
-
----
+| `report_bug` | AS, K, GH | `server/tools/tools_github.py` |
+| `prepare_issue` | AS, K, GH | `server/tools/tools_issue_headless.py` |
+| `claim_issue` | AS, K, GH | `server/tools/tools_issue_labels.py` |
+| `release_issue` | AS, K, GH | `server/tools/tools_issue_labels.py` |
+| `claim_and_resolve_issue` | AS, K, GH | `server/tools/tools_issue_composite.py` |
+| `get_pr_reviews` | AS, K, GH | `server/tools/tools_pr_ops.py` |
+| `bulk_close_issues` | AS, K, GH | `server/tools/tools_pr_ops.py` |
+| `verify_review_receipt` | AS, K, GH | `server/tools/tools_pr_ops.py` |
 
 ### KITCHEN — Status / Telemetry
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `kitchen_status` | AS, K | `server/tools_status.py` |
-| `get_pipeline_report` | AS, K | `server/tools_status.py` |
-| `get_token_summary` | AS, K, TL | `server/tools_status.py` |
-| `get_timing_summary` | AS, K, TL | `server/tools_status.py` |
-| `get_quota_events` | AS, K, TL | `server/tools_status.py` |
-| `write_telemetry_files` | AS, K, TL | `server/tools_status.py` |
-| `read_db` | AS, K | `server/tools_status.py` |
-| `analyze_tool_sequences` | AS, K, TL | `server/tools_status.py` |
-
----
+| `kitchen_status` | AS, K, KC | `server/tools/tools_status.py` |
+| `write_telemetry_files` | AS, K, KC, TL | `server/tools/tools_status.py` |
+| `read_db` | AS, K, KC | `server/tools/tools_status.py` |
+| `analyze_tool_sequences` | AS, K, KC, TL | `server/tools/tools_status.py` |
+| `inspect_session_logs` | AS, K, KC | `server/tools/tools_session_logs.py` |
 
 ### KITCHEN — Recipes
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `list_recipes` | AS, K | `server/tools_recipe.py` |
-| `load_recipe` | AS, K | `server/tools_recipe.py` |
-| `complete_recipe_initialization` | AS, K | `server/tools_recipe.py` |
-| `validate_recipe` | AS, K | `server/tools_recipe.py` |
-| `migrate_recipe` | AS, K | `server/tools_recipe.py` |
-
----
+| `list_recipes` | AS, K, KC, FD | `server/tools/tools_recipe.py` |
+| `load_recipe` | AS, K, KC, FD | `server/tools/tools_recipe.py` |
+| `get_recipe_section` | AS, K, KC | `server/tools/_recipe_section_handler.py` |
+| `complete_recipe_initialization` | AS, K, KC | `server/tools/tools_recipe.py` |
+| `validate_recipe` | AS, K, KC | `server/tools/tools_recipe.py` |
+| `migrate_recipe` | AS, K, KC | `server/tools/tools_recipe.py` |
 
 ### KITCHEN — Fleet
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `dispatch_food_truck` | AS, K, KC, fleet | `server/tools_execution.py` |
-| `record_gate_dispatch` | AS, K, KC, fleet | `server/tools_execution.py` |
-
----
+| `batch_cleanup_clones` | AS, FL, CL | `server/tools/tools_clone.py` |
+| `get_pipeline_report` | AS, KC, FL | `server/tools/tools_status.py` |
+| `get_token_summary` | AS, KC, FL, TL | `server/tools/tools_status.py` |
+| `get_timing_summary` | AS, KC, FL, TL | `server/tools/tools_status.py` |
+| `get_quota_events` | AS, KC, FL, TL | `server/tools/tools_status.py` |
+| `dispatch_food_truck` | AS, KC, FL | `server/tools/tools_fleet_dispatch/_handlers.py` |
+| `record_gate_dispatch` | AS, KC, FL | `server/tools/tools_fleet_dispatch/_handlers.py` |
+| `reset_dispatch` | AS, KC, FL | `server/tools/tools_fleet_reset.py` |
 
 Tool visibility in the server and tool addressability in an interactive Claude
 client are separate boundaries. `open_kitchen` is initially visible and carries
@@ -316,8 +316,8 @@ fresh/resume behavior are documented in
 
 `GATED_TOOLS` and the category-specific sets in
 `core/types/_type_constants_registries.py` define the visible surfaces. The kitchen
-set is derived by subtracting fleet, fleet-dispatch, exploration, and evidence-reader
-tools from `GATED_TOOLS`.
+set is derived by subtracting fleet, exploration, and evidence-reader tools from
+`GATED_TOOLS`.
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](../skills/subsets.md).

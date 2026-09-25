@@ -85,6 +85,25 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("review-pr", "verdict"),  # computed verdict string
         ("review-pr", "summary_markdown"),  # computed review summary
         ("review-pr", "escalation_user_mention"),  # prose: "set escalation_user_mention=..."
+        # review-pr pastes these printed or returned values as literal command
+        # arguments; Step 0 and Step 2.7 define each source before use.
+        *(
+            ("review-pr", name)
+            for name in (
+                "printed_output_dir",
+                "review_output_dir",
+                "checkout_root",
+                "metrics_path",
+                "annotated_diff_path",
+                "hunk_ranges_path",
+                "valid_lines_path",
+                "authority_path",
+                "metrics_marker_snapshot_path",
+                "annotated_diff_snapshot_path",
+                "hunk_ranges_snapshot_path",
+                "valid_lines_snapshot_path",
+            )
+        ),
         ("review-research-pr", "verdict"),  # computed verdict string
         ("review-research-pr", "summary_markdown"),  # computed review summary
         (

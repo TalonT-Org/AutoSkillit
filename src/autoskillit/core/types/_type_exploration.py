@@ -56,6 +56,14 @@ class ExplorationFailureResponse(StrEnum):
 
 
 PLUGINLESS_EXPLORER_ROLE: Final[str] = "pluginless-explorer"
+#: Verbatim Claude Code (v2.1.208+) text when a subagent's ``tools:`` resolves to
+#: nothing; https://code.claude.com/docs/en/errors#agent-would-be-spawned-with-zero-tools.
+#: Client-side: raised before any MCP call, so no ExplorationFailureCode
+#: can represent it.
+HARNESS_ZERO_TOOLS_REFUSAL_MARKER: Final[str] = "would be spawned with zero tools"
+#: A refusal is a deterministic packaging defect, never transient: retrying cannot
+#: help, and the pluginless fallback keeps the typed-evidence contract.
+EXPLORER_SPAWN_REFUSAL_RESPONSE: Final = ExplorationFailureResponse.FALLBACK
 
 EXPLORATION_FAILURE_CODE_RESPONSES: Mapping[ExplorationFailureCode, ExplorationFailureResponse] = {
     ExplorationFailureCode.SESSION_TYPE_INELIGIBLE: ExplorationFailureResponse.FALLBACK,
@@ -98,10 +106,16 @@ def render_exploration_failure_guidance(*, fallback_dispatch: str) -> str:
     fallback = ", ".join(sorted(grouped[ExplorationFailureResponse.FALLBACK]))
     retry = ", ".join(sorted(grouped[ExplorationFailureResponse.RETRY_THEN_SURFACE]))
     surface = ", ".join(sorted(grouped[ExplorationFailureResponse.SURFACE]))
+    # The refusal sentence below is authored for the FALLBACK tier only.
+    assert EXPLORER_SPAWN_REFUSAL_RESPONSE is ExplorationFailureResponse.FALLBACK
     return (
         f"For {fallback}, dispatch {fallback_dispatch}. "
         f"For {retry}, retry once and then surface the failure. "
         f"For {surface}, surface the failure directly. "
+        "If the harness refuses to launch a broker-bound explorer before it starts (its "
+        f"result contains '{HARNESS_ZERO_TOOLS_REFUSAL_MARKER}'), that is an AutoSkillit "
+        "packaging defect, not an exploration outcome: dispatch "
+        f"{fallback_dispatch} and quote the refusal verbatim in your report. "
         "Use the current local checkout for fallback investigation. Do not substitute "
         "a remote or public copy; if local access is unavailable, surface the failure."
     )
@@ -638,6 +652,8 @@ __all__ = [
     "EvidenceRecord",
     "EXPLORATION_FAILURE_CODE_RESPONSES",
     "EXPLORATION_FALLBACK_CODES",
+    "EXPLORER_SPAWN_REFUSAL_RESPONSE",
+    "HARNESS_ZERO_TOOLS_REFUSAL_MARKER",
     "render_exploration_failure_guidance",
     "ExplorationApplicability",
     "ExplorationContextStoreProtocol",

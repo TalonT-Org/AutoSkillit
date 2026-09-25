@@ -1538,6 +1538,12 @@ from .types._type_exploration import (
     EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
 )
 from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
+from .types._type_exploration import (
+    EXPLORER_SPAWN_REFUSAL_RESPONSE as EXPLORER_SPAWN_REFUSAL_RESPONSE,
+)
+from .types._type_exploration import (
+    HARNESS_ZERO_TOOLS_REFUSAL_MARKER as HARNESS_ZERO_TOOLS_REFUSAL_MARKER,
+)
 from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
 from .types._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
 from .types._type_exploration import CapabilityResolution as CapabilityResolution

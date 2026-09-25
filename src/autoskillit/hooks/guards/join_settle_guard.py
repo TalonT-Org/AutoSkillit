@@ -22,6 +22,7 @@ Stdlib-only — no autoskillit imports.
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -57,6 +58,12 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
     settle_assignment,
 )
 
+# Resolved dynamically, matching child_outcome_hook's precedent, because static
+# analysis cannot resolve ``_child_outcome_snapshot`` ahead of the sys.path bootstrap.
+HARNESS_SPAWN_REFUSAL_LITERAL = getattr(
+    importlib.import_module("_child_outcome_snapshot"), "HARNESS_SPAWN_REFUSAL_LITERAL"
+)
+
 
 def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
     """Map an upstream event to the canonical outcome, or None to skip."""
@@ -72,6 +79,10 @@ def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
         return OUTCOME_SUCCESS
     if event_type == "PostToolUseFailure":
         reason = payload.get("reason") or payload.get("error")
+        # The refusal text embeds caller-chosen agent and tool names, so it must be
+        # recognized before the keyword checks below can misread them.
+        if isinstance(reason, str) and HARNESS_SPAWN_REFUSAL_LITERAL in reason:
+            return OUTCOME_FAILURE
         text = str(reason).casefold() if isinstance(reason, str) else ""
         if "timeout" in text:
             return OUTCOME_TIMEOUT

@@ -1079,3 +1079,47 @@ def test_no_guard_reads_a_retired_join_env_var() -> None:
             reads[source.relative_to(_PROJECT_ROOT)] = retired_reads
 
     assert not reads, f"retired join environment reads remain: {reads}"
+
+
+def _settle_guard():
+    import importlib
+
+    return importlib.import_module("autoskillit.hooks.guards.join_settle_guard")
+
+
+def test_spawn_refusal_settles_as_failure_despite_keyword_names() -> None:
+    """The refusal embeds caller-chosen names; 'timeout'/'cancel' in them never route it."""
+    outcome = _settle_guard()._resolve_outcome(
+        "PostToolUseFailure",
+        {
+            "tool_input": {"subagent_type": "project:timeout-auditor"},
+            "error": (
+                "Agent 'project:timeout-auditor' would be spawned with zero tools — refusing. "
+                "Its tools list resolved to nothing: unrecognized [mcp__acme__cancel_job]. "
+                "Fix the agent's tools frontmatter or pass a different subagent_type."
+            ),
+        },
+    )
+    assert outcome == OUTCOME_FAILURE
+
+
+def test_genuine_timeout_failure_still_settles_as_timeout() -> None:
+    from autoskillit.hooks._join_ledger import OUTCOME_TIMEOUT
+
+    outcome = _settle_guard()._resolve_outcome(
+        "PostToolUseFailure",
+        {"tool_input": {"subagent_type": "worker"}, "error": "Agent timeout after 600s"},
+    )
+    assert outcome == OUTCOME_TIMEOUT
+
+
+def test_successful_result_quoting_the_refusal_marker_settles_as_success() -> None:
+    outcome = _settle_guard()._resolve_outcome(
+        "PostToolUse",
+        {
+            "tool_input": {"subagent_type": "autoskillit:pluginless-explorer"},
+            "tool_response": "Report: the guidance routes 'would be spawned with zero tools' "
+            "to the pluginless fallback.",
+        },
+    )
+    assert outcome == OUTCOME_SUCCESS

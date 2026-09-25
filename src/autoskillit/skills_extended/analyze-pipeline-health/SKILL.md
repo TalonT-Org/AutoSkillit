@@ -128,6 +128,11 @@ Collect results from all readers. For each result:
    scope, or evidence for an unassigned session.
 3. Treat `partial`, `blocked`, empty, or malformed results as coverage gaps; never
    silently promote them to complete evidence.
+4. If an `Agent` call for `autoskillit:session-log-reader` was refused before launch
+   (its result contains `would be spawned with zero tools`), record every batch of that
+   packet as `blocked` with the refusal quoted verbatim as the coverage limitation, and
+   report it as an AutoSkillit packaging defect. There is no fallback reader: do not
+   inspect session logs yourself as a substitute.
 
 After every join, the parent alone interprets the evidence, correlates retry and
 error patterns across batches, determines anomalies, and writes the report. Group

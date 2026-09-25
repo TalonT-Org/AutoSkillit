@@ -17,6 +17,7 @@ _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_DUPLICATION_RE = re.compile(r"^\d*>{1,2}&(?:\d+|-)$")
 _FD_TARGET_RE = re.compile(r"^&(?:\d+|-)$")
 _SHELL_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
+_RESIDUAL_EXPANSION_RE = re.compile(r"\$[{(\[A-Za-z_0-9@*#?$!'\"-]|`")
 
 
 def _shell_tilde_prefix(source: str) -> tuple[str, str, int] | None:
@@ -33,6 +34,8 @@ def _shell_tilde_prefix(source: str) -> tuple[str, str, int] | None:
 
 def _shell_escaped_char(source: str, index: int, quote: str) -> str | None:
     if index + 1 >= len(source) or source[index + 1] == "\n":
+        return None
+    if source.startswith(r"\$(", index):
         return None
     escaped = source[index + 1]
     if quote == '"' and escaped not in '$`"\\':
@@ -55,7 +58,11 @@ def _shell_variable(source: str, index: int, quote: str) -> tuple[str, str, int]
         end = match.end()
     spelling = source[index:end]
     value = os.path.expandvars(spelling)
-    if value == spelling or (quote != '"' and any(c in value for c in " \t\n*?[]")):
+    if (
+        value == spelling
+        or _RESIDUAL_EXPANSION_RE.search(value)
+        or (quote != '"' and any(c in value for c in " \t\n*?[]"))
+    ):
         return None
     return spelling, value, end
 
@@ -111,7 +118,11 @@ def _expand_shell_target(path: str, source: str) -> str | None:
 def resolve_write_target(
     path: str, cwd: str = "", *, shell_source: str | None = None
 ) -> str | None:
-    """Resolve a literal argv path or a shell word with its source spelling."""
+    """Resolve a literal argv path or a shell word with its source spelling.
+
+    Environment values containing ``$(`` or backticks stay unresolved. An escaped
+    ``\\$(x)`` source is also unresolved after shlex dequoting. Both fail closed.
+    """
     if not path:
         return None
     if shell_source is not None:

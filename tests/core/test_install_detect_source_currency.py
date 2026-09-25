@@ -43,7 +43,7 @@ def test_source_currency_no_generation_root_local_editable_is_unknown(
     result = source_currency(tmp_path, generation_root=None)
 
     assert result.status is SourceCurrencyStatus.UNKNOWN
-    assert result.install_type == "local-editable"
+    assert result.install_type == info["install_type"]
 
 
 def test_source_currency_classifies_git_generation(monkeypatch, tmp_path) -> None:
@@ -145,7 +145,7 @@ def test_source_currency_local_path_current_at_equal_versions(monkeypatch, tmp_p
     assert result.status is SourceCurrencyStatus.CURRENT
     assert result.installed_version == "1.2.3"
     assert result.checkout_version == "1.2.3"
-    assert result.install_type == "local-path"
+    assert result.install_type == info["install_type"]
 
 
 def test_source_currency_local_path_stale_at_different_versions(monkeypatch, tmp_path) -> None:
@@ -168,7 +168,7 @@ def test_source_currency_local_path_stale_at_different_versions(monkeypatch, tmp
     assert result.status is SourceCurrencyStatus.STALE
     assert result.installed_version == "1.2.3"
     assert result.checkout_version == "1.3.0"
-    assert result.install_type == "local-path"
+    assert result.install_type == info["install_type"]
     assert result.behind_by is None
 
 

@@ -87,7 +87,7 @@ _CMD_RPC_MERGE_PATH: Final = "recipe/cmd_rpc/_cmd_rpc_merge.py"
 
 # (relative path, enclosing function, line number, subcommand, classification)
 _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
-    ("cli/update/_update_checks_source.py", "_git_ls_remote_sha", 175, "ls-remote", "BARE"),
+    ("cli/update/_update_checks_source.py", "_git_ls_remote_sha", 177, "ls-remote", "BARE"),
     ("core/git/git_refs.py", "verify_qualified_ref_sync", 61, "rev-parse", "BARE"),
     ("core/install/cmd_runner.py", "run_git", 62, "<unresolved>", "UNRESOLVABLE"),
     ("execution/headless/_headless_git.py", "_compute_loc_changed", 56, "diff", "BARE"),
@@ -169,7 +169,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
     ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
     ("server/git.py", "perform_merge", 617, "merge", "BARE"),
-    ("core/install/install_detect.py", "_git", 58, "<unresolved>", "UNRESOLVABLE"),
+    ("core/install/install_detect.py", "_git", 64, "<unresolved>", "UNRESOLVABLE"),
     ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 455, "push", "BARE"),
     ("server/tools/tools_git.py", "classify_fix", 201, "fetch", "BARE"),
     ("server/tools/tools_git.py", "classify_fix", 220, "diff", "BARE"),

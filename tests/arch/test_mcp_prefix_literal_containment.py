@@ -57,7 +57,9 @@ def test_mcp_prefix_literals_confined_to_canonical_module() -> None:
     )
 
 
-_QUALIFIED_AUTOSKILLIT_TOOL = re.compile(r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__")
+_QUALIFIED_AUTOSKILLIT_TOOL = re.compile(
+    r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__[A-Za-z0-9_]+"
+)
 
 
 def _agent_body(text: str) -> str:

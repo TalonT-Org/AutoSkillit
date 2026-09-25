@@ -46,7 +46,13 @@ _MCP_TOOL_AGENTS = sorted(
     for definition in load_bundled_agent_definitions()
     if any(tool.startswith("mcp__") for tool in definition.tools)
 )
-_QUALIFIED_AUTOSKILLIT_TOOL = re.compile(r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__")
+# Reuse the production qualifier so this enforcer agrees with
+# core.plugins._plugin_ids._QUALIFIED_AUTOSKILLIT_TOOL_RE and
+# tests.arch.test_mcp_prefix_literal_containment._QUALIFIED_AUTOSKILLIT_TOOL
+# instead of redefining the same concept three different ways.
+_QUALIFIED_AUTOSKILLIT_TOOL = re.compile(
+    r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__[A-Za-z0-9_]+"
+)
 
 
 @pytest.mark.parametrize("agent", _MCP_TOOL_AGENTS)

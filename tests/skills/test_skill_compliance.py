@@ -17,14 +17,27 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, SkillSource
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skills import DefaultSkillResolver
+from autoskillit.workspace.skills import (
+    _INTERNAL_SKILLS,
+    DefaultSkillResolver,
+    SkillInfo,
+    invalidity_hints,
+)
+from tests._git_inventory import git_ls_files
 from tests._helpers import extract_always_block, extract_never_block
+from tests._tracked_skills import (
+    admit_tracked_project_local_skill,
+    tracked_project_local_skill_paths,
+)
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_TRACKED_LOCAL_SKILLS = tracked_project_local_skill_paths(_REPO_ROOT)
 
 _CANONICAL_REVIEW_WRITERS = frozenset(
     {"review-pr", "review-research-pr", "audit-claims", "resolve-review"}
@@ -647,10 +660,23 @@ For each dimension name in the list, spawn the corresponding subagent using the 
     )
 
 
+def _dispatch_declaration_violations(info: SkillInfo, skill_text: str) -> list[str]:
+    """Return violations of a skill's declared child dispatch against its body."""
+    plan = info.semantic_plan
+    if plan is None or not plan.child_spawns:
+        return []
+    if plan.join is None or not plan.join.required:
+        return ["child_spawns is declared without join.required"]
+    if len(plan.child_spawns) == 1 and plan.child_spawns[0].count == 1:
+        return []
+    if plan.concurrency is None or not plan.concurrency.required:
+        return ["parallel child_spawns is declared without concurrency.required"]
+    return _check_parallel_dispatch_reinforcement(skill_text)
+
+
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
 def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> None:
     """Portable child dispatch declares concurrency and join semantics."""
-    from autoskillit.core import SkillSource
     from autoskillit.workspace.skills import (
         _skill_info_from_frontmatter,
         render_skill_invalidities,
@@ -662,13 +688,59 @@ def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> 
         skill_dir / "SKILL.md",
     )
     assert not info.invalidities, render_skill_invalidities(info.invalidities)
-    plan = info.semantic_plan
-    if plan is None or not plan.child_spawns:
-        return
-    assert plan.join is not None and plan.join.required
-    if len(plan.child_spawns) == 1 and plan.child_spawns[0].count == 1:
-        return
-    assert plan.concurrency is not None and plan.concurrency.required
     skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    violations = _check_parallel_dispatch_reinforcement(skill_text)
+    violations = _dispatch_declaration_violations(info, skill_text)
     assert not violations, f"{skill_dir.name}: {violations}"
+
+
+def _repo_relative(path: Path) -> str:
+    return path.relative_to(_REPO_ROOT).as_posix()
+
+
+@pytest.mark.parametrize("path", _TRACKED_LOCAL_SKILLS, ids=_repo_relative)
+def test_tracked_project_local_skill_is_admitted(path: Path) -> None:
+    """Every tracked project-local skill passes the resolver's own admission."""
+    rel = _repo_relative(path)
+    info = admit_tracked_project_local_skill(_REPO_ROOT, path)
+
+    assert info is not None, f"{rel}: the resolver found no project-local candidate"
+    assert info.source is SkillSource.PROJECT_LOCAL
+    assert info.path == path.resolve()
+    assert not info.invalidities, (
+        f"{rel}: "
+        + "; ".join(f"{item.kind.value}: {item.detail}" for item in info.invalidities)
+        + f" (hints: {invalidity_hints(info.invalidities)})"
+    )
+
+
+@pytest.mark.parametrize("path", _TRACKED_LOCAL_SKILLS, ids=_repo_relative)
+def test_tracked_project_local_skill_declared_dispatch_is_reinforced(path: Path) -> None:
+    """A tracked project-local skill's body performs the dispatch its frontmatter declares."""
+    rel = _repo_relative(path)
+    info = admit_tracked_project_local_skill(_REPO_ROOT, path)
+    if info is None:
+        pytest.fail(f"{rel}: the resolver found no project-local candidate")
+
+    violations = _dispatch_declaration_violations(info, path.read_text(encoding="utf-8"))
+    assert violations == [], f"{rel}: {violations}"
+
+
+def test_compliance_sweep_roots_cover_bundled_and_every_project_local_root() -> None:
+    """The sweep covers the resolver's bundled catalog and every project-local root."""
+    bundled_names = {skill.name for skill in DefaultSkillResolver().list_all()}
+    assert {d.name for d in _all_skill_dirs()} == bundled_names | _INTERNAL_SKILLS
+
+    assert {".claude/skills", ".autoskillit/skills"} <= set(ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
+    assert tracked_project_local_skill_paths(_REPO_ROOT) == _TRACKED_LOCAL_SKILLS
+    for path in _TRACKED_LOCAL_SKILLS:
+        assert path.parent.parent.relative_to(_REPO_ROOT).as_posix() in (
+            ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+        )
+
+    tracked_skill_files = {
+        _REPO_ROOT / rel
+        for rel in git_ls_files(_REPO_ROOT, *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
+        if Path(rel).name == "SKILL.md"
+        and Path(rel).parent.parent.as_posix() in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+    }
+    assert set(_TRACKED_LOCAL_SKILLS) == tracked_skill_files

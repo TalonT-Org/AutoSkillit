@@ -17,59 +17,13 @@ from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
 )
-from autoskillit.workspace.skills._format import read_skill_frontmatter
-from tests._git_inventory import git_ls_files
+from tests._tracked_skills import tracked_project_local_skill_paths
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _BUNDLED_SKILL_ROOTS = (pkg_root() / "skills", pkg_root() / "skills_extended")
-_EXPECTED_TRACKED_SHADOW_PAIR_COUNT = 12
-_EXPECTED_TRACKED_FLOOR_EXCLUSIONS = {
-    ".claude/skills/audit-arch/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "evidence.required, evidence.independent"
-    ),
-    ".claude/skills/audit-bugs/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/audit-cohesion/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/audit-defense-standards/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/audit-tests/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/design-guards/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/elaborate-phase/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/make-arch-diag/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: semantic_requirements"
-    ),
-    ".claude/skills/make-req/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-    ".claude/skills/verify-diag/SKILL.md": (
-        "project-local override weakens bundled semantic requirements: "
-        "concurrency.required, evidence.required, evidence.independent"
-    ),
-}
-_EXPECTED_TRACKED_FLOOR_NAMES = frozenset(
-    Path(path).parent.name for path in _EXPECTED_TRACKED_FLOOR_EXCLUSIONS
-)
 
 
 def _bundled_skill_paths() -> dict[str, Path]:
@@ -80,16 +34,8 @@ def _bundled_skill_paths() -> dict[str, Path]:
     return paths
 
 
-def _tracked_project_local_skill_paths() -> tuple[Path, ...]:
-    return tuple(
-        _REPOSITORY_ROOT / relative_path
-        for relative_path in git_ls_files(_REPOSITORY_ROOT, *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
-        if Path(relative_path).name == "SKILL.md"
-    )
-
-
 def _on_disk_project_local_skill_paths() -> tuple[Path, ...]:
-    tracked = set(_tracked_project_local_skill_paths())
+    tracked = set(tracked_project_local_skill_paths(_REPOSITORY_ROOT))
     return tuple(
         path
         for search_dir in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
@@ -109,15 +55,6 @@ def _shadow_pairs(
     )
 
 
-def _requires_join(path: Path) -> bool:
-    parsed = read_skill_frontmatter(path)
-    requirements = parsed.data.get("semantic_requirements") if parsed.data else None
-    if not isinstance(requirements, dict):
-        return False
-    join = requirements.get("join")
-    return isinstance(join, dict) and join.get("required") is True
-
-
 def _ignore_provenance(path: Path) -> str:
     result = subprocess.run(
         ["git", "check-ignore", "-v", "--", str(path.relative_to(_REPOSITORY_ROOT))],
@@ -129,13 +66,8 @@ def _ignore_provenance(path: Path) -> str:
     return result.stdout.strip() or "not ignored"
 
 
-_TRACKED_SHADOW_PAIRS = _shadow_pairs(_tracked_project_local_skill_paths())
+_TRACKED_SHADOW_PAIRS = _shadow_pairs(tracked_project_local_skill_paths(_REPOSITORY_ROOT))
 _ON_DISK_SHADOW_PAIRS = _shadow_pairs(_on_disk_project_local_skill_paths())
-_REQUIRED_JOIN_SKILLS = frozenset(
-    name
-    for name, _local_path, bundled_path in _ON_DISK_SHADOW_PAIRS
-    if _requires_join(bundled_path)
-)
 
 
 def _catalog_for(skill) -> EffectiveSkillCatalog:
@@ -178,25 +110,34 @@ def _floor_exclusion_failure_details(details: dict[str, tuple[str, ...]]) -> str
 
 def test_tracked_override_shadow_pair_inventory_is_reviewed() -> None:
     """A new tracked shadow pair must consciously update this guard's inventory."""
-    assert len(_TRACKED_SHADOW_PAIRS) == _EXPECTED_TRACKED_SHADOW_PAIR_COUNT
+    assert {name for name, _local_path, _bundled_path in _TRACKED_SHADOW_PAIRS} == frozenset(
+        {"audit-arch", "audit-cohesion", "audit-tests", "promote-to-main", "validate-audit"}
+    )
 
 
 @pytest.mark.parametrize(
     "execution_role", (SkillExecutionRole.SESSION, SkillExecutionRole.ORCHESTRATOR)
 )
-def test_repository_root_reports_only_expected_contract_floor_exclusions(execution_role) -> None:
-    """Tracked project shadows are explicit exclusions and no other override weakens a floor."""
+def test_repository_root_reports_no_tracked_contract_floor_exclusions(execution_role) -> None:
+    """No tracked project-local override weakens its bundled twin's contract floor."""
     catalog = DefaultSkillResolver().list_effective(
         _REPOSITORY_ROOT,
         execution_role,
         cook_session=True,
     )
-    details = _floor_exclusion_details(catalog)
+    tracked_rel_paths = {
+        path.relative_to(_REPOSITORY_ROOT).as_posix()
+        for path in tracked_project_local_skill_paths(_REPOSITORY_ROOT)
+    }
+    details = {
+        path: detail
+        for path, detail in _floor_exclusion_details(catalog).items()
+        if path in tracked_rel_paths
+    }
 
-    assert details == {
-        path: (detail,) for path, detail in _EXPECTED_TRACKED_FLOOR_EXCLUSIONS.items()
-    }, "Unexpected project-local contract-floor exclusions:\n" + _floor_exclusion_failure_details(
-        details
+    assert details == {}, (
+        "Tracked project-local contract-floor exclusions:\n"
+        + _floor_exclusion_failure_details(details)
     )
 
 
@@ -212,9 +153,6 @@ def test_project_local_override_admission_matches_bundled_twin_on_every_backend(
             failures.append(
                 f"{name}: could not resolve both project-local and bundled definitions"
             )
-            continue
-        if name in _EXPECTED_TRACKED_FLOOR_NAMES and local.source is not bundled.source:
-            failures.append(f"{name}: expected bundled fallback after contract-floor exclusion")
             continue
         for backend_name, backend_type in BACKEND_REGISTRY.items():
             backend = backend_type()

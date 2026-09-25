@@ -1,7 +1,9 @@
 ---
 name: audit-arch
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-arch/'
 categories: [audit]
-description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural aspects and generates a structured report.
+description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Audits principles in bounded parallel batches and generates a structured report.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -11,8 +13,14 @@ hooks:
           once: true
 semantic_version: 1
 semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
   join:
     required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Architectural Audit Skill
@@ -26,9 +34,11 @@ Audit the codebase for adherence to architectural standards and rules.
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
 - Modify any source code files
 - Update an existing report - always generate new
 - Launch more than 6 principle auditors in one parallel batch. Process all principles in sequential batches of at most 6, and join each batch before starting the next.
+- Detach child delegations instead of joining them (joining every child is required)
 
 **ALWAYS:**
 - Use subagents for parallel exploration

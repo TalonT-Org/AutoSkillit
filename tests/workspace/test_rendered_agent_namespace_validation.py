@@ -7,15 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillExecutionRole, SkillSource, pkg_root
+from autoskillit.core import PLUGIN_PREFIX, SkillExecutionRole, SkillSource, pkg_root
 from autoskillit.workspace._projected_artifact._validation import (
     validate_rendered_agent_tool_namespace,
     validate_sanitized_plugin_artifact,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-_PLUGIN_NAMESPACE = "mcp__plugin_autoskillit_autoskillit__"
 
 
 def _write_probe(plugin_root: Path, tools_line: str, *, body: str = "Probe body.") -> Path:
@@ -55,19 +53,19 @@ def test_direct_prefix_agent_is_reported_with_expected_namespace(tmp_path: Path)
 
     assert len(errors) == 1
     assert "probe.md" in errors[0]
-    assert _PLUGIN_NAMESPACE in errors[0]
+    assert PLUGIN_PREFIX in errors[0]
 
 
 def test_plugin_namespace_agent_is_valid(tmp_path: Path) -> None:
     _write_manifests(tmp_path)
-    _write_probe(tmp_path, f"[{_PLUGIN_NAMESPACE}inspect_session_logs]")
+    _write_probe(tmp_path, f"[{PLUGIN_PREFIX}inspect_session_logs]")
 
     assert validate_rendered_agent_tool_namespace(tmp_path) == ()
 
 
 def test_unregistered_short_name_under_plugin_namespace_is_reported(tmp_path: Path) -> None:
     _write_manifests(tmp_path)
-    _write_probe(tmp_path, f"[{_PLUGIN_NAMESPACE}nonexistent_tool]")
+    _write_probe(tmp_path, f"[{PLUGIN_PREFIX}nonexistent_tool]")
 
     errors = validate_rendered_agent_tool_namespace(tmp_path)
 
@@ -77,7 +75,7 @@ def test_unregistered_short_name_under_plugin_namespace_is_reported(tmp_path: Pa
 
 def test_mcp_agent_without_mcp_json_fails_closed(tmp_path: Path) -> None:
     _write_manifests(tmp_path, mcp_json=False)
-    _write_probe(tmp_path, f"[{_PLUGIN_NAMESPACE}inspect_session_logs]")
+    _write_probe(tmp_path, f"[{PLUGIN_PREFIX}inspect_session_logs]")
 
     errors = validate_rendered_agent_tool_namespace(tmp_path)
 
@@ -113,7 +111,7 @@ def test_agent_vanishing_between_listing_and_reading_is_an_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_manifests(tmp_path)
-    probe = _write_probe(tmp_path, f"[{_PLUGIN_NAMESPACE}inspect_session_logs]")
+    probe = _write_probe(tmp_path, f"[{PLUGIN_PREFIX}inspect_session_logs]")
     original_read_text = Path.read_text
 
     def vanish_on_read(path: Path, *args, **kwargs) -> str:
@@ -133,7 +131,7 @@ def test_agent_vanishing_between_listing_and_reading_is_an_error(
 def test_invalid_plugin_json_is_an_error_not_an_exception(tmp_path: Path) -> None:
     _write_manifests(tmp_path)
     (tmp_path / ".claude-plugin" / "plugin.json").write_text("{not json", encoding="utf-8")
-    _write_probe(tmp_path, f"[{_PLUGIN_NAMESPACE}inspect_session_logs]")
+    _write_probe(tmp_path, f"[{PLUGIN_PREFIX}inspect_session_logs]")
 
     errors = validate_rendered_agent_tool_namespace(tmp_path)
 
@@ -177,7 +175,7 @@ def test_validate_sanitized_plugin_artifact_reports_agent_namespace_errors(
     reader = public_root / "agents" / "session-log-reader.md"
     reader.write_text(
         reader.read_text(encoding="utf-8").replace(
-            f"{_PLUGIN_NAMESPACE}inspect_session_logs", "mcp__autoskillit__inspect_session_logs"
+            f"{PLUGIN_PREFIX}inspect_session_logs", "mcp__autoskillit__inspect_session_logs"
         ),
         encoding="utf-8",
     )
@@ -189,9 +187,9 @@ def test_validate_sanitized_plugin_artifact_reports_agent_namespace_errors(
     assert any(
         "session-log-reader.md" in error
         and "does not carry the plugin namespace" in error
-        and _PLUGIN_NAMESPACE in error
+        and PLUGIN_PREFIX in error
         for error in errors
     ), (
         f"Expected at least one error citing session-log-reader.md's missing plugin "
-        f"namespace {_PLUGIN_NAMESPACE!r}, got: {errors!r}"
+        f"namespace {PLUGIN_PREFIX!r}, got: {errors!r}"
     )

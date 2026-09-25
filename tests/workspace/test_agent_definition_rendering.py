@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core import (
     DIRECT_PREFIX,
+    PLUGIN_PREFIX,
     SkillContractError,
     load_agent_definitions,
     load_bundled_agent_definitions,
@@ -18,8 +19,6 @@ from autoskillit.core import (
 from tests.contracts._projection_helpers import session_catalog
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-_PLUGIN_NAMESPACE = "mcp__plugin_autoskillit_autoskillit__"
 
 
 def _write_plugin_manifests(
@@ -78,7 +77,7 @@ class TestRenderAgentDefinitionsValidation:
         _write_agent_md(
             agents_dir / "bad-prefix.md",
             name="bad-prefix",
-            tools=[f"{_PLUGIN_NAMESPACE}submit_exploration_query"],
+            tools=[f"{PLUGIN_PREFIX}submit_exploration_query"],
         )
         with pytest.raises(ValueError, match="direct-install canonical prefix"):
             _render_agent_definitions(tmp_path)
@@ -176,7 +175,7 @@ class TestRenderAgentDefinitionsValidation:
         _render_agent_definitions(tmp_path)
 
         rendered = path.read_bytes()
-        projected_tools_line = f"tools: [{_PLUGIN_NAMESPACE}submit_exploration_query]\r\n".encode()
+        projected_tools_line = f"tools: [{PLUGIN_PREFIX}submit_exploration_query]\r\n".encode()
         assert projected_tools_line in rendered
         assert b"\n" not in rendered.replace(b"\r\n", b"")
 
@@ -388,7 +387,7 @@ def test_render_agent_definitions_skips_a_definition_that_vanishes_mid_glob(
 
     assert did_vanish
     assert not vanished.exists()
-    assert f"tools: [{_PLUGIN_NAMESPACE}submit_exploration_query]" in rendered.read_text(
+    assert f"tools: [{PLUGIN_PREFIX}submit_exploration_query]" in rendered.read_text(
         encoding="utf-8"
     )
 

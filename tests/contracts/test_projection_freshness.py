@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit
-from autoskillit.core import pkg_root
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, pkg_root
 from autoskillit.workspace import (
     iter_public_plugin_asset_files,
     public_plugin_asset_digest,
@@ -44,9 +44,7 @@ def _digest(path: Path) -> str:
 def _rendered_agent_text(source_file: Path) -> str:
     """Source agent text with its ``tools:`` line in the plugin namespace."""
     return "".join(
-        line.replace("mcp__autoskillit__", "mcp__plugin_autoskillit_autoskillit__")
-        if line.lstrip().startswith("tools:")
-        else line
+        line.replace(DIRECT_PREFIX, PLUGIN_PREFIX) if line.lstrip().startswith("tools:") else line
         for line in source_file.read_text(encoding="utf-8").splitlines(keepends=True)
     )
 
@@ -369,10 +367,10 @@ class TestProjectionFreshness:
         rewritten = 0
         for agent_md in sorted((destination / "agents").glob("*.md")):
             text = agent_md.read_text(encoding="utf-8")
-            if "mcp__plugin_autoskillit_autoskillit__" not in text:
+            if PLUGIN_PREFIX not in text:
                 continue
             agent_md.write_text(
-                text.replace("mcp__plugin_autoskillit_autoskillit__", "mcp__autoskillit__"),
+                text.replace(PLUGIN_PREFIX, DIRECT_PREFIX),
                 encoding="utf-8",
             )
             rewritten += 1
@@ -391,9 +389,7 @@ class TestProjectionFreshness:
             tool for definition in served for tool in definition.tools if tool.startswith("mcp__")
         ]
         assert served_mcp_tools
-        assert all(
-            tool.startswith("mcp__plugin_autoskillit_autoskillit__") for tool in served_mcp_tools
-        ), served_mcp_tools
+        assert all(tool.startswith(PLUGIN_PREFIX) for tool in served_mcp_tools), served_mcp_tools
 
 
 class TestAssetDigestMirrorsTheCopier:

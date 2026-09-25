@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import DefaultManagedWorkerCapacity
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, DefaultManagedWorkerCapacity
 from tests.fakes import (
     InMemoryHeadlessExecutor,
     InMemoryRecipeRepository,
@@ -371,8 +371,8 @@ async def test_dispatch_food_truck_preserves_inner_timeout_semantics(
 @pytest.mark.parametrize(
     ("backend_name", "expected_prefix"),
     [
-        ("claude-code", "mcp__plugin_autoskillit_autoskillit__"),
-        ("codex", "mcp__autoskillit__"),
+        ("claude-code", PLUGIN_PREFIX),
+        ("codex", DIRECT_PREFIX),
     ],
 )
 def test_food_truck_prompt_builder_binds_corridor_prefix(

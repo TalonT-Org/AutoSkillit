@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
-from autoskillit.core import FleetErrorCode
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -558,7 +558,7 @@ class TestFleetRunDispatch:
 
     @pytest.mark.parametrize(
         ("plugin_namespace", "expected_prefix"),
-        [(True, "mcp__plugin_autoskillit_autoskillit__"), (False, "mcp__autoskillit__")],
+        [(True, PLUGIN_PREFIX), (False, DIRECT_PREFIX)],
     )
     def test_fleet_run_prompt_builder_binds_launch_corridor_prefix(
         self, monkeypatch: pytest.MonkeyPatch, plugin_namespace: bool, expected_prefix: str

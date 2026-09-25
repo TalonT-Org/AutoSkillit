@@ -114,14 +114,22 @@ def validate_agent_tool_canonical(tool: str) -> str:
     Raises ValueError if the tool does not start with DIRECT_PREFIX or its short
     name is neither a canonical exploration tool nor a registered inspection tool.
     """
-    from ..tool_registry import get_tool_def
-    from ..types import EXPLORATION_TOOLS, ToolInitializationOperation
-
     if not tool.startswith(DIRECT_PREFIX):
         raise ValueError(
             f"agent tool {tool!r} must use the direct-install canonical prefix {DIRECT_PREFIX!r}"
         )
-    short = tool[len(DIRECT_PREFIX) :]
+    return validate_agent_tool_short_name(tool[len(DIRECT_PREFIX) :])
+
+
+def validate_agent_tool_short_name(short: str) -> str:
+    """Assert *short* names an agent-admissible AutoSkillit tool and return it.
+
+    Raises ValueError unless *short* is a canonical exploration tool or a
+    registered inspection tool.
+    """
+    from ..tool_registry import get_tool_def
+    from ..types import EXPLORATION_TOOLS, ToolInitializationOperation
+
     if short not in EXPLORATION_TOOLS:
         try:
             tool_def = get_tool_def(short)

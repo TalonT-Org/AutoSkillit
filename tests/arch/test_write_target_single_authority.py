@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -38,11 +39,12 @@ def test_no_second_write_target_implementation() -> None:
                 or re.search(r"resolve_write_target(?:$|_)", node.name)
             ):
                 violations.append(f"{path}:{node.lineno} {node.name}")
-        for node in tree.body:
             if isinstance(node, ast.Assign):
                 names = [target.id for target in node.targets if isinstance(target, ast.Name)]
             elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                 names = [node.target.id]
+            elif isinstance(node, ast.ImportFrom):
+                names = [alias.name for alias in node.names]
             else:
                 continue
             if any(name in {"_WRITE_VERBS", "WRITE_VERBS"} for name in names):
@@ -51,3 +53,21 @@ def test_no_second_write_target_implementation() -> None:
         "Use autoskillit.hooks.scan_write_targets instead of another implementation: "
         + ", ".join(violations)
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def resolve_write_target_path(): pass\n",
+        "def helper():\n    WRITE_VERBS = {'cp'}\n",
+        "from elsewhere import WRITE_VERBS as WV\n",
+    ],
+)
+def test_write_target_authority_guard_catches_alternate_definitions(
+    tmp_path, monkeypatch, source: str
+) -> None:
+    (tmp_path / "other.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "_SOURCE_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="instead of another implementation"):
+        test_no_second_write_target_implementation()

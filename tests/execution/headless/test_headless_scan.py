@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.execution.headless import _scan_jsonl_write_paths
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION
 from tests.execution.conftest import _make_tool_use_line
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -51,7 +52,8 @@ class TestScanJsonlCustomToolNames:
 
 class TestScanJsonlWriteWarnings:
     GENERIC_UNRESOLVED_WARNING = (
-        "Bash command contained a write target that could not be statically resolved"
+        "Bash command contained a write target that could not be statically resolved. "
+        + UNRESOLVED_WRITE_TARGET_REMEDIATION
     )
 
     @pytest.mark.parametrize(

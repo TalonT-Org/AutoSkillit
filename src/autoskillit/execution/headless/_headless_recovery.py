@@ -40,7 +40,7 @@ from autoskillit.execution.session.turn_usage import (
     merge_turn_usage,
     valid_token_count,
 )
-from autoskillit.hooks import scan_write_targets
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, scan_write_targets
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
@@ -101,7 +101,8 @@ def _tool_write_path_warnings(
             scan = scan_write_targets(command, cwd)
             if scan.unresolved or not scan.parseable:
                 warnings.append(
-                    "Bash command contained a write target that could not be statically resolved"
+                    "Bash command contained a write target that could not be statically resolved. "
+                    + UNRESOLVED_WRITE_TARGET_REMEDIATION
                 )
             for path in scan.targets:
                 if _is_path_outside_cwd(path, cwd):

@@ -16,6 +16,14 @@ except ImportError:
 RECIPES_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "recipes"
 
 
+# Convention-setter for the recipe-pair empty-universe guard: prints `ERROR: ...`
+# to stderr from `main()` because this script has no per-file unit tests — only
+# tests/infra/test_script_gate_empty_universe.py drives main() end-to-end.
+# Scripts with per-file unit tests expose a list-returning check() instead;
+# see scripts/check_pyi_stub_format.py for the contrasted pattern. The same
+# convention is mirrored in scripts/check_contract_freshness.py.
+
+
 class CompileError(Exception):
     """Raised when a single recipe file fails to compile."""
 

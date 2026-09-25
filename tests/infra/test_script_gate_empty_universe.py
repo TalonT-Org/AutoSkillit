@@ -37,6 +37,10 @@ def _load_script(name: str) -> ModuleType:
         "script_name",
         "root_attribute",
         "entrypoint",
+        # True → entrypoint returns a list[str] of violations (pyi pair).
+        # False → entrypoint returns an exit code and writes to stderr (recipe pair).
+        # The split reflects the intentional script-pair divergence documented
+        # in scripts/check_pyi_stub_format.py and scripts/compile_recipes.py.
         "returns_violations",
         "cli_args",
         "expected_message_substring",

@@ -375,9 +375,18 @@ class TestPerCorridorConsumptionChecks:
     """I4: the rendered namespace follows the artifact's manifests, never host state."""
 
     @pytest.mark.parametrize("registered", [False, True])
-    def test_production_projection_namespace_independent_of_host_registry(
+    def test_production_projection_namespace_uses_plugin_manifests(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: bool
     ) -> None:
+        """The rendered namespace derives from the artifact's manifests, not the host registry.
+
+        The projection hardcodes PluginLoadMode.EXPLICIT_PLUGIN_DIR and derives the
+        MCP tool namespace from the artifact's own .claude-plugin/plugin.json and
+        .mcp.json via read_claude_plugin_tool_prefix(); it never consults
+        is_marketplace_plugin_registered(). This parametrize exists so the
+        projection is smoke-tested with both an absent and a present registry
+        file (scoped to tmp_path via monkeypatch so xdist is not polluted).
+        """
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
         if registered:

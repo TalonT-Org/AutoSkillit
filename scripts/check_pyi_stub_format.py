@@ -56,6 +56,15 @@ def _guess_name(node: ast.stmt) -> str:
 
 
 def check() -> list[str]:
+    """Return all stub-format violations as structured strings.
+
+    Returns a list (not stderr/ERROR:) because tests consume the structured
+    return directly: tests/infra/test_check_pyi_stub_format.py calls
+    check_file() per-file, and tests/infra/test_script_gate_empty_universe.py
+    asserts on this list. Scripts without per-file tests (check_contract_freshness,
+    compile_recipes) print directly to stderr instead — see that test for the
+    parametrized contrast.
+    """
     violations = []
     paths = sorted(SRC_ROOT.rglob("__init__.pyi"))
     if not paths:

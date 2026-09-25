@@ -292,6 +292,32 @@ def test_probe_rate_limited_and_never_called_before_soft(monkeypatch: pytest.Mon
     assert calls == 2
 
 
+def test_persistent_probe_failure_still_triggers_idle_stall(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persistently failing activity probe must not mask IDLE_STALL."""
+    lifetime_module = _lifetime_module()
+    monkeypatch.setattr(lifetime_module, "_IDLE_WINDOW_SECONDS", 1.0)
+    monkeypatch.setattr(lifetime_module, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.1)
+
+    def failing_probe(_pid: int, _fd: int | None) -> frozenset[str]:
+        raise OSError("activity probe failed")
+
+    clock = _Clock()
+    lifetime = _start_lifetime(
+        _policy(soft=2.0, extension=10.0),
+        clock=clock,
+        activity_probe=failing_probe,
+    )
+    clock.advance(2.1)
+    # First poll after soft ceiling: probe raises, decision still pending.
+    assert lifetime.poll() is None
+    # Advance past IDLE_WINDOW_SECONDS while probes keep failing — IDLE_STALL must fire
+    # even though every probe raised (the fix for bugs L180: probe failure is not activity).
+    clock.advance(2.0)
+    assert lifetime.poll() is TerminationReason.IDLE_STALL
+
+
 def test_decision_is_sticky_and_logged_once() -> None:
     clock = _Clock()
     lifetime = _start_lifetime(_policy(soft=2.0, extension=0.0), clock=clock)

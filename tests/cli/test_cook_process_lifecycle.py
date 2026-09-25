@@ -653,7 +653,7 @@ def test_poll_failures_do_not_escape_the_wait_loop(
             lifetime=policy,
         )
 
-    assert result.termination is TerminationReason.TIMED_OUT
+    assert result.termination is TerminationReason.IDLE_STALL
     assert any(event["event"] == "cook_lifetime_probe_failed" for event in logs)
     assert any(event["event"] == "cook_lifetime_warning_write_failed" for event in logs)
 

@@ -181,16 +181,15 @@ class InteractiveLifetime:
             signals = frozenset(self._activity_probe(self._pid, self._terminal_fd))
         except Exception:
             # Probe failure is an unknown state, not evidence of activity.
-            # Leave _last_active_mono untouched so the IDLE_STALL backstop
-            # can still fire if probes keep failing.
-            self._last_signals = frozenset()
+            # Route through _apply_activity_signals with empty signals so the
+            # IDLE_STALL backstop still fires if probes keep failing.
             logger.warning(
                 "cook_lifetime_probe_failed",
                 pid=self._pid,
                 elapsed_seconds=now - self._started_at,
                 exc_info=True,
             )
-            return None
+            return self._apply_activity_signals(now, first_probe, frozenset())
 
         return self._apply_activity_signals(now, first_probe, signals)
 
@@ -438,6 +437,8 @@ def run_cook_attempt(
                     logger.error(
                         "cook_master_fd_close_failed",
                         error_type=type(exc).__name__,
+                        pid=pid,
+                        fd=deferred_master_fd,
                     )
                     failures.append(exc)
             _remove_lifetime_notice(notice_path)

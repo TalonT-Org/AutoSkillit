@@ -10,7 +10,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
-from autoskillit.cli.install._install_info import InstallType
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
     append_skill_unavailability,
@@ -88,6 +87,8 @@ def _source_currency_warning(
             )
         case SourceCurrencyStatus.STALE:
             if currency.checkout_version is not None:
+                from autoskillit.cli.install._install_info import InstallType
+
                 remedy = (
                     f"`autoskillit update` (runs `uv tool install --force --reinstall {checkout}`)"
                     if currency.install_type == InstallType.LOCAL_PATH

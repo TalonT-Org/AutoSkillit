@@ -45,7 +45,7 @@ class _ShellDirectoryState:
     cdpath_unknown: bool
 
 
-def _scope_state(
+def _ensure_scope_state(
     scopes: dict[tuple[int, ...], _ShellDirectoryState], path: tuple[int, ...]
 ) -> _ShellDirectoryState:
     for length in range(1, len(path) + 1):
@@ -56,7 +56,7 @@ def _scope_state(
     return scopes[path]
 
 
-def _shell_builtin_prefix(prefix: list[str]) -> bool:
+def _unwrapped_prefix(prefix: list[str]) -> bool:
     """True when *prefix* contains no wrapper command — i.e. is the unwrapped shell-builtin form.
 
     The polarity is ``unwrapped``: returns True only when none of the wrapper
@@ -75,7 +75,7 @@ def _cdpath_setting(segment: list[str], start: int | None) -> tuple[bool, bool] 
         import _command_classification as _classification  # type: ignore[no-redef]
 
     prefix = segment if start is None else segment[:start]
-    if not _shell_builtin_prefix(prefix):
+    if not _unwrapped_prefix(prefix):
         return None
     verb = segment[start] if start is not None else ""
     shell_builtin = verb in {
@@ -220,12 +220,12 @@ def _record_state(
         negative_components = [index for index, component in enumerate(path) if component < 0]
         override_scope = path[: negative_components[-1] + 1] if negative_components else path
         if override_scope not in overridden_scopes:
-            override_state = _scope_state(scopes, override_scope)
+            override_state = _ensure_scope_state(scopes, override_scope)
             override_state.cwd = (
                 _classification.resolve_write_target(record.cwd_override, override_state.cwd) or ""
             )
             overridden_scopes.add(override_scope)
-    return _scope_state(scopes, path)
+    return _ensure_scope_state(scopes, path)
 
 
 def _apply_shell_builtin(
@@ -234,7 +234,7 @@ def _apply_shell_builtin(
     argv_tokens: Sequence[ArgvToken] | None,
     state: _ShellDirectoryState,
 ) -> bool:
-    if argv_tokens is None or not _shell_builtin_prefix(executable[:start]):
+    if argv_tokens is None or not _unwrapped_prefix(executable[:start]):
         return False
     if start >= len(executable):
         state.cwd = ""

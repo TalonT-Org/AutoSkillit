@@ -472,7 +472,6 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_backend_event_kind.py",
             "test_backend_gating_core.py",
             "test_backend_protocols.py",
-            "test_bash_write_targets.py",
             "test_branch_guard.py",
             "test_build_agent_env.py",
             "test_canonical_token_usage.py",

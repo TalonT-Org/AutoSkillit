@@ -29,9 +29,9 @@ _WRITE_TARGET_CASES: list[tuple[str, str, tuple[str, ...], bool]] = [
     ("echo x 2> /path/err.txt", _WORKSPACE, ("/path/err.txt",), False),
     ("echo x 2>/path/err.txt", _WORKSPACE, ("/path/err.txt",), False),
     (
-        "(echo x > /path/nested.txt) > /path/outer.txt)",
+        "(echo x > /path/nested.txt) > /path/outer.txt",
         _WORKSPACE,
-        (),
+        ("/path/nested.txt", "/path/outer.txt"),
         False,
     ),
     ("echo x 2>&1", _WORKSPACE, (), False),

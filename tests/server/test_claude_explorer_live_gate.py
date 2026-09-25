@@ -207,6 +207,12 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> tuple[str, list[dict
     assert len(output.encode()) <= 2_000_000, "Claude live output exceeded its evidence bound"
     assert process.returncode == 0, output[-4000:]
     events = [json.loads(line) for line in output.splitlines() if line.strip()]
+    # Secondary bound on event count so a regression that produces a flood of small
+    # envelopes cannot balloon the evidence file while staying under the byte bound.
+    assert len(events) <= 500, (
+        f"Claude live output emitted {len(events)} NDJSON events; expected a handful, "
+        "got a flood — investigate before raising either bound"
+    )
     return output, events
 
 

@@ -19,7 +19,11 @@ from ..types import (
     EVIDENCE_READER_TOOLS,
     PARENT_SANDBOX_MODES,
 )
-from ._plugin_ids import DIRECT_PREFIX, validate_agent_tool_canonical
+from ._plugin_ids import (
+    DIRECT_PREFIX,
+    find_qualified_autoskillit_tool_names,
+    validate_agent_tool_canonical,
+)
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
@@ -205,10 +209,7 @@ class AgentDef:
             raise AgentDefinitionError("agent tools must be unique")
         if self.max_turns is not None and self.max_turns < 1:
             raise AgentDefinitionError("agent maxTurns must be a positive integer")
-        if not self.body.strip():
-            raise AgentDefinitionError("agent body must be non-empty")
-        if "'''" in self.body:
-            raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
+        self._validate_body()
         if not isinstance(self.reader_tools, tuple):
             raise AgentDefinitionError("agent reader_tools must be an immutable tuple")
         if self.provisioning not in _AGENT_PROVISIONING_POLICIES:
@@ -219,6 +220,24 @@ class AgentDef:
         self._validate_reader_tools()
         if self.reader_tools:
             self._validate_reader_eligibility()
+
+    def _validate_body(self) -> None:
+        """Validate the body is non-empty, TOML-embeddable, and prefix-free.
+
+        A qualified AutoSkillit tool name differs per corridor, so a body that
+        spells one out is wrong in at least one of them.
+        """
+        if not self.body.strip():
+            raise AgentDefinitionError("agent body must be non-empty")
+        qualified = find_qualified_autoskillit_tool_names(self.body)
+        if qualified:
+            raise AgentDefinitionError(
+                "agent body must name AutoSkillit MCP tools by short name; the qualified "
+                "name differs per corridor (Claude plugin, marketplace, Codex): "
+                f"{sorted(set(qualified))!r}"
+            )
+        if "'''" in self.body:
+            raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
 
     def _validate_reader_tools(self) -> None:
         """Validate the canonical reader tool allowlist (format, uniqueness, prefix)."""

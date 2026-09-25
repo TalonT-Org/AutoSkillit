@@ -444,6 +444,70 @@ class TestPluginJsonContract:
 
 
 # ---------------------------------------------------------------------------
+# CC-PLUGIN-TOOL-NAME: plugin-provided MCP tool naming rule
+# https://code.claude.com/docs/en/mcp (plugin-provided servers):
+#   mcp__plugin_<plugin-name>_<server-name>__<tool-name>, with every character
+#   outside A-Z, a-z, 0-9, _ and - replaced by _.
+# Expected prefixes are HARDCODED STRING LITERALS.
+# ---------------------------------------------------------------------------
+
+
+class TestClaudePluginToolNamespace:
+    def test_claude_plugin_tool_prefix_rule(self) -> None:
+        from autoskillit.core import claude_plugin_tool_prefix
+
+        assert (
+            claude_plugin_tool_prefix("autoskillit", "autoskillit")
+            == "mcp__plugin_autoskillit_autoskillit__"
+        )
+        assert (
+            claude_plugin_tool_prefix("my.plugin", "db-tools")
+            == "mcp__plugin_my_plugin_db-tools__"
+        )
+        with pytest.raises(ValueError):
+            claude_plugin_tool_prefix("", "autoskillit")
+        with pytest.raises(ValueError):
+            claude_plugin_tool_prefix("autoskillit", "")
+
+    def test_packaged_plugin_manifests_yield_plugin_tool_prefix(self) -> None:
+        from autoskillit.core import pkg_root, read_claude_plugin_tool_prefix
+
+        assert (
+            read_claude_plugin_tool_prefix(pkg_root()) == "mcp__plugin_autoskillit_autoskillit__"
+        )
+
+    @pytest.mark.parametrize(
+        ("plugin_json", "mcp_json"),
+        [
+            (None, '{"mcpServers": {"autoskillit": {}}}'),
+            ('{"name": 7}', '{"mcpServers": {"autoskillit": {}}}'),
+            ('{"name": "autoskillit"}', None),
+            ('{"name": "autoskillit"}', '{"mcpServers": {}}'),
+            ('{"name": "autoskillit"}', '{"mcpServers": {"a": {}, "b": {}}}'),
+        ],
+        ids=[
+            "plugin-json-missing",
+            "name-not-string",
+            "mcp-json-missing",
+            "zero-servers",
+            "two-servers",
+        ],
+    )
+    def test_read_claude_plugin_tool_prefix_fails_closed(
+        self, tmp_path: Path, plugin_json: str | None, mcp_json: str | None
+    ) -> None:
+        from autoskillit.core import read_claude_plugin_tool_prefix
+
+        if plugin_json is not None:
+            (tmp_path / ".claude-plugin").mkdir()
+            (tmp_path / ".claude-plugin" / "plugin.json").write_text(plugin_json)
+        if mcp_json is not None:
+            (tmp_path / ".mcp.json").write_text(mcp_json)
+        with pytest.raises(ValueError):
+            read_claude_plugin_tool_prefix(tmp_path)
+
+
+# ---------------------------------------------------------------------------
 # CC-HEADLESS-001: run_skill headless path --add-dir layout guard
 # Path components are HARDCODED STRING LITERALS — do NOT replace with constants.
 # Replaces CC-SKILLS-EXT (xfail removed): run_skill now routes through

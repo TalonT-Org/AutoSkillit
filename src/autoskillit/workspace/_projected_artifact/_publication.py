@@ -10,10 +10,11 @@ and rendered agent definitions must derive from the admitted catalog (#4715).
 
 from __future__ import annotations
 
+import functools
 import os
 import shutil
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from autoskillit.core import (
     destination_location,
     load_agent_definition,
     project_agent_tool_name,
+    read_claude_plugin_tool_prefix,
     scan_observed,
     validate_agent_tool_canonical,
     write_versioned_json,
@@ -243,7 +245,16 @@ def _first_tools_line_index(lines: list[str]) -> int | None:
     return None
 
 
-def _render_agent_definition(path: Path, mcp_tool_prefix: str) -> None:
+def _derive_plugin_tool_prefix(plugin_root: Path) -> str:
+    try:
+        return read_claude_plugin_tool_prefix(plugin_root)
+    except ValueError as exc:
+        raise SkillContractError(
+            f"cannot derive the plugin MCP tool namespace for {plugin_root}: {exc}"
+        ) from exc
+
+
+def _render_agent_definition(path: Path, resolve_prefix: Callable[[], str]) -> None:
     """Rewrite and re-validate one eligible agent definition transactionally."""
     content = path.read_bytes().decode("utf-8")
     lines = content.splitlines(keepends=True)
@@ -258,9 +269,8 @@ def _render_agent_definition(path: Path, mcp_tool_prefix: str) -> None:
         if tool.startswith("mcp__"):
             validate_agent_tool_canonical(tool)
 
-    projected_tools = tuple(
-        project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools
-    )
+    prefix = resolve_prefix()
+    projected_tools = tuple(project_agent_tool_name(tool, prefix) for tool in source_def.tools)
     new_tools_value = "[" + ", ".join(projected_tools) + "]"
     original_tools_line = lines[tools_line_idx]
     indent = original_tools_line[: len(original_tools_line) - len(original_tools_line.lstrip())]
@@ -291,23 +301,27 @@ def _render_agent_definition(path: Path, mcp_tool_prefix: str) -> None:
         )
 
 
-def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
-    """Rewrite MCP tool prefixes in copied agent definitions.
+def _render_agent_definitions(plugin_root: Path) -> None:
+    """Rewrite MCP tool prefixes in the agent definitions copied into *plugin_root*.
 
     Performs a format-preserving line-level rewrite of the ``tools:`` frontmatter
-    line only: each DIRECT-canonical MCP tool name is projected to the target
-    prefix.  Non-MCP tools pass through unchanged.  The source definitions are
-    validated before projection — a non-canonical MCP tool raises immediately.
+    line only: each DIRECT-canonical MCP tool name is projected to the namespace
+    Claude Code registers for this plugin, derived from the plugin root's own
+    ``.claude-plugin/plugin.json`` and ``.mcp.json``.  Non-MCP tools pass through
+    unchanged.  The source definitions are validated before projection — a
+    non-canonical MCP tool raises immediately.
 
     Each rendered file is re-parsed via the canonical fail-closed loader to
     assert semantic equality with the source definition (modulo tools prefix).
     """
+    agents_dir = plugin_root / "agents"
     if not agents_dir.is_dir():
         return
     try:
         entries = sorted(scan_observed(agents_dir), key=lambda entry: entry.name)
     except VANISHED_ERRORS:
         return
+    resolve_prefix = functools.cache(lambda: _derive_plugin_tool_prefix(plugin_root))
     for entry in entries:
         if not entry.name.endswith(".md") or entry.is_dir:
             continue
@@ -315,7 +329,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
         if path.name in {"AGENTS.md", "CLAUDE.md"}:
             continue
         try:
-            _render_agent_definition(path, mcp_tool_prefix)
+            _render_agent_definition(path, resolve_prefix)
         except (FileNotFoundError, NotADirectoryError, UnicodeDecodeError):
             continue
 
@@ -325,8 +339,6 @@ def materialize_sanitized_plugin_root(
     destination: Path,
     catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
-    *,
-    mcp_tool_prefix: str,
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
 
@@ -352,7 +364,7 @@ def materialize_sanitized_plugin_root(
     )
     try:
         _copy_non_skill_plugin_assets(source_root, staging)
-        _render_agent_definitions(staging / "agents", mcp_tool_prefix)
+        _render_agent_definitions(staging)
         skill_infos = _skill_sequence(catalog)
         documents = materialize_agent_skill_tree(staging / "skills", skill_infos, context)
         _replace_directory(staging, destination)

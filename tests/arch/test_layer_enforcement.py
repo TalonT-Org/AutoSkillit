@@ -1996,6 +1996,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/workspace/test_project_local_overrides_resolution.py": frozenset(
         {"autoskillit.execution"}
     ),
+    # production --plugin-dir projection is acquired for a real ClaudeCodeBackend to
+    # prove its rendered agents carry the plugin tool namespace
+    "tests/workspace/test_agent_definition_rendering.py": frozenset({"autoskillit.execution"}),
     # ineligible-context fallback routing test needs a real ClaudeCodeBackend to
     # exercise context.backend.exploration_dispatch_renderer.conventions
     "tests/workspace/test_explorer_eligibility_rendering.py": frozenset({"autoskillit.execution"}),

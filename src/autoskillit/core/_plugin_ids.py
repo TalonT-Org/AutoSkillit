@@ -7,12 +7,16 @@ from autoskillit.core.plugins._plugin_ids import (
     DIRECT_PREFIX,
     MARKETPLACE_PREFIX,
     _installed_plugins_path,
+    claude_plugin_tool_prefix,
     detect_autoskillit_mcp_prefix,
+    find_qualified_autoskillit_tool_names,
     installed_plugin_semantic_key,
     parse_installed_plugin_semantic_key,
     project_agent_tool_name,
+    read_claude_plugin_tool_prefix,
     registered_install_paths,
     validate_agent_tool_canonical,
+    validate_agent_tool_short_name,
 )
 
 __all__ = [
@@ -22,10 +26,14 @@ __all__ = [
     "_AUTOSKILLIT_INSTALL_ROOT_KEY",
     "_AUTOSKILLIT_PLUGIN_KEY",
     "_installed_plugins_path",
+    "claude_plugin_tool_prefix",
     "detect_autoskillit_mcp_prefix",
+    "find_qualified_autoskillit_tool_names",
     "installed_plugin_semantic_key",
     "parse_installed_plugin_semantic_key",
     "project_agent_tool_name",
+    "read_claude_plugin_tool_prefix",
     "registered_install_paths",
     "validate_agent_tool_canonical",
+    "validate_agent_tool_short_name",
 ]

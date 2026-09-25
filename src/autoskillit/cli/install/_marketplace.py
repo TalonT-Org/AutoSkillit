@@ -25,7 +25,6 @@ from autoskillit.cli.install._install_contract import (
     InstallResult,
 )
 from autoskillit.core import (
-    MARKETPLACE_PREFIX,
     ManagedHome,
     SkillExecutionRole,
     SkillSource,
@@ -134,10 +133,6 @@ def _ensure_marketplace(
             catalog=catalog,
             adaptation_context=None,
         ),
-        # Marketplace registration — Claude Code resolves these tools under the
-        # marketplace prefix; never detect_autoskillit_mcp_prefix(), which answers
-        # a different question (host-level registry presence, not load mechanism).
-        mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
     write_generated_hooks_json(public_plugin_root)
     validate_public_plugin_projection(

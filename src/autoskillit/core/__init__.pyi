@@ -302,14 +302,20 @@ from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_C
 from .plugins._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from .plugins._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from .plugins._plugin_ids import _installed_plugins_path as _installed_plugins_path
+from .plugins._plugin_ids import claude_plugin_tool_prefix as claude_plugin_tool_prefix
 from .plugins._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from .plugins._plugin_ids import (
+    find_qualified_autoskillit_tool_names as find_qualified_autoskillit_tool_names,
+)
 from .plugins._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
 from .plugins._plugin_ids import (
     parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key,
 )
 from .plugins._plugin_ids import project_agent_tool_name as project_agent_tool_name
+from .plugins._plugin_ids import read_claude_plugin_tool_prefix as read_claude_plugin_tool_prefix
 from .plugins._plugin_ids import registered_install_paths as registered_install_paths
 from .plugins._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from .plugins._plugin_ids import validate_agent_tool_short_name as validate_agent_tool_short_name
 from .plugins._retiring_cache import _InstallLock as _InstallLock
 from .plugins._retiring_cache import append_retiring_record as append_retiring_record
 from .plugins._retiring_cache import due_retiring_records as due_retiring_records

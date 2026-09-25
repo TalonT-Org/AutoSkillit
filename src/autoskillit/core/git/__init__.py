@@ -4,7 +4,7 @@ Exposes the canonical public surface of ``git_remote``, ``github_url``,
 ``bash_write_targets``, and ``branch_guard`` through the
 ``autoskillit.core.git`` namespace. Backward-compat shims at
 ``core/git_remote.py``, ``core/github_url.py``,
-``core/bash_write_targets.py``, and ``core/branch_guard.py`` preserve old
+and ``core/branch_guard.py`` preserve old
 import paths after the core/git/ decomposition.
 """
 

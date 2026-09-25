@@ -15,7 +15,6 @@ _SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 def test_write_target_consumers_share_hooks_scanner() -> None:
     import autoskillit.core as core
-    import autoskillit.core.bash_write_targets as core_shim
     import autoskillit.core.git as core_git
     import autoskillit.execution.headless._headless_recovery as recovery
     import autoskillit.hooks as hooks
@@ -25,7 +24,6 @@ def test_write_target_consumers_share_hooks_scanner() -> None:
     assert recovery.scan_write_targets is hooks.scan_write_targets
     assert not hasattr(core, "extract_bash_write_targets")
     assert not hasattr(core_git, "extract_bash_write_targets")
-    assert not hasattr(core_shim, "extract_bash_write_targets")
 
 
 def test_no_second_write_target_implementation() -> None:

@@ -260,19 +260,48 @@ _CLASSIFICATION_CASES = [
 ]
 
 
+def _unquoted_pipe(cmd: str) -> bool:
+    """Return True if *cmd* contains a shell pipe (`|`) outside of any quote.
+
+    Plain `"|" in cmd` would falsely flag ripgrep regex alternation like
+    `rg -n 'foo|bar' ...` (the `|` is inside single quotes — it's a regex
+    alternation, not a shell pipe). Walk the string tracking quote state.
+    """
+    in_single = False
+    in_double = False
+    for index, char in enumerate(cmd):
+        if char == "\\" and index + 1 < len(cmd):
+            # Skip the escaped char regardless of quote state.
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+        elif char == '"' and not in_single:
+            in_double = not in_double
+        elif char == "|" and not in_single and not in_double:
+            return True
+    return False
+
+
 def _classification_case_ids() -> list[str]:
     """Build descriptive pytest parametrize IDs for _CLASSIFICATION_CASES.
 
     A single failing case shows up as ``sed-redirect`` or ``rg-pipe`` rather
     than ``case-19`` — the offending shell shape is right there in the
     failure report, no need to scroll back to the parametrization site.
+
+    Caveats baked into the labels:
+      - `>` triggers `redirect` even when it's a stderr redirect like
+        `2>/dev/null`; this is acceptable because stderr redirect does
+        affect classification, just not the way the test asserts.
+      - Pipe detection uses _unquoted_pipe so ripgrep regex `|` does NOT
+        trigger `pipe` (e.g. `rg -n 'foo|bar' a.py` is `rg`, not `rg-pipe`).
     """
     ids: list[str] = []
     seen: dict[str, int] = {}
     for cmd, bounded, target in _CLASSIFICATION_CASES:
         verb = cmd.lstrip(" {").split()[0] if cmd.lstrip() else "empty"
         has_redirect = ">" in cmd
-        has_pipe = "|" in cmd
+        has_pipe = _unquoted_pipe(cmd)
         shape_bits = [verb]
         if has_pipe:
             shape_bits.append("pipe")

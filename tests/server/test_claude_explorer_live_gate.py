@@ -14,13 +14,12 @@ from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     EXPLORATION_TOOLS,
     PluginLoadMode,
-    SkillExecutionRole,
-    SkillSource,
     load_agent_definition,
     load_agent_definitions,
     load_bundled_agent_definitions,
 )
 from tests.conftest import production_interpreter_env
+from tests.contracts._projection_helpers import session_catalog
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.large, pytest.mark.smoke]
@@ -54,27 +53,13 @@ def _initialize_repository(project: Path) -> None:
         subprocess.run(command, cwd=project, check=True, timeout=10)
 
 
-def _session_catalog():
-    from autoskillit.workspace.skills import (
-        DefaultSkillResolver,
-        EffectiveSkillCatalog,
-        SkillCatalogEntry,
-    )
-
-    skills = tuple(s for s in DefaultSkillResolver().list_all() if s.source is SkillSource.BUNDLED)
-    return EffectiveSkillCatalog(
-        skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in skills),
-        execution_role=SkillExecutionRole.SESSION,
-    )
-
-
 def _build_plugin(plugin: Path) -> None:
     """Copy the production ``--plugin-dir`` projection into *plugin*, byte for byte."""
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.workspace import project_default_plugin_authority
 
     authority = project_default_plugin_authority(
-        cwd=plugin.parent, base_branch="main", catalog=_session_catalog()
+        cwd=plugin.parent, base_branch="main", catalog=session_catalog()
     )
     with authority.acquire_launch_binding(
         backend=ClaudeCodeBackend(),

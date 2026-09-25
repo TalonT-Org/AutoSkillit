@@ -11,12 +11,11 @@ import pytest
 from autoskillit.core import (
     DIRECT_PREFIX,
     SkillContractError,
-    SkillExecutionRole,
-    SkillSource,
     load_agent_definitions,
     load_bundled_agent_definitions,
     pkg_root,
 )
+from tests.contracts._projection_helpers import session_catalog
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -49,22 +48,6 @@ def _copy_packaged_plugin(plugin_root: Path) -> Path:
     )
     shutil.copy2(pkg_root() / ".mcp.json", plugin_root / ".mcp.json")
     return agents_dir
-
-
-def _session_catalog():
-    from autoskillit.workspace.skills import (
-        DefaultSkillResolver,
-        EffectiveSkillCatalog,
-        SkillCatalogEntry,
-    )
-
-    source_infos = tuple(
-        s for s in DefaultSkillResolver().list_all() if s.source is SkillSource.BUNDLED
-    )
-    return EffectiveSkillCatalog(
-        skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in source_infos),
-        execution_role=SkillExecutionRole.SESSION,
-    )
 
 
 def _write_agent_md(path: Path, *, name: str, tools: list[str], body: str = "") -> None:
@@ -312,7 +295,7 @@ class TestBothPipelinesRenderAgents:
             materialize_sanitized_plugin_root,
         )
 
-        catalog = _session_catalog()
+        catalog = session_catalog()
         destination = tmp_path / "marketplace" / "autoskillit"
         destination.parent.mkdir(parents=True)
         materialize_sanitized_plugin_root(

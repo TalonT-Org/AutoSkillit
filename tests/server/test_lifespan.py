@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog
 
-from autoskillit.execution.process._process_tether import TETHER_SWEEP_INTERVAL_SECONDS
+from autoskillit.execution import TETHER_SWEEP_INTERVAL_SECONDS
 from autoskillit.execution.recording.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

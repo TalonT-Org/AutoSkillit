@@ -45,8 +45,8 @@ def test_authored_agent_mcp_tools_derive_from_core_authority() -> None:
                 assert short in EXPLORATION_TOOLS
 
 
-def test_marketplace_artifact_agent_tools_carry_plugin_namespace(tmp_path: Path) -> None:
-    """The marketplace-published agent definitions carry the plugin namespace."""
+def test_projected_artifact_agent_tools_carry_plugin_namespace(tmp_path: Path) -> None:
+    """The projected agent definitions carry the plugin namespace."""
     from autoskillit.workspace import (
         SkillProjectionContext,
         materialize_sanitized_plugin_root,
@@ -83,11 +83,11 @@ def test_marketplace_artifact_agent_tools_carry_plugin_namespace(tmp_path: Path)
         for tool in definition.tools:
             if not tool.startswith("mcp__"):
                 continue
-            assert tool.startswith("mcp__plugin_autoskillit_autoskillit__"), (
-                f"Marketplace agent {definition.name!r} tool {tool!r} does not use "
-                "the plugin namespace 'mcp__plugin_autoskillit_autoskillit__'"
+            assert tool.startswith(PLUGIN_PREFIX), (
+                f"Projected agent {definition.name!r} tool {tool!r} does not use "
+                f"the plugin namespace {PLUGIN_PREFIX!r}"
             )
-            short = tool.removeprefix("mcp__plugin_autoskillit_autoskillit__")
+            short = tool.removeprefix(PLUGIN_PREFIX)
             assert (
                 get_tool_def(short).initialization_operation
                 is ToolInitializationOperation.INSPECTION

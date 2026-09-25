@@ -490,7 +490,6 @@ class TestClaudePluginToolNamespace:
             ('{"name": "autoskillit"}', None),
             ('{"name": "autoskillit"}', '{"mcpServers": {}}'),
             ('{"name": "autoskillit"}', '{"mcpServers": {"a": {}, "b": {}}}'),
-            ('{"name": "autoskillit"}', '{"mcpServers": {7: {}}}'),
             ('{"name": "autoskillit"}', '{"mcpServers": {"": {}}}'),
         ],
         ids=[
@@ -499,7 +498,6 @@ class TestClaudePluginToolNamespace:
             "mcp-json-missing",
             "zero-servers",
             "two-servers",
-            "server-key-not-string",
             "server-key-empty-string",
         ],
     )
@@ -514,6 +512,34 @@ class TestClaudePluginToolNamespace:
         if mcp_json is not None:
             (tmp_path / ".mcp.json").write_text(mcp_json)
         with pytest.raises(ValueError):
+            read_claude_plugin_tool_prefix(tmp_path)
+
+    def test_read_claude_plugin_tool_prefix_rejects_non_string_server_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-string mcpServers key is rejected even if JSON parsing is bypassed.
+
+        json.loads strictly rejects non-string object keys, so the production
+        guard is unreachable through the normal read path; this test bypasses
+        the JSON layer to verify the runtime isinstance(server_key, str)
+        check still rejects the malformed dict shape.
+        """
+        from autoskillit.core import read_claude_plugin_tool_prefix
+        from autoskillit.core.plugins import _plugin_ids
+
+        original_reader = _plugin_ids._read_plugin_json_object
+
+        (tmp_path / ".claude-plugin").mkdir()
+        (tmp_path / ".claude-plugin" / "plugin.json").write_text('{"name": "autoskillit"}')
+        (tmp_path / ".mcp.json").write_text('{"mcpServers": {"autoskillit": {}}}')
+
+        def _selective_bypass(path: Path) -> dict[str, object]:
+            if path.name == ".mcp.json":
+                return {"mcpServers": {7: {}}}
+            return original_reader(path)
+
+        monkeypatch.setattr(_plugin_ids, "_read_plugin_json_object", _selective_bypass)
+        with pytest.raises(ValueError, match="must be a non-empty string"):
             read_claude_plugin_tool_prefix(tmp_path)
 
 

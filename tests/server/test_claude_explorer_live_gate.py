@@ -200,6 +200,10 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> tuple[str, list[dict
             _cleanup_owned_process_group(process, timeout=10)
             pytest.fail(f"Claude explorer live gate timed out: {output_path.read_text()[-4000:]}")
     output = output_path.read_text()
+    # stream-json --verbose emits per-event NDJSON envelopes (system / user / assistant
+    # tool_use / tool_result), which is intrinsically much larger than the previous
+    # single-result `json` payload. The 2 MB bound still bounds the evidence file size
+    # for human review; the meaningful content boundary is the prompt + LIVE_OK line.
     assert len(output.encode()) <= 2_000_000, "Claude live output exceeded its evidence bound"
     assert process.returncode == 0, output[-4000:]
     events = [json.loads(line) for line in output.splitlines() if line.strip()]

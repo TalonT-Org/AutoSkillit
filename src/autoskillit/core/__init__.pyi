@@ -103,7 +103,7 @@ from .fs_observation import ObservedEntry as ObservedEntry
 from .fs_observation import observe_path_mode as observe_path_mode
 from .fs_observation import safe_mtime as safe_mtime
 from .fs_observation import scan_observed as scan_observed
-from .git.bash_write_targets import contains_test_gate_command as contains_test_gate_command
+from .git.test_gate_command import contains_test_gate_command as contains_test_gate_command
 from .git.branch_guard import is_protected_branch as is_protected_branch
 from .git.git_refs import ResolvedRef as ResolvedRef
 from .git.git_refs import local_branch_ref as local_branch_ref

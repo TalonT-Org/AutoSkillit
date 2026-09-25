@@ -201,7 +201,7 @@ class TestModuleCascadeCore:
             "git_remote",
             "fs_observation",
             "pipeline_tracker",
-            "bash_write_targets",
+            "test_gate_command",
             "_type_audit_admission",
             "_type_audit_admission_artifact_ownership",
             "_type_audit_admission_ledger",

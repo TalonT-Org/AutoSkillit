@@ -588,7 +588,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
-    "bash_write_targets": frozenset({"core", "execution", "recipe", "server"}),
+    "test_gate_command": frozenset({"core", "execution", "recipe", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_audit_artifact_ref": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_audit_cycle_authority": frozenset(

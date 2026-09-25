@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import paths
+from autoskillit.core import find_qualified_autoskillit_tool_names, paths
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -57,11 +56,6 @@ def test_mcp_prefix_literals_confined_to_canonical_module() -> None:
     )
 
 
-_QUALIFIED_AUTOSKILLIT_TOOL = re.compile(
-    r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__[A-Za-z0-9_]+"
-)
-
-
 def _agent_body(text: str) -> str:
     """Return the text after the closing frontmatter delimiter."""
     lines = text.splitlines(keepends=True)
@@ -93,7 +87,7 @@ def test_no_qualified_autoskillit_tool_names_in_model_visible_text() -> None:
     violations: list[tuple[str, str]] = [
         (path.relative_to(src_root).as_posix(), match)
         for path, text in documents
-        for match in _QUALIFIED_AUTOSKILLIT_TOOL.findall(text)
+        for match in find_qualified_autoskillit_tool_names(text)
     ]
     assert not violations, (
         "Qualified AutoSkillit MCP tool names in model-visible text; use the short name:\n"

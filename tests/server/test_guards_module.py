@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
             'cp a "$(echo /outside)/x"',
             "allowed",
             True,
-            "",
+            UNRESOLVED_WRITE_TARGET_REMEDIATION,
             id="subshell-target-fails-closed",
         ),
         pytest.param(
@@ -74,8 +74,7 @@ def test_check_write_target_boundary_cases(
 
     if expected_message is not None:
         assert result is not None
-        if expected_message:
-            assert expected_message in result
+        assert expected_message in result
     else:
         assert result is None
 

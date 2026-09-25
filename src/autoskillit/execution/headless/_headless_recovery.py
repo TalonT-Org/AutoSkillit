@@ -19,7 +19,6 @@ from autoskillit.core import (
     SkillResult,
     TokenMeasure,
     TurnTokenEntry,
-    extract_bash_write_targets,
     get_logger,
     is_parent_assistant_record,
 )
@@ -41,6 +40,7 @@ from autoskillit.execution.session.turn_usage import (
     merge_turn_usage,
     valid_token_count,
 )
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, scan_write_targets
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
@@ -98,7 +98,13 @@ def _tool_write_path_warnings(
     if tool_name == bash_tool_name:
         command = inputs.get("command", "")
         if isinstance(command, str):
-            for path in extract_bash_write_targets(command, cwd):
+            scan = scan_write_targets(command, cwd)
+            if scan.unresolved or not scan.parseable:
+                warnings.append(
+                    "Bash command contained a write target that could not be statically resolved. "
+                    + UNRESOLVED_WRITE_TARGET_REMEDIATION
+                )
+            for path in scan.targets:
                 if _is_path_outside_cwd(path, cwd):
                     normalized = os.path.normpath(path)
                     warnings.append(

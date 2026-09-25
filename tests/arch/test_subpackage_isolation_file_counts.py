@@ -33,7 +33,6 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         # Phase B: core/git/ sub-package
         "git_remote.py",
         "github_url.py",
-        "bash_write_targets.py",
         "branch_guard.py",
         # Phase B: core/audit/ sub-package
         "audit_cycle_verifier.py",

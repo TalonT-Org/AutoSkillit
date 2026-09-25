@@ -15,7 +15,6 @@ from autoskillit.core import (
     BackendPinResolution,
     FaultDomain,
     InputContractResolver,
-    extract_bash_write_targets,
     extract_path_arg,
     extract_positional_args,
     extract_skill_name,
@@ -26,7 +25,9 @@ from autoskillit.core import (
 from autoskillit.execution import get_backend
 from autoskillit.hooks import (
     PROTECTED_SOURCE_PATH_PATTERNS,
+    UNRESOLVED_WRITE_TARGET_REMEDIATION,
     command_has_blocked_protected_path_read,
+    scan_write_targets,
 )
 from autoskillit.pipeline import gate_error_result
 
@@ -142,16 +143,22 @@ def _check_write_target_boundary(
 ) -> str | None:
     """Deny run_cmd writes outside allowed prefix directories.
 
-    Fail-open: returns None when allowed_prefixes is empty (no write scope configured).
-    Returns gate_error_result JSON when a write target falls outside all prefixes.
+    Empty prefixes disable the boundary. Unresolved or unparseable commands fail closed.
+    Returns gate_error_result JSON when a target falls outside all prefixes.
     """
     if not allowed_prefixes:
         return None
-    targets = extract_bash_write_targets(cmd, cwd)
-    if not targets:
+    cwd = os.path.abspath(cwd) if cwd else ""
+    scan = scan_write_targets(cmd, cwd)
+    if scan.unresolved or not scan.parseable:
+        return gate_error_result(
+            "run_cmd write target could not be resolved safely. "
+            + UNRESOLVED_WRITE_TARGET_REMEDIATION
+        )
+    if not scan.targets:
         return None
     normalized = tuple(os.path.realpath(p).rstrip("/") + "/" for p in allowed_prefixes)
-    for target in targets:
+    for target in scan.targets:
         resolved = os.path.realpath(target)
         if not any(resolved.startswith(pfx) for pfx in normalized):
             return gate_error_result(

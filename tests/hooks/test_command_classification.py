@@ -735,9 +735,7 @@ class TestStdinLiteralBinding:
         assert segments[0].stdin_literals[0].text == "y"
 
     def test_strip_heredoc_bodies_parity_preserved(self):
-        """The parity-locked oracle (tests/core/test_bash_write_targets.py) is
-        untouched; this only pins that this module's own strip_heredoc_bodies
-        still matches its pre-rectify output shape."""
+        """The hook tokenizer keeps stripping heredoc bodies before later commands."""
         assert (
             command_classification.strip_heredoc_bodies("cat <<'EOF'\nbody\nEOF\ncat file")
             == "cat <<'EOF'\nEOF\ncat file"

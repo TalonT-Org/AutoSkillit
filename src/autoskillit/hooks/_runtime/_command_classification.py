@@ -197,9 +197,9 @@ def extract_patch_paths(command: str) -> list[str]:
 
 def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | None:
     """Keep a shell token's raw spelling; Python argv has no shell expansion."""
-    if argv_tokens is None:
+    if argv_tokens is None or index >= len(argv_tokens):
         return None
-    return argv_tokens[index].raw_span.strip() if index < len(argv_tokens) else ""
+    return argv_tokens[index].raw_span.strip()
 
 
 def _non_option_indices(segment: list[str], argv_tokens: Sequence[ArgvToken] | None) -> list[int]:

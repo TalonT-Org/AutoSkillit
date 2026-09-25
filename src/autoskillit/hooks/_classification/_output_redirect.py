@@ -204,6 +204,11 @@ def _partition_output_redirect_indices(
     Shared so callers can project index-aligned argv tokens onto the same
     partitioning decision without re-deriving redirect syntax.
     """
+    if len(redirect_syntax) != len(tokens):
+        raise ValueError(
+            "redirect_syntax length must equal tokens length: "
+            f"got {len(redirect_syntax)} syntax entries for {len(tokens)} tokens"
+        )
     segments: list[int] = []
     targets: list[str] = []
     file_redirect_count = 0

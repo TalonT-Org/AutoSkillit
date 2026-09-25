@@ -415,10 +415,26 @@ class EvaluatedSegment:
             raise ValueError("EvaluatedSegment redirect_syntax must align with tokens")
         if self.argv_tokens is not None and len(self.argv_tokens) != len(self.tokens):
             raise ValueError("EvaluatedSegment argv_tokens must align with tokens")
-        if self.provenance is not None and self.provenance.tokens != self.tokens:
-            raise ValueError(
-                "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
-            )
+        if self.provenance is not None:
+            if self.provenance.tokens != self.tokens:
+                raise ValueError(
+                    "EvaluatedSegment tokens must match provenance.tokens when provenance is set"
+                )
+            if self.provenance.redirect_syntax != self.redirect_syntax:
+                raise ValueError(
+                    "EvaluatedSegment redirect_syntax must match provenance.redirect_syntax "
+                    "when provenance is set"
+                )
+            if self.provenance.argv_tokens != self.argv_tokens:
+                raise ValueError(
+                    "EvaluatedSegment argv_tokens must match provenance.argv_tokens "
+                    "when provenance is set"
+                )
+            if self.provenance.subshell_path != self.subshell_path:
+                raise ValueError(
+                    "EvaluatedSegment subshell_path must match provenance.subshell_path "
+                    "when provenance is set"
+                )
 
 
 def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:

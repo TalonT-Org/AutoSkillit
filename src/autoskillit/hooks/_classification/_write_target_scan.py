@@ -32,6 +32,12 @@ class WriteTargetScan:
     parseable: bool
     has_write: bool
 
+    def __post_init__(self) -> None:
+        if not self.parseable and self.targets:
+            raise ValueError("WriteTargetScan.targets must be empty when parseable is False")
+        if not self.has_write and self.targets:
+            raise ValueError("WriteTargetScan.targets must be empty when has_write is False")
+
 
 @dataclass(slots=True)
 class _ShellDirectoryState:
@@ -51,6 +57,12 @@ def _scope_state(
 
 
 def _shell_builtin_prefix(prefix: list[str]) -> bool:
+    """True when *prefix* contains no wrapper command — i.e. is the unwrapped shell-builtin form.
+
+    The polarity is ``unwrapped``: returns True only when none of the wrapper
+    tokens (``env``, ``sudo``, ``nice``, ``nohup``, ``timeout``, ``stdbuf``)
+    appears in the prefix.
+    """
     return not any(
         token in {"env", "sudo", "nice", "nohup", "timeout", "stdbuf"} for token in prefix
     )
@@ -199,6 +211,10 @@ def _apply_shell_builtin(
 ) -> bool:
     if argv_tokens is None or not _shell_builtin_prefix(executable[:start]):
         return False
+    if start >= len(executable):
+        state.cwd = ""
+        state.cdpath_unknown = True
+        return True
     argv = executable[start:]
     verb = argv[0]
     if verb in {"cd", "pushd", "popd"}:

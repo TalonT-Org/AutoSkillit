@@ -35,7 +35,7 @@ def test_no_second_write_target_implementation() -> None:
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
                 re.search(r"write_targets?$", node.name)
-                or re.fullmatch(r"_?resolve_write_target", node.name)
+                or re.search(r"resolve_write_target(?:$|_)", node.name)
             ):
                 violations.append(f"{path}:{node.lineno} {node.name}")
         for node in tree.body:

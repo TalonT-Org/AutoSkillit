@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:
     """mcp.enable(tags={'kitchen'}) reveals all GATED_TOOLS to the client.
 
-    Uses FastMCP Client to assert that every tool in GITCHEN_GATED_TOOLS is visible
+    Uses FastMCP Client to assert that every tool in KITCHEN_GATED_TOOLS is visible
     after mcp.enable(tags={'kitchen'}), which is the manual reveal step used
     in headless sessions.
     """

@@ -15,11 +15,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 @pytest.mark.anyio
 async def test_orchestrator_headless_enables_kitchen_tag(monkeypatch):
-    from autoskillit.core import (
-        EVIDENCE_READER_TOOLS,
-        FLEET_TOOLS,
-        GATED_TOOLS,
-    )
+    from autoskillit.core import EVIDENCE_READER_TOOLS, KITCHEN_GATED_TOOLS
     from autoskillit.server import _apply_session_type_visibility, mcp
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -28,8 +24,7 @@ async def test_orchestrator_headless_enables_kitchen_tag(monkeypatch):
 
     tools = list(await mcp.list_tools())
     tool_names = {t.name for t in tools}
-    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - EVIDENCE_READER_TOOLS
-    for name in kitchen_tools:
+    for name in KITCHEN_GATED_TOOLS:
         assert name in tool_names, f"{name} should be visible for orchestrator+headless"
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
@@ -169,11 +164,7 @@ async def test_food_truck_with_multiple_packs(monkeypatch):
 @pytest.mark.anyio
 async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
     """ORCHESTRATOR+HEADLESS without FOOD_TRUCK_TOOL_TAGS falls back to full kitchen."""
-    from autoskillit.core import (
-        EVIDENCE_READER_TOOLS,
-        FLEET_TOOLS,
-        GATED_TOOLS,
-    )
+    from autoskillit.core import EVIDENCE_READER_TOOLS, KITCHEN_GATED_TOOLS
     from autoskillit.server import _apply_session_type_visibility, mcp
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -184,8 +175,7 @@ async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
     tools = list(await mcp.list_tools())
     tool_names = {t.name for t in tools}
 
-    kitchen_tools = GATED_TOOLS - FLEET_TOOLS - EVIDENCE_READER_TOOLS
-    for name in kitchen_tools:
+    for name in KITCHEN_GATED_TOOLS:
         assert name in tool_names
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 

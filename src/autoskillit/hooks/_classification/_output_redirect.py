@@ -21,6 +21,7 @@ _RESIDUAL_EXPANSION_RE = re.compile(r"\$[{(\[A-Za-z_0-9@*#?$!'\"-]|`")
 
 
 def _shell_tilde_prefix(source: str) -> tuple[str, str, int] | None:
+    """Return an empty-prefix tuple when no tilde is present; None means invalid tilde."""
     if not source.startswith("~"):
         return "", "", 0
     prefix = source.split("/", 1)[0]

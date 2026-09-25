@@ -491,10 +491,6 @@ def test_fleet_reload_restores_session_without_prompt(
         fake_run_interactive_session,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.detect_autoskillit_mcp_prefix",
-        lambda _capabilities: "autoskillit",
-    )
-    monkeypatch.setattr(
         _patch_cli_prompts,
         "_build_fleet_dispatch_prompt",
         lambda mcp_prefix, **kw: "test-prompt",

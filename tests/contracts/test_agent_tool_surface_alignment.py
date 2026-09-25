@@ -11,7 +11,7 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
     EXPLORATION_TOOLS,
-    MARKETPLACE_PREFIX,
+    PLUGIN_PREFIX,
     SkillExecutionRole,
     SkillSource,
     ToolInitializationOperation,
@@ -135,7 +135,7 @@ def test_pr_source_reader_tools_convert_from_canonical_to_exact_bare_subset() ->
 @pytest.mark.parametrize(
     "reader_tools",
     [
-        (f"{MARKETPLACE_PREFIX}read_authorized_artifact",),
+        (f"{PLUGIN_PREFIX}read_authorized_artifact",),
         (f"{DIRECT_PREFIX}read_authorized_artifact",),
     ],
 )

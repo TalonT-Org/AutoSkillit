@@ -300,14 +300,17 @@ from .plugins._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_I
 from .plugins._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from .plugins._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
-from .plugins._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
+from .plugins._plugin_ids import PLUGIN_PREFIX as PLUGIN_PREFIX
 from .plugins._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from .plugins._plugin_ids import claude_plugin_tool_prefix as claude_plugin_tool_prefix
-from .plugins._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
 from .plugins._plugin_ids import (
     find_qualified_autoskillit_tool_names as find_qualified_autoskillit_tool_names,
 )
 from .plugins._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
+from .plugins._plugin_ids import (
+    is_marketplace_plugin_registered as is_marketplace_plugin_registered,
+)
+from .plugins._plugin_ids import launched_session_mcp_prefix as launched_session_mcp_prefix
 from .plugins._plugin_ids import (
     parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key,
 )

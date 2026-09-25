@@ -1,14 +1,14 @@
-"""MCP tool name prefix detection — pure stdlib, importable from any layer.
+"""AutoSkillit plugin identifiers and MCP tool-name authorities — pure stdlib.
 
-Detects whether autoskillit is marketplace-installed or running under
-direct --plugin-dir only, and derives the correct fully-qualified MCP
-tool name prefix. Detection is pure Python I/O — no LLM, no subprocess,
-no network calls.
+Holds the plugin registry keys, the Claude Code plugin tool-naming rule, and
+the prefix AutoSkillit's MCP tools carry inside a session it launches. That
+prefix follows the launch corridor (how the backend loads AutoSkillit), never
+host registry state. Importable from any layer; no LLM, subprocess, or
+network calls.
 """
 
 from __future__ import annotations
 
-import functools
 import json
 import re
 from pathlib import Path
@@ -29,7 +29,10 @@ DIRECT_INSTALL_CACHE_SUBDIR = "autoskillit-local"
 
 # Single source of truth for both known prefix forms
 DIRECT_PREFIX = "mcp__autoskillit__"
-MARKETPLACE_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
+# Prefix Claude Code assigns to AutoSkillit's MCP tools in every plugin-loaded
+# session (--plugin-dir and marketplace alike):
+# mcp__plugin_<plugin.json name>_<.mcp.json server key>__
+PLUGIN_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
 
 _CLAUDE_TOOL_SEGMENT_INVALID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 _QUALIFIED_AUTOSKILLIT_TOOL_RE = re.compile(
@@ -147,23 +150,31 @@ def registered_install_paths(home: Path | None = None) -> tuple[Path, ...]:
     return tuple(paths)
 
 
-@functools.lru_cache(maxsize=2)
-def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
-    """Return the MCP prefix that autoskillit tools will use in a spawned session.
+def launched_session_mcp_prefix(capabilities: BackendCapabilities) -> str:
+    """Prefix of AutoSkillit's MCP tools inside a session AutoSkillit launches with this backend.
 
-    Backends without marketplace-prefix support always use the direct prefix.
-    Marketplace-capable backends use the marketplace prefix only while an
-    ``installed_plugins.json`` registration is present.
+    Claude children always load AutoSkillit as a plugin (``--plugin-dir``);
+    Codex children register ``[mcp_servers.autoskillit]``. Pure: never reads
+    host state.
     """
-    if not capabilities.claude_marketplace_tool_prefix_capable:
-        return DIRECT_PREFIX
+    return PLUGIN_PREFIX if capabilities.claude_plugin_tool_namespace else DIRECT_PREFIX
+
+
+def is_marketplace_plugin_registered(home: Path | None = None) -> bool:
+    """Host-level registry presence, for diagnostics about the *running* session's hook
+    source only; never a tool-name authority.
+
+    Checks key presence only and never dereferences ``installPath``. Never
+    raises: an absent, unreadable, or malformed registry reads as unregistered.
+    """
     try:
-        data = json.loads(_installed_plugins_path().read_text())
-        if _AUTOSKILLIT_PLUGIN_KEY in data.get("plugins", {}):
-            return MARKETPLACE_PREFIX
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        pass
-    return DIRECT_PREFIX
+        data = json.loads(_installed_plugins_path(home).read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    plugins = data.get("plugins")
+    return isinstance(plugins, dict) and _AUTOSKILLIT_PLUGIN_KEY in plugins
 
 
 def validate_agent_tool_canonical(tool: str) -> str:

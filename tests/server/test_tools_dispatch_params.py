@@ -366,3 +366,24 @@ async def test_dispatch_food_truck_preserves_inner_timeout_semantics(
     assert result["success"] is False
     assert result["error"] == "fleet_l3_startup_or_crash"
     assert "TimeoutError" in result["user_visible_message"]
+
+
+@pytest.mark.parametrize(
+    ("backend_name", "expected_prefix"),
+    [
+        ("claude-code", "mcp__plugin_autoskillit_autoskillit__"),
+        ("codex", "mcp__autoskillit__"),
+    ],
+)
+def test_food_truck_prompt_builder_binds_corridor_prefix(
+    backend_name: str, expected_prefix: str
+) -> None:
+    """dispatch_food_truck's prompt names the tools of the corridor the child launches in."""
+    from autoskillit.execution.backends import get_backend
+    from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (
+        _get_food_truck_prompt_builder,
+    )
+
+    builder = _get_food_truck_prompt_builder(get_backend(backend_name))
+
+    assert builder.keywords["mcp_prefix"] == expected_prefix  # type: ignore[attr-defined]

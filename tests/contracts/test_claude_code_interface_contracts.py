@@ -476,6 +476,12 @@ class TestClaudePluginToolNamespace:
             read_claude_plugin_tool_prefix(pkg_root()) == "mcp__plugin_autoskillit_autoskillit__"
         )
 
+    def test_plugin_prefix_constant_matches_packaged_manifests(self) -> None:
+        """Prompt builders' PLUGIN_PREFIX and the namespace rendered into agents agree."""
+        from autoskillit.core import PLUGIN_PREFIX, pkg_root, read_claude_plugin_tool_prefix
+
+        assert read_claude_plugin_tool_prefix(pkg_root()) == PLUGIN_PREFIX
+
     @pytest.mark.parametrize(
         ("plugin_json", "mcp_json"),
         [

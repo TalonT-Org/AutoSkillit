@@ -21,7 +21,6 @@ from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     RecipeDeliveryRequest,
     RecipeLoadError,
-    detect_autoskillit_mcp_prefix,
     get_logger,
 )
 from autoskillit.core import (
@@ -121,7 +120,9 @@ def _build_anonymous_open_response(
     try:
         warning = (
             _tk_pkg._build_hook_diagnostic_warning(
-                detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
+                claude_plugin_tool_namespace=(
+                    tool_ctx.backend.capabilities.claude_plugin_tool_namespace
+                )
             )
             if tool_ctx.backend is not None
             else None

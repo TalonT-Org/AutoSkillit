@@ -55,7 +55,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "anthropic_provider_capable": "OPTIONAL",
     "channel_b_capable": "OPTIONAL",
     "supports_task_lifecycle_events": "REQUIRED",
-    "claude_marketplace_tool_prefix_capable": "REQUIRED",
+    "claude_plugin_tool_namespace": "REQUIRED",
     "completion_record_types": "REQUIRED",
     "cook_exact_binding_probe_required": "OPTIONAL",
     "default_skill_sandbox_mode": "REQUIRED",
@@ -157,12 +157,31 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(self.backend.name, str)
         assert len(self.backend.name) > 0
 
-    def test_marketplace_tool_prefix_capability_is_bool(self) -> None:
-        """BackendCapabilities.claude_marketplace_tool_prefix_capable is boolean."""
-        assert isinstance(
-            self.backend.capabilities.claude_marketplace_tool_prefix_capable,
-            bool,
+    def test_plugin_tool_namespace_capability_is_bool(self) -> None:
+        """BackendCapabilities.claude_plugin_tool_namespace is boolean."""
+        assert isinstance(self.backend.capabilities.claude_plugin_tool_namespace, bool)
+
+    def test_plugin_tool_namespace_capability_matches_launch_corridor(
+        self, tmp_path: Path
+    ) -> None:
+        """BackendCapabilities.claude_plugin_tool_namespace is True exactly when every
+        launch path loads AutoSkillit into this backend as a Claude plugin."""
+        from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.headless._managed._attempt import _headless_plugin_load_mode
+
+        namespace = self.backend.capabilities.claude_plugin_tool_namespace
+        assert namespace == (
+            _headless_plugin_load_mode(self.backend) is PluginLoadMode.EXPLICIT_PLUGIN_DIR
         )
+        _authority, interactive_mode = interactive_plugin_authority(
+            backend=self.backend,
+            project_dir=tmp_path,
+            default_base_branch="main",
+            skill_catalog=None,
+            generated_home_available=False,
+        )
+        assert namespace == (interactive_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR)
 
     def test_cook_exact_binding_probe_capability_is_bool(self) -> None:
         """BackendCapabilities.cook_exact_binding_probe_required — fresh-cook gate."""

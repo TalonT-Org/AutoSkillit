@@ -323,7 +323,7 @@ def _launch_fleet_session(
     recipe_table: str | None = None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
-    from autoskillit.cli import detect_autoskillit_mcp_prefix  # noqa: PLC0415
+    from autoskillit.cli import launched_session_mcp_prefix  # noqa: PLC0415
     from autoskillit.cli.session._session_backend import (  # noqa: PLC0415
         resolve_global_backend,
     )
@@ -341,7 +341,7 @@ def _launch_fleet_session(
         codex_runtime_spec=cfg.codex_runtime.resolve(),
     )
     _backend_caps = _backend.capabilities
-    mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
+    mcp_prefix = launched_session_mcp_prefix(_backend_caps)
     managed_join_context = None
     managed_join_parent_id: str | None = None
     if getattr(_backend_caps, "managed_fixed_batch_route_capable", False):
